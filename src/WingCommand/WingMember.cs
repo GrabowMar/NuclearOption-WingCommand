@@ -46,7 +46,9 @@ namespace WingCommand
             switch (order)
             {
                 case WingOrder.Formation:
-                    formationState.BoostRejoin();
+                    // Stagger by slot so a Rejoin order brings them in one after another
+                    // rather than as a converging scrum that leans on separation to sort out.
+                    formationState.BoostRejoin(Slot * Plugin.Config2.RejoinStagger.Value);
                     Pilot.SwitchState(formationState);
                     break;
 

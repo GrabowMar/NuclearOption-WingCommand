@@ -236,7 +236,7 @@ namespace WingCommand
             Pilot pilot = PrimaryPilot(aircraft);
             if (pilot == null) return null;
 
-            var member = new WingMember(this, aircraft, pilot, members.Count + 1);
+            var member = new WingMember(this, aircraft, pilot, NearestFreeSlot(aircraft));
             members.Add(member);
             member.Apply(WingOrder.Formation);
             WingMapTint.Refresh(aircraft);
@@ -295,10 +295,69 @@ namespace WingCommand
             }
         }
 
+        /// <summary>
+        /// Deliberately does not reassign slots. Renumbering after a loss made every
+        /// surviving wingman physically swap position in mid-air to close the gap, which
+        /// looks far worse than simply leaving a hole in the formation. New joiners fill
+        /// the gap through NearestFreeSlot instead.
+        /// </summary>
         private void Renumber()
         {
+        }
+
+        /// <summary>
+        /// Pick the free slot closest to a joining aircraft, rather than simply the next
+        /// number.
+        ///
+        /// Handing slots out in join order means a wingman off your right wing can be given
+        /// the left-hand slot and has to cross underneath you to reach it — the "characters
+        /// scrabbling over each other to reach the formation" that formation-motion
+        /// references warn about. Choosing by proximity shortens every rejoin and removes
+        /// most crossings outright.
+        /// </summary>
+        private int NearestFreeSlot(Aircraft joining)
+        {
+            int max = Plugin.Config2.MaxWingSize.Value;
+
+            if (Leader == null || joining == null)
+                return members.Count + 1;
+
+            float spacing = Plugin.Config2.SlotSpacing.Value;
+            if (IsRotary(joining)) spacing *= Plugin.Config2.RotarySpacingScale.Value;
+
+            Vector3 from = joining.transform.position;
+            Vector3 leaderPos = Leader.transform.position;
+            Vector3 leaderForward = Leader.transform.forward;
+
+            int bestSlot = members.Count + 1;
+            float bestDistance = float.MaxValue;
+
+            for (int slot = 1; slot <= max; slot++)
+            {
+                if (SlotTaken(slot)) continue;
+
+                Vector3 slotPos = leaderPos + FormationSolver.SlotOffset(
+                    leaderForward, slot, Plugin.Config2.Shape.Value,
+                    spacing, Plugin.Config2.SlotStack.Value);
+
+                float d = (slotPos - from).sqrMagnitude;
+                if (d < bestDistance)
+                {
+                    bestDistance = d;
+                    bestSlot = slot;
+                }
+            }
+
+            return bestSlot;
+        }
+
+        private bool SlotTaken(int slot)
+        {
             for (int i = 0; i < members.Count; i++)
-                members[i].Slot = i + 1;
+            {
+                if (members[i].Slot == slot) return true;
+            }
+            return false;
         }
 
         /// <summary>

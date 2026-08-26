@@ -21,9 +21,11 @@ namespace WingCommand
         private float lastEngageCheck;
         private float lastFiredTime;
         private float rejoinBoostUntil;
+        private float rejoinHoldUntil;
         private float lastKeepUpDistance = float.MaxValue;
         private float losingGroundSince;
         private Vector3 smoothedAvoidance;
+        private float threatSpacing = 1f;
 
         public FormationFlyState(WingMember member)
         {
@@ -81,6 +83,8 @@ namespace WingCommand
             if (WingRegistry.IsRotary(aircraft))
                 spacing *= Plugin.Config2.RotarySpacingScale.Value;
 
+            spacing *= ThreatSpacingScale(leader);
+
             Vector3 offset = FormationSolver.SlotOffset(
                 leader.transform.forward, member.Slot, shape, spacing,
                 Plugin.Config2.SlotStack.Value);
@@ -126,6 +130,70 @@ namespace WingCommand
         }
 
         /// <summary>
+        /// Open the formation up under threat and close it again when clear.
+        ///
+        /// Real formations widen when they expect to fight — a tight parade formation is
+        /// easy to shoot at and leaves nobody room to manoeuvre. Eased rather than stepped,
+        /// because a sudden change in spacing moves every slot at once and the autopilot
+        /// would chase the jump.
+        /// </summary>
+        private float ThreatSpacingScale(Aircraft leader)
+        {
+            float target = 1f;
+
+            if (Plugin.Config2.WidenUnderThreat.Value)
+            {
+                bool threatened =
+                    (WingCommandManager.Instance?.Wing?.Posture ?? WingPosture.Defensive)
+                        == WingPosture.Aggressive;
+
+                if (!threatened)
+                {
+                    MissileWarning warning = leader.GetMissileWarningSystem();
+                    threatened = warning != null && warning.IsWarning();
+                }
+
+                if (threatened) target = Plugin.Config2.ThreatSpacingScale.Value;
+            }
+
+            threatSpacing = Mathf.Lerp(
+                threatSpacing <= 0f ? 1f : threatSpacing, target,
+                1f - Mathf.Exp(-Time.fixedDeltaTime / 2f));
+
+            return threatSpacing;
+        }
+
+        /// <summary>
+        /// Roll with the leader once settled.
+        ///
+        /// AutopilotPlane derives roll from the desired flight direction and offers no way
+        /// to command it, so this blends the result afterwards and re-filters. Wingmen that
+        /// stay wings-level through a banked turn are one of the clearest giveaways that a
+        /// formation is being simulated rather than flown.
+        /// </summary>
+        private void MatchLeaderBank(Aircraft leader, float distance)
+        {
+            if (!Plugin.Config2.BankMatching.Value) return;
+            if (distance > Plugin.Config2.CaptureDistance.Value) return;
+
+            // Bank angle about each aircraft's own forward axis.
+            float leaderBank = Vector3.SignedAngle(
+                Vector3.up, leader.transform.up, leader.transform.forward);
+            float myBank = Vector3.SignedAngle(
+                Vector3.up, aircraft.transform.up, aircraft.transform.forward);
+
+            float error = Mathf.DeltaAngle(myBank, leaderBank);
+
+            // Blend rather than override: the autopilot is still flying the aircraft, and
+            // fighting it outright makes wingmen wallow.
+            float command = Mathf.Clamp(error * 0.02f, -1f, 1f);
+            controlInputs.roll = Mathf.Lerp(
+                controlInputs.roll, command, Plugin.Config2.BankMatchStrength.Value);
+
+            aircraft.FilterInputs();
+        }
+
+        /// <summary>
         /// Rotary and tiltwing aircraft: <c>AutopilotHelo</c> / <c>AutopilotTiltwing</c>
         /// override the five-argument overload and manage collective themselves, so
         /// throttle is deliberately left alone here.
@@ -147,11 +215,27 @@ namespace WingCommand
             float speedFraction = Mathf.Clamp01(aircraft.speed / Mathf.Max(p.maxSpeed, 1f));
             float lead = Plugin.Config2.RotaryLeadTime.Value * speedFraction;
 
-            // Damp against drift for the same reason as the fixed-wing path: a purely
-            // positional target overshoots and the airframe answers by rocking.
-            Vector3 drift = aircraft.rb.velocity - leaderVel;
-            Vector3 damping = -drift * Plugin.Config2.StationDamping.Value * speedFraction;
+            // Damp against drift, but only once station-keeping and only within a bound.
+            //
+            // Applied while transiting, this term is self-cancelling: closing on the slot
+            // *is* drift relative to the leader, so the harder a wingman tries to close the
+            // further the destination gets dragged back toward it. Unclamped at 1.6 gain,
+            // 50 m/s of drift pulls the target back some 60 m — comparable to the gap being
+            // closed — so it lands on or behind the aircraft and the wingman simply stops.
+            // Slowing then releases the damping, so it creeps forward and stalls again.
+            bool settled = distance < Plugin.Config2.CaptureDistance.Value;
 
+            Vector3 damping = Vector3.zero;
+            if (settled)
+            {
+                Vector3 drift = aircraft.rb.velocity - leaderVel;
+                damping = Vector3.ClampMagnitude(
+                    -drift * Plugin.Config2.StationDamping.Value * speedFraction,
+                    Plugin.Config2.RotaryMaxDamping.Value);
+            }
+
+            // The lead term stays at all distances: it pushes the destination forward, so
+            // it was never part of the stall, and it is what this path exists for.
             GlobalPosition destination = slotPos + leaderVel * lead + damping;
 
             // altitudeHold is a height above ground, and is used twice: as the height of
@@ -166,7 +250,6 @@ namespace WingCommand
             // crabbing sideways across the gap.
             Vector3 heading = leader.transform.forward;
             heading.y = 0f;
-            bool settled = distance < Plugin.Config2.CaptureDistance.Value;
 
             aircraft.autopilot.AutoAim(
                 destination: destination,
@@ -195,22 +278,42 @@ namespace WingCommand
                 member.Slot, Plugin.Config2.Shape.Value, Plugin.Config2.SlotSpacing.Value);
             float turnCompensation = yawRate * lateral;
 
-            // --- Arrival: ramp closure down inside the slowing radius. ---
-            // A raw proportional term hunts around the slot; arrival converges on it.
-            float alongTrack = Vector3.Dot(toSlot, leader.transform.forward);
+            // --- Arrival with rate damping. ---
+            // Position error alone gives nothing to arrest closure with, so the gain has to
+            // stay timid or the wingman sails past the slot. Formation technique is to pull
+            // power *early* and let inertia carry you in, because throttle response lags.
+            // Subtracting the closing rate does exactly that, and is what makes a higher
+            // positional gain safe rather than merely twitchy.
+            Vector3 leaderForward = leader.transform.forward;
+            float alongTrack = Vector3.Dot(toSlot, leaderForward);
+            float closingRate = Vector3.Dot(aircraft.rb.velocity - leader.rb.velocity, leaderForward);
+
             float slowingRadius = Mathf.Max(Plugin.Config2.SlowingRadius.Value, 1f);
             float closure = Mathf.Clamp(alongTrack, -slowingRadius, slowingRadius) / slowingRadius;
             closure *= leaderSpeed * Plugin.Config2.ClosureAuthority.Value;
+            closure -= closingRate * Plugin.Config2.ClosureDamping.Value;
+
+            // While waiting its turn in a staggered rejoin, a wingman matches the leader's
+            // speed instead of closing, so it holds its place in the queue rather than
+            // arriving alongside everyone else.
+            if (Time.timeSinceLevelLoad < rejoinHoldUntil)
+                closure = Mathf.Min(closure, 0f);
 
             float desiredSpeed = leaderSpeed + turnCompensation + closure;
             desiredSpeed = Mathf.Clamp(desiredSpeed, p.landingSpeed * 1.2f,
                                        Mathf.Max(p.maxSpeed, leaderSpeed * 1.5f));
 
+            // Bias the baseline below cruise so there is usable headroom in both
+            // directions. Sitting at cruiseThrottle (typically 0.9) left roughly 0.1 of
+            // range above against 0.9 below, so any demand to accelerate saturated
+            // immediately and the wingman had no fine control at all while catching up.
+            float baseline = p.cruiseThrottle * Plugin.Config2.ThrottleBaseline.Value;
             float speedError = desiredSpeed - aircraft.speed;
-            float throttle = p.cruiseThrottle + speedError * 0.06f;
+            float throttle = baseline + speedError * Plugin.Config2.ThrottleGain.Value;
 
-            // A long way out, just get there.
-            if (distance > 1500f || Time.timeSinceLevelLoad < rejoinBoostUntil)
+            // A long way out, just get there — unless still waiting its turn to rejoin.
+            bool holding = Time.timeSinceLevelLoad < rejoinHoldUntil;
+            if (!holding && (distance > 1500f || Time.timeSinceLevelLoad < rejoinBoostUntil))
                 throttle = 1f;
 
             controlInputs.throttle = Mathf.Clamp01(throttle);
@@ -279,6 +382,8 @@ namespace WingCommand
                 followTerrain: false,
                 altitudeHold: Mathf.Clamp(leader.radarAlt, aircraft.maxRadius, 8000f),
                 targetVelocity: leader.rb.velocity);
+
+            MatchLeaderBank(leader, distance);
         }
 
         /// <summary>
@@ -417,10 +522,14 @@ namespace WingCommand
             member.Apply(WingOrder.ReturnToBase);
         }
 
-        /// <summary>Run the throttle wide open for a few seconds after a rejoin order.</summary>
-        public void BoostRejoin()
+        /// <summary>
+        /// Run the throttle wide open for a few seconds after a rejoin order. The delay
+        /// staggers arrivals across the flight so they slot in one at a time.
+        /// </summary>
+        public void BoostRejoin(float delay = 0f)
         {
-            rejoinBoostUntil = Time.timeSinceLevelLoad + 8f;
+            rejoinHoldUntil = Time.timeSinceLevelLoad + delay;
+            rejoinBoostUntil = rejoinHoldUntil + 8f;
         }
     }
 }
