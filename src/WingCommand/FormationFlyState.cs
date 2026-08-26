@@ -480,12 +480,27 @@ namespace WingCommand
         {
             if (!Plugin.Config2.ReportUnableToKeepUp.Value) return;
 
+            // Only a genuine performance gap counts as "unable". This check was written for
+            // a helicopter recruited into a jet flight, but it fired on wingmen in the
+            // *same airframe* as the leader that were simply a long way back and closing —
+            // its own message read "max speed 100 vs leader 100" while the aircraft was
+            // overtaking at 87 against 78. Being behind is not the same as being incapable,
+            // and sending those wingmen home is what looked like ignoring the formation.
+            float mine = aircraft.GetAircraftParameters().maxSpeed;
+            float theirs = leader.GetAircraftParameters().maxSpeed;
+            if (mine >= theirs * 0.9f) return;
+
             float threshold = Plugin.Config2.UnableDistance.Value;
 
-            // Closing, or close enough: reset and carry on.
-            if (distance < threshold || distance < lastKeepUpDistance)
+            // Close enough, or the gap is not meaningfully growing: reset and carry on.
+            //
+            // The margin matters. Comparing bare distances meant any frame where the slot
+            // shifted outward counted as losing ground, and a slot moves constantly as the
+            // leader manoeuvres, so a wingman that was closing overall could still be
+            // condemned by the noise.
+            if (distance < threshold || distance < lastKeepUpDistance + 1f)
             {
-                lastKeepUpDistance = distance;
+                lastKeepUpDistance = Mathf.Min(lastKeepUpDistance, distance);
                 losingGroundSince = 0f;
                 return;
             }
@@ -502,9 +517,6 @@ namespace WingCommand
                 return;
 
             losingGroundSince = 0f;
-
-            float mine = aircraft.GetAircraftParameters().maxSpeed;
-            float theirs = leader.GetAircraftParameters().maxSpeed;
 
             Plugin.Logger.LogInfo(
                 $"[Wing] {aircraft.unitName} cannot hold station " +
