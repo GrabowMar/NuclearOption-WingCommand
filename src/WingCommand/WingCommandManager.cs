@@ -297,15 +297,27 @@ namespace WingCommand
             mapLayer?.AddSelected();
         }
 
-        /// <summary>Whatever the player currently has designated, or null.</summary>
+        /// <summary>
+        /// Whatever the player currently has designated, or null.
+        ///
+        /// Read from <c>CombatHUD.GetTargetList()</c>, which is what the player's own HUD
+        /// tracks. <c>Pilot.GetPrimaryTarget</c> looks like the obvious source, but nothing
+        /// in the game ever calls its setter — only the AI states read and write it — so
+        /// for a player-controlled pilot it is always null.
+        /// </summary>
         private static Unit CurrentPlayerTarget()
         {
-            if (!GameManager.GetLocalAircraft(out Aircraft local) || local == null) return null;
+            CombatHUD hud = SceneSingleton<CombatHUD>.i;
+            if (hud == null) return null;
 
-            Pilot pilot = WingRegistry.PrimaryPilot(local);
-            Unit target = pilot != null ? pilot.GetPrimaryTarget() : null;
+            System.Collections.Generic.List<Unit> targets = hud.GetTargetList();
+            if (targets == null) return null;
 
-            return (target != null && !target.disabled) ? target : null;
+            foreach (Unit t in targets)
+            {
+                if (t != null && !t.disabled) return t;
+            }
+            return null;
         }
 
         private bool RequireWing()

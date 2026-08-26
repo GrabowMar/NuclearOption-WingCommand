@@ -23,6 +23,7 @@ namespace WingCommand
             Bingo,
             Rejoining,
             Breaking,
+            Unable,
             Copy,
         }
 
@@ -91,6 +92,7 @@ namespace WingCommand
                 case Call.Winchester: return "Winchester, returning to base";
                 case Call.Bingo:      return "bingo fuel, returning to base";
                 case Call.Rejoining:  return "rejoining";
+                case Call.Unable:     return "unable to keep up, returning to base";
                 case Call.Breaking:   return detail != null ? "breaking " + detail : "breaking";
                 default:              return "copy";
             }

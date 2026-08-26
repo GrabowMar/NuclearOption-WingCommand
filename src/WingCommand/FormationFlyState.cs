@@ -20,6 +20,8 @@ namespace WingCommand
         private float lastSupportCheck;
         private float lastEngageCheck;
         private float rejoinBoostUntil;
+        private float lastKeepUpDistance = float.MaxValue;
+        private float losingGroundSince;
 
         public FormationFlyState(WingMember member)
         {
@@ -97,6 +99,7 @@ namespace WingCommand
             float distance = toSlot.magnitude;
 
             member.SlotError = distance;
+            CheckAbleToKeepUp(leader, distance);
 
             // Fixed-wing and rotary aircraft use different Autopilot overloads, and the
             // one each does not implement is an empty method on the base class. Calling
@@ -250,6 +253,13 @@ namespace WingCommand
         private bool CheckMutualSupport(Aircraft leader)
         {
             if (!Plugin.Config2.MutualSupport.Value) return false;
+
+            // Defensive means hold the slot no matter what, so breaking formation here
+            // would contradict the posture the player chose. The defensive answer to a
+            // missile on the leader is to shoot it down, which RunEngagement already does.
+            WingPosture posture = WingCommandManager.Instance?.Wing?.Posture ?? WingPosture.Defensive;
+            if (posture == WingPosture.Defensive) return false;
+
             if (Time.timeSinceLevelLoad - lastSupportCheck < 1f) return false;
             lastSupportCheck = Time.timeSinceLevelLoad;
 
@@ -257,8 +267,58 @@ namespace WingCommand
             if (mw == null || !mw.IsWarning())
                 return false;
 
-            member.ReleaseToCombat("leader under missile attack");
+            member.BreakToEngage("leader under missile attack");
             return true;
+        }
+
+        /// <summary>
+        /// Notice when a wingman simply cannot hold the slot and stop it killing itself
+        /// trying.
+        ///
+        /// A helicopter recruited into a jet flight is the clear case: it has nowhere near
+        /// the speed, falls further behind every second, and chases flat out and nose-down
+        /// until it sinks into the ground. Nothing else in the controller registers that
+        /// the task is impossible — the slot is simply somewhere it can never reach.
+        ///
+        /// If the wingman is a long way out and losing ground for a sustained period, it
+        /// reports unable and returns to base rather than pursuing to destruction.
+        /// </summary>
+        private void CheckAbleToKeepUp(Aircraft leader, float distance)
+        {
+            if (!Plugin.Config2.ReportUnableToKeepUp.Value) return;
+
+            float threshold = Plugin.Config2.UnableDistance.Value;
+
+            // Closing, or close enough: reset and carry on.
+            if (distance < threshold || distance < lastKeepUpDistance)
+            {
+                lastKeepUpDistance = distance;
+                losingGroundSince = 0f;
+                return;
+            }
+
+            lastKeepUpDistance = distance;
+
+            if (losingGroundSince <= 0f)
+            {
+                losingGroundSince = Time.timeSinceLevelLoad;
+                return;
+            }
+
+            if (Time.timeSinceLevelLoad - losingGroundSince < Plugin.Config2.UnableSeconds.Value)
+                return;
+
+            losingGroundSince = 0f;
+
+            float mine = aircraft.GetAircraftParameters().maxSpeed;
+            float theirs = leader.GetAircraftParameters().maxSpeed;
+
+            Plugin.Logger.LogInfo(
+                $"[Wing] {aircraft.unitName} cannot hold station " +
+                $"({distance:F0} m out, max speed {mine:F0} vs leader {theirs:F0}) - returning to base");
+
+            WingComms.Say(member, WingComms.Call.Unable);
+            member.Apply(WingOrder.ReturnToBase);
         }
 
         /// <summary>Run the throttle wide open for a few seconds after a rejoin order.</summary>

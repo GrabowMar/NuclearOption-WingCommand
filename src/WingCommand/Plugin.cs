@@ -96,6 +96,12 @@ namespace WingCommand
         // --- Comms ---
         public readonly ConfigEntry<bool> RadioChatter;
 
+        // --- Capability ---
+        public readonly ConfigEntry<bool> ReportUnableToKeepUp;
+        public readonly ConfigEntry<float> UnableDistance;
+        public readonly ConfigEntry<float> UnableSeconds;
+        public readonly ConfigEntry<bool> WarnOnSlowRecruit;
+
         // --- Debug ---
         public readonly ConfigEntry<bool> EnableDebugActions;
 
@@ -204,6 +210,20 @@ namespace WingCommand
             PathCutStrength = c.Bind("Formation", "PathCutStrength", 200f,
                 new ConfigDescription("How hard wingmen are pushed out of your path.",
                     new AcceptableValueRange<float>(0f, 800f)));
+
+            ReportUnableToKeepUp = c.Bind("Formation", "ReportUnableToKeepUp", true,
+                "A wingman that keeps losing ground on its slot gives up and returns to base " +
+                "instead of chasing until it crashes. Mainly affects slow aircraft recruited " +
+                "into a fast flight.");
+            UnableDistance = c.Bind("Formation", "UnableDistance", 3000f,
+                new ConfigDescription("How far out counts as failing to hold station.",
+                    new AcceptableValueRange<float>(500f, 20000f)));
+            UnableSeconds = c.Bind("Formation", "UnableSeconds", 20f,
+                new ConfigDescription("How long it must keep losing ground before giving up.",
+                    new AcceptableValueRange<float>(5f, 120f)));
+            WarnOnSlowRecruit = c.Bind("Formation", "WarnOnSlowRecruit", true,
+                "Warn when recruiting an aircraft far slower than yours - a helicopter cannot " +
+                "hold formation on a jet.");
 
             RadioChatter = c.Bind("Comms", "RadioChatter", true,
                 "Wingmen report engagements, defending, Winchester and rejoins in the game's " +

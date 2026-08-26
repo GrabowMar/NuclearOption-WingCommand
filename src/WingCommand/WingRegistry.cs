@@ -183,7 +183,27 @@ namespace WingCommand
             members.Add(member);
             member.Apply(WingOrder.Formation);
             WingMapTint.Refresh(aircraft);
+            WarnIfTooSlow(aircraft);
             return member;
+        }
+
+        /// <summary>
+        /// Say so up front when a recruit has no hope of holding station — a helicopter
+        /// cannot formate on a jet, and the failure otherwise only shows up much later as
+        /// a wingman disappearing off the back of the formation.
+        /// </summary>
+        private void WarnIfTooSlow(Aircraft recruit)
+        {
+            if (!Plugin.Config2.WarnOnSlowRecruit.Value || Leader == null) return;
+
+            float mine = recruit.GetAircraftParameters().maxSpeed;
+            float leader = Leader.GetAircraftParameters().maxSpeed;
+            if (mine <= 0f || leader <= 0f || mine >= leader * 0.7f) return;
+
+            WingCommandManager.Instance?.Toast(
+                recruit.unitName + " is much slower than you - it will fall behind");
+            Plugin.Logger.LogInfo(
+                $"[Wing] {recruit.unitName} max speed {mine:F0} vs leader {leader:F0} - cannot hold station");
         }
 
         public void Remove(WingMember member, string reason)
