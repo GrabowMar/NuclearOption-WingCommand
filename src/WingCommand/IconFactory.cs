@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using UnityEngine;
 
@@ -51,13 +52,19 @@ namespace WingCommand
                 case "disband":     Disband(c);             break;
                 case "back":        Back(c);                break;
 
-                case "shape_EchelonRight": ShapeGlyph(c, FormationShape.EchelonRight); break;
-                case "shape_EchelonLeft":  ShapeGlyph(c, FormationShape.EchelonLeft);  break;
-                case "shape_LineAbreast":  ShapeGlyph(c, FormationShape.LineAbreast);  break;
-                case "shape_Trail":        ShapeGlyph(c, FormationShape.Trail);        break;
-                case "shape_CombatSpread": ShapeGlyph(c, FormationShape.CombatSpread); break;
-
-                default: Chevrons(c); break;
+                default:
+                    // Shape glyphs are derived from the solver, so any formation added to
+                    // the enum draws itself without needing an icon written for it.
+                    if (key != null && key.StartsWith("shape_") &&
+                        TryParseShape(key.Substring(6), out FormationShape shape))
+                    {
+                        ShapeGlyph(c, shape);
+                    }
+                    else
+                    {
+                        Chevrons(c);
+                    }
+                    break;
             }
         }
 
@@ -162,25 +169,39 @@ namespace WingCommand
         /// Leader plus wingmen drawn in their true relative slot positions, so the icon
         /// reads as the formation it selects.
         /// </summary>
+        private static bool TryParseShape(string name, out FormationShape shape)
+        {
+            foreach (FormationShape candidate in (FormationShape[])Enum.GetValues(typeof(FormationShape)))
+            {
+                if (candidate.ToString() == name)
+                {
+                    shape = candidate;
+                    return true;
+                }
+            }
+            shape = FormationShape.EchelonRight;
+            return false;
+        }
+
         private static void ShapeGlyph(Canvas c, FormationShape shape)
         {
-            // Reuse the real solver so the icon can never drift from the geometry.
-            // Scale is set so the furthest slot (trail/echelon at 2x spacing, 240 m out)
-            // still fits inside the canvas with room for the mark itself.
-            const float scale = 0.14f;
-            Vector2 centre = new Vector2(48f, 50f);
+            // Reuse the real solver so the icon can never drift from the geometry. Three
+            // wingmen are drawn because several shapes — finger four, diamond — only read
+            // correctly once the third aircraft is in place.
+            const float scale = 0.10f;
+            Vector2 centre = new Vector2(48f, 56f);
 
-            Delta(c, centre.x, centre.y, 15, 0f);
+            Delta(c, centre.x, centre.y, 13, 0f);
 
-            for (int slot = 1; slot <= 2; slot++)
+            for (int slot = 1; slot <= 3; slot++)
             {
                 Vector3 offset = FormationSolver.SlotOffset(
                     Vector3.forward, slot, shape, spacing: 120f, stack: 0f);
 
                 // World +Z is "up" on the icon; world +X is to the right.
                 float x = centre.x + offset.x * scale;
-                float y = centre.y + offset.z * scale;
-                Delta(c, x, y, 12, 0f);
+                float y = centre.y + offset.z * scale + offset.y * scale;
+                Delta(c, x, y, 10, 0f);
             }
         }
 

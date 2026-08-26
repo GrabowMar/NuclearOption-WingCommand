@@ -249,9 +249,38 @@ namespace WingCommand
                     Plugin.Config2.RotaryMaxDamping.Value);
             }
 
-            // The lead term stays at all distances: it pushes the destination forward, so
-            // it was never part of the stall, and it is what this path exists for.
-            GlobalPosition destination = slotPos + leaderVel * lead + damping;
+            GlobalPosition destination;
+
+            if (settled)
+            {
+                // Aim far, not near — the same reason the fixed-wing path does, and the
+                // remaining cause of helicopters circling their slot.
+                //
+                // AutopilotHelo puts its forward-flight waypoint at
+                // TerrainWaypoint(direction, ..., max(speed, 100) * 6) — never less than
+                // 600 m ahead. Point that at a slot 66 m away and the waypoint lands 600 m
+                // *beyond* it, so the aircraft overflies the slot and comes back round.
+                //
+                // Aiming down the leader's velocity instead puts that waypoint where it
+                // should be, with a bounded correction steering the aircraft onto station.
+                // The far aim fades out with speed, because below forward flight the tilt
+                // PID drives straight at the destination and holds position properly.
+                Vector3 leaderDir = leaderVel.sqrMagnitude > 1f
+                    ? leaderVel.normalized
+                    : leader.transform.forward;
+
+                Vector3 ahead = leaderDir * (Plugin.Config2.RotaryLookAhead.Value * speedFraction);
+
+                Vector3 correction = Vector3.ClampMagnitude(
+                    toSlot * 2.5f, Plugin.Config2.StationMaxCorrection.Value);
+
+                destination = aircraft.GlobalPosition() + ahead + correction + damping;
+            }
+            else
+            {
+                // Transiting: chase the slot itself, led by the staleness of that waypoint.
+                destination = slotPos + leaderVel * lead;
+            }
 
             // altitudeHold is a height above ground, and is used twice: as the height of
             // the forward-flight waypoint and as the collective error term. It therefore

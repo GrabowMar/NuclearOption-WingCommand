@@ -48,6 +48,45 @@ namespace WingCommand
                     offset = right * (side * spacing * 1.5f * pair) + fwd * (-spacing * 0.25f * pair);
                     break;
 
+                // Two elements rather than one line: lead plus wingman, then a second pair
+                // stepped further out and further back. The classic fighter formation,
+                // because every aircraft can see the others and nobody is directly astern.
+                case FormationShape.FingerFour:
+                    switch (slot)
+                    {
+                        case 1:  offset = right * spacing + fwd * (-spacing * 0.7f); break;
+                        case 2:  offset = right * (-spacing * 1.2f) + fwd * (-spacing * 0.9f); break;
+                        default: offset = right * (-spacing * 2.2f) + fwd * (-spacing * 1.7f); break;
+                    }
+                    break;
+
+                // Symmetric V, wingmen splayed evenly either side and stepped back.
+                case FormationShape.Vic:
+                    offset = right * (side * spacing * pair) + fwd * (-spacing * pair);
+                    break;
+
+                // Two on the wings, one in the slot astern. A display formation: tight,
+                // pretty, and completely impractical in a fight.
+                case FormationShape.Diamond:
+                    switch (slot)
+                    {
+                        case 1:  offset = right * spacing + fwd * (-spacing * 0.8f); break;
+                        case 2:  offset = right * -spacing + fwd * (-spacing * 0.8f); break;
+                        default: offset = fwd * (-spacing * 1.6f); break;
+                    }
+                    break;
+
+                // Line astern with pronounced vertical separation, so each aircraft sits in
+                // clear air above the one ahead rather than in its wake.
+                case FormationShape.Ladder:
+                    offset = fwd * (-spacing * slot) + Vector3.up * (spacing * 0.25f * slot);
+                    break;
+
+                // Line abreast at wide spacing — mutual support with room to manoeuvre.
+                case FormationShape.Wall:
+                    offset = right * (side * spacing * 2.2f * pair);
+                    break;
+
                 case FormationShape.EchelonRight:
                 default:
                     offset = right * (spacing * slot) + fwd * (-spacing * 0.6f * slot);
@@ -84,7 +123,27 @@ namespace WingCommand
                 case FormationShape.EchelonLeft:  return -spacing * slot;
                 case FormationShape.LineAbreast:  return side * spacing * pair;
                 case FormationShape.Trail:        return 0f;
+                case FormationShape.Ladder:       return 0f;
                 case FormationShape.CombatSpread: return side * spacing * 1.5f * pair;
+                case FormationShape.Vic:          return side * spacing * pair;
+                case FormationShape.Wall:         return side * spacing * 2.2f * pair;
+
+                case FormationShape.FingerFour:
+                    switch (slot)
+                    {
+                        case 1:  return spacing;
+                        case 2:  return -spacing * 1.2f;
+                        default: return -spacing * 2.2f;
+                    }
+
+                case FormationShape.Diamond:
+                    switch (slot)
+                    {
+                        case 1:  return spacing;
+                        case 2:  return -spacing;
+                        default: return 0f;
+                    }
+
                 case FormationShape.EchelonRight:
                 default:                          return spacing * slot;
             }

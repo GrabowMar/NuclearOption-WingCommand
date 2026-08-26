@@ -107,6 +107,7 @@ namespace WingCommand
         public readonly ConfigEntry<float> RotaryLeadTime;
         public readonly ConfigEntry<float> RotarySpacingScale;
         public readonly ConfigEntry<float> RotaryMaxDamping;
+        public readonly ConfigEntry<float> RotaryLookAhead;
         public readonly ConfigEntry<float> AvoidanceSmoothing;
         public readonly ConfigEntry<float> RejoinStagger;
         public readonly ConfigEntry<bool> WidenUnderThreat;
@@ -254,6 +255,12 @@ namespace WingCommand
                     "Slot spacing multiplier for helicopter formations, which fly far closer " +
                     "together than jets.",
                     new AcceptableValueRange<float>(0.2f, 2f)));
+            RotaryLookAhead = c.Bind("Formation", "RotaryLookAhead", 700f,
+                new ConfigDescription(
+                    "How far ahead a settled helicopter aims. AutopilotHelo places its own " +
+                    "forward-flight waypoint at least 600 m out, so aiming at a nearby slot " +
+                    "puts that waypoint far beyond it and the aircraft circles.",
+                    new AcceptableValueRange<float>(200f, 2000f)));
             RotaryMaxDamping = c.Bind("Formation", "RotaryMaxDamping", 40f,
                 new ConfigDescription(
                     "Largest pull-back the helicopter damping term may apply, in metres. " +
@@ -416,5 +423,10 @@ namespace WingCommand
         LineAbreast,
         Trail,
         CombatSpread,
+        FingerFour,
+        Vic,
+        Diamond,
+        Ladder,
+        Wall,
     }
 }
