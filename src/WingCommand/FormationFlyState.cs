@@ -26,6 +26,8 @@ namespace WingCommand
         private float losingGroundSince;
         private Vector3 smoothedAvoidance;
         private float threatSpacing = 1f;
+        private RotaryFormation.Mode lastRotaryMode = (RotaryFormation.Mode)(-1);
+        private float lastRotaryReport;
 
         public FormationFlyState(WingMember member)
         {
@@ -126,14 +128,48 @@ namespace WingCommand
             member.SlotError = distance;
             CheckAbleToKeepUp(leader, distance);
 
-            // Fixed-wing and rotary aircraft use different Autopilot overloads, and the
-            // one each does not implement is an empty method on the base class. Calling
-            // the wrong one produces no control input at all, so the aircraft simply
-            // falls out of the sky.
+            // Rotary flight is a separate model, not a variation on this one. See
+            // RotaryFormation: helicopters hold a point when the leader is slow and fly a
+            // heading when it is cruising, because the two rotary control paths behave
+            // nothing like the fixed-wing one.
             if (aircraft.autopilot is AutopilotPlane)
+            {
                 FlyFixedWing(leader, slotPos, toSlot, distance);
+            }
             else
-                FlyRotary(leader, slotPos, toSlot, distance, offset.y);
+            {
+                RotaryFormation.Mode mode = RotaryFormation.Fly(
+                    aircraft, leader, slotPos, toSlot, distance, offset.y);
+
+                ReportRotaryMode(mode, distance);
+            }
+        }
+
+        /// <summary>
+        /// Log rotary regime changes and periodic slot error.
+        ///
+        /// Four attempts at helicopter formation failed partly because the only evidence
+        /// available was a description of how it looked. This says which control path is
+        /// running and how far out the aircraft actually is, so the next diagnosis starts
+        /// from data.
+        /// </summary>
+        private void ReportRotaryMode(RotaryFormation.Mode mode, float distance)
+        {
+            if (!Plugin.Config2.VerboseLogging.Value) return;
+
+            bool changed = mode != lastRotaryMode;
+            bool due = Time.timeSinceLevelLoad - lastRotaryReport > 5f;
+            if (!changed && !due) return;
+
+            lastRotaryMode = mode;
+            lastRotaryReport = Time.timeSinceLevelLoad;
+
+            Aircraft leader = Leader;
+            Plugin.Logger.LogInfo(
+                $"[Rotary] {aircraft.unitName} slot {member.Slot}: {mode}, " +
+                $"error {distance:F0} m, own speed {aircraft.speed:F0}, " +
+                $"leader {(leader != null ? leader.speed : 0f):F0} m/s, " +
+                $"alt {aircraft.radarAlt:F0} m");
         }
 
         /// <summary>
@@ -205,127 +241,6 @@ namespace WingCommand
                 controlInputs.roll, command, Plugin.Config2.BankMatchStrength.Value);
 
             aircraft.FilterInputs();
-        }
-
-        /// <summary>
-        /// Rotary and tiltwing aircraft: <c>AutopilotHelo</c> / <c>AutopilotTiltwing</c>
-        /// override the five-argument overload and manage collective themselves, so
-        /// throttle is deliberately left alone here.
-        /// </summary>
-        private void FlyRotary(Aircraft leader, GlobalPosition slotPos, Vector3 toSlot,
-                               float distance, float slotStack)
-        {
-            AircraftParameters p = aircraft.GetAircraftParameters();
-            Vector3 leaderVel = leader.rb != null ? leader.rb.velocity : Vector3.zero;
-
-            // AutopilotHelo blends hover control into forward flight with
-            // SmoothStep(speed / maxSpeed). In hover it drives a tilt PID straight at the
-            // destination, which holds position well. In forward flight it steers to a
-            // waypoint recomputed only once a second — so chasing a moving leader means
-            // chasing a target up to a second stale, which is most of why helicopters
-            // handled formation worse than aeroplanes.
-            //
-            // Leading the slot by roughly that staleness cancels it. The lead fades out as
-            // the aircraft slows into hover control, where it is neither needed nor wanted.
-            float speedFraction = Mathf.Clamp01(aircraft.speed / Mathf.Max(p.maxSpeed, 1f));
-            float lead = Plugin.Config2.RotaryLeadTime.Value * speedFraction;
-
-            // Damp against drift, but only once station-keeping and only within a bound.
-            //
-            // Applied while transiting, this term is self-cancelling: closing on the slot
-            // *is* drift relative to the leader, so the harder a wingman tries to close the
-            // further the destination gets dragged back toward it. Unclamped at 1.6 gain,
-            // 50 m/s of drift pulls the target back some 60 m — comparable to the gap being
-            // closed — so it lands on or behind the aircraft and the wingman simply stops.
-            // Slowing then releases the damping, so it creeps forward and stalls again.
-            bool settled = distance < Plugin.Config2.CaptureDistance.Value;
-
-            Vector3 damping = Vector3.zero;
-            if (settled)
-            {
-                Vector3 drift = aircraft.rb.velocity - leaderVel;
-                damping = Vector3.ClampMagnitude(
-                    -drift * Plugin.Config2.StationDamping.Value * speedFraction,
-                    Plugin.Config2.RotaryMaxDamping.Value);
-            }
-
-            GlobalPosition destination;
-
-            if (settled)
-            {
-                // Aim far, not near — the same reason the fixed-wing path does, and the
-                // remaining cause of helicopters circling their slot.
-                //
-                // AutopilotHelo puts its forward-flight waypoint at
-                // TerrainWaypoint(direction, ..., max(speed, 100) * 6) — never less than
-                // 600 m ahead. Point that at a slot 66 m away and the waypoint lands 600 m
-                // *beyond* it, so the aircraft overflies the slot and comes back round.
-                //
-                // Aiming down the leader's velocity instead puts that waypoint where it
-                // should be, with a bounded correction steering the aircraft onto station.
-                // The far aim fades out with speed, because below forward flight the tilt
-                // PID drives straight at the destination and holds position properly.
-                Vector3 leaderDir = leaderVel.sqrMagnitude > 1f
-                    ? leaderVel.normalized
-                    : leader.transform.forward;
-
-                // Distance to the destination is not just geometry here — it *is* the
-                // power command. AutopilotHelo sets collective from
-                //
-                //     0.5 + magnitude * 0.001 - speed * 0.02
-                //
-                // so holding speed v needs magnitude ≈ 20 * v, at which the two terms
-                // cancel and collective rests at hover. A fixed look-ahead therefore caps
-                // the speed a helicopter can sustain — 700 m capped it at 35 m/s, which is
-                // why they fell behind anything faster and eventually sank.
-                float sustain = leader.speed * Plugin.Config2.RotaryLookAheadSeconds.Value;
-
-                // Falling behind adds to that distance, which asks for more power, which is
-                // how a wingman catches up rather than settling into the deficit.
-                float behind = Mathf.Max(0f, Vector3.Dot(toSlot, leaderDir));
-
-                float lookAhead = Mathf.Max(Plugin.Config2.RotaryMinLookAhead.Value, sustain) + behind;
-
-                // Only the across-track part of the error steers; the along-track part has
-                // already been folded into the look-ahead above, and applying it twice made
-                // the destination fight itself.
-                Vector3 across = toSlot - leaderDir * Vector3.Dot(toSlot, leaderDir);
-                Vector3 correction = Vector3.ClampMagnitude(
-                    across * 2.5f, Plugin.Config2.StationMaxCorrection.Value);
-
-                destination = aircraft.GlobalPosition() + leaderDir * lookAhead + correction + damping;
-            }
-            else
-            {
-                // Transiting: chase the slot itself, led by the staleness of that waypoint.
-                destination = slotPos + leaderVel * lead;
-            }
-
-            // altitudeHold is a height above ground, and is used twice: as the height of
-            // the forward-flight waypoint and as the collective error term. It therefore
-            // has to describe where the *slot* sits above the terrain, not where the leader
-            // does — otherwise the vertical stagger between slots is silently discarded.
-            // Taken from the pure slot offset, never from the avoidance-adjusted position.
-            // Separation and path-cut pushes have a vertical component, and folding those
-            // into the commanded height let a sideways nudge drive altitudeHold down to its
-            // floor — which is how helicopters ended up sinking into the ground while still
-            // kilometres from their slot.
-            float agl = Mathf.Max(p.minimumRadarAlt, leader.radarAlt + slotStack);
-
-            // Hold the leader's heading once settled. While still transiting, leave yaw to
-            // the autopilot so the aircraft points where it is actually going instead of
-            // crabbing sideways across the gap.
-            Vector3 heading = leader.transform.forward;
-            heading.y = 0f;
-
-            aircraft.autopilot.AutoAim(
-                destination: destination,
-                altitudeHold: Mathf.Clamp(agl, 25f, 3000f),
-                aimDirection: (settled && heading.sqrMagnitude > 0.01f)
-                    ? heading.normalized
-                    : Vector3.zero,
-                targetVelocity: leaderVel,
-                followTerrain: true);
         }
 
         private void FlyFixedWing(Aircraft leader, GlobalPosition slotPos, Vector3 toSlot, float distance)

@@ -107,9 +107,11 @@ namespace WingCommand
         public readonly ConfigEntry<float> StationDeadband;
         public readonly ConfigEntry<float> StationBank;
         public readonly ConfigEntry<float> StationDamping;
-        public readonly ConfigEntry<float> RotaryLeadTime;
         public readonly ConfigEntry<float> RotarySpacingScale;
-        public readonly ConfigEntry<float> RotaryMaxDamping;
+        public readonly ConfigEntry<float> RotaryHoverSpeed;
+        public readonly ConfigEntry<float> RotaryCrossGain;
+        public readonly ConfigEntry<float> RotaryMaxCross;
+        public readonly ConfigEntry<float> RotaryStationDistance;
         public readonly ConfigEntry<float> RotaryLookAheadSeconds;
         public readonly ConfigEntry<float> RotaryMinLookAhead;
         public readonly ConfigEntry<float> AvoidanceSmoothing;
@@ -248,12 +250,6 @@ namespace WingCommand
                     "Bank angle a settled wingman is allowed. This is the main authority knob: " +
                     "the autopilot ignores the effort parameter at these values.",
                     new AcceptableValueRange<float>(10f, 180f)));
-            RotaryLeadTime = c.Bind("Formation", "RotaryLeadTime", 1.1f,
-                new ConfigDescription(
-                    "How far ahead helicopters aim, in seconds. AutopilotHelo only recomputes " +
-                    "its forward-flight waypoint once a second, so without a lead they chase a " +
-                    "target that is always stale and overshoot.",
-                    new AcceptableValueRange<float>(0f, 4f)));
             RotarySpacingScale = c.Bind("Formation", "RotarySpacingScale", 0.55f,
                 new ConfigDescription(
                     "Slot spacing multiplier for helicopter formations, which fly far closer " +
@@ -273,12 +269,24 @@ namespace WingCommand
                     "forward-flight waypoint at least 600 m out, so aiming nearer than that " +
                     "puts the waypoint beyond the slot and the aircraft circles it.",
                     new AcceptableValueRange<float>(200f, 2000f)));
-            RotaryMaxDamping = c.Bind("Formation", "RotaryMaxDamping", 40f,
+            RotaryHoverSpeed = c.Bind("Formation", "RotaryHoverSpeed", 25f,
                 new ConfigDescription(
-                    "Largest pull-back the helicopter damping term may apply, in metres. " +
-                    "Unbounded, it cancels the wingman's own closing speed and stalls it short " +
-                    "of the slot.",
-                    new AcceptableValueRange<float>(0f, 200f)));
+                    "Leader speed below which helicopters hold their slot as a point using " +
+                    "Autopilot.Hover, and above which they fly the leader's heading instead. " +
+                    "Hover is precise but tilts at most about seventeen degrees, so it cannot " +
+                    "cruise; the two regimes fly genuinely differently.",
+                    new AcceptableValueRange<float>(0f, 80f)));
+            RotaryCrossGain = c.Bind("Formation", "RotaryCrossGain", 2.5f,
+                new ConfigDescription("How hard a cruising helicopter steers onto its slot line.",
+                    new AcceptableValueRange<float>(0.5f, 8f)));
+            RotaryMaxCross = c.Bind("Formation", "RotaryMaxCross", 250f,
+                new ConfigDescription("Cap on that sideways correction, in metres.",
+                    new AcceptableValueRange<float>(30f, 1000f)));
+            RotaryStationDistance = c.Bind("Formation", "RotaryStationDistance", 200f,
+                new ConfigDescription(
+                    "Slot error below which a cruising helicopter holds the leader's heading " +
+                    "rather than pointing where it is going.",
+                    new AcceptableValueRange<float>(20f, 1000f)));
             StationDamping = c.Bind("Formation", "StationDamping", 1.6f,
                 new ConfigDescription(
                     "Damps the station-keeping correction against drift rate. Without it the " +
