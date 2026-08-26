@@ -226,11 +226,11 @@ namespace WingCommand
                 }
 
                 case WingAction.Rejoin:
-                    if (RequireWing()) { Wing.OrderAll(WingOrder.Formation); Toast("Wing: rejoin formation"); WingComms.SayWing(WingComms.Call.Rejoining); }
+                    if (RequireWing()) { Wing.OrderAll(WingOrder.Formation); Toast("Wing: rejoin formation"); }
                     break;
 
                 case WingAction.Engage:
-                    if (RequireWing()) { Wing.OrderAll(WingOrder.Engage); Toast("Wing: engage"); WingComms.SayWing(WingComms.Call.Engaging); }
+                    if (RequireWing()) { Wing.OrderAll(WingOrder.Engage); Toast("Wing: engage"); }
                     break;
 
                 case WingAction.ReturnToBase:
@@ -327,12 +327,30 @@ namespace WingCommand
             return false;
         }
 
+        /// <summary>
+        /// Confirmation of a player order. Routed into the game's own on-screen message
+        /// feed rather than drawn as a custom overlay, so it matches everything else on
+        /// screen by construction instead of by imitation. The IMGUI box remains only as a
+        /// fallback for when that feed is unavailable.
+        /// </summary>
         internal void Toast(string message)
         {
-            toast = message;
-            toastUntil = Time.unscaledTime + 3f;
             if (Plugin.Config2.VerboseLogging.Value)
                 Plugin.Logger.LogInfo("[Wing] " + message);
+
+            try
+            {
+                MessageUI ui = SceneSingleton<MessageUI>.i;
+                if (ui != null)
+                {
+                    ui.GameMessage(message);
+                    return;
+                }
+            }
+            catch { /* fall through to the overlay */ }
+
+            toast = message;
+            toastUntil = Time.unscaledTime + 3f;
         }
 
         internal static string SlotName(int slot)

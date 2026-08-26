@@ -23,6 +23,7 @@ namespace WingCommand
         private float rejoinBoostUntil;
         private float lastKeepUpDistance = float.MaxValue;
         private float losingGroundSince;
+        private Vector3 smoothedAvoidance;
 
         public FormationFlyState(WingMember member)
         {
@@ -81,20 +82,27 @@ namespace WingCommand
 
             GlobalPosition slotPos = leader.GlobalPosition() + offset;
 
-            // Separation keeps wingmen out of each other during a rejoin, when several
-            // converge on the leader from arbitrary angles.
-            slotPos += FormationSolver.Separation(
-                aircraft, member.Siblings,
-                Plugin.Config2.SeparationRadius.Value,
-                Plugin.Config2.SeparationStrength.Value);
+            // Separation keeps wingmen out of each other during a rejoin, and path-cut
+            // avoidance keeps them out of the leader's nose.
+            Vector3 avoidance =
+                FormationSolver.Separation(
+                    aircraft, member.Siblings,
+                    Plugin.Config2.SeparationRadius.Value,
+                    Plugin.Config2.SeparationStrength.Value) +
+                FormationSolver.AvoidLeaderPath(
+                    aircraft, leader,
+                    Plugin.Config2.PathCutLookAhead.Value,
+                    Plugin.Config2.PathCutRadius.Value,
+                    Plugin.Config2.PathCutStrength.Value);
 
-            // And out of the leader's own path: a wingman rejoining from in front would
-            // otherwise fly straight through the player to reach a slot behind them.
-            slotPos += FormationSolver.AvoidLeaderPath(
-                aircraft, leader,
-                Plugin.Config2.PathCutLookAhead.Value,
-                Plugin.Config2.PathCutRadius.Value,
-                Plugin.Config2.PathCutStrength.Value);
+            // Both switch on and off as distances cross thresholds, so applied raw they
+            // step the destination and the autopilot chases the step. Easing them in makes
+            // the target something an aircraft can actually track.
+            smoothedAvoidance = Vector3.Lerp(
+                smoothedAvoidance, avoidance,
+                1f - Mathf.Exp(-Time.fixedDeltaTime / Mathf.Max(0.05f, Plugin.Config2.AvoidanceSmoothing.Value)));
+
+            slotPos += smoothedAvoidance;
 
             Vector3 toSlot = slotPos - aircraft.GlobalPosition();
             float distance = toSlot.magnitude;
@@ -174,18 +182,52 @@ namespace WingCommand
 
             controlInputs.throttle = Mathf.Clamp01(throttle);
 
-            // --- Steering: offset pursuit. ---
-            // Aim at where the slot will be, with the lead time scaled by how far out we
-            // are (Reynolds uses T = D * c). Closing in, the prediction shrinks to zero so
-            // the aircraft settles on the slot instead of continually overshooting it.
-            bool closed = distance < 400f;
-            float effort = closed ? 0.6f : 1f;
-            float bankAllowed = closed ? 100f : 160f;
+            // --- Steering ---
+            // AutoAim is a pursuit controller: it rotates the aircraft's velocity toward
+            // the destination and banks to chase it. Aimed at a point a few tens of metres
+            // away, a small lateral drift swings the commanded direction by tens of
+            // degrees — which is why wingmen wandered and rolled constantly.
+            //
+            // So chase the slot only while closing on it. Once in place, fly *parallel* to
+            // the leader and aim at a distant point displaced by a bounded correction: a
+            // 200 m correction over a 1200 m look-ahead is under ten degrees of command no
+            // matter how far the wingman drifts, turning station-keeping into small steady
+            // inputs instead of a continuous chase.
+            float capture = Plugin.Config2.CaptureDistance.Value;
+            float bankAllowed;
+            GlobalPosition aimPoint;
 
-            float leadTime = Mathf.Clamp(distance / Mathf.Max(aircraft.speed, 50f), 0f, 6f);
-            if (closed) leadTime *= distance / 400f;
+            if (distance < capture)
+            {
+                Vector3 leaderVel = leader.rb.velocity;
+                Vector3 ahead = (leaderVel.sqrMagnitude > 1f
+                                    ? leaderVel.normalized
+                                    : leader.transform.forward)
+                                * Plugin.Config2.StationLookAhead.Value;
 
-            GlobalPosition aimPoint = slotPos + leader.rb.velocity * leadTime;
+                // Ignore the last few metres outright: chasing them is what reads as fidget.
+                Vector3 correction = distance > Plugin.Config2.StationDeadband.Value
+                    ? Vector3.ClampMagnitude(toSlot * 2.5f, Plugin.Config2.StationMaxCorrection.Value)
+                    : Vector3.zero;
+
+                aimPoint = aircraft.GlobalPosition() + ahead + correction;
+
+                // Bank authority eases in from settled to pursuit across the capture
+                // radius, so nothing steps at the boundary.
+                bankAllowed = Mathf.Lerp(Plugin.Config2.StationBank.Value, 140f,
+                                         distance / Mathf.Max(capture, 1f));
+            }
+            else
+            {
+                float leadTime = Mathf.Clamp(distance / Mathf.Max(aircraft.speed, 50f), 0f, 6f);
+                aimPoint = slotPos + leader.rb.velocity * leadTime;
+                bankAllowed = 160f;
+            }
+
+            // effort is read as (effort > 1f || radarAlt < 1f) ? 1f : clamp01(airspeed /
+            // cornerSpeed), so anything at or below 1 behaves identically. Varying it, as
+            // this used to, achieved nothing.
+            const float effort = 1f;
 
             aircraft.autopilot.AutoAim(
                 destination: aimPoint,

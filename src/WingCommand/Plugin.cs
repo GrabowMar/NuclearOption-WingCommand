@@ -71,6 +71,12 @@ namespace WingCommand
         public readonly ConfigEntry<float> ClosureAuthority;
         public readonly ConfigEntry<float> SeparationRadius;
         public readonly ConfigEntry<float> SeparationStrength;
+        public readonly ConfigEntry<float> CaptureDistance;
+        public readonly ConfigEntry<float> StationLookAhead;
+        public readonly ConfigEntry<float> StationMaxCorrection;
+        public readonly ConfigEntry<float> StationDeadband;
+        public readonly ConfigEntry<float> StationBank;
+        public readonly ConfigEntry<float> AvoidanceSmoothing;
 
         // --- AI ---
         public readonly ConfigEntry<bool> AiTweakEnabled;
@@ -159,6 +165,36 @@ namespace WingCommand
             SeparationStrength = c.Bind("Formation", "SeparationStrength", 12f,
                 new ConfigDescription("Strength of that push, in metres of slot displacement.",
                     new AcceptableValueRange<float>(0f, 100f)));
+
+            CaptureDistance = c.Bind("Formation", "CaptureDistance", 500f,
+                new ConfigDescription(
+                    "Inside this distance a wingman stops chasing the slot and flies parallel " +
+                    "to you with small corrections. Raising it makes them settle sooner and " +
+                    "more gently; lowering it makes them chase harder for longer.",
+                    new AcceptableValueRange<float>(100f, 2000f)));
+            StationLookAhead = c.Bind("Formation", "StationLookAhead", 1200f,
+                new ConfigDescription(
+                    "How far ahead a settled wingman aims. Larger is calmer, because the same " +
+                    "positional correction becomes a smaller steering angle.",
+                    new AcceptableValueRange<float>(300f, 4000f)));
+            StationMaxCorrection = c.Bind("Formation", "StationMaxCorrection", 220f,
+                new ConfigDescription(
+                    "Largest sideways correction a settled wingman will command. Together with " +
+                    "the look-ahead this caps how sharply it can manoeuvre while in formation.",
+                    new AcceptableValueRange<float>(20f, 1000f)));
+            StationDeadband = c.Bind("Formation", "StationDeadband", 8f,
+                new ConfigDescription("Slot error below which a wingman stops correcting at all.",
+                    new AcceptableValueRange<float>(0f, 60f)));
+            StationBank = c.Bind("Formation", "StationBank", 45f,
+                new ConfigDescription(
+                    "Bank angle a settled wingman is allowed. This is the main authority knob: " +
+                    "the autopilot ignores the effort parameter at these values.",
+                    new AcceptableValueRange<float>(10f, 180f)));
+            AvoidanceSmoothing = c.Bind("Formation", "AvoidanceSmoothing", 0.4f,
+                new ConfigDescription(
+                    "Seconds over which separation and path-avoidance pushes ease in, so they " +
+                    "do not step the target position.",
+                    new AcceptableValueRange<float>(0.05f, 3f)));
 
             AiTweakEnabled = c.Bind("AI", "EnableAiTweak", false,
                 "Scale AI pilot skill and bravery. Changes vanilla combat feel, so it is off by default.");
