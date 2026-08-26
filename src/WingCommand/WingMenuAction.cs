@@ -25,6 +25,13 @@ namespace WingCommand
         /// <summary>Key into <see cref="IconFactory"/> for this entry's drawn glyph.</summary>
         public string IconKey;
 
+        /// <summary>
+        /// Set on entries that open another page. Dwelling on one swaps the wheel in place
+        /// rather than waiting for the button to be released, so a nested menu is a single
+        /// continuous gesture.
+        /// </summary>
+        public Action OnHoverSwitch;
+
         public static WingMenuAction Create(string label, Action<Aircraft> onTrigger,
                                             Func<Aircraft, bool> onAllowed = null)
         {
