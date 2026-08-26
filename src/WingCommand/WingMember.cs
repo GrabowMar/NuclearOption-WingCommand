@@ -15,6 +15,7 @@ namespace WingCommand
         public WingOrder Order { get; private set; } = WingOrder.Formation;
 
         private readonly FormationFlyState formationState;
+        private readonly float joinedAt;
         private WingRegistry owner;
 
         public WingMember(WingRegistry owner, Aircraft aircraft, Pilot pilot, int slot)
@@ -24,6 +25,7 @@ namespace WingCommand
             Pilot = pilot;
             Slot = slot;
             formationState = new FormationFlyState(this);
+            joinedAt = Time.timeSinceLevelLoad;
         }
 
         public Aircraft Leader => owner?.Leader;
@@ -127,6 +129,11 @@ namespace WingCommand
         {
             if (!Alive || Order == WingOrder.ReturnToBase) return;
             if (!Plugin.Config2.AutoReturnOnEmpty.Value) return;
+
+            // A freshly spawned aircraft can be sampled before its weapon stations have
+            // finished initialising, which reads as zero ammunition and would send it
+            // straight home the moment it joined.
+            if (Time.timeSinceLevelLoad - joinedAt < 10f) return;
 
             if (Fuel <= Plugin.Config2.BingoFuel.Value)
             {

@@ -197,7 +197,12 @@ namespace WingCommand
                     Aircraft spawnedAircraft = spawner.SpawnAircraft(
                         player: null,
                         prefab: prefab,
-                        loadout: leader.loadout,
+                        // Null, not the leader's Loadout instance. Aircraft initialisation
+                        // substitutes the airframe's own standard loadout when this is
+                        // null, whereas handing over the leader's object shares one mutable
+                        // loadout across every aircraft — which left the spawned wing with
+                        // no usable ammunition and sent all of them straight home Winchester.
+                        loadout: null,
                         fuelLevel: 1f,
                         livery: leader.NetworkLiveryKey,
                         globalPosition: p.Global,
