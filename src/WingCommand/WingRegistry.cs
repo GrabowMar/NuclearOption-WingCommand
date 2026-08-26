@@ -43,6 +43,17 @@ namespace WingCommand
             for (int i = 0; i < members.Count; i++) members[i].CheckReserves();
         }
 
+        /// <summary>
+        /// Drop the roster without touching the aircraft, for when a mission ends and they
+        /// are being destroyed anyway. Leaving them in place carried dead members into the
+        /// next mission, where they surfaced as "lost (gone)".
+        /// </summary>
+        public void Clear()
+        {
+            members.Clear();
+            Leader = null;
+        }
+
         /// <summary>Put the whole wing onto one target.</summary>
         public int AttackTarget(Unit target)
         {

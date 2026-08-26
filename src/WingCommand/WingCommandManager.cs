@@ -53,6 +53,7 @@ namespace WingCommand
                 WmcScreen.Reset();
                 PlayerFireWatcher.Reset();
                 WingComms.Reset();
+                Wing.Clear();
                 return;
             }
 

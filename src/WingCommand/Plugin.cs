@@ -76,6 +76,7 @@ namespace WingCommand
         public readonly ConfigEntry<float> StationMaxCorrection;
         public readonly ConfigEntry<float> StationDeadband;
         public readonly ConfigEntry<float> StationBank;
+        public readonly ConfigEntry<float> StationDamping;
         public readonly ConfigEntry<float> AvoidanceSmoothing;
 
         // --- AI ---
@@ -190,6 +191,12 @@ namespace WingCommand
                     "Bank angle a settled wingman is allowed. This is the main authority knob: " +
                     "the autopilot ignores the effort parameter at these values.",
                     new AcceptableValueRange<float>(10f, 180f)));
+            StationDamping = c.Bind("Formation", "StationDamping", 1.6f,
+                new ConfigDescription(
+                    "Damps the station-keeping correction against drift rate. Without it the " +
+                    "correction overshoots and reverses, which shows up as a slow left-right " +
+                    "rocking. Raise it if they still rock, lower it if they feel sluggish.",
+                    new AcceptableValueRange<float>(0f, 6f)));
             AvoidanceSmoothing = c.Bind("Formation", "AvoidanceSmoothing", 0.4f,
                 new ConfigDescription(
                     "Seconds over which separation and path-avoidance pushes ease in, so they " +

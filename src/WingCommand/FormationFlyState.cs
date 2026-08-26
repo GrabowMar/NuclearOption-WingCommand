@@ -205,9 +205,16 @@ namespace WingCommand
                                     : leader.transform.forward)
                                 * Plugin.Config2.StationLookAhead.Value;
 
-                // Ignore the last few metres outright: chasing them is what reads as fidget.
+                // Proportional-only correction overshoots and reverses, which the autopilot
+                // answers with yaw — the slow left-right rocking. Subtracting a term
+                // proportional to drift rate damps it: the correction eases off while
+                // already closing, instead of driving all the way to the slot and back.
+                Vector3 drift = aircraft.rb.velocity - leader.rb.velocity;
+
                 Vector3 correction = distance > Plugin.Config2.StationDeadband.Value
-                    ? Vector3.ClampMagnitude(toSlot * 2.5f, Plugin.Config2.StationMaxCorrection.Value)
+                    ? Vector3.ClampMagnitude(
+                          toSlot * 2.5f - drift * Plugin.Config2.StationDamping.Value,
+                          Plugin.Config2.StationMaxCorrection.Value)
                     : Vector3.zero;
 
                 aimPoint = aircraft.GlobalPosition() + ahead + correction;
