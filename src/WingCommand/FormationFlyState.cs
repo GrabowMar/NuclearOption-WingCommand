@@ -93,10 +93,17 @@ namespace WingCommand
 
             // Separation keeps wingmen out of each other during a rejoin, and path-cut
             // avoidance keeps them out of the leader's nose.
+            //
+            // The radius has to scale with spacing. Left at its fixed-wing value it sat
+            // wider than a rotary formation's own slots, so helicopters repelled each other
+            // permanently and the formation could never settle.
+            float separationRadius = Plugin.Config2.SeparationRadius.Value *
+                                     (spacing / Mathf.Max(Plugin.Config2.SlotSpacing.Value, 1f));
+
             Vector3 avoidance =
                 FormationSolver.Separation(
                     aircraft, member.Siblings,
-                    Plugin.Config2.SeparationRadius.Value,
+                    separationRadius,
                     Plugin.Config2.SeparationStrength.Value) +
                 FormationSolver.AvoidLeaderPath(
                     aircraft, leader,
@@ -126,7 +133,7 @@ namespace WingCommand
             if (aircraft.autopilot is AutopilotPlane)
                 FlyFixedWing(leader, slotPos, toSlot, distance);
             else
-                FlyRotary(leader, slotPos, toSlot, distance);
+                FlyRotary(leader, slotPos, toSlot, distance, offset.y);
         }
 
         /// <summary>
@@ -184,9 +191,16 @@ namespace WingCommand
 
             float error = Mathf.DeltaAngle(myBank, leaderBank);
 
+            // Roll input is a *rate* command, not an angle. Driving it from angle error
+            // alone is an undamped integrator: the aircraft rolls, sails past the leader's
+            // bank, keeps rolling, and ends up inverted — which is how wingmen were flying
+            // themselves into the ground at full speed. The roll-rate term is what closes
+            // the loop.
+            float rollRate = Vector3.Dot(aircraft.rb.angularVelocity, aircraft.transform.forward);
+            float command = Mathf.Clamp(error * 0.02f - rollRate * 0.5f, -1f, 1f);
+
             // Blend rather than override: the autopilot is still flying the aircraft, and
             // fighting it outright makes wingmen wallow.
-            float command = Mathf.Clamp(error * 0.02f, -1f, 1f);
             controlInputs.roll = Mathf.Lerp(
                 controlInputs.roll, command, Plugin.Config2.BankMatchStrength.Value);
 
@@ -198,7 +212,8 @@ namespace WingCommand
         /// override the five-argument overload and manage collective themselves, so
         /// throttle is deliberately left alone here.
         /// </summary>
-        private void FlyRotary(Aircraft leader, GlobalPosition slotPos, Vector3 toSlot, float distance)
+        private void FlyRotary(Aircraft leader, GlobalPosition slotPos, Vector3 toSlot,
+                               float distance, float slotStack)
         {
             AircraftParameters p = aircraft.GetAircraftParameters();
             Vector3 leaderVel = leader.rb != null ? leader.rb.velocity : Vector3.zero;
@@ -242,8 +257,12 @@ namespace WingCommand
             // the forward-flight waypoint and as the collective error term. It therefore
             // has to describe where the *slot* sits above the terrain, not where the leader
             // does — otherwise the vertical stagger between slots is silently discarded.
-            float stack = slotPos.y - leader.GlobalPosition().y;
-            float agl = Mathf.Max(p.minimumRadarAlt, leader.radarAlt + stack);
+            // Taken from the pure slot offset, never from the avoidance-adjusted position.
+            // Separation and path-cut pushes have a vertical component, and folding those
+            // into the commanded height let a sideways nudge drive altitudeHold down to its
+            // floor — which is how helicopters ended up sinking into the ground while still
+            // kilometres from their slot.
+            float agl = Mathf.Max(p.minimumRadarAlt, leader.radarAlt + slotStack);
 
             // Hold the leader's heading once settled. While still transiting, leave yaw to
             // the autopilot so the aircraft points where it is actually going instead of
@@ -311,9 +330,19 @@ namespace WingCommand
             float speedError = desiredSpeed - aircraft.speed;
             float throttle = baseline + speedError * Plugin.Config2.ThrottleGain.Value;
 
-            // A long way out, just get there — unless still waiting its turn to rejoin.
+            // Full throttle only when genuinely out of position, and never once inside the
+            // capture radius.
+            //
+            // The rejoin boost used to run for a fixed eight seconds regardless of distance,
+            // so a wingman spawned a hundred metres from its slot got the same firewalled
+            // throttle as one two kilometres out. It would rocket past the leader and then
+            // have to be dragged back, which is the "turbo and break" behaviour — and jets
+            // decelerate on throttle alone very slowly, so the overshoot was large.
             bool holding = Time.timeSinceLevelLoad < rejoinHoldUntil;
-            if (!holding && (distance > 1500f || Time.timeSinceLevelLoad < rejoinBoostUntil))
+            bool outOfPosition = distance > Plugin.Config2.CaptureDistance.Value;
+
+            if (!holding && outOfPosition &&
+                (distance > 1500f || Time.timeSinceLevelLoad < rejoinBoostUntil))
                 throttle = 1f;
 
             controlInputs.throttle = Mathf.Clamp01(throttle);

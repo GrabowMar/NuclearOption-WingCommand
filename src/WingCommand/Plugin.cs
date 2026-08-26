@@ -15,7 +15,7 @@ namespace WingCommand
     {
         public const string PluginGuid = "com.marci.wingcommand";
         public const string PluginName = "WingCommand";
-        public const string PluginVersion = "0.2.0";
+        public const string PluginVersion = "0.3.0";
 
         internal static Plugin Instance { get; private set; }
         internal static new ManualLogSource Logger { get; private set; }
@@ -253,10 +253,11 @@ namespace WingCommand
             ThreatSpacingScale = c.Bind("Formation", "ThreatSpacingScale", 2.2f,
                 new ConfigDescription("How far the formation opens under threat.",
                     new AcceptableValueRange<float>(1f, 5f)));
-            BankMatching = c.Bind("Formation", "BankMatching", true,
+            BankMatching = c.Bind("Formation", "BankMatching", false,
                 "Wingmen roll with you once settled instead of staying wings-level. Cosmetic, " +
                 "but wings-level wingmen through a banked turn are the clearest giveaway that " +
-                "a formation is simulated rather than flown. Turn off if they wallow.");
+                "a formation is simulated rather than flown. Off by default: an earlier version " +
+                "of this drove wingmen inverted into the ground, so it needs to earn trust.");
             BankMatchStrength = c.Bind("Formation", "BankMatchStrength", 0.35f,
                 new ConfigDescription(
                     "How much of the roll command bank matching may take from the autopilot. " +
