@@ -57,7 +57,10 @@ namespace WingCommand
                 $"ThrottleBaseline={Config2.ThrottleBaseline.Value} " +
                 $"CaptureDistance={Config2.CaptureDistance.Value} " +
                 $"BankMatching={Config2.BankMatching.Value} " +
-                $"WidenUnderThreat={Config2.WidenUnderThreat.Value}");
+                $"WidenUnderThreat={Config2.WidenUnderThreat.Value} " +
+                $"RotaryLookAheadSeconds={Config2.RotaryLookAheadSeconds.Value} " +
+                $"RotaryMinLookAhead={Config2.RotaryMinLookAhead.Value} " +
+                $"RotarySpacingScale={Config2.RotarySpacingScale.Value}");
 
             if (Config2.ThrottleBaseline.Value < 0.99f)
             {
@@ -107,7 +110,8 @@ namespace WingCommand
         public readonly ConfigEntry<float> RotaryLeadTime;
         public readonly ConfigEntry<float> RotarySpacingScale;
         public readonly ConfigEntry<float> RotaryMaxDamping;
-        public readonly ConfigEntry<float> RotaryLookAhead;
+        public readonly ConfigEntry<float> RotaryLookAheadSeconds;
+        public readonly ConfigEntry<float> RotaryMinLookAhead;
         public readonly ConfigEntry<float> AvoidanceSmoothing;
         public readonly ConfigEntry<float> RejoinStagger;
         public readonly ConfigEntry<bool> WidenUnderThreat;
@@ -255,11 +259,19 @@ namespace WingCommand
                     "Slot spacing multiplier for helicopter formations, which fly far closer " +
                     "together than jets.",
                     new AcceptableValueRange<float>(0.2f, 2f)));
-            RotaryLookAhead = c.Bind("Formation", "RotaryLookAhead", 700f,
+            RotaryLookAheadSeconds = c.Bind("Formation", "RotaryLookAheadSeconds", 20f,
                 new ConfigDescription(
-                    "How far ahead a settled helicopter aims. AutopilotHelo places its own " +
-                    "forward-flight waypoint at least 600 m out, so aiming at a nearby slot " +
-                    "puts that waypoint far beyond it and the aircraft circles.",
+                    "Seconds of travel a settled helicopter aims ahead. Twenty is not " +
+                    "arbitrary: AutopilotHelo sets collective from " +
+                    "0.5 + distance*0.001 - speed*0.02, so a look-ahead of 20 x speed makes " +
+                    "those terms cancel and collective rest at hover, which is what lets a " +
+                    "helicopter sustain any speed. Lower it and they cannot hold pace.",
+                    new AcceptableValueRange<float>(5f, 60f)));
+            RotaryMinLookAhead = c.Bind("Formation", "RotaryMinLookAhead", 600f,
+                new ConfigDescription(
+                    "Floor for that look-ahead, in metres. AutopilotHelo places its own " +
+                    "forward-flight waypoint at least 600 m out, so aiming nearer than that " +
+                    "puts the waypoint beyond the slot and the aircraft circles it.",
                     new AcceptableValueRange<float>(200f, 2000f)));
             RotaryMaxDamping = c.Bind("Formation", "RotaryMaxDamping", 40f,
                 new ConfigDescription(

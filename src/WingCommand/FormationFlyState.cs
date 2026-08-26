@@ -269,12 +269,31 @@ namespace WingCommand
                     ? leaderVel.normalized
                     : leader.transform.forward;
 
-                Vector3 ahead = leaderDir * (Plugin.Config2.RotaryLookAhead.Value * speedFraction);
+                // Distance to the destination is not just geometry here — it *is* the
+                // power command. AutopilotHelo sets collective from
+                //
+                //     0.5 + magnitude * 0.001 - speed * 0.02
+                //
+                // so holding speed v needs magnitude ≈ 20 * v, at which the two terms
+                // cancel and collective rests at hover. A fixed look-ahead therefore caps
+                // the speed a helicopter can sustain — 700 m capped it at 35 m/s, which is
+                // why they fell behind anything faster and eventually sank.
+                float sustain = leader.speed * Plugin.Config2.RotaryLookAheadSeconds.Value;
 
+                // Falling behind adds to that distance, which asks for more power, which is
+                // how a wingman catches up rather than settling into the deficit.
+                float behind = Mathf.Max(0f, Vector3.Dot(toSlot, leaderDir));
+
+                float lookAhead = Mathf.Max(Plugin.Config2.RotaryMinLookAhead.Value, sustain) + behind;
+
+                // Only the across-track part of the error steers; the along-track part has
+                // already been folded into the look-ahead above, and applying it twice made
+                // the destination fight itself.
+                Vector3 across = toSlot - leaderDir * Vector3.Dot(toSlot, leaderDir);
                 Vector3 correction = Vector3.ClampMagnitude(
-                    toSlot * 2.5f, Plugin.Config2.StationMaxCorrection.Value);
+                    across * 2.5f, Plugin.Config2.StationMaxCorrection.Value);
 
-                destination = aircraft.GlobalPosition() + ahead + correction + damping;
+                destination = aircraft.GlobalPosition() + leaderDir * lookAhead + correction + damping;
             }
             else
             {
