@@ -26,6 +26,8 @@ namespace WingCommand
         private static WingMenuAction rootEntry;
         private static WingMenuAction[] commanderMenu;
         private static WingMenuAction[] formationMenu;
+        private static WingMenuAction[] ordersMenu;
+        private static WingMenuAction[] wingMenu;
 
         /// <summary>The stock wheel contents, captured the first time we swap away.</summary>
         private static RadialMenuAction[] stockActions;
@@ -118,17 +120,32 @@ namespace WingCommand
 
             rootEntry = WingMenuAction.Create(RootLabel, _ => ShowCommanderMenu());
 
+            // Five slices, not nine. A wheel is selected by direction, so every extra
+            // entry narrows the wedge you have to hit; past about six the gesture stops
+            // being reliable, especially on a stick. Orders and roster management move
+            // into their own pages, leaving a top level that reads at a glance.
             var commander = new List<WingMenuAction>
             {
-                Leaf("Recruit Nearest", WingAction.RecruitNearest, "recruit"),
+                Icon(WingMenuAction.Create("Orders", _ => ShowOrdersMenu()), "orders"),
+                Leaf("Attack My Target", WingAction.AttackMyTarget, "attack"),
+                Icon(WingMenuAction.Create("Formation", _ => ShowFormationMenu()), "formation"),
+                Leaf("Posture", WingAction.TogglePosture, "posture"),
+                Icon(WingMenuAction.Create("Wing", _ => ShowWingMenu()), "recruit"),
+            };
+
+            var orders = new List<WingMenuAction>
+            {
                 Leaf("Rejoin", WingAction.Rejoin, "rejoin"),
                 Leaf("Engage", WingAction.Engage, "engage"),
                 Leaf("Return To Base", WingAction.ReturnToBase, "rtb"),
-                Icon(WingMenuAction.Create("Formation", _ => ShowFormationMenu()), "formation"),
-                Leaf("Attack My Target", WingAction.AttackMyTarget, "attack"),
-                Leaf("Posture", WingAction.TogglePosture, "posture"),
+                Icon(WingMenuAction.Create("Back", _ => ShowCommanderMenu()), "back"),
+            };
+
+            var wing = new List<WingMenuAction>
+            {
+                Leaf("Recruit Nearest", WingAction.RecruitNearest, "recruit"),
                 Leaf("Disband", WingAction.Disband, "disband"),
-                Icon(WingMenuAction.Create("Back", _ => RestoreStockWheel()), "back"),
+                Icon(WingMenuAction.Create("Back", _ => ShowCommanderMenu()), "back"),
             };
 
             var shapes = new List<WingMenuAction>();
@@ -146,15 +163,23 @@ namespace WingCommand
             shapes.Add(Icon(WingMenuAction.Create("Back", _ => ShowCommanderMenu()), "back"));
 
             commanderMenu = commander.ToArray();
+            ordersMenu = orders.ToArray();
+            wingMenu = wing.ToArray();
             formationMenu = shapes.ToArray();
 
             // Take the wedge background and colours from a stock entry so the slices match
             // the game's styling, then overwrite the icon with our own drawn glyph.
             ApplyAppearance(rootEntry, template(0), "root");
-            for (int i = 0; i < commanderMenu.Length; i++)
-                ApplyAppearance(commanderMenu[i], template(i), null);
-            for (int i = 0; i < formationMenu.Length; i++)
-                ApplyAppearance(formationMenu[i], template(i), null);
+            ApplyAll(commanderMenu, template);
+            ApplyAll(ordersMenu, template);
+            ApplyAll(wingMenu, template);
+            ApplyAll(formationMenu, template);
+        }
+
+        private static void ApplyAll(WingMenuAction[] entries, Func<int, RadialMenuAction> template)
+        {
+            for (int i = 0; i < entries.Length; i++)
+                ApplyAppearance(entries[i], template(i), null);
         }
 
         /// <summary>Tag an entry with the glyph it should draw.</summary>
@@ -211,6 +236,10 @@ namespace WingCommand
         private static void ShowCommanderMenu() => Swap(commanderMenu, submenu: true);
 
         private static void ShowFormationMenu() => Swap(formationMenu, submenu: true);
+
+        private static void ShowOrdersMenu() => Swap(ordersMenu, submenu: true);
+
+        private static void ShowWingMenu() => Swap(wingMenu, submenu: true);
 
         internal static void RestoreStockWheel()
         {

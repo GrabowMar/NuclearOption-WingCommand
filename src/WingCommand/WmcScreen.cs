@@ -34,11 +34,14 @@ namespace WingCommand
         private static TMP_Text shapeLabel;
         private static TMP_Text summaryLabel;
         private static TMP_Text postureLabel;
+        private static WmcButton defensiveButton;
+        private static WmcButton aggressiveButton;
         private static TMP_FontAsset font;
 
         private static readonly List<RosterRow> rosterRows = new List<RosterRow>();
 
         private static float nextAttempt;
+        private static float nextRefresh;
         private static bool gaveUp;
 
         public static bool Installed => screen != null;
@@ -61,7 +64,13 @@ namespace WingCommand
                 return;
             }
 
-            if (screen.isActive) Refresh(wing);
+            // Refreshing rebuilds a formatted string per roster row; at frame rate that is
+            // pure garbage for numbers a reader cannot follow that fast.
+            if (screen.isActive && Time.unscaledTime >= nextRefresh)
+            {
+                nextRefresh = Time.unscaledTime + 0.2f;
+                Refresh(wing);
+            }
         }
 
         /// <summary>Forget the screen when the mission ends; a new one is built next time.</summary>
@@ -73,6 +82,8 @@ namespace WingCommand
             summaryLabel = null;
             rosterRows.Clear();
             postureLabel = null;
+            defensiveButton = null;
+            aggressiveButton = null;
             gaveUp = false;
         }
 
@@ -260,16 +271,26 @@ namespace WingCommand
             return y - 8f;
         }
 
-        /// <summary>Small caps section heading, matching the stock left-aligned group labels.</summary>
+        /// <summary>
+        /// Section heading with a rule running out to the right of it, which is how the
+        /// stock panels separate their groups.
+        /// </summary>
         private static float Heading(RectTransform parent, float y, string text)
         {
-            Label(parent, text, new Rect(Pad, y, PanelWidth - Pad * 2f, 18f),
-                  Green(), 12f, FontStyles.Normal, TextAlignmentOptions.Left);
+            float labelWidth = 8f * text.Length + 10f;
+
+            Label(parent, text, new Rect(Pad, y, labelWidth, 16f),
+                  Green(), 11f, FontStyles.Normal, TextAlignmentOptions.Left);
+
+            float ruleX = Pad + labelWidth + 6f;
+            Rule(parent, new Rect(ruleX, y - 8f, PanelWidth - Pad - ruleX, 1f), FrameColor());
+
             return y - 20f;
         }
 
         private static float AddShapeSelector(RectTransform parent, float y)
         {
+            y = Heading(parent, y, "FORMATION");
             float w = PanelWidth - Pad * 2f;
 
             Panel(parent, new Rect(Pad, y, w, RowHeight), RowColor());
@@ -287,17 +308,19 @@ namespace WingCommand
 
         private static float AddPostureSelector(RectTransform parent, float y)
         {
+            y = Heading(parent, y, "RULES OF ENGAGEMENT");
+
             float w = (PanelWidth - Pad * 2f - Gap) * 0.5f;
 
-            Button(parent, "Defensive", new Rect(Pad, y, w, RowHeight),
-                   () => SetPosture(WingPosture.Defensive));
-            Button(parent, "Aggressive", new Rect(Pad + w + Gap, y, w, RowHeight),
-                   () => SetPosture(WingPosture.Aggressive));
+            defensiveButton = Button(parent, "DEFENSIVE", new Rect(Pad, y, w, RowHeight),
+                                     () => SetPosture(WingPosture.Defensive));
+            aggressiveButton = Button(parent, "AGGRESSIVE", new Rect(Pad + w + Gap, y, w, RowHeight),
+                                      () => SetPosture(WingPosture.Aggressive));
 
-            y -= RowHeight + Gap;
+            y -= RowHeight + 2f;
 
-            postureLabel = Label(parent, "", new Rect(Pad, y, PanelWidth - Pad * 2f, 18f),
-                                 Green(), 11f, FontStyles.Normal, TextAlignmentOptions.Left);
+            postureLabel = Label(parent, "", new Rect(Pad, y, PanelWidth - Pad * 2f, 16f),
+                                 Dim(), 10f, FontStyles.Normal, TextAlignmentOptions.Left);
             return y - 22f;
         }
 
@@ -319,18 +342,33 @@ namespace WingCommand
 
         private static float AddRosterArea(RectTransform parent, float y)
         {
+            y = Heading(parent, y, "FLIGHT");
+
+            // Column headers, so the numbers in each row are readable without guessing.
+            float w = PanelWidth - Pad * 2f;
+            Label(parent, "CALLSIGN", new Rect(Pad + 26f, y, 108f, 14f), Dim(), 9f,
+                  FontStyles.Normal, TextAlignmentOptions.Left);
+            Label(parent, "STATE", new Rect(Pad + 136f, y, 62f, 14f), Dim(), 9f,
+                  FontStyles.Normal, TextAlignmentOptions.Left);
+            Label(parent, "SLOT ERR", new Rect(Pad + 198f, y, 62f, 14f), Dim(), 9f,
+                  FontStyles.Normal, TextAlignmentOptions.Right);
+            Label(parent, "FUEL  AMMO", new Rect(Pad + 264f, y, 70f, 14f), Dim(), 9f,
+                  FontStyles.Normal, TextAlignmentOptions.Right);
+            y -= 16f;
+
             float h = RowHeight * Plugin.Config2.MaxWingSize.Value + Gap * 2f;
 
             var area = new GameObject("Roster", typeof(RectTransform));
             rosterArea = area.GetComponent<RectTransform>();
             rosterArea.SetParent(parent, worldPositionStays: false);
-            Place(rosterArea, new Rect(Pad, y, PanelWidth - Pad * 2f, h));
+            Place(rosterArea, new Rect(Pad, y, w, h));
 
             return y - (h + Gap);
         }
 
         private static float AddActions(RectTransform parent, float y)
         {
+            y = Heading(parent, y, "ORDERS");
             float w = (PanelWidth - Pad * 2f - Gap) * 0.5f;
 
             y = Pair(parent, y, w,
@@ -388,7 +426,10 @@ namespace WingCommand
                 summaryLabel.text = wing.Count + " of " + Plugin.Config2.MaxWingSize.Value + " assigned";
 
             if (postureLabel != null)
-                postureLabel.text = "ROE: " + wing.Posture.ToString().ToUpperInvariant() + PostureHint(wing.Posture);
+                postureLabel.text = PostureHint(wing.Posture);
+
+            defensiveButton?.SetLatched(wing.Posture == WingPosture.Defensive);
+            aggressiveButton?.SetLatched(wing.Posture == WingPosture.Aggressive);
 
             SyncRosterRows(wing.Count);
 
@@ -487,8 +528,8 @@ namespace WingCommand
         private static string PostureHint(WingPosture posture)
         {
             return posture == WingPosture.Aggressive
-                ? "  - breaks for air, leashed"
-                : "  - holds slot, mirrors your ground fire";
+                ? "Breaks to fight aircraft, then rejoins. Ground targets from the slot."
+                : "Holds the slot. Intercepts missiles. Ground fire only when you fire.";
         }
 
         private static void CycleShape(int direction)
@@ -575,7 +616,7 @@ namespace WingCommand
         /// An outlined button in the stock idiom: grey frame and text at rest, green when
         /// hovered — the same on/off treatment HUD OPTIONS gives its MAXIMIZE buttons.
         /// </summary>
-        private static void Button(RectTransform parent, string text, Rect rect, Action onClick)
+        private static WmcButton Button(RectTransform parent, string text, Rect rect, Action onClick)
         {
             var go = new GameObject("Button", typeof(RectTransform), typeof(Image));
             var rt = go.GetComponent<RectTransform>();
@@ -596,6 +637,7 @@ namespace WingCommand
 
             WmcButton behaviour = go.AddComponent<WmcButton>();
             behaviour.Initialise(frame, label, onClick);
+            return behaviour;
         }
 
         /// <summary>Anchor a rect to the parent's top-left and place it in pixels.</summary>
@@ -747,12 +789,21 @@ namespace WingCommand
         private Image[] frame;
         private TMP_Text label;
         private Action onClick;
+        private bool latched;
 
         public void Initialise(Image[] frame, TMP_Text label, Action onClick)
         {
             this.frame = frame;
             this.label = label;
             this.onClick = onClick;
+        }
+
+        /// <summary>Hold this button lit, for a selected option in a group.</summary>
+        public void SetLatched(bool on)
+        {
+            if (latched == on) return;
+            latched = on;
+            Tint(on ? WmcScreen.Green() : WmcScreen.Grey());
         }
 
         private void Tint(Color color)
@@ -777,6 +828,7 @@ namespace WingCommand
 
         public void OnPointerEnter(PointerEventData eventData) => Tint(WmcScreen.Green());
 
-        public void OnPointerExit(PointerEventData eventData) => Tint(WmcScreen.Grey());
+        public void OnPointerExit(PointerEventData eventData) =>
+            Tint(latched ? WmcScreen.Green() : WmcScreen.Grey());
     }
 }

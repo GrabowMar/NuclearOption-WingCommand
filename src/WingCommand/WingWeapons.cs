@@ -121,29 +121,34 @@ namespace WingCommand
             bool wantAir = allow == Allow.AirOnly || allow == Allow.AirAndGround;
             bool wantGround = allow == Allow.GroundOnly || allow == Allow.AirAndGround;
 
+            // Resolve the two candidate stations once. Doing this per unit meant walking
+            // every weapon station for every unit on the map on every engagement tick.
+            WeaponStation airStation = wantAir ? BestStationFor(aircraft, TargetClass.Air) : null;
+            WeaponStation groundStation = wantGround ? BestStationFor(aircraft, TargetClass.Surface) : null;
+            if (airStation == null && groundStation == null) return null;
+
             Unit best = null;
             float bestScore = 0f;
             WeaponStation bestStation = null;
 
-            float rangeSq = maxRange * maxRange;
             GlobalPosition from = aircraft.GlobalPosition();
             FactionHQ hq = aircraft.NetworkHQ;
 
-            foreach (Unit unit in UnitRegistry.allUnits)
+            // Spatial query rather than a scan of every unit in the mission. This is the
+            // same grid the game's own proximity checks use.
+            scratch.Clear();
+            BattlefieldGrid.GetUnitsInRangeNonAlloc(from, maxRange, scratch);
+
+            for (int i = 0; i < scratch.Count; i++)
             {
-                if (unit == null || unit.disabled) continue;
-                if (unit == aircraft) continue;
+                Unit unit = scratch[i];
+                if (unit == null || unit.disabled || unit == aircraft) continue;
                 if (unit.NetworkHQ == null || unit.NetworkHQ == hq) continue;   // friendly or neutral
-                if (FastMath.SquareDistance(unit.GlobalPosition(), from) > rangeSq) continue;
 
                 TypeIdentity id = unit.definition.typeIdentity;
                 bool isAir = id.air > 0.5f;
 
-                if (isAir && !wantAir) continue;
-                if (!isAir && !wantGround) continue;
-
-                WeaponStation candidate = BestStationFor(
-                    aircraft, isAir ? TargetClass.Air : TargetClass.Surface);
+                WeaponStation candidate = isAir ? airStation : groundStation;
                 if (candidate == null) continue;
 
                 // The game's own weapon/target matching, so a wingman does not try to take
@@ -156,9 +161,13 @@ namespace WingCommand
                 bestStation = candidate;
             }
 
+            scratch.Clear();
             station = bestStation;
             return best;
         }
+
+        /// <summary>Reused across calls so target search allocates nothing per tick.</summary>
+        private static readonly List<Unit> scratch = new List<Unit>(64);
 
         /// <summary>Highest-effectiveness ready station for a target class.</summary>
         private static WeaponStation BestStationFor(Aircraft aircraft, TargetClass targetClass)
@@ -210,8 +219,12 @@ namespace WingCommand
             GlobalPosition from = aircraft.GlobalPosition();
             FactionHQ hq = aircraft.NetworkHQ;
 
-            foreach (Aircraft other in UnitRegistry.allAircraft)
+            // allAircraft is short enough to scan directly, and avoids a grid query that
+            // would pull in every ground unit just to find aeroplanes.
+            List<Aircraft> all = UnitRegistry.allAircraft;
+            for (int i = 0; i < all.Count; i++)
             {
+                Aircraft other = all[i];
                 if (other == null || other.disabled || other == aircraft) continue;
                 if (other.NetworkHQ == null || other.NetworkHQ == hq) continue;
                 if (FastMath.SquareDistance(other.GlobalPosition(), from) <= rangeSq)

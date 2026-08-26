@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using UnityEngine;
 
 namespace WingCommand
@@ -76,31 +77,46 @@ namespace WingCommand
             return t;
         }
 
+        // Unity calls OnGUI several times per frame (layout, repaint, each input event),
+        // so formatting these rows inline produced a fresh set of strings several times a
+        // frame. They are rebuilt on a timer instead and simply drawn in between.
+        private static readonly List<string> cachedRows = new List<string>();
+        private static string cachedHeader = "";
+        private static float nextRowRebuild;
+
         public static void DrawStatusPanel(WingRegistry wing)
         {
             EnsureStyles();
+            RebuildRows(wing);
 
             const float w = 250f;
-            float h = 34f + wing.Count * 18f;
+            float h = 34f + cachedRows.Count * 18f;
             var rect = new Rect(14f, Screen.height * 0.5f - h * 0.5f, w, h);
 
             GUI.Box(rect, GUIContent.none, panelStyle);
             GUILayout.BeginArea(new Rect(rect.x + 10f, rect.y + 8f, rect.width - 20f, rect.height - 16f));
 
-            GUILayout.Label("WING  -  " + Plugin.Config2.Shape.Value, labelStyle);
-
-            foreach (WingMember m in wing.Members)
-            {
-                string line = string.Format(
-                    "{0}  {1,-14} {2,-9} {3:F0} m",
-                    m.Slot,
-                    Truncate(m.Name, 14),
-                    m.Order,
-                    m.SlotError);
-                GUILayout.Label(line, labelStyle);
-            }
+            GUILayout.Label(cachedHeader, labelStyle);
+            for (int i = 0; i < cachedRows.Count; i++)
+                GUILayout.Label(cachedRows[i], labelStyle);
 
             GUILayout.EndArea();
+        }
+
+        private static void RebuildRows(WingRegistry wing)
+        {
+            if (Time.unscaledTime < nextRowRebuild && cachedRows.Count == wing.Count) return;
+            nextRowRebuild = Time.unscaledTime + 0.2f;
+
+            cachedHeader = "WING  -  " + Plugin.Config2.Shape.Value;
+
+            cachedRows.Clear();
+            foreach (WingMember m in wing.Members)
+            {
+                cachedRows.Add(string.Format(
+                    "{0}  {1,-14} {2,-9} {3:F0} m",
+                    m.Slot, Truncate(m.Name, 14), m.Order, m.SlotError));
+            }
         }
 
         public static void DrawRadial(RadialSlice[] slices, Vector2 centre, int hovered)

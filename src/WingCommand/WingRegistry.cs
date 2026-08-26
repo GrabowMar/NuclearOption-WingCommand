@@ -28,9 +28,18 @@ namespace WingCommand
             if (leader == null) DisbandAll("leader gone");
         }
 
-        /// <summary>Send home any member out of fuel or ammunition.</summary>
+        private float nextReserveCheck;
+
+        /// <summary>
+        /// Send home any member out of fuel or ammunition. Throttled: reading fuel walks
+        /// the tanks and reading ammunition walks every weapon station, which is wasted
+        /// work at frame rate for a quantity that changes slowly.
+        /// </summary>
         public void CheckReserves()
         {
+            if (Time.timeSinceLevelLoad < nextReserveCheck) return;
+            nextReserveCheck = Time.timeSinceLevelLoad + 1f;
+
             for (int i = 0; i < members.Count; i++) members[i].CheckReserves();
         }
 
@@ -103,7 +112,19 @@ namespace WingCommand
             return "unknown" + state;
         }
 
-        public bool Contains(Aircraft aircraft) => members.Any(m => m.Aircraft == aircraft);
+        /// <summary>
+        /// Plain loop rather than LINQ: this is called from the MapIcon.UpdateColor postfix,
+        /// which the game fires for every icon on the map whenever selection or theme
+        /// changes, and Any() allocates a closure and an enumerator on each call.
+        /// </summary>
+        public bool Contains(Aircraft aircraft)
+        {
+            for (int i = 0; i < members.Count; i++)
+            {
+                if (members[i].Aircraft == aircraft) return true;
+            }
+            return false;
+        }
 
         /// <summary>
         /// Recruit the nearest eligible friendly AI aircraft. Returns null when there is

@@ -45,6 +45,7 @@ namespace WingCommand
                 case "engage":      Engage(c);              break;
                 case "rtb":         ReturnToBase(c);        break;
                 case "formation":   ShapeGlyph(c, FormationShape.EchelonRight); break;
+                case "orders":      Orders(c);              break;
                 case "attack":      AttackTarget(c);        break;
                 case "posture":     Posture(c);             break;
                 case "disband":     Disband(c);             break;
@@ -107,6 +108,19 @@ namespace WingCommand
             c.Segment(58, 78, 74, 56, 6f);
             c.Segment(74, 56, 66, 58, 6f);
             c.Segment(74, 56, 72, 64, 6f);
+        }
+
+        /// <summary>A signal flag on a mast: orders to the flight.</summary>
+        private static void Orders(Canvas c)
+        {
+            c.Segment(30, 18, 30, 80, 7f);
+            var flag = new[]
+            {
+                new Vector2(34f, 78f), new Vector2(76f, 66f),
+                new Vector2(34f, 54f),
+            };
+            c.Polygon(flag);
+            c.Segment(30, 44, 62, 38, 5f);
         }
 
         /// <summary>Two aircraft converging on a marked target.</summary>
