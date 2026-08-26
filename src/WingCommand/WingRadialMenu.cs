@@ -57,64 +57,12 @@ namespace WingCommand
             if (inUse)
             {
                 lastInUseTime = Time.unscaledTime;
-                CheckHoverSwitch(menu);
                 return;
             }
-
-            hoveredSwitch = null;
-            hoverStarted = 0f;
 
             if (inSubmenu && Time.unscaledTime - lastInUseTime > RestoreAfterSeconds)
                 RestoreStockWheel();
         }
-
-        /// <summary>
-        /// Change page while the wheel is still open, by dwelling on a page entry.
-        ///
-        /// The stock wheel only triggers an action when the button is *released*, and then
-        /// closes. Left alone that means navigating a nested menu is press, release, press
-        /// again for every level. Watching the hovered entry instead lets the wheel swap
-        /// under the player's thumb without ever closing, so the whole menu is one gesture.
-        /// </summary>
-        private static void CheckHoverSwitch(RadialMenuMain menu)
-        {
-            RadialMenuAction current;
-            try { current = GameAccess.GetSelectedAction(menu); }
-            catch { return; }
-
-            if (!(current is WingMenuAction wing) || wing.OnHoverSwitch == null)
-            {
-                hoveredSwitch = null;
-                hoverStarted = 0f;
-                return;
-            }
-
-            if (!ReferenceEquals(wing, hoveredSwitch))
-            {
-                hoveredSwitch = wing;
-                hoverStarted = Time.unscaledTime;
-                return;
-            }
-
-            if (Time.unscaledTime - hoverStarted < HoverSwitchDelay) return;
-
-            // Clear the selection first: SetupMain destroys the slice this action is bound
-            // to, so leaving it selected would fire a stale action on release.
-            Action swap = wing.OnHoverSwitch;
-            hoveredSwitch = null;
-            hoverStarted = 0f;
-
-            try { GameAccess.ClearSelection(menu); }
-            catch { /* selection state is cosmetic; the swap still matters */ }
-
-            swap();
-        }
-
-        /// <summary>How long to dwell on a page entry before the wheel changes under you.</summary>
-        private const float HoverSwitchDelay = 0.35f;
-
-        private static WingMenuAction hoveredSwitch;
-        private static float hoverStarted;
 
         /// <summary>
         /// Ensure the "Wing Command" slice is present in the stock wheel. Called from a
@@ -171,7 +119,6 @@ namespace WingCommand
                 (templates != null && templates.Length > 0) ? templates[i % templates.Length] : null;
 
             rootEntry = WingMenuAction.Create(RootLabel, _ => ShowCommanderMenu());
-            rootEntry.OnHoverSwitch = ShowCommanderMenu;
 
             // Five slices, not nine. A wheel is selected by direction, so every extra
             // entry narrows the wedge you have to hit; past about six the gesture stops
@@ -179,11 +126,11 @@ namespace WingCommand
             // into their own pages, leaving a top level that reads at a glance.
             var commander = new List<WingMenuAction>
             {
-                Page("Orders", "orders", ShowOrdersMenu),
+                Icon(WingMenuAction.Create("Orders", _ => ShowOrdersMenu()), "orders"),
                 Leaf("Attack My Target", WingAction.AttackMyTarget, "attack"),
-                Page("Formation", "formation", ShowFormationMenu),
+                Icon(WingMenuAction.Create("Formation", _ => ShowFormationMenu()), "formation"),
                 Leaf("Posture", WingAction.TogglePosture, "posture"),
-                Page("Wing", "recruit", ShowWingMenu),
+                Icon(WingMenuAction.Create("Wing", _ => ShowWingMenu()), "recruit"),
             };
 
             var orders = new List<WingMenuAction>
@@ -191,14 +138,14 @@ namespace WingCommand
                 Leaf("Rejoin", WingAction.Rejoin, "rejoin"),
                 Leaf("Engage", WingAction.Engage, "engage"),
                 Leaf("Return To Base", WingAction.ReturnToBase, "rtb"),
-                Page("Back", "back", ShowCommanderMenu),
+                Icon(WingMenuAction.Create("Back", _ => ShowCommanderMenu()), "back"),
             };
 
             var wing = new List<WingMenuAction>
             {
                 Leaf("Recruit Nearest", WingAction.RecruitNearest, "recruit"),
                 Leaf("Disband", WingAction.Disband, "disband"),
-                Page("Back", "back", ShowCommanderMenu),
+                Icon(WingMenuAction.Create("Back", _ => ShowCommanderMenu()), "back"),
             };
 
             var shapes = new List<WingMenuAction>();
@@ -213,7 +160,7 @@ namespace WingCommand
                 });
                 shapes.Add(Icon(entry, "shape_" + captured));
             }
-            shapes.Add(Page("Back", "back", ShowCommanderMenu));
+            shapes.Add(Icon(WingMenuAction.Create("Back", _ => ShowCommanderMenu()), "back"));
 
             commanderMenu = commander.ToArray();
             ordersMenu = orders.ToArray();
@@ -240,14 +187,6 @@ namespace WingCommand
         {
             action.IconKey = iconKey;
             return action;
-        }
-
-        /// <summary>A page entry: swaps the wheel on dwell, and also on release.</summary>
-        private static WingMenuAction Page(string label, string iconKey, Action swap)
-        {
-            WingMenuAction action = WingMenuAction.Create(label, _ => swap());
-            action.OnHoverSwitch = swap;
-            return Icon(action, iconKey);
         }
 
         private static void ApplyAppearance(WingMenuAction action, RadialMenuAction template, string iconKey)

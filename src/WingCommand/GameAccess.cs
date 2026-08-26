@@ -31,11 +31,6 @@ namespace WingCommand
         private static AccessTools.FieldRef<VirtualMFD, List<MFDScreen>> leftScreensRef;
         private static AccessTools.FieldRef<VirtualMFD, List<MFDScreen>> rightScreensRef;
 
-        // RadialMenuMain selection state, for in-place submenu switching
-        private static AccessTools.FieldRef<RadialMenuMain, RadialMenuAction> selectedActionRef;
-        private static AccessTools.FieldRef<RadialMenuMain, int> currentIndexRef;
-        private static AccessTools.FieldRef<RadialMenuMain, TMPro.TMP_Text> selectedTextRef;
-
         // RadialMenuAction
         private static AccessTools.FieldRef<RadialMenuAction, RadialMenuAction.ActionType> actionTypeRef;
         private static AccessTools.FieldRef<RadialMenuAction, Sprite> iconSpriteRef;
@@ -60,10 +55,6 @@ namespace WingCommand
                 menuAircraftRef = Field<RadialMenuMain, Aircraft>("aircraft");
                 setupMainMethod = Require(AccessTools.Method(typeof(RadialMenuMain), "SetupMain"),
                                           "RadialMenuMain.SetupMain()");
-
-                selectedActionRef = Field<RadialMenuMain, RadialMenuAction>("selectedAction");
-                currentIndexRef   = Field<RadialMenuMain, int>("currentIndex");
-                selectedTextRef   = Field<RadialMenuMain, TMPro.TMP_Text>("selectedActionText");
 
                 actionTypeRef       = Field<RadialMenuAction, RadialMenuAction.ActionType>("actionType");
                 iconSpriteRef       = Field<RadialMenuAction, Sprite>("iconSprite");
@@ -125,22 +116,6 @@ namespace WingCommand
         public static Aircraft GetMenuAircraft(RadialMenuMain menu) => menuAircraftRef(menu);
 
         public static void SetupMain(RadialMenuMain menu) => setupMainMethod.Invoke(menu, null);
-
-        public static RadialMenuAction GetSelectedAction(RadialMenuMain menu) => selectedActionRef(menu);
-
-        /// <summary>
-        /// Clear the wheel's current selection. Needed after swapping pages in place: the
-        /// selected action belongs to slices that SetupMain has just destroyed, so leaving
-        /// it set would fire a stale action on release and touch dead Images.
-        /// </summary>
-        public static void ClearSelection(RadialMenuMain menu)
-        {
-            selectedActionRef(menu) = null;
-            currentIndexRef(menu) = -1;
-
-            TMPro.TMP_Text label = selectedTextRef(menu);
-            if (label != null) label.text = "";
-        }
 
         // --------------------------------------------------------------- VirtualMFD
 
