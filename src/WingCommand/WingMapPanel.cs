@@ -249,7 +249,7 @@ namespace WingCommand
             if (stylesReady) return;
             stylesReady = true;
 
-            Color accent = WingMapTint.WingColor;
+            Color accent = WingMarkers.MemberColor;
             Color friendly = WingMapTint.FriendlyThemeColor;
 
             panelBg = Solid(new Color(0.03f, 0.06f, 0.06f, 0.90f));

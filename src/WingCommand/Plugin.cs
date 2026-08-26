@@ -1,6 +1,8 @@
 using BepInEx;
 using BepInEx.Configuration;
 using BepInEx.Logging;
+using System.Collections.Generic;
+using System.Reflection;
 using HarmonyLib;
 using UnityEngine;
 
@@ -32,9 +34,11 @@ namespace WingCommand
             // Resolve reflection accessors before patching: the radial patches consult
             // GameAccess.Available and quietly stand down if the game layout has moved.
             GameAccess.Initialise();
+            WingHudTint.Initialise();
 
             harmony = new Harmony(PluginGuid);
             harmony.PatchAll(typeof(Plugin).Assembly);
+            ReportPatches();
 
             var go = new GameObject("WingCommandManager");
             go.hideFlags = HideFlags.HideAndDontSave;
@@ -68,6 +72,43 @@ namespace WingCommand
                     "ThrottleBaseline is below 1. cruiseThrottle is a feed-forward term, so " +
                     "this makes wingmen settle permanently slower than commanded and fall " +
                     "behind. Set it to 1 unless you are deliberately experimenting.");
+            }
+        }
+
+        /// <summary>
+        /// Report what Harmony actually patched.
+        ///
+        /// A patch class with no class-level <c>[HarmonyPatch]</c> is skipped in total
+        /// silence: <c>PatchClassProcessor</c> returns before it looks at a single method
+        /// attribute. Map tinting shipped that way and did nothing for weeks, with no
+        /// error anywhere to say so. Listing the patched methods at startup turns that
+        /// failure from invisible into a line in the log.
+        /// </summary>
+        private void ReportPatches()
+        {
+            var patched = new List<MethodBase>(harmony.GetPatchedMethods());
+            var names = new List<string>(patched.Count);
+            foreach (MethodBase m in patched)
+            {
+                if (m != null) names.Add(m.DeclaringType?.Name + "." + m.Name);
+            }
+
+            names.Sort(System.StringComparer.Ordinal);
+            Logger.LogInfo($"Harmony patched {names.Count} method(s): {string.Join(", ", names.ToArray())}");
+
+            // Named so a future game update that moves one of these is reported as a
+            // missing patch rather than as a feature that silently stopped working.
+            string[] expected =
+            {
+                "MapIcon.UpdateColor",
+                "HUDUnitMarker.UpdateColor",
+                "AIPilotCombatModes.EnterState",
+            };
+
+            foreach (string want in expected)
+            {
+                if (!names.Contains(want))
+                    Logger.LogWarning($"Expected Harmony patch missing: {want}");
             }
         }
 
@@ -163,7 +204,10 @@ namespace WingCommand
         public readonly ConfigEntry<bool> UseMfdPanel;
         public readonly ConfigEntry<bool> ShowMapPanel;
         public readonly ConfigEntry<bool> HighlightWingOnMap;
+        public readonly ConfigEntry<bool> HighlightWingOnHud;
+        public readonly ConfigEntry<bool> HighlightWingTargets;
         public readonly ConfigEntry<string> WingIconColor;
+        public readonly ConfigEntry<string> WingTargetColor;
         public readonly ConfigEntry<bool> VerboseLogging;
 
         public Cfg(ConfigFile c)
@@ -417,8 +461,17 @@ namespace WingCommand
                 "WMC MFD screen is working, so off by default.");
             HighlightWingOnMap = c.Bind("UI", "HighlightWingOnMap", true,
                 "Tint your wingmen's map icons so they stand out from the rest of the friendly force.");
+            HighlightWingOnHud = c.Bind("UI", "HighlightWingOnHud", true,
+                "Tint your wingmen's in-cockpit HUD markers to match the map. Without this " +
+                "the only aircraft the HUD marks distinctly is the game's nearest-ally " +
+                "indicator, which is chosen by range and has nothing to do with your wing.");
+            HighlightWingTargets = c.Bind("UI", "HighlightWingTargets", true,
+                "Mark the units your wing is engaging, on both the map and the HUD, so you " +
+                "can see what your wingmen have committed to.");
+            WingTargetColor = c.Bind("UI", "WingTargetColor", "#FFB020",
+                "Hex colour for units your wing is engaging.");
             WingIconColor = c.Bind("UI", "WingIconColor", "#33E5FF",
-                "Hex colour for wingmen's map icons. Selected members are drawn brighter.");
+                "Hex colour for wingmen, on the map and the HUD. Selected members are drawn brighter.");
             MapCommandEnabled = c.Bind("UI", "MapCommands", true,
                 "Enable aircraft tasking and squad groups on the maximised map.");
             VerboseLogging = c.Bind("Debug", "VerboseLogging", false,

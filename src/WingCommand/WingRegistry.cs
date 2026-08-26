@@ -239,7 +239,7 @@ namespace WingCommand
             var member = new WingMember(this, aircraft, pilot, NearestFreeSlot(aircraft));
             members.Add(member);
             member.Apply(WingOrder.Formation);
-            WingMapTint.Refresh(aircraft);
+            WingMarkers.Repaint(aircraft);
             WarnIfTooSlow(aircraft);
             return member;
         }
@@ -270,7 +270,7 @@ namespace WingCommand
             member.ReleaseToCombat(reason);
             members.Remove(member);
             Renumber();
-            WingMapTint.Refresh(released);
+            WingMarkers.Repaint(released);
         }
 
         public void DisbandAll(string reason)
@@ -284,7 +284,7 @@ namespace WingCommand
             members.Clear();
 
             // Icons must be repainted after the roster empties, or they keep the tint.
-            foreach (Aircraft a in released) WingMapTint.Refresh(a);
+            foreach (Aircraft a in released) WingMarkers.Repaint(a);
         }
 
         public void OrderAll(WingOrder order)

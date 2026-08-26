@@ -53,6 +53,7 @@ namespace WingCommand
                 WmcScreen.Reset();
                 PlayerFireWatcher.Reset();
                 WingComms.Reset();
+                WingMarkers.Reset();
                 Wing.Clear();
                 return;
             }
@@ -73,6 +74,7 @@ namespace WingCommand
             if (Plugin.Config2.MapCommandEnabled.Value)
                 mapLayer.Update();
 
+            WingMarkers.Tick(Wing);
             WmcScreen.Tick(Wing);
             FlushRecruitQueue();
         }

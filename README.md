@@ -40,16 +40,33 @@ The panel is built from known widgets rather than cloned from HUD OPTIONS — th
 hierarchy is not something this mod can safely dissect — borrowing only the font and the
 `ThemeManager` colours so it still matches the game's look.
 
+### Wing symbology
+
+Your wing is marked the same way on both displays, so what you see through the canopy
+agrees with what you see on the map.
+
+- **Wingmen** — drawn in a distinct colour (default cyan `#33E5FF`, configurable) on the
+  tactical map *and* on the in-cockpit HUD. Selected members are drawn brighter on the map.
+- **What your wing is engaging** — units a wingman has been ordered onto, or has broken
+  formation to fight, are marked in amber (`#FFB020`) on both displays. An autonomous
+  target only counts while the member is actually off fighting: a weapon manager holds the
+  last target it was given long after the engagement is over, and marking that would leave
+  stale symbols scattered across the display.
+
+Note that the game marks one friendly aircraft distinctly on its own — `AllyInfo` picks
+the nearest ally each second and swaps its HUD marker to a different sprite. That is a
+proximity indicator and has nothing to do with your wing, which is why the HUD needed its
+own designation rather than leaving it to be misread.
+
 ### Map layer
 - **Wing overlay (fallback)** — the same controls as an overlay on the maximised map. Only
   used if the WMC screen cannot be installed; off by default.
-- **Wingmen tinted on the map** — your wing's icons are drawn in a distinct colour
-  (default cyan `#33E5FF`, configurable) so they read apart from the rest of the friendly
-  force. Selected members are drawn brighter.
 - **Aircraft tasking** — select friendly AI aircraft on the maximised map and right-click
   to assign them to your wing. Vanilla ignores this gesture for aircraft, because
   `Aircraft` does not implement `ICommandable` (only ground vehicles, ships and missiles
-  do), so it is free for us to use.
+  do), so it is free for us to use. The selection is dropped once they are recruited: a
+  selected icon is drawn white by the game's own highlight, which would hide the wing
+  colour on exactly the aircraft that just earned it.
 - **Squad groups** — `Ctrl`+`1`..`4` stores the current map selection, `1`..`4` restores
   it, and the panel exposes the same thing as buttons. Works for ground and naval units
   too, so you can re-issue vanilla move orders to a saved group without hand-picking it
@@ -187,9 +204,17 @@ The interesting part is that almost none of this needed patching.
   they inherit hover and caution colours for free. The five formation icons call the real
   `FormationSolver` to place their marks, so the picker draws the actual geometry it
   selects and cannot drift out of sync with the flight code.
-- **Map tinting** postfixes `MapIcon.UpdateColor`, the one place every icon assigns its
-  colour. Because the stock call sites only fire on selection and theme changes, the
-  registry repaints affected icons whenever wing membership changes.
+- **Wing symbology** postfixes `MapIcon.UpdateColor` and the private
+  `HUDUnitMarker.UpdateColor` — the one place each surface assigns a colour. Because the
+  stock call sites only fire on selection, theme and faction changes, the marker layer
+  repaints affected units whenever membership or the engaged set changes, and reasserts
+  HUD colours four times a second (a HUD marker fades in from the warning colour for its
+  first second of life and is repainted whenever its track goes stale).
+- **Harmony patches are listed at startup.** A patch class with no *class-level*
+  `[HarmonyPatch]` is skipped in complete silence — `PatchClassProcessor` returns before it
+  reads a single method attribute. Map tinting shipped that way and did nothing at all,
+  with no error anywhere to say so. `Plugin.ReportPatches` now logs every patched method
+  and warns about any expected one that is missing.
 
 ### Compatibility notes
 

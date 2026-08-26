@@ -22,6 +22,7 @@ namespace WingCommand
 
         private readonly WingRegistry wing;
         private readonly List<Unit>[] groups = new List<Unit>[GroupCount];
+        private readonly List<Aircraft> recruited = new List<Aircraft>();
 
         private static readonly KeyCode[] GroupKeys =
         {
@@ -165,20 +166,30 @@ namespace WingCommand
                 return;
             }
 
-            int added = 0;
+            recruited.Clear();
             int max = Plugin.Config2.MaxWingSize.Value;
 
             foreach (MapIcon icon in map.selectedIcons)
             {
-                if (wing.Count >= max) break;
+                if (wing.Count + recruited.Count >= max) break;
                 if (!(icon is UnitMapIcon unitIcon)) continue;
                 if (!(unitIcon.unit is Aircraft aircraft)) continue;
                 if (aircraft == wing.Leader || aircraft.Player != null) continue;
                 if (aircraft.disabled || wing.Contains(aircraft)) continue;
                 if (DynamicMap.GetFactionMode(aircraft.NetworkHQ) != FactionMode.Friendly) continue;
 
-                if (wing.Add(aircraft) != null) added++;
+                recruited.Add(aircraft);
             }
+
+            // Recruit outside the loop above: Add repaints the icon, and repainting an
+            // icon inside a foreach over the live selection list is asking for trouble.
+            int added = 0;
+            foreach (Aircraft a in recruited)
+            {
+                if (wing.Add(a) != null) added++;
+            }
+
+            ReleaseSelection(map);
 
             if (added > 0)
                 Toast("Wing: " + added + " aircraft assigned (" + wing.Count + " total)");
@@ -186,6 +197,38 @@ namespace WingCommand
                 Toast("Wing is full");
             else
                 Toast("No eligible friendly AI aircraft selected");
+        }
+
+        /// <summary>
+        /// Drop the map selection once the aircraft in it have been recruited.
+        ///
+        /// The selection was a gesture, not a state the player wanted to keep. Leaving it
+        /// standing costs twice over: a selected icon is drawn white by the game's own
+        /// highlight, which hides the wing colour on exactly the aircraft that just
+        /// earned it, and each selected unit carries a target-marker info card that
+        /// clutters the map around the formation.
+        ///
+        /// While the player is flying, selecting a unit on the map also adds it to their
+        /// weapon target list, so the deselect goes through the HUD rather than the map
+        /// alone — otherwise the new wingman stays designated as one of the player's own
+        /// targets.
+        /// </summary>
+        private void ReleaseSelection(DynamicMap map)
+        {
+            if (recruited.Count == 0) return;
+
+            CombatHUD hud = SceneSingleton<CombatHUD>.i;
+            bool flying = hud != null && hud.aircraft != null && !hud.aircraft.disabled;
+
+            foreach (Aircraft a in recruited)
+            {
+                if (a == null) continue;
+
+                if (flying && hud.GetTargetList().Contains(a)) hud.DeSelectUnit(a);
+                else map.DeselectIcon(a);
+            }
+
+            recruited.Clear();
         }
 
         private static void Toast(string message)
