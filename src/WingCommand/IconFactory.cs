@@ -45,6 +45,7 @@ namespace WingCommand
                 case "engage":      Engage(c);              break;
                 case "rtb":         ReturnToBase(c);        break;
                 case "formation":   ShapeGlyph(c, FormationShape.EchelonRight); break;
+                case "posture":     Posture(c);             break;
                 case "disband":     Disband(c);             break;
                 case "back":        Back(c);                break;
 
@@ -105,6 +106,18 @@ namespace WingCommand
             c.Segment(58, 78, 74, 56, 6f);
             c.Segment(74, 56, 66, 58, 6f);
             c.Segment(74, 56, 72, 64, 6f);
+        }
+
+        /// <summary>A shield: the wing's rules of engagement.</summary>
+        private static void Posture(Canvas c)
+        {
+            c.Segment(26, 70, 48, 78, 7f);
+            c.Segment(48, 78, 70, 70, 7f);
+            c.Segment(26, 70, 30, 40, 7f);
+            c.Segment(70, 70, 66, 40, 7f);
+            c.Segment(30, 40, 48, 22, 7f);
+            c.Segment(66, 40, 48, 22, 7f);
+            c.Disc(48, 52, 8f);
         }
 
         private static void Disband(Canvas c)

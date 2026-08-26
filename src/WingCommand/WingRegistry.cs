@@ -15,6 +15,9 @@ namespace WingCommand
 
         public Aircraft Leader { get; private set; }
 
+        /// <summary>Standing rules of engagement for the whole wing.</summary>
+        public WingPosture Posture { get; set; } = WingPosture.Defensive;
+
         public IReadOnlyList<WingMember> Members => members;
         public int Count => members.Count;
 
@@ -23,6 +26,12 @@ namespace WingCommand
             if (Leader == leader) return;
             Leader = leader;
             if (leader == null) DisbandAll("leader gone");
+        }
+
+        /// <summary>Pull back any member that has strayed past the leash while engaging.</summary>
+        public void CheckLeashes()
+        {
+            for (int i = 0; i < members.Count; i++) members[i].CheckLeash();
         }
 
         /// <summary>Drop members that died, ejected, or despawned.</summary>

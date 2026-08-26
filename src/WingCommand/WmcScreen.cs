@@ -33,6 +33,7 @@ namespace WingCommand
         private static RectTransform rosterArea;
         private static TMP_Text shapeLabel;
         private static TMP_Text summaryLabel;
+        private static TMP_Text postureLabel;
         private static TMP_FontAsset font;
 
         private static readonly List<RosterRow> rosterRows = new List<RosterRow>();
@@ -71,6 +72,7 @@ namespace WingCommand
             shapeLabel = null;
             summaryLabel = null;
             rosterRows.Clear();
+            postureLabel = null;
             gaveUp = false;
         }
 
@@ -217,6 +219,7 @@ namespace WingCommand
 
             y = AddTitle(contentRt, y);
             y = AddShapeSelector(contentRt, y);
+            y = AddPostureSelector(contentRt, y);
             y = AddSummary(contentRt, y);
             y = AddRosterArea(contentRt, y);
             y = AddActions(contentRt, y);
@@ -280,6 +283,31 @@ namespace WingCommand
                                Friendly(), 13f, FontStyles.Normal, TextAlignmentOptions.Center);
 
             return y - (RowHeight + Gap);
+        }
+
+        private static float AddPostureSelector(RectTransform parent, float y)
+        {
+            float w = (PanelWidth - Pad * 2f - Gap) * 0.5f;
+
+            Button(parent, "Defensive", new Rect(Pad, y, w, RowHeight),
+                   () => SetPosture(WingPosture.Defensive));
+            Button(parent, "Aggressive", new Rect(Pad + w + Gap, y, w, RowHeight),
+                   () => SetPosture(WingPosture.Aggressive));
+
+            y -= RowHeight + Gap;
+
+            postureLabel = Label(parent, "", new Rect(Pad, y, PanelWidth - Pad * 2f, 18f),
+                                 Green(), 11f, FontStyles.Normal, TextAlignmentOptions.Left);
+            return y - 22f;
+        }
+
+        private static void SetPosture(WingPosture posture)
+        {
+            WingRegistry wing = Wing();
+            if (wing == null) return;
+
+            wing.Posture = posture;
+            WingCommandManager.Instance?.Toast("Posture: " + posture.ToString().ToUpperInvariant());
         }
 
         private static float AddSummary(RectTransform parent, float y)
@@ -358,6 +386,9 @@ namespace WingCommand
 
             if (summaryLabel != null)
                 summaryLabel.text = wing.Count + " of " + Plugin.Config2.MaxWingSize.Value + " assigned";
+
+            if (postureLabel != null)
+                postureLabel.text = "ROE: " + wing.Posture.ToString().ToUpperInvariant() + PostureHint(wing.Posture);
 
             SyncRosterRows(wing.Count);
 
@@ -445,6 +476,13 @@ namespace WingCommand
         // ------------------------------------------------------------------ UI helpers
 
         private static WingRegistry Wing() => WingCommandManager.Instance?.Wing;
+
+        private static string PostureHint(WingPosture posture)
+        {
+            return posture == WingPosture.Aggressive
+                ? "  - breaks for air, leashed"
+                : "  - holds slot, mirrors your ground fire";
+        }
 
         private static void CycleShape(int direction)
         {

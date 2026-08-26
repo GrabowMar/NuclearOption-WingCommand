@@ -78,6 +78,14 @@ namespace WingCommand
         public readonly ConfigEntry<float> AiBraveryScale;
         public readonly ConfigEntry<bool> MutualSupport;
 
+        // --- Engagement ---
+        public readonly ConfigEntry<WingPosture> DefaultPosture;
+        public readonly ConfigEntry<bool> MissileDefence;
+        public readonly ConfigEntry<float> DefensiveEngageRange;
+        public readonly ConfigEntry<float> AggressiveEngageRange;
+        public readonly ConfigEntry<float> LeashRadius;
+        public readonly ConfigEntry<float> MirrorWindowSeconds;
+
         // --- Debug ---
         public readonly ConfigEntry<bool> EnableDebugActions;
 
@@ -144,6 +152,31 @@ namespace WingCommand
                     new AcceptableValueRange<float>(0.25f, 3f)));
             MutualSupport = c.Bind("AI", "MutualSupport", true,
                 "Wingmen holding formation automatically break to engage when the leader is under missile attack.");
+
+            DefaultPosture = c.Bind("Engagement", "DefaultPosture", WingPosture.Defensive,
+                "Rules of engagement the wing starts a mission with. Defensive holds the slot " +
+                "no matter what; Aggressive breaks to fight aircraft and rejoins afterwards.");
+            MissileDefence = c.Bind("Engagement", "MissileDefence", true,
+                "Defensive wingmen prioritise shooting down inbound missiles, on themselves or " +
+                "on you, when they carry a weapon capable of it.");
+            DefensiveEngageRange = c.Bind("Engagement", "DefensiveEngageRange", 6000f,
+                new ConfigDescription(
+                    "How far a Defensive wingman will shoot from its slot, in metres. It never " +
+                    "manoeuvres to engage, so this is purely a weapons-range limit.",
+                    new AcceptableValueRange<float>(500f, 30000f)));
+            AggressiveEngageRange = c.Bind("Engagement", "AggressiveEngageRange", 12000f,
+                new ConfigDescription("Range at which an Aggressive wingman will break formation to fight.",
+                    new AcceptableValueRange<float>(1000f, 60000f)));
+            LeashRadius = c.Bind("Engagement", "LeashRadius", 8000f,
+                new ConfigDescription(
+                    "How far an Aggressive wingman may stray from you before it abandons the " +
+                    "fight and rejoins. This is what stops the wing dispersing.",
+                    new AcceptableValueRange<float>(1000f, 40000f)));
+            MirrorWindowSeconds = c.Bind("Engagement", "MirrorWindowSeconds", 15f,
+                new ConfigDescription(
+                    "How long Defensive wingmen stay weapons-free against ground targets after " +
+                    "you fire an anti-surface weapon.",
+                    new AcceptableValueRange<float>(2f, 120f)));
 
             UseNativeRadial = c.Bind("UI", "UseNativeRadial", true,
                 "Add a nested 'Wing Command' entry to the game's own radial menu. This uses " +

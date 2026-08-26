@@ -15,7 +15,10 @@ namespace WingCommand
     {
         private readonly WingMember member;
 
+        private const float EngageInterval = 0.5f;
+
         private float lastSupportCheck;
+        private float lastEngageCheck;
         private float rejoinBoostUntil;
 
         public FormationFlyState(WingMember member)
@@ -63,6 +66,8 @@ namespace WingCommand
 
             if (CheckMutualSupport(leader))
                 return;
+
+            RunEngagement(leader);
 
             FormationShape shape = Plugin.Config2.Shape.Value;
             float spacing = Plugin.Config2.SlotSpacing.Value;
@@ -180,6 +185,33 @@ namespace WingCommand
                 followTerrain: false,
                 altitudeHold: Mathf.Clamp(leader.radarAlt, aircraft.maxRadius, 8000f),
                 targetVelocity: leader.rb.velocity);
+        }
+
+        /// <summary>
+        /// Apply the wing's rules of engagement from inside the slot.
+        ///
+        /// Nothing here touches attitude or throttle, so a Defensive wingman can shoot
+        /// without ever compromising station-keeping. Aggressive wingmen additionally look
+        /// for an air target worth breaking formation for; ground targets are engaged from
+        /// the slot in both postures.
+        /// </summary>
+        private void RunEngagement(Aircraft leader)
+        {
+            if (Time.timeSinceLevelLoad - lastEngageCheck < EngageInterval) return;
+            lastEngageCheck = Time.timeSinceLevelLoad;
+
+            WingPosture posture = WingCommandManager.Instance?.Wing?.Posture ?? WingPosture.Defensive;
+
+            WingWeapons.Allow allow = PostureRules.WeaponsFree(posture, aircraft);
+            float range = PostureRules.EngageRange(posture);
+
+            WingWeapons.Engage(aircraft, pilot, allow, range);
+
+            // Aggressive only: hand over to the stock dogfight AI when an air threat is
+            // close enough to be worth chasing. WingMember owns the leash that brings it
+            // back, so the break is always temporary.
+            if (posture == WingPosture.Aggressive && WingWeapons.HasAirThreatWithin(aircraft, range))
+                member.BreakToEngage("air threat within " + (int)range + " m");
         }
 
         /// <summary>

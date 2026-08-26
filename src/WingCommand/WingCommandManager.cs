@@ -42,6 +42,7 @@ namespace WingCommand
         {
             Instance = this;
             mapLayer = new MapCommandLayer(Wing);
+            Wing.Posture = Plugin.Config2.DefaultPosture.Value;
         }
 
         private void Update()
@@ -50,12 +51,15 @@ namespace WingCommand
             {
                 if (radialOpen) CloseRadial(apply: false);
                 WmcScreen.Reset();
+                PlayerFireWatcher.Reset();
                 return;
             }
 
             // The player's own aircraft is always the formation leader.
             Wing.SetLeader(GameManager.GetLocalAircraft(out Aircraft local) ? local : null);
             Wing.Prune();
+            Wing.CheckLeashes();
+            PlayerFireWatcher.Track(local);
 
             if (NativeRadialActive)
                 WingRadialMenu.Tick();
@@ -240,6 +244,15 @@ namespace WingCommand
                     break;
                 }
 
+                case WingAction.TogglePosture:
+                {
+                    Wing.Posture = Wing.Posture == WingPosture.Defensive
+                        ? WingPosture.Aggressive
+                        : WingPosture.Defensive;
+                    Toast("Posture: " + Wing.Posture.ToString().ToUpperInvariant());
+                    break;
+                }
+
                 case WingAction.Disband:
                     if (RequireWing())
                     {
@@ -313,6 +326,7 @@ namespace WingCommand
         Engage,
         ReturnToBase,
         CycleShape,
+        TogglePosture,
         Disband,
     }
 

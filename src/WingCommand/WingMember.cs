@@ -71,7 +71,55 @@ namespace WingCommand
                 Plugin.Logger.LogInfo($"[Wing] {Name} releasing to combat AI: {reason}");
 
             Order = WingOrder.Engage;
+            OnLeash = false;
             SwitchToCombat();
+        }
+
+        /// <summary>True while this member is off the wing on a leashed engagement.</summary>
+        public bool OnLeash { get; private set; }
+
+        /// <summary>
+        /// Break formation to fight, but stay tethered. Unlike a plain Engage order this
+        /// is temporary: <see cref="CheckLeash"/> pulls the member back once the fight
+        /// takes it too far from the leader. Follows the Falcon BMS model, where an attack
+        /// order means acquire, fire, then rejoin — not leave for good.
+        /// </summary>
+        public void BreakToEngage(string reason)
+        {
+            if (OnLeash || Order != WingOrder.Formation) return;
+
+            if (Plugin.Config2.VerboseLogging.Value)
+                Plugin.Logger.LogInfo($"[Wing] {Name} breaking to engage: {reason}");
+
+            OnLeash = true;
+            Order = WingOrder.Engage;
+            SwitchToCombat();
+        }
+
+        /// <summary>
+        /// Called each frame while off the wing. Returns the member to formation once it
+        /// strays past the leash radius, so an Aggressive wing never simply disperses.
+        /// </summary>
+        public void CheckLeash()
+        {
+            if (!OnLeash || !Alive) return;
+
+            Aircraft leader = Leader;
+            if (leader == null)
+            {
+                OnLeash = false;
+                return;
+            }
+
+            float leash = Plugin.Config2.LeashRadius.Value;
+            if (FastMath.SquareDistance(Aircraft.GlobalPosition(), leader.GlobalPosition()) < leash * leash)
+                return;
+
+            if (Plugin.Config2.VerboseLogging.Value)
+                Plugin.Logger.LogInfo($"[Wing] {Name} past leash - rejoining");
+
+            OnLeash = false;
+            Apply(WingOrder.Formation);
         }
 
         private void SwitchToCombat()
