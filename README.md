@@ -1,0 +1,230 @@
+# WingCommand
+
+A BepInEx mod for **Nuclear Option** that lets you command AI aircraft: form a wing, hold
+formation, and issue orders — from an in-cockpit radial menu and from the tactical map.
+
+Built against game version `0.34.2`, Unity 2022.3.62f2 (Mono), BepInEx 5.4.23.3.
+
+---
+
+## What it does
+
+### Wingmen and formation flying
+Assign friendly AI aircraft to your wing. They fly a formation slot on you and hold
+station, then break off and fight when you tell them to — or automatically, when you come
+under missile attack.
+
+Formation shapes: `EchelonRight`, `EchelonLeft`, `LineAbreast`, `Trail`, `CombatSpread`.
+
+### Orders
+| Order | Effect |
+|---|---|
+| **Rejoin Formation** | Wingmen close on their slot and hold station |
+| **Engage** | Hand control back to the stock combat AI |
+| **Return To Base** | Wingmen switch to the AI landing state |
+| **Change Shape** | Cycle the formation geometry |
+| **Disband** | Release everyone back to normal AI behaviour |
+
+### WMC — the MFD screen
+The main wing interface is a native MFD screen labelled **WMC**, sitting on the left bezel
+alongside BDF / MAP / HUD. Each bezel column carries six buttons but only three configured
+screens, so the fourth slot is free; registering an `MFDScreen` there and calling
+`VirtualMFD.SetupButtons()` lights the button up and the game drives show/hide exactly as
+it does for its own screens.
+
+It shows every wingman with slot, name, order and **live slot error in metres**, plus
+buttons for Add Selected, Recruit Near, Rejoin, Engage, RTB, Disband, per-member release
+and formation cycling.
+
+The panel is built from known widgets rather than cloned from HUD OPTIONS — the stock
+hierarchy is not something this mod can safely dissect — borrowing only the font and the
+`ThemeManager` colours so it still matches the game's look.
+
+### Map layer
+- **Wing overlay (fallback)** — the same controls as an overlay on the maximised map. Only
+  used if the WMC screen cannot be installed; off by default.
+- **Wingmen tinted on the map** — your wing's icons are drawn in a distinct colour
+  (default cyan `#33E5FF`, configurable) so they read apart from the rest of the friendly
+  force. Selected members are drawn brighter.
+- **Aircraft tasking** — select friendly AI aircraft on the maximised map and right-click
+  to assign them to your wing. Vanilla ignores this gesture for aircraft, because
+  `Aircraft` does not implement `ICommandable` (only ground vehicles, ships and missiles
+  do), so it is free for us to use.
+- **Squad groups** — `Ctrl`+`1`..`4` stores the current map selection, `1`..`4` restores
+  it, and the panel exposes the same thing as buttons. Works for ground and naval units
+  too, so you can re-issue vanilla move orders to a saved group without hand-picking it
+  every time.
+
+### Debugging formation
+
+Station-keeping is hard to judge by eye, so the slot-error column is the instrument:
+
+| Reading | Meaning |
+|---|---|
+| Settles to a steady value, shown bright | Wingman is parked in the slot — controller is tuned |
+| Swings up and down repeatedly | Throttle gain too hot; the wingman is hunting |
+| Grows without bound | Wingman cannot keep up, or is not actually under our control |
+| `-` | Not on a formation order |
+
+The same numbers appear in the compact in-flight panel, which hides itself while the map
+is up so the two never overlap.
+
+### Debug actions (optional, off by default)
+Two testing aids on the WMC screen, enabled with `Debug/EnableDebugActions`:
+
+| Action | Effect |
+|---|---|
+| **Teleport Wing To Formation** | Snaps every current wingman into its slot, matching the leader's heading and velocity |
+| **Spawn Wing Of My Aircraft** | Spawns fresh copies of your own aircraft type, already in their slots, and assigns them |
+
+Both are cheats — they move or create aircraft outright — and both write world state, so
+they are **host / single-player only** and refuse otherwise. Their purpose is to remove the
+setup cost of testing station-keeping: rather than flying twenty minutes to find friendly
+AI, put a wing on your wingtip and read the slot-error column immediately.
+
+### AI tuning (optional, off by default)
+Scales AI pilot `skill` and `bravery`, which the stock combat AI reads for aim error,
+missile reaction time, target selection and threat avoidance. Applies to all AI aircraft
+on both sides.
+
+---
+
+## Controls
+
+Orders go through the **game's own radial menu**, as a nested submenu — the same technique
+BOTE uses. Open the radial with your normal *Radial Menu* binding and pick **Wing Command**;
+the wheel then becomes the commander menu. As in BOTE, selecting an entry closes the wheel,
+so re-open it to see the submenu you switched to.
+
+```
+Radial Menu ─┬─ (stock entries: Gear, Radar, Eject, …)
+             └─ Wing Command ─┬─ Recruit Nearest
+                              ├─ Rejoin
+                              ├─ Engage
+                              ├─ Return To Base
+                              ├─ Formation ─┬─ Echelon Right / Left
+                              │             ├─ Line Abreast
+                              │             ├─ Trail
+                              │             ├─ Combat Spread
+                              │             └─ Back
+                              ├─ Disband
+                              └─ Back
+```
+
+Picking any order restores the stock wheel afterwards, and it also restores itself after a
+few seconds if you back out without choosing.
+
+| Input | Action |
+|---|---|
+| *Radial Menu* binding | Open the wheel, then **Wing Command** |
+| **Right-click** on map | Assign selected friendly AI aircraft to the wing |
+| **Ctrl**+**1**..**4** | Store map selection as a squad group |
+| **1**..**4** | Recall a squad group |
+| **F1** | ConfigurationManager — all settings below |
+
+Optional direct hotkeys for *Rejoin* and *Engage* are unbound by default.
+
+### Why the native wheel
+
+In flight the cursor is captured for mouse-look, so `Input.mousePosition` does not move —
+a self-drawn wheel driven by cursor position simply does not track. The stock wheel
+integrates the Rewired **Pan View / Tilt View** look axes instead. Using it means selection
+works with mouse, stick and the keyboard scheme, and matches whatever the player already
+set under `PlayerSettings.radialControl`.
+
+A standalone fallback wheel is still included for the case where the native integration
+cannot attach (see below). It uses the same Rewired axes. It is unbound by default —
+set `Keys/FallbackRadialMenu` if you need it.
+
+---
+
+## Configuration
+
+Everything is exposed through ConfigurationManager (**F1**) and written to
+`BepInEx/config/com.marci.wingcommand.cfg`.
+
+- **Formation** — shape, slot spacing, vertical stagger, recruit range, max wing size
+- **AI** — enable tweak, skill scale, bravery scale, mutual support
+- **UI** — wing status panel, map commands
+- **Keys** — radial menu key, optional quick-order hotkeys
+- **Debug** — verbose logging of every order and state transition
+
+---
+
+## Multiplayer
+
+AI pilots are **server-authoritative**. Formation control therefore works correctly in
+**single-player or when you are the host**. As a non-host client, your orders will fight
+the server's own AI updates.
+
+The squad-group feature is purely local selection state and is safe anywhere. Vanilla
+ground move orders continue to go through the game's own networked
+`UnitCommand.CmdSetDestination` path, which already validates faction ownership
+server-side.
+
+The mod adds no network messages of its own.
+
+---
+
+## How it works
+
+The interesting part is that almost none of this needed patching.
+
+- **`FormationFlyState`** subclasses the game's own `PilotBaseState` and is installed with
+  the public `Pilot.SwitchState`, exactly as the stock AI states are. It steers through
+  `Autopilot.AutoAim` — the same primitive `AIPilotCombatModes` uses — and owns only
+  throttle and destination.
+- **Recruiting** reads `UnitRegistry.allAircraft`, the game's live unit list.
+- **Map integration** uses the public `DynamicMap.selectedIcons` / `SelectIcon` /
+  `GetFactionMode` API.
+- **Menu entries** are `RadialMenuAction` subclasses created at runtime. The stock
+  `AllowedOnAircraft` / `TriggerAction` are not virtual, so Harmony prefixes dispatch to
+  the subclass and skip the original — each prefix claims only its own type, so this
+  coexists with BOTE's identical mechanism.
+- **Menu icons ship as code, not files.** `IconFactory` rasterises each glyph into a
+  texture at runtime with a small anti-aliased software renderer, so the mod stays a
+  single DLL with no asset bundle. Glyphs are drawn white and tinted by the stock menu, so
+  they inherit hover and caution colours for free. The five formation icons call the real
+  `FormationSolver` to place their marks, so the picker draws the actual geometry it
+  selects and cannot drift out of sync with the flight code.
+- **Map tinting** postfixes `MapIcon.UpdateColor`, the one place every icon assigns its
+  colour. Because the stock call sites only fire on selection and theme changes, the
+  registry repaints affected icons whenever wing membership changes.
+
+### Compatibility notes
+
+- **Reflection instead of a publicizer.** The usual way to reach `actionsMain`,
+  `SetupMain()` and the private `RadialMenuAction` fields is an assembly publicizer, but
+  this machine's application-control policy blocks that MSBuild task from loading. The
+  members are resolved once through Harmony's `AccessTools` instead. If a game update
+  renames one, the mod logs a warning and disables native radial integration rather than
+  throwing every frame.
+- **BOTE coexistence.** BOTE swaps the wheel contents for its own submenus using the same
+  technique. The injector records the main wheel on first sight and only re-adds
+  *Wing Command* to wheels that still share entries with it, so it does not leak into
+  another mod's submenu.
+- **A stock bug this mod repairs.** `AIPilotCombatModes` subscribes its missile-alert
+  handler in the *constructor* but unsubscribes it in `LeaveState`; its other three
+  handlers are correctly paired with `EnterState`. Vanilla rarely leaves the combat state
+  so this is mostly latent, but this mod switches pilots in and out constantly — which
+  would leave wingmen permanently blind to missile warnings. The `EnterState` postfix
+  removes and re-adds the handler, normalising it to exactly one subscription.
+
+---
+
+## Building
+
+Requires the .NET 8 SDK.
+
+```bash
+dotnet build -c Release
+```
+
+Then deploy:
+
+```bash
+pwsh build/copy-to-game.ps1
+```
+
+Output lands in `BepInEx/plugins/WingCommand/` alongside a `meta.json` in the same format
+the Nuclear Option mod manager uses.

@@ -1,0 +1,330 @@
+using System;
+using UnityEngine;
+
+namespace WingCommand
+{
+    /// <summary>
+    /// Per-frame driver: tracks the player's aircraft as formation leader, handles input,
+    /// and draws the radial menu and wing status panel.
+    /// </summary>
+    internal class WingCommandManager : MonoBehaviour
+    {
+        internal static WingCommandManager Instance { get; private set; }
+
+        internal readonly WingRegistry Wing = new WingRegistry();
+        private MapCommandLayer mapLayer;
+
+        internal MapCommandLayer MapLayer => mapLayer;
+
+        // Radial menu state
+        private bool radialOpen;
+        private Vector2 radialCentre;
+        private Vector2 radialDelta;
+        private int hoveredSlice = -1;
+
+        private string toast;
+        private float toastUntil;
+
+        private readonly System.Collections.Generic.List<Aircraft> recruitQueue =
+            new System.Collections.Generic.List<Aircraft>();
+
+        private static readonly RadialSlice[] Slices =
+        {
+            new RadialSlice("Recruit\nNearest", WingAction.RecruitNearest),
+            new RadialSlice("Rejoin\nFormation", WingAction.Rejoin),
+            new RadialSlice("Engage", WingAction.Engage),
+            new RadialSlice("Return\nTo Base", WingAction.ReturnToBase),
+            new RadialSlice("Change\nShape", WingAction.CycleShape),
+            new RadialSlice("Disband", WingAction.Disband),
+        };
+
+        private void Awake()
+        {
+            Instance = this;
+            mapLayer = new MapCommandLayer(Wing);
+        }
+
+        private void Update()
+        {
+            if (!InPlayableState())
+            {
+                if (radialOpen) CloseRadial(apply: false);
+                WmcScreen.Reset();
+                return;
+            }
+
+            // The player's own aircraft is always the formation leader.
+            Wing.SetLeader(GameManager.GetLocalAircraft(out Aircraft local) ? local : null);
+            Wing.Prune();
+
+            if (NativeRadialActive)
+                WingRadialMenu.Tick();
+
+            HandleRadialInput();
+            HandleHotkeys();
+
+            if (Plugin.Config2.MapCommandEnabled.Value)
+                mapLayer.Update();
+
+            WmcScreen.Tick(Wing);
+            FlushRecruitQueue();
+        }
+
+        /// <summary>Assign an aircraft to the wing on the next frame.</summary>
+        internal void QueueRecruit(Aircraft aircraft)
+        {
+            if (aircraft != null) recruitQueue.Add(aircraft);
+        }
+
+        /// <summary>
+        /// Aircraft spawned during this frame have not finished initialising their pilot
+        /// state machine yet, so assignment is deferred by a frame.
+        /// </summary>
+        private void FlushRecruitQueue()
+        {
+            if (recruitQueue.Count == 0) return;
+
+            Aircraft[] batch = recruitQueue.ToArray();
+            recruitQueue.Clear();
+
+            foreach (Aircraft a in batch)
+            {
+                if (a == null || a.disabled) continue;
+                if (Wing.Count >= Plugin.Config2.MaxWingSize.Value) break;
+                Wing.Add(a);
+            }
+        }
+
+        /// <summary>
+        /// The native wheel is used when the player asked for it and every private member
+        /// it depends on resolved. Otherwise the standalone fallback wheel takes over.
+        /// </summary>
+        internal static bool NativeRadialActive =>
+            Plugin.Config2.UseNativeRadial.Value && GameAccess.Available;
+
+        private static bool InPlayableState()
+        {
+            GameState s = GameManager.gameState;
+            return s == GameState.SinglePlayer || s == GameState.Multiplayer;
+        }
+
+        // ------------------------------------------------------------------ input
+
+        /// <summary>
+        /// Standalone fallback wheel, used only when the native integration is switched
+        /// off or the game's radial singleton is absent.
+        /// </summary>
+        private void HandleRadialInput()
+        {
+            if (NativeRadialActive && SceneSingleton<RadialMenuMain>.i != null)
+            {
+                if (radialOpen) CloseRadial(apply: false);
+                return;
+            }
+
+            KeyCode key = Plugin.Config2.RadialKey.Value;
+            if (key == KeyCode.None) return;
+
+            if (Input.GetKeyDown(key) && Wing.Leader != null)
+            {
+                radialOpen = true;
+                radialCentre = new Vector2(Screen.width * 0.5f, Screen.height * 0.5f);
+                radialDelta = Vector2.zero;
+                hoveredSlice = -1;
+            }
+            else if (Input.GetKeyUp(key) && radialOpen)
+            {
+                CloseRadial(apply: true);
+            }
+
+            if (radialOpen)
+            {
+                AccumulateRadialDelta();
+                hoveredSlice = SliceFromDelta();
+            }
+        }
+
+        /// <summary>
+        /// In flight the cursor is captured for mouse-look, so <c>Input.mousePosition</c>
+        /// does not move. The game's own wheel integrates the Rewired look axes instead;
+        /// this mirrors that exactly, including the decay term.
+        /// </summary>
+        private void AccumulateRadialDelta()
+        {
+            Rewired.Player p = GameManager.playerInput;
+            if (p != null)
+            {
+                radialDelta += new Vector2(p.GetAxis("Pan View"), -p.GetAxis("Tilt View")) * 0.5f;
+            }
+            else
+            {
+                radialDelta += new Vector2(Input.GetAxis("Mouse X"), Input.GetAxis("Mouse Y"));
+            }
+
+            radialDelta = Vector2.Lerp(radialDelta, Vector2.zero, 0.05f);
+        }
+
+        private void HandleHotkeys()
+        {
+            if (Wing.Count == 0) return;
+
+            if (Plugin.Config2.QuickRejoinKey.Value != KeyCode.None &&
+                Input.GetKeyDown(Plugin.Config2.QuickRejoinKey.Value))
+                Execute(WingAction.Rejoin);
+
+            if (Plugin.Config2.QuickEngageKey.Value != KeyCode.None &&
+                Input.GetKeyDown(Plugin.Config2.QuickEngageKey.Value))
+                Execute(WingAction.Engage);
+        }
+
+        /// <summary>Same angle convention the stock wheel uses: index 0 at the top, clockwise.</summary>
+        private int SliceFromDelta()
+        {
+            if (radialDelta.sqrMagnitude <= 0.1f) return hoveredSlice;
+
+            float angle = -Vector2.SignedAngle(Vector2.up, radialDelta.normalized);
+            if (angle < 0f) angle += 360f;
+
+            float per = 360f / Slices.Length;
+            angle = Mathf.Repeat(angle + per * 0.5f, 360f);
+            return Mathf.Clamp(Mathf.FloorToInt(angle / per), 0, Slices.Length - 1);
+        }
+
+        private void CloseRadial(bool apply)
+        {
+            if (apply && hoveredSlice >= 0 && hoveredSlice < Slices.Length)
+                Execute(Slices[hoveredSlice].Action);
+
+            radialOpen = false;
+            hoveredSlice = -1;
+        }
+
+        // ---------------------------------------------------------------- actions
+
+        internal void Execute(WingAction action)
+        {
+            switch (action)
+            {
+                case WingAction.RecruitNearest:
+                {
+                    if (Wing.Count >= Plugin.Config2.MaxWingSize.Value)
+                    {
+                        Toast("Wing is full");
+                        break;
+                    }
+                    WingMember m = Wing.RecruitNearest();
+                    Toast(m != null
+                        ? m.Name + " joined as " + SlotName(m.Slot)
+                        : "No eligible friendly AI aircraft in range");
+                    break;
+                }
+
+                case WingAction.Rejoin:
+                    if (RequireWing()) { Wing.OrderAll(WingOrder.Formation); Toast("Wing: rejoin formation"); }
+                    break;
+
+                case WingAction.Engage:
+                    if (RequireWing()) { Wing.OrderAll(WingOrder.Engage); Toast("Wing: engage"); }
+                    break;
+
+                case WingAction.ReturnToBase:
+                    if (RequireWing()) { Wing.OrderAll(WingOrder.ReturnToBase); Toast("Wing: return to base"); }
+                    break;
+
+                case WingAction.CycleShape:
+                {
+                    var values = (FormationShape[])Enum.GetValues(typeof(FormationShape));
+                    int next = (Array.IndexOf(values, Plugin.Config2.Shape.Value) + 1) % values.Length;
+                    Plugin.Config2.Shape.Value = values[next];
+                    Toast("Formation: " + values[next]);
+                    break;
+                }
+
+                case WingAction.Disband:
+                    if (RequireWing())
+                    {
+                        int n = Wing.Count;
+                        Wing.DisbandAll("player disbanded wing");
+                        Toast("Wing disbanded (" + n + ")");
+                    }
+                    break;
+            }
+        }
+
+        /// <summary>Drop one member back to the stock AI. Used by the map panel.</summary>
+        internal void RemoveMember(WingMember member)
+        {
+            if (member == null) return;
+            string name = member.Name;
+            Wing.Remove(member, "removed from the map panel");
+            Toast(name + " released");
+        }
+
+        /// <summary>Assign the current map selection to the wing. Used by the map panel.</summary>
+        internal void AddSelectedFromMap()
+        {
+            mapLayer?.AddSelected();
+        }
+
+        private bool RequireWing()
+        {
+            if (Wing.Count > 0) return true;
+            Toast("No wingmen assigned");
+            return false;
+        }
+
+        internal void Toast(string message)
+        {
+            toast = message;
+            toastUntil = Time.unscaledTime + 3f;
+            if (Plugin.Config2.VerboseLogging.Value)
+                Plugin.Logger.LogInfo("[Wing] " + message);
+        }
+
+        internal static string SlotName(int slot)
+        {
+            return "wingman " + (slot + 1);
+        }
+
+        // --------------------------------------------------------------------- UI
+
+        private void OnGUI()
+        {
+            if (!InPlayableState()) return;
+
+            if (!WmcScreen.Installed) WingMapPanel.Draw(Wing, mapLayer);
+
+            // The compact in-flight readout is redundant while the map panel is up.
+            if (Plugin.Config2.ShowHud.Value && Wing.Count > 0 && !DynamicMap.mapMaximized)
+                WingHud.DrawStatusPanel(Wing);
+
+            if (radialOpen)
+                WingHud.DrawRadial(Slices, radialCentre, hoveredSlice);
+
+            if (toast != null && Time.unscaledTime < toastUntil)
+                WingHud.DrawToast(toast);
+        }
+    }
+
+    internal enum WingAction
+    {
+        RecruitNearest,
+        Rejoin,
+        Engage,
+        ReturnToBase,
+        CycleShape,
+        Disband,
+    }
+
+    internal struct RadialSlice
+    {
+        public readonly string Label;
+        public readonly WingAction Action;
+
+        public RadialSlice(string label, WingAction action)
+        {
+            Label = label;
+            Action = action;
+        }
+    }
+}
