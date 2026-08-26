@@ -22,6 +22,7 @@ namespace WingCommand
         private static GUIStyle sliceStyle;
         private static GUIStyle sliceHotStyle;
         private static GUIStyle toastStyle;
+        private static GUIStyle headerStyle;
 
         private static readonly Color Panel = new Color(0.04f, 0.06f, 0.05f, 0.78f);
         private static readonly Color Accent = new Color(0.45f, 0.95f, 0.55f);
@@ -45,7 +46,10 @@ namespace WingCommand
                 richText = false,
                 wordWrap = false,
             };
-            labelStyle.normal.textColor = Accent;
+            labelStyle.normal.textColor = HudGreen();
+
+            headerStyle = new GUIStyle(labelStyle) { fontStyle = FontStyle.Bold };
+            headerStyle.normal.textColor = HudGreen();
 
             sliceStyle = new GUIStyle(GUI.skin.box)
             {
@@ -69,6 +73,13 @@ namespace WingCommand
             toastStyle.normal.textColor = Accent;
         }
 
+        /// <summary>The theme colour the game uses for friendly symbology.</summary>
+        private static Color HudGreen()
+        {
+            try { return NuclearOption.UIStyleSystem.ThemeManager.Active.ColorTheme.AllClear; }
+            catch { return new Color(0.30f, 1f, 0.35f); }
+        }
+
         private static Texture2D Solid(Color c)
         {
             var t = new Texture2D(1, 1);
@@ -84,23 +95,51 @@ namespace WingCommand
         private static string cachedHeader = "";
         private static float nextRowRebuild;
 
+        /// <summary>
+        /// In-flight wing readout. Drawn as bare green text with no panel behind it, so it
+        /// reads as part of the aircraft's own symbology rather than as a mod overlay
+        /// sitting on top of the canopy.
+        /// </summary>
         public static void DrawStatusPanel(WingRegistry wing)
         {
             EnsureStyles();
             RebuildRows(wing);
 
-            const float w = 250f;
-            float h = 34f + cachedRows.Count * 18f;
-            var rect = new Rect(14f, Screen.height * 0.5f - h * 0.5f, w, h);
+            const float w = 260f;
+            const float lineHeight = 18f;
+            float h = lineHeight * (cachedRows.Count + 1) + 8f;
 
-            GUI.Box(rect, GUIContent.none, panelStyle);
-            GUILayout.BeginArea(new Rect(rect.x + 10f, rect.y + 8f, rect.width - 20f, rect.height - 16f));
+            Vector2 origin = PanelOrigin(w, h);
 
-            GUILayout.Label(cachedHeader, labelStyle);
+            // No GUI.Box: the background plate was the main thing making this look bolted on.
+            var line = new Rect(origin.x, origin.y, w, lineHeight);
+
+            GUI.Label(line, cachedHeader, headerStyle);
             for (int i = 0; i < cachedRows.Count; i++)
-                GUILayout.Label(cachedRows[i], labelStyle);
+            {
+                line.y += lineHeight;
+                GUI.Label(line, cachedRows[i], labelStyle);
+            }
+        }
 
-            GUILayout.EndArea();
+        /// <summary>Corner placement, so the readout can be moved clear of the HUD.</summary>
+        private static Vector2 PanelOrigin(float w, float h)
+        {
+            const float margin = 24f;
+            switch (Plugin.Config2.HudCorner.Value)
+            {
+                case HudCorner.TopLeft:
+                    return new Vector2(margin, margin);
+                case HudCorner.TopRight:
+                    return new Vector2(Screen.width - w - margin, margin);
+                case HudCorner.BottomLeft:
+                    return new Vector2(margin, Screen.height - h - margin);
+                case HudCorner.BottomRight:
+                    return new Vector2(Screen.width - w - margin, Screen.height - h - margin);
+                case HudCorner.MiddleRight:
+                default:
+                    return new Vector2(Screen.width - w - margin, Screen.height * 0.34f);
+            }
         }
 
         private static void RebuildRows(WingRegistry wing)

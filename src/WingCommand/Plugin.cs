@@ -85,6 +85,7 @@ namespace WingCommand
         public readonly ConfigEntry<float> AggressiveEngageRange;
         public readonly ConfigEntry<float> LeashRadius;
         public readonly ConfigEntry<float> MirrorWindowSeconds;
+        public readonly ConfigEntry<float> FireInterval;
         public readonly ConfigEntry<bool> AutoReturnOnEmpty;
         public readonly ConfigEntry<float> BingoFuel;
 
@@ -108,6 +109,7 @@ namespace WingCommand
         // --- UI ---
         public readonly ConfigEntry<bool> UseNativeRadial;
         public readonly ConfigEntry<bool> ShowHud;
+        public readonly ConfigEntry<HudCorner> HudCorner;
         public readonly ConfigEntry<bool> MapCommandEnabled;
         public readonly ConfigEntry<bool> UseMfdPanel;
         public readonly ConfigEntry<bool> ShowMapPanel;
@@ -193,6 +195,11 @@ namespace WingCommand
                     "How long Defensive wingmen stay weapons-free against ground targets after " +
                     "you fire an anti-surface weapon.",
                     new AcceptableValueRange<float>(2f, 120f)));
+            FireInterval = c.Bind("Engagement", "FireInterval", 5f,
+                new ConfigDescription(
+                    "Minimum seconds between shots from one wingman. Without a gap they fire " +
+                    "every engagement tick and empty the aircraft in seconds.",
+                    new AcceptableValueRange<float>(0.5f, 30f)));
             AutoReturnOnEmpty = c.Bind("Engagement", "AutoReturnOnEmpty", true,
                 "Wingmen return to base on their own once out of ammunition or down to bingo fuel.");
             BingoFuel = c.Bind("Engagement", "BingoFuel", 0.15f,
@@ -238,7 +245,9 @@ namespace WingCommand
                 "a wing of your own aircraft type. Both are cheats and are host-only.");
 
             ShowHud = c.Bind("UI", "ShowWingHud", true,
-                "Draw the compact wing status panel in flight while you have wingmen assigned.");
+                "Draw the compact wing status readout in flight while you have wingmen assigned.");
+            HudCorner = c.Bind("UI", "WingHudCorner", WingCommand.HudCorner.MiddleRight,
+                "Where that readout sits, so it can be kept clear of the HUD.");
             UseMfdPanel = c.Bind("UI", "UseMfdPanel", true,
                 "Add a WMC screen to the cockpit MFD bezel, alongside BDF/MAP/HUD. This is " +
                 "the primary wing interface; the map overlay below is only a fallback.");
@@ -254,6 +263,16 @@ namespace WingCommand
             VerboseLogging = c.Bind("Debug", "VerboseLogging", false,
                 "Log every order and state transition to the BepInEx console.");
         }
+    }
+
+    /// <summary>Screen placement for the in-flight wing readout.</summary>
+    internal enum HudCorner
+    {
+        TopLeft,
+        TopRight,
+        BottomLeft,
+        BottomRight,
+        MiddleRight,
     }
 
     internal enum FormationShape

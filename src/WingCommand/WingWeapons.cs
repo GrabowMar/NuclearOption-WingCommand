@@ -43,6 +43,7 @@ namespace WingCommand
 
             Unit target = ChooseTarget(aircraft, allow, maxRange, out WeaponStation station);
             if (target == null || station == null) return false;
+            if (!ShotIsValid(aircraft, station, target)) return false;
 
             wm.currentWeaponStation = station;
             wm.ClearTargetList();
@@ -51,6 +52,38 @@ namespace WingCommand
 
             pilot.SetPrimaryTarget(target);
             pilot.Fire();
+            return true;
+        }
+
+        /// <summary>
+        /// Whether this shot is actually worth taking, using the weapon's own stated
+        /// requirements.
+        ///
+        /// Without this a wingman fires on every engagement tick the moment anything
+        /// hostile is loosely in range, and empties its entire loadout in a few seconds.
+        /// The stock AI gates the same way — minimum range, alignment to the nose, and a
+        /// cooldown between launches.
+        /// </summary>
+        private static bool ShotIsValid(Aircraft aircraft, WeaponStation station, Unit target)
+        {
+            WeaponInfo info = station.WeaponInfo;
+            if (info == null) return false;
+
+            TargetRequirements req = info.targetRequirements;
+
+            float distance = FastMath.Distance(target.GlobalPosition(), aircraft.GlobalPosition());
+            if (req.maxRange > 0f && distance > req.maxRange) return false;
+            if (distance < req.minRange) return false;
+
+            // Alignment: the target has to be somewhere near the nose. minAlignment is the
+            // widest off-boresight angle the weapon accepts.
+            if (req.minAlignment > 0f)
+            {
+                Vector3 toTarget = target.GlobalPosition() - aircraft.GlobalPosition();
+                if (Vector3.Angle(aircraft.transform.forward, toTarget) > req.minAlignment)
+                    return false;
+            }
+
             return true;
         }
 
@@ -75,6 +108,7 @@ namespace WingCommand
             bool isAir = target.definition.typeIdentity.air > 0.5f;
             WeaponStation station = BestStationFor(aircraft, isAir ? TargetClass.Air : TargetClass.Surface);
             if (station == null) return false;
+            if (!ShotIsValid(aircraft, station, target)) return false;
 
             wm.currentWeaponStation = station;
             wm.ClearTargetList();

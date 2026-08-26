@@ -295,9 +295,9 @@ namespace WingCommand
 
             Panel(parent, new Rect(Pad, y, w, RowHeight), RowColor());
 
-            Button(parent, "<", new Rect(Pad + 4f, y + 3f, 30f, RowHeight - 6f),
+            Button(parent, "<", new Rect(Pad + 4f, y - 3f, 30f, RowHeight - 6f),
                    () => CycleShape(-1));
-            Button(parent, ">", new Rect(Pad + w - 34f, y + 3f, 30f, RowHeight - 6f),
+            Button(parent, ">", new Rect(Pad + w - 34f, y - 3f, 30f, RowHeight - 6f),
                    () => CycleShape(1));
 
             shapeLabel = Label(parent, "", new Rect(Pad + 38f, y, w - 76f, RowHeight),
@@ -479,7 +479,7 @@ namespace WingCommand
                 reserves = Label(rt, "", new Rect(264f, 0f, 70f, RowHeight), Dim(), 11f,
                               FontStyles.Normal, TextAlignmentOptions.Right);
 
-                Button(rt, "X", new Rect(width - 32f, 3f, 26f, RowHeight - 6f), () =>
+                Button(rt, "X", new Rect(width - 32f, -3f, 26f, RowHeight - 6f), () =>
                 {
                     if (bound != null) WingCommandManager.Instance?.RemoveMember(bound);
                 });

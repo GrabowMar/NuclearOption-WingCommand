@@ -19,6 +19,7 @@ namespace WingCommand
 
         private float lastSupportCheck;
         private float lastEngageCheck;
+        private float lastFiredTime;
         private float rejoinBoostUntil;
         private float lastKeepUpDistance = float.MaxValue;
         private float losingGroundSince;
@@ -211,6 +212,11 @@ namespace WingCommand
             if (Time.timeSinceLevelLoad - lastEngageCheck < EngageInterval) return;
             lastEngageCheck = Time.timeSinceLevelLoad;
 
+            // A weapon that passes its own checks would otherwise be fired on every tick,
+            // emptying the aircraft in seconds. The stock AI leaves five seconds between
+            // launches; this is the same idea, exposed so it can be tuned.
+            bool mayFire = Time.timeSinceLevelLoad - lastFiredTime >= Plugin.Config2.FireInterval.Value;
+
             WingPosture posture = WingCommandManager.Instance?.Wing?.Posture ?? WingPosture.Defensive;
 
             WingWeapons.Allow allow = PostureRules.WeaponsFree(posture, aircraft);
@@ -227,17 +233,25 @@ namespace WingCommand
                 assigned = null;
             }
 
+            bool fired;
             if (assigned != null && allow != WingWeapons.Allow.MissilesOnly)
             {
-                WingWeapons.EngageSpecific(aircraft, pilot, assigned, range);
+                fired = mayFire && WingWeapons.EngageSpecific(aircraft, pilot, assigned, range);
+            }
+            else if (allow == WingWeapons.Allow.MissilesOnly)
+            {
+                WingComms.Say(member, WingComms.Call.Defending);
+
+                // Missile defence is time-critical and uses its own short interval.
+                fired = Time.timeSinceLevelLoad - lastFiredTime >= 1f &&
+                        WingWeapons.Engage(aircraft, pilot, allow, range);
             }
             else
             {
-                if (allow == WingWeapons.Allow.MissilesOnly)
-                    WingComms.Say(member, WingComms.Call.Defending);
-
-                WingWeapons.Engage(aircraft, pilot, allow, range);
+                fired = mayFire && WingWeapons.Engage(aircraft, pilot, allow, range);
             }
+
+            if (fired) lastFiredTime = Time.timeSinceLevelLoad;
 
             // Aggressive only: hand over to the stock dogfight AI when an air threat is
             // close enough to be worth chasing. WingMember owns the leash that brings it
