@@ -91,6 +91,43 @@ namespace WingCommand
         }
 
         /// <summary>
+        /// Reynolds' leader-following keep-out: steer clear of the airspace directly ahead
+        /// of the leader.
+        ///
+        /// A wingman rejoining from in front converges on a slot that lies behind the
+        /// leader, and the straight path to it goes through the leader. Nothing else in the
+        /// controller prevents that, so this is what stops mid-airs on rejoin.
+        ///
+        /// Returns a lateral push, or zero when the wingman is not in the way.
+        /// </summary>
+        /// <param name="lookAhead">Length of the protected corridor ahead of the leader.</param>
+        /// <param name="corridorRadius">Half-width of that corridor.</param>
+        public static Vector3 AvoidLeaderPath(Aircraft self, Aircraft leader,
+                                              float lookAhead, float corridorRadius, float strength)
+        {
+            if (self == null || leader == null) return Vector3.zero;
+
+            Vector3 forward = leader.transform.forward;
+            Vector3 toSelf = self.transform.position - leader.transform.position;
+
+            // Only the corridor *ahead* of the leader matters; behind is where slots live.
+            float ahead = Vector3.Dot(toSelf, forward);
+            if (ahead <= 0f || ahead > lookAhead) return Vector3.zero;
+
+            Vector3 lateral = toSelf - forward * ahead;
+            float offCentre = lateral.magnitude;
+            if (offCentre > corridorRadius) return Vector3.zero;
+
+            // Push sideways out of the corridor, hardest on the centreline and closest in.
+            Vector3 escape = offCentre > 0.1f
+                ? lateral / offCentre
+                : Vector3.Cross(forward, Vector3.up).normalized;
+
+            float urgency = (1f - offCentre / corridorRadius) * (1f - ahead / lookAhead);
+            return escape * (strength * urgency);
+        }
+
+        /// <summary>
         /// Reynolds separation: a repulsion vector pushing an aircraft away from nearby
         /// wing members, weighted by inverse square distance.
         ///

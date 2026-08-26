@@ -28,6 +28,27 @@ namespace WingCommand
             if (leader == null) DisbandAll("leader gone");
         }
 
+        /// <summary>Send home any member out of fuel or ammunition.</summary>
+        public void CheckReserves()
+        {
+            for (int i = 0; i < members.Count; i++) members[i].CheckReserves();
+        }
+
+        /// <summary>Put the whole wing onto one target.</summary>
+        public int AttackTarget(Unit target)
+        {
+            if (target == null) return 0;
+
+            int ordered = 0;
+            foreach (WingMember m in members)
+            {
+                if (!m.Alive) continue;
+                m.AttackTarget(target);
+                ordered++;
+            }
+            return ordered;
+        }
+
         /// <summary>Pull back any member that has strayed past the leash while engaging.</summary>
         public void CheckLeashes()
         {

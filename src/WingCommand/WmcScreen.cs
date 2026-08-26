@@ -412,7 +412,7 @@ namespace WingCommand
         private sealed class RosterRow
         {
             private readonly GameObject go;
-            private readonly TMP_Text slot, name, order, error;
+            private readonly TMP_Text slot, name, order, error, reserves;
             private WingMember bound;
 
             public RosterRow(RectTransform parent, int index)
@@ -429,11 +429,13 @@ namespace WingCommand
 
                 slot  = Label(rt, "", new Rect(6f, 0f, 18f, RowHeight), Dim(), 12f,
                               FontStyles.Normal, TextAlignmentOptions.Left);
-                name  = Label(rt, "", new Rect(26f, 0f, 150f, RowHeight), Friendly(), 12f,
+                name  = Label(rt, "", new Rect(26f, 0f, 108f, RowHeight), Friendly(), 12f,
                               FontStyles.Normal, TextAlignmentOptions.Left);
-                order = Label(rt, "", new Rect(180f, 0f, 74f, RowHeight), Dim(), 12f,
+                order = Label(rt, "", new Rect(136f, 0f, 62f, RowHeight), Dim(), 12f,
                               FontStyles.Normal, TextAlignmentOptions.Left);
-                error = Label(rt, "", new Rect(256f, 0f, 78f, RowHeight), Dim(), 12f,
+                error = Label(rt, "", new Rect(198f, 0f, 62f, RowHeight), Dim(), 12f,
+                              FontStyles.Normal, TextAlignmentOptions.Right);
+                reserves = Label(rt, "", new Rect(264f, 0f, 70f, RowHeight), Dim(), 11f,
                               FontStyles.Normal, TextAlignmentOptions.Right);
 
                 Button(rt, "X", new Rect(width - 32f, 3f, 26f, RowHeight - 6f), () =>
@@ -450,6 +452,11 @@ namespace WingCommand
                 slot.text = m.Slot.ToString();
                 name.text = Truncate(m.Name, 16);
                 order.text = ShortOrder(m.Order);
+
+                reserves.text = Mathf.RoundToInt(m.Fuel * 100f) + "%  " + m.Ammo;
+                reserves.color = m.Fuel <= Plugin.Config2.BingoFuel.Value || m.Ammo <= 0
+                    ? new Color(1f, 0.55f, 0.2f)
+                    : Dim();
 
                 error.text = ErrorText(m);
                 error.color = m.Order == WingOrder.Formation && m.SlotError > 0f && m.SlotError < 250f

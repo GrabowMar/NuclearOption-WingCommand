@@ -55,6 +55,38 @@ namespace WingCommand
         }
 
         /// <summary>
+        /// Fire at one specific unit, chosen by the player rather than by the wingman.
+        /// Returns true if it fired.
+        /// </summary>
+        public static bool EngageSpecific(Aircraft aircraft, Pilot pilot, Unit target, float maxRange)
+        {
+            if (aircraft == null || pilot == null || target == null || target.disabled) return false;
+
+            WeaponManager wm = aircraft.weaponManager;
+            if (wm == null) return false;
+
+            WeaponStation current = wm.currentWeaponStation;
+            if (current != null && current.SalvoInProgress) return false;
+
+            if (FastMath.SquareDistance(target.GlobalPosition(), aircraft.GlobalPosition())
+                > maxRange * maxRange)
+                return false;
+
+            bool isAir = target.definition.typeIdentity.air > 0.5f;
+            WeaponStation station = BestStationFor(aircraft, isAir ? TargetClass.Air : TargetClass.Surface);
+            if (station == null) return false;
+
+            wm.currentWeaponStation = station;
+            wm.ClearTargetList();
+            wm.AddTargetList(target);
+            wm.TargetListChanged();
+
+            pilot.SetPrimaryTarget(target);
+            pilot.Fire();
+            return true;
+        }
+
+        /// <summary>
         /// Shoot down inbound missiles using the game's own intercept target search.
         /// </summary>
         public static bool InterceptMissiles(Aircraft aircraft, Pilot pilot)

@@ -85,6 +85,16 @@ namespace WingCommand
         public readonly ConfigEntry<float> AggressiveEngageRange;
         public readonly ConfigEntry<float> LeashRadius;
         public readonly ConfigEntry<float> MirrorWindowSeconds;
+        public readonly ConfigEntry<bool> AutoReturnOnEmpty;
+        public readonly ConfigEntry<float> BingoFuel;
+
+        // --- Station keeping (safety) ---
+        public readonly ConfigEntry<float> PathCutLookAhead;
+        public readonly ConfigEntry<float> PathCutRadius;
+        public readonly ConfigEntry<float> PathCutStrength;
+
+        // --- Comms ---
+        public readonly ConfigEntry<bool> RadioChatter;
 
         // --- Debug ---
         public readonly ConfigEntry<bool> EnableDebugActions;
@@ -177,6 +187,27 @@ namespace WingCommand
                     "How long Defensive wingmen stay weapons-free against ground targets after " +
                     "you fire an anti-surface weapon.",
                     new AcceptableValueRange<float>(2f, 120f)));
+            AutoReturnOnEmpty = c.Bind("Engagement", "AutoReturnOnEmpty", true,
+                "Wingmen return to base on their own once out of ammunition or down to bingo fuel.");
+            BingoFuel = c.Bind("Engagement", "BingoFuel", 0.15f,
+                new ConfigDescription("Fuel fraction at which a wingman calls bingo and heads home.",
+                    new AcceptableValueRange<float>(0.05f, 0.5f)));
+
+            PathCutLookAhead = c.Bind("Formation", "PathCutLookAhead", 400f,
+                new ConfigDescription(
+                    "Length of the protected corridor ahead of you, in metres. Wingmen steer " +
+                    "around it rather than crossing your nose to reach a slot behind you.",
+                    new AcceptableValueRange<float>(0f, 2000f)));
+            PathCutRadius = c.Bind("Formation", "PathCutRadius", 120f,
+                new ConfigDescription("Half-width of that corridor.",
+                    new AcceptableValueRange<float>(10f, 500f)));
+            PathCutStrength = c.Bind("Formation", "PathCutStrength", 200f,
+                new ConfigDescription("How hard wingmen are pushed out of your path.",
+                    new AcceptableValueRange<float>(0f, 800f)));
+
+            RadioChatter = c.Bind("Comms", "RadioChatter", true,
+                "Wingmen report engagements, defending, Winchester and rejoins in the game's " +
+                "on-screen message feed.");
 
             UseNativeRadial = c.Bind("UI", "UseNativeRadial", true,
                 "Add a nested 'Wing Command' entry to the game's own radial menu. This uses " +

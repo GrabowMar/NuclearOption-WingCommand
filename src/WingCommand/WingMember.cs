@@ -78,6 +78,70 @@ namespace WingCommand
         /// <summary>True while this member is off the wing on a leashed engagement.</summary>
         public bool OnLeash { get; private set; }
 
+        /// <summary>A target the player has explicitly assigned, or null.</summary>
+        public Unit AssignedTarget { get; private set; }
+
+        /// <summary>Fuel remaining, 0-1.</summary>
+        public float Fuel => Aircraft != null ? Aircraft.GetFuelLevel() : 0f;
+
+        /// <summary>Rounds/missiles remaining across all stations.</summary>
+        public int Ammo
+        {
+            get
+            {
+                if (Aircraft == null || Aircraft.weaponStations == null) return 0;
+
+                int total = 0;
+                foreach (WeaponStation s in Aircraft.weaponStations)
+                {
+                    if (s != null && !s.Cargo) total += s.Ammo;
+                }
+                return total;
+            }
+        }
+
+        /// <summary>Order this member onto a specific target.</summary>
+        public void AttackTarget(Unit target)
+        {
+            AssignedTarget = target;
+            if (target == null) return;
+
+            Pilot.SetPrimaryTarget(target);
+
+            // Aggressive breaks to chase; Defensive shoots from the slot, which is the
+            // whole point of the posture.
+            WingPosture posture = WingCommandManager.Instance?.Wing?.Posture ?? WingPosture.Defensive;
+            if (PostureRules.MayBreakFor(posture, target))
+                BreakToEngage("ordered onto " + target.unitName);
+            else
+                WingComms.Say(this, WingComms.Call.Engaging, target.unitName);
+        }
+
+        public void ClearAssignedTarget() => AssignedTarget = null;
+
+        /// <summary>
+        /// Send the member home when it can no longer contribute. A wingman with no
+        /// weapons or no fuel is just a liability holding station.
+        /// </summary>
+        public void CheckReserves()
+        {
+            if (!Alive || Order == WingOrder.ReturnToBase) return;
+            if (!Plugin.Config2.AutoReturnOnEmpty.Value) return;
+
+            if (Fuel <= Plugin.Config2.BingoFuel.Value)
+            {
+                WingComms.Say(this, WingComms.Call.Bingo);
+                Apply(WingOrder.ReturnToBase);
+                return;
+            }
+
+            if (Ammo <= 0)
+            {
+                WingComms.Say(this, WingComms.Call.Winchester);
+                Apply(WingOrder.ReturnToBase);
+            }
+        }
+
         /// <summary>
         /// Break formation to fight, but stay tethered. Unlike a plain Engage order this
         /// is temporary: <see cref="CheckLeash"/> pulls the member back once the fight
@@ -93,6 +157,7 @@ namespace WingCommand
 
             OnLeash = true;
             Order = WingOrder.Engage;
+            WingComms.Say(this, WingComms.Call.Breaking);
             SwitchToCombat();
         }
 
@@ -119,6 +184,7 @@ namespace WingCommand
                 Plugin.Logger.LogInfo($"[Wing] {Name} past leash - rejoining");
 
             OnLeash = false;
+            WingComms.Say(this, WingComms.Call.Rejoining);
             Apply(WingOrder.Formation);
         }
 

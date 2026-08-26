@@ -85,6 +85,14 @@ namespace WingCommand
                 Plugin.Config2.SeparationRadius.Value,
                 Plugin.Config2.SeparationStrength.Value);
 
+            // And out of the leader's own path: a wingman rejoining from in front would
+            // otherwise fly straight through the player to reach a slot behind them.
+            slotPos += FormationSolver.AvoidLeaderPath(
+                aircraft, leader,
+                Plugin.Config2.PathCutLookAhead.Value,
+                Plugin.Config2.PathCutRadius.Value,
+                Plugin.Config2.PathCutStrength.Value);
+
             Vector3 toSlot = slotPos - aircraft.GlobalPosition();
             float distance = toSlot.magnitude;
 
@@ -205,7 +213,28 @@ namespace WingCommand
             WingWeapons.Allow allow = PostureRules.WeaponsFree(posture, aircraft);
             float range = PostureRules.EngageRange(posture);
 
-            WingWeapons.Engage(aircraft, pilot, allow, range);
+            // An explicitly assigned target outranks whatever the wingman would pick, and
+            // survives until it dies. Missile defence still takes precedence: a missile in
+            // the air is more urgent than any order.
+            Unit assigned = member.AssignedTarget;
+            if (assigned != null && assigned.disabled)
+            {
+                WingComms.Say(member, WingComms.Call.Splash, assigned.unitName);
+                member.ClearAssignedTarget();
+                assigned = null;
+            }
+
+            if (assigned != null && allow != WingWeapons.Allow.MissilesOnly)
+            {
+                WingWeapons.EngageSpecific(aircraft, pilot, assigned, range);
+            }
+            else
+            {
+                if (allow == WingWeapons.Allow.MissilesOnly)
+                    WingComms.Say(member, WingComms.Call.Defending);
+
+                WingWeapons.Engage(aircraft, pilot, allow, range);
+            }
 
             // Aggressive only: hand over to the stock dogfight AI when an air threat is
             // close enough to be worth chasing. WingMember owns the leash that brings it

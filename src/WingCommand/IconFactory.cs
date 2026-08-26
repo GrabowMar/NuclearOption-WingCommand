@@ -45,6 +45,7 @@ namespace WingCommand
                 case "engage":      Engage(c);              break;
                 case "rtb":         ReturnToBase(c);        break;
                 case "formation":   ShapeGlyph(c, FormationShape.EchelonRight); break;
+                case "attack":      AttackTarget(c);        break;
                 case "posture":     Posture(c);             break;
                 case "disband":     Disband(c);             break;
                 case "back":        Back(c);                break;
@@ -106,6 +107,16 @@ namespace WingCommand
             c.Segment(58, 78, 74, 56, 6f);
             c.Segment(74, 56, 66, 58, 6f);
             c.Segment(74, 56, 72, 64, 6f);
+        }
+
+        /// <summary>Two aircraft converging on a marked target.</summary>
+        private static void AttackTarget(Canvas c)
+        {
+            c.Ring(60, 62, 16, 5f);
+            c.Disc(60, 62, 5f);
+            Delta(c, 24, 30, 13, 30f);
+            Delta(c, 46, 22, 13, 20f);
+            c.Segment(30, 42, 48, 54, 4f);
         }
 
         /// <summary>A shield: the wing's rules of engagement.</summary>

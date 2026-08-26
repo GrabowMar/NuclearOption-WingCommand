@@ -125,6 +125,7 @@ namespace WingCommand
                 Leaf("Engage", WingAction.Engage, "engage"),
                 Leaf("Return To Base", WingAction.ReturnToBase, "rtb"),
                 Icon(WingMenuAction.Create("Formation", _ => ShowFormationMenu()), "formation"),
+                Leaf("Attack My Target", WingAction.AttackMyTarget, "attack"),
                 Leaf("Posture", WingAction.TogglePosture, "posture"),
                 Leaf("Disband", WingAction.Disband, "disband"),
                 Icon(WingMenuAction.Create("Back", _ => RestoreStockWheel()), "back"),

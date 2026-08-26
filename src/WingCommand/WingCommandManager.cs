@@ -52,6 +52,7 @@ namespace WingCommand
                 if (radialOpen) CloseRadial(apply: false);
                 WmcScreen.Reset();
                 PlayerFireWatcher.Reset();
+                WingComms.Reset();
                 return;
             }
 
@@ -59,6 +60,7 @@ namespace WingCommand
             Wing.SetLeader(GameManager.GetLocalAircraft(out Aircraft local) ? local : null);
             Wing.Prune();
             Wing.CheckLeashes();
+            Wing.CheckReserves();
             PlayerFireWatcher.Track(local);
 
             if (NativeRadialActive)
@@ -224,11 +226,11 @@ namespace WingCommand
                 }
 
                 case WingAction.Rejoin:
-                    if (RequireWing()) { Wing.OrderAll(WingOrder.Formation); Toast("Wing: rejoin formation"); }
+                    if (RequireWing()) { Wing.OrderAll(WingOrder.Formation); Toast("Wing: rejoin formation"); WingComms.SayWing(WingComms.Call.Rejoining); }
                     break;
 
                 case WingAction.Engage:
-                    if (RequireWing()) { Wing.OrderAll(WingOrder.Engage); Toast("Wing: engage"); }
+                    if (RequireWing()) { Wing.OrderAll(WingOrder.Engage); Toast("Wing: engage"); WingComms.SayWing(WingComms.Call.Engaging); }
                     break;
 
                 case WingAction.ReturnToBase:
@@ -241,6 +243,22 @@ namespace WingCommand
                     int next = (Array.IndexOf(values, Plugin.Config2.Shape.Value) + 1) % values.Length;
                     Plugin.Config2.Shape.Value = values[next];
                     Toast("Formation: " + values[next]);
+                    break;
+                }
+
+                case WingAction.AttackMyTarget:
+                {
+                    if (!RequireWing()) break;
+
+                    Unit target = CurrentPlayerTarget();
+                    if (target == null)
+                    {
+                        Toast("No target selected");
+                        break;
+                    }
+
+                    int n = Wing.AttackTarget(target);
+                    Toast("Wing: attacking " + target.unitName + " (" + n + ")");
                     break;
                 }
 
@@ -277,6 +295,17 @@ namespace WingCommand
         internal void AddSelectedFromMap()
         {
             mapLayer?.AddSelected();
+        }
+
+        /// <summary>Whatever the player currently has designated, or null.</summary>
+        private static Unit CurrentPlayerTarget()
+        {
+            if (!GameManager.GetLocalAircraft(out Aircraft local) || local == null) return null;
+
+            Pilot pilot = WingRegistry.PrimaryPilot(local);
+            Unit target = pilot != null ? pilot.GetPrimaryTarget() : null;
+
+            return (target != null && !target.disabled) ? target : null;
         }
 
         private bool RequireWing()
@@ -326,6 +355,7 @@ namespace WingCommand
         Engage,
         ReturnToBase,
         CycleShape,
+        AttackMyTarget,
         TogglePosture,
         Disband,
     }
