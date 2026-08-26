@@ -74,7 +74,12 @@ namespace WingCommand
             RunEngagement(leader);
 
             FormationShape shape = Plugin.Config2.Shape.Value;
+
+            // Helicopters fly slower and much closer together than jets, so the same
+            // spacing that reads as tight for a fighter formation looks scattered for them.
             float spacing = Plugin.Config2.SlotSpacing.Value;
+            if (WingRegistry.IsRotary(aircraft))
+                spacing *= Plugin.Config2.RotarySpacingScale.Value;
 
             Vector3 offset = FormationSolver.SlotOffset(
                 leader.transform.forward, member.Slot, shape, spacing,
@@ -117,7 +122,7 @@ namespace WingCommand
             if (aircraft.autopilot is AutopilotPlane)
                 FlyFixedWing(leader, slotPos, toSlot, distance);
             else
-                FlyRotary(leader, slotPos);
+                FlyRotary(leader, slotPos, toSlot, distance);
         }
 
         /// <summary>
@@ -125,23 +130,51 @@ namespace WingCommand
         /// override the five-argument overload and manage collective themselves, so
         /// throttle is deliberately left alone here.
         /// </summary>
-        private void FlyRotary(Aircraft leader, GlobalPosition slotPos)
+        private void FlyRotary(Aircraft leader, GlobalPosition slotPos, Vector3 toSlot, float distance)
         {
+            AircraftParameters p = aircraft.GetAircraftParameters();
+            Vector3 leaderVel = leader.rb != null ? leader.rb.velocity : Vector3.zero;
+
+            // AutopilotHelo blends hover control into forward flight with
+            // SmoothStep(speed / maxSpeed). In hover it drives a tilt PID straight at the
+            // destination, which holds position well. In forward flight it steers to a
+            // waypoint recomputed only once a second — so chasing a moving leader means
+            // chasing a target up to a second stale, which is most of why helicopters
+            // handled formation worse than aeroplanes.
+            //
+            // Leading the slot by roughly that staleness cancels it. The lead fades out as
+            // the aircraft slows into hover control, where it is neither needed nor wanted.
+            float speedFraction = Mathf.Clamp01(aircraft.speed / Mathf.Max(p.maxSpeed, 1f));
+            float lead = Plugin.Config2.RotaryLeadTime.Value * speedFraction;
+
+            // Damp against drift for the same reason as the fixed-wing path: a purely
+            // positional target overshoots and the airframe answers by rocking.
+            Vector3 drift = aircraft.rb.velocity - leaderVel;
+            Vector3 damping = -drift * Plugin.Config2.StationDamping.Value * speedFraction;
+
+            GlobalPosition destination = slotPos + leaderVel * lead + damping;
+
+            // altitudeHold is a height above ground, and is used twice: as the height of
+            // the forward-flight waypoint and as the collective error term. It therefore
+            // has to describe where the *slot* sits above the terrain, not where the leader
+            // does — otherwise the vertical stagger between slots is silently discarded.
+            float stack = slotPos.y - leader.GlobalPosition().y;
+            float agl = Mathf.Max(p.minimumRadarAlt, leader.radarAlt + stack);
+
+            // Hold the leader's heading once settled. While still transiting, leave yaw to
+            // the autopilot so the aircraft points where it is actually going instead of
+            // crabbing sideways across the gap.
             Vector3 heading = leader.transform.forward;
             heading.y = 0f;
-
-            // For rotary aircraft altitudeHold is a height *above ground* to fly at, not a
-            // target altitude: AutopilotHelo feeds it to TerrainWaypoint and then steers on
-            // (radarAlt - altitudeHold). Passing anything small flies them into the ground,
-            // so track the leader's own AGL and never go below the airframe's stated floor.
-            AircraftParameters p = aircraft.GetAircraftParameters();
-            float agl = Mathf.Max(p.minimumRadarAlt, leader.radarAlt);
+            bool settled = distance < Plugin.Config2.CaptureDistance.Value;
 
             aircraft.autopilot.AutoAim(
-                destination: slotPos,
-                altitudeHold: Mathf.Clamp(agl, 30f, 3000f),
-                aimDirection: heading.sqrMagnitude > 0.01f ? heading.normalized : Vector3.zero,
-                targetVelocity: leader.rb != null ? leader.rb.velocity : Vector3.zero,
+                destination: destination,
+                altitudeHold: Mathf.Clamp(agl, 25f, 3000f),
+                aimDirection: (settled && heading.sqrMagnitude > 0.01f)
+                    ? heading.normalized
+                    : Vector3.zero,
+                targetVelocity: leaderVel,
                 followTerrain: true);
         }
 

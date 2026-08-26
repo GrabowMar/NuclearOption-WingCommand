@@ -77,6 +77,8 @@ namespace WingCommand
         public readonly ConfigEntry<float> StationDeadband;
         public readonly ConfigEntry<float> StationBank;
         public readonly ConfigEntry<float> StationDamping;
+        public readonly ConfigEntry<float> RotaryLeadTime;
+        public readonly ConfigEntry<float> RotarySpacingScale;
         public readonly ConfigEntry<float> AvoidanceSmoothing;
 
         // --- AI ---
@@ -191,6 +193,17 @@ namespace WingCommand
                     "Bank angle a settled wingman is allowed. This is the main authority knob: " +
                     "the autopilot ignores the effort parameter at these values.",
                     new AcceptableValueRange<float>(10f, 180f)));
+            RotaryLeadTime = c.Bind("Formation", "RotaryLeadTime", 1.1f,
+                new ConfigDescription(
+                    "How far ahead helicopters aim, in seconds. AutopilotHelo only recomputes " +
+                    "its forward-flight waypoint once a second, so without a lead they chase a " +
+                    "target that is always stale and overshoot.",
+                    new AcceptableValueRange<float>(0f, 4f)));
+            RotarySpacingScale = c.Bind("Formation", "RotarySpacingScale", 0.55f,
+                new ConfigDescription(
+                    "Slot spacing multiplier for helicopter formations, which fly far closer " +
+                    "together than jets.",
+                    new AcceptableValueRange<float>(0.2f, 2f)));
             StationDamping = c.Bind("Formation", "StationDamping", 1.6f,
                 new ConfigDescription(
                     "Damps the station-keeping correction against drift rate. Without it the " +

@@ -201,12 +201,37 @@ namespace WingCommand
             // it, so refuse rather than appear to work and silently do nothing.
             if (!candidate.LocalSim) return false;
 
+            if (!TypeMatchesLeader(candidate)) return false;
+
             return true;
+        }
+
+        /// <summary>
+        /// Rotary and fixed-wing aircraft cannot share a formation. They fly different
+        /// autopilots, hold station by different means, and differ in speed by a factor of
+        /// three or more — a helicopter told to formate on a jet simply falls behind until
+        /// it gives up or flies into something.
+        /// </summary>
+        private bool TypeMatchesLeader(Aircraft candidate)
+        {
+            if (Leader == null || candidate == null) return false;
+            return IsRotary(candidate) == IsRotary(Leader);
         }
 
         public WingMember Add(Aircraft aircraft)
         {
             if (aircraft == null || !aircraft.LocalSim) return null;
+
+            // Checked here as well as in IsEligible, because map selection and the debug
+            // spawn both add directly without passing through the eligibility filter.
+            if (!TypeMatchesLeader(aircraft))
+            {
+                WingCommandManager.Instance?.Toast(
+                    IsRotary(aircraft)
+                        ? aircraft.unitName + " is rotary - it cannot formate on a fixed-wing leader"
+                        : aircraft.unitName + " is fixed-wing - it cannot formate on a rotary leader");
+                return null;
+            }
 
             Pilot pilot = PrimaryPilot(aircraft);
             if (pilot == null) return null;
@@ -274,6 +299,16 @@ namespace WingCommand
         {
             for (int i = 0; i < members.Count; i++)
                 members[i].Slot = i + 1;
+        }
+
+        /// <summary>
+        /// Whether this airframe is flown by a rotary or tiltwing autopilot rather than a
+        /// fixed-wing one. The two use different Autopilot overloads and have wildly
+        /// different speed envelopes, so they are handled separately throughout.
+        /// </summary>
+        public static bool IsRotary(Aircraft aircraft)
+        {
+            return aircraft != null && !(aircraft.autopilot is AutopilotPlane);
         }
 
         public static Pilot PrimaryPilot(Aircraft aircraft)
