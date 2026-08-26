@@ -42,6 +42,30 @@ namespace WingCommand
             go.AddComponent<WingCommandManager>();
 
             Logger.LogInfo($"{PluginName} {PluginVersion} loaded.");
+
+            // Log what is actually in force, not what the defaults say.
+            //
+            // BepInEx only applies a default to a *new* key: an existing config file keeps
+            // its own value forever. Changing a default in code therefore does nothing for
+            // anyone who has already run the mod, which silently left tuning changes
+            // unapplied and a feature enabled long after it was supposedly turned off.
+            Logger.LogInfo(
+                "Effective tuning: " +
+                $"ClosureAuthority={Config2.ClosureAuthority.Value} " +
+                $"ClosureDamping={Config2.ClosureDamping.Value} " +
+                $"ThrottleGain={Config2.ThrottleGain.Value} " +
+                $"ThrottleBaseline={Config2.ThrottleBaseline.Value} " +
+                $"CaptureDistance={Config2.CaptureDistance.Value} " +
+                $"BankMatching={Config2.BankMatching.Value} " +
+                $"WidenUnderThreat={Config2.WidenUnderThreat.Value}");
+
+            if (Config2.ThrottleBaseline.Value < 0.99f)
+            {
+                Logger.LogWarning(
+                    "ThrottleBaseline is below 1. cruiseThrottle is a feed-forward term, so " +
+                    "this makes wingmen settle permanently slower than commanded and fall " +
+                    "behind. Set it to 1 unless you are deliberately experimenting.");
+            }
         }
 
         private void OnDestroy()
@@ -172,7 +196,7 @@ namespace WingCommand
                     "as a fraction of the leader's speed. Higher closes gaps faster; the damping " +
                     "term below is what keeps that from overshooting.",
                     new AcceptableValueRange<float>(0.1f, 2f)));
-            ClosureDamping = c.Bind("Formation", "ClosureDamping", 1.2f,
+            ClosureDamping = c.Bind("Formation", "ClosureDamping", 0.4f,
                 new ConfigDescription(
                     "Arrests closure early by subtracting the closing rate, the way a pilot pulls " +
                     "power before arriving rather than at the slot. Raise if wingmen overshoot " +
@@ -181,11 +205,12 @@ namespace WingCommand
             ThrottleGain = c.Bind("Formation", "ThrottleGain", 0.12f,
                 new ConfigDescription("Throttle applied per m/s of speed error.",
                     new AcceptableValueRange<float>(0.02f, 0.4f)));
-            ThrottleBaseline = c.Bind("Formation", "ThrottleBaseline", 0.75f,
+            ThrottleBaseline = c.Bind("Formation", "ThrottleBaseline", 1.0f,
                 new ConfigDescription(
-                    "Resting throttle as a fraction of the airframe's cruise setting. Below 1 so " +
-                    "there is room to accelerate; at cruise itself the control saturates the " +
-                    "moment a wingman needs to catch up.",
+                    "Resting throttle as a fraction of the airframe's cruise setting. Leave at " +
+                    "1: cruiseThrottle is the feed-forward term, the power needed to hold " +
+                    "cruise, so anything below 1 makes a wingman settle permanently slower " +
+                    "than commanded and fall steadily behind.",
                     new AcceptableValueRange<float>(0.3f, 1f)));
             SeparationRadius = c.Bind("Formation", "SeparationRadius", 90f,
                 new ConfigDescription("Distance at which wingmen start pushing away from each other.",
@@ -246,7 +271,7 @@ namespace WingCommand
                     "Seconds of delay per slot when rejoining, so the flight arrives in sequence " +
                     "instead of converging on you all at once. Zero restores the old behaviour.",
                     new AcceptableValueRange<float>(0f, 6f)));
-            WidenUnderThreat = c.Bind("Formation", "WidenUnderThreat", true,
+            WidenUnderThreat = c.Bind("Formation", "WidenUnderThreat", false,
                 "Open the formation up when the wing is Aggressive or you are being shot at, " +
                 "and close it again when clear. A tight formation is easy to shoot at and " +
                 "leaves nobody room to manoeuvre.");
