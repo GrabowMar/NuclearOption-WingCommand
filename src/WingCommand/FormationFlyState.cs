@@ -64,14 +64,22 @@ namespace WingCommand
             if (CheckMutualSupport(leader))
                 return;
 
+            FormationShape shape = Plugin.Config2.Shape.Value;
+            float spacing = Plugin.Config2.SlotSpacing.Value;
+
             Vector3 offset = FormationSolver.SlotOffset(
-                leader.transform.forward,
-                member.Slot,
-                Plugin.Config2.Shape.Value,
-                Plugin.Config2.SlotSpacing.Value,
+                leader.transform.forward, member.Slot, shape, spacing,
                 Plugin.Config2.SlotStack.Value);
 
             GlobalPosition slotPos = leader.GlobalPosition() + offset;
+
+            // Separation keeps wingmen out of each other during a rejoin, when several
+            // converge on the leader from arbitrary angles.
+            slotPos += FormationSolver.Separation(
+                aircraft, member.Siblings,
+                Plugin.Config2.SeparationRadius.Value,
+                Plugin.Config2.SeparationStrength.Value);
+
             Vector3 toSlot = slotPos - aircraft.GlobalPosition();
             float distance = toSlot.magnitude;
 
@@ -115,14 +123,30 @@ namespace WingCommand
         private void FlyFixedWing(Aircraft leader, GlobalPosition slotPos, Vector3 toSlot, float distance)
         {
             AircraftParameters p = aircraft.GetAircraftParameters();
-
-            // --- Throttle: match the leader, biased by along-track error. ---
-            Vector3 leaderFwd = leader.transform.forward;
-            float alongTrack = Vector3.Dot(toSlot, leaderFwd);
-
             float leaderSpeed = Mathf.Max(leader.speed, 1f);
-            float desiredSpeed = leaderSpeed + Mathf.Clamp(alongTrack * 0.35f, -leaderSpeed * 0.5f, leaderSpeed * 0.8f);
-            desiredSpeed = Mathf.Clamp(desiredSpeed, p.landingSpeed * 1.2f, Mathf.Max(p.maxSpeed, leaderSpeed * 1.5f));
+
+            // --- Turn compensation: fly concentric arcs, not a swinging offset. ---
+            // When the leader turns at yaw rate w, every slot orbits the same centre, so a
+            // wingman at signed lateral offset d must fly at v_leader + w*d — the outside
+            // one covers more ground, the inside one less. Without this the slot sweeps
+            // around the leader and wingmen get whipped through every turn.
+            float yawRate = leader.rb != null
+                ? Vector3.Dot(leader.rb.angularVelocity, Vector3.up)
+                : 0f;
+            float lateral = FormationSolver.SlotLateral(
+                member.Slot, Plugin.Config2.Shape.Value, Plugin.Config2.SlotSpacing.Value);
+            float turnCompensation = yawRate * lateral;
+
+            // --- Arrival: ramp closure down inside the slowing radius. ---
+            // A raw proportional term hunts around the slot; arrival converges on it.
+            float alongTrack = Vector3.Dot(toSlot, leader.transform.forward);
+            float slowingRadius = Mathf.Max(Plugin.Config2.SlowingRadius.Value, 1f);
+            float closure = Mathf.Clamp(alongTrack, -slowingRadius, slowingRadius) / slowingRadius;
+            closure *= leaderSpeed * Plugin.Config2.ClosureAuthority.Value;
+
+            float desiredSpeed = leaderSpeed + turnCompensation + closure;
+            desiredSpeed = Mathf.Clamp(desiredSpeed, p.landingSpeed * 1.2f,
+                                       Mathf.Max(p.maxSpeed, leaderSpeed * 1.5f));
 
             float speedError = desiredSpeed - aircraft.speed;
             float throttle = p.cruiseThrottle + speedError * 0.06f;
@@ -133,16 +157,18 @@ namespace WingCommand
 
             controlInputs.throttle = Mathf.Clamp01(throttle);
 
-            // --- Steering ---
-            // Close in, aim at the slot itself and match the leader's velocity so the
-            // autopilot stops chasing and settles. Far out, fly a lead pursuit.
+            // --- Steering: offset pursuit. ---
+            // Aim at where the slot will be, with the lead time scaled by how far out we
+            // are (Reynolds uses T = D * c). Closing in, the prediction shrinks to zero so
+            // the aircraft settles on the slot instead of continually overshooting it.
             bool closed = distance < 400f;
             float effort = closed ? 0.6f : 1f;
             float bankAllowed = closed ? 100f : 160f;
 
-            GlobalPosition aimPoint = closed
-                ? slotPos
-                : slotPos + leader.rb.velocity * Mathf.Clamp(distance / Mathf.Max(aircraft.speed, 50f), 0f, 6f);
+            float leadTime = Mathf.Clamp(distance / Mathf.Max(aircraft.speed, 50f), 0f, 6f);
+            if (closed) leadTime *= distance / 400f;
+
+            GlobalPosition aimPoint = slotPos + leader.rb.velocity * leadTime;
 
             aircraft.autopilot.AutoAim(
                 destination: aimPoint,

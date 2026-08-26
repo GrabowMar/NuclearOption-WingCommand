@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using UnityEngine;
 
 namespace WingCommand
@@ -60,6 +61,66 @@ namespace WingCommand
 
             offset.y += vertical;
             return offset;
+        }
+
+        /// <summary>
+        /// The signed lateral component of a slot, in metres: positive to the leader's
+        /// right, negative to its left.
+        ///
+        /// Turn compensation needs this separately from the full offset. In a turn a
+        /// formation flies concentric arcs about a common centre, so a wingman on the
+        /// outside must cover more ground than the leader and one on the inside less. The
+        /// correction is proportional to how far off the centreline the slot sits.
+        /// </summary>
+        public static float SlotLateral(int slot, FormationShape shape, float spacing)
+        {
+            if (slot <= 0) return 0f;
+
+            int pair = (slot + 1) / 2;
+            float side = (slot % 2 == 1) ? 1f : -1f;
+
+            switch (shape)
+            {
+                case FormationShape.EchelonLeft:  return -spacing * slot;
+                case FormationShape.LineAbreast:  return side * spacing * pair;
+                case FormationShape.Trail:        return 0f;
+                case FormationShape.CombatSpread: return side * spacing * 1.5f * pair;
+                case FormationShape.EchelonRight:
+                default:                          return spacing * slot;
+            }
+        }
+
+        /// <summary>
+        /// Reynolds separation: a repulsion vector pushing an aircraft away from nearby
+        /// wing members, weighted by inverse square distance.
+        ///
+        /// Slots are far enough apart on paper, but during a rejoin several wingmen
+        /// converge on the leader from arbitrary angles and nothing else keeps them out of
+        /// one another's way.
+        /// </summary>
+        public static Vector3 Separation(Aircraft self, IReadOnlyList<WingMember> members,
+                                         float radius, float strength)
+        {
+            if (self == null || members == null || radius <= 0f) return Vector3.zero;
+
+            Vector3 push = Vector3.zero;
+            float radiusSq = radius * radius;
+            Vector3 selfPos = self.transform.position;
+
+            for (int i = 0; i < members.Count; i++)
+            {
+                Aircraft other = members[i].Aircraft;
+                if (other == null || other == self || other.disabled) continue;
+
+                Vector3 away = selfPos - other.transform.position;
+                float distSq = away.sqrMagnitude;
+                if (distSq > radiusSq || distSq < 1f) continue;
+
+                // Inverse square, so the push only grows sharply when genuinely close.
+                push += away.normalized * (radiusSq / distSq);
+            }
+
+            return push * strength;
         }
     }
 }

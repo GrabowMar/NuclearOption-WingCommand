@@ -28,6 +28,10 @@ namespace WingCommand
 
         public Aircraft Leader => owner?.Leader;
 
+        /// <summary>The rest of the wing, for separation steering.</summary>
+        public System.Collections.Generic.IReadOnlyList<WingMember> Siblings =>
+            owner != null ? owner.Members : null;
+
         public bool Alive =>
             Aircraft != null && !Aircraft.disabled &&
             Pilot != null && !Pilot.dead && !Pilot.ejected;

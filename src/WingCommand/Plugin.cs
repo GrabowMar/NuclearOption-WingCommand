@@ -67,6 +67,10 @@ namespace WingCommand
         public readonly ConfigEntry<float> SlotStack;
         public readonly ConfigEntry<float> RecruitRange;
         public readonly ConfigEntry<int> MaxWingSize;
+        public readonly ConfigEntry<float> SlowingRadius;
+        public readonly ConfigEntry<float> ClosureAuthority;
+        public readonly ConfigEntry<float> SeparationRadius;
+        public readonly ConfigEntry<float> SeparationStrength;
 
         // --- AI ---
         public readonly ConfigEntry<bool> AiTweakEnabled;
@@ -111,6 +115,24 @@ namespace WingCommand
             MaxWingSize = c.Bind("Formation", "MaxWingSize", 3,
                 new ConfigDescription("Maximum number of wingmen.",
                     new AcceptableValueRange<int>(1, 8)));
+
+            SlowingRadius = c.Bind("Formation", "SlowingRadius", 300f,
+                new ConfigDescription(
+                    "Arrival distance, in metres. Closure speed ramps down inside this radius " +
+                    "instead of being proportional to error. Smaller settles harder but risks " +
+                    "hunting; larger is gentler but slower to close.",
+                    new AcceptableValueRange<float>(50f, 1500f)));
+            ClosureAuthority = c.Bind("Formation", "ClosureAuthority", 0.5f,
+                new ConfigDescription(
+                    "How much faster or slower than the leader a wingman may fly while closing, " +
+                    "as a fraction of the leader's speed.",
+                    new AcceptableValueRange<float>(0.1f, 1.5f)));
+            SeparationRadius = c.Bind("Formation", "SeparationRadius", 90f,
+                new ConfigDescription("Distance at which wingmen start pushing away from each other.",
+                    new AcceptableValueRange<float>(0f, 400f)));
+            SeparationStrength = c.Bind("Formation", "SeparationStrength", 12f,
+                new ConfigDescription("Strength of that push, in metres of slot displacement.",
+                    new AcceptableValueRange<float>(0f, 100f)));
 
             AiTweakEnabled = c.Bind("AI", "EnableAiTweak", false,
                 "Scale AI pilot skill and bravery. Changes vanilla combat feel, so it is off by default.");
