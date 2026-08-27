@@ -93,7 +93,8 @@ namespace WingCommand
 
         public static void Fly(Aircraft aircraft, Aircraft leader, ControlInputs controls,
                                int slot, GlobalPosition slotPos, Vector3 toSlot,
-                               float distance, Rejoin rejoin)
+                               float distance, Rejoin rejoin, Vector3 smoothedLeaderDir,
+                               bool report)
         {
             AircraftParameters p = aircraft.GetAircraftParameters();
             float leaderSpeed = Mathf.Max(leader.speed, 1f);
@@ -113,7 +114,7 @@ namespace WingCommand
                      leaderSpeed, drift, aggression, damping, rejoin, outOfPosition);
 
             Steer(aircraft, leader, slotPos, toSlot, distance,
-                  leaderVel, drift, aggression, damping, outOfPosition);
+                  leaderVel, drift, aggression, damping, outOfPosition, smoothedLeaderDir, report);
 
             MatchLeaderBank(aircraft, leader, controls, outOfPosition);
         }
@@ -188,7 +189,7 @@ namespace WingCommand
         private static void Steer(Aircraft aircraft, Aircraft leader, GlobalPosition slotPos,
                                   Vector3 toSlot, float distance, Vector3 leaderVel,
                                   Vector3 drift, float aggression, float damping,
-                                  float outOfPosition)
+                                  float outOfPosition, Vector3 smoothedLeaderDir, bool report)
         {
             // AutoAim is a pursuit controller: it rotates the aircraft's velocity toward the
             // destination and banks to chase it, so the distance to that destination sets the
@@ -201,9 +202,16 @@ namespace WingCommand
             // fast jet and a slow one. Deriving it from the correction instead — which is what
             // the first version of this did — let it collapse to a few hundred metres near the
             // slot and put the wobble straight back.
-            Vector3 baseDir = leaderVel.sqrMagnitude > 1f
-                ? leaderVel.normalized
-                : leader.transform.forward;
+            // The reference direction is a *smoothed* leader track, not its instantaneous
+            // velocity. Aimed two kilometres ahead, a wingman reproduces the direction it is
+            // given one-for-one, so every small correction the player makes on the stick
+            // arrives in the formation as a lateral swing of the aim point — which is what
+            // "it is like I was constantly steering left and right" describes. Real wingmen
+            // fly the leader's average track and let position error take care of the rest,
+            // and the smoothing is short enough not to lag a genuine turn.
+            Vector3 baseDir = smoothedLeaderDir.sqrMagnitude > 0.5f
+                ? smoothedLeaderDir
+                : (leaderVel.sqrMagnitude > 1f ? leaderVel.normalized : leader.transform.forward);
 
             float lookAhead = Mathf.Max(aircraft.speed * LookAheadSeconds, MinLookAhead);
 
@@ -249,7 +257,8 @@ namespace WingCommand
                                            Plugin.Config2.PursuitBankDegrees.Value,
                                            outOfPosition);
 
-            Report(aircraft, distance, correction.magnitude, maxCorrection, lookAhead);
+            if (report)
+                Report(aircraft, distance, correction.magnitude, maxCorrection, lookAhead);
             aircraft.autopilot.AutoAim(
                 destination: aimPoint,
                 aimVelocity: true,
@@ -263,6 +272,33 @@ namespace WingCommand
         }
 
         // ---------------------------------------------------------------- bank match
+
+        /// <summary>
+        /// <summary>
+        /// True bank angle, in degrees, independent of pitch.
+        ///
+        /// The obvious formula — the signed angle between world up and the aircraft's up
+        /// about its forward axis — is wrong, and wrong in a way that matters here: it does
+        /// not project onto the plane the roll axis actually turns in, so pitch leaks
+        /// straight into the answer. An aircraft pulling thirty degrees nose-up with its
+        /// wings dead level reports thirty degrees of bank. Feeding that to a bank match
+        /// meant every time the leader pulled, its wingmen saw a bank error that did not
+        /// exist and rolled to correct it — which is what the constant left-right rocking
+        /// was.
+        ///
+        /// Measuring the aircraft's right wing against the horizon's right, about its own
+        /// forward axis, is pitch-independent. It is only degenerate pointing straight up or
+        /// down, where bank has no meaning anyway.
+        /// </summary>
+        private static float BankOf(Aircraft aircraft)
+        {
+            Vector3 forward = aircraft.transform.forward;
+            Vector3 horizonRight = Vector3.Cross(Vector3.up, forward);
+
+            if (horizonRight.sqrMagnitude < 0.0001f) return 0f;
+
+            return Vector3.SignedAngle(horizonRight.normalized, aircraft.transform.right, forward);
+        }
 
         /// <summary>
         /// Roll with the leader while settled, so a turning formation looks like one
@@ -280,8 +316,7 @@ namespace WingCommand
             if (blend <= 0.001f || outOfPosition > 0.5f) return;
 
             // Bank angle about each aircraft's own forward axis.
-            float myBank = Vector3.SignedAngle(
-                Vector3.up, aircraft.transform.up, aircraft.transform.forward);
+            float myBank = BankOf(aircraft);
 
             if (Mathf.Abs(myBank) > BankMatchLimit || aircraft.radarAlt < BankMatchFloor)
             {
@@ -289,8 +324,7 @@ namespace WingCommand
                 return;
             }
 
-            float leaderBank = Vector3.SignedAngle(
-                Vector3.up, leader.transform.up, leader.transform.forward);
+            float leaderBank = BankOf(leader);
 
             float error = Mathf.DeltaAngle(myBank, leaderBank);
 
@@ -323,19 +357,13 @@ namespace WingCommand
         private static void Report(Aircraft aircraft, float distance, float correction,
                                    float maxCorrection, float lookAhead)
         {
-            if (!Plugin.Config2.VerboseLogging.Value) return;
-            if (Time.timeSinceLevelLoad - lastReport < 5f) return;
-            lastReport = Time.timeSinceLevelLoad;
-
             bool saturated = correction >= maxCorrection * 0.99f;
             Plugin.Logger.LogInfo(
                 $"[Formation] {aircraft.unitName}: error {distance:F0} m, " +
                 $"correction {correction:F0}/{maxCorrection:F0} m{(saturated ? " (SATURATED)" : "")}, " +
                 $"baseline {lookAhead:F0} m, speed {aircraft.speed:F0} m/s, " +
-                $"bank {Vector3.SignedAngle(Vector3.up, aircraft.transform.up, aircraft.transform.forward):F0} deg");
+                $"bank {BankOf(aircraft):F0} deg");
         }
-
-        private static float lastReport;
 
         /// <summary>
         /// Say so, once, when an interlock fires. If wallowing is ever reported again this

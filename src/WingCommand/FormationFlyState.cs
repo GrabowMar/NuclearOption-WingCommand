@@ -66,6 +66,53 @@ namespace WingCommand
 
         public Aircraft Leader => member.Leader;
 
+        /// <summary>
+        /// Leader track, low-pass filtered. Wingmen steer against this rather than the
+        /// leader's instantaneous velocity, so the formation follows where the leader is
+        /// going instead of reproducing every twitch of the stick.
+        /// </summary>
+        private Vector3 smoothedLeaderDir;
+
+        /// <summary>Seconds of smoothing. Long enough to reject stick noise, short enough not to lag a turn.</summary>
+        private const float LeaderTrackSmoothing = 1.2f;
+
+        /// <summary>
+        /// One report every five seconds, per wingman. The timer lives here rather than in
+        /// the flight model because the model is static and shared: a single static timer
+        /// meant three wingmen took turns logging, so consecutive lines described different
+        /// aircraft and the numbers looked like one aircraft thrashing.
+        /// </summary>
+        private bool DueToReport()
+        {
+            if (!Plugin.Config2.VerboseLogging.Value) return false;
+            if (Time.timeSinceLevelLoad - lastReport < 5f) return false;
+
+            lastReport = Time.timeSinceLevelLoad;
+            return true;
+        }
+
+        private float lastReport;
+
+        private Vector3 TrackLeader(Aircraft leader)
+        {
+            Vector3 instant = leader.rb != null && leader.rb.velocity.sqrMagnitude > 1f
+                ? leader.rb.velocity.normalized
+                : leader.transform.forward;
+
+            if (smoothedLeaderDir.sqrMagnitude < 0.5f)
+            {
+                smoothedLeaderDir = instant;
+                return smoothedLeaderDir;
+            }
+
+            smoothedLeaderDir = Vector3.Slerp(
+                smoothedLeaderDir, instant,
+                1f - Mathf.Exp(-Time.fixedDeltaTime / LeaderTrackSmoothing)).normalized;
+
+            return smoothedLeaderDir;
+        }
+
+
         public override void EnterState(Pilot pilot)
         {
             base.pilot = pilot;
@@ -167,7 +214,8 @@ namespace WingCommand
                 FixedWingFormation.Fly(
                     aircraft, leader, controlInputs, member.Slot,
                     slotPos, toSlot, distance,
-                    new FixedWingFormation.Rejoin(rejoinHoldUntil, rejoinBoostUntil));
+                    new FixedWingFormation.Rejoin(rejoinHoldUntil, rejoinBoostUntil),
+                    TrackLeader(leader), DueToReport());
             }
             else
             {
