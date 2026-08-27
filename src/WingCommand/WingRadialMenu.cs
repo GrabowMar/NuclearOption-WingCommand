@@ -158,6 +158,7 @@ namespace WingCommand
             var wing = new List<WingMenuAction>
             {
                 Leaf("Recruit Nearest", WingAction.RecruitNearest, "recruit"),
+                Leaf("Buy Wingman", WingAction.BuyWingman, "buy"),
                 Leaf("Disband", WingAction.Disband, "disband"),
                 Icon(WingMenuAction.Create("Back", _ => ShowCommanderMenu()), "back"),
             };

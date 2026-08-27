@@ -39,6 +39,12 @@ namespace WingCommand
         private static TMP_FontAsset font;
 
         private static readonly List<RosterRow> rosterRows = new List<RosterRow>();
+        private static readonly List<ShopRow> shopRows = new List<ShopRow>();
+        private static RectTransform shopArea;
+        private static TMP_Text allocationLabel;
+
+        /// <summary>Rows built for the shop. Bounded: the panel is sized to its content.</summary>
+        private const int ShopRows = 6;
 
         private static float nextAttempt;
         private static float nextRefresh;
@@ -79,6 +85,9 @@ namespace WingCommand
             shapeLabel = null;
             summaryLabel = null;
             rosterRows.Clear();
+            shopRows.Clear();
+            shopArea = null;
+            allocationLabel = null;
             postureLabel = null;
             defensiveButton = null;
             aggressiveButton = null;
@@ -232,6 +241,7 @@ namespace WingCommand
             y = AddSummary(contentRt, y);
             y = AddRosterArea(contentRt, y);
             y = AddActions(contentRt, y);
+            y = AddShop(contentRt, y);
             y = AddDebug(contentRt, y);
 
             // Size the panel to its content instead of leaving a large dead area below,
@@ -441,6 +451,8 @@ namespace WingCommand
             defensiveButton?.SetLatched(wing.Posture == WingPosture.Defensive);
             aggressiveButton?.SetLatched(wing.Posture == WingPosture.Aggressive);
 
+            RefreshShop();
+
             SyncRosterRows(wing.Count);
 
             for (int i = 0; i < rosterRows.Count; i++)
@@ -456,6 +468,142 @@ namespace WingCommand
             {
                 int index = rosterRows.Count;
                 rosterRows.Add(new RosterRow(rosterArea, index));
+            }
+        }
+
+        /// <summary>
+        /// The shop: allocation, delivery mode, and a row per airframe the faction has in
+        /// stock.
+        ///
+        /// A fixed set of rows is built once and rebound each refresh, the same way the
+        /// roster works — building UI objects on a timer is how a screen like this starts
+        /// costing frames. The list is capped because the panel is sized to its content and
+        /// an unbounded catalogue would run off the display.
+        /// </summary>
+        private static float AddShop(RectTransform parent, float y)
+        {
+            if (!Plugin.Config2.ShopEnabled.Value) return y;
+
+            y -= 6f;
+            Rule(parent, new Rect(Pad, y, PanelWidth - Pad * 2f, 1f), FrameColor());
+            y -= 8f;
+
+            Label(parent, "SQUADRON SUPPLY", new Rect(Pad, y, PanelWidth - Pad * 2f, 18f),
+                  Green(), 13f, FontStyles.Bold, TextAlignmentOptions.Center);
+            y -= 20f;
+
+            allocationLabel = Label(parent, "", new Rect(Pad, y, PanelWidth - Pad * 2f, 16f),
+                                    Dim(), 11f, FontStyles.Normal, TextAlignmentOptions.Center);
+            y -= 20f;
+
+            float w = (PanelWidth - Pad * 2f - Gap) * 0.5f;
+            y = Pair(parent, y, w,
+                "Delivery: Base", () => SetDelivery(WingShop.Delivery.Base),
+                "Delivery: Fast", () => SetDelivery(WingShop.Delivery.Fast));
+
+            var area = new GameObject("ShopArea", typeof(RectTransform));
+            shopArea = area.GetComponent<RectTransform>();
+            shopArea.SetParent(parent, worldPositionStays: false);
+
+            float height = ShopRows * (RowHeight + 2f);
+            Place(shopArea, new Rect(Pad, y, PanelWidth - Pad * 2f, height));
+
+            for (int i = 0; i < ShopRows; i++)
+                shopRows.Add(new ShopRow(shopArea, i));
+
+            y -= height + 4f;
+            return y;
+        }
+
+        private static void SetDelivery(WingShop.Delivery mode)
+        {
+            if (WingShop.Mode != mode) WingShop.ToggleDelivery();
+        }
+
+        /// <summary>Rebind the shop rows and the allocation header.</summary>
+        private static void RefreshShop()
+        {
+            if (!Plugin.Config2.ShopEnabled.Value || shopRows.Count == 0) return;
+
+            IReadOnlyList<WingShop.Offer> offers = WingShop.Catalogue();
+
+            if (allocationLabel != null)
+            {
+                bool fast = WingShop.Mode == WingShop.Delivery.Fast;
+                allocationLabel.text =
+                    "Funds " + Mathf.RoundToInt(WingShop.Allocation) +
+                    "   -   delivery " + (fast ? "FAST" : "BASE") +
+                    "   -   wing " + (WingCommandManager.Instance?.Wing?.Count ?? 0);
+            }
+
+            for (int i = 0; i < shopRows.Count; i++)
+            {
+                if (i < offers.Count) shopRows[i].Bind(offers[i]);
+                else shopRows[i].Hide();
+            }
+        }
+
+        /// <summary>One purchasable airframe: name, stock, price, buy.</summary>
+        private sealed class ShopRow
+        {
+            private readonly GameObject go;
+            private readonly TMP_Text name, stock, price;
+            private AircraftDefinition bound;
+
+            public ShopRow(RectTransform parent, int index)
+            {
+                float width = parent.rect.width;
+                float y = -index * (RowHeight + 2f);
+
+                go = new GameObject("Shop" + index, typeof(RectTransform));
+                var rt = go.GetComponent<RectTransform>();
+                rt.SetParent(parent, worldPositionStays: false);
+                Place(rt, new Rect(0f, y, width, RowHeight));
+
+                Panel(rt, new Rect(0f, 0f, width, RowHeight), RowColor());
+
+                name  = Label(rt, "", new Rect(6f, 0f, 150f, RowHeight), Friendly(), 12f,
+                              FontStyles.Normal, TextAlignmentOptions.Left);
+                stock = Label(rt, "", new Rect(158f, 0f, 60f, RowHeight), Dim(), 11f,
+                              FontStyles.Normal, TextAlignmentOptions.Left);
+                price = Label(rt, "", new Rect(218f, 0f, 110f, RowHeight), Dim(), 12f,
+                              FontStyles.Normal, TextAlignmentOptions.Right);
+
+                Button(rt, "BUY", new Rect(width - 52f, -3f, 46f, RowHeight - 6f), () =>
+                {
+                    if (bound == null) return;
+
+                    WingCommandManager.Instance?.Toast(
+                        WingShop.Buy(bound, WingShop.Mode, out string why)
+                            ? bound.unitName + " bought"
+                            : why);
+                });
+
+                go.SetActive(false);
+            }
+
+            public void Bind(WingShop.Offer offer)
+            {
+                bound = offer.Definition;
+                if (!go.activeSelf) go.SetActive(true);
+
+                float cost = WingShop.PriceOf(offer.Definition, WingShop.Mode);
+                bool affordable = WingShop.Allocation >= cost;
+
+                name.text = UiTheme.Truncate(offer.Name, 20);
+                stock.text = "x" + offer.Stock;
+                price.text = Mathf.RoundToInt(cost).ToString();
+
+                // Grey the price when it cannot be met, so the constraint reads at a glance
+                // rather than only on a failed press.
+                price.color = affordable ? Accent() : new Color(1f, 0.55f, 0.2f);
+                name.color = affordable ? Friendly() : Dim();
+            }
+
+            public void Hide()
+            {
+                bound = null;
+                if (go.activeSelf) go.SetActive(false);
             }
         }
 

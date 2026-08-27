@@ -45,6 +45,45 @@ land.
 Cargo and landing orders only apply to the aircraft that can carry them out, and the
 confirmation says how many did: an order that silently applies to nobody looks exactly like
 one that failed.
+### The formation shop
+
+Wingmen can be bought rather than only recruited, from the **SQUADRON SUPPLY** section of
+the WMC screen. Everything about the economy is the game's own, reached without patching
+anything:
+
+- **Price** is `AircraftDefinition.value` — the same field the player's own aircraft menu
+  prices from.
+- **Payment** comes out of `Player.Allocation`, the same pool that buys your own airframe
+  and weapons.
+- **Stock** is drawn from the faction's supply through `FactionHQ.AddSupplyUnit`, the exact
+  call the game's own reserve flow uses. Buying a wingman therefore competes with the
+  mission's AI for airframes, and a long mission can run a type dry.
+
+The catalogue offers only what the faction has in stock, minus the types the mission
+restricts and the types your rank does not reach — the same two gates the player's own
+aircraft menu applies, so the shop cannot be used to fly around them.
+
+**Price compounds with wing size.** Each wingman already on the roster multiplies the next
+one's price by `WingPriceGrowth` (1.5 by default), so a 1000-credit airframe costs 1000,
+1500, 2250, 3375 as the wing fills. A large wing is meant to be a serious investment.
+
+**Two deliveries.** *Base* puts the aircraft in the circuit over the nearest friendly
+airbase, and it flies to its slot under its own power — cheap, but it takes time to arrive.
+*Fast* puts it behind you at your speed and altitude, on the wing within seconds, for a
+further 25%.
+
+**The balance gate.** Missions set a per-faction `AIAircraftLimit`, adjusted for player
+counts. Purchases may push the faction at most `OverLimitAllowance` aircraft past it — one,
+by default — after which the shop refuses until something is lost. Raising that setting is
+the main way to unbalance a mission with this feature.
+
+Nothing is spent until an aircraft actually exists: every gate runs, and the spawn returns,
+before a single credit or airframe moves.
+
+The radial's **Buy Wingman** entry is a shortcut for the common case — your own airframe
+type, base delivery. The catalogue and the delivery choice live on the MFD, because a price
+list is not something a wheel can show.
+
 ### WMC — the MFD screen
 The main wing interface is a native MFD screen labelled **WMC**, sitting on the left bezel
 alongside BDF / MAP / HUD. Each bezel column carries six buttons but only three configured
@@ -216,6 +255,9 @@ in the unit the controller acts in.
 | `LeashRadius` | &mdash; | How far a hunting wingman may stray on an Engage order before it is recalled. |
 | `FallBackStandoff` | 6000 m | How far a Fall Back runs before the wing settles into its holding orbit. |
 | `OrbitRadius` | 2000 m | Radius of the holding circle, for Orbit Here and the end of a Fall Back. |
+| `WingPriceGrowth` | 1.5 | Compounding price multiplier per wingman already in the formation. |
+| `FastDeliverySurcharge` | 0.25 | Extra fraction charged for delivery straight to your wing. |
+| `OverLimitAllowance` | 1 | How far purchases may push the faction past the mission’s AI aircraft limit. |
 | `BankMatchBlend` | 0.35 | How much a settled wingman rolls to match your bank. 0 switches it off. |
 | `RotaryHoverSpeed` | 25 m/s | Leader speed below which helicopters hold their slot as a point rather than flying a heading. |
 | `RotaryPowerSeconds` | 20 s | Helicopter destination distance — a **power** setting, see below. |

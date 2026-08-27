@@ -56,6 +56,7 @@ namespace WingCommand
                 case "tasking":     Tasking(c);             break;
                 case "cargo":       Cargo(c);               break;
                 case "land":        LandHere(c);            break;
+                case "buy":         Buy(c);                 break;
                 case "back":        Back(c);                break;
 
                 default:
@@ -225,6 +226,18 @@ namespace WingCommand
             c.Segment(48, 62, 40, 54, 5f);
             c.Segment(48, 62, 56, 54, 5f);
             c.Segment(22, 74, 74, 74, 5f);
+        }
+
+        /// <summary>Buy: an aircraft with a price tag.</summary>
+        private static void Buy(Canvas c)
+        {
+            Delta(c, 38, 34, 14, 0f);
+            c.Segment(58, 56, 78, 56, 5f);
+            c.Segment(58, 56, 58, 76, 5f);
+            c.Segment(58, 76, 78, 76, 5f);
+            c.Segment(78, 56, 78, 76, 5f);
+            c.Segment(64, 62, 72, 70, 4f);
+            c.Segment(64, 70, 72, 62, 4f);
         }
 
         private static void Back(Canvas c)

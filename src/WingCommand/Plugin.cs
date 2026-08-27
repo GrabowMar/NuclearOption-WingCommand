@@ -179,6 +179,13 @@ namespace WingCommand
         // --- Capability ---
         public readonly ConfigEntry<bool> KeepUpReports;
 
+        // --- Shop ---
+        public readonly ConfigEntry<bool> ShopEnabled;
+        public readonly ConfigEntry<float> WingPriceGrowth;
+        public readonly ConfigEntry<float> FastDeliverySurcharge;
+        public readonly ConfigEntry<float> FastDeliveryDistance;
+        public readonly ConfigEntry<float> OverLimitAllowance;
+
         // --- Debug ---
         public readonly ConfigEntry<bool> EnableDebugActions;
 
@@ -401,6 +408,36 @@ namespace WingCommand
                     "into a fast flight.",
                     null,
                     new ConfigurationManagerAttributes { IsAdvanced = true }));
+            ShopEnabled = c.Bind("Shop", "ShopEnabled", true,
+                "Allow buying wingmen. Aircraft are priced from the same value the player's " +
+                "own aircraft menu uses, paid for out of your allocation, and drawn from " +
+                "your faction's stock - so a purchase competes with the mission's own AI.");
+            WingPriceGrowth = c.Bind("Shop", "WingPriceGrowth", 1.5f,
+                new ConfigDescription(
+                    "Price multiplier per wingman already in the formation, compounding. At " +
+                    "1.5 a 1000-credit airframe costs 1000, 1500, 2250, 3375 as the wing " +
+                    "fills. Set to 1 for flat pricing.",
+                    new AcceptableValueRange<float>(1f, 3f),
+                    new ConfigurationManagerAttributes { IsAdvanced = true }));
+            FastDeliverySurcharge = c.Bind("Shop", "FastDeliverySurcharge", 0.25f,
+                new ConfigDescription(
+                    "Extra fraction of the price for delivery straight to your wing rather " +
+                    "than to the nearest airbase.",
+                    new AcceptableValueRange<float>(0f, 2f),
+                    new ConfigurationManagerAttributes { IsAdvanced = true }));
+            FastDeliveryDistance = c.Bind("Shop", "FastDeliveryDistance", 2000f,
+                new ConfigDescription(
+                    "How far behind you a fast delivery appears, in metres.",
+                    new AcceptableValueRange<float>(500f, 10000f),
+                    new ConfigurationManagerAttributes { IsAdvanced = true }));
+            OverLimitAllowance = c.Bind("Shop", "OverLimitAllowance", 1f,
+                new ConfigDescription(
+                    "How many aircraft your purchases may push the faction above the " +
+                    "mission's own AI aircraft limit. Raising this is the main way to " +
+                    "unbalance a mission with this feature.",
+                    new AcceptableValueRange<float>(0f, 8f),
+                    new ConfigurationManagerAttributes { IsAdvanced = true }));
+
             RadioChatter = c.Bind("Comms", "RadioChatter", true,
                 "Wingmen report engagements, defending, Winchester and rejoins in the game's " +
                 "on-screen message feed.");
