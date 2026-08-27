@@ -85,6 +85,7 @@ namespace WingCommand
         }
 
         /// <summary>
+        /// Whether this airframe can join the player's formation at all.
         ///
         /// Rotary and fixed-wing cannot share a formation - they fly different autopilots
         /// and differ in speed by a factor of three - and WingRegistry refuses the mix. It
@@ -104,6 +105,7 @@ namespace WingCommand
         // ------------------------------------------------------------------- pricing
 
         /// <summary>
+        /// What the next aircraft of this type costs.
         ///
         /// The price compounds with wing size, so each wingman makes the next one dearer:
         /// a 1000-credit airframe runs 1000, 1500, 2250, 3375 as the wing fills. That is
