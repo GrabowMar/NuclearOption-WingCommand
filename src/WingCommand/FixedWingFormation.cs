@@ -48,6 +48,22 @@ namespace WingCommand
         /// <summary>Shortest baseline, for aircraft slow enough that seconds alone is not enough.</summary>
         private const float MinLookAhead = 800f;
 
+        /// <summary>Slot radius, as a fraction of spacing, inside which position is not chased at all.</summary>
+        private const float SlotZoneInner = 0.12f;
+
+        /// <summary>Radius at which position correction reaches full authority.</summary>
+        private const float SlotZoneOuter = 0.5f;
+
+        /// <summary>
+        /// Bank authority when nothing is being asked of the roll axis. Small on purpose:
+        /// it is what forces the aircraft back to wings level when the autopilot's own
+        /// desired-bank term is undefined.
+        /// </summary>
+        private const float LevelBank = 8f;
+
+        /// <summary>Degrees of bank authority granted per degree of commanded turn.</summary>
+        private const float TurnDemandGain = 4f;
+
         /// <summary>Correction gain on slot error, before <c>Aggression</c> scales it.</summary>
         private const float PositionGain = 2.5f;
 
@@ -102,7 +118,7 @@ namespace WingCommand
 
         public static void Fly(Aircraft aircraft, Aircraft leader, ControlInputs controls,
                                int slot, GlobalPosition slotPos, Vector3 toSlot,
-                               float distance, Rejoin rejoin, Vector3 smoothedLeaderDir,
+                               float distance, float spacing, Rejoin rejoin, Vector3 smoothedLeaderDir,
                                bool report)
         {
             AircraftParameters p = aircraft.GetAircraftParameters();
@@ -123,7 +139,7 @@ namespace WingCommand
                      leaderSpeed, drift, aggression, damping, rejoin, outOfPosition);
 
             Steer(aircraft, leader, slotPos, toSlot, distance,
-                  leaderVel, drift, aggression, damping, outOfPosition, smoothedLeaderDir, report);
+                  leaderVel, drift, aggression, damping, spacing, outOfPosition, smoothedLeaderDir, report);
 
             MatchLeaderBank(aircraft, leader, controls, outOfPosition);
         }
@@ -198,7 +214,7 @@ namespace WingCommand
         private static void Steer(Aircraft aircraft, Aircraft leader, GlobalPosition slotPos,
                                   Vector3 toSlot, float distance, Vector3 leaderVel,
                                   Vector3 drift, float aggression, float damping,
-                                  float outOfPosition, Vector3 smoothedLeaderDir, bool report)
+                                  float spacing, float outOfPosition, Vector3 smoothedLeaderDir, bool report)
         {
             // AutoAim is a pursuit controller: it rotates the aircraft's velocity toward the
             // destination and banks to chase it, so the distance to that destination sets the
@@ -232,16 +248,24 @@ namespace WingCommand
             Vector3 across = toSlot - baseDir * Vector3.Dot(toSlot, baseDir);
             Vector3 acrossDrift = drift - baseDir * Vector3.Dot(drift, baseDir);
 
-            // Proportional-only correction overshoots and reverses, which the autopilot
-            // answers with yaw — the slow left-right rocking. The rate term damps it.
-            Vector3 correction = (across * PositionGain * aggression)
+            // The slot is a zone, not a point.
+            //
+            // A hard deadband — which is what this was — is a bang-bang element: the
+            // correction jumps from nothing to full the instant the error crosses the
+            // threshold, which is a textbook way to produce a limit cycle. The zone now has
+            // soft edges, so authority fades in across it and nothing ever switches.
+            //
+            // Only the proportional term is faded. Damping stays live inside the zone, which
+            // is what a human formating actually does: match the leader's velocity and stop
+            // caring about a few metres of position. Killing damping in the zone as well
+            // would let a wingman drift out unopposed and be yanked back, which is the same
+            // limit cycle wearing a different hat.
+            float inner = spacing * SlotZoneInner;
+            float outer = spacing * SlotZoneOuter;
+            float ramp = Mathf.SmoothStep(0f, 1f, Mathf.InverseLerp(inner, outer, across.magnitude));
+
+            Vector3 correction = (across * PositionGain * aggression * ramp)
                                  - (acrossDrift * DriftDamping * damping);
-
-            // A deadband proportional to spacing, so it scales with the formation instead of
-            // being an absolute that means something different for helicopters and jets.
-            float deadband = Plugin.Config2.SlotSpacing.Value * 0.05f;
-            if (across.magnitude < deadband) correction = Vector3.zero;
-
             // CommandAngle is the quantity being limited, and it is limited where it is
             // produced: over a baseline this long, a correction of baseline*tan(angle) is
             // exactly that many degrees of command. One configured angle, applied honestly,
@@ -262,12 +286,51 @@ namespace WingCommand
             // GlobalPosition has no Lerp, but subtracting two of them gives a Vector3.
             GlobalPosition aimPoint = stationAim + (pursuitAim - stationAim) * outOfPosition;
 
-            float bankAllowed = Mathf.Lerp(Plugin.Config2.StationBankDegrees.Value,
+            // --- Bank authority, from actual turn demand ---
+            //
+            // This is the fix for the roll axis spinning while the formation sat three
+            // metres off its slot, and it is a property of the game's controller rather
+            // than of anything above. AutopilotPlane derives the bank it wants from
+            //
+            //     GetAngleOnAxis(command, up, -velocity)
+            //       -> from = Cross(-velocity, command)
+            //          SignedAngle(from, to, -velocity)
+            //
+            // and that cross product is the zero vector when the commanded direction is
+            // parallel to the velocity. Settled formation flight is exactly that case: the
+            // command is the leader's track and the aircraft is already flying it. So the
+            // desired bank is computed from a vanishing vector, comes back as noise, and
+            // `num6 = currentBank - noise` becomes the roll command. With bankAllowed at 75
+            // degrees the noise was not clamped to anything, which is how a wingman holding
+            // station to three metres ended up at 91 degrees of bank rolling at 200 deg/s.
+            //
+            // The clamp is the whole defence: with bankAllowed small, num6 collapses to
+            // currentBank, which drives the aircraft to wings level — stable, and correct,
+            // because when the command is parallel to the velocity there is no turn to bank
+            // for. Authority is therefore granted in proportion to how much turning is
+            // genuinely being asked for: the leader's own bank, plus the angle between where
+            // the wingman is pointing and where it has been told to point. Both are zero in
+            // level formation and both grow the moment a turn starts, so a wingman can still
+            // follow anything the leader does.
+            Vector3 aimDir = aimPoint - aircraft.GlobalPosition();
+            Vector3 velocityDir = aircraft.rb.velocity;
+
+            float commandAngle = (aimDir.sqrMagnitude > 1f && velocityDir.sqrMagnitude > 1f)
+                ? Vector3.Angle(velocityDir, aimDir)
+                : 0f;
+
+            float turnDemand = Mathf.Abs(BankOf(leader)) + commandAngle * TurnDemandGain;
+
+            float settledBank = Mathf.Clamp(turnDemand, LevelBank,
+                                            Plugin.Config2.StationBankDegrees.Value);
+
+            float bankAllowed = Mathf.Lerp(settledBank,
                                            Plugin.Config2.PursuitBankDegrees.Value,
                                            outOfPosition);
 
             if (report)
-                Report(aircraft, leader, distance, correction.magnitude, maxCorrection, lookAhead);
+                Report(aircraft, leader, distance, correction.magnitude, maxCorrection, lookAhead,
+                       commandAngle, bankAllowed);
             aircraft.autopilot.AutoAim(
                 destination: aimPoint,
                 aimVelocity: true,
@@ -384,7 +447,8 @@ namespace WingCommand
         /// correct any harder no matter how far out it is.
         /// </summary>
         private static void Report(Aircraft aircraft, Aircraft leader, float distance,
-                                   float correction, float maxCorrection, float lookAhead)
+                                   float correction, float maxCorrection, float lookAhead,
+                                   float commandAngle, float bankAllowed)
         {
             bool saturated = correction >= maxCorrection * 0.99f;
 
@@ -401,7 +465,8 @@ namespace WingCommand
                 $"correction {correction:F0}/{maxCorrection:F0} m{(saturated ? " (SATURATED)" : "")}, " +
                 $"baseline {lookAhead:F0} m, speed {aircraft.speed:F0} m/s, " +
                 $"bank {BankOf(aircraft):F0} vs leader {BankOf(leader):F0} deg, " +
-                $"roll rate {rollRate:F0} deg/s");
+                $"roll rate {rollRate:F0} deg/s, " +
+                $"cmd {commandAngle:F1} deg, bank allowed {bankAllowed:F0} deg");
         }
 
         /// <summary>

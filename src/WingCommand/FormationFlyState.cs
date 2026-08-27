@@ -213,7 +213,7 @@ namespace WingCommand
             {
                 FixedWingFormation.Fly(
                     aircraft, leader, controlInputs, member.Slot,
-                    slotPos, toSlot, distance,
+                    slotPos, toSlot, distance, spacing,
                     new FixedWingFormation.Rejoin(rejoinHoldUntil, rejoinBoostUntil),
                     TrackLeader(leader), DueToReport());
             }
