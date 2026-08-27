@@ -330,6 +330,16 @@ namespace WingCommand
                 assigned = null;
             }
 
+            // Cover Me: with no explicit order standing, shoot at what is hunting the
+            // leader rather than at whatever is nearest to us. This is the entire
+            // difference between Cover Me and Formation - station-keeping, posture and fire
+            // gating are all untouched.
+            if (assigned == null && member.Order == WingOrder.CoverMe)
+            {
+                assigned = WingWeapons.NearestThreatTo(leader, range);
+                if (assigned != null) WingComms.Say(member, WingComms.Call.Covering);
+            }
+
             bool fired;
             if (assigned != null && allow != WingWeapons.Allow.MissilesOnly)
             {

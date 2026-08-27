@@ -28,6 +28,7 @@ namespace WingCommand
         private static WingMenuAction[] formationMenu;
         private static WingMenuAction[] ordersMenu;
         private static WingMenuAction[] wingMenu;
+        private static WingMenuAction[] taskingMenu;
 
         /// <summary>The stock wheel contents, captured the first time we swap away.</summary>
         private static RadialMenuAction[] stockActions;
@@ -133,14 +134,27 @@ namespace WingCommand
                 Icon(WingMenuAction.Create("Wing", _ => ShowWingMenu()), "recruit"),
             };
 
+            // Six, not eleven. Orders that are given in a fight sit on this page; the
+            // tasking that is given between fights moves to its own, because past about six
+            // slices the wheel stops being selectable — especially on a stick.
             var orders = new List<WingMenuAction>
             {
                 Leaf("Rejoin", WingAction.Rejoin, "rejoin"),
                 Leaf("Engage", WingAction.Engage, "engage"),
-                Leaf("Return To Base", WingAction.ReturnToBase, "rtb"),
+                Leaf("Cover Me", WingAction.CoverMe, "cover"),
+                Leaf("Fall Back", WingAction.FallBack, "fallback"),
+                Icon(WingMenuAction.Create("Tasking", _ => ShowTaskingMenu()), "tasking"),
                 Icon(WingMenuAction.Create("Back", _ => ShowCommanderMenu()), "back"),
             };
 
+            var tasking = new List<WingMenuAction>
+            {
+                Leaf("Return To Base", WingAction.ReturnToBase, "rtb"),
+                Leaf("Orbit Here", WingAction.OrbitHere, "orbit"),
+                Leaf("Deliver Cargo", WingAction.DeliverCargo, "cargo"),
+                Leaf("Land Here", WingAction.LandHere, "land"),
+                Icon(WingMenuAction.Create("Back", _ => ShowOrdersMenu()), "back"),
+            };
             var wing = new List<WingMenuAction>
             {
                 Leaf("Recruit Nearest", WingAction.RecruitNearest, "recruit"),
@@ -165,6 +179,7 @@ namespace WingCommand
             commanderMenu = commander.ToArray();
             ordersMenu = orders.ToArray();
             wingMenu = wing.ToArray();
+            taskingMenu = tasking.ToArray();
             formationMenu = shapes.ToArray();
 
             // Take the wedge background and colours from a stock entry so the slices match
@@ -173,6 +188,7 @@ namespace WingCommand
             ApplyAll(commanderMenu, template);
             ApplyAll(ordersMenu, template);
             ApplyAll(wingMenu, template);
+            ApplyAll(taskingMenu, template);
             ApplyAll(formationMenu, template);
         }
 
@@ -228,6 +244,8 @@ namespace WingCommand
         private static void ShowOrdersMenu() => Swap(ordersMenu, submenu: true);
 
         private static void ShowWingMenu() => Swap(wingMenu, submenu: true);
+
+        private static void ShowTaskingMenu() => Swap(taskingMenu, submenu: true);
 
         internal static void RestoreStockWheel()
         {

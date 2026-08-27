@@ -359,6 +359,23 @@ namespace WingCommand
             foreach (Aircraft a in released) WingMarkers.Repaint(a);
         }
 
+        /// <summary>
+        /// Give an order only to the members that can carry it out, and say how many that
+        /// was. Cargo runs and landing in place are airframe-dependent, and an order that
+        /// silently applies to nobody looks identical to one that failed.
+        /// </summary>
+        public int OrderCapable(WingOrder order, System.Func<WingMember, bool> capable)
+        {
+            int applied = 0;
+            foreach (WingMember m in members)
+            {
+                if (!m.Alive || !capable(m)) continue;
+                m.Apply(order);
+                applied++;
+            }
+            return applied;
+        }
+
         public void OrderAll(WingOrder order)
         {
             foreach (WingMember m in members)

@@ -23,6 +23,12 @@ namespace WingCommand
             Bingo,
             Rejoining,
             Breaking,
+            FallingBack,
+            Holding,
+            Covering,
+            Orbiting,
+            Delivering,
+            Down,
             Unable,
             Copy,
         }
@@ -89,6 +95,12 @@ namespace WingCommand
                 case Call.Rejoining:  return "rejoining";
                 case Call.Unable:     return "unable to keep up, returning to base";
                 case Call.Breaking:   return detail != null ? "breaking " + detail : "breaking";
+                case Call.FallingBack: return "breaking off, falling back";
+                case Call.Holding:    return "holding at standoff";
+                case Call.Covering:   return "covering you";
+                case Call.Orbiting:   return "on station, orbiting";
+                case Call.Delivering: return "running the cargo in";
+                case Call.Down:       return "on the deck";
                 default:              return "copy";
             }
         }

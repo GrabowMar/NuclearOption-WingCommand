@@ -21,11 +21,30 @@ Formation shapes: `EchelonRight`, `EchelonLeft`, `LineAbreast`, `Trail`, `Combat
 | Order | Effect |
 |---|---|
 | **Rejoin Formation** | Wingmen close on their slot and hold station |
-| **Engage** | Hand control back to the stock combat AI |
+| **Engage** | Hunt freely, but on a tether — see below |
+| **Cover Me** | Fly formation, but shoot at what is hunting *you* rather than what is nearest to them |
+| **Fall Back** | Emergency break: scatter on separate headings with flares, run for the nearest friendly airbase, hold there |
+| **Orbit Here** | Anchor to where you are *now* and fly a CAP over it while you go elsewhere |
+| **Deliver Cargo** | Transport helicopters run the game's own supply behaviour |
+| **Land Here** | Helicopters set down where they are, rather than flying home |
 | **Return To Base** | Wingmen switch to the AI landing state |
 | **Change Shape** | Cycle the formation geometry |
 | **Disband** | Release everyone back to normal AI behaviour |
 
+**Engage is tethered.** It used to hand a wingman to the stock combat AI permanently, which
+made it indistinguishable from Disband except that the aircraft stayed on the roster —
+ordering it meant losing the aircraft for the rest of the mission. It now means "hunt, but
+stay within `LeashRadius` of me": a wingman that strays past the leash flies back, and is
+turned loose again once it is inside half of it. The two thresholds are the point — a
+single one would have it flip-flopping on the boundary every frame.
+
+Orders that are going somewhere deliberate — Fall Back, Deliver Cargo, Land Here — are not
+interrupted by a bingo-fuel call. A wingman already on the deck does not need telling to
+land.
+
+Cargo and landing orders only apply to the aircraft that can carry them out, and the
+confirmation says how many did: an order that silently applies to nobody looks exactly like
+one that failed.
 ### WMC — the MFD screen
 The main wing interface is a native MFD screen labelled **WMC**, sitting on the left bezel
 alongside BDF / MAP / HUD. Each bezel column carries six buttons but only three configured
@@ -34,7 +53,8 @@ screens, so the fourth slot is free; registering an `MFDScreen` there and callin
 it does for its own screens.
 
 It shows every wingman with slot, name, order and **live slot error in metres**, plus
-buttons for Add Selected, Recruit Near, Rejoin, Engage, RTB, Disband, per-member release
+buttons for Add Selected, Recruit Near, Rejoin, Engage, Cover Me, Fall Back, Orbit Here,
+Deliver Cargo, Land Here, RTB and Disband, per-member release
 and formation cycling.
 
 The panel is built from known widgets rather than cloned from HUD OPTIONS — the stock
@@ -114,18 +134,29 @@ so re-open it to see the submenu you switched to.
 
 ```
 Radial Menu ─┬─ (stock entries: Gear, Radar, Eject, …)
-             └─ Wing Command ─┬─ Recruit Nearest
-                              ├─ Rejoin
-                              ├─ Engage
-                              ├─ Return To Base
-                              ├─ Formation ─┬─ Echelon Right / Left
-                              │             ├─ Line Abreast
-                              │             ├─ Trail
-                              │             ├─ Combat Spread
+             └─ Wing Command ─┬─ Orders ─┬─ Rejoin
+                              │          ├─ Engage
+                              │          ├─ Cover Me
+                              │          ├─ Fall Back
+                              │          ├─ Tasking ─┬─ Return To Base
+                              │          │           ├─ Orbit Here
+                              │          │           ├─ Deliver Cargo
+                              │          │           ├─ Land Here
+                              │          │           └─ Back
+                              │          └─ Back
+                              ├─ Attack My Target
+                              ├─ Formation ─┬─ ten shapes
                               │             └─ Back
-                              ├─ Disband
-                              └─ Back
+                              ├─ Posture
+                              └─ Wing ─┬─ Recruit Nearest
+                                       ├─ Disband
+                                       └─ Back
 ```
+
+No page carries more than six slices. A wheel is selected by direction, so every extra
+entry narrows the wedge you have to hit; past about six the gesture stops being reliable,
+especially on a stick. That is why the tasking orders sit on their own page rather than
+being added to the orders one.
 
 Picking any order restores the stock wheel afterwards, and it also restores itself after a
 few seconds if you back out without choosing.
@@ -182,6 +213,9 @@ in the unit the controller acts in.
 | `ThrottleGain` | 0.12 | Throttle change per m/s of speed error. Resting throttle is the airframe's own cruise setting. |
 | `CaptureDistance` | 500 m | Slot error below which a wingman counts as on station. |
 | `RejoinStagger` | 1.2 s | Per-slot delay so a Rejoin arrives in sequence, not as a scrum. |
+| `LeashRadius` | &mdash; | How far a hunting wingman may stray on an Engage order before it is recalled. |
+| `FallBackStandoff` | 6000 m | How far a Fall Back runs before the wing settles into its holding orbit. |
+| `OrbitRadius` | 2000 m | Radius of the holding circle, for Orbit Here and the end of a Fall Back. |
 | `BankMatchBlend` | 0.35 | How much a settled wingman rolls to match your bank. 0 switches it off. |
 | `RotaryHoverSpeed` | 25 m/s | Leader speed below which helicopters hold their slot as a point rather than flying a heading. |
 | `RotaryPowerSeconds` | 20 s | Helicopter destination distance — a **power** setting, see below. |

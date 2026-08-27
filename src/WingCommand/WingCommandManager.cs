@@ -241,6 +241,49 @@ namespace WingCommand
                     if (RequireWing()) { Wing.OrderAll(WingOrder.ReturnToBase); Toast("Wing: return to base"); }
                     break;
 
+                case WingAction.FallBack:
+                    if (RequireWing())
+                    {
+                        Wing.OrderAll(WingOrder.FallBack);
+                        WingComms.Say(Wing.Members.Count > 0 ? Wing.Members[0] : null,
+                                      WingComms.Call.FallingBack);
+                        Toast("Wing: FALL BACK");
+                    }
+                    break;
+
+                case WingAction.CoverMe:
+                    if (RequireWing()) { Wing.OrderAll(WingOrder.CoverMe); Toast("Wing: covering you"); }
+                    break;
+
+                case WingAction.OrbitHere:
+                    if (RequireWing()) { Wing.OrderAll(WingOrder.OrbitHere); Toast("Wing: orbit this position"); }
+                    break;
+
+                case WingAction.DeliverCargo:
+                {
+                    if (!RequireWing()) break;
+
+                    // Only the aircraft that can actually run cargo take the order, and the
+                    // toast says how many did - an order that silently applies to nobody is
+                    // worse than one that reports it applied to nobody.
+                    int sent = Wing.OrderCapable(WingOrder.DeliverCargo, m => m.CanDeliverCargo);
+                    Toast(sent > 0
+                        ? "Wing: " + sent + " delivering cargo"
+                        : "No wingman is carrying cargo");
+                    break;
+                }
+
+                case WingAction.LandHere:
+                {
+                    if (!RequireWing()) break;
+
+                    int landing = Wing.OrderCapable(WingOrder.LandHere, m => m.CanLandInPlace);
+                    Toast(landing > 0
+                        ? "Wing: " + landing + " landing"
+                        : "Only helicopters can land in place");
+                    break;
+                }
+
                 case WingAction.CycleShape:
                 {
                     FormationShape next = FormationShapes.Cycle(Plugin.Config2.Shape.Value, 1);
@@ -405,6 +448,11 @@ namespace WingCommand
         Rejoin,
         Engage,
         ReturnToBase,
+        FallBack,
+        CoverMe,
+        OrbitHere,
+        DeliverCargo,
+        LandHere,
         CycleShape,
         AttackMyTarget,
         TogglePosture,

@@ -15,6 +15,12 @@ namespace WingCommand
         public WingOrder Order { get; private set; } = WingOrder.Formation;
 
         private readonly FormationFlyState formationState;
+        private readonly FallBackState fallBackState;
+        private readonly OrbitState orbitState;
+        private readonly LandInPlaceState landState;
+
+        /// <summary>Flying back to the wing while a standing Engage order is still in force.</summary>
+        private bool recalled;
         private readonly float joinedAt;
         private WingRegistry owner;
 
@@ -25,6 +31,9 @@ namespace WingCommand
             Pilot = pilot;
             Slot = slot;
             formationState = new FormationFlyState(this);
+            fallBackState = new FallBackState(this);
+            orbitState = new OrbitState(this);
+            landState = new LandInPlaceState(this);
             joinedAt = Time.timeSinceLevelLoad;
         }
 
@@ -43,11 +52,15 @@ namespace WingCommand
         public void Apply(WingOrder order)
         {
             Order = order;
+            recalled = false;
+
             switch (order)
             {
                 case WingOrder.Formation:
-                    // Stagger by slot so a Rejoin order brings them in one after another
-                    // rather than as a converging scrum that leans on separation to sort out.
+                case WingOrder.CoverMe:
+                    // Cover Me is formation flight with a different idea of what to shoot
+                    // at, so it shares the state entirely; only RunEngagement reads the
+                    // difference.
                     formationState.BoostRejoin(Slot * Plugin.Config2.RejoinStagger.Value);
                     Pilot.SwitchState(formationState);
                     break;
@@ -59,12 +72,57 @@ namespace WingCommand
                 case WingOrder.ReturnToBase:
                     SwitchToLanding();
                     break;
+
+                case WingOrder.FallBack:
+                    Pilot.SwitchState(fallBackState);
+                    break;
+
+                case WingOrder.OrbitHere:
+                {
+                    Aircraft leader = Leader;
+                    GlobalPosition anchor = leader != null
+                        ? leader.GlobalPosition()
+                        : Aircraft.GlobalPosition();
+
+                    orbitState.SetAnchor(anchor, Plugin.Config2.OrbitRadius.Value);
+                    Pilot.SwitchState(orbitState);
+                    break;
+                }
+
+                case WingOrder.DeliverCargo:
+                    // The stock transport state configures itself in EnterState — nearest
+                    // airbase, nearest known ground enemy, landing zone search — so this is
+                    // a complete supply-run behaviour for the cost of a state switch.
+                    Pilot.SwitchState(Pilot.AIHeloTransportState);
+                    break;
+
+                case WingOrder.LandHere:
+                    Pilot.SwitchState(landState);
+                    break;
             }
 
             if (Plugin.Config2.VerboseLogging.Value)
                 Plugin.Logger.LogInfo($"[Wing] {Name} -> {order}");
         }
 
+        /// <summary>True when this aircraft can be told to run cargo.</summary>
+        public bool CanDeliverCargo
+        {
+            get
+            {
+                if (Pilot == null || Pilot.AIHeloTransportState == null) return false;
+                if (Aircraft == null || Aircraft.weaponStations == null) return false;
+
+                foreach (WeaponStation s in Aircraft.weaponStations)
+                {
+                    if (s != null && s.Cargo && s.Ammo > 0) return true;
+                }
+                return false;
+            }
+        }
+
+        /// <summary>True when this aircraft can set down where it is.</summary>
+        public bool CanLandInPlace => WingRegistry.IsRotary(Aircraft);
         /// <summary>
         /// Give control back to the stock combat AI. Used both for an explicit Engage
         /// order and for automatic breaks (leader lost, mutual support).
@@ -129,8 +187,20 @@ namespace WingCommand
         /// </summary>
         public void CheckReserves()
         {
-            if (!Alive || Order == WingOrder.ReturnToBase) return;
-            if (!Plugin.Config2.AutoReturnOnEmpty.Value) return;
+            if (!Alive || !Plugin.Config2.AutoReturnOnEmpty.Value) return;
+
+            // Orders that are already going somewhere deliberate are not interrupted by a
+            // bingo call. A wingman on the deck does not need telling to land, and one
+            // mid-cargo-run or mid-retreat has a better reason to be where it is than its
+            // fuel state.
+            switch (Order)
+            {
+                case WingOrder.ReturnToBase:
+                case WingOrder.LandHere:
+                case WingOrder.DeliverCargo:
+                case WingOrder.FallBack:
+                    return;
+            }
 
             // A freshly spawned aircraft can be sampled before its weapon stations have
             // finished initialising, which reads as zero ammunition and would send it
@@ -171,12 +241,26 @@ namespace WingCommand
         }
 
         /// <summary>
-        /// Called each frame while off the wing. Returns the member to formation once it
-        /// strays past the leash radius, so an Aggressive wing never simply disperses.
+        /// Keep a hunting wingman on a tether.
+        ///
+        /// Engage used to be a one-way handoff to the stock combat AI: the wingman stayed on
+        /// the roster but flew off and never came back, which made it indistinguishable from
+        /// Disband except in the paperwork. It is now a standing order to hunt *within*
+        /// LeashRadius of the leader.
+        ///
+        /// The two thresholds are deliberate. Recalling at the leash and releasing again at
+        /// half of it gives the hysteresis that stops a wingman flip-flopping between
+        /// hunting and rejoining every frame it sits on the boundary — with a single
+        /// threshold that is exactly what would happen.
+        ///
+        /// <see cref="OnLeash"/> separates the two callers: an automatic mutual-support
+        /// break is temporary and reverts to Formation once it has rejoined, while a
+        /// standing Engage order resumes hunting and keeps its order.
         /// </summary>
         public void CheckLeash()
         {
-            if (!OnLeash || !Alive) return;
+            if (!Alive) return;
+            if (Order != WingOrder.Engage && !OnLeash) return;
 
             Aircraft leader = Leader;
             if (leader == null)
@@ -186,17 +270,40 @@ namespace WingCommand
             }
 
             float leash = Plugin.Config2.LeashRadius.Value;
-            if (FastMath.SquareDistance(Aircraft.GlobalPosition(), leader.GlobalPosition()) < leash * leash)
+            float distanceSq = FastMath.SquareDistance(Aircraft.GlobalPosition(), leader.GlobalPosition());
+
+            if (!recalled)
+            {
+                if (distanceSq < leash * leash) return;
+
+                if (Plugin.Config2.VerboseLogging.Value)
+                    Plugin.Logger.LogInfo($"[Wing] {Name} past leash - rejoining");
+
+                WingComms.Say(this, WingComms.Call.Rejoining);
+
+                // An automatic break is over the moment it rejoins; a standing order is not.
+                if (OnLeash)
+                {
+                    OnLeash = false;
+                    Apply(WingOrder.Formation);
+                    return;
+                }
+
+                recalled = true;
+                formationState.BoostRejoin(0f);
+                Pilot.SwitchState(formationState);
                 return;
+            }
 
-            if (Plugin.Config2.VerboseLogging.Value)
-                Plugin.Logger.LogInfo($"[Wing] {Name} past leash - rejoining");
+            // Recalled and on the way back: turn loose again once genuinely close, not the
+            // instant the leash is nominally satisfied.
+            float release = leash * 0.5f;
+            if (distanceSq > release * release) return;
 
-            OnLeash = false;
-            WingComms.Say(this, WingComms.Call.Rejoining);
-            Apply(WingOrder.Formation);
+            recalled = false;
+            WingComms.Say(this, WingComms.Call.Engaging);
+            SwitchToCombat();
         }
-
         private void SwitchToCombat()
         {
             if (Pilot == null) return;
@@ -222,10 +329,19 @@ namespace WingCommand
         }
     }
 
+    /// <summary>
+    /// What a wingman has been told to do. Formation and CoverMe both fly the formation
+    /// state and differ only in what they shoot at; the rest each have their own state.
+    /// </summary>
     internal enum WingOrder
     {
         Formation,
         Engage,
         ReturnToBase,
+        FallBack,
+        CoverMe,
+        OrbitHere,
+        DeliverCargo,
+        LandHere,
     }
 }

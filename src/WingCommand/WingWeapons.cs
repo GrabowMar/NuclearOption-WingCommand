@@ -245,6 +245,54 @@ namespace WingCommand
         /// Whether a hostile aircraft is close enough to be worth breaking formation for.
         /// Used only by the Aggressive posture.
         /// </summary>
+        /// <summary>
+        /// The enemy aircraft most threatening a given aircraft, or null.
+        ///
+        /// Used by the Cover Me order, which is the whole difference between it and plain
+        /// formation flight: a covering wingman shoots at what is hunting the player, not
+        /// at whatever happens to be nearest to itself.
+        ///
+        /// Aircraft behind the protectee score better than aircraft ahead of it at the same
+        /// range, because that is where a gun or a heater comes from and it is the half of
+        /// the sky the player can least see.
+        /// </summary>
+        public static Unit NearestThreatTo(Aircraft protectee, float range)
+        {
+            if (protectee == null) return null;
+
+            float rangeSq = range * range;
+            GlobalPosition from = protectee.GlobalPosition();
+            Vector3 facing = protectee.transform.forward;
+            FactionHQ hq = protectee.NetworkHQ;
+
+            Unit best = null;
+            float bestScore = float.MaxValue;
+
+            List<Aircraft> all = UnitRegistry.allAircraft;
+            for (int i = 0; i < all.Count; i++)
+            {
+                Aircraft other = all[i];
+                if (other == null || other.disabled) continue;
+                if (other.NetworkHQ == null || other.NetworkHQ == hq) continue;
+
+                Vector3 toThreat = other.GlobalPosition() - from;
+                float distanceSq = toThreat.sqrMagnitude;
+                if (distanceSq > rangeSq) continue;
+
+                // Halve the effective distance for anything in the rear hemisphere, so a
+                // trailer is preferred over a head-on contact at the same range.
+                float score = distanceSq;
+                if (Vector3.Dot(toThreat, facing) < 0f) score *= 0.5f;
+
+                if (score >= bestScore) continue;
+
+                bestScore = score;
+                best = other;
+            }
+
+            return best;
+        }
+
         public static bool HasAirThreatWithin(Aircraft aircraft, float range)
         {
             if (aircraft == null) return false;

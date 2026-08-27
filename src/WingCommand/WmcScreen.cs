@@ -378,8 +378,20 @@ namespace WingCommand
                 "Engage", () => WingCommandManager.Instance?.Execute(WingAction.Engage));
 
             y = Pair(parent, y, w,
-                "Return To Base", () => WingCommandManager.Instance?.Execute(WingAction.ReturnToBase),
-                "Disband", () => WingCommandManager.Instance?.Execute(WingAction.Disband));
+                "Cover Me", () => WingCommandManager.Instance?.Execute(WingAction.CoverMe),
+                "Fall Back", () => WingCommandManager.Instance?.Execute(WingAction.FallBack));
+
+            y = Pair(parent, y, w,
+                "Orbit Here", () => WingCommandManager.Instance?.Execute(WingAction.OrbitHere),
+                "Deliver Cargo", () => WingCommandManager.Instance?.Execute(WingAction.DeliverCargo));
+
+            y = Pair(parent, y, w,
+                "Land Here", () => WingCommandManager.Instance?.Execute(WingAction.LandHere),
+                "Return To Base", () => WingCommandManager.Instance?.Execute(WingAction.ReturnToBase));
+
+            y = Pair(parent, y, w,
+                "Disband", () => WingCommandManager.Instance?.Execute(WingAction.Disband),
+                "Rejoin", () => WingCommandManager.Instance?.Execute(WingAction.Rejoin));
 
             return y;
         }
@@ -759,6 +771,11 @@ namespace WingCommand
                 case WingOrder.Formation: return "FORM";
                 case WingOrder.Engage: return "ENGAGE";
                 case WingOrder.ReturnToBase: return "RTB";
+                case WingOrder.FallBack: return "FALLBACK";
+                case WingOrder.CoverMe: return "COVER";
+                case WingOrder.OrbitHere: return "ORBIT";
+                case WingOrder.DeliverCargo: return "CARGO";
+                case WingOrder.LandHere: return "LANDING";
                 default: return m.Order.ToString();
             }
         }

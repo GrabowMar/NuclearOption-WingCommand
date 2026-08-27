@@ -164,6 +164,8 @@ namespace WingCommand
         public readonly ConfigEntry<float> DefensiveEngageRange;
         public readonly ConfigEntry<float> AggressiveEngageRange;
         public readonly ConfigEntry<float> LeashRadius;
+        public readonly ConfigEntry<float> FallBackStandoff;
+        public readonly ConfigEntry<float> OrbitRadius;
         public readonly ConfigEntry<float> MirrorWindowSeconds;
         public readonly ConfigEntry<float> FireInterval;
         public readonly ConfigEntry<bool> AutoReturnOnEmpty;
@@ -361,6 +363,18 @@ namespace WingCommand
                     "How far an Aggressive wingman may stray from you before it abandons the " +
                     "fight and rejoins. This is what stops the wing dispersing.",
                     new AcceptableValueRange<float>(1000f, 40000f)));
+            FallBackStandoff = c.Bind("Engagement", "FallBackStandoff", 6000f,
+                new ConfigDescription(
+                    "How far from the threat a Fall Back order runs before the wing settles " +
+                    "into its holding orbit, in metres.",
+                    new AcceptableValueRange<float>(1000f, 30000f),
+                    new ConfigurationManagerAttributes { IsAdvanced = true }));
+            OrbitRadius = c.Bind("Engagement", "OrbitRadius", 2000f,
+                new ConfigDescription(
+                    "Radius of the circle wingmen fly when holding over a point, for both " +
+                    "Orbit Here and the end of a Fall Back.",
+                    new AcceptableValueRange<float>(300f, 10000f),
+                    new ConfigurationManagerAttributes { IsAdvanced = true }));
             MirrorWindowSeconds = c.Bind("Engagement", "MirrorWindowSeconds", 15f,
                 new ConfigDescription(
                     "How long Defensive wingmen stay weapons-free against ground targets after " +

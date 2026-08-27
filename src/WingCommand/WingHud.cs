@@ -186,7 +186,16 @@ namespace WingCommand
                 string code = assigned.definition != null ? assigned.definition.code : assigned.unitName;
                 return UiTheme.Truncate(code, 9);
             }
-            return m.Order.ToString();
+            switch (m.Order)
+            {
+                case WingOrder.ReturnToBase: return "RTB";
+                case WingOrder.FallBack:     return "Fall Back";
+                case WingOrder.CoverMe:      return "Cover";
+                case WingOrder.OrbitHere:    return "Orbit";
+                case WingOrder.DeliverCargo: return "Cargo";
+                case WingOrder.LandHere:     return "Landing";
+                default:                     return m.Order.ToString();
+            }
         }
 
     }

@@ -50,6 +50,12 @@ namespace WingCommand
                 case "attack":      AttackTarget(c);        break;
                 case "posture":     Posture(c);             break;
                 case "disband":     Disband(c);             break;
+                case "fallback":    FallBack(c);            break;
+                case "cover":       Cover(c);               break;
+                case "orbit":       Orbit(c);               break;
+                case "tasking":     Tasking(c);             break;
+                case "cargo":       Cargo(c);               break;
+                case "land":        LandHere(c);            break;
                 case "back":        Back(c);                break;
 
                 default:
@@ -156,6 +162,69 @@ namespace WingCommand
         {
             c.Segment(24, 24, 72, 72, 9f);
             c.Segment(24, 72, 72, 24, 9f);
+        }
+
+        /// <summary>Fall back: an aircraft turning away, with countermeasures trailing.</summary>
+        private static void FallBack(Canvas c)
+        {
+            Delta(c, 62, 62, 15, 200f);
+            c.Segment(52, 52, 34, 34, 5f);
+            c.Segment(34, 34, 22, 38, 5f);
+            c.Disc(30, 24, 3.5f);
+            c.Disc(40, 18, 3.5f);
+            c.Disc(20, 32, 3.5f);
+        }
+
+        /// <summary>Cover me: a wingman held over the leader, shield-like.</summary>
+        private static void Cover(Canvas c)
+        {
+            Delta(c, 48, 30, 14, 0f);
+            c.Segment(24, 62, 48, 74, 5f);
+            c.Segment(72, 62, 48, 74, 5f);
+            c.Segment(24, 62, 24, 46, 5f);
+            c.Segment(72, 62, 72, 46, 5f);
+        }
+
+        /// <summary>Orbit: an aircraft circling a fixed point.</summary>
+        private static void Orbit(Canvas c)
+        {
+            c.Ring(48, 50, 26, 4f);
+            c.Disc(48, 50, 5f);
+            Delta(c, 48, 24, 12, 90f);
+        }
+
+        /// <summary>Tasking: a checklist.</summary>
+        private static void Tasking(Canvas c)
+        {
+            c.Segment(30, 30, 74, 30, 5f);
+            c.Segment(30, 50, 74, 50, 5f);
+            c.Segment(30, 70, 74, 70, 5f);
+            c.Disc(20, 30, 4f);
+            c.Disc(20, 50, 4f);
+            c.Disc(20, 70, 4f);
+        }
+
+        /// <summary>Cargo: a crate under a parachute canopy.</summary>
+        private static void Cargo(Canvas c)
+        {
+            c.Segment(26, 34, 70, 34, 5f);
+            c.Segment(26, 34, 40, 20, 5f);
+            c.Segment(70, 34, 56, 20, 5f);
+            c.Segment(34, 52, 62, 52, 5f);
+            c.Segment(34, 52, 34, 76, 5f);
+            c.Segment(62, 52, 62, 76, 5f);
+            c.Segment(34, 76, 62, 76, 5f);
+            c.Segment(40, 20, 56, 20, 5f);
+        }
+
+        /// <summary>Land here: an aircraft descending onto a ground line.</summary>
+        private static void LandHere(Canvas c)
+        {
+            Delta(c, 48, 34, 14, 180f);
+            c.Segment(48, 46, 48, 62, 5f);
+            c.Segment(48, 62, 40, 54, 5f);
+            c.Segment(48, 62, 56, 54, 5f);
+            c.Segment(22, 74, 74, 74, 5f);
         }
 
         private static void Back(Canvas c)
