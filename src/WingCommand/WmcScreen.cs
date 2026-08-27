@@ -42,6 +42,8 @@ namespace WingCommand
         private static readonly List<ShopRow> shopRows = new List<ShopRow>();
         private static RectTransform shopArea;
         private static TMP_Text allocationLabel;
+        private static TMP_Text shopPageLabel;
+        private static int shopPage;
 
         /// <summary>Rows built for the shop. Bounded: the panel is sized to its content.</summary>
         private const int ShopRows = 6;
@@ -88,6 +90,8 @@ namespace WingCommand
             shopRows.Clear();
             shopArea = null;
             allocationLabel = null;
+            shopPageLabel = null;
+            shopPage = 0;
             postureLabel = null;
             defensiveButton = null;
             aggressiveButton = null;
@@ -406,8 +410,14 @@ namespace WingCommand
             return y;
         }
 
+        /// <summary>
+        /// Debug tools, hidden unless the config asks for them. They are cheats, and a
+        /// panel that shows them to everyone invites their use by accident.
+        /// </summary>
         private static float AddDebug(RectTransform parent, float y)
         {
+            if (!Plugin.Config2.EnableDebugActions.Value) return y;
+
             y -= 6f;
             Rule(parent, new Rect(Pad, y, PanelWidth - Pad * 2f, 1f), FrameColor());
             y -= 8f;
@@ -416,16 +426,11 @@ namespace WingCommand
 
             float w = PanelWidth - Pad * 2f;
 
-            Button(parent, "Teleport Wing To Formation", new Rect(Pad, y, w, RowHeight),
-                   () => WingDebugActions.TeleportWingToFormation(Wing()));
-            y -= RowHeight + Gap;
-
             Button(parent, "Spawn Wing Of My Aircraft", new Rect(Pad, y, w, RowHeight),
                    () => WingDebugActions.SpawnWingLikePlayer(Wing()));
 
             return y - RowHeight;
         }
-
         private static float Pair(RectTransform parent, float y, float w,
                                   string leftText, Action leftAction,
                                   string rightText, Action rightAction)
@@ -501,6 +506,19 @@ namespace WingCommand
                 "Delivery: Base", () => SetDelivery(WingShop.Delivery.Base),
                 "Delivery: Fast", () => SetDelivery(WingShop.Delivery.Fast));
 
+            // Page controls. The faction usually has more airframes in stock than fit on a
+            // panel sized to its content, and silently showing only the cheapest six hid
+            // most of the catalogue.
+            float arrow = 34f;
+            Button(parent, "<", new Rect(Pad, y, arrow, RowHeight), () => TurnPage(-1));
+            shopPageLabel = Label(parent,
+                                  "", new Rect(Pad + arrow + Gap, y,
+                                               PanelWidth - Pad * 2f - (arrow + Gap) * 2f, RowHeight),
+                                  Dim(), 11f, FontStyles.Normal, TextAlignmentOptions.Center);
+            Button(parent, ">", new Rect(PanelWidth - Pad - arrow, y, arrow, RowHeight),
+                   () => TurnPage(1));
+            y -= RowHeight + Gap;
+
             var area = new GameObject("ShopArea", typeof(RectTransform));
             shopArea = area.GetComponent<RectTransform>();
             shopArea.SetParent(parent, worldPositionStays: false);
@@ -515,6 +533,12 @@ namespace WingCommand
             return y;
         }
 
+        private static void TurnPage(int direction)
+        {
+            shopPage += direction;
+            if (shopPage < 0) shopPage = 0;
+        }
+
         private static void SetDelivery(WingShop.Delivery mode)
         {
             if (WingShop.Mode != mode) WingShop.ToggleDelivery();
@@ -527,6 +551,13 @@ namespace WingCommand
 
             IReadOnlyList<WingShop.Offer> offers = WingShop.Catalogue();
 
+            // Clamp here rather than in TurnPage: stock runs out and the catalogue shrinks
+            // under the player, so the page has to be re-validated against what is actually
+            // on offer each time rather than only when a button is pressed.
+            int pages = Mathf.Max(1, Mathf.CeilToInt(offers.Count / (float)ShopRows));
+            if (shopPage >= pages) shopPage = pages - 1;
+            if (shopPage < 0) shopPage = 0;
+
             if (allocationLabel != null)
             {
                 bool fast = WingShop.Mode == WingShop.Delivery.Fast;
@@ -536,13 +567,22 @@ namespace WingCommand
                     "   -   wing " + (WingCommandManager.Instance?.Wing?.Count ?? 0);
             }
 
+            if (shopPageLabel != null)
+            {
+                shopPageLabel.text = offers.Count == 0
+                    ? "nothing in stock for your airframe"
+                    : "page " + (shopPage + 1) + " of " + pages + "   (" + offers.Count + " types)";
+            }
+
+            int first = shopPage * ShopRows;
+
             for (int i = 0; i < shopRows.Count; i++)
             {
-                if (i < offers.Count) shopRows[i].Bind(offers[i]);
+                int index = first + i;
+                if (index < offers.Count) shopRows[i].Bind(offers[index]);
                 else shopRows[i].Hide();
             }
         }
-
         /// <summary>One purchasable airframe: name, stock, price, buy.</summary>
         private sealed class ShopRow
         {

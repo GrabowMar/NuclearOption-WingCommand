@@ -4,13 +4,13 @@ using UnityEngine;
 namespace WingCommand
 {
     /// <summary>
-    /// Testing aids for formation work. Both are cheats — they move or create aircraft
-    /// outright — so they are server-side only and off unless explicitly enabled.
+    /// A testing aid for formation work: spawn a full wing of the player's own aircraft,
+    /// already in their slots. It is a cheat, so it is server-side only and hidden unless
+    /// explicitly enabled in config.
     ///
-    /// Both go through the same placement solver: take the leader's position, heading and
+    /// It goes through a placement solver: take the leader's position, heading and
     /// velocity, derive each slot from it, then check the result is actually a safe piece
-    /// of sky before putting an aircraft there. Spawning and teleporting differ only in
-    /// whether the aircraft already exists.
+    /// of sky before putting an aircraft there.
     /// </summary>
     internal static class WingDebugActions
     {
@@ -88,59 +88,6 @@ namespace WingCommand
 
             position.y = Mathf.Max(position.y, Datum.LocalSeaY + TerrainClearance);
             return position;
-        }
-
-        // ----------------------------------------------------------------- teleport
-
-        /// <summary>
-        /// Snap every current wingman into its slot, matching the leader's heading and
-        /// velocity. Turns "does it hold station" into a question answerable in seconds
-        /// rather than after a long join-up.
-        /// </summary>
-        public static void TeleportWingToFormation(WingRegistry wing)
-        {
-            if (!Guard(wing, out string why))
-            {
-                Toast(why);
-                return;
-            }
-
-            Aircraft leader = wing.Leader;
-            int moved = 0;
-
-            foreach (WingMember m in wing.Members)
-            {
-                if (!m.Alive) continue;
-                if (Place(m.Aircraft, leader, m.Slot)) moved++;
-            }
-
-            Toast(moved > 0
-                ? "Teleported " + moved + " into formation"
-                : "No wingmen to teleport");
-        }
-
-        private static bool Place(Aircraft aircraft, Aircraft leader, int slot)
-        {
-            if (aircraft == null || aircraft.disabled) return false;
-
-            Rigidbody rb = aircraft.rb;
-            if (rb == null) return false;
-
-            Placement p = ComputeSlot(leader, slot, aircraft.GetAircraftParameters().maxSpeed);
-
-            rb.position = p.Position;
-            rb.rotation = p.Rotation;
-            rb.velocity = p.Velocity;
-            rb.angularVelocity = Vector3.zero;
-
-            aircraft.transform.SetPositionAndRotation(p.Position, p.Rotation);
-
-            // Colliders otherwise keep their old pose until the next physics step, which
-            // makes the arrival look like an intersection to anything querying them.
-            Physics.SyncTransforms();
-
-            SuppressGForceSpike(aircraft, p.Velocity);
-            return true;
         }
 
         // -------------------------------------------------------------------- spawn
@@ -234,30 +181,6 @@ namespace WingCommand
         }
 
         // ---------------------------------------------------------------- internals
-
-        /// <summary>
-        /// Stop a placement from registering as a lethal G load.
-        ///
-        /// <c>Pilot_OnAeroInputsApplied</c> derives G from the frame-to-frame velocity
-        /// delta and squares anything over 20 g into <c>TakeGForceDamage</c>. Handing a
-        /// wingman a new velocity is a step change, so without this a large speed
-        /// difference reads as hundreds of g. Freshly spawned aircraft are unaffected
-        /// because their <c>velocityPrev</c> starts at zero, which the stock code treats as
-        /// "no reading yet"; this puts a teleported aircraft in the same position.
-        /// </summary>
-        private static void SuppressGForceSpike(Aircraft aircraft, Vector3 velocity)
-        {
-            aircraft.velocityPrev = velocity;
-
-            if (aircraft.pilots == null) return;
-            foreach (Pilot pilot in aircraft.pilots)
-            {
-                if (pilot == null) continue;
-                pilot.velocityPrev = velocity;
-                pilot.accel = Vector3.zero;
-                pilot.gForce = 0f;
-            }
-        }
 
         private static bool Guard(WingRegistry wing, out string why)
         {

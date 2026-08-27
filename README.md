@@ -63,6 +63,11 @@ The catalogue offers only what the faction has in stock, minus the types the mis
 restricts and the types your rank does not reach — the same two gates the player's own
 aircraft menu applies, so the shop cannot be used to fly around them.
 
+It also hides anything that could not join your formation. Rotary and fixed-wing cannot
+share a formation, so flying a jet shows you only jets and flying a helicopter shows you
+only helicopters. The list pages with the arrows when the faction has more types in stock
+than fit on one screen.
+
 **Price compounds with wing size.** Each wingman already on the roster multiplies the next
 one's price by `WingPriceGrowth` (1.5 by default), so a 1000-credit airframe costs 1000,
 1500, 2250, 3375 as the wing fills. A large wing is meant to be a serious investment.
@@ -144,18 +149,22 @@ Station-keeping is hard to judge by eye, so the slot-error column is the instrum
 The same numbers appear in the compact in-flight panel, which hides itself while the map
 is up so the two never overlap.
 
-### Debug actions (optional, off by default)
-Two testing aids on the WMC screen, enabled with `Debug/EnableDebugActions`:
+### Debug action (optional, off by default)
+One testing aid on the WMC screen, shown only when `Debug/EnableDebugActions` is on:
 
 | Action | Effect |
 |---|---|
-| **Teleport Wing To Formation** | Snaps every current wingman into its slot, matching the leader's heading and velocity |
 | **Spawn Wing Of My Aircraft** | Spawns fresh copies of your own aircraft type, already in their slots, and assigns them |
 
-Both are cheats — they move or create aircraft outright — and both write world state, so
-they are **host / single-player only** and refuse otherwise. Their purpose is to remove the
-setup cost of testing station-keeping: rather than flying twenty minutes to find friendly
-AI, put a wing on your wingtip and read the slot-error column immediately.
+It is a cheat — it creates aircraft outright — and it writes world state, so it is
+**host / single-player only** and refuses otherwise. Its purpose is to remove the setup
+cost of testing station-keeping: rather than flying twenty minutes to find friendly AI, put
+a wing on your wingtip and read the slot-error column immediately.
+
+A *Teleport Wing To Formation* action used to sit beside it, snapping wingmen into their
+slots. It was removed: placing an aircraft with a new position and velocity in a single
+step fought the game's own G-force accounting badly enough that it was never reliable, and
+the spawn action covers the same testing need without the fight.
 
 ### AI tuning (optional, off by default)
 Scales AI pilot `skill` and `bravery`, which the stock combat AI reads for aim error,

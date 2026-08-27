@@ -54,6 +54,54 @@ namespace WingCommand
             Mode = Mode == Delivery.Base ? Delivery.Fast : Delivery.Base;
         }
 
+        // Whether a definition is a helicopter, resolved once per airframe.
+        //
+        // Nothing on AircraftDefinition says so - there is no category field and
+        // AircraftParameters has no rotary flag - so the answer comes from the prefab's own
+        // autopilot component, which is the same thing WingRegistry.IsRotary asks of a live
+        // aircraft. Cached because the catalogue rebuilds several times a second and
+        // GetComponentInChildren on a prefab is not free.
+        private static readonly Dictionary<AircraftDefinition, bool> rotaryCache =
+            new Dictionary<AircraftDefinition, bool>();
+
+        /// <summary>True when this airframe flies on rotors rather than wings.</summary>
+        public static bool IsRotary(AircraftDefinition definition)
+        {
+            if (definition == null) return false;
+
+            if (rotaryCache.TryGetValue(definition, out bool cached)) return cached;
+
+            bool rotary = true;
+            GameObject prefab = definition.unitPrefab;
+
+            if (prefab != null)
+            {
+                Autopilot autopilot = prefab.GetComponentInChildren<Autopilot>(includeInactive: true);
+                if (autopilot != null) rotary = !(autopilot is AutopilotPlane);
+            }
+
+            rotaryCache[definition] = rotary;
+            return rotary;
+        }
+
+        /// <summary>
+        /// Whether this airframe can join the player's formation at all.
+        ///
+        /// Rotary and fixed-wing cannot share a formation - they fly different autopilots
+        /// and differ in speed by a factor of three - and WingRegistry refuses the mix. It
+        /// used to refuse it *after* the purchase went through, so buying a helicopter as a
+        /// jet spent the money, consumed the airframe, and left the aircraft orbiting on
+        /// its own with no way to command it. The catalogue now hides what cannot be
+        /// bought, and Buy refuses it as well in case anything reaches it another way.
+        /// </summary>
+        public static bool MatchesLeader(AircraftDefinition definition)
+        {
+            Aircraft leader = WingCommandManager.Instance?.Wing?.Leader;
+            if (leader == null || definition == null) return false;
+
+            return IsRotary(definition) == WingRegistry.IsRotary(leader);
+        }
+
         // ------------------------------------------------------------------- pricing
 
         /// <summary>
@@ -106,6 +154,10 @@ namespace WingCommand
             {
                 AircraftDefinition definition = entry.Key;
                 if (definition == null || entry.Value.Count <= 0) continue;
+
+                // Hide what could never join the formation, rather than selling it and
+                // leaving the aircraft orphaned in the air with no way to command it.
+                if (!MatchesLeader(definition)) continue;
 
                 if (hq.restrictedAircraft != null &&
                     hq.restrictedAircraft.Contains(definition.unitName)) continue;
@@ -167,6 +219,15 @@ namespace WingCommand
             if (!leader.IsServer)
             {
                 reason = "Host or single-player only";
+                return false;
+            }
+
+            if (!MatchesLeader(definition))
+            {
+                bool rotary = IsRotary(definition);
+                reason = rotary
+                    ? "Helicopters cannot formate on a jet"
+                    : "Jets cannot formate on a helicopter";
                 return false;
             }
 
