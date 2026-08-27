@@ -131,8 +131,7 @@ namespace WingCommand
 
             // The same weapon selection and validity checks the formation path uses, so an
             // attack run cannot dump the loadout at a target it has no business shooting.
-            float range = PostureRules.EngageRange(
-                WingCommandManager.Instance?.Wing?.Posture ?? WingPosture.Aggressive);
+            float range = RoeRules.EngageRange(RoeRules.Current);
 
             if (WingWeapons.EngageSpecific(aircraft, pilot, target, range))
                 lastFiredTime = Time.timeSinceLevelLoad;

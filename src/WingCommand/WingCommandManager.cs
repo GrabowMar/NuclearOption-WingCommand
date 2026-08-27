@@ -42,7 +42,7 @@ namespace WingCommand
         {
             Instance = this;
             mapLayer = new MapCommandLayer(Wing);
-            Wing.Posture = Plugin.Config2.DefaultPosture.Value;
+            Wing.Roe = Plugin.Config2.DefaultRoe.Value;
         }
 
         private void Update()
@@ -270,10 +270,6 @@ namespace WingCommand
                     }
                     break;
 
-                case WingAction.CoverMe:
-                    if (RequireWing()) { Wing.OrderAll(WingOrder.CoverMe); Toast("Wing: covering you"); }
-                    break;
-
                 case WingAction.OrbitHere:
                     if (RequireWing()) { Wing.OrderAll(WingOrder.OrbitHere); Toast("Wing: orbit this position"); }
                     break;
@@ -334,12 +330,12 @@ namespace WingCommand
                     break;
                 }
 
-                case WingAction.TogglePosture:
+                case WingAction.CycleRoe:
                 {
-                    Wing.Posture = Wing.Posture == WingPosture.Defensive
-                        ? WingPosture.Aggressive
-                        : WingPosture.Defensive;
-                    Toast("Posture: " + Wing.Posture.ToString().ToUpperInvariant());
+                    // Cycles all three rungs rather than toggling two, so the wheel can
+                    // reach the whole escalation without a submenu.
+                    Wing.Roe = (WingRoe)(((int)Wing.Roe + 1) % 3);
+                    Toast("ROE: " + Wing.Roe.ToString().ToUpperInvariant());
                     break;
                 }
 
@@ -469,13 +465,12 @@ namespace WingCommand
         Engage,
         ReturnToBase,
         FallBack,
-        CoverMe,
         OrbitHere,
         DeliverCargo,
         LandHere,
         CycleShape,
         AttackMyTarget,
-        TogglePosture,
+        CycleRoe,
         Disband,
     }
 

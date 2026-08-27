@@ -1,0 +1,129 @@
+namespace WingCommand
+{
+    /// <summary>
+    /// Standing rules of engagement for the whole wing.
+    ///
+    /// The division of labour with <see cref="WingOrder"/> is the point, and it used not to
+    /// hold: <b>an order says where a wingman flies, rules of engagement say what it
+    /// shoots</b>. Before this split, both answered both questions. The Aggressive posture
+    /// made a wingman leave formation to hunt, which is what the Engage order is for,
+    /// reached by a different path with different recovery; and Cover Me was an *order*
+    /// meaning "hold station but shoot what is hunting the leader", which is a weapons
+    /// policy wearing an order's clothes.
+    ///
+    /// The three rungs are an escalation, and each has its own answer to the same event —
+    /// the leader being shot at. That is the test of whether the model earns its place:
+    ///
+    /// <list type="bullet">
+    /// <item>Hold shoots the missile down and stays put.</item>
+    /// <item>Escort shoots the aircraft that launched it, and stays put.</item>
+    /// <item>Free breaks formation and goes after the shooter.</item>
+    /// </list>
+    /// </summary>
+    internal enum WingRoe
+    {
+        /// <summary>
+        /// Holds the slot no matter what. Intercepts inbound missiles at itself or the
+        /// leader, and attacks ground targets only while the player is attacking ground.
+        /// </summary>
+        Hold,
+
+        /// <summary>
+        /// Holds the slot, but weapons free and looking after the leader: targets whatever
+        /// is threatening the leader in preference to whatever is nearest to itself.
+        /// </summary>
+        Escort,
+
+        /// <summary>
+        /// Weapons free, and the only rung that will leave formation on its own — and then
+        /// only for the emergency of the leader being under missile attack. Routine hunting
+        /// is an explicit Engage order, not a posture.
+        /// </summary>
+        Free,
+    }
+
+    /// <summary>Resolves what a wingman may shoot at, given the rules of engagement.</summary>
+    internal static class RoeRules
+    {
+        /// <summary>
+        /// The wing's current rules of engagement.
+        ///
+        /// One accessor, one fallback. Callers used to reach for
+        /// <c>Wing?.Posture ?? something</c> individually and disagreed about the
+        /// something — the formation path assumed the cautious rung and the attack path
+        /// assumed the aggressive one, so the same question had two answers depending on
+        /// which file happened to ask it.
+        /// </summary>
+        public static WingRoe Current =>
+            WingCommandManager.Instance?.Wing?.Roe ?? WingRoe.Hold;
+
+        /// <summary>What the wingman may currently fire at.</summary>
+        public static WingWeapons.Allow WeaponsFree(WingRoe roe, Aircraft aircraft)
+        {
+            // Missile defence outranks everything below Free: a missile in the air is the
+            // most time-critical thing on the battlefield, and both cautious rungs exist to
+            // keep the leader alive.
+            if (roe != WingRoe.Free &&
+                Plugin.Config2.MissileDefence.Value &&
+                WingWeapons.HasMissileDefence(aircraft))
+            {
+                if (UnderMissileAttack(aircraft)) return WingWeapons.Allow.MissilesOnly;
+
+                Aircraft leader = WingCommandManager.Instance?.Wing?.Leader;
+                if (leader != null && UnderMissileAttack(leader)) return WingWeapons.Allow.MissilesOnly;
+            }
+
+            // Escort and Free are both weapons free; they differ in what they aim at and
+            // whether they may leave the slot, not in what they are allowed to shoot.
+            if (roe != WingRoe.Hold) return WingWeapons.Allow.AirAndGround;
+
+            // Hold: ground attack only while the player is attacking ground.
+            if (PlayerFireWatcher.GroundAttackOpen) return WingWeapons.Allow.AirAndGround;
+
+            return WingWeapons.Allow.AirOnly;
+        }
+
+        /// <summary>True when this rung prefers threats to the leader over its own.</summary>
+        public static bool GuardsLeader(WingRoe roe) => roe == WingRoe.Escort;
+
+        /// <summary>
+        /// True when this rung may leave formation on its own.
+        ///
+        /// Only Free, and only for the leader-under-missile emergency. The generic "break
+        /// for any air threat in range" that used to live here is gone: it made Aggressive
+        /// plus Formation behave almost identically to an Engage order, which is why the
+        /// two were impossible to tell apart.
+        /// </summary>
+        public static bool MayBreakForEmergency(WingRoe roe) => roe == WingRoe.Free;
+
+        /// <summary>Engagement range for a rung, in metres.</summary>
+        public static float EngageRange(WingRoe roe)
+        {
+            // Hold and Escort share a range because neither manoeuvres to engage, so for
+            // both of them it is purely a weapons-range limit.
+            return roe == WingRoe.Free
+                ? Plugin.Config2.FreeEngageRange.Value
+                : Plugin.Config2.HoldEngageRange.Value;
+        }
+
+        /// <summary>The one-line hint shown under the selector.</summary>
+        public static string Hint(WingRoe roe)
+        {
+            switch (roe)
+            {
+                case WingRoe.Escort:
+                    return "Holds the slot. Weapons free, guarding you first.";
+                case WingRoe.Free:
+                    return "Weapons free. Breaks formation only if you are shot at.";
+                default:
+                    return "Holds the slot. Intercepts missiles. Ground fire only when you fire.";
+            }
+        }
+
+        private static bool UnderMissileAttack(Aircraft aircraft)
+        {
+            MissileWarning warning = aircraft != null ? aircraft.GetMissileWarningSystem() : null;
+            return warning != null && warning.IsWarning();
+        }
+    }
+}

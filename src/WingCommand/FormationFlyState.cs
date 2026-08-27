@@ -270,8 +270,7 @@ namespace WingCommand
             if (scale > 1.001f)
             {
                 bool threatened =
-                    (WingCommandManager.Instance?.Wing?.Posture ?? WingPosture.Defensive)
-                        == WingPosture.Aggressive;
+                    RoeRules.Current == WingRoe.Free;
 
                 if (!threatened)
                 {
@@ -314,10 +313,10 @@ namespace WingCommand
             // launches; this is the same idea, exposed so it can be tuned.
             bool mayFire = Time.timeSinceLevelLoad - lastFiredTime >= Plugin.Config2.FireInterval.Value;
 
-            WingPosture posture = WingCommandManager.Instance?.Wing?.Posture ?? WingPosture.Defensive;
+            WingRoe roe = RoeRules.Current;
 
-            WingWeapons.Allow allow = PostureRules.WeaponsFree(posture, aircraft);
-            float range = PostureRules.EngageRange(posture);
+            WingWeapons.Allow allow = RoeRules.WeaponsFree(roe, aircraft);
+            float range = RoeRules.EngageRange(roe);
 
             // An explicitly assigned target outranks whatever the wingman would pick, and
             // survives until it dies. Missile defence still takes precedence: a missile in
@@ -330,11 +329,11 @@ namespace WingCommand
                 assigned = null;
             }
 
-            // Cover Me: with no explicit order standing, shoot at what is hunting the
-            // leader rather than at whatever is nearest to us. This is the entire
-            // difference between Cover Me and Formation - station-keeping, posture and fire
-            // gating are all untouched.
-            if (assigned == null && member.Order == WingOrder.CoverMe)
+            // Escort: with no explicit order standing, shoot at what is hunting the leader
+            // rather than at whatever is nearest to us. This is the entire difference
+            // between Escort and Hold - station-keeping and fire gating are untouched, only
+            // the choice of target changes.
+            if (assigned == null && RoeRules.GuardsLeader(roe))
             {
                 assigned = WingWeapons.NearestThreatTo(leader, range);
                 if (assigned != null) WingComms.Say(member, WingComms.Call.Covering);
@@ -359,12 +358,6 @@ namespace WingCommand
             }
 
             if (fired) lastFiredTime = Time.timeSinceLevelLoad;
-
-            // Aggressive only: hand over to the stock dogfight AI when an air threat is
-            // close enough to be worth chasing. WingMember owns the leash that brings it
-            // back, so the break is always temporary.
-            if (posture == WingPosture.Aggressive && WingWeapons.HasAirThreatWithin(aircraft, range))
-                member.BreakToEngage("air threat within " + (int)range + " m");
         }
 
         /// <summary>
@@ -375,11 +368,11 @@ namespace WingCommand
         {
             if (!Plugin.Config2.MutualSupport.Value) return false;
 
-            // Defensive means hold the slot no matter what, so breaking formation here
-            // would contradict the posture the player chose. The defensive answer to a
-            // missile on the leader is to shoot it down, which RunEngagement already does.
-            WingPosture posture = WingCommandManager.Instance?.Wing?.Posture ?? WingPosture.Defensive;
-            if (posture == WingPosture.Defensive) return false;
+            // Only the Free rung leaves the slot, and only for this. The cautious rungs
+            // answer the same event with a weapon rather than a manoeuvre: Hold shoots the
+            // missile down, Escort shoots the aircraft that launched it. Three different
+            // responses to one event is what makes the three rungs worth having.
+            if (!RoeRules.MayBreakForEmergency(RoeRules.Current)) return false;
 
             if (Time.timeSinceLevelLoad - lastSupportCheck < 1f) return false;
             lastSupportCheck = Time.timeSinceLevelLoad;

@@ -66,7 +66,10 @@ namespace WingCommand
                 $"RotaryPowerSeconds={Config2.RotaryPowerSeconds.Value} " +
                 $"RotaryCommandAngle={Config2.RotaryCommandAngle.Value} " +
                 $"RotarySpacingScale={Config2.RotarySpacingScale.Value} " +
-                $"ThreatWidenScale={Config2.ThreatSpacingScale.Value}");
+                $"ThreatWidenScale={Config2.ThreatSpacingScale.Value} " +
+                $"DefaultRoe={Config2.DefaultRoe.Value} " +
+                $"HoldEngageRange={Config2.HoldEngageRange.Value} " +
+                $"FreeEngageRange={Config2.FreeEngageRange.Value}");
         }
 
         /// <summary>
@@ -159,10 +162,10 @@ namespace WingCommand
         public readonly ConfigEntry<bool> MutualSupport;
 
         // --- Engagement ---
-        public readonly ConfigEntry<WingPosture> DefaultPosture;
+        public readonly ConfigEntry<WingRoe> DefaultRoe;
         public readonly ConfigEntry<bool> MissileDefence;
-        public readonly ConfigEntry<float> DefensiveEngageRange;
-        public readonly ConfigEntry<float> AggressiveEngageRange;
+        public readonly ConfigEntry<float> HoldEngageRange;
+        public readonly ConfigEntry<float> FreeEngageRange;
         public readonly ConfigEntry<float> LeashRadius;
         public readonly ConfigEntry<float> FallBackStandoff;
         public readonly ConfigEntry<float> OrbitRadius;
@@ -351,21 +354,29 @@ namespace WingCommand
                 new ConfigDescription("Multiplier applied to AI pilot bravery (target aggression, threat avoidance).",
                     new AcceptableValueRange<float>(0.25f, 3f)));
             MutualSupport = c.Bind("AI", "MutualSupport", true,
-                "Wingmen holding formation automatically break to engage when the leader is under missile attack.");
+                "Wingmen break formation to engage when the leader is under missile attack. " +
+                "Free rules of engagement only - Hold shoots the missile down instead, and " +
+                "Escort shoots the aircraft that launched it, both from the slot.");
 
-            DefaultPosture = c.Bind("Engagement", "DefaultPosture", WingPosture.Defensive,
-                "Rules of engagement the wing starts a mission with. Defensive holds the slot " +
-                "no matter what; Aggressive breaks to fight aircraft and rejoins afterwards.");
+            // Renamed from DefaultPosture / DefensiveEngageRange / AggressiveEngageRange.
+            // BepInEx applies a default only to a NEW key, and the old values ("Defensive")
+            // would not parse as a WingRoe anyway - so these had to be new names for the
+            // new defaults to take at all. The old keys go inert.
+            DefaultRoe = c.Bind("Engagement", "DefaultRoe", WingRoe.Hold,
+                "Rules of engagement the wing starts a mission with. Hold never leaves the " +
+                "slot and shoots only what threatens it; Escort is weapons free and guards " +
+                "you first; Free is weapons free and will break formation if you are shot at.");
             MissileDefence = c.Bind("Engagement", "MissileDefence", true,
                 "Defensive wingmen prioritise shooting down inbound missiles, on themselves or " +
                 "on you, when they carry a weapon capable of it.");
-            DefensiveEngageRange = c.Bind("Engagement", "DefensiveEngageRange", 6000f,
+            HoldEngageRange = c.Bind("Engagement", "HoldEngageRange", 6000f,
                 new ConfigDescription(
-                    "How far a Defensive wingman will shoot from its slot, in metres. It never " +
-                    "manoeuvres to engage, so this is purely a weapons-range limit.",
+                    "How far a wingman will shoot from its slot, in metres. Used by Hold and " +
+                    "Escort: neither manoeuvres to engage, so for both it is purely a " +
+                    "weapons-range limit.",
                     new AcceptableValueRange<float>(500f, 30000f)));
-            AggressiveEngageRange = c.Bind("Engagement", "AggressiveEngageRange", 12000f,
-                new ConfigDescription("Range at which an Aggressive wingman will break formation to fight.",
+            FreeEngageRange = c.Bind("Engagement", "FreeEngageRange", 12000f,
+                new ConfigDescription("Weapons range for a Free wingman.",
                     new AcceptableValueRange<float>(1000f, 60000f)));
             LeashRadius = c.Bind("Engagement", "LeashRadius", 8000f,
                 new ConfigDescription(

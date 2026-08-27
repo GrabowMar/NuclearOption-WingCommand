@@ -130,7 +130,7 @@ namespace WingCommand
                 Icon(WingMenuAction.Create("Orders", _ => ShowOrdersMenu()), "orders"),
                 Leaf("Attack My Target", WingAction.AttackMyTarget, "attack"),
                 Icon(WingMenuAction.Create("Formation", _ => ShowFormationMenu()), "formation"),
-                Leaf("Posture", WingAction.TogglePosture, "posture"),
+                Leaf("Rules Of Engagement", WingAction.CycleRoe, "posture"),
                 Icon(WingMenuAction.Create("Wing", _ => ShowWingMenu()), "recruit"),
             };
 
@@ -141,7 +141,6 @@ namespace WingCommand
             {
                 Leaf("Rejoin", WingAction.Rejoin, "rejoin"),
                 Leaf("Engage", WingAction.Engage, "engage"),
-                Leaf("Cover Me", WingAction.CoverMe, "cover"),
                 Leaf("Fall Back", WingAction.FallBack, "fallback"),
                 Icon(WingMenuAction.Create("Tasking", _ => ShowTaskingMenu()), "tasking"),
                 Icon(WingMenuAction.Create("Back", _ => ShowCommanderMenu()), "back"),

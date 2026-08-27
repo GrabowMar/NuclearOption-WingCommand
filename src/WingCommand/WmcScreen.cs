@@ -34,8 +34,9 @@ namespace WingCommand
         private static TMP_Text shapeLabel;
         private static TMP_Text summaryLabel;
         private static TMP_Text postureLabel;
-        private static WmcButton defensiveButton;
-        private static WmcButton aggressiveButton;
+        private static WmcButton holdButton;
+        private static WmcButton escortButton;
+        private static WmcButton freeButton;
         private static TMP_FontAsset font;
 
         private static readonly List<RosterRow> rosterRows = new List<RosterRow>();
@@ -93,8 +94,9 @@ namespace WingCommand
             shopPageLabel = null;
             shopPage = 0;
             postureLabel = null;
-            defensiveButton = null;
-            aggressiveButton = null;
+            holdButton = null;
+            escortButton = null;
+            freeButton = null;
             gaveUp = false;
         }
 
@@ -322,12 +324,17 @@ namespace WingCommand
         {
             y = Heading(parent, y, "RULES OF ENGAGEMENT");
 
-            float w = (PanelWidth - Pad * 2f - Gap) * 0.5f;
+            // Three rungs, so three buttons. They are an escalation rather than a toggle:
+            // each answers "the leader is being shot at" differently, which is the whole
+            // reason there are three of them.
+            float w = (PanelWidth - Pad * 2f - Gap * 2f) / 3f;
 
-            defensiveButton = Button(parent, "DEFENSIVE", new Rect(Pad, y, w, RowHeight),
-                                     () => SetPosture(WingPosture.Defensive));
-            aggressiveButton = Button(parent, "AGGRESSIVE", new Rect(Pad + w + Gap, y, w, RowHeight),
-                                      () => SetPosture(WingPosture.Aggressive));
+            holdButton = Button(parent, "HOLD", new Rect(Pad, y, w, RowHeight),
+                                () => SetRoe(WingRoe.Hold));
+            escortButton = Button(parent, "ESCORT", new Rect(Pad + w + Gap, y, w, RowHeight),
+                                  () => SetRoe(WingRoe.Escort));
+            freeButton = Button(parent, "FREE", new Rect(Pad + (w + Gap) * 2f, y, w, RowHeight),
+                                () => SetRoe(WingRoe.Free));
 
             y -= RowHeight + 2f;
 
@@ -336,13 +343,13 @@ namespace WingCommand
             return y - 22f;
         }
 
-        private static void SetPosture(WingPosture posture)
+        private static void SetRoe(WingRoe roe)
         {
             WingRegistry wing = Wing();
             if (wing == null) return;
 
-            wing.Posture = posture;
-            WingCommandManager.Instance?.Toast("Posture: " + posture.ToString().ToUpperInvariant());
+            wing.Roe = roe;
+            WingCommandManager.Instance?.Toast("ROE: " + roe.ToString().ToUpperInvariant());
         }
 
         private static float AddSummary(RectTransform parent, float y)
@@ -392,20 +399,16 @@ namespace WingCommand
                 "Engage", () => WingCommandManager.Instance?.Execute(WingAction.Engage));
 
             y = Pair(parent, y, w,
-                "Cover Me", () => WingCommandManager.Instance?.Execute(WingAction.CoverMe),
-                "Fall Back", () => WingCommandManager.Instance?.Execute(WingAction.FallBack));
+                "Fall Back", () => WingCommandManager.Instance?.Execute(WingAction.FallBack),
+                "Orbit Here", () => WingCommandManager.Instance?.Execute(WingAction.OrbitHere));
 
             y = Pair(parent, y, w,
-                "Orbit Here", () => WingCommandManager.Instance?.Execute(WingAction.OrbitHere),
-                "Deliver Cargo", () => WingCommandManager.Instance?.Execute(WingAction.DeliverCargo));
+                "Deliver Cargo", () => WingCommandManager.Instance?.Execute(WingAction.DeliverCargo),
+                "Land Here", () => WingCommandManager.Instance?.Execute(WingAction.LandHere));
 
             y = Pair(parent, y, w,
-                "Land Here", () => WingCommandManager.Instance?.Execute(WingAction.LandHere),
-                "Return To Base", () => WingCommandManager.Instance?.Execute(WingAction.ReturnToBase));
-
-            y = Pair(parent, y, w,
-                "Disband", () => WingCommandManager.Instance?.Execute(WingAction.Disband),
-                "Rejoin", () => WingCommandManager.Instance?.Execute(WingAction.Rejoin));
+                "Return To Base", () => WingCommandManager.Instance?.Execute(WingAction.ReturnToBase),
+                "Disband", () => WingCommandManager.Instance?.Execute(WingAction.Disband));
 
             return y;
         }
@@ -451,10 +454,11 @@ namespace WingCommand
                 summaryLabel.text = wing.Count + " of " + Plugin.Config2.MaxWingSize.Value + " assigned";
 
             if (postureLabel != null)
-                postureLabel.text = PostureHint(wing.Posture);
+                postureLabel.text = RoeRules.Hint(wing.Roe);
 
-            defensiveButton?.SetLatched(wing.Posture == WingPosture.Defensive);
-            aggressiveButton?.SetLatched(wing.Posture == WingPosture.Aggressive);
+            holdButton?.SetLatched(wing.Roe == WingRoe.Hold);
+            escortButton?.SetLatched(wing.Roe == WingRoe.Escort);
+            freeButton?.SetLatched(wing.Roe == WingRoe.Free);
 
             RefreshShop();
 
@@ -723,12 +727,6 @@ namespace WingCommand
 
         private static WingRegistry Wing() => WingCommandManager.Instance?.Wing;
 
-        private static string PostureHint(WingPosture posture)
-        {
-            return posture == WingPosture.Aggressive
-                ? "Breaks to fight aircraft, then rejoins. Ground targets from the slot."
-                : "Holds the slot. Intercepts missiles. Ground fire only when you fire.";
-        }
 
         private static void CycleShape(int direction)
         {
@@ -960,7 +958,6 @@ namespace WingCommand
                 case WingOrder.Engage: return "ENGAGE";
                 case WingOrder.ReturnToBase: return "RTB";
                 case WingOrder.FallBack: return "FALLBACK";
-                case WingOrder.CoverMe: return "COVER";
                 case WingOrder.OrbitHere: return "ORBIT";
                 case WingOrder.DeliverCargo: return "CARGO";
                 case WingOrder.LandHere: return "LANDING";

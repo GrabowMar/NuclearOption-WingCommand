@@ -59,10 +59,6 @@ namespace WingCommand
             switch (order)
             {
                 case WingOrder.Formation:
-                case WingOrder.CoverMe:
-                    // Cover Me is formation flight with a different idea of what to shoot
-                    // at, so it shares the state entirely; only RunEngagement reads the
-                    // difference.
                     formationState.BoostRejoin(Slot * Plugin.Config2.RejoinStagger.Value);
                     Pilot.SwitchState(formationState);
                     break;
@@ -365,8 +361,8 @@ namespace WingCommand
     }
 
     /// <summary>
-    /// What a wingman has been told to do. Formation and CoverMe both fly the formation
-    /// state and differ only in what they shoot at; the rest each have their own state.
+    /// What a wingman has been told to do - that is, where it flies. What it *shoots* is
+    /// the separate question answered by <see cref="WingRoe"/>.
     /// </summary>
     internal enum WingOrder
     {
@@ -374,7 +370,6 @@ namespace WingCommand
         Engage,
         ReturnToBase,
         FallBack,
-        CoverMe,
         OrbitHere,
         DeliverCargo,
         LandHere,

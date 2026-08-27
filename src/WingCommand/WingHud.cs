@@ -190,7 +190,6 @@ namespace WingCommand
             {
                 case WingOrder.ReturnToBase: return "RTB";
                 case WingOrder.FallBack:     return "Fall Back";
-                case WingOrder.CoverMe:      return "Cover";
                 case WingOrder.OrbitHere:    return "Orbit";
                 case WingOrder.DeliverCargo: return "Cargo";
                 case WingOrder.LandHere:     return "Landing";

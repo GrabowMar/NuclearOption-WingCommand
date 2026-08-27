@@ -26,7 +26,6 @@ Formation shapes: `EchelonRight`, `EchelonLeft`, `LineAbreast`, `Trail`, `Combat
 | **Rejoin Formation** | Wingmen close on their slot and hold station |
 | **Attack My Target** | Wingmen fly an attack run on what you have designated, and return to the wing once it is dead |
 | **Engage** | Hunt freely, but on a tether — see below |
-| **Cover Me** | Fly formation, but shoot at what is hunting *you* rather than what is nearest to them |
 | **Fall Back** | Emergency break: scatter on separate headings with flares, run for the nearest friendly airbase, hold there |
 | **Orbit Here** | Anchor to where you are *now* and fly a CAP over it while you go elsewhere |
 | **Deliver Cargo** | Transport helicopters run the game's own supply behaviour |
@@ -49,6 +48,34 @@ land.
 Cargo and landing orders only apply to the aircraft that can carry them out, and the
 confirmation says how many did: an order that silently applies to nobody looks exactly like
 one that failed.
+
+### Rules of engagement
+
+Orders and rules of engagement answer different questions, and keeping them apart is what
+makes the wing predictable:
+
+> **An order says where a wingman flies. Rules of engagement say what it shoots.**
+
+Three rungs, wing-wide. Each has its own answer to the same event — you being shot at —
+which is the test of whether three rungs earn their place:
+
+| ROE | Leaves the slot? | What it shoots | You come under missile attack |
+|---|---|---|---|
+| **Hold** | never | missiles at you or itself; ground targets only while you are attacking ground | shoots the missile down |
+| **Escort** | never | weapons free, preferring whatever is threatening you | shoots the aircraft that launched it, from the slot |
+| **Free** | emergency only | weapons free | breaks formation and goes after the shooter |
+
+This replaced a two-state Defensive/Aggressive posture that overlapped the order set badly.
+Aggressive made a wingman leave formation to hunt, which is what the **Engage** order is
+for — reached by a different code path, with different recovery — so the two were nearly
+impossible to tell apart. And *Cover Me* was an **order** meaning "hold station but shoot
+what is hunting the leader", which is a weapons policy wearing an order's clothes; it is
+now the Escort rung.
+
+Leaving the slot is otherwise always an explicit **Engage** or **Attack My Target** order.
+The one exception is the Free rung's emergency break, which stays because it is a reaction
+to a specific event rather than a standing policy.
+
 ### The formation shop
 
 Wingmen can be bought rather than only recruited, from the **SQUADRON SUPPLY** section of
@@ -107,7 +134,7 @@ screens, so the fourth slot is free; registering an `MFDScreen` there and callin
 it does for its own screens.
 
 It shows every wingman with slot, name, order and **live slot error in metres**, plus
-buttons for Add Selected, Recruit Near, Rejoin, Engage, Cover Me, Fall Back, Orbit Here,
+buttons for Add Selected, Recruit Near, Rejoin, Engage, Fall Back, Orbit Here,
 Deliver Cargo, Land Here, RTB and Disband, per-member release
 and formation cycling.
 
@@ -194,7 +221,6 @@ so re-open it to see the submenu you switched to.
 Radial Menu ─┬─ (stock entries: Gear, Radar, Eject, …)
              └─ Wing Command ─┬─ Orders ─┬─ Rejoin
                               │          ├─ Engage
-                              │          ├─ Cover Me
                               │          ├─ Fall Back
                               │          ├─ Tasking ─┬─ Return To Base
                               │          │           ├─ Orbit Here
@@ -205,7 +231,7 @@ Radial Menu ─┬─ (stock entries: Gear, Radar, Eject, …)
                               ├─ Attack My Target
                               ├─ Formation ─┬─ ten shapes
                               │             └─ Back
-                              ├─ Posture
+                              ├─ Rules Of Engagement
                               └─ Wing ─┬─ Recruit Nearest
                                        ├─ Disband
                                        └─ Back

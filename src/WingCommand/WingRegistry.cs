@@ -16,7 +16,8 @@ namespace WingCommand
         public Aircraft Leader { get; private set; }
 
         /// <summary>Standing rules of engagement for the whole wing.</summary>
-        public WingPosture Posture { get; set; } = WingPosture.Defensive;
+        /// <summary>Standing rules of engagement for the whole wing.</summary>
+        public WingRoe Roe { get; set; } = WingRoe.Hold;
 
         public IReadOnlyList<WingMember> Members => members;
         public int Count => members.Count;

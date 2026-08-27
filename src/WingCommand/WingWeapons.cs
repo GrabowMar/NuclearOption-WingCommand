@@ -293,27 +293,5 @@ namespace WingCommand
             return best;
         }
 
-        public static bool HasAirThreatWithin(Aircraft aircraft, float range)
-        {
-            if (aircraft == null) return false;
-
-            float rangeSq = range * range;
-            GlobalPosition from = aircraft.GlobalPosition();
-            FactionHQ hq = aircraft.NetworkHQ;
-
-            // allAircraft is short enough to scan directly, and avoids a grid query that
-            // would pull in every ground unit just to find aeroplanes.
-            List<Aircraft> all = UnitRegistry.allAircraft;
-            for (int i = 0; i < all.Count; i++)
-            {
-                Aircraft other = all[i];
-                if (other == null || other.disabled || other == aircraft) continue;
-                if (other.NetworkHQ == null || other.NetworkHQ == hq) continue;
-                if (FastMath.SquareDistance(other.GlobalPosition(), from) <= rangeSq)
-                    return true;
-            }
-
-            return false;
-        }
     }
 }
