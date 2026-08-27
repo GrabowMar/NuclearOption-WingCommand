@@ -69,6 +69,94 @@ namespace WingCommand
             return ordered;
         }
 
+        /// <summary>
+        /// Distribute several designated targets across the wing.
+        ///
+        /// One target means the whole wing goes for it — massed fire on a single
+        /// designation is the point of that order. Several targets are spread instead, so
+        /// four wingmen with four targets designated prosecute four contacts rather than
+        /// queueing up behind the first one.
+        ///
+        /// Coverage comes before concentration: every target gets a shooter before any
+        /// target gets a second one. Within each pass the nearest free member takes the
+        /// target, which keeps wingmen from crossing the formation to reach something a
+        /// neighbour was already beside.
+        /// </summary>
+        /// <param name="targets">Designated targets, most important first.</param>
+        /// <param name="covered">Number of distinct targets that got at least one shooter.</param>
+        /// <returns>Number of members given an order.</returns>
+        public int AttackTargets(IReadOnlyList<Unit> targets, out int covered)
+        {
+            covered = 0;
+            if (targets == null || targets.Count == 0) return 0;
+
+            if (targets.Count == 1)
+            {
+                int all = AttackTarget(targets[0]);
+                covered = all > 0 ? 1 : 0;
+                return all;
+            }
+
+            var free = new List<WingMember>();
+            foreach (WingMember m in members)
+            {
+                if (m.Alive) free.Add(m);
+            }
+            if (free.Count == 0) return 0;
+
+            var seen = new HashSet<Unit>();
+            int ordered = 0;
+
+            while (free.Count > 0)
+            {
+                bool assignedThisPass = false;
+
+                foreach (Unit target in targets)
+                {
+                    if (target == null || target.disabled) continue;
+                    if (free.Count == 0) break;
+
+                    WingMember nearest = TakeNearest(free, target);
+                    if (nearest == null) continue;
+
+                    nearest.AttackTarget(target);
+                    ordered++;
+                    assignedThisPass = true;
+                    if (seen.Add(target)) covered++;
+                }
+
+                // No live target in the list: stop rather than spin.
+                if (!assignedThisPass) break;
+            }
+
+            return ordered;
+        }
+
+        /// <summary>Remove and return the member closest to a target.</summary>
+        private static WingMember TakeNearest(List<WingMember> free, Unit target)
+        {
+            int best = -1;
+            float bestDistance = float.MaxValue;
+            GlobalPosition targetPos = target.GlobalPosition();
+
+            for (int i = 0; i < free.Count; i++)
+            {
+                Aircraft a = free[i].Aircraft;
+                if (a == null) continue;
+
+                float d = FastMath.SquareDistance(a.GlobalPosition(), targetPos);
+                if (d >= bestDistance) continue;
+
+                bestDistance = d;
+                best = i;
+            }
+
+            if (best < 0) return null;
+
+            WingMember member = free[best];
+            free.RemoveAt(best);
+            return member;
+        }
         /// <summary>Pull back any member that has strayed past the leash while engaging.</summary>
         public void CheckLeashes()
         {

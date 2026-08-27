@@ -492,7 +492,7 @@ namespace WingCommand
 
                 slot.text = m.Slot.ToString();
                 name.text = Truncate(m.Name, 16);
-                order.text = ShortOrder(m.Order);
+                order.text = ShortOrder(m);
 
                 reserves.text = Mathf.RoundToInt(m.Fuel * 100f) + "%  " + m.Ammo;
                 reserves.color = m.Fuel <= Plugin.Config2.BingoFuel.Value || m.Ammo <= 0
@@ -765,17 +765,27 @@ namespace WingCommand
             }
         }
 
-        private static string ShortOrder(WingOrder order)
+        /// <summary>
+        /// The order column, which names the target when there is one.
+        ///
+        /// With targets distributed across the wing, "ENGAGE" on four rows says nothing
+        /// about who went after what. The target's own designation is the useful thing to
+        /// read here, and it pairs with the amber marks on the map and HUD.
+        /// </summary>
+        private static string ShortOrder(WingMember m)
         {
-            switch (order)
+            Unit assigned = m.AssignedTarget;
+            if (assigned != null && !assigned.disabled)
+                return Truncate(assigned.definition != null ? assigned.definition.code : assigned.unitName, 8);
+
+            switch (m.Order)
             {
                 case WingOrder.Formation: return "FORM";
                 case WingOrder.Engage: return "ENGAGE";
                 case WingOrder.ReturnToBase: return "RTB";
-                default: return order.ToString();
+                default: return m.Order.ToString();
             }
         }
-
         private static string Truncate(string s, int max)
         {
             if (string.IsNullOrEmpty(s)) return "";

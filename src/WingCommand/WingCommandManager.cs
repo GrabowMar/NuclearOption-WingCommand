@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using UnityEngine;
 
 namespace WingCommand
@@ -253,15 +254,22 @@ namespace WingCommand
                 {
                     if (!RequireWing()) break;
 
-                    Unit target = CurrentPlayerTarget();
-                    if (target == null)
+                    List<Unit> targets = CurrentPlayerTargets();
+                    if (targets.Count == 0)
                     {
                         Toast("No target selected");
                         break;
                     }
 
-                    int n = Wing.AttackTarget(target);
-                    Toast("Wing: attacking " + target.unitName + " (" + n + ")");
+                    int n = Wing.AttackTargets(targets, out int covered);
+
+                    if (targets.Count == 1)
+                        Toast("Wing: attacking " + targets[0].unitName + " (" + n + ")");
+                    else if (covered < targets.Count)
+                        Toast("Wing: " + n + " onto " + covered + " of " +
+                              targets.Count + " targets - not enough aircraft");
+                    else
+                        Toast("Wing: " + n + " aircraft onto " + covered + " targets");
                     break;
                 }
 
@@ -301,26 +309,38 @@ namespace WingCommand
         }
 
         /// <summary>
-        /// Whatever the player currently has designated, or null.
+        /// Everything the player currently has designated, most recent first.
         ///
         /// Read from <c>CombatHUD.GetTargetList()</c>, which is what the player's own HUD
         /// tracks. <c>Pilot.GetPrimaryTarget</c> looks like the obvious source, but nothing
         /// in the game ever calls its setter — only the AI states read and write it — so
         /// for a player-controlled pilot it is always null.
+        ///
+        /// The whole list matters, not just its head. The player can designate several
+        /// contacts, and taking only the first meant the entire wing piled onto one of
+        /// them no matter how many were marked.
         /// </summary>
-        private static Unit CurrentPlayerTarget()
+        private static readonly List<Unit> playerTargets = new List<Unit>();
+
+        private static List<Unit> CurrentPlayerTargets()
         {
+            playerTargets.Clear();
+
             CombatHUD hud = SceneSingleton<CombatHUD>.i;
-            if (hud == null) return null;
+            if (hud == null) return playerTargets;
 
-            System.Collections.Generic.List<Unit> targets = hud.GetTargetList();
-            if (targets == null) return null;
+            List<Unit> targets = hud.GetTargetList();
+            if (targets == null) return playerTargets;
 
+            // GetTargetList inserts at the head, so this is already newest-first — which
+            // is the right priority order for handing targets out.
             foreach (Unit t in targets)
             {
-                if (t != null && !t.disabled) return t;
+                if (t != null && !t.disabled && !playerTargets.Contains(t))
+                    playerTargets.Add(t);
             }
-            return null;
+
+            return playerTargets;
         }
 
         private bool RequireWing()

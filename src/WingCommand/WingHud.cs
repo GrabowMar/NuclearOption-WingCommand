@@ -154,7 +154,7 @@ namespace WingCommand
             {
                 cachedRows.Add(string.Format(
                     "{0}  {1,-14} {2,-9} {3:F0} m",
-                    m.Slot, Truncate(m.Name, 14), m.Order, m.SlotError));
+                    m.Slot, Truncate(m.Name, 14), OrderText(m), m.SlotError));
             }
         }
 
@@ -185,6 +185,22 @@ namespace WingCommand
             EnsureStyles();
             var rect = new Rect(Screen.width * 0.5f - 190f, Screen.height * 0.78f, 380f, 30f);
             GUI.Box(rect, message, toastStyle);
+        }
+
+        /// <summary>
+        /// Name the target when a member has one, matching the WMC roster. Four rows all
+        /// reading "Engage" tell the player nothing once targets are spread across the
+        /// wing.
+        /// </summary>
+        private static string OrderText(WingMember m)
+        {
+            Unit assigned = m.AssignedTarget;
+            if (assigned != null && !assigned.disabled)
+            {
+                string code = assigned.definition != null ? assigned.definition.code : assigned.unitName;
+                return Truncate(code, 9);
+            }
+            return m.Order.ToString();
         }
 
         private static string Truncate(string s, int max)
