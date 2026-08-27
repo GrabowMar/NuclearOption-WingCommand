@@ -1,14 +1,29 @@
 <#
-    Builds the release archive that NOMM installs and NOMNOM's manifest points at.
+    Builds the two release assets.
 
-    The zip mirrors the game folder, so extracting it at the Nuclear Option root puts the
-    DLL exactly where BepInEx looks for it:
+    THE BARE DLL IS THE ONE NOMM WANTS. Checking how NOMM actually lays out the mods it
+    manages settles it - both installed plugins on this machine ship a plain .dll as their
+    release asset and nothing else:
+
+        BepInEx/plugins/NOSMR/NOSMR.dll                          <- id "NOSMR", asset NOSMR.dll
+        BepInEx/plugins/com.nikkorap.blueprinter/Blueprinter_1.8.21.dll
+
+    NOMM creates the folder from the manifest id and drops the DLL in. A zip of a folder
+    tree is not what it takes from a file drop, which is why dragging one in did nothing.
+
+    (For the record, .nobp is unrelated: it is a Blueprinter content bundle - custom
+    aircraft - carried as artifact type "addon" with "extends" pointing at Blueprinter.
+    WingCommand is a real BepInEx plugin, so it is type "plugin" and ships a DLL.)
+
+    The zip is still built, for people installing by hand who want the README and licence
+    alongside. It mirrors the game folder, so extracting it at the Nuclear Option root puts
+    the DLL where BepInEx looks:
 
         BepInEx/plugins/WingCommand/WingCommand.dll
 
     NOMNOM requires the manifest's version to match the version in the DLL, so the version
-    is read back out of the built assembly rather than typed anywhere. It also wants a
-    sha256 of the archive, which is printed at the end ready to paste.
+    is read back out of the built assembly rather than typed anywhere. Both assets' sha256
+    are printed at the end ready to paste.
 #>
 [CmdletBinding()]
 param(
@@ -77,15 +92,28 @@ finally {
 }
 
 Remove-Item $stage -Recurse -Force
-$hash = (Get-FileHash $archive -Algorithm SHA256).Hash.ToLower()
+$zipHash = (Get-FileHash $archive -Algorithm SHA256).Hash.ToLower()
+
+# The primary asset: the bare DLL, which is what NOMM installs.
+$loose = Join-Path $dist 'WingCommand.dll'
+Copy-Item $built $loose -Force
+$dllHash = (Get-FileHash $loose -Algorithm SHA256).Hash.ToLower()
+
+$base = "https://github.com/GrabowMar/NuclearOption-WingCommand/releases/download/v$version"
 
 Write-Host ""
-Write-Host "Packaged $archive"
-Write-Host "  version   $version"
-Write-Host "  sha256    $hash"
+Write-Host "Version $version"
 Write-Host ""
-Write-Host "For the NOMNOM manifest artifact entry:"
-Write-Host "  `"fileName`":    `"WingCommand-$version.zip`""
+Write-Host "Attach BOTH to the release, DLL FIRST - NOMNOM takes the first asset as the"
+Write-Host "package, and NOMM installs a bare DLL rather than an archive."
+Write-Host ""
+Write-Host "  1. $loose"
+Write-Host "     sha256  $dllHash"
+Write-Host "  2. $archive"
+Write-Host "     sha256  $zipHash   (manual installs only)"
+Write-Host ""
+Write-Host "NOMNOM manifest artifact entry:"
+Write-Host "  `"fileName`":    `"WingCommand.dll`""
 Write-Host "  `"version`":     `"$version`""
-Write-Host "  `"hash`":        `"sha256:$hash`""
-Write-Host "  `"downloadUrl`": `"https://github.com/GrabowMar/NuclearOption-WingCommand/releases/download/v$version/WingCommand-$version.zip`""
+Write-Host "  `"hash`":        `"sha256:$dllHash`""
+Write-Host "  `"downloadUrl`": `"$base/WingCommand.dll`""

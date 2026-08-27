@@ -19,11 +19,15 @@ BepInEx is set up for you, and updates arrive through the manager.
 
 1. Install [BepInEx 5](https://github.com/BepInEx/BepInEx/releases) (5.4.23.3 or later) into
    your Nuclear Option folder and run the game once so it generates its directories.
-2. Download the latest release archive from the
-   [releases page](https://github.com/GrabowMar/NuclearOption-WingCommand/releases).
-3. Extract it into the game folder, so the DLL lands at
-   `Nuclear Option/BepInEx/plugins/WingCommand/WingCommand.dll`.
-4. Launch the game. `BepInEx/LogOutput.log` should contain a line like
+2. From the [releases page](https://github.com/GrabowMar/NuclearOption-WingCommand/releases),
+   take either asset:
+   - **`WingCommand.dll`** — drop it straight into `Nuclear Option/BepInEx/plugins/`. This
+     is also the file to give NOMM if you are adding the mod from a file rather than from
+     its list; NOMM installs plugins as bare DLLs, not archives.
+   - **`WingCommand-x.y.z.zip`** — extract at the Nuclear Option root. It mirrors the game
+     folder, so the DLL lands in `BepInEx/plugins/WingCommand/` with the readme and licence
+     beside it.
+3. Launch the game. `BepInEx/LogOutput.log` should contain a line like
    `WingCommand 0.6.0 loaded.` followed by `Harmony patched 8 method(s)`.
 
 Settings live in `BepInEx/config/com.marci.wingcommand.cfg` and can be edited in-game with
@@ -470,10 +474,13 @@ pwsh build/package.ps1
 
 `package.ps1` reads the version out of the built assembly rather than taking it as an
 argument — NOMNOM rejects a manifest whose version disagrees with the DLL, and typing it in
-two places is how they come to disagree. It prints the sha256 and the exact manifest fields
-to paste.
+two places is how they come to disagree. It prints both assets' sha256 and the exact
+manifest fields to paste.
 
-Then tag and publish a GitHub release with the archive attached:
+Then tag and publish a GitHub release, attaching **`WingCommand.dll` first** and the zip
+second. The order matters: NOMNOM treats the first release asset as the package, and NOMM
+installs plugins as bare DLLs — every NOMM-managed plugin ships one, not an archive. The
+zip is there for people installing by hand.
 
 ```bash
 git tag -a v0.6.0 -m "WingCommand 0.6.0" && git push --tags
