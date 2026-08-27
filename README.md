@@ -14,7 +14,8 @@ Assign friendly AI aircraft to your wing. They fly a formation slot on you and h
 station, then break off and fight when you tell them to — or automatically, when you come
 under missile attack.
 
-Formation shapes: `EchelonRight`, `EchelonLeft`, `LineAbreast`, `Trail`, `CombatSpread`.
+Formation shapes: `EchelonRight`, `EchelonLeft`, `LineAbreast`, `Trail`, `CombatSpread`,
+`FingerFour`, `Vic`, `Diamond`, `Ladder`, `Wall`.
 
 ### Orders
 | Order | Effect |
@@ -59,8 +60,6 @@ proximity indicator and has nothing to do with your wing, which is why the HUD n
 own designation rather than leaving it to be misread.
 
 ### Map layer
-- **Wing overlay (fallback)** — the same controls as an overlay on the maximised map. Only
-  used if the WMC screen cannot be installed; off by default.
 - **Aircraft tasking** — select friendly AI aircraft on the maximised map and right-click
   to assign them to your wing. Vanilla ignores this gesture for aircraft, because
   `Aircraft` does not implement `ICommandable` (only ground vehicles, ships and missiles
@@ -68,7 +67,7 @@ own designation rather than leaving it to be misread.
   selected icon is drawn white by the game's own highlight, which would hide the wing
   colour on exactly the aircraft that just earned it.
 - **Squad groups** — `Ctrl`+`1`..`4` stores the current map selection, `1`..`4` restores
-  it, and the panel exposes the same thing as buttons. Works for ground and naval units
+  it. Works for ground and naval units
   too, so you can re-issue vanilla move orders to a saved group without hand-picking it
   every time.
 
@@ -201,7 +200,7 @@ The interesting part is that almost none of this needed patching.
 - **Menu icons ship as code, not files.** `IconFactory` rasterises each glyph into a
   texture at runtime with a small anti-aliased software renderer, so the mod stays a
   single DLL with no asset bundle. Glyphs are drawn white and tinted by the stock menu, so
-  they inherit hover and caution colours for free. The five formation icons call the real
+  they inherit hover and caution colours for free. The formation icons call the real
   `FormationSolver` to place their marks, so the picker draws the actual geometry it
   selects and cannot drift out of sync with the flight code.
 - **Wing symbology** postfixes `MapIcon.UpdateColor` and the private

@@ -95,27 +95,6 @@ namespace WingCommand
             Toast("Group " + (index + 1) + ": " + groups[index].Count + " unit(s) selected");
         }
 
-        // Entry points for the map panel's buttons.
-
-        public int GroupSize(int index)
-        {
-            if (index < 0 || index >= GroupCount) return 0;
-            groups[index].RemoveAll(u => u == null || u.disabled);
-            return groups[index].Count;
-        }
-
-        public void StoreGroupExternal(int index)
-        {
-            DynamicMap map = SceneSingleton<DynamicMap>.i;
-            if (map != null && index >= 0 && index < GroupCount) StoreGroup(map, index);
-        }
-
-        public void RecallGroupExternal(int index)
-        {
-            DynamicMap map = SceneSingleton<DynamicMap>.i;
-            if (map != null && index >= 0 && index < GroupCount) RecallGroup(map, index);
-        }
-
         private static void ClearSelection(DynamicMap map)
         {
             // Copy first: DeselectIcon may mutate the live list.
@@ -133,8 +112,6 @@ namespace WingCommand
         {
             if (!Input.GetMouseButtonDown(1)) return;
 
-            // A click on the wing panel must not also drop a map order underneath it.
-            if (WingMapPanel.MouseOverPanel) return;
             if (map.selectedIcons.Count == 0) return;
 
             // Only act when the primary selection is an aircraft. Anything else is a

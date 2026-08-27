@@ -15,7 +15,6 @@ namespace WingCommand
         internal readonly WingRegistry Wing = new WingRegistry();
         private MapCommandLayer mapLayer;
 
-        internal MapCommandLayer MapLayer => mapLayer;
 
         // Radial menu state
         private bool radialOpen;
@@ -55,6 +54,7 @@ namespace WingCommand
                 PlayerFireWatcher.Reset();
                 WingComms.Reset();
                 WingMarkers.Reset();
+                AiCombatTweak.Reset();
                 Wing.Clear();
                 return;
             }
@@ -243,10 +243,9 @@ namespace WingCommand
 
                 case WingAction.CycleShape:
                 {
-                    var values = (FormationShape[])Enum.GetValues(typeof(FormationShape));
-                    int next = (Array.IndexOf(values, Plugin.Config2.Shape.Value) + 1) % values.Length;
-                    Plugin.Config2.Shape.Value = values[next];
-                    Toast("Formation: " + values[next]);
+                    FormationShape next = FormationShapes.Cycle(Plugin.Config2.Shape.Value, 1);
+                    Plugin.Config2.Shape.Value = next;
+                    Toast("Formation: " + FormationShapes.Pretty(next));
                     break;
                 }
 
@@ -387,9 +386,8 @@ namespace WingCommand
         {
             if (!InPlayableState()) return;
 
-            if (!WmcScreen.Installed) WingMapPanel.Draw(Wing, mapLayer);
-
-            // The compact in-flight readout is redundant while the map panel is up.
+            // The readout hides itself while the tactical map is up, where it would sit
+            // on top of the map rather than beside the HUD it belongs to.
             if (Plugin.Config2.ShowHud.Value && Wing.Count > 0 && !DynamicMap.mapMaximized)
                 WingHud.DrawStatusPanel(Wing);
 

@@ -15,19 +15,9 @@ namespace WingCommand
     {
         private static Pilot watched;
         private static float windowUntil;
-        private static Unit lastPlayerTarget;
 
         /// <summary>True while the player is actively attacking ground targets.</summary>
         public static bool GroundAttackOpen => Time.timeSinceLevelLoad < windowUntil;
-
-        /// <summary>
-        /// The player's most recent ground target, so wingmen can concentrate fire rather
-        /// than each picking something different. May be null.
-        /// </summary>
-        public static Unit PreferredTarget =>
-            GroundAttackOpen && lastPlayerTarget != null && !lastPlayerTarget.disabled
-                ? lastPlayerTarget
-                : null;
 
         /// <summary>Rebind to the player's current aircraft. Cheap enough to call each frame.</summary>
         public static void Track(Aircraft playerAircraft)
@@ -45,7 +35,6 @@ namespace WingCommand
             if (watched != null) watched.onFire -= OnPlayerFired;
             watched = null;
             windowUntil = 0f;
-            lastPlayerTarget = null;
         }
 
         private static void OnPlayerFired()
@@ -62,7 +51,6 @@ namespace WingCommand
             if (role.antiSurface <= role.antiAir) return;
 
             windowUntil = Time.timeSinceLevelLoad + Plugin.Config2.MirrorWindowSeconds.Value;
-            lastPlayerTarget = watched.GetPrimaryTarget();
 
             if (Plugin.Config2.VerboseLogging.Value)
             {

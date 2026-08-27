@@ -30,6 +30,16 @@ namespace WingCommand
         private static readonly Dictionary<Aircraft, Baseline> baselines =
             new Dictionary<Aircraft, Baseline>();
 
+        /// <summary>
+        /// Drop the captured baselines when a mission ends.
+        ///
+        /// PruneDead already caps the dictionary, so this is not a leak fix — it is here
+        /// so every static that survives a mission is cleared in the same place, rather
+        /// than this one quietly holding references to destroyed aircraft until the cap
+        /// happens to be reached.
+        /// </summary>
+        public static void Reset() => baselines.Clear();
+
         [HarmonyPostfix]
         private static void Postfix(AIPilotCombatModes __instance, Pilot pilot)
         {

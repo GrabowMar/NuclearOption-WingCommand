@@ -171,7 +171,7 @@ namespace WingCommand
         /// </summary>
         private static bool TryParseShape(string name, out FormationShape shape)
         {
-            foreach (FormationShape candidate in (FormationShape[])Enum.GetValues(typeof(FormationShape)))
+            foreach (FormationShape candidate in FormationShapes.All)
             {
                 if (candidate.ToString() == name)
                 {

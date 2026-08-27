@@ -128,13 +128,17 @@ namespace WingCommand
             member.SlotError = distance;
             CheckAbleToKeepUp(leader, distance);
 
-            // Rotary flight is a separate model, not a variation on this one. See
-            // RotaryFormation: helicopters hold a point when the leader is slow and fly a
-            // heading when it is cruising, because the two rotary control paths behave
-            // nothing like the fixed-wing one.
+            // Two flight models, chosen by autopilot type, each in its own file. They are
+            // separate because AutopilotPlane and AutopilotHelo override different AutoAim
+            // overloads and answer to completely different commands — calling the wrong one
+            // produces no control input at all. Everything above this point (slot geometry,
+            // avoidance, diagnostics) is shared; everything below is not.
             if (aircraft.autopilot is AutopilotPlane)
             {
-                FlyFixedWing(leader, slotPos, toSlot, distance);
+                FixedWingFormation.Fly(
+                    aircraft, leader, controlInputs, member.Slot,
+                    slotPos, toSlot, distance,
+                    new FixedWingFormation.Rejoin(rejoinHoldUntil, rejoinBoostUntil));
             }
             else
             {
@@ -214,170 +218,6 @@ namespace WingCommand
         /// stay wings-level through a banked turn are one of the clearest giveaways that a
         /// formation is being simulated rather than flown.
         /// </summary>
-        private void MatchLeaderBank(Aircraft leader, float distance)
-        {
-            if (!Plugin.Config2.BankMatching.Value) return;
-            if (distance > Plugin.Config2.CaptureDistance.Value) return;
-
-            // Bank angle about each aircraft's own forward axis.
-            float leaderBank = Vector3.SignedAngle(
-                Vector3.up, leader.transform.up, leader.transform.forward);
-            float myBank = Vector3.SignedAngle(
-                Vector3.up, aircraft.transform.up, aircraft.transform.forward);
-
-            float error = Mathf.DeltaAngle(myBank, leaderBank);
-
-            // Roll input is a *rate* command, not an angle. Driving it from angle error
-            // alone is an undamped integrator: the aircraft rolls, sails past the leader's
-            // bank, keeps rolling, and ends up inverted — which is how wingmen were flying
-            // themselves into the ground at full speed. The roll-rate term is what closes
-            // the loop.
-            float rollRate = Vector3.Dot(aircraft.rb.angularVelocity, aircraft.transform.forward);
-            float command = Mathf.Clamp(error * 0.02f - rollRate * 0.5f, -1f, 1f);
-
-            // Blend rather than override: the autopilot is still flying the aircraft, and
-            // fighting it outright makes wingmen wallow.
-            controlInputs.roll = Mathf.Lerp(
-                controlInputs.roll, command, Plugin.Config2.BankMatchStrength.Value);
-
-            aircraft.FilterInputs();
-        }
-
-        private void FlyFixedWing(Aircraft leader, GlobalPosition slotPos, Vector3 toSlot, float distance)
-        {
-            AircraftParameters p = aircraft.GetAircraftParameters();
-            float leaderSpeed = Mathf.Max(leader.speed, 1f);
-
-            // --- Turn compensation: fly concentric arcs, not a swinging offset. ---
-            // When the leader turns at yaw rate w, every slot orbits the same centre, so a
-            // wingman at signed lateral offset d must fly at v_leader + w*d — the outside
-            // one covers more ground, the inside one less. Without this the slot sweeps
-            // around the leader and wingmen get whipped through every turn.
-            float yawRate = leader.rb != null
-                ? Vector3.Dot(leader.rb.angularVelocity, Vector3.up)
-                : 0f;
-            float lateral = FormationSolver.SlotLateral(
-                member.Slot, Plugin.Config2.Shape.Value, Plugin.Config2.SlotSpacing.Value);
-            float turnCompensation = yawRate * lateral;
-
-            // --- Arrival with rate damping. ---
-            // Position error alone gives nothing to arrest closure with, so the gain has to
-            // stay timid or the wingman sails past the slot. Formation technique is to pull
-            // power *early* and let inertia carry you in, because throttle response lags.
-            // Subtracting the closing rate does exactly that, and is what makes a higher
-            // positional gain safe rather than merely twitchy.
-            Vector3 leaderForward = leader.transform.forward;
-            float alongTrack = Vector3.Dot(toSlot, leaderForward);
-            float closingRate = Vector3.Dot(aircraft.rb.velocity - leader.rb.velocity, leaderForward);
-
-            float slowingRadius = Mathf.Max(Plugin.Config2.SlowingRadius.Value, 1f);
-            float closure = Mathf.Clamp(alongTrack, -slowingRadius, slowingRadius) / slowingRadius;
-            closure *= leaderSpeed * Plugin.Config2.ClosureAuthority.Value;
-            closure -= closingRate * Plugin.Config2.ClosureDamping.Value;
-
-            // While waiting its turn in a staggered rejoin, a wingman matches the leader's
-            // speed instead of closing, so it holds its place in the queue rather than
-            // arriving alongside everyone else.
-            if (Time.timeSinceLevelLoad < rejoinHoldUntil)
-                closure = Mathf.Min(closure, 0f);
-
-            float desiredSpeed = leaderSpeed + turnCompensation + closure;
-            desiredSpeed = Mathf.Clamp(desiredSpeed, p.landingSpeed * 1.2f,
-                                       Mathf.Max(p.maxSpeed, leaderSpeed * 1.5f));
-
-            // Bias the baseline below cruise so there is usable headroom in both
-            // directions. Sitting at cruiseThrottle (typically 0.9) left roughly 0.1 of
-            // range above against 0.9 below, so any demand to accelerate saturated
-            // immediately and the wingman had no fine control at all while catching up.
-            float baseline = p.cruiseThrottle * Plugin.Config2.ThrottleBaseline.Value;
-            float speedError = desiredSpeed - aircraft.speed;
-            float throttle = baseline + speedError * Plugin.Config2.ThrottleGain.Value;
-
-            // Full throttle only when genuinely out of position, and never once inside the
-            // capture radius.
-            //
-            // The rejoin boost used to run for a fixed eight seconds regardless of distance,
-            // so a wingman spawned a hundred metres from its slot got the same firewalled
-            // throttle as one two kilometres out. It would rocket past the leader and then
-            // have to be dragged back, which is the "turbo and break" behaviour — and jets
-            // decelerate on throttle alone very slowly, so the overshoot was large.
-            bool holding = Time.timeSinceLevelLoad < rejoinHoldUntil;
-            bool outOfPosition = distance > Plugin.Config2.CaptureDistance.Value;
-
-            if (!holding && outOfPosition &&
-                (distance > 1500f || Time.timeSinceLevelLoad < rejoinBoostUntil))
-                throttle = 1f;
-
-            controlInputs.throttle = Mathf.Clamp01(throttle);
-
-            // --- Steering ---
-            // AutoAim is a pursuit controller: it rotates the aircraft's velocity toward
-            // the destination and banks to chase it. Aimed at a point a few tens of metres
-            // away, a small lateral drift swings the commanded direction by tens of
-            // degrees — which is why wingmen wandered and rolled constantly.
-            //
-            // So chase the slot only while closing on it. Once in place, fly *parallel* to
-            // the leader and aim at a distant point displaced by a bounded correction: a
-            // 200 m correction over a 1200 m look-ahead is under ten degrees of command no
-            // matter how far the wingman drifts, turning station-keeping into small steady
-            // inputs instead of a continuous chase.
-            float capture = Plugin.Config2.CaptureDistance.Value;
-            float bankAllowed;
-            GlobalPosition aimPoint;
-
-            if (distance < capture)
-            {
-                Vector3 leaderVel = leader.rb.velocity;
-                Vector3 ahead = (leaderVel.sqrMagnitude > 1f
-                                    ? leaderVel.normalized
-                                    : leader.transform.forward)
-                                * Plugin.Config2.StationLookAhead.Value;
-
-                // Proportional-only correction overshoots and reverses, which the autopilot
-                // answers with yaw — the slow left-right rocking. Subtracting a term
-                // proportional to drift rate damps it: the correction eases off while
-                // already closing, instead of driving all the way to the slot and back.
-                Vector3 drift = aircraft.rb.velocity - leader.rb.velocity;
-
-                Vector3 correction = distance > Plugin.Config2.StationDeadband.Value
-                    ? Vector3.ClampMagnitude(
-                          toSlot * 2.5f - drift * Plugin.Config2.StationDamping.Value,
-                          Plugin.Config2.StationMaxCorrection.Value)
-                    : Vector3.zero;
-
-                aimPoint = aircraft.GlobalPosition() + ahead + correction;
-
-                // Bank authority eases in from settled to pursuit across the capture
-                // radius, so nothing steps at the boundary.
-                bankAllowed = Mathf.Lerp(Plugin.Config2.StationBank.Value, 140f,
-                                         distance / Mathf.Max(capture, 1f));
-            }
-            else
-            {
-                float leadTime = Mathf.Clamp(distance / Mathf.Max(aircraft.speed, 50f), 0f, 6f);
-                aimPoint = slotPos + leader.rb.velocity * leadTime;
-                bankAllowed = 160f;
-            }
-
-            // effort is read as (effort > 1f || radarAlt < 1f) ? 1f : clamp01(airspeed /
-            // cornerSpeed), so anything at or below 1 behaves identically. Varying it, as
-            // this used to, achieved nothing.
-            const float effort = 1f;
-
-            aircraft.autopilot.AutoAim(
-                destination: aimPoint,
-                aimVelocity: true,
-                ignoreCollisions: false,
-                runwayAlign: false,
-                effort: effort,
-                bankAllowed: bankAllowed,
-                followTerrain: false,
-                altitudeHold: Mathf.Clamp(leader.radarAlt, aircraft.maxRadius, 8000f),
-                targetVelocity: leader.rb.velocity);
-
-            MatchLeaderBank(leader, distance);
-        }
-
         /// <summary>
         /// Apply the wing's rules of engagement from inside the slot.
         ///

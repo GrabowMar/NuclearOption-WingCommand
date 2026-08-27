@@ -17,7 +17,7 @@ namespace WingCommand
     {
         public const string PluginGuid = "com.marci.wingcommand";
         public const string PluginName = "WingCommand";
-        public const string PluginVersion = "0.3.0";
+        public const string PluginVersion = "0.3.1";
 
         internal static Plugin Instance { get; private set; }
         internal static new ManualLogSource Logger { get; private set; }
@@ -202,7 +202,6 @@ namespace WingCommand
         public readonly ConfigEntry<HudCorner> HudCorner;
         public readonly ConfigEntry<bool> MapCommandEnabled;
         public readonly ConfigEntry<bool> UseMfdPanel;
-        public readonly ConfigEntry<bool> ShowMapPanel;
         public readonly ConfigEntry<bool> HighlightWingOnMap;
         public readonly ConfigEntry<bool> HighlightWingOnHud;
         public readonly ConfigEntry<bool> HighlightWingTargets;
@@ -456,9 +455,6 @@ namespace WingCommand
             UseMfdPanel = c.Bind("UI", "UseMfdPanel", true,
                 "Add a WMC screen to the cockpit MFD bezel, alongside BDF/MAP/HUD. This is " +
                 "the primary wing interface; the map overlay below is only a fallback.");
-            ShowMapPanel = c.Bind("UI", "ShowMapOverlayPanel", false,
-                "Draw the standalone wing overlay on the maximised map. Redundant while the " +
-                "WMC MFD screen is working, so off by default.");
             HighlightWingOnMap = c.Bind("UI", "HighlightWingOnMap", true,
                 "Tint your wingmen's map icons so they stand out from the rest of the friendly force.");
             HighlightWingOnHud = c.Bind("UI", "HighlightWingOnHud", true,

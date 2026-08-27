@@ -180,7 +180,6 @@ namespace WingCommand
                 removed++;
             }
 
-            if (removed > 0) Renumber();
         }
 
         /// <summary>
@@ -253,20 +252,6 @@ namespace WingCommand
             }
 
             return best == null ? null : Add(best);
-        }
-
-        public IEnumerable<Aircraft> EligibleCandidates()
-        {
-            if (Leader == null) yield break;
-            float range = Plugin.Config2.RecruitRange.Value;
-            float rangeSq = range * range;
-
-            foreach (Aircraft a in UnitRegistry.allAircraft)
-            {
-                if (!IsEligible(a)) continue;
-                if (FastMath.SquareDistance(a.GlobalPosition(), Leader.GlobalPosition()) <= rangeSq)
-                    yield return a;
-            }
         }
 
         private bool IsEligible(Aircraft candidate)
@@ -357,7 +342,6 @@ namespace WingCommand
             Aircraft released = member.Aircraft;
             member.ReleaseToCombat(reason);
             members.Remove(member);
-            Renumber();
             WingMarkers.Repaint(released);
         }
 
@@ -384,16 +368,6 @@ namespace WingCommand
         }
 
         /// <summary>
-        /// Deliberately does not reassign slots. Renumbering after a loss made every
-        /// surviving wingman physically swap position in mid-air to close the gap, which
-        /// looks far worse than simply leaving a hole in the formation. New joiners fill
-        /// the gap through NearestFreeSlot instead.
-        /// </summary>
-        private void Renumber()
-        {
-        }
-
-        /// <summary>
         /// Pick the free slot closest to a joining aircraft, rather than simply the next
         /// number.
         ///
@@ -402,6 +376,11 @@ namespace WingCommand
         /// scrabbling over each other to reach the formation" that formation-motion
         /// references warn about. Choosing by proximity shortens every rejoin and removes
         /// most crossings outright.
+        ///
+        /// Slots are never renumbered after a loss, either: closing the gap would make
+        /// every surviving wingman physically swap position in mid-air, which looks far
+        /// worse than simply flying with a hole in the formation. The next joiner fills
+        /// that hole here instead.
         /// </summary>
         private int NearestFreeSlot(Aircraft joining)
         {

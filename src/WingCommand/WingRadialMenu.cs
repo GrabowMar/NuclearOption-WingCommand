@@ -149,13 +149,13 @@ namespace WingCommand
             };
 
             var shapes = new List<WingMenuAction>();
-            foreach (FormationShape shape in (FormationShape[])Enum.GetValues(typeof(FormationShape)))
+            foreach (FormationShape shape in FormationShapes.All)
             {
                 FormationShape captured = shape;
-                WingMenuAction entry = WingMenuAction.Create(Pretty(captured), _ =>
+                WingMenuAction entry = WingMenuAction.Create(FormationShapes.Pretty(captured), _ =>
                 {
                     Plugin.Config2.Shape.Value = captured;
-                    Mgr?.Toast("Formation: " + Pretty(captured));
+                    Mgr?.Toast("Formation: " + FormationShapes.Pretty(captured));
                     RestoreStockWheel();
                 });
                 shapes.Add(Icon(entry, "shape_" + captured));
@@ -218,18 +218,6 @@ namespace WingCommand
             return Icon(entry, iconKey);
         }
 
-        private static string Pretty(FormationShape shape)
-        {
-            switch (shape)
-            {
-                case FormationShape.EchelonRight: return "Echelon Right";
-                case FormationShape.EchelonLeft:  return "Echelon Left";
-                case FormationShape.LineAbreast:  return "Line Abreast";
-                case FormationShape.Trail:        return "Trail";
-                case FormationShape.CombatSpread: return "Combat Spread";
-                default: return shape.ToString();
-            }
-        }
 
         // ------------------------------------------------------------------ swapping
 

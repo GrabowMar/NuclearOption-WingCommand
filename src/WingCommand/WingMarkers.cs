@@ -162,18 +162,6 @@ namespace WingCommand
             WingHudTint.Refresh(unit);
         }
 
-        /// <summary>Repaint the whole wing, plus one unit that may have just left it.</summary>
-        public static void RepaintAll(WingRegistry wing, Unit alsoRefresh = null)
-        {
-            if (wing != null)
-            {
-                foreach (WingMember m in wing.Members) Repaint(m.Aircraft);
-            }
-
-            for (int i = 0; i < engaged.Count; i++) Repaint(engaged[i]);
-
-            if (alsoRefresh != null) Repaint(alsoRefresh);
-        }
 
         // ------------------------------------------------------------------- colours
 

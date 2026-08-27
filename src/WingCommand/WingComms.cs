@@ -47,11 +47,6 @@ namespace WingCommand
         }
 
         /// <summary>A call from the flight as a whole, in response to a player order.</summary>
-        public static void SayWing(Call call, string detail = null)
-        {
-            if (!Plugin.Config2.RadioChatter.Value) return;
-            Broadcast("Flight, " + Phrase(call, detail));
-        }
 
         public static void Reset() => lastSpoken.Clear();
 

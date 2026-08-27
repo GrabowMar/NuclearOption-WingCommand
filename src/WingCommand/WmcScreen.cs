@@ -44,8 +44,6 @@ namespace WingCommand
         private static float nextRefresh;
         private static bool gaveUp;
 
-        public static bool Installed => screen != null;
-
         // ------------------------------------------------------------------- lifecycle
 
         /// <summary>
@@ -164,7 +162,7 @@ namespace WingCommand
             screen = null;
             Plugin.Logger.LogWarning(
                 "Could not install the WMC MFD screen (" + reason +
-                "). Falling back to the map overlay panel.");
+                "). The radial menu and hotkeys still work; there is no fallback panel.");
         }
 
         /// <summary>
@@ -420,7 +418,7 @@ namespace WingCommand
         private static void Refresh(WingRegistry wing)
         {
             if (shapeLabel != null)
-                shapeLabel.text = Pretty(Plugin.Config2.Shape.Value);
+                shapeLabel.text = FormationShapes.Pretty(Plugin.Config2.Shape.Value);
 
             if (summaryLabel != null)
                 summaryLabel.text = wing.Count + " of " + Plugin.Config2.MaxWingSize.Value + " assigned";
@@ -491,7 +489,7 @@ namespace WingCommand
                 if (!go.activeSelf) go.SetActive(true);
 
                 slot.text = m.Slot.ToString();
-                name.text = Truncate(m.Name, 16);
+                name.text = UiTheme.Truncate(m.Name, 16);
                 order.text = ShortOrder(m);
 
                 reserves.text = Mathf.RoundToInt(m.Fuel * 100f) + "%  " + m.Ammo;
@@ -534,9 +532,7 @@ namespace WingCommand
 
         private static void CycleShape(int direction)
         {
-            var values = (FormationShape[])Enum.GetValues(typeof(FormationShape));
-            int index = Array.IndexOf(values, Plugin.Config2.Shape.Value);
-            Plugin.Config2.Shape.Value = values[(index + direction + values.Length) % values.Length];
+            Plugin.Config2.Shape.Value = FormationShapes.Cycle(Plugin.Config2.Shape.Value, direction);
         }
 
         private static TMP_Text Label(RectTransform parent, string text, Rect rect,
@@ -727,22 +723,14 @@ namespace WingCommand
                 // ---------------------------------------------------------------------- colours
 
         /// <summary>The stock "on" colour: what HUD OPTIONS uses for an active control.</summary>
-        internal static Color Green()
-        {
-            try { return ThemeManager.Active.ColorTheme.AllClear; }
-            catch { return new Color(0.30f, 1f, 0.35f); }
-        }
+        internal static Color Green() => UiTheme.Green;
 
         /// <summary>The stock "off" colour.</summary>
         internal static Color Grey() => Color.grey;
 
         private static Color Accent() => Green();
 
-        private static Color Friendly()
-        {
-            try { return ThemeManager.Active.ColorTheme.MapIconFriendly; }
-            catch { return new Color(0.45f, 0.95f, 0.55f); }
-        }
+        private static Color Friendly() => UiTheme.Friendly;
 
         private static Color Dim() => Grey();
 
@@ -752,18 +740,6 @@ namespace WingCommand
 
         // ----------------------------------------------------------------------- text
 
-        private static string Pretty(FormationShape shape)
-        {
-            switch (shape)
-            {
-                case FormationShape.EchelonRight: return "Echelon Right";
-                case FormationShape.EchelonLeft: return "Echelon Left";
-                case FormationShape.LineAbreast: return "Line Abreast";
-                case FormationShape.Trail: return "Trail";
-                case FormationShape.CombatSpread: return "Combat Spread";
-                default: return shape.ToString();
-            }
-        }
 
         /// <summary>
         /// The order column, which names the target when there is one.
@@ -776,7 +752,7 @@ namespace WingCommand
         {
             Unit assigned = m.AssignedTarget;
             if (assigned != null && !assigned.disabled)
-                return Truncate(assigned.definition != null ? assigned.definition.code : assigned.unitName, 8);
+                return UiTheme.Truncate(assigned.definition != null ? assigned.definition.code : assigned.unitName, 8);
 
             switch (m.Order)
             {
@@ -785,11 +761,6 @@ namespace WingCommand
                 case WingOrder.ReturnToBase: return "RTB";
                 default: return m.Order.ToString();
             }
-        }
-        private static string Truncate(string s, int max)
-        {
-            if (string.IsNullOrEmpty(s)) return "";
-            return s.Length <= max ? s : s.Substring(0, max);
         }
     }
 

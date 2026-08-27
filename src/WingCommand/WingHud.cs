@@ -16,8 +16,7 @@ namespace WingCommand
         private const float SliceWidth = 108f;
         private const float SliceHeight = 54f;
 
-        private static Texture2D pixel;
-        private static GUIStyle panelStyle;
+        private static bool stylesReady;
         private static GUIStyle labelStyle;
         private static GUIStyle sliceStyle;
         private static GUIStyle sliceHotStyle;
@@ -31,14 +30,8 @@ namespace WingCommand
 
         private static void EnsureStyles()
         {
-            if (pixel != null) return;
-
-            pixel = new Texture2D(1, 1);
-            pixel.SetPixel(0, 0, Color.white);
-            pixel.Apply();
-
-            panelStyle = new GUIStyle(GUI.skin.box) { padding = new RectOffset(10, 10, 8, 8) };
-            panelStyle.normal.background = Solid(Panel);
+            if (stylesReady) return;
+            stylesReady = true;
 
             labelStyle = new GUIStyle(GUI.skin.label)
             {
@@ -46,10 +39,10 @@ namespace WingCommand
                 richText = false,
                 wordWrap = false,
             };
-            labelStyle.normal.textColor = HudGreen();
+            labelStyle.normal.textColor = UiTheme.Green;
 
             headerStyle = new GUIStyle(labelStyle) { fontStyle = FontStyle.Bold };
-            headerStyle.normal.textColor = HudGreen();
+            headerStyle.normal.textColor = UiTheme.Green;
 
             sliceStyle = new GUIStyle(GUI.skin.box)
             {
@@ -71,13 +64,6 @@ namespace WingCommand
             };
             toastStyle.normal.background = Solid(Panel);
             toastStyle.normal.textColor = Accent;
-        }
-
-        /// <summary>The theme colour the game uses for friendly symbology.</summary>
-        private static Color HudGreen()
-        {
-            try { return NuclearOption.UIStyleSystem.ThemeManager.Active.ColorTheme.AllClear; }
-            catch { return new Color(0.30f, 1f, 0.35f); }
         }
 
         private static Texture2D Solid(Color c)
@@ -154,7 +140,7 @@ namespace WingCommand
             {
                 cachedRows.Add(string.Format(
                     "{0}  {1,-14} {2,-9} {3:F0} m",
-                    m.Slot, Truncate(m.Name, 14), OrderText(m), m.SlotError));
+                    m.Slot, UiTheme.Truncate(m.Name, 14), OrderText(m), m.SlotError));
             }
         }
 
@@ -198,15 +184,10 @@ namespace WingCommand
             if (assigned != null && !assigned.disabled)
             {
                 string code = assigned.definition != null ? assigned.definition.code : assigned.unitName;
-                return Truncate(code, 9);
+                return UiTheme.Truncate(code, 9);
             }
             return m.Order.ToString();
         }
 
-        private static string Truncate(string s, int max)
-        {
-            if (string.IsNullOrEmpty(s)) return "";
-            return s.Length <= max ? s : s.Substring(0, max);
-        }
     }
 }

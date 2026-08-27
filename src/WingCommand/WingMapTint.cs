@@ -1,6 +1,5 @@
 using System;
 using HarmonyLib;
-using NuclearOption.UIStyleSystem;
 using UnityEngine;
 
 namespace WingCommand
@@ -38,16 +37,6 @@ namespace WingCommand
             {
                 if (Plugin.Config2.VerboseLogging.Value)
                     Plugin.Logger.LogWarning("Map icon refresh failed: " + e.Message);
-            }
-        }
-
-        /// <summary>A theme-matched accent, used by the map panel so it does not clash.</summary>
-        public static Color FriendlyThemeColor
-        {
-            get
-            {
-                try { return ThemeManager.Active.ColorTheme.MapIconFriendly; }
-                catch { return new Color(0.45f, 0.95f, 0.55f); }
             }
         }
 
