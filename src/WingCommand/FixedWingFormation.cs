@@ -37,6 +37,17 @@ namespace WingCommand
         /// </summary>
         private const float FullAuthority = 2f;
 
+        /// <summary>
+        /// Seconds of flight used as the steering baseline. This is the loop gain: the
+        /// aircraft's velocity is rotated towards a point this far ahead, so a short
+        /// baseline makes a high-gain loop that oscillates. Six seconds is about 1200 m at
+        /// jet cruise.
+        /// </summary>
+        private const float LookAheadSeconds = 6f;
+
+        /// <summary>Shortest baseline, for aircraft slow enough that seconds alone is not enough.</summary>
+        private const float MinLookAhead = 800f;
+
         /// <summary>Correction gain on slot error, before <c>Aggression</c> scales it.</summary>
         private const float PositionGain = 2.5f;
 
@@ -180,33 +191,48 @@ namespace WingCommand
                                   float outOfPosition)
         {
             // AutoAim is a pursuit controller: it rotates the aircraft's velocity toward the
-            // destination and banks to chase it. Aimed at a point a few tens of metres away,
-            // a small lateral drift swings the commanded direction by tens of degrees —
-            // which is why wingmen wandered and rolled constantly. So the station-keeping
-            // aim point is built at a distance chosen to produce exactly the command angle
-            // asked for, and no more.
+            // destination and banks to chase it, so the distance to that destination sets the
+            // gain of the whole loop. Aim a few hundred metres ahead and a jet covers the gap
+            // in a second, which makes it a high-gain loop that oscillates; aim far ahead and
+            // the same lateral error becomes a small, steady command.
+            //
+            // The baseline is therefore time, not distance: a fixed number of seconds of
+            // flight, so it scales with speed instead of meaning something different for a
+            // fast jet and a slow one. Deriving it from the correction instead — which is what
+            // the first version of this did — let it collapse to a few hundred metres near the
+            // slot and put the wobble straight back.
             Vector3 baseDir = leaderVel.sqrMagnitude > 1f
                 ? leaderVel.normalized
                 : leader.transform.forward;
 
-            // Correction in metres: proportional to slot error, damped by drift rate.
-            // Proportional-only overshoots and reverses, which the autopilot answers with
-            // yaw — the slow left-right rocking.
-            Vector3 correction = (toSlot * PositionGain * aggression)
-                                 - (drift * DriftDamping * damping);
+            float lookAhead = Mathf.Max(aircraft.speed * LookAheadSeconds, MinLookAhead);
+
+            // Only cross-track error steers. The along-track part is throttle's job, and
+            // feeding it in here pushed the aim point forwards and backwards along the
+            // direction of travel to no purpose, while inflating the correction that the
+            // angle limit is measured against — so a wingman sitting behind its slot spent
+            // its whole steering allowance on an error steering cannot fix.
+            Vector3 across = toSlot - baseDir * Vector3.Dot(toSlot, baseDir);
+            Vector3 acrossDrift = drift - baseDir * Vector3.Dot(drift, baseDir);
+
+            // Proportional-only correction overshoots and reverses, which the autopilot
+            // answers with yaw — the slow left-right rocking. The rate term damps it.
+            Vector3 correction = (across * PositionGain * aggression)
+                                 - (acrossDrift * DriftDamping * damping);
 
             // A deadband proportional to spacing, so it scales with the formation instead of
             // being an absolute that means something different for helicopters and jets.
             float deadband = Plugin.Config2.SlotSpacing.Value * 0.05f;
-            if (distance < deadband) correction = Vector3.zero;
+            if (across.magnitude < deadband) correction = Vector3.zero;
 
-            // The baseline distance is derived from the correction, not configured: setting
-            // L = |correction| / tan(maxAngle) makes the commanded angle exactly maxAngle
-            // when the correction saturates, and gentler when it does not. One configured
-            // angle replaces the two distances that used to imply it.
+            // CommandAngle is the quantity being limited, and it is limited where it is
+            // produced: over a baseline this long, a correction of baseline*tan(angle) is
+            // exactly that many degrees of command. One configured angle, applied honestly,
+            // and at cruise it allows roughly 2.5 times the correction the old fixed 220 m
+            // clamp did.
             float maxAngle = Mathf.Clamp(Plugin.Config2.CommandAngle.Value, 1f, 80f);
-            float tan = Mathf.Tan(maxAngle * Mathf.Deg2Rad);
-            float lookAhead = Mathf.Max(correction.magnitude / Mathf.Max(tan, 0.01f), 300f);
+            float maxCorrection = lookAhead * Mathf.Tan(maxAngle * Mathf.Deg2Rad);
+            correction = Vector3.ClampMagnitude(correction, maxCorrection);
 
             GlobalPosition stationAim = aircraft.GlobalPosition() + baseDir * lookAhead + correction;
 
@@ -223,6 +249,7 @@ namespace WingCommand
                                            Plugin.Config2.PursuitBankDegrees.Value,
                                            outOfPosition);
 
+            Report(aircraft, distance, correction.magnitude, maxCorrection, lookAhead);
             aircraft.autopilot.AutoAim(
                 destination: aimPoint,
                 aimVelocity: true,
@@ -283,6 +310,32 @@ namespace WingCommand
 
             aircraft.FilterInputs();
         }
+
+        /// <summary>
+        /// Periodic station-keeping numbers, the fixed-wing equivalent of the [Rotary]
+        /// line.
+        ///
+        /// Its absence is why the last wobble report had to be diagnosed from arithmetic:
+        /// the rotary path had a diagnostic and the fixed-wing path did not. Saturation is
+        /// the thing to watch — a wingman pinned at its command limit is one that cannot
+        /// correct any harder no matter how far out it is.
+        /// </summary>
+        private static void Report(Aircraft aircraft, float distance, float correction,
+                                   float maxCorrection, float lookAhead)
+        {
+            if (!Plugin.Config2.VerboseLogging.Value) return;
+            if (Time.timeSinceLevelLoad - lastReport < 5f) return;
+            lastReport = Time.timeSinceLevelLoad;
+
+            bool saturated = correction >= maxCorrection * 0.99f;
+            Plugin.Logger.LogInfo(
+                $"[Formation] {aircraft.unitName}: error {distance:F0} m, " +
+                $"correction {correction:F0}/{maxCorrection:F0} m{(saturated ? " (SATURATED)" : "")}, " +
+                $"baseline {lookAhead:F0} m, speed {aircraft.speed:F0} m/s, " +
+                $"bank {Vector3.SignedAngle(Vector3.up, aircraft.transform.up, aircraft.transform.forward):F0} deg");
+        }
+
+        private static float lastReport;
 
         /// <summary>
         /// Say so, once, when an interlock fires. If wallowing is ever reported again this
