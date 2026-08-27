@@ -18,6 +18,7 @@ namespace WingCommand
         private readonly FallBackState fallBackState;
         private readonly OrbitState orbitState;
         private readonly LandInPlaceState landState;
+        private readonly AttackRunState attackState;
 
         /// <summary>Flying back to the wing while a standing Engage order is still in force.</summary>
         private bool recalled;
@@ -34,6 +35,7 @@ namespace WingCommand
             fallBackState = new FallBackState(this);
             orbitState = new OrbitState(this);
             landState = new LandInPlaceState(this);
+            attackState = new AttackRunState(this);
             joinedAt = Time.timeSinceLevelLoad;
         }
 
@@ -99,6 +101,15 @@ namespace WingCommand
                 case WingOrder.LandHere:
                     Pilot.SwitchState(landState);
                     break;
+
+                case WingOrder.Attack:
+                    // Reached only if something re-applies a standing attack order.
+                    // AttackTarget is the normal entry point and sets the target first.
+                    if (AssignedTarget != null && !AssignedTarget.disabled)
+                        Pilot.SwitchState(attackState);
+                    else
+                        Pilot.SwitchState(formationState);
+                    break;
             }
 
             if (Plugin.Config2.VerboseLogging.Value)
@@ -162,23 +173,27 @@ namespace WingCommand
             }
         }
 
-        /// <summary>Order this member onto a specific target.</summary>
+        /// <summary>
+        /// Order this member onto a specific target.
+        ///
+        /// An order to attack now flies an attack. It used to set AssignedTarget and hope,
+        /// which only worked while the wingman happened to be holding station: AssignedTarget
+        /// is read by FormationFlyState, so under an Engage order - where the stock combat AI
+        /// is flying - it was ignored entirely. The Pilot.SetPrimaryTarget call that looked
+        /// like it bridged the gap was dead code; AIPilotCombatModes never reads it.
+        /// </summary>
         public void AttackTarget(Unit target)
         {
             AssignedTarget = target;
             if (target == null) return;
 
-            Pilot.SetPrimaryTarget(target);
+            Order = WingOrder.Attack;
+            recalled = false;
+            OnLeash = false;
 
-            // Aggressive breaks to chase; Defensive shoots from the slot, which is the
-            // whole point of the posture.
-            WingPosture posture = WingCommandManager.Instance?.Wing?.Posture ?? WingPosture.Defensive;
-            if (PostureRules.MayBreakFor(posture, target))
-                BreakToEngage("ordered onto " + target.unitName);
-            else
-                WingComms.Say(this, WingComms.Call.Engaging, target.unitName);
+            WingComms.Say(this, WingComms.Call.Engaging, target.unitName);
+            Pilot.SwitchState(attackState);
         }
-
         public void ClearAssignedTarget() => AssignedTarget = null;
 
         /// <summary>
@@ -260,7 +275,7 @@ namespace WingCommand
         public void CheckLeash()
         {
             if (!Alive) return;
-            if (Order != WingOrder.Engage && !OnLeash) return;
+            if (Order != WingOrder.Engage && Order != WingOrder.Attack && !OnLeash) return;
 
             Aircraft leader = Leader;
             if (leader == null)
@@ -301,9 +316,29 @@ namespace WingCommand
             if (distanceSq > release * release) return;
 
             recalled = false;
+
+            // Resume whatever the standing order actually was. An attack order goes back to
+            // its target rather than to free hunting, which is the difference between "go
+            // and get that" and "go and find something".
+            if (Order == WingOrder.Attack && AssignedTarget != null && !AssignedTarget.disabled)
+            {
+                WingComms.Say(this, WingComms.Call.Engaging, AssignedTarget.unitName);
+                Pilot.SwitchState(attackState);
+                return;
+            }
+
+            if (Order == WingOrder.Attack)
+            {
+                // Target died while we were on our way back.
+                ClearAssignedTarget();
+                Apply(WingOrder.Formation);
+                return;
+            }
+
             WingComms.Say(this, WingComms.Call.Engaging);
             SwitchToCombat();
         }
+
         private void SwitchToCombat()
         {
             if (Pilot == null) return;
@@ -343,5 +378,6 @@ namespace WingCommand
         OrbitHere,
         DeliverCargo,
         LandHere,
+        Attack,
     }
 }

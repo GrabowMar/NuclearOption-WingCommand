@@ -185,6 +185,8 @@ namespace WingCommand
         public readonly ConfigEntry<float> FastDeliverySurcharge;
         public readonly ConfigEntry<float> FastDeliveryDistance;
         public readonly ConfigEntry<float> OverLimitAllowance;
+        public readonly ConfigEntry<bool> IncludeUndeclaredAircraft;
+        public readonly ConfigEntry<float> UndeclaredStock;
 
         // --- Debug ---
         public readonly ConfigEntry<bool> EnableDebugActions;
@@ -436,6 +438,17 @@ namespace WingCommand
                     "mission's own AI aircraft limit. Raising this is the main way to " +
                     "unbalance a mission with this feature.",
                     new AcceptableValueRange<float>(0f, 8f),
+                    new ConfigurationManagerAttributes { IsAdvanced = true }));
+
+            IncludeUndeclaredAircraft = c.Bind("Shop", "IncludeUndeclaredAircraft", true,
+                "Also offer airframes the mission did not stock, from the game's own aircraft " +
+                "registry. This is what makes modded and workshop aircraft purchasable: they " +
+                "are never in a mission's declared supply, so without this they can never " +
+                "appear. They draw on their own small allowance rather than faction stock.");
+            UndeclaredStock = c.Bind("Shop", "UndeclaredStock", 3f,
+                new ConfigDescription(
+                    "How many of each undeclared airframe may be bought per mission.",
+                    new AcceptableValueRange<float>(1f, 20f),
                     new ConfigurationManagerAttributes { IsAdvanced = true }));
 
             RadioChatter = c.Bind("Comms", "RadioChatter", true,

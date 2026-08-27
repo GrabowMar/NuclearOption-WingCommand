@@ -1,3 +1,6 @@
+| **Rejoin Formation** | Wingmen close on their slot and hold station |
+| **Attack My Target** | Wingmen fly an attack run on what you have designated, and return to the wing once it is dead |
+| **Attack My Target** | Wingmen fly an attack run on what you have designated, and return to the wing when it is dead |
 # WingCommand
 
 A BepInEx mod for **Nuclear Option** that lets you command AI aircraft: form a wing, hold
@@ -21,6 +24,7 @@ Formation shapes: `EchelonRight`, `EchelonLeft`, `LineAbreast`, `Trail`, `Combat
 | Order | Effect |
 |---|---|
 | **Rejoin Formation** | Wingmen close on their slot and hold station |
+| **Attack My Target** | Wingmen fly an attack run on what you have designated, and return to the wing once it is dead |
 | **Engage** | Hunt freely, but on a tether — see below |
 | **Cover Me** | Fly formation, but shoot at what is hunting *you* rather than what is nearest to them |
 | **Fall Back** | Emergency break: scatter on separate headings with flares, run for the nearest friendly airbase, hold there |
@@ -63,7 +67,13 @@ The catalogue offers only what the faction has in stock, minus the types the mis
 restricts and the types your rank does not reach — the same two gates the player's own
 aircraft menu applies, so the shop cannot be used to fly around them.
 
-It also hides anything that could not join your formation. Rotary and fixed-wing cannot
+Modded and workshop aircraft are included. A mission declares its faction stock by name,
+so an aircraft it never heard of has no supply entry and would never appear; those are
+taken from the game's own aircraft registry instead and given their own small per-mission
+allowance rather than drawing on faction stock, since inventing supply entries on the
+mission's behalf is not the mod's business. Turn it off with `IncludeUndeclaredAircraft`.
+
+The catalogue also hides anything that could not join your formation. Rotary and fixed-wing cannot
 share a formation, so flying a jet shows you only jets and flying a helicopter shows you
 only helicopters. The list pages with the arrows when the faction has more types in stock
 than fit on one screen.
@@ -267,6 +277,8 @@ in the unit the controller acts in.
 | `WingPriceGrowth` | 1.5 | Compounding price multiplier per wingman already in the formation. |
 | `FastDeliverySurcharge` | 0.25 | Extra fraction charged for delivery straight to your wing. |
 | `OverLimitAllowance` | 1 | How far purchases may push the faction past the mission’s AI aircraft limit. |
+| `IncludeUndeclaredAircraft` | true | Offer aircraft the mission did not stock, which is what makes modded airframes purchasable. |
+| `UndeclaredStock` | 3 | How many of each undeclared airframe may be bought per mission. |
 | `BankMatchBlend` | 0.35 | How much a settled wingman rolls to match your bank. 0 switches it off. |
 | `RotaryHoverSpeed` | 25 m/s | Leader speed below which helicopters hold their slot as a point rather than flying a heading. |
 | `RotaryPowerSeconds` | 20 s | Helicopter destination distance — a **power** setting, see below. |

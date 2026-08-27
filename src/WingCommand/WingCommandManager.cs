@@ -55,6 +55,7 @@ namespace WingCommand
                 WingComms.Reset();
                 WingMarkers.Reset();
                 AiCombatTweak.Reset();
+                WingShop.Reset();
                 Wing.Clear();
                 return;
             }

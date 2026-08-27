@@ -85,7 +85,6 @@ namespace WingCommand
         }
 
         /// <summary>
-        /// Whether this airframe can join the player's formation at all.
         ///
         /// Rotary and fixed-wing cannot share a formation - they fly different autopilots
         /// and differ in speed by a factor of three - and WingRegistry refuses the mix. It
@@ -105,7 +104,6 @@ namespace WingCommand
         // ------------------------------------------------------------------- pricing
 
         /// <summary>
-        /// What the next aircraft of this type costs.
         ///
         /// The price compounds with wing size, so each wingman makes the next one dearer:
         /// a 1000-credit airframe runs 1000, 1500, 2250, 3375 as the wing fills. That is
@@ -134,10 +132,21 @@ namespace WingCommand
         // ----------------------------------------------------------------- catalogue
 
         /// <summary>
-        /// What the faction can sell right now: everything it has in stock, minus the types
-        /// the mission restricts and the types the player's rank does not reach. Those are
-        /// the same two gates the player's own aircraft menu applies, so the shop cannot be
-        /// used to fly around them.
+        /// What can be bought right now.
+        ///
+        /// Two sources, because one is not enough. The faction's <c>AircraftSupply</c> is
+        /// populated from the mission's declared stock, so anything the mission author did
+        /// not list — every workshop and modded airframe, and any stock type the mission
+        /// simply did not stock — has no entry and would never appear. Those are taken from
+        /// <c>Encyclopedia.i.aircraft</c> instead, which is the registry the game itself
+        /// spawns from and which modded aircraft register into.
+        ///
+        /// Undeclared types get their own small allowance rather than drawing on faction
+        /// stock, tracked here: writing a supply entry for an airframe the faction was never
+        /// given would be inventing stock on the mission's behalf.
+        ///
+        /// Both sources are then filtered the same way — mission restrictions, player rank,
+        /// and whether the airframe could join this formation at all.
         /// </summary>
         public static IReadOnlyList<Offer> Catalogue()
         {
@@ -152,27 +161,75 @@ namespace WingCommand
 
             foreach (KeyValuePair<AircraftDefinition, FactionHQ.RuntimeSupply> entry in hq.AircraftSupply)
             {
-                AircraftDefinition definition = entry.Key;
-                if (definition == null || entry.Value.Count <= 0) continue;
+                if (entry.Value.Count <= 0) continue;
+                if (!Sellable(entry.Key, hq, rank)) continue;
 
-                // Hide what could never join the formation, rather than selling it and
-                // leaving the aircraft orphaned in the air with no way to command it.
-                if (!MatchesLeader(definition)) continue;
-
-                if (hq.restrictedAircraft != null &&
-                    hq.restrictedAircraft.Contains(definition.unitName)) continue;
-
-                if (definition.aircraftParameters != null &&
-                    definition.aircraftParameters.rankRequired > rank) continue;
-
-                catalogue.Add(new Offer(definition, definition.unitName,
-                                        definition.value, entry.Value.Count));
+                catalogue.Add(new Offer(entry.Key, entry.Key.unitName,
+                                        entry.Key.value, entry.Value.Count));
             }
+
+            if (Plugin.Config2.IncludeUndeclaredAircraft.Value)
+                AddUndeclared(hq, rank);
 
             catalogue.Sort((a, b) => a.BasePrice.CompareTo(b.BasePrice));
             return catalogue;
         }
 
+        /// <summary>Airframes the mission never stocked, offered from our own allowance.</summary>
+        private static void AddUndeclared(FactionHQ hq, int rank)
+        {
+            Encyclopedia encyclopedia = Encyclopedia.i;
+            if (encyclopedia == null || encyclopedia.aircraft == null) return;
+
+            List<AircraftDefinition> all = encyclopedia.aircraft;
+            for (int i = 0; i < all.Count; i++)
+            {
+                AircraftDefinition definition = all[i];
+                if (definition == null) continue;
+
+                // Anything the faction actually stocks was handled above, at its real count.
+                if (hq.AircraftSupply.ContainsKey(definition)) continue;
+                if (!Sellable(definition, hq, rank)) continue;
+
+                int left = UndeclaredRemaining(definition);
+                if (left <= 0) continue;
+
+                catalogue.Add(new Offer(definition, definition.unitName, definition.value, left));
+            }
+        }
+
+        /// <summary>Restrictions, rank and airframe class - the gates both sources share.</summary>
+        private static bool Sellable(AircraftDefinition definition, FactionHQ hq, int rank)
+        {
+            if (definition == null) return false;
+
+            // Hide what could never join the formation, rather than selling it and leaving
+            // the aircraft orphaned in the air with no way to command it.
+            if (!MatchesLeader(definition)) return false;
+
+            if (hq.restrictedAircraft != null &&
+                hq.restrictedAircraft.Contains(definition.unitName)) return false;
+
+            if (definition.aircraftParameters != null &&
+                definition.aircraftParameters.rankRequired > rank) return false;
+
+            return true;
+        }
+
+        // How many of each undeclared airframe have been bought this mission. Kept here
+        // rather than in the faction's supply dictionary, which describes what the mission
+        // handed the faction and is not ours to invent entries in.
+        private static readonly Dictionary<AircraftDefinition, int> undeclaredBought =
+            new Dictionary<AircraftDefinition, int>();
+
+        private static int UndeclaredRemaining(AircraftDefinition definition)
+        {
+            int allowance = Mathf.RoundToInt(Plugin.Config2.UndeclaredStock.Value);
+            return allowance - (undeclaredBought.TryGetValue(definition, out int used) ? used : 0);
+        }
+
+        /// <summary>Forget what was bought, when a mission ends.</summary>
+        public static void Reset() => undeclaredBought.Clear();
         /// <summary>The player's own airframe type, for the radial's quick-buy.</summary>
         public static AircraftDefinition OwnType()
         {
@@ -244,7 +301,10 @@ namespace WingCommand
                 return false;
             }
 
-            if (hq.GetUnitSupply(definition) <= 0)
+            bool declared = hq.AircraftSupply.ContainsKey(definition);
+            int stock = declared ? hq.GetUnitSupply(definition) : UndeclaredRemaining(definition);
+
+            if (stock <= 0)
             {
                 reason = definition.unitName + ": none left in stock";
                 return false;
@@ -279,13 +339,19 @@ namespace WingCommand
 
             // Only now, with an aircraft actually in the world, does anything get spent.
             player.AddAllocation(-price);
-            hq.AddSupplyUnit(definition, -1);
+
+            // Declared airframes come out of the faction's books; undeclared ones out of
+            // ours, so the mission's own accounting is never handed entries it did not have.
+            if (declared)
+                hq.AddSupplyUnit(definition, -1);
+            else
+                undeclaredBought[definition] = (undeclaredBought.TryGetValue(definition, out int n) ? n : 0) + 1;
 
             WingCommandManager.Instance?.QueueRecruit(bought);
 
             Plugin.Logger.LogInfo(
                 $"[Shop] bought {definition.unitName} for {price:F0} " +
-                $"({mode} delivery), {hq.GetUnitSupply(definition)} left in stock");
+                $"({mode} delivery), {(declared ? hq.GetUnitSupply(definition) : UndeclaredRemaining(definition))} left in stock");
 
             return true;
         }

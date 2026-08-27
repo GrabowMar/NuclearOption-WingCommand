@@ -964,6 +964,7 @@ namespace WingCommand
                 case WingOrder.OrbitHere: return "ORBIT";
                 case WingOrder.DeliverCargo: return "CARGO";
                 case WingOrder.LandHere: return "LANDING";
+                case WingOrder.Attack: return "ATTACK";
                 default: return m.Order.ToString();
             }
         }
