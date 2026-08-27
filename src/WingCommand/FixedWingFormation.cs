@@ -70,6 +70,15 @@ namespace WingCommand
         /// <summary>Height below which the bank match yields to terrain avoidance.</summary>
         private const float BankMatchFloor = 150f;
 
+        /// <summary>
+        /// Leader bank below which the bank match does nothing. Level flight needs no help,
+        /// and helping anyway is what made the roll axis chaotic.
+        /// </summary>
+        private const float BankMatchDeadband = 15f;
+
+        /// <summary>Hard ceiling on the roll bias, as a fraction of full stick.</summary>
+        private const float MaxBankTrim = 0.25f;
+
         private static bool loggedInterlock;
 
         /// <summary>
@@ -258,7 +267,7 @@ namespace WingCommand
                                            outOfPosition);
 
             if (report)
-                Report(aircraft, distance, correction.magnitude, maxCorrection, lookAhead);
+                Report(aircraft, leader, distance, correction.magnitude, maxCorrection, lookAhead);
             aircraft.autopilot.AutoAim(
                 destination: aimPoint,
                 aimVelocity: true,
@@ -315,7 +324,6 @@ namespace WingCommand
             float blend = Plugin.Config2.BankMatchBlend.Value;
             if (blend <= 0.001f || outOfPosition > 0.5f) return;
 
-            // Bank angle about each aircraft's own forward axis.
             float myBank = BankOf(aircraft);
 
             if (Mathf.Abs(myBank) > BankMatchLimit || aircraft.radarAlt < BankMatchFloor)
@@ -326,25 +334,46 @@ namespace WingCommand
 
             float leaderBank = BankOf(leader);
 
+            // Only while the leader is genuinely banking.
+            //
+            // This is the fix for the chaotic roll axis, and the reasoning is worth keeping.
+            // In settled formation the aim point is a degree or two off the nose, so the
+            // bank the autopilot wants is approximately zero — while this was asking for
+            // whatever bank the leader happened to be holding. Two controllers commanding
+            // the same axis towards different targets, fifty times a second, and the
+            // autopilot's is a stateful loop that integrates against being overridden. The
+            // formation held station to within twenty metres throughout, which is what made
+            // it obvious the fault was not in the steering.
+            //
+            // Wings-level flight needs no help: a wingman flying the correct path already
+            // banks like the leader through a turn, because that is what flying the same
+            // curve means. So this now does nothing at all until the leader is actually
+            // committed to a turn, which is the only time it was ever wanted.
+            if (Mathf.Abs(leaderBank) < BankMatchDeadband) return;
+
             float error = Mathf.DeltaAngle(myBank, leaderBank);
 
             // Roll input is a *rate* command, not an angle. Driving it from angle error
             // alone is an undamped integrator: the aircraft rolls, sails past the leader's
             // bank, keeps rolling, and ends up inverted. The roll-rate term closes the loop.
             float rollRate = Vector3.Dot(aircraft.rb.angularVelocity, aircraft.transform.forward);
-            float command = Mathf.Clamp(error * 0.02f - rollRate * 0.5f, -1f, 1f);
+            float trim = Mathf.Clamp(error * 0.02f - rollRate * 0.5f, -1f, 1f);
 
-            // Blend rather than override: the autopilot is still flying the aircraft, and
-            // fighting it outright makes wingmen wallow.
+            // Add a bounded trim rather than blending towards a command of our own. The
+            // difference matters: lerping towards an absolute command discards what the
+            // autopilot asked for, so the two fight over the axis outright. A small additive
+            // nudge leaves the autopilot's decision intact and biases it, which is all this
+            // was ever supposed to do.
             //
-            // Ease the blend out as the wingman drifts off station, so authority is handed
-            // back before the two controllers can argue about a large correction.
-            float authority = blend * (1f - outOfPosition * 2f);
-            controls.roll = Mathf.Lerp(controls.roll, command, Mathf.Clamp01(authority));
+            // Fade it out as the wingman drifts off station, so authority is handed back
+            // before there is anything large to disagree about.
+            float authority = Mathf.Clamp01(blend * (1f - outOfPosition * 2f));
+            float bias = Mathf.Clamp(trim * authority, -MaxBankTrim, MaxBankTrim);
+
+            controls.roll = Mathf.Clamp(controls.roll + bias, -1f, 1f);
 
             aircraft.FilterInputs();
         }
-
         /// <summary>
         /// Periodic station-keeping numbers, the fixed-wing equivalent of the [Rotary]
         /// line.
@@ -354,15 +383,25 @@ namespace WingCommand
         /// the thing to watch — a wingman pinned at its command limit is one that cannot
         /// correct any harder no matter how far out it is.
         /// </summary>
-        private static void Report(Aircraft aircraft, float distance, float correction,
-                                   float maxCorrection, float lookAhead)
+        private static void Report(Aircraft aircraft, Aircraft leader, float distance,
+                                   float correction, float maxCorrection, float lookAhead)
         {
             bool saturated = correction >= maxCorrection * 0.99f;
+
+            // Bank is reported against the leader, and with its rate, because a wingman
+            // banked 40 degrees behind a leader banked 40 degrees is a formation turning,
+            // while the same number with the leader level is a wingman rolling for no
+            // reason. The first version logged only the wingman and could not tell them
+            // apart.
+            float rollRate = Vector3.Dot(aircraft.rb.angularVelocity, aircraft.transform.forward)
+                             * Mathf.Rad2Deg;
+
             Plugin.Logger.LogInfo(
                 $"[Formation] {aircraft.unitName}: error {distance:F0} m, " +
                 $"correction {correction:F0}/{maxCorrection:F0} m{(saturated ? " (SATURATED)" : "")}, " +
                 $"baseline {lookAhead:F0} m, speed {aircraft.speed:F0} m/s, " +
-                $"bank {BankOf(aircraft):F0} deg");
+                $"bank {BankOf(aircraft):F0} vs leader {BankOf(leader):F0} deg, " +
+                $"roll rate {rollRate:F0} deg/s");
         }
 
         /// <summary>
