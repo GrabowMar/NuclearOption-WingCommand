@@ -324,7 +324,7 @@ namespace WingCommand
         /// </summary>
         private void WarnIfTooSlow(Aircraft recruit)
         {
-            if (!Plugin.Config2.WarnOnSlowRecruit.Value || Leader == null) return;
+            if (!Plugin.Config2.KeepUpReports.Value || Leader == null) return;
 
             float mine = recruit.GetAircraftParameters().maxSpeed;
             float leader = Leader.GetAircraftParameters().maxSpeed;

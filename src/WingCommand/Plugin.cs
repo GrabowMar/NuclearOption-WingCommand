@@ -175,10 +175,7 @@ namespace WingCommand
         public readonly ConfigEntry<bool> RadioChatter;
 
         // --- Capability ---
-        public readonly ConfigEntry<bool> ReportUnableToKeepUp;
-        public readonly ConfigEntry<float> UnableDistance;
-        public readonly ConfigEntry<float> UnableSeconds;
-        public readonly ConfigEntry<bool> WarnOnSlowRecruit;
+        public readonly ConfigEntry<bool> KeepUpReports;
 
         // --- Debug ---
         public readonly ConfigEntry<bool> EnableDebugActions;
@@ -213,25 +210,30 @@ namespace WingCommand
                     new AcceptableValueRange<float>(40f, 600f)));
             SlotStack = c.Bind("Formation", "SlotStack", 20f,
                 new ConfigDescription("Vertical stagger per slot, in metres. Keeps wingmen out of each other's wash.",
-                    new AcceptableValueRange<float>(0f, 200f)));
+                    new AcceptableValueRange<float>(0f, 200f),
+                    new ConfigurationManagerAttributes { IsAdvanced = true }));
             RecruitRange = c.Bind("Formation", "RecruitRange", 12000f,
                 new ConfigDescription("Maximum range at which a friendly AI aircraft can be recruited into the wing.",
-                    new AcceptableValueRange<float>(1000f, 60000f)));
+                    new AcceptableValueRange<float>(1000f, 60000f),
+                    new ConfigurationManagerAttributes { IsAdvanced = true }));
             MaxWingSize = c.Bind("Formation", "MaxWingSize", 3,
                 new ConfigDescription("Maximum number of wingmen.",
-                    new AcceptableValueRange<int>(1, 8)));
+                    new AcceptableValueRange<int>(1, 8),
+                    new ConfigurationManagerAttributes { IsAdvanced = true }));
             RotarySpacingScale = c.Bind("Formation", "RotarySpacingScale", 0.55f,
                 new ConfigDescription(
                     "Slot spacing multiplier for helicopters. They fly slower and much closer " +
                     "together than jets, so the spacing that looks tight for fighters reads as " +
                     "scattered for them. Every rotary threshold is derived from the result, so " +
                     "changing this moves them all together.",
-                    new AcceptableValueRange<float>(0.2f, 1.5f)));
+                    new AcceptableValueRange<float>(0.2f, 1.5f),
+                    new ConfigurationManagerAttributes { IsAdvanced = true }));
             ThreatSpacingScale = c.Bind("Formation", "ThreatWidenScale", 1.0f,
                 new ConfigDescription(
                     "Spacing multiplier applied while the wing is Aggressive or under missile " +
                     "warning. Real formations widen when they expect to fight. 1 disables it.",
-                    new AcceptableValueRange<float>(1f, 4f)));
+                    new AcceptableValueRange<float>(1f, 4f),
+                    new ConfigurationManagerAttributes { IsAdvanced = true }));
 
             // ---- Flying ----
             //
@@ -272,23 +274,27 @@ namespace WingCommand
                     "Bank authority, in degrees, while rejoining from outside the capture " +
                     "distance. Authority eases between this and StationBank with slot error, so " +
                     "there is no step as a wingman arrives.",
-                    new AcceptableValueRange<float>(60f, 180f)));
+                    new AcceptableValueRange<float>(60f, 180f),
+                    new ConfigurationManagerAttributes { IsAdvanced = true }));
             ThrottleGain = c.Bind("Formation", "ThrottleGain", 0.12f,
                 new ConfigDescription(
                     "Throttle change per m/s of speed error. The resting throttle is the " +
                     "airframe's own cruise setting, which is the power needed to hold cruise.",
-                    new AcceptableValueRange<float>(0.01f, 0.6f)));
+                    new AcceptableValueRange<float>(0.01f, 0.6f),
+                    new ConfigurationManagerAttributes { IsAdvanced = true }));
             CaptureDistance = c.Bind("Formation", "CaptureDistance", 500f,
                 new ConfigDescription(
                     "Slot error, in metres, below which a wingman is treated as on station. " +
                     "Steering, bank authority and throttle all ease across this distance rather " +
                     "than switching at it.",
-                    new AcceptableValueRange<float>(100f, 2000f)));
+                    new AcceptableValueRange<float>(100f, 2000f),
+                    new ConfigurationManagerAttributes { IsAdvanced = true }));
             RejoinStagger = c.Bind("Formation", "RejoinStagger", 1.2f,
                 new ConfigDescription(
                     "Seconds per slot by which a Rejoin order is staggered, so the wing arrives " +
                     "in sequence rather than as a converging scrum.",
-                    new AcceptableValueRange<float>(0f, 6f)));
+                    new AcceptableValueRange<float>(0f, 6f),
+                    new ConfigurationManagerAttributes { IsAdvanced = true }));
             BankMatchBlend = c.Bind("Formation", "BankMatchBlend", 0.35f,
                 new ConfigDescription(
                     "How much a settled wingman rolls to match your bank, 0 to 1. This blends " +
@@ -307,7 +313,8 @@ namespace WingCommand
                 new ConfigDescription(
                     "Leader speed, in m/s, below which helicopters hold their slot as a point " +
                     "in space instead of flying a heading.",
-                    new AcceptableValueRange<float>(0f, 60f)));
+                    new AcceptableValueRange<float>(0f, 60f),
+                    new ConfigurationManagerAttributes { IsAdvanced = true }));
             RotaryPowerSeconds = c.Bind("Formation", "RotaryPowerSeconds", 20f,
                 new ConfigDescription(
                     "Seconds of travel used as the helicopter's destination distance. This is a " +
@@ -315,13 +322,15 @@ namespace WingCommand
                     "0.5 + distance*0.001 - speed*0.02, so distance IS the throttle command and " +
                     "20 is what makes those terms cancel at hover power. Steering is set " +
                     "separately by RotaryCommandAngle, so this no longer limits it.",
-                    new AcceptableValueRange<float>(5f, 40f)));
+                    new AcceptableValueRange<float>(5f, 40f),
+                    new ConfigurationManagerAttributes { IsAdvanced = true }));
             RotaryCommandAngle = c.Bind("Formation", "RotaryCommandAngle", 30f,
                 new ConfigDescription(
                     "Largest heading correction, in degrees, a helicopter will command to close " +
                     "a lateral error. Previously this was whatever fell out of the destination " +
                     "distance, which worked out at about 5 degrees.",
-                    new AcceptableValueRange<float>(5f, 60f)));
+                    new AcceptableValueRange<float>(5f, 60f),
+                    new ConfigurationManagerAttributes { IsAdvanced = true }));
             AiTweakEnabled = c.Bind("AI", "EnableAiTweak", false,
                 "Scale AI pilot skill and bravery. Changes vanilla combat feel, so it is off by default.");
             AiSkillScale = c.Bind("AI", "SkillScale", 1.0f,
@@ -368,20 +377,16 @@ namespace WingCommand
                 new ConfigDescription("Fuel fraction at which a wingman calls bingo and heads home.",
                     new AcceptableValueRange<float>(0.05f, 0.5f)));
 
-            ReportUnableToKeepUp = c.Bind("Formation", "ReportUnableToKeepUp", true,
-                "A wingman that keeps losing ground on its slot gives up and returns to base " +
-                "instead of chasing until it crashes. Mainly affects slow aircraft recruited " +
-                "into a fast flight.");
-            UnableDistance = c.Bind("Formation", "UnableDistance", 3000f,
-                new ConfigDescription("How far out counts as failing to hold station.",
-                    new AcceptableValueRange<float>(500f, 20000f)));
-            UnableSeconds = c.Bind("Formation", "UnableSeconds", 20f,
-                new ConfigDescription("How long it must keep losing ground before giving up.",
-                    new AcceptableValueRange<float>(5f, 120f)));
-            WarnOnSlowRecruit = c.Bind("Formation", "WarnOnSlowRecruit", true,
-                "Warn when recruiting an aircraft far slower than yours - a helicopter cannot " +
-                "hold formation on a jet.");
-
+            // Four keys collapsed to one. The distance and the timeout never wanted tuning
+            // independently of each other, and WarnOnSlowRecruit is the same question asked
+            // at recruit time instead of in flight.
+            KeepUpReports = c.Bind("Formation", "KeepUpReports", true,
+                new ConfigDescription(
+                    "Warn when a wingman cannot hold formation, and send it home rather than " +
+                    "let it chase until it crashes. Mainly affects slow aircraft recruited " +
+                    "into a fast flight.",
+                    null,
+                    new ConfigurationManagerAttributes { IsAdvanced = true }));
             RadioChatter = c.Bind("Comms", "RadioChatter", true,
                 "Wingmen report engagements, defending, Winchester and rejoins in the game's " +
                 "on-screen message feed.");

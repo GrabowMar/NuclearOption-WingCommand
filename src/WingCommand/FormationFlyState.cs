@@ -40,6 +40,12 @@ namespace WingCommand
         /// <summary>Seconds over which avoidance eases in, so it never steps the target.</summary>
         private const float AvoidanceSmoothing = 0.4f;
 
+        /// <summary>Slot error, in metres, that counts as failing to hold station.</summary>
+        private const float UnableDistance = 3000f;
+
+        /// <summary>How long it must keep losing ground before a wingman gives up.</summary>
+        private const float UnableSeconds = 20f;
+
         private float lastSupportCheck;
         private float lastEngageCheck;
         private float lastFiredTime;
@@ -342,7 +348,7 @@ namespace WingCommand
         /// </summary>
         private void CheckAbleToKeepUp(Aircraft leader, float distance)
         {
-            if (!Plugin.Config2.ReportUnableToKeepUp.Value) return;
+            if (!Plugin.Config2.KeepUpReports.Value) return;
 
             // Only a genuine performance gap counts as "unable". This check was written for
             // a helicopter recruited into a jet flight, but it fired on wingmen in the
@@ -354,7 +360,7 @@ namespace WingCommand
             float theirs = leader.GetAircraftParameters().maxSpeed;
             if (mine >= theirs * 0.9f) return;
 
-            float threshold = Plugin.Config2.UnableDistance.Value;
+            float threshold = UnableDistance;
 
             // Close enough, or the gap is not meaningfully growing: reset and carry on.
             //
@@ -377,7 +383,7 @@ namespace WingCommand
                 return;
             }
 
-            if (Time.timeSinceLevelLoad - losingGroundSince < Plugin.Config2.UnableSeconds.Value)
+            if (Time.timeSinceLevelLoad - losingGroundSince < UnableSeconds)
                 return;
 
             losingGroundSince = 0f;
