@@ -20,7 +20,7 @@ BepInEx is set up for you, and updates arrive through the manager.
 1. Install [BepInEx 5](https://github.com/BepInEx/BepInEx/releases) (5.4.23.3 or later) into
    your Nuclear Option folder and run the game once so it generates its directories.
 2. Download the latest release archive from the
-   [releases page](https://github.com/marci/WingCommand/releases).
+   [releases page](https://github.com/GrabowMar/NuclearOption-WingCommand/releases).
 3. Extract it into the game folder, so the DLL lands at
    `Nuclear Option/BepInEx/plugins/WingCommand/WingCommand.dll`.
 4. Launch the game. `BepInEx/LogOutput.log` should contain a line like
