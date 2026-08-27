@@ -1,0 +1,28 @@
+{
+  "id": "WingCommand",
+  "displayName": "WingCommand",
+  "description": "Command AI aircraft as your wing. Recruit or buy wingmen, hold ten formation shapes, and issue orders - rejoin, engage on a tether, attack your target, cover, fall back with flares, orbit, deliver cargo, land - from the game's own radial menu, an MFD screen and the tactical map. Wingmen and their targets are marked on both the HUD and the map.",
+  "tags": ["QoL", "Utility", "AI"],
+  "authors": ["marci"],
+  "isClientOrServer": "Client",
+  "urls": [
+    {
+      "name": "info",
+      "url": "https://github.com/marci/WingCommand"
+    }
+  ],
+  "githubOwner": "marci",
+  "githubRepoName": "WingCommand",
+  "autoUpdateArtifacts": "True",
+  "artifacts": [
+    {
+      "type": "plugin",
+      "fileName": "WingCommand-0.6.0.zip",
+      "downloadUrl": "https://github.com/marci/WingCommand/releases/download/v0.6.0/WingCommand-0.6.0.zip",
+      "gameVersion": "0.34.2",
+      "version": "0.6.0",
+      "category": "Release",
+      "hash": "sha256:a9a126539bf3dce732a120f3dcaef6b929f51549e4c25e7951f9087d9442ee85"
+    }
+  ]
+}

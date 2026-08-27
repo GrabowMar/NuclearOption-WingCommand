@@ -11,3 +11,6 @@ obj/
 # OS
 Thumbs.db
 .DS_Store
+
+# Release archives
+dist/

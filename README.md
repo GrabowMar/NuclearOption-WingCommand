@@ -1,12 +1,37 @@
-| **Rejoin Formation** | Wingmen close on their slot and hold station |
-| **Attack My Target** | Wingmen fly an attack run on what you have designated, and return to the wing once it is dead |
-| **Attack My Target** | Wingmen fly an attack run on what you have designated, and return to the wing when it is dead |
 # WingCommand
 
-A BepInEx mod for **Nuclear Option** that lets you command AI aircraft: form a wing, hold
-formation, and issue orders — from an in-cockpit radial menu and from the tactical map.
+A BepInEx mod for **Nuclear Option** that lets you command AI aircraft: recruit or buy a
+wing, hold formation, and issue orders — from an in-cockpit radial menu, an MFD screen, and
+the tactical map.
 
 Built against game version `0.34.2`, Unity 2022.3.62f2 (Mono), BepInEx 5.4.23.3.
+
+---
+
+## Install
+
+### With NOMM (recommended)
+
+Search for **WingCommand** in [NOMM](https://github.com/Combat787/NOMM) and install it.
+BepInEx is set up for you, and updates arrive through the manager.
+
+### Manually
+
+1. Install [BepInEx 5](https://github.com/BepInEx/BepInEx/releases) (5.4.23.3 or later) into
+   your Nuclear Option folder and run the game once so it generates its directories.
+2. Download the latest release archive from the
+   [releases page](https://github.com/marci/WingCommand/releases).
+3. Extract it into the game folder, so the DLL lands at
+   `Nuclear Option/BepInEx/plugins/WingCommand/WingCommand.dll`.
+4. Launch the game. `BepInEx/LogOutput.log` should contain a line like
+   `WingCommand 0.6.0 loaded.` followed by `Harmony patched 8 method(s)`.
+
+Settings live in `BepInEx/config/com.marci.wingcommand.cfg` and can be edited in-game with
+[ConfigurationManager](https://github.com/BepInEx/BepInEx.ConfigurationManager) (**F1**).
+
+> **Host or single-player.** AI pilots are server-authoritative in Nuclear Option, so
+> formation control works when you are the host or playing alone. As a non-host client your
+> orders fight the server's own AI updates. See [Multiplayer](#multiplayer).
 
 ---
 
@@ -425,3 +450,36 @@ pwsh build/copy-to-game.ps1
 
 Output lands in `BepInEx/plugins/WingCommand/` alongside a `meta.json` in the same format
 the Nuclear Option mod manager uses.
+
+---
+
+## Licence
+
+MIT — see [LICENSE](LICENSE). The findings in `FixedWingFormation`, `RotaryFormation` and
+`WingRoe` about how the game's autopilots actually behave are the most reusable part of
+this repository; take them.
+
+---
+
+## Releasing
+
+```bash
+dotnet build -c Release
+pwsh build/package.ps1
+```
+
+`package.ps1` reads the version out of the built assembly rather than taking it as an
+argument — NOMNOM rejects a manifest whose version disagrees with the DLL, and typing it in
+two places is how they come to disagree. It prints the sha256 and the exact manifest fields
+to paste.
+
+Then tag and publish a GitHub release with the archive attached:
+
+```bash
+git tag -a v0.6.0 -m "WingCommand 0.6.0" && git push --tags
+```
+
+The mod is listed with [NOMM](https://github.com/Combat787/NOMM) through a manifest in
+[NOMNOM](https://github.com/KopterBuzz/NOMNOM); `build/nomnom/WingCommand.json` is that
+manifest. Because it sets `autoUpdateArtifacts`, later releases are picked up from the
+GitHub releases automatically and only the first listing needs a pull request.
