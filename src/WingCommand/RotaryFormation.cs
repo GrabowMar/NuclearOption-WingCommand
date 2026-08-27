@@ -4,11 +4,9 @@ namespace WingCommand
 {
     /// <summary>
     /// Formation flight for helicopters and tiltwings, written against how the rotary
-    /// autopilot actually behaves rather than as a variation on the fixed-wing path.
+    /// autopilot actually behaves rather than as a variation on the fixed-wing one.
     ///
-    /// Four previous attempts failed because they reused aeroplane concepts — a capture
-    /// radius, a fixed look-ahead, drift damping — on a controller that does not work that
-    /// way. Two facts drive everything here:
+    /// Three facts drive everything here:
     ///
     /// 1. <c>Autopilot.Hover</c> is a real position-hold: clamped error, a derivative term,
     ///    collective straight from altitude error, and yaw from the aim direction. It is
@@ -21,8 +19,15 @@ namespace WingCommand
     ///    power command, so it has to be about twenty times the speed for the terms to
     ///    cancel and collective to rest at hover.
     ///
-    /// So there are two regimes, chosen by how fast the leader is going, and they fly
-    /// genuinely differently: hold a point when slow, fly a heading when fast.
+    /// 3. Because of (2), the destination's distance and its direction were doing two
+    ///    different jobs through one vector, and pulling against each other: holding speed
+    ///    demanded a far destination, which made every cross-track correction a tiny angle
+    ///    — about five degrees in practice. They are set independently now. Distance still
+    ///    comes from the power law; direction is a commanded heading offset.
+    ///
+    /// Worth knowing before tuning any of this: <c>AutopilotHelo</c> recomputes its forward
+    /// waypoint only once per second and rate-limits it to 0.8 rad. That is a hard ceiling
+    /// on rotary responsiveness which nothing here can raise.
     /// </summary>
     internal static class RotaryFormation
     {
@@ -35,25 +40,41 @@ namespace WingCommand
             Cruise,
         }
 
-        public static Mode Fly(Aircraft aircraft, Aircraft leader, GlobalPosition slotPos,
-                               Vector3 toSlot, float distance, float slotStack)
-        {
-            Vector3 leaderVel = leader.rb != null ? leader.rb.velocity : Vector3.zero;
+        /// <summary>
+        /// Shortest destination distance, in metres. Much below this the collective law
+        /// reads it as an instruction to come down.
+        /// </summary>
+        private const float MinPowerDistance = 600f;
 
+        /// <summary>Heading-correction gain per metre of cross-track error, in degrees.</summary>
+        private const float CrossGain = 0.35f;
+
+        /// <summary>Damping gain on cross-track closing rate, in degrees per m/s.</summary>
+        private const float CrossDamping = 1.4f;
+
+        /// <summary>
+        /// Slot error at which a helicopter counts as on station, as a multiple of its own
+        /// slot spacing. An absolute value does not work here: rotary slots sit at about
+        /// half the fixed-wing spacing, so the old 200 m threshold called a helicopter
+        /// settled while it was three slot-widths out of place.
+        /// </summary>
+        private const float StationSpacings = 1.5f;
+
+        public static Mode Fly(Aircraft aircraft, Aircraft leader, GlobalPosition slotPos,
+                               Vector3 toSlot, float distance, float slotStack, float spacing)
+        {
             Vector3 heading = leader.transform.forward;
             heading.y = 0f;
             if (heading.sqrMagnitude < 0.0001f) heading = Vector3.forward;
             heading.Normalize();
 
-            bool hover = leader.speed < Plugin.Config2.RotaryHoverSpeed.Value;
-
-            if (hover)
+            if (leader.speed < Plugin.Config2.RotaryHoverSpeed.Value)
             {
                 HoldPoint(aircraft, slotPos, heading);
                 return Mode.Hover;
             }
 
-            Cruise(aircraft, leader, toSlot, distance, slotStack, leaderVel, heading);
+            Cruise(aircraft, leader, toSlot, distance, slotStack, spacing, heading);
             return Mode.Cruise;
         }
 
@@ -71,35 +92,54 @@ namespace WingCommand
         }
 
         /// <summary>
-        /// Cruising leader: fly the leader's heading, and treat distance as the power
-        /// command it actually is.
+        /// Cruising leader: distance sets power, heading sets steering, and the two no
+        /// longer fight each other.
         /// </summary>
         private static void Cruise(Aircraft aircraft, Aircraft leader, Vector3 toSlot,
-                                   float distance, float slotStack, Vector3 leaderVel,
+                                   float distance, float slotStack, float spacing,
                                    Vector3 heading)
         {
+            Vector3 leaderVel = leader.rb != null ? leader.rb.velocity : Vector3.zero;
             Vector3 leaderDir = leaderVel.sqrMagnitude > 1f ? leaderVel.normalized : heading;
 
-            // Distance sets collective. Twenty seconds of travel makes the autopilot's two
-            // collective terms cancel, so it rests at hover power and can hold any speed;
-            // anything shorter caps the speed a wingman can sustain.
-            float sustain = leader.speed * Plugin.Config2.RotaryLookAheadSeconds.Value;
-
-            // Being behind adds distance, which asks for more power — that is how a wingman
-            // catches up instead of settling into the gap.
+            // --- Power ---
+            // Twenty seconds of travel makes the autopilot's two collective terms cancel, so
+            // it rests at hover power and can hold any speed. Being behind adds distance,
+            // which asks for more power: that is how a wingman catches up rather than
+            // settling into the gap.
             float alongTrack = Vector3.Dot(toSlot, leaderDir);
             float behind = Mathf.Max(0f, alongTrack);
 
-            float lookAhead = Mathf.Max(Plugin.Config2.RotaryMinLookAhead.Value, sustain) + behind;
+            float sustain = leader.speed * Plugin.Config2.RotaryPowerSeconds.Value;
+            float powerDistance = Mathf.Max(MinPowerDistance, sustain) + behind;
 
-            // Only across-track error steers. The along-track part is already expressed in
-            // the look-ahead, and feeding it in twice had the destination fighting itself.
+            // --- Steering ---
+            // Only across-track error steers; the along-track part is already expressed in
+            // the power distance above, and feeding it in twice had the destination fighting
+            // itself. The correction is a heading angle, so it no longer shrinks as the
+            // destination is pushed further out to hold speed.
             Vector3 across = toSlot - leaderDir * alongTrack;
-            Vector3 correction = Vector3.ClampMagnitude(
-                across * Plugin.Config2.RotaryCrossGain.Value,
-                Plugin.Config2.RotaryMaxCross.Value);
+            across.y = 0f;
 
-            GlobalPosition destination = aircraft.GlobalPosition() + leaderDir * lookAhead + correction;
+            Vector3 drift = aircraft.rb != null ? aircraft.rb.velocity - leaderVel : Vector3.zero;
+            drift.y = 0f;
+            Vector3 acrossDrift = drift - leaderDir * Vector3.Dot(drift, leaderDir);
+
+            // Sign the error and its rate about the vertical axis, so a positive command is
+            // always a turn towards the slot.
+            Vector3 rightOfTrack = Vector3.Cross(Vector3.up, leaderDir);
+            float crossError = Vector3.Dot(across, rightOfTrack);
+            float crossRate = Vector3.Dot(acrossDrift, rightOfTrack);
+
+            float maxAngle = Plugin.Config2.RotaryCommandAngle.Value;
+            float command = Mathf.Clamp(
+                crossError * CrossGain * Plugin.Config2.Aggression.Value
+                    - crossRate * CrossDamping * Plugin.Config2.Damping.Value,
+                -maxAngle, maxAngle);
+
+            Vector3 steer = Quaternion.AngleAxis(command, Vector3.up) * leaderDir;
+
+            GlobalPosition destination = aircraft.GlobalPosition() + steer * powerDistance;
 
             // altitudeHold is a height above ground here, used both for the forward-flight
             // waypoint and the collective error, so it has to describe where the slot sits
@@ -111,7 +151,7 @@ namespace WingCommand
             // Hold the leader's heading only once roughly in place. While still closing,
             // leaving yaw to the autopilot lets the aircraft point where it is going rather
             // than crab sideways across the gap, which costs it speed it cannot spare.
-            bool onStation = distance < Plugin.Config2.RotaryStationDistance.Value;
+            bool onStation = distance < spacing * StationSpacings;
 
             aircraft.autopilot.AutoAim(
                 destination: destination,

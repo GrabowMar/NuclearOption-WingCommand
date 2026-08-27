@@ -17,6 +17,29 @@ namespace WingCommand
 
         private const float EngageInterval = 0.5f;
 
+        // Avoidance geometry, all expressed as multiples of the slot spacing in use so a
+        // change to spacing moves them together. These were config entries; none of them
+        // ever needed tuning independently, and leaving them free is how one of them came
+        // to sit wider than a whole rotary formation.
+
+        /// <summary>Separation radius: just inside the gap between neighbouring slots.</summary>
+        private const float SeparationSpacings = 0.75f;
+
+        /// <summary>Repulsion strength at that radius, in metres of slot displacement.</summary>
+        private const float SeparationStrength = 12f;
+
+        /// <summary>Length of the protected corridor ahead of the leader.</summary>
+        private const float PathCutSpacings = 3.3f;
+
+        /// <summary>Half-width of that corridor.</summary>
+        private const float PathCutRadiusSpacings = 1f;
+
+        /// <summary>How hard a wingman is pushed out of the leader's path.</summary>
+        private const float PathCutStrengthSpacings = 1.7f;
+
+        /// <summary>Seconds over which avoidance eases in, so it never steps the target.</summary>
+        private const float AvoidanceSmoothing = 0.4f;
+
         private float lastSupportCheck;
         private float lastEngageCheck;
         private float lastFiredTime;
@@ -96,29 +119,29 @@ namespace WingCommand
             // Separation keeps wingmen out of each other during a rejoin, and path-cut
             // avoidance keeps them out of the leader's nose.
             //
-            // The radius has to scale with spacing. Left at its fixed-wing value it sat
+            // Every distance here is derived from the spacing actually in use rather than
+            // configured separately. That is not only tidier: a fixed separation radius sat
             // wider than a rotary formation's own slots, so helicopters repelled each other
-            // permanently and the formation could never settle.
-            float separationRadius = Plugin.Config2.SeparationRadius.Value *
-                                     (spacing / Mathf.Max(Plugin.Config2.SlotSpacing.Value, 1f));
-
+            // permanently and the formation could never settle. Deriving them means a
+            // setting like RotarySpacingScale moves the whole geometry together and cannot
+            // leave one threshold contradicting another.
             Vector3 avoidance =
                 FormationSolver.Separation(
                     aircraft, member.Siblings,
-                    separationRadius,
-                    Plugin.Config2.SeparationStrength.Value) +
+                    radius: spacing * SeparationSpacings,
+                    strength: SeparationStrength) +
                 FormationSolver.AvoidLeaderPath(
                     aircraft, leader,
-                    Plugin.Config2.PathCutLookAhead.Value,
-                    Plugin.Config2.PathCutRadius.Value,
-                    Plugin.Config2.PathCutStrength.Value);
+                    lookAhead: spacing * PathCutSpacings,
+                    corridorRadius: spacing * PathCutRadiusSpacings,
+                    strength: spacing * PathCutStrengthSpacings);
 
             // Both switch on and off as distances cross thresholds, so applied raw they
             // step the destination and the autopilot chases the step. Easing them in makes
             // the target something an aircraft can actually track.
             smoothedAvoidance = Vector3.Lerp(
                 smoothedAvoidance, avoidance,
-                1f - Mathf.Exp(-Time.fixedDeltaTime / Mathf.Max(0.05f, Plugin.Config2.AvoidanceSmoothing.Value)));
+                1f - Mathf.Exp(-Time.fixedDeltaTime / AvoidanceSmoothing));
 
             slotPos += smoothedAvoidance;
 
@@ -143,12 +166,11 @@ namespace WingCommand
             else
             {
                 RotaryFormation.Mode mode = RotaryFormation.Fly(
-                    aircraft, leader, slotPos, toSlot, distance, offset.y);
+                    aircraft, leader, slotPos, toSlot, distance, offset.y, spacing);
 
                 ReportRotaryMode(mode, distance);
             }
         }
-
         /// <summary>
         /// Log rotary regime changes and periodic slot error.
         ///
@@ -186,9 +208,12 @@ namespace WingCommand
         /// </summary>
         private float ThreatSpacingScale(Aircraft leader)
         {
+            // One setting now, not a bool plus a scale that could disagree: a value of 1
+            // is the off switch.
+            float scale = Plugin.Config2.ThreatSpacingScale.Value;
             float target = 1f;
 
-            if (Plugin.Config2.WidenUnderThreat.Value)
+            if (scale > 1.001f)
             {
                 bool threatened =
                     (WingCommandManager.Instance?.Wing?.Posture ?? WingPosture.Defensive)
@@ -200,7 +225,7 @@ namespace WingCommand
                     threatened = warning != null && warning.IsWarning();
                 }
 
-                if (threatened) target = Plugin.Config2.ThreatSpacingScale.Value;
+                if (threatened) target = scale;
             }
 
             threatSpacing = Mathf.Lerp(
@@ -209,7 +234,6 @@ namespace WingCommand
 
             return threatSpacing;
         }
-
         /// <summary>
         /// Roll with the leader once settled.
         ///

@@ -159,11 +159,61 @@ set `Keys/FallbackRadialMenu` if you need it.
 Everything is exposed through ConfigurationManager (**F1**) and written to
 `BepInEx/config/com.marci.wingcommand.cfg`.
 
-- **Formation** — shape, slot spacing, vertical stagger, recruit range, max wing size
+- **Formation** — geometry, nine flying knobs, three rotary knobs (below)
 - **AI** — enable tweak, skill scale, bravery scale, mutual support
-- **UI** — wing status panel, map commands
+- **UI** — wing symbology colours, status panel, map commands
 - **Keys** — radial menu key, optional quick-order hotkeys
 - **Debug** — verbose logging of every order and state transition
+
+### Tuning formation flight
+
+The Formation section used to carry thirty-eight entries, several of which encoded one
+physical quantity as two numbers that only meant anything as a ratio — so tuning either
+one silently moved a quantity neither of them named. What is left names what it controls,
+in the unit the controller acts in.
+
+| Setting | Default | What it does |
+|---|---|---|
+| `Aggression` | 1.0 | Master scale on how hard a wingman corrects: steering, closure and throttle together. Above ~2 they start to hunt. |
+| `Damping` | 1.0 | Master scale on the rate terms that arrest a correction before it arrives. This is what stops the slow left-right rocking. |
+| `CommandAngle` | 25° | Largest heading correction while holding station — the real limit on how fast a lateral error closes. |
+| `StationBankDegrees` | 75° | Bank authority while settled. |
+| `PursuitBankDegrees` | 160° | Bank authority while rejoining. Authority eases between the two with slot error, so nothing steps. |
+| `ThrottleGain` | 0.12 | Throttle change per m/s of speed error. Resting throttle is the airframe's own cruise setting. |
+| `CaptureDistance` | 500 m | Slot error below which a wingman counts as on station. |
+| `RejoinStagger` | 1.2 s | Per-slot delay so a Rejoin arrives in sequence, not as a scrum. |
+| `BankMatchBlend` | 0.35 | How much a settled wingman rolls to match your bank. 0 switches it off. |
+| `RotaryHoverSpeed` | 25 m/s | Leader speed below which helicopters hold their slot as a point rather than flying a heading. |
+| `RotaryPowerSeconds` | 20 s | Helicopter destination distance — a **power** setting, see below. |
+| `RotaryCommandAngle` | 30° | Largest heading correction a helicopter will command. |
+
+Avoidance distances (separation radius, path-cut corridor) are derived from the spacing in
+use rather than configured, so changing `SlotSpacing` or `RotarySpacingScale` moves the
+whole geometry together and cannot leave one threshold contradicting another.
+
+### Two things about the game's autopilot worth knowing
+
+Both were found by reading the decompiled autopilots, and the mod was on the wrong side of
+each for a long time.
+
+**`effort` above 1 is the agility switch.** `AutopilotPlane.AutoAim` computes
+`num3 = (effort > 1 || radarAlt < 1) ? 1 : clamp01(airspeed / cornerSpeed)` and then spends
+it twice — as `RotateTowards(..., 0.9 * num3²)`, the cap on how fast the commanded
+direction may swing, and as `bankAllowed *= max(num3², 0.45)`. Below corner speed both
+shrink quadratically, so a wingman that had slowed down was having its turn authority
+halved on top of the aerodynamic penalty it already pays. Anything above 1 removes that
+double-counting.
+
+**For helicopters, distance is throttle.** `AutopilotHelo` sets collective from
+`0.5 + distance*0.001 - speed*0.02`, so the distance to the destination *is* the power
+command — about twenty times the speed for the terms to cancel at hover power. That is
+what `RotaryPowerSeconds` is for. Steering is set separately, by rotating the commanded
+heading, because when the two shared one vector, holding speed forced the destination far
+enough away that every cross-track correction became about five degrees.
+
+Also worth knowing before tuning rotary flight: `AutopilotHelo` recomputes its forward
+waypoint only **once per second** and rate-limits it to 0.8 rad. That is a hard ceiling on
+helicopter responsiveness that no setting can raise.
 
 ---
 
