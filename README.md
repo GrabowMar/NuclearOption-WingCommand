@@ -6,6 +6,24 @@ the tactical map.
 
 Built against game version `0.34.2`, Unity 2022.3.62f2 (Mono), BepInEx 5.4.23.3.
 
+> [!WARNING]
+> **This is very early in development. Please read before installing.**
+>
+> - **Most of the code was written by Claude**, Anthropic's model, working from my direction
+>   and my testing. I have flown every feature and the core formation flying is solid, but
+>   the implementation is largely AI-authored and there is still ironing to do.
+> - **It is not balanced, and parts of it are frankly overpowered.** The shop especially —
+>   buying yourself a wing will break the difficulty most missions were built around. Several
+>   defaults lean generous. Treat it as a sandbox toy until the numbers settle.
+> - **No multiplayer.** AI pilots are server-authoritative in Nuclear Option, so this works
+>   when you host or play alone. As a non-host client your orders fight the server's own AI.
+> - **Expect things to change a lot.** Orders, rules of engagement, config keys and defaults
+>   are all still moving, and settings may reset between versions.
+>
+> Feedback is genuinely wanted — bug reports, balance opinions, "this feels wrong" — please
+> [open an issue](https://github.com/GrabowMar/NuclearOption-WingCommand/issues). Rough edges
+> are expected at this stage and hearing about them is the fastest way they get fixed.
+
 ---
 
 ## Install
