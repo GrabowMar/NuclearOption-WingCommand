@@ -46,7 +46,7 @@ BepInEx is set up for you, and updates arrive through the manager.
      folder, so the DLL lands in `BepInEx/plugins/WingCommand/` with the readme and licence
      beside it.
 3. Launch the game. `BepInEx/LogOutput.log` should contain a line like
-   `WingCommand 0.6.0 loaded.` followed by `Harmony patched 8 method(s)`.
+   `WingCommand 0.6.1 loaded.` followed by `Harmony patched 8 method(s)`.
 
 Settings live in `BepInEx/config/com.marci.wingcommand.cfg` and can be edited in-game with
 [ConfigurationManager](https://github.com/BepInEx/BepInEx.ConfigurationManager) (**F1**).
@@ -162,16 +162,15 @@ airbase, and it flies to its slot under its own power — cheap, but it takes ti
 further 25%.
 
 **The balance gate.** Missions set a per-faction `AIAircraftLimit`, adjusted for player
-counts. Purchases may push the faction at most `OverLimitAllowance` aircraft past it — one,
-by default — after which the shop refuses until something is lost. Raising that setting is
-the main way to unbalance a mission with this feature.
+counts. Purchases are refused once the faction is already at that limit — buying cannot
+push the mission past its own AI aircraft cap, which is what keeps the shop from simply
+adding aircraft the mission never accounted for.
 
 Nothing is spent until an aircraft actually exists: every gate runs, and the spawn returns,
 before a single credit or airframe moves.
 
-The radial's **Buy Wingman** entry is a shortcut for the common case — your own airframe
-type, base delivery. The catalogue and the delivery choice live on the MFD, because a price
-list is not something a wheel can show.
+Buying lives on the **WMC** MFD screen — the catalogue, price list and delivery choice are
+not something a wheel can show.
 
 ### WMC — the MFD screen
 The main wing interface is a native MFD screen labelled **WMC**, sitting on the left bezel
@@ -349,7 +348,6 @@ in the unit the controller acts in.
 | `OrbitRadius` | 2000 m | Radius of the holding circle, for Orbit Here and the end of a Fall Back. |
 | `WingPriceGrowth` | 1.5 | Compounding price multiplier per wingman already in the formation. |
 | `FastDeliverySurcharge` | 0.25 | Extra fraction charged for delivery straight to your wing. |
-| `OverLimitAllowance` | 1 | How far purchases may push the faction past the mission’s AI aircraft limit. |
 | `IncludeUndeclaredAircraft` | true | Offer aircraft the mission did not stock, which is what makes modded airframes purchasable. |
 | `UndeclaredStock` | 3 | How many of each undeclared airframe may be bought per mission. |
 | `BankMatchBlend` | 0.35 | How much a settled wingman rolls to match your bank. 0 switches it off. |
@@ -501,7 +499,7 @@ installs plugins as bare DLLs — every NOMM-managed plugin ships one, not an ar
 zip is there for people installing by hand.
 
 ```bash
-git tag -a v0.6.0 -m "WingCommand 0.6.0" && git push --tags
+git tag -a v0.6.1 -m "WingCommand 0.6.1" && git push --tags
 ```
 
 The mod is listed with [NOMM](https://github.com/Combat787/NOMM) through a manifest in

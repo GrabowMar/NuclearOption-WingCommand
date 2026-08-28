@@ -167,8 +167,6 @@ namespace WingCommand
         /// <summary>Drop members that died, ejected, or despawned.</summary>
         public void Prune()
         {
-            int removed = 0;
-
             for (int i = members.Count - 1; i >= 0; i--)
             {
                 WingMember m = members[i];
@@ -178,9 +176,7 @@ namespace WingCommand
                     Plugin.Logger.LogInfo("[Wing] lost " + m.Name + ": " + LostReason(m));
 
                 members.RemoveAt(i);
-                removed++;
             }
-
         }
 
         /// <summary>

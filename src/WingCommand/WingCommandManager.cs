@@ -230,24 +230,6 @@ namespace WingCommand
                     break;
                 }
 
-                case WingAction.BuyWingman:
-                {
-                    // The wheel buys the player's own type with base delivery, which is the
-                    // common case. The catalogue and the delivery choice live on the WMC
-                    // page, because a price list is not something a wheel can show.
-                    AircraftDefinition own = WingShop.OwnType();
-                    if (WingShop.Buy(own, WingShop.Delivery.Base, out string why))
-                    {
-                        Toast(own.unitName + " bought - " +
-                              Mathf.RoundToInt(WingShop.Allocation) + " left");
-                    }
-                    else
-                    {
-                        Toast(why);
-                    }
-                    break;
-                }
-
                 case WingAction.Rejoin:
                     if (RequireWing()) { Wing.OrderAll(WingOrder.Formation); Toast("Wing: rejoin formation"); }
                     break;
@@ -460,7 +442,6 @@ namespace WingCommand
     internal enum WingAction
     {
         RecruitNearest,
-        BuyWingman,
         Rejoin,
         Engage,
         ReturnToBase,

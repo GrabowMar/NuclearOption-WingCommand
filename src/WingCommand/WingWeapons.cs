@@ -39,7 +39,8 @@ namespace WingCommand
             if (current != null && current.SalvoInProgress) return false;
 
             if (allow == Allow.MissilesOnly)
-                return InterceptMissiles(aircraft, pilot);
+                return InterceptMissiles(aircraft, pilot,
+                    RoeRules.MissileDefenceProtectee(aircraft) ?? aircraft);
 
             Unit target = ChooseTarget(aircraft, allow, maxRange, out WeaponStation station);
             if (target == null || station == null) return false;
@@ -123,18 +124,29 @@ namespace WingCommand
         /// <summary>
         /// Shoot down inbound missiles using the game's own intercept target search.
         /// </summary>
-        public static bool InterceptMissiles(Aircraft aircraft, Pilot pilot)
+        public static bool InterceptMissiles(Aircraft aircraft, Pilot pilot, Aircraft protectee)
         {
+            if (protectee == null) protectee = aircraft;
+
             WeaponManager wm = aircraft.weaponManager;
             WeaponStation station = BestStationFor(aircraft, TargetClass.Missile);
             if (station == null) return false;
+
+            // The intercept search anchors on a concrete inbound missile. Passing null used
+            // to return zero targets immediately — CombatAI.LookForMissileTargets bails when
+            // the anchor has no known position — so a wingman under a missile warning never
+            // fired a single defensive shot. The anchor is the missile threatening whichever
+            // aircraft the rules of engagement chose to defend (us or the leader).
+            MissileWarning warning = protectee.GetMissileWarningSystem();
+            if (warning == null || !warning.TryGetNearestIncoming(out Missile incoming))
+                return false;
 
             wm.currentWeaponStation = station;
 
             List<Unit> targets = wm.GetTargetList();
             targets.Clear();
 
-            int found = CombatAI.LookForMissileTargets(aircraft, null, station, targets);
+            int found = CombatAI.LookForMissileTargets(aircraft, incoming, station, targets);
             wm.TargetListChanged();
 
             if (found <= 0) return false;

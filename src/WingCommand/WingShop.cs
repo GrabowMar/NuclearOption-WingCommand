@@ -232,12 +232,6 @@ namespace WingCommand
 
         /// <summary>Forget what was bought, when a mission ends.</summary>
         public static void Reset() => undeclaredBought.Clear();
-        /// <summary>The player's own airframe type, for the radial's quick-buy.</summary>
-        public static AircraftDefinition OwnType()
-        {
-            Aircraft leader = WingCommandManager.Instance?.Wing?.Leader;
-            return leader != null ? leader.definition as AircraftDefinition : null;
-        }
 
         // ------------------------------------------------------------------ purchase
 
@@ -359,7 +353,7 @@ namespace WingCommand
         }
 
         /// <summary>
-        /// The mission's own aircraft cap, plus the allowance.
+        /// The mission's own aircraft cap, applied strictly.
         ///
         /// The effective limit mirrors the game's formula in <c>FactionHQ.DeployAIAircraft</c>
         /// — the mission's base limit, raised for each enemy player and lowered for each
@@ -384,8 +378,6 @@ namespace WingCommand
             float limit = hq.AIAircraftLimit
                           + enemyPlayers * hq.addAIPerEnemyPlayer
                           - friendlyPlayers * hq.reduceAIPerFriendlyPlayer;
-
-            limit += Plugin.Config2.OverLimitAllowance.Value;
 
             int aiCount = 0;
             List<Aircraft> all = UnitRegistry.allAircraft;

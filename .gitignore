@@ -14,3 +14,6 @@ Thumbs.db
 
 # Release archives
 dist/
+
+# Local AI agent skills (kept in-tree for portability, not published)
+.opencode/

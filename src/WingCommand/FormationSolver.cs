@@ -7,10 +7,114 @@ namespace WingCommand
     /// Pure geometry: turns a leader's position/heading plus a slot index into a world
     /// position. Kept free of game types so the shapes can be reasoned about (and changed)
     /// without touching flight logic.
+    ///
+    /// Every shape is a <see cref="SlotShape"/> in two independent units: lateral and
+    /// back are multiples of the horizontal slot spacing, height is a multiple of the
+    /// vertical stack. The world offset multiplies those once at the end. One place
+    /// describes a shape, so <see cref="SlotOffset"/> and <see cref="SlotLateral"/> can no
+    /// longer drift apart, and no shape hard-codes a vertical offset out of the horizontal
+    /// spacing — which is what made Ladder climb twice as fast as it should.
     /// </summary>
     internal static class FormationSolver
     {
-        /// <param name="leaderPos">Leader position in world space.</param>
+        /// <summary>How many vertical stacks each Ladder rung steps up. The vertical step is the point of the shape.</summary>
+        private const float LadderHeight = 2f;
+
+        /// <summary>
+        /// A slot's position relative to the leader in formation units. <see cref="Lateral"/>
+        /// is positive to the leader's right, <see cref="Back"/> is positive behind it, and
+        /// <see cref="Height"/> is positive up. Lateral and back are spacing units, height is
+        /// stack units.
+        /// </summary>
+        private struct SlotShape
+        {
+            public readonly float Lateral;
+            public readonly float Back;
+            public readonly float Height;
+
+            public SlotShape(float lateral, float back, float height)
+            {
+                Lateral = lateral;
+                Back = back;
+                Height = height;
+            }
+        }
+
+        /// <summary>The shape of one slot. The single source of truth for a formation's geometry.</summary>
+        private static SlotShape Shape(FormationShape shape, int slot)
+        {
+            int pair = (slot + 1) / 2;               // 1,1,2,2,3,3...
+            float side = (slot % 2 == 1) ? 1f : -1f; // odd slots right, even slots left
+
+            switch (shape)
+            {
+                case FormationShape.EchelonLeft:
+                    return new SlotShape(-slot, 0.6f * slot, slot);
+
+                case FormationShape.LineAbreast:
+                    return new SlotShape(side * pair, 0f, 0f);
+
+                case FormationShape.Trail:
+                    return new SlotShape(0f, slot, slot);
+
+                // Line astern with the vertical step the defining feature: each rung sits in
+                // clear air above the one ahead instead of in its wake.
+                case FormationShape.Ladder:
+                    return new SlotShape(0f, slot, LadderHeight * slot);
+
+                case FormationShape.CombatSpread:
+                    return new SlotShape(side * 1.5f * pair, 0.25f * pair, 0f);
+
+                // Symmetric V: wingmen splayed evenly either side and stepped back. Both
+                // members of a pair share the same altitude, so the rung sits level.
+                case FormationShape.Vic:
+                    return new SlotShape(side * pair, pair, pair);
+
+                case FormationShape.Wall:
+                    return new SlotShape(side * 2.2f * pair, 0f, 0f);
+
+                case FormationShape.FingerFour:
+                    return FingerFour(slot);
+
+                case FormationShape.Diamond:
+                    return Diamond(slot);
+
+                case FormationShape.EchelonRight:
+                default:
+                    return new SlotShape(slot, 0.6f * slot, slot);
+            }
+        }
+
+        /// <summary>
+        /// Finger four: lead plus right and left wingmen, then an element lead astern. The
+        /// three wingmen are fixed; any beyond that fall into a second element behind, so a
+        /// larger wing still has somewhere sensible to sit rather than stacking on a slot.
+        /// </summary>
+        private static SlotShape FingerFour(int slot)
+        {
+            switch (slot)
+            {
+                case 1: return new SlotShape(1f, 0.7f, 0f);      // right wing
+                case 2: return new SlotShape(-1.2f, 0.9f, 0f);  // left wing
+                case 3: return new SlotShape(0f, 2f, 1f);       // element lead astern
+                case 4: return new SlotShape(1.2f, 2.7f, 1f);   // second element, right
+                case 5: return new SlotShape(-1.2f, 2.9f, 1f);  // second element, left
+                default: return new SlotShape(0f, 2f + (slot - 3) * 1.2f, slot - 2); // trail out
+            }
+        }
+
+        /// <summary>Diamond: two on the wings, one in the slot astern.</summary>
+        private static SlotShape Diamond(int slot)
+        {
+            switch (slot)
+            {
+                case 1: return new SlotShape(1f, 0.8f, 0f);      // right wing
+                case 2: return new SlotShape(-1f, 0.8f, 0f);     // left wing
+                case 3: return new SlotShape(0f, 1.6f, 1f);      // tail astern
+                default: return new SlotShape(0f, 1.6f + (slot - 3) * 1.2f, slot - 2); // trail out
+            }
+        }
+
         /// <param name="leaderForward">Leader forward vector; flattened internally.</param>
         /// <param name="slot">1-based slot index. Slot 0 is the leader itself.</param>
         public static Vector3 SlotOffset(
@@ -22,84 +126,13 @@ namespace WingCommand
             if (fwd.sqrMagnitude < 0.0001f) fwd = Vector3.forward;
             fwd.Normalize();
 
-            // Right-hand perpendicular in the horizontal plane.
-            Vector3 right = new Vector3(fwd.z, 0f, -fwd.x);
+            Vector3 right = Vector3.Cross(Vector3.up, fwd);
 
-            // Alternating shapes place odd slots right, even slots left.
-            int pair = (slot + 1) / 2;          // 1,1,2,2,3,3...
-            float side = (slot % 2 == 1) ? 1f : -1f;
+            SlotShape s = Shape(shape, slot);
 
-            Vector3 offset;
-            switch (shape)
-            {
-                case FormationShape.EchelonLeft:
-                    offset = right * (-spacing * slot) + fwd * (-spacing * 0.6f * slot);
-                    break;
-
-                case FormationShape.LineAbreast:
-                    offset = right * (side * spacing * pair);
-                    break;
-
-                case FormationShape.Trail:
-                    offset = fwd * (-spacing * slot);
-                    break;
-
-                case FormationShape.CombatSpread:
-                    offset = right * (side * spacing * 1.5f * pair) + fwd * (-spacing * 0.25f * pair);
-                    break;
-
-                // Two elements rather than one line: lead plus wingman, then a second pair
-                // stepped further out and further back. The classic fighter formation,
-                // because every aircraft can see the others and nobody is directly astern.
-                case FormationShape.FingerFour:
-                    switch (slot)
-                    {
-                        case 1:  offset = right * spacing + fwd * (-spacing * 0.7f); break;
-                        case 2:  offset = right * (-spacing * 1.2f) + fwd * (-spacing * 0.9f); break;
-                        default: offset = right * (-spacing * 2.2f) + fwd * (-spacing * 1.7f); break;
-                    }
-                    break;
-
-                // Symmetric V, wingmen splayed evenly either side and stepped back.
-                case FormationShape.Vic:
-                    offset = right * (side * spacing * pair) + fwd * (-spacing * pair);
-                    break;
-
-                // Two on the wings, one in the slot astern. A display formation: tight,
-                // pretty, and completely impractical in a fight.
-                case FormationShape.Diamond:
-                    switch (slot)
-                    {
-                        case 1:  offset = right * spacing + fwd * (-spacing * 0.8f); break;
-                        case 2:  offset = right * -spacing + fwd * (-spacing * 0.8f); break;
-                        default: offset = fwd * (-spacing * 1.6f); break;
-                    }
-                    break;
-
-                // Line astern with pronounced vertical separation, so each aircraft sits in
-                // clear air above the one ahead rather than in its wake.
-                case FormationShape.Ladder:
-                    offset = fwd * (-spacing * slot) + Vector3.up * (spacing * 0.25f * slot);
-                    break;
-
-                // Line abreast at wide spacing — mutual support with room to manoeuvre.
-                case FormationShape.Wall:
-                    offset = right * (side * spacing * 2.2f * pair);
-                    break;
-
-                case FormationShape.EchelonRight:
-                default:
-                    offset = right * (spacing * slot) + fwd * (-spacing * 0.6f * slot);
-                    break;
-            }
-
-            // Vertical stagger keeps wingmen out of the leader's wake and out of each other.
-            float vertical = (shape == FormationShape.LineAbreast || shape == FormationShape.CombatSpread)
-                ? stack * side * pair
-                : stack * slot;
-
-            offset.y += vertical;
-            return offset;
+            return right * (s.Lateral * spacing)
+                 - fwd * (s.Back * spacing)
+                 + Vector3.up * (s.Height * stack);
         }
 
         /// <summary>
@@ -114,39 +147,7 @@ namespace WingCommand
         public static float SlotLateral(int slot, FormationShape shape, float spacing)
         {
             if (slot <= 0) return 0f;
-
-            int pair = (slot + 1) / 2;
-            float side = (slot % 2 == 1) ? 1f : -1f;
-
-            switch (shape)
-            {
-                case FormationShape.EchelonLeft:  return -spacing * slot;
-                case FormationShape.LineAbreast:  return side * spacing * pair;
-                case FormationShape.Trail:        return 0f;
-                case FormationShape.Ladder:       return 0f;
-                case FormationShape.CombatSpread: return side * spacing * 1.5f * pair;
-                case FormationShape.Vic:          return side * spacing * pair;
-                case FormationShape.Wall:         return side * spacing * 2.2f * pair;
-
-                case FormationShape.FingerFour:
-                    switch (slot)
-                    {
-                        case 1:  return spacing;
-                        case 2:  return -spacing * 1.2f;
-                        default: return -spacing * 2.2f;
-                    }
-
-                case FormationShape.Diamond:
-                    switch (slot)
-                    {
-                        case 1:  return spacing;
-                        case 2:  return -spacing;
-                        default: return 0f;
-                    }
-
-                case FormationShape.EchelonRight:
-                default:                          return spacing * slot;
-            }
+            return Shape(shape, slot).Lateral * spacing;
         }
 
         /// <summary>

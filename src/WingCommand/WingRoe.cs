@@ -65,22 +65,60 @@ namespace WingCommand
             // keep the leader alive.
             if (roe != WingRoe.Free &&
                 Plugin.Config2.MissileDefence.Value &&
-                WingWeapons.HasMissileDefence(aircraft))
+                WingWeapons.HasMissileDefence(aircraft) &&
+                MissileDefenceProtectee(aircraft) != null)
             {
-                if (UnderMissileAttack(aircraft)) return WingWeapons.Allow.MissilesOnly;
-
-                Aircraft leader = WingCommandManager.Instance?.Wing?.Leader;
-                if (leader != null && UnderMissileAttack(leader)) return WingWeapons.Allow.MissilesOnly;
+                return WingWeapons.Allow.MissilesOnly;
             }
 
             // Escort and Free are both weapons free; they differ in what they aim at and
             // whether they may leave the slot, not in what they are allowed to shoot.
             if (roe != WingRoe.Hold) return WingWeapons.Allow.AirAndGround;
 
-            // Hold: ground attack only while the player is attacking ground.
-            if (PlayerFireWatcher.GroundAttackOpen) return WingWeapons.Allow.AirAndGround;
+            // Hold: mirror the player's ground attack, and otherwise hold fire. Shooting
+            // at whatever aircraft happens to be in range is Escort/Free behaviour, not
+            // Hold's — a Hold wingman that fired at every enemy in range was exactly the
+            // "they shoot missiles very aggressively" complaint.
+            if (PlayerFireWatcher.GroundAttackOpen) return WingWeapons.Allow.GroundOnly;
 
-            return WingWeapons.Allow.AirOnly;
+            return WingWeapons.Allow.None;
+        }
+
+        /// <summary>
+        /// The aircraft under missile attack that a wingman should defend, or null.
+        ///
+        /// Own missiles first, then the leader's — the two directions that make the cautious
+        /// rungs worth having. The caller needs the *aircraft*, not just the yes/no, because
+        /// the game's intercept search anchors on a specific inbound missile and cannot look
+        /// one up from nothing.
+        /// </summary>
+        public static Aircraft MissileDefenceProtectee(Aircraft aircraft)
+        {
+            WingRegistry wing = WingCommandManager.Instance?.Wing;
+            Aircraft leader = wing?.Leader;
+
+            // Escort is the rung that exists to guard the leader, so it answers the
+            // leader's missiles before its own. The other cautious rungs see to themselves
+            // first, then the leader.
+            bool leaderFirst = wing != null && wing.Roe == WingRoe.Escort;
+
+            if (leaderFirst && leader != null && UnderMissileAttack(leader)) return leader;
+            if (UnderMissileAttack(aircraft)) return aircraft;
+            if (leader != null && UnderMissileAttack(leader)) return leader;
+
+            // Nothing on us or the leader: a formation still defends its members, so a
+            // missile aimed at a fellow wingman is worth more than none at all.
+            if (wing != null)
+            {
+                foreach (WingMember m in wing.Members)
+                {
+                    Aircraft other = m.Aircraft;
+                    if (other == null || other == aircraft) continue;
+                    if (UnderMissileAttack(other)) return other;
+                }
+            }
+
+            return null;
         }
 
         /// <summary>True when this rung prefers threats to the leader over its own.</summary>

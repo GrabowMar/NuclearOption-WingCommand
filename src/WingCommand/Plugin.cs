@@ -17,7 +17,7 @@ namespace WingCommand
     {
         public const string PluginGuid = "com.marci.wingcommand";
         public const string PluginName = "WingCommand";
-        public const string PluginVersion = "0.6.0";
+        public const string PluginVersion = "0.6.1";
 
         internal static Plugin Instance { get; private set; }
         internal static new ManualLogSource Logger { get; private set; }
@@ -187,7 +187,6 @@ namespace WingCommand
         public readonly ConfigEntry<float> WingPriceGrowth;
         public readonly ConfigEntry<float> FastDeliverySurcharge;
         public readonly ConfigEntry<float> FastDeliveryDistance;
-        public readonly ConfigEntry<float> OverLimitAllowance;
         public readonly ConfigEntry<bool> IncludeUndeclaredAircraft;
         public readonly ConfigEntry<float> UndeclaredStock;
 
@@ -442,13 +441,6 @@ namespace WingCommand
                 new ConfigDescription(
                     "How far behind you a fast delivery appears, in metres.",
                     new AcceptableValueRange<float>(500f, 10000f),
-                    new ConfigurationManagerAttributes { IsAdvanced = true }));
-            OverLimitAllowance = c.Bind("Shop", "OverLimitAllowance", 1f,
-                new ConfigDescription(
-                    "How many aircraft your purchases may push the faction above the " +
-                    "mission's own AI aircraft limit. Raising this is the main way to " +
-                    "unbalance a mission with this feature.",
-                    new AcceptableValueRange<float>(0f, 8f),
                     new ConfigurationManagerAttributes { IsAdvanced = true }));
 
             IncludeUndeclaredAircraft = c.Bind("Shop", "IncludeUndeclaredAircraft", true,

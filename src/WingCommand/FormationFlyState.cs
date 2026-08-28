@@ -55,6 +55,9 @@ namespace WingCommand
         private float losingGroundSince;
         private Vector3 smoothedAvoidance;
         private float threatSpacing = 1f;
+
+        /// <summary>Seconds of leader motion fed into the slot position, so the slot is where the leader will be, not where it was.</summary>
+        private const float SlotPredictionSeconds = 1f;
         private RotaryFormation.Mode lastRotaryMode = (RotaryFormation.Mode)(-1);
         private float lastRotaryReport;
 
@@ -73,8 +76,12 @@ namespace WingCommand
         /// </summary>
         private Vector3 smoothedLeaderDir;
 
-        /// <summary>Seconds of smoothing. Long enough to reject stick noise, short enough not to lag a turn.</summary>
-        private const float LeaderTrackSmoothing = 1.2f;
+        /// <summary>
+        /// Seconds of smoothing. Long enough to reject stick noise, short enough not to lag a
+        /// turn. Tightened to half a second: the track still filters the leader's every
+        /// twitch, but a genuine manoeuvre is now followed rather than trailed.
+        /// </summary>
+        private const float LeaderTrackSmoothing = 0.5f;
 
         /// <summary>
         /// One report every five seconds, per wingman. The timer lives here rather than in
@@ -167,7 +174,14 @@ namespace WingCommand
                 leader.transform.forward, member.Slot, shape, spacing,
                 Plugin.Config2.SlotStack.Value);
 
-            GlobalPosition slotPos = leader.GlobalPosition() + offset;
+            // Anchor the slot to where the leader is going, not where it is: a fast leader
+            // drags an un-predicted slot behind it and the wingman spends the whole flight
+            // chasing a moving target it can never sit on. Predicting the leader's own motion
+            // removes that lag so station-keeping converges instead of perpetually trailing.
+            Vector3 leaderVel = leader.rb != null ? leader.rb.velocity : Vector3.zero;
+            GlobalPosition slotPos = leader.GlobalPosition()
+                                     + leaderVel * SlotPredictionSeconds
+                                     + offset;
 
             // Separation keeps wingmen out of each other during a rejoin, and path-cut
             // avoidance keeps them out of the leader's nose.
