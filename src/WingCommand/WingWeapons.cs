@@ -42,9 +42,14 @@ namespace WingCommand
                 return InterceptMissiles(aircraft, pilot,
                     RoeRules.MissileDefenceProtectee(aircraft) ?? aircraft);
 
-            Unit target = ChooseTarget(aircraft, allow, maxRange, out WeaponStation station);
+            Unit target = ChooseTarget(aircraft, allow, maxRange,
+                                       out WeaponStation station, out int capacity);
             if (target == null || station == null) return false;
             if (!ShotIsValid(aircraft, station, target)) return false;
+            if (!TacticalCoordinator.TryClaim(
+                    target, aircraft, capacity,
+                    Mathf.Max(Plugin.Config2.FireInterval.Value * 1.5f, 3f)))
+                return false;
 
             wm.currentWeaponStation = station;
             wm.ClearTargetList();
@@ -111,6 +116,15 @@ namespace WingCommand
             if (station == null) return false;
             if (!ShotIsValid(aircraft, station, target)) return false;
 
+            // Explicit attack orders may deliberately mass some fire, but still respect the
+            // wing-wide cap. This keeps a four-ship from launching four missiles at a target
+            // that only needed one or two.
+            int capacity = RequiredAttackers(station, target);
+            if (!TacticalCoordinator.TryClaim(
+                    target, aircraft, capacity,
+                    Mathf.Max(Plugin.Config2.FireInterval.Value * 1.5f, 3f)))
+                return false;
+
             wm.currentWeaponStation = station;
             wm.ClearTargetList();
             wm.AddTargetList(target);
@@ -138,8 +152,15 @@ namespace WingCommand
             // fired a single defensive shot. The anchor is the missile threatening whichever
             // aircraft the rules of engagement chose to defend (us or the leader).
             MissileWarning warning = protectee.GetMissileWarningSystem();
-            if (warning == null || !warning.TryGetNearestIncoming(out Missile incoming))
+            if (warning == null || !warning.IsWarning())
                 return false;
+
+            Missile incoming = ChooseIncoming(warning, protectee, aircraft);
+            if (incoming == null) return false;
+
+            // One interceptor per inbound missile. If it cannot take the shot the claim
+            // expires quickly and another wingman gets the next opportunity.
+            if (!TacticalCoordinator.TryClaim(incoming, aircraft, 1, 3f)) return false;
 
             wm.currentWeaponStation = station;
 
@@ -160,9 +181,10 @@ namespace WingCommand
         private enum TargetClass { Air, Surface, Missile }
 
         private static Unit ChooseTarget(Aircraft aircraft, Allow allow, float maxRange,
-                                         out WeaponStation station)
+                                         out WeaponStation station, out int capacity)
         {
             station = null;
+            capacity = 1;
 
             bool wantAir = allow == Allow.AirOnly || allow == Allow.AirAndGround;
             bool wantGround = allow == Allow.GroundOnly || allow == Allow.AirAndGround;
@@ -200,16 +222,87 @@ namespace WingCommand
                 // The game's own weapon/target matching, so a wingman does not try to take
                 // a tank with an anti-air missile.
                 float score = candidate.WeaponInfo.effectiveness.OpportunityAgainst(id);
+                if (score <= 0f) continue;
+
+                float distance = FastMath.Distance(unit.GlobalPosition(), from);
+                float weaponRange = Mathf.Min(maxRange,
+                    Mathf.Max(candidate.WeaponInfo.targetRequirements.maxRange, 1f));
+                if (distance > weaponRange || distance < candidate.WeaponInfo.targetRequirements.minRange)
+                    continue;
+
+                int needed = RequiredAttackers(candidate, unit);
+                int committed = TacticalCoordinator.CountClaims(unit, aircraft);
+                if (committed >= needed) continue;
+
+                // Effectiveness first, then range and reservation pressure. The old loop
+                // used effectiveness alone, so equal contacts all resolved to whichever
+                // BattlefieldGrid happened to enumerate first for every wingman.
+                score *= Mathf.Lerp(1f, 0.35f, Mathf.Clamp01(distance / weaponRange));
+                score /= 1f + committed * Plugin.Config2.TargetSaturationPenalty.Value;
                 if (score <= bestScore) continue;
 
                 bestScore = score;
                 best = unit;
                 bestStation = candidate;
+                capacity = needed;
             }
 
             scratch.Clear();
             station = bestStation;
             return best;
+        }
+
+        /// <summary>Closest-time unclaimed missile aimed at the protected aircraft.</summary>
+        private static Missile ChooseIncoming(MissileWarning warning, Aircraft protectee,
+                                              Aircraft interceptor)
+        {
+            Missile best = null;
+            float bestTime = float.MaxValue;
+
+            List<Missile> missiles = warning.knownMissiles;
+            for (int i = 0; i < missiles.Count; i++)
+            {
+                Missile missile = missiles[i];
+                if (missile == null || missile.disabled || missile.targetID != protectee.persistentID)
+                    continue;
+                if (TacticalCoordinator.CountClaims(missile, interceptor) > 0) continue;
+
+                Vector3 toMissile = missile.GlobalPosition() - protectee.GlobalPosition();
+                Vector3 relativeVelocity = missile.rb != null && protectee.rb != null
+                    ? missile.rb.velocity - protectee.rb.velocity
+                    : Vector3.zero;
+                float closing = toMissile.sqrMagnitude > 1f
+                    ? Mathf.Max(Vector3.Dot(-toMissile.normalized, relativeVelocity), 1f)
+                    : 1f;
+                float impactTime = toMissile.magnitude / closing;
+
+                if (impactTime >= bestTime) continue;
+                bestTime = impactTime;
+                best = missile;
+            }
+
+            return best;
+        }
+
+        internal static int RequiredAttackers(WeaponStation station, Unit target)
+        {
+            if (station == null || station.WeaponInfo == null || target == null) return 1;
+            if (target is Missile) return 1;
+
+            int estimated = Mathf.CeilToInt(station.WeaponInfo.CalcAttacksNeeded(target));
+            return Mathf.Clamp(estimated, 1, Plugin.Config2.MaxWingmenPerTarget.Value);
+        }
+
+        /// <summary>Estimated useful concurrent shooters from a particular aircraft.</summary>
+        public static int RecommendedAttackers(Aircraft aircraft, Unit target)
+        {
+            if (aircraft == null || target == null || target.definition == null) return 1;
+
+            bool isAir = target.definition.typeIdentity.air > 0.5f;
+            WeaponStation station = BestStationFor(
+                aircraft, target is Missile ? TargetClass.Missile
+                                            : (isAir ? TargetClass.Air : TargetClass.Surface));
+            return RequiredAttackers(station, target);
         }
 
         /// <summary>Reused across calls so target search allocates nothing per tick.</summary>

@@ -703,7 +703,8 @@ namespace WingCommand
                     : Dim();
 
                 error.text = ErrorText(m);
-                error.color = m.Order == WingOrder.Formation && m.SlotError > 0f && m.SlotError < 250f
+                error.color = !m.IsPanicking && m.Order == WingOrder.Formation &&
+                              m.SlotError > 0f && m.SlotError < 250f
                     ? Accent()
                     : Dim();
             }
@@ -716,7 +717,7 @@ namespace WingCommand
 
             private static string ErrorText(WingMember m)
             {
-                if (m.Order != WingOrder.Formation) return "-";
+                if (m.IsPanicking || m.Order != WingOrder.Formation) return "-";
                 if (m.SlotError <= 0f) return "...";
                 return m.SlotError < 10000f
                     ? m.SlotError.ToString("F0") + " m"
@@ -952,6 +953,8 @@ namespace WingCommand
         /// </summary>
         private static string ShortOrder(WingMember m)
         {
+            if (m.IsPanicking) return "DEFENSIVE";
+
             Unit assigned = m.AssignedTarget;
             if (assigned != null && !assigned.disabled)
                 return UiTheme.Truncate(assigned.definition != null ? assigned.definition.code : assigned.unitName, 8);

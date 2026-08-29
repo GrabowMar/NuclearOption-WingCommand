@@ -19,6 +19,7 @@ namespace WingCommand
         private readonly OrbitState orbitState;
         private readonly LandInPlaceState landState;
         private readonly AttackRunState attackState;
+        private readonly DefensiveManeuverState defensiveState;
 
         /// <summary>Flying back to the wing while a standing Engage order is still in force.</summary>
         private bool recalled;
@@ -36,6 +37,7 @@ namespace WingCommand
             orbitState = new OrbitState(this);
             landState = new LandInPlaceState(this);
             attackState = new AttackRunState(this);
+            defensiveState = new DefensiveManeuverState(this);
             joinedAt = Time.timeSinceLevelLoad;
         }
 
@@ -53,8 +55,21 @@ namespace WingCommand
 
         public void Apply(WingOrder order)
         {
+            if (order != WingOrder.Attack)
+                AssignedTarget = null;
+            TacticalCoordinator.Release(Aircraft);
+
             Order = order;
             recalled = false;
+
+            // A player order received during a missile break is queued as the standing
+            // intent. Self-preservation continues until clear, then resumes this exact order.
+            if (IsPanicking)
+            {
+                if (Plugin.Config2.VerboseLogging.Value)
+                    Plugin.Logger.LogInfo($"[Panic] {Name} queued {order} while defensive");
+                return;
+            }
 
             switch (order)
             {
@@ -141,6 +156,7 @@ namespace WingCommand
 
             Order = WingOrder.Engage;
             OnLeash = false;
+            IsPanicking = false;
             SwitchToCombat();
         }
 
@@ -149,6 +165,9 @@ namespace WingCommand
 
         /// <summary>A target the player has explicitly assigned, or null.</summary>
         public Unit AssignedTarget { get; private set; }
+
+        /// <summary>True while a missile warning temporarily owns the flight controls.</summary>
+        public bool IsPanicking { get; private set; }
 
         /// <summary>Fuel remaining, 0-1.</summary>
         public float Fuel => Aircraft != null ? Aircraft.GetFuelLevel() : 0f;
@@ -180,12 +199,15 @@ namespace WingCommand
         /// </summary>
         public void AttackTarget(Unit target)
         {
+            TacticalCoordinator.Release(Aircraft);
             AssignedTarget = target;
             if (target == null) return;
 
             Order = WingOrder.Attack;
             recalled = false;
             OnLeash = false;
+
+            if (IsPanicking) return;
 
             WingComms.Say(this, WingComms.Call.Engaging, target.unitName);
             Pilot.SwitchState(attackState);
@@ -199,6 +221,7 @@ namespace WingCommand
         public void CheckReserves()
         {
             if (!Alive || !Plugin.Config2.AutoReturnOnEmpty.Value) return;
+            if (IsPanicking) return;
 
             // Orders that are already going somewhere deliberate are not interrupted by a
             // bingo call. A wingman on the deck does not need telling to land, and one
@@ -240,7 +263,7 @@ namespace WingCommand
         /// </summary>
         public void BreakToEngage(string reason)
         {
-            if (OnLeash || Order != WingOrder.Formation) return;
+            if (IsPanicking || OnLeash || Order != WingOrder.Formation) return;
 
             if (Plugin.Config2.VerboseLogging.Value)
                 Plugin.Logger.LogInfo($"[Wing] {Name} breaking to engage: {reason}");
@@ -270,7 +293,7 @@ namespace WingCommand
         /// </summary>
         public void CheckLeash()
         {
-            if (!Alive) return;
+            if (!Alive || IsPanicking) return;
             if (Order != WingOrder.Engage && Order != WingOrder.Attack && !OnLeash) return;
 
             Aircraft leader = Leader;
@@ -333,6 +356,44 @@ namespace WingCommand
 
             WingComms.Say(this, WingComms.Call.Engaging);
             SwitchToCombat();
+        }
+
+        /// <summary>Enter the temporary defensive interrupt when this aircraft is warned.</summary>
+        public void CheckThreats()
+        {
+            if (!Alive || IsPanicking || !Plugin.Config2.PanicSystem.Value) return;
+            if (Aircraft.radarAlt < 5f) return;
+
+            MissileWarning warning = Aircraft.GetMissileWarningSystem();
+            if (warning == null || !warning.IsWarning()) return;
+
+            IsPanicking = true;
+            TacticalCoordinator.Release(Aircraft);
+            Pilot.SwitchState(defensiveState);
+        }
+
+        /// <summary>
+        /// Called by <see cref="DefensiveManeuverState"/> after the warning stays clear.
+        /// The standing order may have changed while defensive, so resolve it at this exact
+        /// moment instead of caching a stale pilot state at panic entry.
+        /// </summary>
+        public void ResumeAfterPanic()
+        {
+            if (!IsPanicking) return;
+
+            WingOrder resume = Order;
+            IsPanicking = false;
+
+            if (resume == WingOrder.Attack && (AssignedTarget == null || AssignedTarget.disabled))
+            {
+                AssignedTarget = null;
+                resume = WingOrder.Formation;
+            }
+
+            if (Plugin.Config2.VerboseLogging.Value)
+                Plugin.Logger.LogInfo($"[Panic] {Name} clear -> {resume}");
+
+            Apply(resume);
         }
 
         private void SwitchToCombat()

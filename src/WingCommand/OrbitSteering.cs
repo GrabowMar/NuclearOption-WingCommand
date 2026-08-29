@@ -78,7 +78,7 @@ namespace WingCommand
                 ignoreCollisions: false,
                 runwayAlign: false,
                 effort: 2f,
-                bankAllowed: 120f,
+                bankAllowed: FixedWingFormation.MaxSafeBank,
                 followTerrain: false,
                 altitudeHold: Mathf.Clamp(altitude, aircraft.maxRadius, 8000f),
                 targetVelocity: Vector3.zero);

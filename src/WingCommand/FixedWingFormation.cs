@@ -75,6 +75,16 @@ namespace WingCommand
         private const float TurnDemandGain = 3f;
 
         /// <summary>
+        /// Formation capture is not an aerobatic order. Authority beyond a vertical bank
+        /// lets AutoAim roll through the horizon to chase a slot behind the aircraft, which
+        /// the live log showed as 200-277 degree requests followed by pilot loss/ejection.
+        /// </summary>
+        internal const float MaxSafeBank = 88f;
+
+        /// <summary>Largest course change allowed while intercepting a distant slot.</summary>
+        private const float MaxRejoinCommandAngle = 55f;
+
+        /// <summary>
         /// How much bank authority to grant relative to the leader's own bank. Above one
         /// on purpose: the autopilot de-rates <c>bankAllowed</c> by altitude and speed —
         /// down to 0.6 at low altitude — so asking for exactly the leader's bank would hand
@@ -199,7 +209,7 @@ namespace WingCommand
         public static void Fly(Aircraft aircraft, Aircraft leader, ControlInputs controls,
                                int slot, GlobalPosition slotPos, Vector3 toSlot,
                                float distance, float spacing, Rejoin rejoin, Vector3 smoothedLeaderDir,
-                               bool report)
+                               bool report, FormationShape shape, float lateralScale)
         {
             AircraftParameters p = aircraft.GetAircraftParameters();
             float leaderSpeed = Mathf.Max(leader.speed, 1f);
@@ -216,7 +226,8 @@ namespace WingCommand
             float outOfPosition = Mathf.SmoothStep(0f, 1f, Mathf.Clamp01(distance / capture));
 
             ThrottleState throttle = Throttle(aircraft, leader, controls, p, slot, toSlot, distance, capture, spacing,
-                                              leaderSpeed, drift, aggression, damping, rejoin, outOfPosition);
+                                              leaderSpeed, drift, aggression, damping, rejoin, outOfPosition,
+                                              shape, lateralScale);
 
             float commandAngle = Steer(aircraft, leader, slotPos, toSlot, distance,
                                        leaderVel, drift, aggression, damping, spacing,
@@ -230,9 +241,10 @@ namespace WingCommand
         private static ThrottleState Throttle(Aircraft aircraft, Aircraft leader, ControlInputs controls,
                                               AircraftParameters p, int slot, Vector3 toSlot,
                                               float distance, float capture, float spacing,
-                                              float leaderSpeed, Vector3 drift,
-                                              float aggression, float damping, Rejoin rejoin,
-                                              float outOfPosition)
+                                               float leaderSpeed, Vector3 drift,
+                                               float aggression, float damping, Rejoin rejoin,
+                                               float outOfPosition, FormationShape shape,
+                                               float lateralScale)
         {
             // --- Turn compensation: fly concentric arcs, not a swinging offset. ---
             // When the leader turns at yaw rate w, every slot orbits the same centre, so a
@@ -243,8 +255,9 @@ namespace WingCommand
                 ? Vector3.Dot(leader.rb.angularVelocity, Vector3.up)
                 : 0f;
             float lateral = FormationSolver.SlotLateral(
-                slot, Plugin.Config2.Shape.Value, Plugin.Config2.SlotSpacing.Value);
-            float turnCompensation = yawRate * lateral;
+                slot, shape, spacing, lateralScale);
+            float turnCompensation = Mathf.Clamp(
+                yawRate * lateral, -p.maxSpeed * 0.25f, p.maxSpeed * 0.25f);
 
             // --- Arrival: deceleration-limited, rate-damped closure. ---
             // Two independent demands pull on the speed: the position error (gap ahead
@@ -270,8 +283,13 @@ namespace WingCommand
                 closure = Mathf.Min(closure, 0f);
 
             float desiredSpeed = leaderSpeed + turnCompensation + closure;
-            desiredSpeed = Mathf.Clamp(desiredSpeed, p.landingSpeed * 1.2f,
-                                       Mathf.Max(p.maxSpeed, leaderSpeed * 1.5f));
+            // Never ask an aircraft for a speed it cannot fly. The previous upper bound used
+            // leaderSpeed*1.5, so a 100 m/s Cricket was routinely commanded to 150-175 m/s;
+            // it stayed at full throttle, bled more speed in extreme bank, and fell farther
+            // behind every report. Capability is the ceiling, not the leader's wish.
+            float minSafeSpeed = Mathf.Max(p.landingSpeed * 1.2f, 1f);
+            float maxUsableSpeed = Mathf.Max(p.maxSpeed, minSafeSpeed);
+            desiredSpeed = Mathf.Clamp(desiredSpeed, minSafeSpeed, maxUsableSpeed);
 
             // Feed-forward plus proportional, no integral. The feed-forward models the
             // throttle for the desired speed (the old resting point was cruise throttle,
@@ -407,6 +425,23 @@ namespace WingCommand
             // GlobalPosition has no Lerp, but subtracting two of them gives a Vector3.
             GlobalPosition aimPoint = stationAim + (pursuitAim - stationAim) * outOfPosition;
 
+            // A pursuit point can lie behind a returning wingman after an attack. Feeding
+            // that point straight to AutoAim produced 120-degree course commands and invited
+            // an inversion. Intercept progressively, with a wider but still flyable limit
+            // outside capture; subsequent ticks continue the turn until the slot is ahead.
+            Vector3 requested = aimPoint - aircraft.GlobalPosition();
+            Vector3 currentDirection = aircraft.rb.velocity.sqrMagnitude > 1f
+                ? aircraft.rb.velocity.normalized
+                : aircraft.transform.forward;
+            if (requested.sqrMagnitude > 1f)
+            {
+                float allowed = Mathf.Lerp(maxAngle, MaxRejoinCommandAngle, outOfPosition);
+                Vector3 safeDirection = Vector3.RotateTowards(
+                    currentDirection, requested.normalized, allowed * Mathf.Deg2Rad, 0f);
+                aimPoint = aircraft.GlobalPosition()
+                         + safeDirection * Mathf.Max(requested.magnitude, lookAhead);
+            }
+
             // --- Bank authority, from actual turn demand ---
             //
             // This is the fix for the roll axis spinning while the formation sat three
@@ -461,6 +496,7 @@ namespace WingCommand
             // wide on a fast manoeuvre, dropped behind, and then spent the whole chase
             // catching back up — the exact "they spend a lot of time chasing me" symptom.
             maxBank = Mathf.Max(maxBank, leaderBankMag * BankFollowScale + LevelBank);
+            maxBank = Mathf.Min(maxBank, MaxSafeBank);
 
             float bankAllowed = Mathf.Clamp(turnDemand, LevelBank, maxBank);
 

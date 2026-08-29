@@ -1,7 +1,7 @@
 {
   "id": "WingCommand",
   "displayName": "WingCommand",
-  "description": "Command AI aircraft as your wing. Recruit or buy wingmen, hold ten formation shapes, and issue orders - rejoin, engage on a tether, attack your target, fall back with flares, orbit, deliver cargo, land - from the game's own radial menu, an MFD screen and the tactical map. Wingmen and their targets are marked on both the HUD and the map. EARLY DEVELOPMENT: largely AI-authored, not balanced (the shop is overpowered and will break mission difficulty), host or single-player only, and expect behaviour and config to change between versions. Feedback and bug reports very welcome.",
+  "description": "Command AI aircraft as your wing. Recruit or buy wingmen, fly ten reactive formation shapes, coordinate targets, and issue orders - rejoin, engage on a tether, attack, fall back, orbit, deliver cargo, land. Wingmen now defend themselves against missile warnings with seeker-aware countermeasures and resume their queued order. Includes radial, MFD and tactical-map controls plus HUD/map symbology. EARLY DEVELOPMENT: not balanced, host or single-player only, and expect behaviour and config to change between versions.",
   "tags": ["QoL", "Utility", "AI"],
   "authors": ["GrabowMar"],
   "isClientOrServer": "Client",
@@ -18,11 +18,11 @@
     {
       "type": "plugin",
       "fileName": "WingCommand.dll",
-      "downloadUrl": "https://github.com/GrabowMar/NuclearOption-WingCommand/releases/download/v0.6.5/WingCommand.dll",
+      "downloadUrl": "https://github.com/GrabowMar/NuclearOption-WingCommand/releases/download/v0.7.0/WingCommand.dll",
       "gameVersion": "0.34.2",
-      "version": "0.6.5",
+      "version": "0.7.0",
       "category": "Release",
-      "hash": "sha256:b7718efcbb4db00e23ef60ae440519e86a7fb285134166a3e1b548b63a61a236"
+      "hash": "sha256:ffece6d8c0611ab98edf0c26c3c5e1bf3065e447f558f07d7ba804624a1b9bb7"
     }
   ]
 }

@@ -55,9 +55,15 @@ namespace WingCommand
         private float losingGroundSince;
         private Vector3 smoothedAvoidance;
         private float threatSpacing = 1f;
+        private Vector3 smoothedSlotLocal;
+        private bool slotLocalReady;
+        private float lateralTurnScale = 1f;
+        private float trailTurnScale = 1f;
 
         /// <summary>Seconds of leader motion fed into the slot position, so the slot is where the leader will be, not where it was.</summary>
         private const float SlotPredictionSeconds = 1f;
+        private const float ShapeTransitionSeconds = 1.6f;
+        private const float TurnGeometrySeconds = 0.7f;
         private RotaryFormation.Mode lastRotaryMode = (RotaryFormation.Mode)(-1);
         private float lastRotaryReport;
 
@@ -134,6 +140,7 @@ namespace WingCommand
                 aircraft.SetGear(deployed: false);
 
             pilot.flightInfo.HasTakenOff = true;
+            slotLocalReady = false;
 
             if (Plugin.Config2.VerboseLogging.Value)
                 Plugin.Logger.LogInfo($"[Formation] {aircraft.unitName} entering slot {member.Slot}");
@@ -179,9 +186,39 @@ namespace WingCommand
 
             spacing *= ThreatSpacingScale(leader);
 
-            Vector3 offset = FormationSolver.SlotOffset(
-                leader.transform.forward, member.Slot, shape, spacing,
-                Plugin.Config2.SlotStack.Value);
+            // Fluid formation geometry: a hard turn compresses the line abreast component
+            // and opens the trail component slightly. That reduces the impossible speed
+            // difference between inside and outside slots while keeping the formation
+            // recognisable instead of letting it dissolve into individual chases.
+            float yawRate = leader.rb != null
+                ? Mathf.Abs(Vector3.Dot(leader.rb.angularVelocity, Vector3.up))
+                : 0f;
+            float turn = Mathf.Clamp01(yawRate / 0.18f);
+            float geometryBlend = 1f - Mathf.Exp(-Time.fixedDeltaTime / TurnGeometrySeconds);
+            lateralTurnScale = Mathf.Lerp(lateralTurnScale, Mathf.Lerp(1f, 0.72f, turn), geometryBlend);
+            trailTurnScale = Mathf.Lerp(trailTurnScale, Mathf.Lerp(1f, 1.12f, turn), geometryBlend);
+
+            Vector3 desiredSlotLocal = FormationSolver.SlotCoordinates(
+                member.Slot, shape, spacing, Plugin.Config2.SlotStack.Value,
+                lateralTurnScale, trailTurnScale);
+
+            if (!slotLocalReady)
+            {
+                smoothedSlotLocal = desiredSlotLocal;
+                slotLocalReady = true;
+            }
+            else
+            {
+                // Shape, threat-spacing and manoeuvre changes all ease in leader-local
+                // space. The shape moves continuously, but it still rotates with the leader
+                // immediately instead of lagging behind in world space.
+                smoothedSlotLocal = Vector3.Lerp(
+                    smoothedSlotLocal, desiredSlotLocal,
+                    1f - Mathf.Exp(-Time.fixedDeltaTime / ShapeTransitionSeconds));
+            }
+
+            Vector3 offset = FormationSolver.WorldOffset(
+                leader.transform.forward, smoothedSlotLocal);
 
             // Anchor the slot to where the leader is going, not where it is: a fast leader
             // drags an un-predicted slot behind it and the wingman spends the whole flight
@@ -238,7 +275,7 @@ namespace WingCommand
                     aircraft, leader, controlInputs, member.Slot,
                     slotPos, toSlot, distance, spacing,
                     new FixedWingFormation.Rejoin(rejoinHoldUntil, rejoinBoostUntil),
-                    TrackLeader(leader), DueToReport());
+                    TrackLeader(leader), DueToReport(), shape, lateralTurnScale);
             }
             else
             {
@@ -294,14 +331,20 @@ namespace WingCommand
 
             if (scale > 1.001f)
             {
-                bool threatened =
-                    RoeRules.Current == WingRoe.Free;
+                MissileWarning leaderWarning = leader.GetMissileWarningSystem();
+                MissileWarning ownWarning = aircraft != null
+                    ? aircraft.GetMissileWarningSystem()
+                    : null;
 
+                bool threatened =
+                    (leaderWarning != null && leaderWarning.IsWarning()) ||
+                    (ownWarning != null && ownWarning.IsWarning());
+
+                // A visual contact inside the tactical bubble is enough to loosen up even
+                // before a missile is in the air. ROE alone is not: selecting Free while
+                // cruising in an empty sky should not permanently scatter the wing.
                 if (!threatened)
-                {
-                    MissileWarning warning = leader.GetMissileWarningSystem();
-                    threatened = warning != null && warning.IsWarning();
-                }
+                    threatened = WingWeapons.NearestThreatTo(leader, 8000f) != null;
 
                 if (threatened) target = scale;
             }
@@ -358,10 +401,11 @@ namespace WingCommand
             // rather than at whatever is nearest to us. This is the entire difference
             // between Escort and Hold - station-keeping and fire gating are untouched, only
             // the choice of target changes.
+            bool coveringLeader = false;
             if (assigned == null && RoeRules.GuardsLeader(roe))
             {
                 assigned = WingWeapons.NearestThreatTo(leader, range);
-                if (assigned != null) WingComms.Say(member, WingComms.Call.Covering);
+                coveringLeader = assigned != null;
             }
 
             bool fired;
@@ -371,18 +415,21 @@ namespace WingCommand
             }
             else if (allow == WingWeapons.Allow.MissilesOnly)
             {
-                WingComms.Say(member, WingComms.Call.Defending);
-
                 // Missile defence is time-critical and uses its own short interval.
                 fired = Time.timeSinceLevelLoad - lastFiredTime >= 1f &&
                         WingWeapons.Engage(aircraft, pilot, allow, range);
+                if (fired) WingComms.Say(member, WingComms.Call.Defending);
             }
             else
             {
                 fired = mayFire && WingWeapons.Engage(aircraft, pilot, allow, range);
             }
 
-            if (fired) lastFiredTime = Time.timeSinceLevelLoad;
+            if (fired)
+            {
+                lastFiredTime = Time.timeSinceLevelLoad;
+                if (coveringLeader) WingComms.Say(member, WingComms.Call.Covering);
+            }
         }
 
         /// <summary>

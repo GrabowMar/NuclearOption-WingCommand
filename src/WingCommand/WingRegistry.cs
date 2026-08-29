@@ -61,7 +61,7 @@ namespace WingCommand
             Leader = null;
         }
 
-        /// <summary>Put the whole wing onto one target.</summary>
+        /// <summary>Put a useful number of wingmen onto one target.</summary>
         public int AttackTarget(Unit target)
         {
             if (target == null) return 0;
@@ -70,6 +70,12 @@ namespace WingCommand
             foreach (WingMember m in members)
             {
                 if (!m.Alive) continue;
+                int capacity = WingWeapons.RecommendedAttackers(m.Aircraft, target);
+                if (ordered >= capacity)
+                {
+                    m.Apply(WingOrder.Formation);
+                    continue;
+                }
                 m.AttackTarget(target);
                 ordered++;
             }
@@ -97,13 +103,6 @@ namespace WingCommand
             covered = 0;
             if (targets == null || targets.Count == 0) return 0;
 
-            if (targets.Count == 1)
-            {
-                int all = AttackTarget(targets[0]);
-                covered = all > 0 ? 1 : 0;
-                return all;
-            }
-
             var free = new List<WingMember>();
             foreach (WingMember m in members)
             {
@@ -112,6 +111,7 @@ namespace WingCommand
             if (free.Count == 0) return 0;
 
             var seen = new HashSet<Unit>();
+            var assigned = new Dictionary<Unit, int>();
             int ordered = 0;
 
             while (free.Count > 0)
@@ -123,18 +123,28 @@ namespace WingCommand
                     if (target == null || target.disabled) continue;
                     if (free.Count == 0) break;
 
+                    int already = assigned.TryGetValue(target, out int count) ? count : 0;
+                    int capacity = WingWeapons.RecommendedAttackers(free[0].Aircraft, target);
+                    if (already >= capacity) continue;
+
                     WingMember nearest = TakeNearest(free, target);
                     if (nearest == null) continue;
 
                     nearest.AttackTarget(target);
                     ordered++;
                     assignedThisPass = true;
+                    assigned[target] = already + 1;
                     if (seen.Add(target)) covered++;
                 }
 
                 // No live target in the list: stop rather than spin.
                 if (!assignedThisPass) break;
             }
+
+            // Aircraft beyond the useful simultaneous attack count remain as cover instead
+            // of queueing behind the same target and wasting the whole wing's weapons.
+            for (int i = 0; i < free.Count; i++)
+                free[i].Apply(WingOrder.Formation);
 
             return ordered;
         }
@@ -170,6 +180,12 @@ namespace WingCommand
             for (int i = 0; i < members.Count; i++) members[i].CheckLeash();
         }
 
+        /// <summary>Let missile self-preservation interrupt any standing wing order.</summary>
+        public void CheckThreats()
+        {
+            for (int i = 0; i < members.Count; i++) members[i].CheckThreats();
+        }
+
         /// <summary>Drop members that died, ejected, or despawned.</summary>
         public void Prune()
         {
@@ -181,6 +197,7 @@ namespace WingCommand
                 if (Plugin.Config2.VerboseLogging.Value)
                     Plugin.Logger.LogInfo("[Wing] lost " + m.Name + ": " + LostReason(m));
 
+                TacticalCoordinator.Release(m.Aircraft);
                 members.RemoveAt(i);
             }
         }

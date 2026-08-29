@@ -31,6 +31,8 @@ namespace WingCommand
             Down,
             Unable,
             Copy,
+            Panic,
+            DefensiveClear,
         }
 
         private const float RepeatCooldown = 12f;
@@ -101,6 +103,10 @@ namespace WingCommand
                 case Call.Orbiting:   return "on station, orbiting";
                 case Call.Delivering: return "running the cargo in";
                 case Call.Down:       return "on the deck";
+                case Call.Panic:      return detail != null
+                    ? "missile " + detail + ", defensive!"
+                    : "missile, defensive!";
+                case Call.DefensiveClear: return "threat clear, resuming";
                 default:              return "copy";
             }
         }

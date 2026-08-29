@@ -17,7 +17,7 @@ namespace WingCommand
     {
         public const string PluginGuid = "com.marci.wingcommand";
         public const string PluginName = "WingCommand";
-        public const string PluginVersion = "0.6.5";
+        public const string PluginVersion = "0.7.0";
 
         internal static Plugin Instance { get; private set; }
         internal static new ManualLogSource Logger { get; private set; }
@@ -30,6 +30,9 @@ namespace WingCommand
             Instance = this;
             Logger = base.Logger;
             Config2 = new Cfg(Config);
+
+            if (!FormationSolver.ValidateGeometry(Config2.MaxWingSize.Value, out string geometryProblem))
+                Logger.LogError("Formation geometry validation failed: " + geometryProblem);
 
             // Resolve reflection accessors before patching: the radial patches consult
             // GameAccess.Available and quietly stand down if the game layout has moved.
@@ -66,6 +69,8 @@ namespace WingCommand
                 $"RotaryPowerSeconds={Config2.RotaryPowerSeconds.Value} " +
                 $"RotarySpacingScale={Config2.RotarySpacingScale.Value} " +
                 $"ThreatWidenScale={Config2.ThreatSpacingScale.Value} " +
+                $"TargetDeconfliction={Config2.AiTargetDeconfliction.Value} " +
+                $"PanicSystem={Config2.PanicSystem.Value} " +
                 $"DefaultRoe={Config2.DefaultRoe.Value} " +
                 $"HoldEngageRange={Config2.HoldEngageRange.Value} " +
                 $"FreeEngageRange={Config2.FreeEngageRange.Value}");
@@ -99,6 +104,7 @@ namespace WingCommand
                 "MapIcon.UpdateColor",
                 "HUDUnitMarker.UpdateColor",
                 "AIPilotCombatModes.EnterState",
+                "CombatAI.ChooseHQTarget",
             };
 
             foreach (string want in expected)
@@ -158,6 +164,11 @@ namespace WingCommand
         public readonly ConfigEntry<float> AiSkillScale;
         public readonly ConfigEntry<float> AiBraveryScale;
         public readonly ConfigEntry<bool> MutualSupport;
+        public readonly ConfigEntry<bool> AiTargetDeconfliction;
+        public readonly ConfigEntry<float> TargetSaturationPenalty;
+        public readonly ConfigEntry<float> PlayerTargetPenalty;
+        public readonly ConfigEntry<bool> PanicSystem;
+        public readonly ConfigEntry<float> PanicClearSeconds;
 
         // --- Engagement ---
         public readonly ConfigEntry<WingRoe> DefaultRoe;
@@ -169,6 +180,7 @@ namespace WingCommand
         public readonly ConfigEntry<float> OrbitRadius;
         public readonly ConfigEntry<float> MirrorWindowSeconds;
         public readonly ConfigEntry<float> FireInterval;
+        public readonly ConfigEntry<int> MaxWingmenPerTarget;
         public readonly ConfigEntry<bool> AutoReturnOnEmpty;
         public readonly ConfigEntry<float> BingoFuel;
 
@@ -239,10 +251,13 @@ namespace WingCommand
                     "changing this moves them all together.",
                     new AcceptableValueRange<float>(0.2f, 1.5f),
                     new ConfigurationManagerAttributes { IsAdvanced = true }));
-            ThreatSpacingScale = c.Bind("Formation", "ThreatWidenScale", 1.0f,
+            // New key: the old default was 1 (disabled), and BepInEx preserves it forever.
+            // A reactive formation overhaul that stays disabled for every existing install
+            // is not an overhaul, so the safe, eased tactical spread gets its own key.
+            ThreatSpacingScale = c.Bind("Formation", "ReactiveThreatWidenScale", 1.45f,
                 new ConfigDescription(
-                    "Spacing multiplier applied while the wing is Aggressive or under missile " +
-                    "warning. Real formations widen when they expect to fight. 1 disables it.",
+                    "Spacing multiplier applied while hostile aircraft are close or anyone in " +
+                    "the formation is under missile warning. The change eases in and out; 1 disables it.",
                     new AcceptableValueRange<float>(1f, 4f),
                     new ConfigurationManagerAttributes { IsAdvanced = true }));
 
@@ -280,12 +295,15 @@ namespace WingCommand
                     "down again by altitude and speed, so the old value of 45 left only 27-54 " +
                     "degrees of real authority and a wingman simply could not follow a hard turn.",
                     new AcceptableValueRange<float>(20f, 160f)));
-            PursuitBankDegrees = c.Bind("Formation", "PursuitBankDegrees", 160f,
+            // New key deliberately retires the old 160-degree default. The live formation
+            // log recorded requests as high as 277 degrees after leader-bank feed-forward;
+            // that is an inversion request, not useful pursuit authority.
+            PursuitBankDegrees = c.Bind("Formation", "SafePursuitBankDegrees", 88f,
                 new ConfigDescription(
                     "Bank authority, in degrees, while rejoining from outside the capture " +
-                    "distance. Authority eases between this and StationBank with slot error, so " +
-                    "there is no step as a wingman arrives.",
-                    new AcceptableValueRange<float>(60f, 180f),
+                    "distance. Formation capture is capped below inversion even if an older " +
+                    "configuration contained a higher value.",
+                    new AcceptableValueRange<float>(60f, 100f),
                     new ConfigurationManagerAttributes { IsAdvanced = true }));
             ThrottleGain = c.Bind("Formation", "ThrottleGain", 0.12f,
                 new ConfigDescription(
@@ -346,6 +364,31 @@ namespace WingCommand
                 "Wingmen break formation to engage when the leader is under missile attack. " +
                 "Free rules of engagement only - Hold shoots the missile down instead, and " +
                 "Escort shoots the aircraft that launched it, both from the slot.");
+            AiTargetDeconfliction = c.Bind("AI", "TargetDeconfliction", true,
+                "Coordinate locally simulated AI target choices so several aircraft do not " +
+                "independently pile onto the same contact while useful alternatives exist.");
+            TargetSaturationPenalty = c.Bind("AI", "TargetSaturationPenalty", 1.5f,
+                new ConfigDescription(
+                    "How strongly each commitment beyond a target's estimated required attacks " +
+                    "pushes another AI toward an unclaimed contact.",
+                    new AcceptableValueRange<float>(0f, 5f),
+                    new ConfigurationManagerAttributes { IsAdvanced = true }));
+            PlayerTargetPenalty = c.Bind("AI", "PlayerConcentrationPenalty", 2.5f,
+                new ConfigDescription(
+                    "Additional anti-dogpile pressure after an AI is already committed to a " +
+                    "player aircraft. The first attacker is unaffected; this is not immunity.",
+                    new AcceptableValueRange<float>(0f, 8f),
+                    new ConfigurationManagerAttributes { IsAdvanced = true }));
+            PanicSystem = c.Bind("AI", "PanicSystem", true,
+                "Temporarily interrupt any wing order when that wingman receives a missile " +
+                "warning: announce defensive, select the correct countermeasure, evade, then " +
+                "resume the queued order after the warning clears.");
+            PanicClearSeconds = c.Bind("AI", "PanicClearSeconds", 2.5f,
+                new ConfigDescription(
+                    "How long a missile warning must remain clear before a defensive wingman " +
+                    "resumes its order.",
+                    new AcceptableValueRange<float>(0.5f, 10f),
+                    new ConfigurationManagerAttributes { IsAdvanced = true }));
 
             // Renamed from DefaultPosture / DefensiveEngageRange / AggressiveEngageRange.
             // BepInEx applies a default only to a NEW key, and the old values ("Defensive")
@@ -394,6 +437,12 @@ namespace WingCommand
                     "Minimum seconds between shots from one wingman. Without a gap they fire " +
                     "every engagement tick and empty the aircraft in seconds.",
                     new AcceptableValueRange<float>(0.5f, 30f)));
+            MaxWingmenPerTarget = c.Bind("Engagement", "MaxWingmenPerTarget", 2,
+                new ConfigDescription(
+                    "Hard ceiling on simultaneous wingmen assigned to one target. Weapon " +
+                    "effectiveness may choose fewer; missiles always receive one interceptor.",
+                    new AcceptableValueRange<int>(1, 4),
+                    new ConfigurationManagerAttributes { IsAdvanced = true }));
             AutoReturnOnEmpty = c.Bind("Engagement", "AutoReturnOnEmpty", true,
                 "Wingmen return to base on their own once out of ammunition or down to bingo fuel.");
             BingoFuel = c.Bind("Engagement", "BingoFuel", 0.15f,

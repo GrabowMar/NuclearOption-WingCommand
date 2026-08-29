@@ -344,7 +344,7 @@ namespace WingCommand
                     ? Mathf.Sqrt(FastMath.SquareDistance(
                         aircraft.GlobalPosition(), leader.GlobalPosition()))
                     : 0f;
-                state.text = OrderCode(member.Order);
+                state.text = OrderCode(member);
                 distance.text = UnitConverter.DistanceReading(range);
                 float proximity = 1f - Mathf.Clamp01(range / Plugin.Config2.LeashRadius.Value);
                 rangeCue.rectTransform.sizeDelta = new Vector2(
@@ -352,7 +352,7 @@ namespace WingCommand
 
                 bool damaged = IsDamaged(aircraft);
                 bool lowStores = member.Fuel <= Plugin.Config2.BingoFuel.Value || member.Ammo <= 0;
-                Color color = !member.Alive || damaged
+                Color color = !member.Alive || damaged || member.IsPanicking
                     ? UiTheme.Alert
                     : lowStores ? UiTheme.Warning : WingMarkers.MemberColor;
                 icon.color = color;
@@ -378,9 +378,11 @@ namespace WingCommand
                 return false;
             }
 
-            private static string OrderCode(WingOrder order)
+            private static string OrderCode(WingMember member)
             {
-                switch (order)
+                if (member.IsPanicking) return "DEF";
+
+                switch (member.Order)
                 {
                     case WingOrder.Engage:       return "ENG";
                     case WingOrder.ReturnToBase: return "RTB";

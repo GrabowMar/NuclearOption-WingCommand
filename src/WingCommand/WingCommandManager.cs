@@ -54,6 +54,7 @@ namespace WingCommand
                 WmcScreen.Reset();
                 PlayerFireWatcher.Reset();
                 WingComms.Reset();
+                TacticalCoordinator.Reset();
                 WingMarkers.Reset();
                 AiCombatTweak.Reset();
                 WingShop.Reset();
@@ -64,6 +65,7 @@ namespace WingCommand
             // The player's own aircraft is always the formation leader.
             Wing.SetLeader(GameManager.GetLocalAircraft(out Aircraft local) ? local : null);
             Wing.Prune();
+            Wing.CheckThreats();
             Wing.CheckLeashes();
             Wing.CheckReserves();
             PlayerFireWatcher.Track(local);

@@ -46,7 +46,7 @@ BepInEx is set up for you, and updates arrive through the manager.
      folder, so the DLL lands in `BepInEx/plugins/WingCommand/` with the readme and licence
      beside it.
 3. Launch the game. `BepInEx/LogOutput.log` should contain a line like
-   `WingCommand 0.6.5 loaded.` followed by `Harmony patched 8 method(s)`.
+   `WingCommand 0.7.0 loaded.` followed by `Harmony patched 9 method(s)`.
 
 Settings live in `BepInEx/config/com.marci.wingcommand.cfg` and can be edited in-game with
 [ConfigurationManager](https://github.com/BepInEx/BepInEx.ConfigurationManager) (**F1**).
@@ -67,11 +67,19 @@ under missile attack.
 Formation shapes: `EchelonRight`, `EchelonLeft`, `LineAbreast`, `Trail`, `CombatSpread`,
 `FingerFour`, `Vic`, `Diamond`, `Ladder`, `Wall`.
 
+The shapes use element-based geometry rather than extending the first three slots forever:
+large Finger Four and Diamond formations build additional elements, trails alternate their
+vertical stack to stay out of wake, and echelon/spread/wall formations carry a small element
+stagger. Shape changes, tactical widening and turn compression are eased in leader-local
+space, so the formation morphs rather than every slot teleporting. Separation also predicts
+the next four seconds of closest approach instead of waiting until two aircraft are already
+on top of one another.
+
 ### Orders
 | Order | Effect |
 |---|---|
 | **Rejoin Formation** | Wingmen close on their slot and hold station |
-| **Attack My Target** | Wingmen fly an attack run on what you have designated, and return to the wing once it is dead |
+| **Attack My Target** | Targets are distributed across the wing; only the useful estimated number attack each one, while surplus aircraft remain as cover |
 | **Engage** | Hunt freely, but on a tether — see below |
 | **Fall Back** | Emergency break: scatter on separate headings with flares, run for the nearest friendly airbase, hold there |
 | **Orbit Here** | Anchor to where you are *now* and fly a CAP over it while you go elsewhere |
@@ -95,6 +103,13 @@ land.
 Cargo and landing orders only apply to the aircraft that can carry them out, and the
 confirmation says how many did: an order that silently applies to nobody looks exactly like
 one that failed.
+
+**Self-preservation interrupts, but never erases, an order.** A wingman receiving its own
+missile warning calls “missile, defensive”, selects countermeasures for the seeker, and flies
+a temporary beam/egress manoeuvre. IR threats get flares and reduced power; radar threats get
+chaff/jamming, speed and a terrain-aware notch. Once the warning stays clear it calls clear
+and resumes the exact order that was standing — including an order issued while it was
+defensive. The WMC and compact roster show `DEFENSIVE` / `DEF` during the interrupt.
 
 ### Rules of engagement
 
@@ -120,8 +135,8 @@ what is hunting the leader", which is a weapons policy wearing an order's clothe
 now the Escort rung.
 
 Leaving the slot is otherwise always an explicit **Engage** or **Attack My Target** order.
-The one exception is the Free rung's emergency break, which stays because it is a reaction
-to a specific event rather than a standing policy.
+The exceptions are the Free rung's emergency break for the leader and every wingman's own
+missile self-preservation; both are reactions to a specific event rather than standing policy.
 
 ### The formation shop
 
@@ -250,10 +265,17 @@ slots. It was removed: placing an aircraft with a new position and velocity in a
 step fought the game's own G-force accounting badly enough that it was never reliable, and
 the spawn action covers the same testing need without the fight.
 
-### AI tuning (optional, off by default)
-Scales AI pilot `skill` and `bravery`, which the stock combat AI reads for aim error,
-missile reaction time, target selection and threat avoidance. Applies to all AI aircraft
-on both sides.
+### AI coordination and optional tuning
+
+Locally simulated AI target searches share short target reservations. The stock opportunity,
+threat, weapon and bravery calculations still decide what is useful, but existing commitments
+push the next pilot toward a comparable unclaimed contact. Player aircraft remain valid
+targets; only follow-on dog-piling is penalised. Missile defence uses the same coordinator,
+with one interceptor assigned to each inbound missile.
+
+The optional `skill` and `bravery` multipliers remain off by default. The stock combat AI
+reads them for aim error, missile reaction time, target selection and threat avoidance and
+the multipliers apply to all AI aircraft on both sides.
 
 ---
 
@@ -322,7 +344,7 @@ Everything is exposed through ConfigurationManager (**F1**) and written to
 `BepInEx/config/com.marci.wingcommand.cfg`.
 
 - **Formation** — geometry, nine flying knobs, three rotary knobs (below)
-- **AI** — enable tweak, skill scale, bravery scale, mutual support
+- **AI** — target deconfliction, panic/self-preservation, mutual support, optional skill/bravery scaling
 - **UI** — wing symbology colours, status panel, map commands
 - **Keys** — radial menu key, optional quick-order hotkeys
 - **Debug** — verbose logging of every order and state transition
@@ -340,7 +362,7 @@ in the unit the controller acts in.
 | `Damping` | 1.0 | Master scale on the rate terms that arrest a correction before it arrives. This is what stops the slow left-right rocking. |
 | `CommandAngle` | 25° | Largest heading correction while holding station — the real limit on how fast a lateral error closes. |
 | `StationBankDegrees` | 75° | Bank authority while settled. |
-| `PursuitBankDegrees` | 160° | Bank authority while rejoining. Authority eases between the two with slot error, so nothing steps. |
+| `SafePursuitBankDegrees` | 88° | Bank authority while rejoining, hard-capped below inversion. This retires the unsafe old 160° key. |
 | `ThrottleGain` | 0.12 | Throttle change per m/s of speed error. Resting throttle is the airframe's own cruise setting. |
 | `CaptureDistance` | 500 m | Slot error below which a wingman counts as on station. |
 | `RejoinStagger` | 1.2 s | Per-slot delay so a Rejoin arrives in sequence, not as a scrum. |
@@ -354,6 +376,13 @@ in the unit the controller acts in.
 | `BankMatchBlend` | 0.35 | How much a settled wingman rolls to match your bank. 0 switches it off. |
 | `RotaryHoverSpeed` | 25 m/s | Leader speed below which helicopters hold their slot as a point rather than flying a heading. |
 | `RotaryPowerSeconds` | 20 s | Helicopter destination distance — a **power** setting, see below. |
+| `ReactiveThreatWidenScale` | 1.45 | Eased tactical spacing when hostiles are inside 8 km or the formation has a missile warning. |
+| `TargetDeconfliction` | true | Share short reservations between locally simulated AI target searches. |
+| `TargetSaturationPenalty` | 1.5 | Pressure toward useful unclaimed contacts once estimated required attacks are covered. |
+| `PlayerConcentrationPenalty` | 2.5 | Extra pressure against follow-on dog-piling of a player; the first attacker is unaffected. |
+| `PanicSystem` | true | Temporarily evade an own-aircraft missile warning, use matching countermeasures, then resume the queued order. |
+| `PanicClearSeconds` | 2.5 s | Warning-clear time before the interrupted order resumes. |
+| `MaxWingmenPerTarget` | 2 | Hard cap on concurrent explicit wing attackers; weapon estimates may choose fewer and missiles always use one. |
 
 Avoidance distances (separation radius, path-cut corridor) are derived from the spacing in
 use rather than configured, so changing `SlotSpacing` or `RotarySpacingScale` moves the
@@ -499,7 +528,7 @@ installs plugins as bare DLLs — every NOMM-managed plugin ships one, not an ar
 zip is there for people installing by hand.
 
 ```bash
-git tag -a v0.6.5 -m "WingCommand 0.6.5" && git push --tags
+git tag -a v0.7.0 -m "WingCommand 0.7.0" && git push --tags
 ```
 
 The mod is listed with [NOMM](https://github.com/Combat787/NOMM) through a manifest in

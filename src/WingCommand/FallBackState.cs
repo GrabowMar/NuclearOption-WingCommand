@@ -152,7 +152,8 @@ namespace WingCommand
                 ignoreCollisions: false,
                 runwayAlign: false,
                 effort: 2f,
-                bankAllowed: Plugin.Config2.PursuitBankDegrees.Value,
+                bankAllowed: Mathf.Min(Plugin.Config2.PursuitBankDegrees.Value,
+                                       FixedWingFormation.MaxSafeBank),
                 followTerrain: false,
                 altitudeHold: Mathf.Clamp(aircraft.radarAlt, aircraft.maxRadius, 8000f),
                 targetVelocity: Vector3.zero);
@@ -175,7 +176,7 @@ namespace WingCommand
                 ignoreCollisions: false,
                 runwayAlign: false,
                 effort: 2f,
-                bankAllowed: 140f,
+                bankAllowed: FixedWingFormation.MaxSafeBank,
                 followTerrain: true,
                 altitudeHold: EgressAltitude,
                 targetVelocity: Vector3.zero);

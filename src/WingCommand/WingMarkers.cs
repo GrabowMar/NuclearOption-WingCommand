@@ -110,6 +110,13 @@ namespace WingCommand
         /// </summary>
         private static Unit TargetOf(WingMember member)
         {
+            if (member.IsPanicking && member.Aircraft != null)
+            {
+                MissileWarning warning = member.Aircraft.GetMissileWarningSystem();
+                if (warning != null && warning.TryGetNearestIncoming(out Missile missile))
+                    return missile;
+            }
+
             Unit assigned = member.AssignedTarget;
             if (assigned != null && !assigned.disabled) return assigned;
 
