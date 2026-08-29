@@ -17,7 +17,7 @@ namespace WingCommand
     {
         public const string PluginGuid = "com.marci.wingcommand";
         public const string PluginName = "WingCommand";
-        public const string PluginVersion = "0.7.0";
+        public const string PluginVersion = "0.8.3";
 
         internal static Plugin Instance { get; private set; }
         internal static new ManualLogSource Logger { get; private set; }
@@ -71,6 +71,7 @@ namespace WingCommand
                 $"ThreatWidenScale={Config2.ThreatSpacingScale.Value} " +
                 $"TargetDeconfliction={Config2.AiTargetDeconfliction.Value} " +
                 $"PanicSystem={Config2.PanicSystem.Value} " +
+                $"TakeoverOnDeath={Config2.TakeoverOnDeath.Value} " +
                 $"DefaultRoe={Config2.DefaultRoe.Value} " +
                 $"HoldEngageRange={Config2.HoldEngageRange.Value} " +
                 $"FreeEngageRange={Config2.FreeEngageRange.Value}");
@@ -105,6 +106,7 @@ namespace WingCommand
                 "HUDUnitMarker.UpdateColor",
                 "AIPilotCombatModes.EnterState",
                 "CombatAI.ChooseHQTarget",
+                "GameManager.FinishGame",
             };
 
             foreach (string want in expected)
@@ -183,6 +185,7 @@ namespace WingCommand
         public readonly ConfigEntry<int> MaxWingmenPerTarget;
         public readonly ConfigEntry<bool> AutoReturnOnEmpty;
         public readonly ConfigEntry<float> BingoFuel;
+        public readonly ConfigEntry<bool> TakeoverOnDeath;
 
         // --- Station keeping (safety) ---
 
@@ -448,6 +451,10 @@ namespace WingCommand
             BingoFuel = c.Bind("Engagement", "BingoFuel", 0.15f,
                 new ConfigDescription("Fuel fraction at which a wingman calls bingo and heads home.",
                     new AcceptableValueRange<float>(0.05f, 0.5f)));
+            TakeoverOnDeath = c.Bind("Engagement", "TakeoverOnDeath", true,
+                "When your pilot dies or ejects, offer control of a surviving aircraft in " +
+                "your wing. Host or single-player only; mission failures unrelated to the " +
+                "player's aircraft are never suppressed.");
 
             // Four keys collapsed to one. The distance and the timeout never wanted tuning
             // independently of each other, and WarnOnSlowRecruit is the same question asked

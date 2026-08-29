@@ -58,6 +58,7 @@ namespace WingCommand
                 WingMarkers.Reset();
                 AiCombatTweak.Reset();
                 WingShop.Reset();
+                WingTakeover.Reset();
                 Wing.Clear();
                 return;
             }
@@ -65,6 +66,7 @@ namespace WingCommand
             // The player's own aircraft is always the formation leader.
             Wing.SetLeader(GameManager.GetLocalAircraft(out Aircraft local) ? local : null);
             Wing.Prune();
+            WingTakeover.Tick();
             Wing.CheckThreats();
             Wing.CheckLeashes();
             Wing.CheckReserves();
@@ -429,6 +431,8 @@ namespace WingCommand
         private void OnGUI()
         {
             if (!InPlayableState()) return;
+
+            WingTakeover.DrawWindow();
 
             if (radialOpen)
                 WingHud.DrawRadial(Slices, radialCentre, hoveredSlice);

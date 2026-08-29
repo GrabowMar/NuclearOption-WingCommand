@@ -6,7 +6,7 @@ WMC display, or tactical map.
 
 | | |
 |---|---|
-| Current release | `0.7.0` |
+| Current release | `0.8.3` |
 | Game version | Nuclear Option `0.34.2` |
 | Requirements | BepInEx `5.4.23.3` or newer |
 | Supported play | Single-player and multiplayer host |
@@ -25,6 +25,7 @@ WMC display, or tactical map.
 - Command a persistent wing through the native radial menu, WMC MFD page, and tactical map.
 - Choose from ten formations with smooth shape transitions and element-based geometry.
 - Wingmen react to turns, nearby threats, closing traffic, terrain, and missile warnings.
+- After pilot death or ejection, take control of a surviving aircraft from your wing.
 - Seeker-aware defensive manoeuvres use the appropriate countermeasures, then resume the
   interrupted order.
 - Target reservations spread attacks across useful contacts instead of dog-piling one unit
@@ -56,11 +57,11 @@ NOMM handles BepInEx and future updates.
 4. Launch the game and check `BepInEx/LogOutput.log` for:
 
    ```text
-   Harmony patched 9 method(s)
-   WingCommand 0.7.0 loaded.
+   Harmony patched 12 method(s)
+   WingCommand 0.8.3 loaded.
    ```
 
-The optional `WingCommand-0.7.0.zip` mirrors the game directory and can instead be
+The optional `WingCommand-0.8.3.zip` mirrors the game directory and can instead be
 extracted at the Nuclear Option root. Do not install both copies.
 
 Settings are generated at:
@@ -82,6 +83,13 @@ using **F1**.
    - Open the **WMC** MFD page and recruit, add selected aircraft, or buy a wingman.
 3. Open **Wing Command** from the normal radial menu and issue an order.
 4. Choose a formation and rules of engagement for the situation.
+
+If your pilot is killed or ejects while wingmen survive, WingCommand holds them in safe
+orbits and opens a takeover window. Selecting one spawns a fresh player-controlled copy at
+its position with the same airframe, loadout, fuel, livery and motion, then removes the AI
+source. This avoids reusing its AI/network state. You may instead use the normal respawn or
+defeat flow. The recovery panel opens over the tactical map and supports number-key selection.
+Replacement is available in single-player and to the host.
 
 Fixed-wing and rotary-wing aircraft cannot share a formation. Recruitment and the shop
 automatically filter incompatible aircraft.
@@ -284,6 +292,7 @@ release defaults:
 | Engagement | `LeashRadius` | `8000` m | Maximum autonomous Engage distance |
 | Engagement | `MaxWingmenPerTarget` | `2` | Explicit attacker cap per target |
 | Engagement | `BingoFuel` | `0.15` | Automatic return fuel fraction |
+| Engagement | `TakeoverOnDeath` | `true` | Offer a surviving wing aircraft after pilot loss |
 | Shop | `WingPriceGrowth` | `1.5` | Compounding price per existing wingman |
 | Shop | `FastDeliverySurcharge` | `0.25` | Fast-delivery price increase |
 
@@ -355,7 +364,7 @@ This produces:
 
 ```text
 dist/WingCommand.dll
-dist/WingCommand-0.7.0.zip
+dist/WingCommand-0.8.3.zip
 ```
 
 Attach **`WingCommand.dll` first** to a GitHub release. NOMM installs the bare plugin DLL;

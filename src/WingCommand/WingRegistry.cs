@@ -24,15 +24,59 @@ namespace WingCommand
 
         public void SetLeader(Aircraft leader)
         {
-            // A shot-down leader releases the wing. The player's aircraft is still returned
-            // by GetLocalAircraft for a while after the pilot ejects, and a disabled leader
-            // is no use to anyone — the wing belongs back in vanilla AI.
-            if (leader != null && leader.disabled)
-                leader = null;
+            // GetLocalAircraft keeps returning the old airframe briefly after death or
+            // ejection. Treat its primary pilot as authoritative rather than waiting for the
+            // networked disabled flag, otherwise a dead leader can keep the formation flying
+            // on its wreck for several frames.
+            if (leader != null)
+            {
+                Pilot pilot = PrimaryPilot(leader);
+                if (leader.disabled || pilot == null || pilot.dead || pilot.ejected)
+                    leader = null;
+            }
 
             if (Leader == leader) return;
+            Aircraft previous = Leader;
             Leader = leader;
-            if (leader == null) DisbandAll("leader gone");
+
+            if (leader == null)
+            {
+                if (previous != null && WingTakeover.Begin(this, previous))
+                    HoldForTakeover();
+                else
+                    DisbandAll("leader gone");
+            }
+            else if (previous == null && members.Count > 0)
+            {
+                // Covers a normal game respawn while the takeover prompt is open: the old
+                // wing follows the newly spawned aircraft and the prompt closes.
+                WingTakeover.LeaderRestored(leader);
+                OrderAll(WingOrder.Formation);
+            }
+        }
+
+        /// <summary>Keep candidates safely airborne while the player chooses a new seat.</summary>
+        private void HoldForTakeover()
+        {
+            foreach (WingMember member in members)
+            {
+                if (member.Alive) member.Apply(WingOrder.OrbitHere);
+            }
+        }
+
+        /// <summary>
+        /// Replace a chosen AI member with the fresh player-controlled aircraft spawned from
+        /// it. The original member is removed without switching its pilot state because the
+        /// server destroys that network object immediately after the replacement succeeds.
+        /// </summary>
+        public bool ReplaceWithLeader(WingMember member, Aircraft newLeader)
+        {
+            if (member == null || newLeader == null || !members.Remove(member)) return false;
+
+            Leader = newLeader;
+            WingMarkers.Repaint(member.Aircraft);
+            OrderAll(WingOrder.Formation);
+            return true;
         }
 
         private float nextReserveCheck;
