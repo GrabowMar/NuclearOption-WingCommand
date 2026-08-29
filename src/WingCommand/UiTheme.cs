@@ -54,6 +54,16 @@ namespace WingCommand
             }
         }
 
+        /// <summary>The stock alert colour used for failed or badly damaged systems.</summary>
+        public static Color Alert
+        {
+            get
+            {
+                try { return ThemeManager.Active.ColorTheme.Alert; }
+                catch { return new Color(1f, 0.18f, 0.12f); }
+            }
+        }
+
         /// <summary>Clip a string to a column width. Null-safe.</summary>
         public static string Truncate(string s, int max)
         {

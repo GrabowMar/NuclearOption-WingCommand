@@ -46,7 +46,7 @@ BepInEx is set up for you, and updates arrive through the manager.
      folder, so the DLL lands in `BepInEx/plugins/WingCommand/` with the readme and licence
      beside it.
 3. Launch the game. `BepInEx/LogOutput.log` should contain a line like
-   `WingCommand 0.6.4 loaded.` followed by `Harmony patched 8 method(s)`.
+   `WingCommand 0.6.5 loaded.` followed by `Harmony patched 8 method(s)`.
 
 Settings live in `BepInEx/config/com.marci.wingcommand.cfg` and can be edited in-game with
 [ConfigurationManager](https://github.com/BepInEx/BepInEx.ConfigurationManager) (**F1**).
@@ -498,7 +498,7 @@ installs plugins as bare DLLs — every NOMM-managed plugin ships one, not an ar
 zip is there for people installing by hand.
 
 ```bash
-git tag -a v0.6.4 -m "WingCommand 0.6.4" && git push --tags
+git tag -a v0.6.5 -m "WingCommand 0.6.5" && git push --tags
 ```
 
 The mod is listed with [NOMM](https://github.com/Combat787/NOMM) through a manifest in

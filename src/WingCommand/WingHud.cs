@@ -148,9 +148,9 @@ namespace WingCommand
 
         private static void RefreshStatusPanel(WingRegistry wing)
         {
-            statusTitle.text = "WING " + wing.Count + "   " +
+            statusTitle.text = "WING " + wing.Count + "  |  " +
                                FormationShapes.Pretty(Plugin.Config2.Shape.Value).ToUpperInvariant() +
-                               "   ROE " + wing.Roe.ToString().ToUpperInvariant();
+                               "  |  ROE " + wing.Roe.ToString().ToUpperInvariant();
 
             while (statusRows.Count < wing.Count)
                 statusRows.Add(new StatusRow(statusRoot, statusRows.Count));
@@ -160,7 +160,7 @@ namespace WingCommand
                 if (i < wing.Count)
                 {
                     statusRows[i].Place(i, wing.Count);
-                    statusRows[i].Bind(wing.Members[i]);
+                    statusRows[i].Bind(wing.Members[i], wing.Leader);
                 }
                 else statusRows[i].Hide();
             }
@@ -195,6 +195,9 @@ namespace WingCommand
             private readonly RectTransform rect;
             private readonly Image icon;
             private readonly TMP_Text identity;
+            private readonly TMP_Text distance;
+            private readonly Image rangeCue;
+            private float cueWidth;
 
             public StatusRow(RectTransform parent, int index)
             {
@@ -202,9 +205,12 @@ namespace WingCommand
                 rect = go.GetComponent<RectTransform>();
                 rect.SetParent(parent, worldPositionStays: false);
 
-                icon = StatusIcon(rect, new Rect(4f, -5f, 30f, 30f));
-                identity = StatusLabel(rect, "", new Rect(39f, -2f, 100f, 32f), 20f,
+                icon = StatusIcon(rect, new Rect(5f, -5f, 34f, 34f));
+                identity = StatusLabel(rect, "", new Rect(45f, -1f, 100f, 24f), 20f,
                                        UiTheme.Friendly, TextAlignmentOptions.Left);
+                distance = StatusLabel(rect, "", new Rect(45f, -21f, 100f, 18f), 14f,
+                                       UiTheme.Friendly.WithAlpha(0.72f), TextAlignmentOptions.Left);
+                rangeCue = StatusIcon(rect, new Rect(45f, -40f, 80f, 2f));
             }
 
             public void Place(int index, int count)
@@ -218,32 +224,58 @@ namespace WingCommand
                     -StatusHeaderHeight - line * StatusRowHeight,
                     width,
                     StatusRowHeight));
-                identity.rectTransform.sizeDelta = new Vector2(width - 43f, 32f);
+                identity.rectTransform.sizeDelta = new Vector2(width - 49f, 24f);
+                distance.rectTransform.sizeDelta = new Vector2(width - 49f, 18f);
+                cueWidth = Mathf.Max(12f, width - 54f);
             }
 
-            public void Bind(WingMember member)
+            public void Bind(WingMember member, Aircraft leader)
             {
                 if (!go.activeSelf) go.SetActive(true);
 
                 Aircraft aircraft = member.Aircraft;
                 icon.sprite = aircraft != null && aircraft.definition != null
-                    ? aircraft.definition.mapIcon
+                    ? aircraft.definition.friendlyIcon
                     : null;
                 identity.text = member.Slot + "  " +
                                 (aircraft != null && aircraft.definition != null
                                     ? aircraft.definition.code
                                     : "AIRCRAFT");
 
-                bool warning = !member.Alive || member.Fuel <= Plugin.Config2.BingoFuel.Value ||
-                               member.Ammo <= 0;
-                Color color = warning ? UiTheme.Warning : UiTheme.Friendly;
+                float range = aircraft != null && leader != null
+                    ? Mathf.Sqrt(FastMath.SquareDistance(
+                        aircraft.GlobalPosition(), leader.GlobalPosition()))
+                    : 0f;
+                distance.text = UnitConverter.DistanceReading(range);
+                float proximity = 1f - Mathf.Clamp01(range / Plugin.Config2.LeashRadius.Value);
+                rangeCue.rectTransform.sizeDelta = new Vector2(
+                    Mathf.Lerp(3f, cueWidth, proximity), 2f);
+
+                bool damaged = IsDamaged(aircraft);
+                bool lowStores = member.Fuel <= Plugin.Config2.BingoFuel.Value || member.Ammo <= 0;
+                Color color = !member.Alive || damaged
+                    ? UiTheme.Alert
+                    : lowStores ? UiTheme.Warning : UiTheme.Friendly;
                 icon.color = color;
                 identity.color = color;
+                distance.color = UiTheme.Friendly.WithAlpha(0.72f);
+                rangeCue.color = UiTheme.Friendly.WithAlpha(0.62f);
             }
 
             public void Hide()
             {
                 if (go.activeSelf) go.SetActive(false);
+            }
+
+            private static bool IsDamaged(Aircraft aircraft)
+            {
+                if (aircraft == null || aircraft.partLookup == null) return false;
+                foreach (UnitPart part in aircraft.partLookup)
+                {
+                    if (part != null && (part.IsDetached() || part.hitPoints < 99.5f))
+                        return true;
+                }
+                return false;
             }
 
         }
