@@ -64,14 +64,19 @@ namespace WingCommand
             return t;
         }
 
-        private const float StatusHeaderHeight = 34f;
-        private const float StatusRowHeight = 44f;
-        private static float statusWidth = 600f;
+        private const float StatusHeaderHeight = 24f;
+        private const float StatusRowHeight = 30f;
+        private const float StatusPanelWidth = 210f;
+        private const float StatusMapGap = 0f;
+        private const float StatusBackdropFeather = 10f;
+        private const int StatusBackdropTextureSize = 48;
+        private static float statusWidth = StatusPanelWidth;
 
         private static RectTransform statusRoot;
         private static TMP_Text statusTitle;
         private static Canvas statusCanvas;
         private static TMP_FontAsset statusFont;
+        private static Sprite statusBackdropSprite;
         private static float nextStatusRefresh;
         private static int lastStatusCount = -1;
         private static readonly List<StatusRow> statusRows = new List<StatusRow>();
@@ -128,10 +133,7 @@ namespace WingCommand
             TMP_Text template = hud.GetComponentInChildren<TMP_Text>(includeInactive: true);
             statusFont = template != null ? template.font : null;
             statusCanvas = canvas;
-            RectTransform mapBounds = map.mapBackground != null
-                ? map.mapBackground.rectTransform
-                : map.mapTransform;
-            statusWidth = Mathf.Max(400f, mapBounds.rect.width);
+            statusWidth = StatusPanelWidth;
 
             var root = new GameObject("WingCommand_Status", typeof(RectTransform));
             statusRoot = root.GetComponent<RectTransform>();
@@ -141,16 +143,92 @@ namespace WingCommand
             statusRoot.SetParent(map.hudMapAnchor, worldPositionStays: false);
             statusRoot.SetAsLastSibling();
 
-            statusTitle = StatusLabel(statusRoot, "", new Rect(4f, -1f, statusWidth - 8f, 29f),
-                                      20f, UiTheme.Green, TextAlignmentOptions.Left);
+            CreateStatusBackdrop(statusRoot);
+
+            statusTitle = StatusLabel(statusRoot, "", new Rect(7f, -2f, statusWidth - 14f, 20f),
+                                      12f, UiTheme.Green.WithAlpha(0.90f), TextAlignmentOptions.Left);
             PositionStatusPanel(map);
+        }
+
+        /// <summary>
+        /// The minimized map is vignetted into the cockpit rather than framed by a hard
+        /// rectangle. Reproduce that treatment with a tiny nine-sliced alpha feather:
+        /// its opaque edge begins exactly at the roster bounds while the translucent
+        /// portion extends outside, allowing the map and roster fades to overlap.
+        /// </summary>
+        private static void CreateStatusBackdrop(RectTransform parent)
+        {
+            var go = new GameObject("Backdrop", typeof(RectTransform), typeof(Image));
+            RectTransform rect = go.GetComponent<RectTransform>();
+            rect.SetParent(parent, worldPositionStays: false);
+            rect.anchorMin = Vector2.zero;
+            rect.anchorMax = Vector2.one;
+            rect.pivot = new Vector2(0.5f, 0.5f);
+            rect.offsetMin = new Vector2(-StatusBackdropFeather, -StatusBackdropFeather);
+            rect.offsetMax = new Vector2(StatusBackdropFeather, StatusBackdropFeather);
+            rect.localScale = Vector3.one;
+            rect.SetAsFirstSibling();
+
+            Image backdrop = go.GetComponent<Image>();
+            backdrop.sprite = StatusBackdropSprite();
+            backdrop.type = Image.Type.Sliced;
+            backdrop.color = new Color(0.006f, 0.014f, 0.010f, 0.68f);
+            backdrop.raycastTarget = false;
+        }
+
+        private static Sprite StatusBackdropSprite()
+        {
+            if (statusBackdropSprite != null) return statusBackdropSprite;
+
+            const int size = StatusBackdropTextureSize;
+            const float margin = StatusBackdropFeather;
+            const float cornerRadius = 5f;
+            var texture = new Texture2D(size, size, TextureFormat.RGBA32, mipChain: false)
+            {
+                name = "WingCommand_StatusFeather",
+                filterMode = FilterMode.Bilinear,
+                wrapMode = TextureWrapMode.Clamp,
+                hideFlags = HideFlags.HideAndDontSave,
+            };
+
+            float half = size * 0.5f;
+            float boxHalf = half - margin;
+            for (int y = 0; y < size; y++)
+            {
+                for (int x = 0; x < size; x++)
+                {
+                    float qx = Mathf.Abs(x + 0.5f - half) - (boxHalf - cornerRadius);
+                    float qy = Mathf.Abs(y + 0.5f - half) - (boxHalf - cornerRadius);
+                    float outside = Mathf.Sqrt(
+                        Mathf.Max(qx, 0f) * Mathf.Max(qx, 0f) +
+                        Mathf.Max(qy, 0f) * Mathf.Max(qy, 0f));
+                    float inside = Mathf.Min(Mathf.Max(qx, qy), 0f);
+                    float distance = outside + inside - cornerRadius;
+                    float alpha = 1f - Mathf.SmoothStep(0f, margin, Mathf.Max(0f, distance));
+                    texture.SetPixel(x, y, new Color(1f, 1f, 1f, alpha));
+                }
+            }
+            texture.Apply(updateMipmaps: false, makeNoLongerReadable: true);
+
+            float border = margin + cornerRadius + 1f;
+            statusBackdropSprite = Sprite.Create(
+                texture,
+                new Rect(0f, 0f, size, size),
+                new Vector2(0.5f, 0.5f),
+                100f,
+                0u,
+                SpriteMeshType.FullRect,
+                new Vector4(border, border, border, border));
+            statusBackdropSprite.name = "WingCommand_StatusFeatherSprite";
+            statusBackdropSprite.hideFlags = HideFlags.HideAndDontSave;
+            return statusBackdropSprite;
         }
 
         private static void RefreshStatusPanel(WingRegistry wing)
         {
-            statusTitle.text = "WING " + wing.Count + "  |  " +
+            statusTitle.text = "WING " + wing.Count + "  ·  " +
                                FormationShapes.Pretty(Plugin.Config2.Shape.Value).ToUpperInvariant() +
-                               "  |  ROE " + wing.Roe.ToString().ToUpperInvariant();
+                               "  ·  " + wing.Roe.ToString().ToUpperInvariant();
 
             while (statusRows.Count < wing.Count)
                 statusRows.Add(new StatusRow(statusRoot, statusRows.Count));
@@ -165,10 +243,9 @@ namespace WingCommand
                 else statusRows[i].Hide();
             }
 
-            int lines = Mathf.CeilToInt(wing.Count / 4f);
             statusRoot.sizeDelta = new Vector2(
                 statusWidth,
-                StatusHeaderHeight + lines * StatusRowHeight);
+                StatusHeaderHeight + wing.Count * StatusRowHeight + 3f);
         }
 
         private static void PositionStatusPanel(DynamicMap map)
@@ -182,9 +259,33 @@ namespace WingCommand
             statusRoot.anchorMin = statusRoot.anchorMax = new Vector2(0.5f, 0.5f);
             statusRoot.pivot = Vector2.zero;
 
-            Vector3 worldTopLeft = mapRect.TransformPoint(
-                new Vector3(mapRect.rect.xMin, mapRect.rect.yMax, 0f));
-            statusRoot.localPosition = map.hudMapAnchor.InverseTransformPoint(worldTopLeft);
+            // Sit beside the minimap and share its baseline. The roster grows upward, so
+            // adding members never pushes it into the bottom screen edge or over the map.
+            Vector3 worldBottomRight = mapRect.TransformPoint(
+                new Vector3(mapRect.rect.xMax, mapRect.rect.yMin, 0f));
+            Vector3 position = map.hudMapAnchor.InverseTransformPoint(worldBottomRight)
+                             + Vector3.right * StatusMapGap;
+
+            // Narrow resolutions may not have enough room beside the map. In that case
+            // keep the same compact vertical component but dock its baseline just above
+            // the minimap instead of allowing it to run off-screen.
+            Camera camera = statusCanvas != null &&
+                            statusCanvas.renderMode != RenderMode.ScreenSpaceOverlay
+                ? statusCanvas.worldCamera
+                : null;
+            Vector2 rightOnScreen = RectTransformUtility.WorldToScreenPoint(camera, worldBottomRight);
+            float canvasScale = statusCanvas != null ? statusCanvas.scaleFactor : 1f;
+            bool roomOnRight = rightOnScreen.x +
+                               (statusWidth + StatusMapGap) * canvasScale < Screen.width - 4f;
+            if (!roomOnRight)
+            {
+                Vector3 worldTopLeft = mapRect.TransformPoint(
+                    new Vector3(mapRect.rect.xMin, mapRect.rect.yMax, 0f));
+                position = map.hudMapAnchor.InverseTransformPoint(worldTopLeft)
+                         + Vector3.up * StatusMapGap;
+            }
+
+            statusRoot.localPosition = position;
             statusRoot.localRotation = Quaternion.identity;
             statusRoot.localScale = Vector3.one;
         }
@@ -195,6 +296,7 @@ namespace WingCommand
             private readonly RectTransform rect;
             private readonly Image icon;
             private readonly TMP_Text identity;
+            private readonly TMP_Text state;
             private readonly TMP_Text distance;
             private readonly Image rangeCue;
             private float cueWidth;
@@ -205,28 +307,24 @@ namespace WingCommand
                 rect = go.GetComponent<RectTransform>();
                 rect.SetParent(parent, worldPositionStays: false);
 
-                icon = StatusIcon(rect, new Rect(5f, -5f, 34f, 34f));
-                identity = StatusLabel(rect, "", new Rect(45f, -1f, 100f, 24f), 20f,
-                                       UiTheme.Friendly, TextAlignmentOptions.Left);
-                distance = StatusLabel(rect, "", new Rect(45f, -21f, 100f, 18f), 14f,
-                                       UiTheme.Friendly.WithAlpha(0.72f), TextAlignmentOptions.Left);
-                rangeCue = StatusIcon(rect, new Rect(45f, -40f, 80f, 2f));
+                icon = StatusIcon(rect, new Rect(7f, -6f, 18f, 18f));
+                identity = StatusLabel(rect, "", new Rect(32f, -2f, 92f, 17f), 14f,
+                                       WingMarkers.MemberColor, TextAlignmentOptions.Left);
+                state = StatusLabel(rect, "", new Rect(32f, -16f, 62f, 12f), 9f,
+                                    WingMarkers.MemberColor.WithAlpha(0.62f), TextAlignmentOptions.Left);
+                distance = StatusLabel(rect, "", new Rect(126f, -3f, 76f, 16f), 11f,
+                                       WingMarkers.MemberColor.WithAlpha(0.78f), TextAlignmentOptions.Right);
+                rangeCue = StatusIcon(rect, new Rect(32f, -27f, 168f, 1f));
             }
 
             public void Place(int index, int count)
             {
-                int columns = Mathf.Min(4, count);
-                int column = index % 4;
-                int line = index / 4;
-                float width = statusWidth / columns;
                 StatusPlace(rect, new Rect(
-                    column * width,
-                    -StatusHeaderHeight - line * StatusRowHeight,
-                    width,
+                    0f,
+                    -StatusHeaderHeight - index * StatusRowHeight,
+                    statusWidth,
                     StatusRowHeight));
-                identity.rectTransform.sizeDelta = new Vector2(width - 49f, 24f);
-                distance.rectTransform.sizeDelta = new Vector2(width - 49f, 18f);
-                cueWidth = Mathf.Max(12f, width - 54f);
+                cueWidth = 168f;
             }
 
             public void Bind(WingMember member, Aircraft leader)
@@ -246,6 +344,7 @@ namespace WingCommand
                     ? Mathf.Sqrt(FastMath.SquareDistance(
                         aircraft.GlobalPosition(), leader.GlobalPosition()))
                     : 0f;
+                state.text = OrderCode(member.Order);
                 distance.text = UnitConverter.DistanceReading(range);
                 float proximity = 1f - Mathf.Clamp01(range / Plugin.Config2.LeashRadius.Value);
                 rangeCue.rectTransform.sizeDelta = new Vector2(
@@ -255,11 +354,12 @@ namespace WingCommand
                 bool lowStores = member.Fuel <= Plugin.Config2.BingoFuel.Value || member.Ammo <= 0;
                 Color color = !member.Alive || damaged
                     ? UiTheme.Alert
-                    : lowStores ? UiTheme.Warning : UiTheme.Friendly;
+                    : lowStores ? UiTheme.Warning : WingMarkers.MemberColor;
                 icon.color = color;
                 identity.color = color;
-                distance.color = UiTheme.Friendly.WithAlpha(0.72f);
-                rangeCue.color = UiTheme.Friendly.WithAlpha(0.62f);
+                state.color = color.WithAlpha(0.62f);
+                distance.color = color.WithAlpha(0.78f);
+                rangeCue.color = color.WithAlpha(0.34f);
             }
 
             public void Hide()
@@ -276,6 +376,21 @@ namespace WingCommand
                         return true;
                 }
                 return false;
+            }
+
+            private static string OrderCode(WingOrder order)
+            {
+                switch (order)
+                {
+                    case WingOrder.Engage:       return "ENG";
+                    case WingOrder.ReturnToBase: return "RTB";
+                    case WingOrder.FallBack:    return "FALL";
+                    case WingOrder.OrbitHere:   return "CAP";
+                    case WingOrder.DeliverCargo: return "CARGO";
+                    case WingOrder.LandHere:    return "LAND";
+                    case WingOrder.Attack:      return "ATK";
+                    default:                    return "FORM";
+                }
             }
 
         }

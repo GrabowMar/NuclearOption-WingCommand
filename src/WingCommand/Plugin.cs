@@ -475,8 +475,13 @@ namespace WingCommand
                 "can see what your wingmen have committed to.");
             WingTargetColor = c.Bind("UI", "WingTargetColor", "#FFB020",
                 "Hex colour for units your wing is engaging.");
-            WingIconColor = c.Bind("UI", "WingIconColor", "#33E5FF",
-                "Hex colour for wingmen, on the map and the HUD. Selected members are drawn brighter.");
+            // New key on purpose. BepInEx preserves an existing value forever, so merely
+            // changing WingIconColor's default would leave every current installation on
+            // the old sky-blue colour. Binding WingMemberColor moves existing users to the
+            // higher-contrast green while leaving the retired key harmlessly inert.
+            WingIconColor = c.Bind("UI", "WingMemberColor", "#39FF65",
+                "Hex colour for wingmen across the compact roster, tactical map and HUD. " +
+                "Selected members are drawn brighter.");
             MapCommandEnabled = c.Bind("UI", "MapCommands", true,
                 "Enable aircraft tasking and squad groups on the maximised map.");
             VerboseLogging = c.Bind("Debug", "VerboseLogging", false,

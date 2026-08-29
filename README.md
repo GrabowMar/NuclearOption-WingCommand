@@ -193,8 +193,9 @@ hierarchy is not something this mod can safely dissect — borrowing only the fo
 Your wing is marked the same way on both displays, so what you see through the canopy
 agrees with what you see on the map.
 
-- **Wingmen** — drawn in a distinct colour (default cyan `#33E5FF`, configurable) on the
-  tactical map *and* on the in-cockpit HUD. Selected members are drawn brighter on the map.
+- **Wingmen** — drawn in high-contrast green (default `#39FF65`, configurable) with a
+  small caret above the stock aircraft silhouette on the tactical map and HUD.
+  The silhouette still shows aircraft type and heading; selected members are brighter.
 - **What your wing is engaging** — units a wingman has been ordered onto, or has broken
   formation to fight, are marked in amber (`#FFB020`) on both displays. An autonomous
   target only counts while the member is actually off fighting: a weapon manager holds the
@@ -458,7 +459,7 @@ The interesting part is that almost none of this needed patching.
 Requires the .NET 8 SDK.
 
 ```bash
-dotnet build -c Release
+dotnet build src/WingCommand/WingCommand.csproj -c Release
 ```
 
 Then deploy:
@@ -483,7 +484,7 @@ this repository; take them.
 ## Releasing
 
 ```bash
-dotnet build -c Release
+dotnet build src/WingCommand/WingCommand.csproj -c Release
 pwsh build/package.ps1
 ```
 

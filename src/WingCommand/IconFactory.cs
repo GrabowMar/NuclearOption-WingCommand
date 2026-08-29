@@ -58,6 +58,7 @@ namespace WingCommand
                 case "land":        LandHere(c);            break;
                 case "buy":         Buy(c);                 break;
                 case "back":        Back(c);                break;
+                case "wing-badge":  WingBadge(c);           break;
 
                 default:
                     // Shape glyphs are derived from the solver, so any formation added to
@@ -83,6 +84,18 @@ namespace WingCommand
             c.Segment(48, 70, 76, 46, t);
             c.Segment(20, 24, 48, 48, t);
             c.Segment(48, 48, 76, 24, t);
+        }
+
+        /// <summary>
+        /// One shallow caret above the game's aircraft silhouette. It is enough to make
+        /// wing membership recognisable by shape, while staying inside the base game's
+        /// sparse line-symbol language and leaving type, heading and selection readable.
+        /// </summary>
+        private static void WingBadge(Canvas c)
+        {
+            const float t = 3.5f;
+            c.Segment(31, 78, 48, 86, t);
+            c.Segment(48, 86, 65, 78, t);
         }
 
         /// <summary>One aircraft plus a "+" — bring another into the wing.</summary>

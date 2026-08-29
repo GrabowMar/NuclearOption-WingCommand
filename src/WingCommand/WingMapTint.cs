@@ -59,6 +59,7 @@ namespace WingCommand
                 if (!(__instance is UnitMapIcon unitIcon) || unitIcon.iconImage == null) return;
 
                 WingMarkers.Role role = WingMarkers.RoleOf(unitIcon.unit);
+                WingMarkerBadge.Apply(unitIcon.iconImage, role);
                 if (role == WingMarkers.Role.None) return;
 
                 // Keep the game's own selected-vs-unselected contrast by brightening the

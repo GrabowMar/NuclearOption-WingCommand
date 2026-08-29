@@ -215,7 +215,7 @@ namespace WingCommand
             float capture = Mathf.Max(Plugin.Config2.CaptureDistance.Value, 1f);
             float outOfPosition = Mathf.SmoothStep(0f, 1f, Mathf.Clamp01(distance / capture));
 
-            ThrottleState throttle = Throttle(aircraft, leader, controls, p, slot, toSlot, distance, capture,
+            ThrottleState throttle = Throttle(aircraft, leader, controls, p, slot, toSlot, distance, capture, spacing,
                                               leaderSpeed, drift, aggression, damping, rejoin, outOfPosition);
 
             float commandAngle = Steer(aircraft, leader, slotPos, toSlot, distance,
@@ -229,7 +229,8 @@ namespace WingCommand
 
         private static ThrottleState Throttle(Aircraft aircraft, Aircraft leader, ControlInputs controls,
                                               AircraftParameters p, int slot, Vector3 toSlot,
-                                              float distance, float capture, float leaderSpeed, Vector3 drift,
+                                              float distance, float capture, float spacing,
+                                              float leaderSpeed, Vector3 drift,
                                               float aggression, float damping, Rejoin rejoin,
                                               float outOfPosition)
         {
@@ -282,6 +283,23 @@ namespace WingCommand
             float speedError = desiredSpeed - aircraft.speed;
             float throttle = Mathf.Clamp01(desiredSpeed / Mathf.Max(p.maxSpeed, 1f))
                            + speedError * Plugin.Config2.ThrottleGain.Value;
+
+            // Player acceleration is the feed-forward term the speed loop cannot see.
+            // When the leader selects military/max power, its speed has not risen yet, so
+            // a controller driven only by speed waits until a gap already exists. Match the
+            // leader's power while behind, and use full power once a max-power leader has
+            // opened a meaningful gap. Closing-rate gating keeps this from carrying the
+            // wingman through the slot after it has already caught up.
+            ControlInputs leaderInputs = leader.GetInputs();
+            float leaderThrottle = leaderInputs != null ? leaderInputs.throttle : 0f;
+            if (gap > 0f && closing < MaxClosure * 0.25f)
+            {
+                throttle = Mathf.Max(throttle, leaderThrottle);
+
+                float maxPowerGap = Mathf.Max(15f, spacing * 0.15f);
+                if (leaderThrottle >= 0.95f && gap >= maxPowerGap)
+                    throttle = 1f;
+            }
 
             // Full throttle only when genuinely out of position, and never once close in.
             //

@@ -165,7 +165,7 @@ namespace WingCommand
 
         // ------------------------------------------------------------------- colours
 
-        private static Color memberColor = new Color(0.20f, 0.90f, 1f);
+        private static Color memberColor = new Color(0.22f, 1f, 0.40f);
         private static string memberFrom;
 
         private static Color targetColor = new Color(1f, 0.69f, 0.13f);
@@ -177,7 +177,7 @@ namespace WingCommand
             get
             {
                 Parse(Plugin.Config2.WingIconColor.Value, ref memberFrom, ref memberColor,
-                      new Color(0.20f, 0.90f, 1f), "WingIconColor");
+                      new Color(0.22f, 1f, 0.40f), "WingMemberColor");
                 return memberColor;
             }
         }

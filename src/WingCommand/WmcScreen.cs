@@ -668,11 +668,12 @@ namespace WingCommand
                 rt.SetParent(parent, worldPositionStays: false);
                 Place(rt, new Rect(0f, y, width, RowHeight));
 
-                Panel(rt, new Rect(0f, 0f, width, RowHeight), RowColor());
+                Panel(rt, new Rect(0f, 0f, width, RowHeight), MemberFrameColor());
+                Rule(rt, new Rect(0f, 0f, 2f, RowHeight), WingColor());
 
                 slot  = Label(rt, "", new Rect(6f, 0f, 18f, RowHeight), Dim(), 12f,
                               FontStyles.Normal, TextAlignmentOptions.Left);
-                name  = Label(rt, "", new Rect(26f, 0f, 108f, RowHeight), Friendly(), 12f,
+                name  = Label(rt, "", new Rect(26f, 0f, 108f, RowHeight), WingColor(), 12f,
                               FontStyles.Normal, TextAlignmentOptions.Left);
                 order = Label(rt, "", new Rect(136f, 0f, 62f, RowHeight), Dim(), 12f,
                               FontStyles.Normal, TextAlignmentOptions.Left);
@@ -930,11 +931,14 @@ namespace WingCommand
 
         private static Color Friendly() => UiTheme.Friendly;
 
+        private static Color WingColor() => WingMarkers.MemberColor;
+
         private static Color Dim() => Grey();
 
         private static Color RowColor() => Grey();
+        private static Color MemberFrameColor() => WingColor().WithAlpha(0.58f);
         private static Color FrameColor() => new Color(Grey().r, Grey().g, Grey().b, 0.75f);
-        private static Color PanelBackground() => new Color(0.05f, 0.07f, 0.09f, 0.93f);
+        private static Color PanelBackground() => new Color(0.025f, 0.045f, 0.035f, 0.97f);
 
         // ----------------------------------------------------------------------- text
 
