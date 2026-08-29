@@ -17,7 +17,7 @@ namespace WingCommand
     {
         public const string PluginGuid = "com.marci.wingcommand";
         public const string PluginName = "WingCommand";
-        public const string PluginVersion = "0.6.1";
+        public const string PluginVersion = "0.6.4";
 
         internal static Plugin Instance { get; private set; }
         internal static new ManualLogSource Logger { get; private set; }
@@ -64,7 +64,6 @@ namespace WingCommand
                 $"CaptureDistance={Config2.CaptureDistance.Value} " +
                 $"BankMatchBlend={Config2.BankMatchBlend.Value} " +
                 $"RotaryPowerSeconds={Config2.RotaryPowerSeconds.Value} " +
-                $"RotaryCommandAngle={Config2.RotaryCommandAngle.Value} " +
                 $"RotarySpacingScale={Config2.RotarySpacingScale.Value} " +
                 $"ThreatWidenScale={Config2.ThreatSpacingScale.Value} " +
                 $"DefaultRoe={Config2.DefaultRoe.Value} " +
@@ -154,7 +153,6 @@ namespace WingCommand
         // --- Formation: rotary ---
         public readonly ConfigEntry<float> RotaryHoverSpeed;
         public readonly ConfigEntry<float> RotaryPowerSeconds;
-        public readonly ConfigEntry<float> RotaryCommandAngle;
         // --- AI ---
         public readonly ConfigEntry<bool> AiTweakEnabled;
         public readonly ConfigEntry<float> AiSkillScale;
@@ -333,16 +331,8 @@ namespace WingCommand
                     "Seconds of travel used as the helicopter's destination distance. This is a " +
                     "power setting, not a steering one: AutopilotHelo derives collective from " +
                     "0.5 + distance*0.001 - speed*0.02, so distance IS the throttle command and " +
-                    "20 is what makes those terms cancel at hover power. Steering is set " +
-                    "separately by RotaryCommandAngle, so this no longer limits it.",
+                    "20 is what makes those terms cancel at hover power.",
                     new AcceptableValueRange<float>(5f, 40f),
-                    new ConfigurationManagerAttributes { IsAdvanced = true }));
-            RotaryCommandAngle = c.Bind("Formation", "RotaryCommandAngle", 30f,
-                new ConfigDescription(
-                    "Largest heading correction, in degrees, a helicopter will command to close " +
-                    "a lateral error. Previously this was whatever fell out of the destination " +
-                    "distance, which worked out at about 5 degrees.",
-                    new AcceptableValueRange<float>(5f, 60f),
                     new ConfigurationManagerAttributes { IsAdvanced = true }));
             AiTweakEnabled = c.Bind("AI", "EnableAiTweak", false,
                 "Scale AI pilot skill and bravery. Changes vanilla combat feel, so it is off by default.");

@@ -3,31 +3,26 @@ using UnityEngine;
 namespace WingCommand
 {
     /// <summary>
-    /// Formation flight for helicopters and tiltwings, written against how the rotary
-    /// autopilot actually behaves rather than as a variation on the fixed-wing one.
+    /// Formation flight for helicopters, built around how a helicopter actually moves
+    /// rather than reusing the fixed-wing pursuit loop.
     ///
-    /// Three facts drive everything here:
+    /// The central idea: a helicopter's natural command is a VELOCITY, not a heading. It can
+    /// produce horizontal thrust in any direction by tilting its rotor, so the controller
+    /// asks for a velocity — match the leader, plus a correction proportional to how far the
+    /// slot is — and hands that to the autopilot as both a direction of travel and a power
+    /// setting. When the wingman is on station the demanded velocity is simply the leader's;
+    /// when it is off station the correction term crabes it back, sideways included.
     ///
-    /// 1. <c>Autopilot.Hover</c> is a real position-hold: clamped error, a derivative term,
-    ///    collective straight from altitude error, and yaw from the aim direction. It is
-    ///    what the stock transport and landing states use to sit precisely on a point, and
-    ///    it is the right tool for holding a slot. Its ceiling is roughly seventeen degrees
-    ///    of tilt, so it cannot cruise.
+    /// The one obstacle the game puts in this path: <c>AutopilotHelo.AutoAim</c> recomputes
+    /// its steering waypoint only once per second and rate-limits it, so the direction a
+    /// cruising helicopter actually flies lags the commanded direction by a second or more.
+    /// That lag is removed by seeding the waypoint's start direction with the commanded one
+    /// (see <c>targetVelocity</c> below), so the waypoint points where we asked on the very
+    /// first update.
     ///
-    /// 2. <c>AutopilotHelo.AutoAim</c> can cruise, but sets collective from
-    ///    <c>0.5 + distance*0.001 - speed*0.02</c>. The distance to the destination *is* the
-    ///    power command, so it has to be about twenty times the speed for the terms to
-    ///    cancel and collective to rest at hover.
-    ///
-    /// 3. Because of (2), the destination's distance and its direction were doing two
-    ///    different jobs through one vector, and pulling against each other: holding speed
-    ///    demanded a far destination, which made every cross-track correction a tiny angle
-    ///    — about five degrees in practice. They are set independently now. Distance still
-    ///    comes from the power law; direction is a commanded heading offset.
-    ///
-    /// Worth knowing before tuning any of this: <c>AutopilotHelo</c> recomputes its forward
-    /// waypoint only once per second and rate-limits it to 0.8 rad. That is a hard ceiling
-    /// on rotary responsiveness which nothing here can raise.
+    /// Slow flight uses <c>Autopilot.Hover</c>, the game's real position hold — no waypoint,
+    /// instantaneous tilt — which is exactly the helicopter behaviour for a near-stationary
+    /// leader.
     /// </summary>
     internal static class RotaryFormation
     {
@@ -36,128 +31,140 @@ namespace WingCommand
             /// <summary>Leader slow or stationary: hold the slot as a point in space.</summary>
             Hover,
 
-            /// <summary>Leader cruising: fly the leader's heading and close laterally.</summary>
+            /// <summary>Leader moving: match the leader's velocity and close on the slot.</summary>
             Cruise,
         }
 
         /// <summary>
-        /// Shortest destination distance, in metres. Much below this the collective law
-        /// reads it as an instruction to come down.
+        /// Shortest destination distance, in metres. The autopilot's collective law reads the
+        /// destination distance as a power command; much below this it reads it as an
+        /// instruction to descend.
         /// </summary>
         private const float MinPowerDistance = 600f;
 
-        /// <summary>Heading-correction gain per metre of cross-track error, in degrees.</summary>
-        private const float CrossGain = 0.35f;
-
-        /// <summary>Damping gain on cross-track closing rate, in degrees per m/s.</summary>
-        private const float CrossDamping = 1.4f;
-
-        /// <summary>
-        /// Slot error at which a helicopter counts as on station, as a multiple of its own
-        /// slot spacing. An absolute value does not work here: rotary slots sit at about
-        /// half the fixed-wing spacing, so the old 200 m threshold called a helicopter
-        /// settled while it was three slot-widths out of place.
-        /// </summary>
+        /// <summary>Slot error at which a helicopter counts as on station, as a multiple of its own spacing.</summary>
         private const float StationSpacings = 1.5f;
 
+        /// <summary>
+        /// Hysteresis on the hover/cruise switch, in m/s. The two modes hold the slot
+        /// differently, so a leader hovering at the threshold should not flap the wingman
+        /// between them.
+        /// </summary>
+        private const float HoverHysteresis = 3f;
+
+        /// <summary>Seconds of leader vertical speed fed into the altitude hold, so climbs and dives are followed rather than trailed.</summary>
+        private const float AltitudeLeadSeconds = 1f;
+
+        /// <summary>
+        /// Closing speed commanded per metre of slot error, in (m/s)/m. This is the position
+        /// loop: it makes the demanded velocity converge on the leader's with a first-order
+        /// response (time constant ~ 1/gain), which is monotonic — no rate term, no
+        /// overshoot, no catch-and-fall cycle.
+        /// </summary>
+        private const float FollowGain = 0.4f;
+
+        /// <summary>
+        /// Steer one wingman. <paramref name="previous"/> is the mode flown last frame, for
+        /// the hover/cruise hysteresis. Reports the horizontal slot error through
+        /// <paramref name="horizontalError"/>.
+        /// </summary>
         public static Mode Fly(Aircraft aircraft, Aircraft leader, GlobalPosition slotPos,
-                               Vector3 toSlot, float distance, float slotStack, float spacing)
+                               Vector3 toSlot, float distance, float slotStack, float spacing,
+                               Mode previous, out float horizontalError)
         {
             Vector3 heading = leader.transform.forward;
             heading.y = 0f;
             if (heading.sqrMagnitude < 0.0001f) heading = Vector3.forward;
             heading.Normalize();
 
-            if (leader.speed < Plugin.Config2.RotaryHoverSpeed.Value)
+            Vector3 leaderVel = leader.rb != null ? leader.rb.velocity : Vector3.zero;
+            Vector3 leaderVelFlat = leaderVel;
+            leaderVelFlat.y = 0f;
+
+            // Horizontal error to the slot, and the direction straight at it.
+            Vector3 toSlotFlat = toSlot;
+            toSlotFlat.y = 0f;
+            float flat = toSlotFlat.magnitude;
+            horizontalError = flat;
+
+            Vector3 slotDir = flat > 0.5f ? toSlotFlat / flat : heading;
+
+            bool onStation = distance < spacing * StationSpacings;
+
+            float hoverSpeed = Plugin.Config2.RotaryHoverSpeed.Value;
+            bool wasHovering = previous == Mode.Hover;
+            float threshold = wasHovering ? hoverSpeed + HoverHysteresis
+                                          : hoverSpeed - HoverHysteresis;
+
+            if (leader.speed < threshold)
             {
-                HoldPoint(aircraft, slotPos, heading);
+                // The game's real position hold: instant tilt, no waypoint lag. Face the
+                // direction of travel while closing, then swing onto the leader's heading on
+                // station — that swing is what a helicopter does on the pad.
+                Vector3 lookDir = onStation ? heading : slotDir;
+                aircraft.autopilot.Hover(slotPos, 0f, lookDir);
                 return Mode.Hover;
             }
 
-            Cruise(aircraft, leader, toSlot, distance, slotStack, spacing, heading);
+            Cruise(aircraft, leader, toSlotFlat, flat, slotDir, heading, leaderVel,
+                   leaderVelFlat, spacing, slotStack, onStation);
             return Mode.Cruise;
         }
 
         /// <summary>
-        /// Slow or stationary leader: sit on the slot.
-        ///
-        /// Hover already contains everything needed — a clamped positional term, a
-        /// derivative term that tracks a moving point, collective from altitude error, and
-        /// yaw to the given direction. Passing zero for altitudeHold means "hold the slot's
-        /// own altitude", which is exactly what a formation slot describes.
+        /// Cruising leader: demand the leader's velocity plus a correction toward the slot,
+        /// and hand that to the autopilot as a direction of travel and a power setting.
         /// </summary>
-        private static void HoldPoint(Aircraft aircraft, GlobalPosition slotPos, Vector3 heading)
+        private static void Cruise(Aircraft aircraft, Aircraft leader, Vector3 toSlotFlat,
+                                   float flat, Vector3 slotDir, Vector3 heading,
+                                   Vector3 leaderVel, Vector3 leaderVelFlat,
+                                   float spacing, float slotStack, bool onStation)
         {
-            aircraft.autopilot.Hover(slotPos, 0f, heading);
-        }
+            // --- The commanded velocity. ---
+            // Match the leader, and add a correction proportional to the gap. On station the
+            // correction is nil and this is just the leader's velocity; off station it points
+            // back at the slot, so the helicopter crabes home — sideways and backwards
+            // included, because that is what a helicopter does.
+            Vector3 vDes = leaderVelFlat + toSlotFlat * FollowGain;
 
-        /// <summary>
-        /// Cruising leader: distance sets power, heading sets steering, and the two no
-        /// longer fight each other.
-        /// </summary>
-        private static void Cruise(Aircraft aircraft, Aircraft leader, Vector3 toSlot,
-                                   float distance, float slotStack, float spacing,
-                                   Vector3 heading)
-        {
-            Vector3 leaderVel = leader.rb != null ? leader.rb.velocity : Vector3.zero;
-            Vector3 leaderDir = leaderVel.sqrMagnitude > 1f ? leaderVel.normalized : heading;
+            float vDesMag = vDes.magnitude;
+            Vector3 moveDir = vDesMag > 1f ? vDes / vDesMag : slotDir;
 
-            // --- Power ---
+            // --- Power: the destination distance IS the collective command. ---
             // Twenty seconds of travel makes the autopilot's two collective terms cancel, so
-            // it rests at hover power and can hold any speed. Being behind adds distance,
-            // which asks for more power: that is how a wingman catches up rather than
-            // settling into the gap.
-            float alongTrack = Vector3.Dot(toSlot, leaderDir);
-            float behind = Mathf.Max(0f, alongTrack);
+            // it rests at hover power and can hold the commanded speed; a larger gap (via
+            // vDes) automatically asks for more power.
+            float sustain = Mathf.Max(vDesMag, leader.speed) * Plugin.Config2.RotaryPowerSeconds.Value;
+            float powerDistance = Mathf.Max(MinPowerDistance, sustain);
 
-            float sustain = leader.speed * Plugin.Config2.RotaryPowerSeconds.Value;
-            float powerDistance = Mathf.Max(MinPowerDistance, sustain) + behind;
+            GlobalPosition destination = aircraft.GlobalPosition() + moveDir * powerDistance;
 
-            // --- Steering ---
-            // Only across-track error steers; the along-track part is already expressed in
-            // the power distance above, and feeding it in twice had the destination fighting
-            // itself. The correction is a heading angle, so it no longer shrinks as the
-            // destination is pushed further out to hold speed.
-            Vector3 across = toSlot - leaderDir * alongTrack;
-            across.y = 0f;
+            // --- Kill the waypoint lag. ---
+            // The autopilot builds its steering waypoint from
+            //     current = (ownVelocity - targetVelocity) + forward * 20
+            // and then rotates that toward the destination at a capped rate, once a second.
+            // Feeding it a targetVelocity that already points the result at the destination
+            // makes the waypoint land on the commanded direction immediately, removing the
+            // rate-limit lag that otherwise trails every manoeuvre.
+            Vector3 targetVel = aircraft.rb.velocity
+                              + aircraft.transform.forward * 20f
+                              - moveDir * powerDistance;
 
-            Vector3 drift = aircraft.rb != null ? aircraft.rb.velocity - leaderVel : Vector3.zero;
-            drift.y = 0f;
-            Vector3 acrossDrift = drift - leaderDir * Vector3.Dot(drift, leaderDir);
-
-            // Sign the error and its rate about the vertical axis, so a positive command is
-            // always a turn towards the slot.
-            Vector3 rightOfTrack = Vector3.Cross(Vector3.up, leaderDir);
-            float crossError = Vector3.Dot(across, rightOfTrack);
-            float crossRate = Vector3.Dot(acrossDrift, rightOfTrack);
-
-            float maxAngle = Plugin.Config2.RotaryCommandAngle.Value;
-            float command = Mathf.Clamp(
-                crossError * CrossGain * Plugin.Config2.Aggression.Value
-                    - crossRate * CrossDamping * Plugin.Config2.Damping.Value,
-                -maxAngle, maxAngle);
-
-            Vector3 steer = Quaternion.AngleAxis(command, Vector3.up) * leaderDir;
-
-            GlobalPosition destination = aircraft.GlobalPosition() + steer * powerDistance;
-
-            // altitudeHold is a height above ground here, used both for the forward-flight
-            // waypoint and the collective error, so it has to describe where the slot sits
-            // above terrain rather than where the leader does.
+            // altitudeHold is a height above ground here, so it must describe where the slot
+            // sits above terrain, led by the leader's vertical speed so a climb is followed.
             AircraftParameters p = aircraft.GetAircraftParameters();
             float agl = Mathf.Clamp(
-                Mathf.Max(p.minimumRadarAlt, leader.radarAlt + slotStack), 25f, 3000f);
+                Mathf.Max(p.minimumRadarAlt,
+                          leader.radarAlt + slotStack + leaderVel.y * AltitudeLeadSeconds),
+                25f, 3000f);
 
-            // Hold the leader's heading only once roughly in place. While still closing,
-            // leaving yaw to the autopilot lets the aircraft point where it is going rather
-            // than crab sideways across the gap, which costs it speed it cannot spare.
-            bool onStation = distance < spacing * StationSpacings;
-
+            // Nose: hold the leader's heading on station; otherwise let the helicopter point
+            // where it is going.
             aircraft.autopilot.AutoAim(
                 destination: destination,
                 altitudeHold: agl,
                 aimDirection: onStation ? heading : Vector3.zero,
-                targetVelocity: leaderVel,
+                targetVelocity: targetVel,
                 followTerrain: true);
         }
     }

@@ -46,7 +46,7 @@ BepInEx is set up for you, and updates arrive through the manager.
      folder, so the DLL lands in `BepInEx/plugins/WingCommand/` with the readme and licence
      beside it.
 3. Launch the game. `BepInEx/LogOutput.log` should contain a line like
-   `WingCommand 0.6.1 loaded.` followed by `Harmony patched 8 method(s)`.
+   `WingCommand 0.6.4 loaded.` followed by `Harmony patched 8 method(s)`.
 
 Settings live in `BepInEx/config/com.marci.wingcommand.cfg` and can be edited in-game with
 [ConfigurationManager](https://github.com/BepInEx/BepInEx.ConfigurationManager) (**F1**).
@@ -353,7 +353,6 @@ in the unit the controller acts in.
 | `BankMatchBlend` | 0.35 | How much a settled wingman rolls to match your bank. 0 switches it off. |
 | `RotaryHoverSpeed` | 25 m/s | Leader speed below which helicopters hold their slot as a point rather than flying a heading. |
 | `RotaryPowerSeconds` | 20 s | Helicopter destination distance — a **power** setting, see below. |
-| `RotaryCommandAngle` | 30° | Largest heading correction a helicopter will command. |
 
 Avoidance distances (separation radius, path-cut corridor) are derived from the spacing in
 use rather than configured, so changing `SlotSpacing` or `RotarySpacingScale` moves the
@@ -375,9 +374,9 @@ double-counting.
 **For helicopters, distance is throttle.** `AutopilotHelo` sets collective from
 `0.5 + distance*0.001 - speed*0.02`, so the distance to the destination *is* the power
 command — about twenty times the speed for the terms to cancel at hover power. That is
-what `RotaryPowerSeconds` is for. Steering is set separately, by rotating the commanded
-heading, because when the two shared one vector, holding speed forced the destination far
-enough away that every cross-track correction became about five degrees.
+what `RotaryPowerSeconds` is for. The destination points wherever the slot is: a
+helicopter translates in any direction, so wingmen crabe sideways (or backwards) into
+their slots instead of steering like a fixed wing.
 
 Also worth knowing before tuning rotary flight: `AutopilotHelo` recomputes its forward
 waypoint only **once per second** and rate-limits it to 0.8 rad. That is a hard ceiling on
@@ -499,7 +498,7 @@ installs plugins as bare DLLs — every NOMM-managed plugin ships one, not an ar
 zip is there for people installing by hand.
 
 ```bash
-git tag -a v0.6.1 -m "WingCommand 0.6.1" && git push --tags
+git tag -a v0.6.4 -m "WingCommand 0.6.4" && git push --tags
 ```
 
 The mod is listed with [NOMM](https://github.com/Combat787/NOMM) through a manifest in

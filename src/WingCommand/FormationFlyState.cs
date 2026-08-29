@@ -234,9 +234,10 @@ namespace WingCommand
             else
             {
                 RotaryFormation.Mode mode = RotaryFormation.Fly(
-                    aircraft, leader, slotPos, toSlot, distance, offset.y, spacing);
+                    aircraft, leader, slotPos, toSlot, distance, offset.y, spacing,
+                    lastRotaryMode, out float horizontalError);
 
-                ReportRotaryMode(mode, distance);
+                ReportRotaryMode(mode, distance, horizontalError);
             }
         }
         /// <summary>
@@ -247,7 +248,7 @@ namespace WingCommand
         /// running and how far out the aircraft actually is, so the next diagnosis starts
         /// from data.
         /// </summary>
-        private void ReportRotaryMode(RotaryFormation.Mode mode, float distance)
+        private void ReportRotaryMode(RotaryFormation.Mode mode, float distance, float horizontalError)
         {
             if (!Plugin.Config2.VerboseLogging.Value) return;
 
@@ -261,7 +262,8 @@ namespace WingCommand
             Aircraft leader = Leader;
             Plugin.Logger.LogInfo(
                 $"[Rotary] {aircraft.unitName} slot {member.Slot}: {mode}, " +
-                $"error {distance:F0} m, own speed {aircraft.speed:F0}, " +
+                $"error {distance:F0} m (flat {horizontalError:F0}), " +
+                $"own speed {aircraft.speed:F0}, " +
                 $"leader {(leader != null ? leader.speed : 0f):F0} m/s, " +
                 $"alt {aircraft.radarAlt:F0} m");
         }
