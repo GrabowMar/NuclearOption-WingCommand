@@ -459,7 +459,8 @@ namespace WingCommand
             ShowHud = c.Bind("UI", "ShowWingHud", true,
                 "Draw the compact wing status readout in flight while you have wingmen assigned.");
             HudCorner = c.Bind("UI", "WingHudCorner", WingCommand.HudCorner.MiddleRight,
-                "Where that readout sits, so it can be kept clear of the HUD.");
+                "Legacy setting retained for existing configurations. The compact flight " +
+                "roster now attaches above the minimized tactical map.");
             UseMfdPanel = c.Bind("UI", "UseMfdPanel", true,
                 "Add a WMC screen to the cockpit MFD bezel, alongside BDF/MAP/HUD. This is " +
                 "the primary wing interface; the map overlay below is only a fallback.");

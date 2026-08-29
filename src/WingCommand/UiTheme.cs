@@ -34,6 +34,26 @@ namespace WingCommand
             }
         }
 
+        /// <summary>The friendly colour used by the in-cockpit HUD.</summary>
+        public static Color HudFriendly
+        {
+            get
+            {
+                try { return ThemeManager.Active.ColorTheme.HudUnitFriendly; }
+                catch { return Friendly; }
+            }
+        }
+
+        /// <summary>The stock warning colour used for low reserves and degraded state.</summary>
+        public static Color Warning
+        {
+            get
+            {
+                try { return ThemeManager.Active.ColorTheme.Warning; }
+                catch { return new Color(1f, 0.55f, 0.2f); }
+            }
+        }
+
         /// <summary>Clip a string to a column width. Null-safe.</summary>
         public static string Truncate(string s, int max)
         {

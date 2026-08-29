@@ -50,6 +50,7 @@ namespace WingCommand
             if (!InPlayableState())
             {
                 if (radialOpen) CloseRadial(apply: false);
+                WingHud.ResetStatusPanel();
                 WmcScreen.Reset();
                 PlayerFireWatcher.Reset();
                 WingComms.Reset();
@@ -77,6 +78,7 @@ namespace WingCommand
                 mapLayer.Update();
 
             WingMarkers.Tick(Wing);
+            WingHud.TickStatusPanel(Wing);
             WmcScreen.Tick(Wing);
             FlushRecruitQueue();
         }
@@ -425,11 +427,6 @@ namespace WingCommand
         private void OnGUI()
         {
             if (!InPlayableState()) return;
-
-            // The readout hides itself while the tactical map is up, where it would sit
-            // on top of the map rather than beside the HUD it belongs to.
-            if (Plugin.Config2.ShowHud.Value && Wing.Count > 0 && !DynamicMap.mapMaximized)
-                WingHud.DrawStatusPanel(Wing);
 
             if (radialOpen)
                 WingHud.DrawRadial(Slices, radialCentre, hoveredSlice);

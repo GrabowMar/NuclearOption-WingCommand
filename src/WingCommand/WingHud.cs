@@ -1,10 +1,13 @@
 using System.Collections.Generic;
+using TMPro;
 using UnityEngine;
+using UnityEngine.UI;
 
 namespace WingCommand
 {
     /// <summary>
-    /// IMGUI rendering for the wing panel, the radial menu and transient messages.
+    /// Native HUD rendering for the compact wing strip, plus IMGUI fallbacks for the
+    /// standalone radial menu and transient messages.
     ///
     /// The stock <c>RadialMenuMain</c> is a SceneSingleton driven by a fixed
     /// <c>RadialMenuAction.ActionType</c> enum and weapon-bound ScriptableObjects, so it
@@ -17,11 +20,9 @@ namespace WingCommand
         private const float SliceHeight = 54f;
 
         private static bool stylesReady;
-        private static GUIStyle labelStyle;
         private static GUIStyle sliceStyle;
         private static GUIStyle sliceHotStyle;
         private static GUIStyle toastStyle;
-        private static GUIStyle headerStyle;
 
         private static readonly Color Panel = new Color(0.04f, 0.06f, 0.05f, 0.78f);
         private static readonly Color Accent = new Color(0.45f, 0.95f, 0.55f);
@@ -32,17 +33,6 @@ namespace WingCommand
         {
             if (stylesReady) return;
             stylesReady = true;
-
-            labelStyle = new GUIStyle(GUI.skin.label)
-            {
-                fontSize = 12,
-                richText = false,
-                wordWrap = false,
-            };
-            labelStyle.normal.textColor = UiTheme.Green;
-
-            headerStyle = new GUIStyle(labelStyle) { fontStyle = FontStyle.Bold };
-            headerStyle.normal.textColor = UiTheme.Green;
 
             sliceStyle = new GUIStyle(GUI.skin.box)
             {
@@ -74,74 +64,228 @@ namespace WingCommand
             return t;
         }
 
-        // Unity calls OnGUI several times per frame (layout, repaint, each input event),
-        // so formatting these rows inline produced a fresh set of strings several times a
-        // frame. They are rebuilt on a timer instead and simply drawn in between.
-        private static readonly List<string> cachedRows = new List<string>();
-        private static string cachedHeader = "";
-        private static float nextRowRebuild;
+        private const float StatusHeaderHeight = 34f;
+        private const float StatusRowHeight = 44f;
+        private static float statusWidth = 600f;
+
+        private static RectTransform statusRoot;
+        private static TMP_Text statusTitle;
+        private static Canvas statusCanvas;
+        private static TMP_FontAsset statusFont;
+        private static float nextStatusRefresh;
+        private static int lastStatusCount = -1;
+        private static readonly List<StatusRow> statusRows = new List<StatusRow>();
 
         /// <summary>
-        /// In-flight wing readout. Drawn as bare green text with no panel behind it, so it
-        /// reads as part of the aircraft's own symbology rather than as a mod overlay
-        /// sitting on top of the canopy.
+        /// Build the roster inside the game's HUD canvas. This gives it the same scaling,
+        /// font rendering, theme changes and resolution handling as stock symbology.
         /// </summary>
-        public static void DrawStatusPanel(WingRegistry wing)
+        public static void TickStatusPanel(WingRegistry wing)
         {
-            EnsureStyles();
-            RebuildRows(wing);
-
-            const float w = 260f;
-            const float lineHeight = 18f;
-            float h = lineHeight * (cachedRows.Count + 1) + 8f;
-
-            Vector2 origin = PanelOrigin(w, h);
-
-            // No GUI.Box: the background plate was the main thing making this look bolted on.
-            var line = new Rect(origin.x, origin.y, w, lineHeight);
-
-            GUI.Label(line, cachedHeader, headerStyle);
-            for (int i = 0; i < cachedRows.Count; i++)
+            CombatHUD hud = SceneSingleton<CombatHUD>.i;
+            DynamicMap map = SceneSingleton<DynamicMap>.i;
+            bool visible = Plugin.Config2.ShowHud.Value && wing.Count > 0 &&
+                           !DynamicMap.mapMaximized && hud != null && hud.isActiveAndEnabled &&
+                           map != null && map.gameObject.activeInHierarchy;
+            Canvas canvas = hud != null ? hud.GetComponentInParent<Canvas>() : null;
+            if (!visible || canvas == null)
             {
-                line.y += lineHeight;
-                GUI.Label(line, cachedRows[i], labelStyle);
+                if (statusRoot != null) statusRoot.gameObject.SetActive(false);
+                return;
             }
+
+            if (statusRoot == null || statusCanvas != canvas)
+            {
+                ResetStatusPanel();
+                BuildStatusPanel(hud, canvas, map);
+            }
+
+            if (statusRoot == null) return;
+            if (!statusRoot.gameObject.activeSelf) statusRoot.gameObject.SetActive(true);
+
+            PositionStatusPanel(map);
+
+            if (Time.unscaledTime < nextStatusRefresh && lastStatusCount == wing.Count) return;
+            nextStatusRefresh = Time.unscaledTime + 0.2f;
+            lastStatusCount = wing.Count;
+            RefreshStatusPanel(wing);
         }
 
-        /// <summary>Corner placement, so the readout can be moved clear of the HUD.</summary>
-        private static Vector2 PanelOrigin(float w, float h)
+        public static void ResetStatusPanel()
         {
-            const float margin = 24f;
-            switch (Plugin.Config2.HudCorner.Value)
-            {
-                case HudCorner.TopLeft:
-                    return new Vector2(margin, margin);
-                case HudCorner.TopRight:
-                    return new Vector2(Screen.width - w - margin, margin);
-                case HudCorner.BottomLeft:
-                    return new Vector2(margin, Screen.height - h - margin);
-                case HudCorner.BottomRight:
-                    return new Vector2(Screen.width - w - margin, Screen.height - h - margin);
-                case HudCorner.MiddleRight:
-                default:
-                    return new Vector2(Screen.width - w - margin, Screen.height * 0.34f);
-            }
+            if (statusRoot != null) Object.Destroy(statusRoot.gameObject);
+            statusRoot = null;
+            statusTitle = null;
+            statusCanvas = null;
+            statusFont = null;
+            statusRows.Clear();
+            nextStatusRefresh = 0f;
+            lastStatusCount = -1;
         }
 
-        private static void RebuildRows(WingRegistry wing)
+        private static void BuildStatusPanel(CombatHUD hud, Canvas canvas, DynamicMap map)
         {
-            if (Time.unscaledTime < nextRowRebuild && cachedRows.Count == wing.Count) return;
-            nextRowRebuild = Time.unscaledTime + 0.2f;
+            TMP_Text template = hud.GetComponentInChildren<TMP_Text>(includeInactive: true);
+            statusFont = template != null ? template.font : null;
+            statusCanvas = canvas;
+            RectTransform mapBounds = map.mapBackground != null
+                ? map.mapBackground.rectTransform
+                : map.mapTransform;
+            statusWidth = Mathf.Max(400f, mapBounds.rect.width);
 
-            cachedHeader = "WING  -  " + Plugin.Config2.Shape.Value;
+            var root = new GameObject("WingCommand_Status", typeof(RectTransform));
+            statusRoot = root.GetComponent<RectTransform>();
+            // The minimized map already has a dedicated HUD anchor. Sharing that parent
+            // avoids translating between the map canvas and the flight-HUD canvas, which
+            // placed the panel off-screen on screen-space-camera HUDs.
+            statusRoot.SetParent(map.hudMapAnchor, worldPositionStays: false);
+            statusRoot.SetAsLastSibling();
 
-            cachedRows.Clear();
-            foreach (WingMember m in wing.Members)
+            statusTitle = StatusLabel(statusRoot, "", new Rect(4f, -1f, statusWidth - 8f, 29f),
+                                      20f, UiTheme.Green, TextAlignmentOptions.Left);
+            PositionStatusPanel(map);
+        }
+
+        private static void RefreshStatusPanel(WingRegistry wing)
+        {
+            statusTitle.text = "WING " + wing.Count + "   " +
+                               FormationShapes.Pretty(Plugin.Config2.Shape.Value).ToUpperInvariant() +
+                               "   ROE " + wing.Roe.ToString().ToUpperInvariant();
+
+            while (statusRows.Count < wing.Count)
+                statusRows.Add(new StatusRow(statusRoot, statusRows.Count));
+
+            for (int i = 0; i < statusRows.Count; i++)
             {
-                cachedRows.Add(string.Format(
-                    "{0}  {1,-14} {2,-9} {3:F0} m",
-                    m.Slot, UiTheme.Truncate(m.Name, 14), OrderText(m), m.SlotError));
+                if (i < wing.Count)
+                {
+                    statusRows[i].Place(i, wing.Count);
+                    statusRows[i].Bind(wing.Members[i]);
+                }
+                else statusRows[i].Hide();
             }
+
+            int lines = Mathf.CeilToInt(wing.Count / 4f);
+            statusRoot.sizeDelta = new Vector2(
+                statusWidth,
+                StatusHeaderHeight + lines * StatusRowHeight);
+        }
+
+        private static void PositionStatusPanel(DynamicMap map)
+        {
+            if (statusRoot == null || map == null || map.mapTransform == null ||
+                map.hudMapAnchor == null) return;
+
+            RectTransform mapRect = map.mapBackground != null
+                ? map.mapBackground.rectTransform
+                : map.mapTransform;
+            statusRoot.anchorMin = statusRoot.anchorMax = new Vector2(0.5f, 0.5f);
+            statusRoot.pivot = Vector2.zero;
+
+            Vector3 worldTopLeft = mapRect.TransformPoint(
+                new Vector3(mapRect.rect.xMin, mapRect.rect.yMax, 0f));
+            statusRoot.localPosition = map.hudMapAnchor.InverseTransformPoint(worldTopLeft);
+            statusRoot.localRotation = Quaternion.identity;
+            statusRoot.localScale = Vector3.one;
+        }
+
+        private sealed class StatusRow
+        {
+            private readonly GameObject go;
+            private readonly RectTransform rect;
+            private readonly Image icon;
+            private readonly TMP_Text identity;
+
+            public StatusRow(RectTransform parent, int index)
+            {
+                go = new GameObject("Member_" + (index + 1), typeof(RectTransform));
+                rect = go.GetComponent<RectTransform>();
+                rect.SetParent(parent, worldPositionStays: false);
+
+                icon = StatusIcon(rect, new Rect(4f, -5f, 30f, 30f));
+                identity = StatusLabel(rect, "", new Rect(39f, -2f, 100f, 32f), 20f,
+                                       UiTheme.Friendly, TextAlignmentOptions.Left);
+            }
+
+            public void Place(int index, int count)
+            {
+                int columns = Mathf.Min(4, count);
+                int column = index % 4;
+                int line = index / 4;
+                float width = statusWidth / columns;
+                StatusPlace(rect, new Rect(
+                    column * width,
+                    -StatusHeaderHeight - line * StatusRowHeight,
+                    width,
+                    StatusRowHeight));
+                identity.rectTransform.sizeDelta = new Vector2(width - 43f, 32f);
+            }
+
+            public void Bind(WingMember member)
+            {
+                if (!go.activeSelf) go.SetActive(true);
+
+                Aircraft aircraft = member.Aircraft;
+                icon.sprite = aircraft != null && aircraft.definition != null
+                    ? aircraft.definition.mapIcon
+                    : null;
+                identity.text = member.Slot + "  " +
+                                (aircraft != null && aircraft.definition != null
+                                    ? aircraft.definition.code
+                                    : "AIRCRAFT");
+
+                bool warning = !member.Alive || member.Fuel <= Plugin.Config2.BingoFuel.Value ||
+                               member.Ammo <= 0;
+                Color color = warning ? UiTheme.Warning : UiTheme.Friendly;
+                icon.color = color;
+                identity.color = color;
+            }
+
+            public void Hide()
+            {
+                if (go.activeSelf) go.SetActive(false);
+            }
+
+        }
+
+        private static TMP_Text StatusLabel(RectTransform parent, string text, Rect rect,
+                                            float size, Color color, TextAlignmentOptions alignment)
+        {
+            var go = new GameObject("Text", typeof(RectTransform));
+            RectTransform rt = go.GetComponent<RectTransform>();
+            rt.SetParent(parent, worldPositionStays: false);
+            StatusPlace(rt, rect);
+
+            TextMeshProUGUI label = go.AddComponent<TextMeshProUGUI>();
+            if (statusFont != null) label.font = statusFont;
+            label.text = text;
+            label.fontSize = size;
+            label.color = color;
+            label.alignment = alignment;
+            label.enableWordWrapping = false;
+            label.overflowMode = TextOverflowModes.Ellipsis;
+            label.raycastTarget = false;
+            return label;
+        }
+
+        private static Image StatusIcon(RectTransform parent, Rect rect)
+        {
+            var go = new GameObject("AircraftIcon", typeof(RectTransform), typeof(Image));
+            RectTransform rt = go.GetComponent<RectTransform>();
+            rt.SetParent(parent, worldPositionStays: false);
+            StatusPlace(rt, rect);
+            Image image = go.GetComponent<Image>();
+            image.preserveAspect = true;
+            image.raycastTarget = false;
+            return image;
+        }
+
+        private static void StatusPlace(RectTransform rt, Rect rect)
+        {
+            rt.anchorMin = rt.anchorMax = rt.pivot = new Vector2(0f, 1f);
+            rt.sizeDelta = new Vector2(rect.width, rect.height);
+            rt.anchoredPosition = new Vector2(rect.x, rect.y);
+            rt.localScale = Vector3.one;
         }
 
         public static void DrawRadial(RadialSlice[] slices, Vector2 centre, int hovered)
@@ -171,31 +315,6 @@ namespace WingCommand
             EnsureStyles();
             var rect = new Rect(Screen.width * 0.5f - 190f, Screen.height * 0.78f, 380f, 30f);
             GUI.Box(rect, message, toastStyle);
-        }
-
-        /// <summary>
-        /// Name the target when a member has one, matching the WMC roster. Four rows all
-        /// reading "Engage" tell the player nothing once targets are spread across the
-        /// wing.
-        /// </summary>
-        private static string OrderText(WingMember m)
-        {
-            Unit assigned = m.AssignedTarget;
-            if (assigned != null && !assigned.disabled)
-            {
-                string code = assigned.definition != null ? assigned.definition.code : assigned.unitName;
-                return UiTheme.Truncate(code, 9);
-            }
-            switch (m.Order)
-            {
-                case WingOrder.ReturnToBase: return "RTB";
-                case WingOrder.FallBack:     return "Fall Back";
-                case WingOrder.OrbitHere:    return "Orbit";
-                case WingOrder.DeliverCargo: return "Cargo";
-                case WingOrder.LandHere:     return "Landing";
-                case WingOrder.Attack:       return "Attack";
-                default:                     return m.Order.ToString();
-            }
         }
 
     }
