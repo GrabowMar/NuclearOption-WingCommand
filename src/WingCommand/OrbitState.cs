@@ -15,6 +15,10 @@ namespace WingCommand
         private readonly WingMember member;
         private GlobalPosition anchor;
         private float radius;
+        private float lastEngageCheck;
+        private float lastFiredTime;
+
+        private const float EngageInterval = 0.35f;
 
         public OrbitState(WingMember member)
         {
@@ -42,6 +46,8 @@ namespace WingCommand
             pilot.flightInfo.HasTakenOff = true;
 
             if (radius <= 0f) radius = Plugin.Config2.OrbitRadius.Value;
+            lastEngageCheck = 0f;
+            lastFiredTime = 0f;
 
             if (Plugin.Config2.VerboseLogging.Value)
                 Plugin.Logger.LogInfo($"[Wing] {aircraft.unitName} orbiting at {radius:F0} m");
@@ -64,6 +70,39 @@ namespace WingCommand
             float phase = member.Slot * 120f;
 
             OrbitSteering.Fly(aircraft, controlInputs, anchor, radius, phase);
+            RunEngagement();
+        }
+
+        /// <summary>Apply the standing ROE while holding instead of orbiting inertly.</summary>
+        private void RunEngagement()
+        {
+            if (Time.timeSinceLevelLoad - lastEngageCheck < EngageInterval) return;
+            lastEngageCheck = Time.timeSinceLevelLoad;
+
+            WingRoe roe = RoeRules.Current;
+            WingWeapons.Allow allow = RoeRules.WeaponsFree(roe, aircraft);
+            float range = RoeRules.EngageRange(roe);
+            bool fired = false;
+
+            if (allow == WingWeapons.Allow.MissilesOnly)
+            {
+                if (Time.timeSinceLevelLoad - lastFiredTime >= 1f)
+                    fired = WingWeapons.Engage(aircraft, pilot, allow, range);
+                if (fired) WingComms.Say(member, WingComms.Call.Defending);
+            }
+            else if (Time.timeSinceLevelLoad - lastFiredTime >= Plugin.Config2.FireInterval.Value)
+            {
+                Unit target = null;
+                Aircraft leader = member.Leader;
+                if (leader != null && RoeRules.GuardsLeader(roe))
+                    target = WingWeapons.NearestThreatTo(leader, range);
+
+                fired = target != null
+                    ? WingWeapons.EngageSpecific(aircraft, pilot, target, range)
+                    : WingWeapons.Engage(aircraft, pilot, allow, range);
+            }
+
+            if (fired) lastFiredTime = Time.timeSinceLevelLoad;
         }
     }
 }

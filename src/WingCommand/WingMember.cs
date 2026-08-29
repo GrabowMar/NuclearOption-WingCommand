@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using UnityEngine;
 
 namespace WingCommand
@@ -12,12 +13,14 @@ namespace WingCommand
         /// <summary>Distance to the assigned slot, in metres. Diagnostic only.</summary>
         public float SlotError;
 
-        public WingOrder Order { get; private set; } = WingOrder.Formation;
+        public WingDirective Directive { get; private set; }
+        public WingOrder Order => Directive.Order;
 
         private readonly FormationFlyState formationState;
         private readonly FallBackState fallBackState;
         private readonly OrbitState orbitState;
         private readonly LandInPlaceState landState;
+        private readonly WaypointTaskState waypointState;
         private readonly AttackRunState attackState;
         private readonly DefensiveManeuverState defensiveState;
 
@@ -25,6 +28,7 @@ namespace WingCommand
         private bool recalled;
         private readonly float joinedAt;
         private WingRegistry owner;
+        private readonly List<GlobalPosition> waypointQueue = new List<GlobalPosition>();
 
         public WingMember(WingRegistry owner, Aircraft aircraft, Pilot pilot, int slot)
         {
@@ -36,9 +40,11 @@ namespace WingCommand
             fallBackState = new FallBackState(this);
             orbitState = new OrbitState(this);
             landState = new LandInPlaceState(this);
+            waypointState = new WaypointTaskState(this);
             attackState = new AttackRunState(this);
             defensiveState = new DefensiveManeuverState(this);
             joinedAt = Time.timeSinceLevelLoad;
+            Directive = WingDirective.Simple(WingOrder.Formation);
         }
 
         public Aircraft Leader => owner?.Leader;
@@ -53,25 +59,30 @@ namespace WingCommand
 
         public string Name => Aircraft != null ? Aircraft.unitName : "(gone)";
 
-        public void Apply(WingOrder order)
+        public void Apply(WingOrder order) => Apply(WingDirective.Simple(order));
+
+        public void Apply(WingDirective directive)
         {
-            if (order != WingOrder.Attack)
-                AssignedTarget = null;
             TacticalCoordinator.Release(Aircraft);
 
-            Order = order;
+            if (directive.Order != WingOrder.MoveToPoint)
+                waypointQueue.Clear();
+
+            Directive = directive;
+            TacticalMapOverlay.Invalidate();
             recalled = false;
+            OnLeash = false;
 
             // A player order received during a missile break is queued as the standing
             // intent. Self-preservation continues until clear, then resumes this exact order.
             if (IsPanicking)
             {
                 if (Plugin.Config2.VerboseLogging.Value)
-                    Plugin.Logger.LogInfo($"[Panic] {Name} queued {order} while defensive");
+                    Plugin.Logger.LogInfo($"[Panic] {Name} queued {directive.Order} while defensive");
                 return;
             }
 
-            switch (order)
+            switch (directive.Order)
             {
                 case WingOrder.Formation:
                     formationState.BoostRejoin(Slot * Plugin.Config2.RejoinStagger.Value);
@@ -93,9 +104,11 @@ namespace WingCommand
                 case WingOrder.OrbitHere:
                 {
                     Aircraft leader = Leader;
-                    GlobalPosition anchor = leader != null
-                        ? leader.GlobalPosition()
-                        : Aircraft.GlobalPosition();
+                    GlobalPosition anchor = directive.HasPoint
+                        ? directive.Point
+                        : leader != null
+                            ? leader.GlobalPosition()
+                            : Aircraft.GlobalPosition();
 
                     orbitState.SetAnchor(anchor, Plugin.Config2.OrbitRadius.Value);
                     Pilot.SwitchState(orbitState);
@@ -110,7 +123,19 @@ namespace WingCommand
                     break;
 
                 case WingOrder.LandHere:
+                    if (directive.HasPoint) landState.SetDestination(directive.Point);
+                    else landState.ClearDestination();
                     Pilot.SwitchState(landState);
+                    break;
+
+                case WingOrder.MoveToPoint:
+                    if (!directive.HasPoint)
+                    {
+                        Apply(WingOrder.Formation);
+                        break;
+                    }
+                    waypointState.SetDestination(directive.Point);
+                    Pilot.SwitchState(waypointState);
                     break;
 
                 case WingOrder.Attack:
@@ -124,7 +149,7 @@ namespace WingCommand
             }
 
             if (Plugin.Config2.VerboseLogging.Value)
-                Plugin.Logger.LogInfo($"[Wing] {Name} -> {order}");
+                Plugin.Logger.LogInfo($"[Wing] {Name} -> {directive.Order}");
         }
 
         /// <summary>True when this aircraft can be told to run cargo.</summary>
@@ -154,7 +179,7 @@ namespace WingCommand
             if (Plugin.Config2.VerboseLogging.Value)
                 Plugin.Logger.LogInfo($"[Wing] {Name} releasing to combat AI: {reason}");
 
-            Order = WingOrder.Engage;
+            Directive = WingDirective.Simple(WingOrder.Engage);
             OnLeash = false;
             IsPanicking = false;
             SwitchToCombat();
@@ -164,7 +189,7 @@ namespace WingCommand
         public bool OnLeash { get; private set; }
 
         /// <summary>A target the player has explicitly assigned, or null.</summary>
-        public Unit AssignedTarget { get; private set; }
+        public Unit AssignedTarget => Directive.Target;
 
         /// <summary>True while a missile warning temporarily owns the flight controls.</summary>
         public bool IsPanicking { get; private set; }
@@ -199,20 +224,46 @@ namespace WingCommand
         /// </summary>
         public void AttackTarget(Unit target)
         {
-            TacticalCoordinator.Release(Aircraft);
-            AssignedTarget = target;
             if (target == null) return;
-
-            Order = WingOrder.Attack;
-            recalled = false;
-            OnLeash = false;
-
-            if (IsPanicking) return;
-
-            WingComms.Say(this, WingComms.Call.Engaging, target.unitName);
-            Pilot.SwitchState(attackState);
+            Apply(WingDirective.Attack(target));
+            if (!IsPanicking)
+                WingComms.Say(this, WingComms.Call.Engaging, target.unitName);
         }
-        public void ClearAssignedTarget() => AssignedTarget = null;
+        public void ClearAssignedTarget() => Directive = Directive.WithoutTarget();
+
+        /// <summary>Issue a tactical-map move, replacing or appending to this member's route.</summary>
+        public void IssueWaypoint(GlobalPosition point, bool append)
+        {
+            if (!Alive) return;
+            if (!append) waypointQueue.Clear();
+            waypointQueue.Add(point);
+
+            Apply(WingDirective.AtPoint(WingOrder.MoveToPoint, waypointQueue[0]));
+        }
+
+        public int WaypointCount => waypointQueue.Count;
+
+        /// <summary>Advance a route, then resolve the wing's ROE at its final endpoint.</summary>
+        internal void CompleteWaypoint()
+        {
+            if (waypointQueue.Count > 0) waypointQueue.RemoveAt(0);
+
+            if (waypointQueue.Count > 0)
+            {
+                GlobalPosition next = waypointQueue[0];
+                Directive = WingDirective.AtPoint(WingOrder.MoveToPoint, next);
+                waypointState.SetDestination(next);
+                if (!IsPanicking) Pilot.SwitchState(waypointState);
+                return;
+            }
+
+            // A map move is temporary. Defend and Escort return to formation, where their
+            // ROE owns weapons policy; Free transitions into autonomous combat.
+            if (RoeRules.Current == WingRoe.Free)
+                Apply(WingOrder.Engage);
+            else
+                Apply(WingOrder.Formation);
+        }
 
         /// <summary>
         /// Send the member home when it can no longer contribute. A wingman with no
@@ -233,6 +284,7 @@ namespace WingCommand
                 case WingOrder.LandHere:
                 case WingOrder.DeliverCargo:
                 case WingOrder.FallBack:
+                case WingOrder.MoveToPoint:
                     return;
             }
 
@@ -269,7 +321,7 @@ namespace WingCommand
                 Plugin.Logger.LogInfo($"[Wing] {Name} breaking to engage: {reason}");
 
             OnLeash = true;
-            Order = WingOrder.Engage;
+            Directive = WingDirective.Simple(WingOrder.Engage);
             WingComms.Say(this, WingComms.Call.Breaking);
             SwitchToCombat();
         }
@@ -381,17 +433,17 @@ namespace WingCommand
         {
             if (!IsPanicking) return;
 
-            WingOrder resume = Order;
+            WingDirective resume = Directive;
             IsPanicking = false;
 
-            if (resume == WingOrder.Attack && (AssignedTarget == null || AssignedTarget.disabled))
+            if (resume.Order == WingOrder.Attack &&
+                (resume.Target == null || resume.Target.disabled))
             {
-                AssignedTarget = null;
-                resume = WingOrder.Formation;
+                resume = WingDirective.Simple(WingOrder.Formation);
             }
 
             if (Plugin.Config2.VerboseLogging.Value)
-                Plugin.Logger.LogInfo($"[Panic] {Name} clear -> {resume}");
+                Plugin.Logger.LogInfo($"[Panic] {Name} clear -> {resume.Order}");
 
             Apply(resume);
         }
@@ -435,5 +487,6 @@ namespace WingCommand
         DeliverCargo,
         LandHere,
         Attack,
+        MoveToPoint,
     }
 }

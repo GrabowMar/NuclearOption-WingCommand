@@ -25,10 +25,8 @@ namespace WingCommand
 
         private static WingMenuAction rootEntry;
         private static WingMenuAction[] commanderMenu;
-        private static WingMenuAction[] formationMenu;
-        private static WingMenuAction[] ordersMenu;
-        private static WingMenuAction[] wingMenu;
         private static WingMenuAction[] taskingMenu;
+        private static WingMenuAction[] formationMenu;
 
         /// <summary>The stock wheel contents, captured the first time we swap away.</summary>
         private static RadialMenuAction[] stockActions;
@@ -121,48 +119,28 @@ namespace WingCommand
 
             rootEntry = WingMenuAction.Create(RootLabel, _ => ShowCommanderMenu());
 
-            // Five slices, not nine. A wheel is selected by direction, so every extra
-            // entry narrows the wedge you have to hit; past about six the gesture stops
-            // being reliable, especially on a stick. Orders and roster management move
-            // into their own pages, leaving a top level that reads at a glance.
+            // Six combat shortcuts. Deliberate management (recruitment, release and the
+            // full shape picker) belongs on WMC, where cost and scope can be inspected.
             var commander = new List<WingMenuAction>
             {
-                Icon(WingMenuAction.Create("Orders", _ => ShowOrdersMenu()), "orders"),
+                Leaf("Form Up", WingAction.Rejoin, "rejoin"),
                 Leaf("Attack My Target", WingAction.AttackMyTarget, "attack"),
-                Icon(WingMenuAction.Create("Formation", _ => ShowFormationMenu()), "formation"),
-                Leaf("Rules Of Engagement", WingAction.CycleRoe, "posture"),
-                Icon(WingMenuAction.Create("Wing", _ => ShowWingMenu()), "recruit"),
-            };
-
-            // Six, not eleven. Orders that are given in a fight sit on this page; the
-            // tasking that is given between fights moves to its own, because past about six
-            // slices the wheel stops being selectable — especially on a stick.
-            var orders = new List<WingMenuAction>
-            {
-                Leaf("Rejoin", WingAction.Rejoin, "rejoin"),
                 Leaf("Engage", WingAction.Engage, "engage"),
-                Leaf("Fall Back", WingAction.FallBack, "fallback"),
+                Leaf("Disengage", WingAction.FallBack, "fallback"),
+                Leaf("Rules Of Engagement", WingAction.CycleRoe, "posture"),
                 Icon(WingMenuAction.Create("Tasking", _ => ShowTaskingMenu()), "tasking"),
-                Icon(WingMenuAction.Create("Back", _ => ShowCommanderMenu()), "back"),
             };
 
             var tasking = new List<WingMenuAction>
             {
+                Leaf("Hold Position", WingAction.OrbitHere, "orbit"),
                 Leaf("Return To Base", WingAction.ReturnToBase, "rtb"),
-                Leaf("Orbit Here", WingAction.OrbitHere, "orbit"),
-                Leaf("Deliver Cargo", WingAction.DeliverCargo, "cargo"),
-                Leaf("Land Here", WingAction.LandHere, "land"),
-                Icon(WingMenuAction.Create("Back", _ => ShowOrdersMenu()), "back"),
-            };
-            var wing = new List<WingMenuAction>
-            {
-                Leaf("Recruit Nearest", WingAction.RecruitNearest, "recruit"),
-                Leaf("Disband", WingAction.Disband, "disband"),
+                Icon(WingMenuAction.Create("Formation", _ => ShowFormationMenu()), "formation"),
                 Icon(WingMenuAction.Create("Back", _ => ShowCommanderMenu()), "back"),
             };
 
-            var shapes = new List<WingMenuAction>();
-            foreach (FormationShape shape in FormationShapes.All)
+            var formations = new List<WingMenuAction>();
+            foreach (FormationShape shape in FormationShapes.Core)
             {
                 FormationShape captured = shape;
                 WingMenuAction entry = WingMenuAction.Create(FormationShapes.Pretty(captured), _ =>
@@ -171,22 +149,18 @@ namespace WingCommand
                     Mgr?.Toast("Formation: " + FormationShapes.Pretty(captured));
                     RestoreStockWheel();
                 });
-                shapes.Add(Icon(entry, "shape_" + captured));
+                formations.Add(Icon(entry, "shape_" + captured));
             }
-            shapes.Add(Icon(WingMenuAction.Create("Back", _ => ShowCommanderMenu()), "back"));
+            formations.Add(Icon(WingMenuAction.Create("Back", _ => ShowTaskingMenu()), "back"));
 
             commanderMenu = commander.ToArray();
-            ordersMenu = orders.ToArray();
-            wingMenu = wing.ToArray();
             taskingMenu = tasking.ToArray();
-            formationMenu = shapes.ToArray();
+            formationMenu = formations.ToArray();
 
             // Take the wedge background and colours from a stock entry so the slices match
             // the game's styling, then overwrite the icon with our own drawn glyph.
             ApplyAppearance(rootEntry, template(0), "root");
             ApplyAll(commanderMenu, template);
-            ApplyAll(ordersMenu, template);
-            ApplyAll(wingMenu, template);
             ApplyAll(taskingMenu, template);
             ApplyAll(formationMenu, template);
         }
@@ -238,13 +212,9 @@ namespace WingCommand
 
         private static void ShowCommanderMenu() => Swap(commanderMenu, submenu: true);
 
-        private static void ShowFormationMenu() => Swap(formationMenu, submenu: true);
-
-        private static void ShowOrdersMenu() => Swap(ordersMenu, submenu: true);
-
-        private static void ShowWingMenu() => Swap(wingMenu, submenu: true);
-
         private static void ShowTaskingMenu() => Swap(taskingMenu, submenu: true);
+
+        private static void ShowFormationMenu() => Swap(formationMenu, submenu: true);
 
         internal static void RestoreStockWheel()
         {

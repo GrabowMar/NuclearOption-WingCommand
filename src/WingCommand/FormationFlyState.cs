@@ -367,9 +367,9 @@ namespace WingCommand
         /// Apply the wing's rules of engagement from inside the slot.
         ///
         /// Nothing here touches attitude or throttle, so a Defensive wingman can shoot
-        /// without ever compromising station-keeping. Aggressive wingmen additionally look
-        /// for an air target worth breaking formation for; ground targets are engaged from
-        /// the slot in both postures.
+        /// without ever compromising station-keeping. Free wingmen may additionally look
+        /// for a target worth breaking formation for; Escort is restricted to air targets
+        /// while Hold stays defensive.
         /// </summary>
         private void RunEngagement(Aircraft leader)
         {

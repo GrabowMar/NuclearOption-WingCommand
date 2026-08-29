@@ -17,7 +17,7 @@ namespace WingCommand
     {
         public const string PluginGuid = "com.marci.wingcommand";
         public const string PluginName = "WingCommand";
-        public const string PluginVersion = "0.8.3";
+        public const string PluginVersion = "0.9.0";
 
         internal static Plugin Instance { get; private set; }
         internal static new ManualLogSource Logger { get; private set; }
@@ -30,6 +30,19 @@ namespace WingCommand
             Instance = this;
             Logger = base.Logger;
             Config2 = new Cfg(Config);
+
+            if (Config2.AiTweakEnabled.Value ||
+                !Mathf.Approximately(Config2.AiSkillScale.Value, 1f) ||
+                !Mathf.Approximately(Config2.AiBraveryScale.Value, 1f))
+            {
+                Logger.LogWarning(
+                    "Legacy global AI skill/bravery settings are ignored in this release.");
+            }
+            if (Config2.PlayerTargetPenalty.Value > 0f)
+            {
+                Logger.LogWarning(
+                    "Legacy player concentration protection is ignored in this release.");
+            }
 
             if (!FormationSolver.ValidateGeometry(Config2.MaxWingSize.Value, out string geometryProblem))
                 Logger.LogError("Formation geometry validation failed: " + geometryProblem);
@@ -197,6 +210,8 @@ namespace WingCommand
 
         // --- Shop ---
         public readonly ConfigEntry<bool> ShopEnabled;
+        public readonly ConfigEntry<float> RecruitmentCostRate;
+        public readonly ConfigEntry<int> AdditionalWingReserve;
         public readonly ConfigEntry<float> WingPriceGrowth;
         public readonly ConfigEntry<float> FastDeliverySurcharge;
         public readonly ConfigEntry<float> FastDeliveryDistance;
@@ -219,20 +234,28 @@ namespace WingCommand
         public readonly ConfigEntry<string> WingTargetColor;
         public readonly ConfigEntry<bool> VerboseLogging;
 
+        private static ConfigDescription Advanced(string text, AcceptableValueBase values = null) =>
+            new ConfigDescription(text, values,
+                new ConfigurationManagerAttributes { IsAdvanced = true });
+
+        private static ConfigDescription Hidden(string text, AcceptableValueBase values = null) =>
+            new ConfigDescription(text, values,
+                new ConfigurationManagerAttributes { IsAdvanced = true, Browsable = false });
+
         public Cfg(ConfigFile c)
         {
             RadialKey = c.Bind("Keys", "FallbackRadialMenu", KeyCode.None,
-                "Hold to open the standalone fallback radial. Only needed if the native " +
-                "wheel integration is turned off or unavailable; leave unbound otherwise.");
+                Advanced("Hold to open the standalone fallback radial. Only needed if the native " +
+                         "wheel integration is turned off or unavailable; leave unbound otherwise."));
             QuickRejoinKey = c.Bind("Keys", "QuickRejoin", KeyCode.None,
-                "Optional hotkey: order the whole wing to rejoin formation.");
+                Advanced("Optional hotkey: order the whole wing to rejoin formation."));
             QuickEngageKey = c.Bind("Keys", "QuickEngage", KeyCode.None,
-                "Optional hotkey: order the whole wing to engage.");
+                Advanced("Optional hotkey: order the whole wing to engage."));
 
             Shape = c.Bind("Formation", "Shape", FormationShape.EchelonRight,
                 "Formation geometry used when wingmen hold station.");
             SlotSpacing = c.Bind("Formation", "SlotSpacing", 120f,
-                new ConfigDescription("Lateral/longitudinal spacing between slots, in metres.",
+                Advanced("Lateral/longitudinal spacing between slots, in metres.",
                     new AcceptableValueRange<float>(40f, 600f)));
             SlotStack = c.Bind("Formation", "SlotStack", 20f,
                 new ConfigDescription("Vertical stagger per slot, in metres. Keeps wingmen out of each other's wash.",
@@ -244,8 +267,7 @@ namespace WingCommand
                     new ConfigurationManagerAttributes { IsAdvanced = true }));
             MaxWingSize = c.Bind("Formation", "MaxWingSize", 3,
                 new ConfigDescription("Maximum number of wingmen.",
-                    new AcceptableValueRange<int>(1, 8),
-                    new ConfigurationManagerAttributes { IsAdvanced = true }));
+                    new AcceptableValueRange<int>(1, 8)));
             RotarySpacingScale = c.Bind("Formation", "RotarySpacingScale", 0.55f,
                 new ConfigDescription(
                     "Slot spacing multiplier for helicopters. They fly slower and much closer " +
@@ -274,26 +296,26 @@ namespace WingCommand
             // that quantity, stated directly.
 
             Aggression = c.Bind("Formation", "Aggression", 1.0f,
-                new ConfigDescription(
+                Advanced(
                     "Master scale on how hard a wingman corrects its position: steering, " +
                     "closure and throttle demand together. Raising it tightens station-keeping " +
                     "at the cost of settling; above about 2 wingmen start to hunt.",
                     new AcceptableValueRange<float>(0.2f, 3f)));
             Damping = c.Bind("Formation", "Damping", 1.0f,
-                new ConfigDescription(
+                Advanced(
                     "Master scale on the rate terms that arrest a correction before it arrives. " +
                     "This is what stops the slow left-right rocking; lower it only if wingmen " +
                     "seem sluggish to start moving, and raise it if they overshoot the slot.",
                     new AcceptableValueRange<float>(0f, 3f)));
             CommandAngle = c.Bind("Formation", "CommandAngle", 25f,
-                new ConfigDescription(
+                Advanced(
                     "Largest heading correction, in degrees, a wingman will command while " +
                     "holding station. This is the real limit on how quickly it can close a " +
                     "lateral error. The old settings worked out to 10.4 degrees, which is why " +
                     "station-keeping felt sluggish.",
                     new AcceptableValueRange<float>(5f, 60f)));
             StationBankDegrees = c.Bind("Formation", "StationBankDegrees", 75f,
-                new ConfigDescription(
+                Advanced(
                     "Bank authority, in degrees, while settled in the slot. The game scales this " +
                     "down again by altitude and speed, so the old value of 45 left only 27-54 " +
                     "degrees of real authority and a wingman simply could not follow a hard turn.",
@@ -328,7 +350,7 @@ namespace WingCommand
                     new AcceptableValueRange<float>(0f, 6f),
                     new ConfigurationManagerAttributes { IsAdvanced = true }));
             BankMatchBlend = c.Bind("Formation", "BankMatchBlend", 0.35f,
-                new ConfigDescription(
+                Advanced(
                     "How much a settled wingman rolls to match your bank, 0 to 1. This blends " +
                     "with the autopilot's own roll rather than overriding it, and disengages " +
                     "past a hard bank limit and near the ground. Set to 0 to switch it off.",
@@ -356,36 +378,31 @@ namespace WingCommand
                     new AcceptableValueRange<float>(5f, 40f),
                     new ConfigurationManagerAttributes { IsAdvanced = true }));
             AiTweakEnabled = c.Bind("AI", "EnableAiTweak", false,
-                "Scale AI pilot skill and bravery. Changes vanilla combat feel, so it is off by default.");
+                Hidden("Retired compatibility key. Wing Command no longer changes global AI skill or bravery."));
             AiSkillScale = c.Bind("AI", "SkillScale", 1.0f,
-                new ConfigDescription("Multiplier applied to AI pilot skill (aim accuracy, missile reaction time).",
-                    new AcceptableValueRange<float>(0.25f, 3f)));
+                Hidden("Retired compatibility key.", new AcceptableValueRange<float>(0.25f, 3f)));
             AiBraveryScale = c.Bind("AI", "BraveryScale", 1.0f,
-                new ConfigDescription("Multiplier applied to AI pilot bravery (target aggression, threat avoidance).",
-                    new AcceptableValueRange<float>(0.25f, 3f)));
+                Hidden("Retired compatibility key.", new AcceptableValueRange<float>(0.25f, 3f)));
             MutualSupport = c.Bind("AI", "MutualSupport", true,
-                "Wingmen break formation to engage when the leader is under missile attack. " +
-                "Free rules of engagement only - Hold shoots the missile down instead, and " +
-                "Escort shoots the aircraft that launched it, both from the slot.");
+                Advanced("Wingmen break formation to engage when the leader is under missile attack. " +
+                         "Free rules of engagement only - Defend shoots the missile down instead, and " +
+                         "Escort shoots the aircraft that launched it, both from the slot."));
             AiTargetDeconfliction = c.Bind("AI", "TargetDeconfliction", true,
-                "Coordinate locally simulated AI target choices so several aircraft do not " +
-                "independently pile onto the same contact while useful alternatives exist.");
+                Advanced("Coordinate locally simulated AI target choices so several aircraft do not " +
+                         "independently pile onto the same contact while useful alternatives exist."));
             TargetSaturationPenalty = c.Bind("AI", "TargetSaturationPenalty", 1.5f,
                 new ConfigDescription(
                     "How strongly each commitment beyond a target's estimated required attacks " +
                     "pushes another AI toward an unclaimed contact.",
                     new AcceptableValueRange<float>(0f, 5f),
                     new ConfigurationManagerAttributes { IsAdvanced = true }));
-            PlayerTargetPenalty = c.Bind("AI", "PlayerConcentrationPenalty", 2.5f,
-                new ConfigDescription(
-                    "Additional anti-dogpile pressure after an AI is already committed to a " +
-                    "player aircraft. The first attacker is unaffected; this is not immunity.",
-                    new AcceptableValueRange<float>(0f, 8f),
-                    new ConfigurationManagerAttributes { IsAdvanced = true }));
+            PlayerTargetPenalty = c.Bind("AI", "PlayerConcentrationPenalty", 0f,
+                Hidden("Retired compatibility key. Player aircraft receive no special protection.",
+                    new AcceptableValueRange<float>(0f, 8f)));
             PanicSystem = c.Bind("AI", "PanicSystem", true,
-                "Temporarily interrupt any wing order when that wingman receives a missile " +
-                "warning: announce defensive, select the correct countermeasure, evade, then " +
-                "resume the queued order after the warning clears.");
+                Advanced("Temporarily interrupt any wing order when that wingman receives a missile " +
+                         "warning: announce defensive, select the correct countermeasure, evade, then " +
+                         "resume the queued order after the warning clears."));
             PanicClearSeconds = c.Bind("AI", "PanicClearSeconds", 2.5f,
                 new ConfigDescription(
                     "How long a missile warning must remain clear before a defensive wingman " +
@@ -402,19 +419,19 @@ namespace WingCommand
                 "slot and shoots only what threatens it; Escort is weapons free and guards " +
                 "you first; Free is weapons free and will break formation if you are shot at.");
             MissileDefence = c.Bind("Engagement", "MissileDefence", true,
-                "Defensive wingmen prioritise shooting down inbound missiles, on themselves or " +
-                "on you, when they carry a weapon capable of it.");
+                Advanced("Defensive wingmen prioritise shooting down inbound missiles, on themselves or " +
+                         "on you, when they carry a weapon capable of it."));
             HoldEngageRange = c.Bind("Engagement", "HoldEngageRange", 6000f,
-                new ConfigDescription(
+                Advanced(
                     "How far a wingman will shoot from its slot, in metres. Used by Hold and " +
                     "Escort: neither manoeuvres to engage, so for both it is purely a " +
                     "weapons-range limit.",
                     new AcceptableValueRange<float>(500f, 30000f)));
             FreeEngageRange = c.Bind("Engagement", "FreeEngageRange", 12000f,
-                new ConfigDescription("Weapons range for a Free wingman.",
+                Advanced("Weapons range for a Free wingman.",
                     new AcceptableValueRange<float>(1000f, 60000f)));
             LeashRadius = c.Bind("Engagement", "LeashRadius", 8000f,
-                new ConfigDescription(
+                Advanced(
                     "How far an Aggressive wingman may stray from you before it abandons the " +
                     "fight and rejoins. This is what stops the wing dispersing.",
                     new AcceptableValueRange<float>(1000f, 40000f)));
@@ -431,12 +448,12 @@ namespace WingCommand
                     new AcceptableValueRange<float>(300f, 10000f),
                     new ConfigurationManagerAttributes { IsAdvanced = true }));
             MirrorWindowSeconds = c.Bind("Engagement", "MirrorWindowSeconds", 15f,
-                new ConfigDescription(
+                Advanced(
                     "How long Defensive wingmen stay weapons-free against ground targets after " +
                     "you fire an anti-surface weapon.",
                     new AcceptableValueRange<float>(2f, 120f)));
             FireInterval = c.Bind("Engagement", "FireInterval", 5f,
-                new ConfigDescription(
+                Advanced(
                     "Minimum seconds between shots from one wingman. Without a gap they fire " +
                     "every engagement tick and empty the aircraft in seconds.",
                     new AcceptableValueRange<float>(0.5f, 30f)));
@@ -467,9 +484,19 @@ namespace WingCommand
                     null,
                     new ConfigurationManagerAttributes { IsAdvanced = true }));
             ShopEnabled = c.Bind("Shop", "ShopEnabled", true,
-                "Allow buying wingmen. Aircraft are priced from the same value the player's " +
-                "own aircraft menu uses, paid for out of your allocation, and drawn from " +
-                "your faction's stock - so a purchase competes with the mission's own AI.");
+                Advanced("Allow buying wingmen. Aircraft are priced from the same value the player's " +
+                         "own aircraft menu uses, paid for out of your allocation, and drawn from " +
+                         "your faction's stock - so a purchase competes with the mission's own AI."));
+            RecruitmentCostRate = c.Bind("Shop", "RecruitmentCostPercent", 0.25f,
+                new ConfigDescription(
+                    "Fraction of an airframe's compounded next-slot price charged the first " +
+                    "time an already-active mission aircraft is assigned to your wing.",
+                    new AcceptableValueRange<float>(0f, 1f)));
+            AdditionalWingReserve = c.Bind("Shop", "AdditionalWingReservePerType", 0,
+                new ConfigDescription(
+                    "Extra airframes of every stocked type protected from automatic friendly " +
+                    "AI deployment. This adds to the mission and per-player reserve; 0 is recommended.",
+                    new AcceptableValueRange<int>(0, 2)));
             WingPriceGrowth = c.Bind("Shop", "WingPriceGrowth", 1.5f,
                 new ConfigDescription(
                     "Price multiplier per wingman already in the formation, compounding. At " +
@@ -489,11 +516,9 @@ namespace WingCommand
                     new AcceptableValueRange<float>(500f, 10000f),
                     new ConfigurationManagerAttributes { IsAdvanced = true }));
 
-            IncludeUndeclaredAircraft = c.Bind("Shop", "IncludeUndeclaredAircraft", true,
-                "Also offer airframes the mission did not stock, from the game's own aircraft " +
-                "registry. This is what makes modded and workshop aircraft purchasable: they " +
-                "are never in a mission's declared supply, so without this they can never " +
-                "appear. They draw on their own small allowance rather than faction stock.");
+            IncludeUndeclaredAircraft = c.Bind("Shop", "IncludeUndeclaredAircraft", false,
+                Advanced("Compatibility option: also offer airframes the mission did not stock, " +
+                         "using a separate per-mission allowance. Disabled in the release profile."));
             UndeclaredStock = c.Bind("Shop", "UndeclaredStock", 3f,
                 new ConfigDescription(
                     "How many of each undeclared airframe may be bought per mission.",
@@ -505,43 +530,35 @@ namespace WingCommand
                 "on-screen message feed.");
 
             UseNativeRadial = c.Bind("UI", "UseNativeRadial", true,
-                "Add a nested 'Wing Command' entry to the game's own radial menu. This uses " +
-                "the game's Rewired look-axis input, which is the only scheme that works " +
-                "while the cursor is captured for mouse-look.");
+                Advanced("Add a compact 'Wing Command' entry to the game's own radial menu. This uses " +
+                         "the game's Rewired look-axis input while the cursor is captured."));
             EnableDebugActions = c.Bind("Debug", "EnableDebugActions", false,
-                "Enable the WMC debug buttons: teleport the wing into formation, and spawn " +
-                "a wing of your own aircraft type. Both are cheats and are host-only.");
+                Hidden("Development-only WMC actions. Both are cheats and host-only."));
 
             ShowHud = c.Bind("UI", "ShowWingHud", true,
                 "Draw the compact wing status readout in flight while you have wingmen assigned.");
             HudCorner = c.Bind("UI", "WingHudCorner", WingCommand.HudCorner.MiddleRight,
-                "Legacy setting retained for existing configurations. The compact flight " +
-                "roster now attaches above the minimized tactical map.");
+                Hidden("Retired compatibility key. The compact roster attaches above the tactical map."));
             UseMfdPanel = c.Bind("UI", "UseMfdPanel", true,
-                "Add a WMC screen to the cockpit MFD bezel, alongside BDF/MAP/HUD. This is " +
-                "the primary wing interface; the map overlay below is only a fallback.");
+                Advanced("Add a WMC screen to the cockpit MFD bezel, alongside BDF/MAP/HUD."));
             HighlightWingOnMap = c.Bind("UI", "HighlightWingOnMap", true,
-                "Tint your wingmen's map icons so they stand out from the rest of the friendly force.");
+                Advanced("Tint your wingmen's map icons so they stand out from the friendly force."));
             HighlightWingOnHud = c.Bind("UI", "HighlightWingOnHud", true,
-                "Tint your wingmen's in-cockpit HUD markers to match the map. Without this " +
-                "the only aircraft the HUD marks distinctly is the game's nearest-ally " +
-                "indicator, which is chosen by range and has nothing to do with your wing.");
+                Advanced("Tint your wingmen's in-cockpit HUD markers to match the map."));
             HighlightWingTargets = c.Bind("UI", "HighlightWingTargets", true,
-                "Mark the units your wing is engaging, on both the map and the HUD, so you " +
-                "can see what your wingmen have committed to.");
+                Advanced("Mark units your wing is engaging on both the map and HUD."));
             WingTargetColor = c.Bind("UI", "WingTargetColor", "#FFB020",
-                "Hex colour for units your wing is engaging.");
+                Advanced("Hex colour for units your wing is engaging."));
             // New key on purpose. BepInEx preserves an existing value forever, so merely
             // changing WingIconColor's default would leave every current installation on
             // the old sky-blue colour. Binding WingMemberColor moves existing users to the
             // higher-contrast green while leaving the retired key harmlessly inert.
             WingIconColor = c.Bind("UI", "WingMemberColor", "#39FF65",
-                "Hex colour for wingmen across the compact roster, tactical map and HUD. " +
-                "Selected members are drawn brighter.");
+                Advanced("Hex colour for wingmen across the roster, tactical map and HUD."));
             MapCommandEnabled = c.Bind("UI", "MapCommands", true,
-                "Enable aircraft tasking and squad groups on the maximised map.");
+                Advanced("Enable tactical wing selection and point tasking on the maximised map."));
             VerboseLogging = c.Bind("Debug", "VerboseLogging", false,
-                "Log every order and state transition to the BepInEx console.");
+                Advanced("Log every order and state transition to the BepInEx console."));
         }
     }
 

@@ -29,8 +29,8 @@ namespace WingCommand
         Hold,
 
         /// <summary>
-        /// Holds the slot, but weapons free and looking after the leader: targets whatever
-        /// is threatening the leader in preference to whatever is nearest to itself.
+        /// Holds the slot, but may engage hostile aircraft while looking after the leader:
+        /// targets whatever is threatening the leader in preference to what is nearest.
         /// </summary>
         Escort,
 
@@ -71,9 +71,12 @@ namespace WingCommand
                 return WingWeapons.Allow.MissilesOnly;
             }
 
-            // Escort and Free are both weapons free; they differ in what they aim at and
-            // whether they may leave the slot, not in what they are allowed to shoot.
-            if (roe != WingRoe.Hold) return WingWeapons.Allow.AirAndGround;
+            // Escort protects the leader from hostile aircraft while staying in its slot.
+            // Ground attack is deliberately reserved for Free (or the player's mirrored
+            // attack in Hold), so Escort remains a useful middle rung instead of a second
+            // Free posture with a different label.
+            if (roe == WingRoe.Escort) return WingWeapons.Allow.AirOnly;
+            if (roe == WingRoe.Free) return WingWeapons.Allow.AirAndGround;
 
             // Hold: mirror the player's ground attack, and otherwise hold fire. Shooting
             // at whatever aircraft happens to be in range is Escort/Free behaviour, not
@@ -150,7 +153,7 @@ namespace WingCommand
             switch (roe)
             {
                 case WingRoe.Escort:
-                    return "Holds the slot. Weapons free, guarding you first.";
+                    return "Holds the slot. Engages aircraft, guarding you first.";
                 case WingRoe.Free:
                     return "Weapons free. Breaks formation only if you are shot at.";
                 default:

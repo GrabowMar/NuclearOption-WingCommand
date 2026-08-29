@@ -28,15 +28,31 @@ namespace WingCommand
         private const float Pad = 12f;
         private const float RowHeight = 30f;
         private const float Gap = 4f;
+        private const int RosterRowsPerPage = 4;
+
+        private enum Page
+        {
+            Tactical,
+            Supply,
+        }
 
         private static MFDScreen screen;
+        private static RectTransform tacticalRoot;
+        private static RectTransform supplyRoot;
+        private static Page page;
+        private static WmcButton tacticalTab;
+        private static WmcButton supplyTab;
         private static RectTransform rosterArea;
         private static TMP_Text shapeLabel;
         private static TMP_Text summaryLabel;
+        private static TMP_Text rosterPageLabel;
+        private static TMP_Text commandStatusLabel;
         private static TMP_Text postureLabel;
         private static WmcButton holdButton;
         private static WmcButton escortButton;
         private static WmcButton freeButton;
+        private static WmcButton cargoButton;
+        private static WmcButton landButton;
         private static TMP_FontAsset font;
 
         private static readonly List<RosterRow> rosterRows = new List<RosterRow>();
@@ -44,7 +60,12 @@ namespace WingCommand
         private static RectTransform shopArea;
         private static TMP_Text allocationLabel;
         private static TMP_Text shopPageLabel;
+        private static TMP_Text reserveLabel;
+        private static TMP_Text offerDetailLabel;
+        private static WmcButton requisitionButton;
+        private static AircraftDefinition selectedOffer;
         private static int shopPage;
+        private static int rosterPage;
 
         /// <summary>Rows built for the shop. Bounded: the panel is sized to its content.</summary>
         private const int ShopRows = 6;
@@ -52,6 +73,11 @@ namespace WingCommand
         private static float nextAttempt;
         private static float nextRefresh;
         private static bool gaveUp;
+        private static Sprite panelSprite;
+
+        /// <summary>Map icon clicks become command selection only on the active WMC page.</summary>
+        public static bool TacticalCommandModeActive =>
+            screen != null && screen.isActive && page == Page.Tactical;
 
         // ------------------------------------------------------------------- lifecycle
 
@@ -84,19 +110,33 @@ namespace WingCommand
         public static void Reset()
         {
             screen = null;
+            tacticalRoot = null;
+            supplyRoot = null;
+            page = Page.Tactical;
+            tacticalTab = null;
+            supplyTab = null;
             rosterArea = null;
             shapeLabel = null;
             summaryLabel = null;
+            rosterPageLabel = null;
+            commandStatusLabel = null;
             rosterRows.Clear();
             shopRows.Clear();
             shopArea = null;
             allocationLabel = null;
             shopPageLabel = null;
+            reserveLabel = null;
+            offerDetailLabel = null;
+            requisitionButton = null;
+            selectedOffer = null;
             shopPage = 0;
+            rosterPage = 0;
             postureLabel = null;
             holdButton = null;
             escortButton = null;
             freeButton = null;
+            cargoButton = null;
+            landButton = null;
             gaveUp = false;
         }
 
@@ -231,7 +271,9 @@ namespace WingCommand
             rt.anchoredPosition = templateRt.anchoredPosition;
 
             Image bg = root.GetComponent<Image>();
-            bg.color = PanelBackground();
+            bg.sprite = VanillaPanelSprite();
+            bg.type = Image.Type.Sliced;
+            bg.color = Color.white;
             bg.raycastTarget = true;
 
             var content = new GameObject("Content", typeof(RectTransform));
@@ -240,22 +282,32 @@ namespace WingCommand
             Stretch(contentRt);
 
             float y = -Pad;
-
             y = AddTitle(contentRt, y);
-            y = AddShapeSelector(contentRt, y);
-            y = AddPostureSelector(contentRt, y);
-            y = AddSummary(contentRt, y);
-            y = AddRosterArea(contentRt, y);
-            y = AddActions(contentRt, y);
-            y = AddShop(contentRt, y);
-            y = AddDebug(contentRt, y);
+            y = AddTabs(contentRt, y);
+
+            tacticalRoot = PageRoot(contentRt, "TacticalPage");
+            supplyRoot = PageRoot(contentRt, "SupplyPage");
+
+            float tacticalY = y;
+            tacticalY = AddSummary(tacticalRoot, tacticalY);
+            tacticalY = AddRosterArea(tacticalRoot, tacticalY);
+            tacticalY = AddPostureSelector(tacticalRoot, tacticalY);
+            tacticalY = AddShapeSelector(tacticalRoot, tacticalY);
+            tacticalY = AddActions(tacticalRoot, tacticalY);
+            tacticalY = AddCommandStatus(tacticalRoot, tacticalY);
+            tacticalY = AddDebug(tacticalRoot, tacticalY);
+
+            float supplyY = y;
+            supplyY = AddAssignment(supplyRoot, supplyY);
+            supplyY = AddReserve(supplyRoot, supplyY);
+            supplyY = AddShop(supplyRoot, supplyY);
+            supplyY = AddDebug(supplyRoot, supplyY);
+
+            y = Mathf.Min(tacticalY, supplyY);
 
             // Size the panel to its content instead of leaving a large dead area below,
             // which is how the stock screens read.
             rt.sizeDelta = new Vector2(PanelWidth, Mathf.Abs(y) + Pad);
-
-            // Outline last so it sits above the fills, matching the stock panels.
-            Outline(contentRt, new Rect(0f, 0f, PanelWidth, rt.sizeDelta.y), FrameColor());
 
             MFDScreen s = root.AddComponent<MFDScreen>();
             s.shortName = "WMC";
@@ -271,7 +323,18 @@ namespace WingCommand
                 return null;
             }
 
+            SetPage(Page.Tactical);
+
             return s;
+        }
+
+        private static RectTransform PageRoot(RectTransform parent, string name)
+        {
+            var go = new GameObject(name, typeof(RectTransform));
+            RectTransform rt = go.GetComponent<RectTransform>();
+            rt.SetParent(parent, worldPositionStays: false);
+            Stretch(rt);
+            return rt;
         }
 
         /// <summary>Centred green title over a rule, as on BOSCALI / TARGET SELECTION / HUD OPTIONS.</summary>
@@ -283,6 +346,32 @@ namespace WingCommand
 
             Rule(parent, new Rect(Pad, y, PanelWidth - Pad * 2f, 1f));
             return y - 8f;
+        }
+
+        private static float AddTabs(RectTransform parent, float y)
+        {
+            float w = (PanelWidth - Pad * 2f - Gap) * 0.5f;
+            tacticalTab = Button(parent, "TACTICAL", new Rect(Pad, y, w, RowHeight),
+                                 () => SetPage(Page.Tactical));
+            supplyTab = Button(parent, "SUPPLY", new Rect(Pad + w + Gap, y, w, RowHeight),
+                               () => SetPage(Page.Supply));
+            return y - RowHeight - 8f;
+        }
+
+        private static void SetPage(Page next)
+        {
+            page = next;
+            if (tacticalRoot != null) tacticalRoot.gameObject.SetActive(next == Page.Tactical);
+            if (supplyRoot != null) supplyRoot.gameObject.SetActive(next == Page.Supply);
+            tacticalTab?.SetLatched(next == Page.Tactical);
+            supplyTab?.SetLatched(next == Page.Supply);
+
+            WingCommandManager manager = WingCommandManager.Instance;
+            if (manager != null)
+            {
+                foreach (WingMember member in manager.Wing.Members)
+                    WingMarkers.Repaint(member.Aircraft);
+            }
         }
 
         /// <summary>
@@ -329,7 +418,7 @@ namespace WingCommand
             // reason there are three of them.
             float w = (PanelWidth - Pad * 2f - Gap * 2f) / 3f;
 
-            holdButton = Button(parent, "HOLD", new Rect(Pad, y, w, RowHeight),
+            holdButton = Button(parent, "DEFEND", new Rect(Pad, y, w, RowHeight),
                                 () => SetRoe(WingRoe.Hold));
             escortButton = Button(parent, "ESCORT", new Rect(Pad + w + Gap, y, w, RowHeight),
                                   () => SetRoe(WingRoe.Escort));
@@ -354,9 +443,11 @@ namespace WingCommand
 
         private static float AddSummary(RectTransform parent, float y)
         {
-            summaryLabel = Label(parent, "", new Rect(Pad, y, PanelWidth - Pad * 2f, 20f),
-                                 Dim(), 11f, FontStyles.Normal, TextAlignmentOptions.Left);
-            return y - 24f;
+            summaryLabel = Label(parent, "", new Rect(Pad, y, PanelWidth - Pad * 2f - 90f, RowHeight),
+                                 Friendly(), 12f, FontStyles.Normal, TextAlignmentOptions.Left);
+            Button(parent, "SELECT ALL", new Rect(PanelWidth - Pad - 88f, y, 88f, RowHeight),
+                   () => WingCommandManager.Instance?.SelectAllMembers());
+            return y - RowHeight - Gap;
         }
 
         private static float AddRosterArea(RectTransform parent, float y)
@@ -375,42 +466,96 @@ namespace WingCommand
                   FontStyles.Normal, TextAlignmentOptions.Right);
             y -= 16f;
 
-            float h = RowHeight * Plugin.Config2.MaxWingSize.Value + Gap * 2f;
+            float h = (RowHeight + 2f) * RosterRowsPerPage;
 
             var area = new GameObject("Roster", typeof(RectTransform));
             rosterArea = area.GetComponent<RectTransform>();
             rosterArea.SetParent(parent, worldPositionStays: false);
             Place(rosterArea, new Rect(Pad, y, w, h));
 
-            return y - (h + Gap);
+            y -= h + Gap;
+
+            Button(parent, "<", new Rect(Pad, y, 34f, RowHeight), () => TurnRosterPage(-1));
+            rosterPageLabel = Label(parent, "", new Rect(Pad + 38f, y, w - 76f, RowHeight),
+                                    Dim(), 10f, FontStyles.Normal, TextAlignmentOptions.Center);
+            Button(parent, ">", new Rect(PanelWidth - Pad - 34f, y, 34f, RowHeight),
+                   () => TurnRosterPage(1));
+            return y - RowHeight - Gap;
         }
 
         private static float AddActions(RectTransform parent, float y)
         {
-            y = Heading(parent, y, "ORDERS");
+            y = Heading(parent, y, "ORDERS - SELECTED SCOPE");
             float w = (PanelWidth - Pad * 2f - Gap) * 0.5f;
 
             y = Pair(parent, y, w,
-                "Add Selected", () => WingCommandManager.Instance?.AddSelectedFromMap(),
-                "Recruit Near", () => WingCommandManager.Instance?.Execute(WingAction.RecruitNearest));
+                "Form Up", () => WingCommandManager.Instance?.Execute(WingAction.Rejoin, wholeWing: false),
+                "Attack", () => WingCommandManager.Instance?.Execute(WingAction.AttackMyTarget, wholeWing: false));
 
             y = Pair(parent, y, w,
-                "Rejoin", () => WingCommandManager.Instance?.Execute(WingAction.Rejoin),
-                "Engage", () => WingCommandManager.Instance?.Execute(WingAction.Engage));
+                "Engage", () => WingCommandManager.Instance?.Execute(WingAction.Engage, wholeWing: false),
+                "Disengage", () => WingCommandManager.Instance?.Execute(WingAction.FallBack, wholeWing: false));
 
             y = Pair(parent, y, w,
-                "Fall Back", () => WingCommandManager.Instance?.Execute(WingAction.FallBack),
-                "Orbit Here", () => WingCommandManager.Instance?.Execute(WingAction.OrbitHere));
+                "Hold Here", () => WingCommandManager.Instance?.ArmPointOrder(WingOrder.OrbitHere),
+                "Return To Base", () => WingCommandManager.Instance?.Execute(WingAction.ReturnToBase, wholeWing: false));
 
-            y = Pair(parent, y, w,
-                "Deliver Cargo", () => WingCommandManager.Instance?.Execute(WingAction.DeliverCargo),
-                "Land Here", () => WingCommandManager.Instance?.Execute(WingAction.LandHere));
-
-            y = Pair(parent, y, w,
-                "Return To Base", () => WingCommandManager.Instance?.Execute(WingAction.ReturnToBase),
-                "Disband", () => WingCommandManager.Instance?.Execute(WingAction.Disband));
+            cargoButton = Button(parent, "Deliver Cargo", new Rect(Pad, y, w, RowHeight),
+                () => WingCommandManager.Instance?.Execute(WingAction.DeliverCargo, wholeWing: false));
+            landButton = Button(parent, "Land Here", new Rect(Pad + w + Gap, y, w, RowHeight),
+                () => WingCommandManager.Instance?.ArmPointOrder(WingOrder.LandHere));
+            y -= RowHeight + Gap;
 
             return y;
+        }
+
+        private static float AddCommandStatus(RectTransform parent, float y)
+        {
+            commandStatusLabel = Label(parent, "", new Rect(Pad, y, PanelWidth - Pad * 2f, 18f),
+                                       Dim(), 10f, FontStyles.Normal, TextAlignmentOptions.Left);
+            return y - 20f;
+        }
+
+        private static float AddAssignment(RectTransform parent, float y)
+        {
+            y = Heading(parent, y, "ACTIVE AIRCRAFT ASSIGNMENT");
+            Label(parent,
+                  "Select friendly AI on the stock map, then confirm its assignment fee.",
+                  new Rect(Pad, y, PanelWidth - Pad * 2f, 18f), Dim(), 10f,
+                  FontStyles.Normal, TextAlignmentOptions.Left);
+            y -= 22f;
+
+            float w = (PanelWidth - Pad * 2f - Gap) * 0.5f;
+            return Pair(parent, y, w,
+                "Assign Selected", () => WingCommandManager.Instance?.AddSelectedFromMap(),
+                "Assign Nearest", () => WingCommandManager.Instance?.Execute(WingAction.RecruitNearest));
+        }
+
+        private static float AddReserve(RectTransform parent, float y)
+        {
+            y = Heading(parent, y, "PLAYER RESERVE");
+            reserveLabel = Label(parent, "", new Rect(Pad + 38f, y, PanelWidth - Pad * 2f - 76f, RowHeight),
+                                 Friendly(), 11f, FontStyles.Normal, TextAlignmentOptions.Center);
+            Button(parent, "-", new Rect(Pad, y, 34f, RowHeight), () => ChangeReserve(-1));
+            Button(parent, "+", new Rect(PanelWidth - Pad - 34f, y, 34f, RowHeight),
+                   () => ChangeReserve(1));
+            y -= RowHeight + 2f;
+            Label(parent, "Held from native AI deployment; stock is not created.",
+                  new Rect(Pad, y, PanelWidth - Pad * 2f, 16f), Dim(), 10f,
+                  FontStyles.Normal, TextAlignmentOptions.Center);
+            return y - 22f;
+        }
+
+        private static void ChangeReserve(int delta)
+        {
+            int value = Mathf.Clamp(Plugin.Config2.AdditionalWingReserve.Value + delta, 0, 2);
+            Plugin.Config2.AdditionalWingReserve.Value = value;
+            WingCommandManager.Instance?.Toast("Additional player reserve: " + value + " per aircraft type");
+        }
+
+        private static void TurnRosterPage(int direction)
+        {
+            rosterPage = Mathf.Max(0, rosterPage + direction);
         }
 
         /// <summary>
@@ -447,11 +592,13 @@ namespace WingCommand
 
         private static void Refresh(WingRegistry wing)
         {
+            WingCommandManager manager = WingCommandManager.Instance;
             if (shapeLabel != null)
                 shapeLabel.text = FormationShapes.Pretty(Plugin.Config2.Shape.Value);
 
             if (summaryLabel != null)
-                summaryLabel.text = wing.Count + " of " + Plugin.Config2.MaxWingSize.Value + " assigned";
+                summaryLabel.text = "COMMAND: " + (manager?.Selection.Summary(wing) ?? "ALL") +
+                                    "   ·   WING " + wing.Count + "/" + Plugin.Config2.MaxWingSize.Value;
 
             if (postureLabel != null)
                 postureLabel.text = RoeRules.Hint(wing.Roe);
@@ -460,13 +607,44 @@ namespace WingCommand
             escortButton?.SetLatched(wing.Roe == WingRoe.Escort);
             freeButton?.SetLatched(wing.Roe == WingRoe.Free);
 
+            if (manager != null)
+            {
+                List<WingMember> scope = manager.Commands.Scope(wholeWing: false);
+                bool canCargo = false;
+                bool canLand = false;
+                foreach (WingMember member in scope)
+                {
+                    canCargo |= WingOrderCatalog.CanApply(member, WingOrder.DeliverCargo);
+                    canLand |= WingOrderCatalog.CanApply(member, WingOrder.LandHere);
+                }
+                cargoButton?.SetEnabled(canCargo);
+                landButton?.SetEnabled(canLand);
+            }
+
+            if (reserveLabel != null)
+            {
+                reserveLabel.text = "Mission " + WingSupplyReserve.MissionReserve +
+                                    "  +  Player " + WingSupplyReserve.Additional +
+                                    "  =  " + WingSupplyReserve.EffectiveProtectedPerType + " / TYPE";
+            }
+
+            if (commandStatusLabel != null)
+                commandStatusLabel.text = manager?.MapStatus ?? "Select wingmen, then issue an order.";
+
             RefreshShop();
 
-            SyncRosterRows(wing.Count);
+            int pages = Mathf.Max(1, Mathf.CeilToInt(wing.Count / (float)RosterRowsPerPage));
+            rosterPage = Mathf.Clamp(rosterPage, 0, pages - 1);
+            if (rosterPageLabel != null)
+                rosterPageLabel.text = "flight page " + (rosterPage + 1) + " of " + pages;
+
+            SyncRosterRows(RosterRowsPerPage);
+            int first = rosterPage * RosterRowsPerPage;
 
             for (int i = 0; i < rosterRows.Count; i++)
             {
-                if (i < wing.Count) rosterRows[i].Bind(wing.Members[i]);
+                int index = first + i;
+                if (index < wing.Count) rosterRows[i].Bind(wing.Members[index]);
                 else rosterRows[i].Hide();
             }
         }
@@ -493,22 +671,11 @@ namespace WingCommand
         {
             if (!Plugin.Config2.ShopEnabled.Value) return y;
 
-            y -= 6f;
-            Rule(parent, new Rect(Pad, y, PanelWidth - Pad * 2f, 1f), FrameColor());
-            y -= 8f;
-
-            Label(parent, "SQUADRON SUPPLY", new Rect(Pad, y, PanelWidth - Pad * 2f, 18f),
-                  Green(), 13f, FontStyles.Bold, TextAlignmentOptions.Center);
-            y -= 20f;
+            y = Heading(parent, y, "AIRFRAME REQUISITION");
 
             allocationLabel = Label(parent, "", new Rect(Pad, y, PanelWidth - Pad * 2f, 16f),
                                     Dim(), 11f, FontStyles.Normal, TextAlignmentOptions.Center);
             y -= 20f;
-
-            float w = (PanelWidth - Pad * 2f - Gap) * 0.5f;
-            y = Pair(parent, y, w,
-                "Delivery: Base", () => SetDelivery(WingShop.Delivery.Base),
-                "Delivery: Fast", () => SetDelivery(WingShop.Delivery.Fast));
 
             // Page controls. The faction usually has more airframes in stock than fit on a
             // panel sized to its content, and silently showing only the cheapest six hid
@@ -533,7 +700,15 @@ namespace WingCommand
             for (int i = 0; i < ShopRows; i++)
                 shopRows.Add(new ShopRow(shopArea, i));
 
-            y -= height + 4f;
+            y -= height + 8f;
+
+            offerDetailLabel = Label(parent, "Select an airframe to inspect its final cost.",
+                                     new Rect(Pad, y, PanelWidth - Pad * 2f - 114f, RowHeight),
+                                     Dim(), 10f, FontStyles.Normal, TextAlignmentOptions.Left);
+            requisitionButton = Button(parent, "REQUISITION",
+                                       new Rect(PanelWidth - Pad - 110f, y, 110f, RowHeight),
+                                       RequisitionSelected);
+            y -= RowHeight + Gap;
             return y;
         }
 
@@ -546,6 +721,20 @@ namespace WingCommand
         private static void SetDelivery(WingShop.Delivery mode)
         {
             if (WingShop.Mode != mode) WingShop.ToggleDelivery();
+        }
+
+        private static void RequisitionSelected()
+        {
+            if (selectedOffer == null)
+            {
+                WingCommandManager.Instance?.Toast("Select an airframe first");
+                return;
+            }
+
+            bool bought = WingShop.Buy(selectedOffer, WingShop.Delivery.Base, out string why);
+            WingCommandManager.Instance?.Toast(bought
+                ? selectedOffer.unitName + " requisitioned - departing friendly base"
+                : why);
         }
 
         /// <summary>Rebind the shop rows and the allocation header.</summary>
@@ -564,10 +753,9 @@ namespace WingCommand
 
             if (allocationLabel != null)
             {
-                bool fast = WingShop.Mode == WingShop.Delivery.Fast;
                 allocationLabel.text =
                     "Funds " + Mathf.RoundToInt(WingShop.Allocation) +
-                    "   -   delivery " + (fast ? "FAST" : "BASE") +
+                    "   -   delivery BASE" +
                     "   -   wing " + (WingCommandManager.Instance?.Wing?.Count ?? 0);
             }
 
@@ -586,6 +774,40 @@ namespace WingCommand
                 if (index < offers.Count) shopRows[i].Bind(offers[index]);
                 else shopRows[i].Hide();
             }
+
+            bool selectedStillOffered = false;
+            for (int i = 0; i < offers.Count; i++)
+            {
+                if (offers[i].Definition == selectedOffer)
+                {
+                    selectedStillOffered = true;
+                    break;
+                }
+            }
+            if (!selectedStillOffered) selectedOffer = null;
+
+            if (offerDetailLabel != null)
+            {
+                if (selectedOffer == null)
+                {
+                    offerDetailLabel.text = "Select an airframe to inspect its final cost.";
+                    offerDetailLabel.color = Dim();
+                }
+                else
+                {
+                    float cost = WingShop.PriceOf(selectedOffer, WingShop.Delivery.Base);
+                    int protectedCount = WingSupplyReserve.ProtectedFromAi(selectedOffer);
+                    int wingSize = WingCommandManager.Instance?.Wing?.Count ?? 0;
+                    offerDetailLabel.text = UiTheme.Truncate(selectedOffer.unitName, 18) +
+                                            "  " + Mathf.RoundToInt(selectedOffer.value) +
+                                            " × " + Plugin.Config2.WingPriceGrowth.Value.ToString("0.##") +
+                                            "^" + wingSize + " = " + Mathf.RoundToInt(cost) +
+                                            (protectedCount > 0 ? "  ·  " + protectedCount + " held" : "");
+                    offerDetailLabel.color = WingShop.Allocation >= cost ? Friendly() : Warning();
+                }
+            }
+            requisitionButton?.SetEnabled(selectedOffer != null &&
+                WingShop.Allocation >= WingShop.PriceOf(selectedOffer, WingShop.Delivery.Base));
         }
         /// <summary>One purchasable airframe: name, stock, price, buy.</summary>
         private sealed class ShopRow
@@ -613,14 +835,10 @@ namespace WingCommand
                 price = Label(rt, "", new Rect(218f, 0f, 110f, RowHeight), Dim(), 12f,
                               FontStyles.Normal, TextAlignmentOptions.Right);
 
-                Button(rt, "BUY", new Rect(width - 52f, -3f, 46f, RowHeight - 6f), () =>
+                Button(rt, "SELECT", new Rect(width - 66f, -3f, 60f, RowHeight - 6f), () =>
                 {
                     if (bound == null) return;
-
-                    WingCommandManager.Instance?.Toast(
-                        WingShop.Buy(bound, WingShop.Mode, out string why)
-                            ? bound.unitName + " bought"
-                            : why);
+                    selectedOffer = bound;
                 });
 
                 go.SetActive(false);
@@ -631,7 +849,7 @@ namespace WingCommand
                 bound = offer.Definition;
                 if (!go.activeSelf) go.SetActive(true);
 
-                float cost = WingShop.PriceOf(offer.Definition, WingShop.Mode);
+                float cost = WingShop.PriceOf(offer.Definition, WingShop.Delivery.Base);
                 bool affordable = WingShop.Allocation >= cost;
 
                 name.text = UiTheme.Truncate(offer.Name, 20);
@@ -656,6 +874,7 @@ namespace WingCommand
         {
             private readonly GameObject go;
             private readonly TMP_Text slot, name, order, error, reserves;
+            private readonly Image selectionRule;
             private WingMember bound;
 
             public RosterRow(RectTransform parent, int index)
@@ -669,7 +888,14 @@ namespace WingCommand
                 Place(rt, new Rect(0f, y, width, RowHeight));
 
                 Panel(rt, new Rect(0f, 0f, width, RowHeight), MemberFrameColor());
-                Rule(rt, new Rect(0f, 0f, 2f, RowHeight), WingColor());
+                selectionRule = Rule(rt, new Rect(0f, 0f, 3f, RowHeight), WingColor());
+
+                HitButton(rt, new Rect(0f, 0f, width - 52f, RowHeight), () =>
+                {
+                    if (bound == null) return;
+                    bool toggle = Input.GetKey(KeyCode.LeftShift) || Input.GetKey(KeyCode.RightShift);
+                    WingCommandManager.Instance?.SelectMember(bound, toggle);
+                });
 
                 slot  = Label(rt, "", new Rect(6f, 0f, 18f, RowHeight), Dim(), 12f,
                               FontStyles.Normal, TextAlignmentOptions.Left);
@@ -682,7 +908,7 @@ namespace WingCommand
                 reserves = Label(rt, "", new Rect(264f, 0f, 70f, RowHeight), Dim(), 11f,
                               FontStyles.Normal, TextAlignmentOptions.Right);
 
-                Button(rt, "X", new Rect(width - 32f, -3f, 26f, RowHeight - 6f), () =>
+                Button(rt, "REL", new Rect(width - 48f, -3f, 42f, RowHeight - 6f), () =>
                 {
                     if (bound != null) WingCommandManager.Instance?.RemoveMember(bound);
                 });
@@ -693,8 +919,11 @@ namespace WingCommand
                 bound = m;
                 if (!go.activeSelf) go.SetActive(true);
 
-                slot.text = m.Slot.ToString();
+                bool selected = WingCommandManager.Instance?.Selection.Contains(m) ?? true;
+                slot.text = selected ? "●" + m.Slot : "○" + m.Slot;
                 name.text = UiTheme.Truncate(m.Name, 16);
+                name.color = selected ? Green() : WingColor();
+                selectionRule.color = selected ? Green() : MemberFrameColor();
                 order.text = ShortOrder(m);
 
                 reserves.text = Mathf.RoundToInt(m.Fuel * 100f) + "%  " + m.Ammo;
@@ -732,7 +961,7 @@ namespace WingCommand
 
         private static void CycleShape(int direction)
         {
-            Plugin.Config2.Shape.Value = FormationShapes.Cycle(Plugin.Config2.Shape.Value, direction);
+            Plugin.Config2.Shape.Value = FormationShapes.CycleCore(Plugin.Config2.Shape.Value, direction);
         }
 
         private static TMP_Text Label(RectTransform parent, string text, Rect rect,
@@ -836,6 +1065,22 @@ namespace WingCommand
             return behaviour;
         }
 
+        private static WmcButton HitButton(RectTransform parent, Rect rect, Action onClick)
+        {
+            var go = new GameObject("HitTarget", typeof(RectTransform), typeof(Image));
+            RectTransform rt = go.GetComponent<RectTransform>();
+            rt.SetParent(parent, worldPositionStays: false);
+            Place(rt, rect);
+
+            Image hit = go.GetComponent<Image>();
+            hit.color = new Color(0f, 0f, 0f, 0f);
+            hit.raycastTarget = true;
+
+            WmcButton behaviour = go.AddComponent<WmcButton>();
+            behaviour.Initialise(null, null, onClick);
+            return behaviour;
+        }
+
         /// <summary>Anchor a rect to the parent's top-left and place it in pixels.</summary>
         private static void Place(RectTransform rt, Rect rect)
         {
@@ -930,6 +1175,8 @@ namespace WingCommand
 
         private static Color Accent() => Green();
 
+        private static Color Warning() => new Color(1f, 0.55f, 0.2f);
+
         private static Color Friendly() => UiTheme.Friendly;
 
         private static Color WingColor() => WingMarkers.MemberColor;
@@ -939,7 +1186,87 @@ namespace WingCommand
         private static Color RowColor() => Grey();
         private static Color MemberFrameColor() => WingColor().WithAlpha(0.58f);
         private static Color FrameColor() => new Color(Grey().r, Grey().g, Grey().b, 0.75f);
-        private static Color PanelBackground() => new Color(0.025f, 0.045f, 0.035f, 0.97f);
+        private static Color PanelBackground() => new Color(0.075f, 0.12f, 0.16f, 0.84f);
+        private static Color PanelEdge() => new Color(0.33f, 0.33f, 0.33f, 1f);
+        private static Color PanelShadow() => new Color(0.24f, 0.24f, 0.24f, 1f);
+
+        /// <summary>
+        /// Reproduce the stock mission/menu card: a translucent slate fill, a soft grey
+        /// two-pixel edge, and small rounded corners. A sliced sprite keeps the treatment
+        /// consistent when the WMC content grows on another page or resolution.
+        /// </summary>
+        private static Sprite VanillaPanelSprite()
+        {
+            if (panelSprite != null) return panelSprite;
+
+            const int size = 32;
+            const float radius = 5f;
+            const float edge = 3f;
+            const float shadow = 1f;
+            var texture = new Texture2D(size, size, TextureFormat.RGBA32, mipChain: false)
+            {
+                name = "WingCommand_VanillaPanel",
+                filterMode = FilterMode.Bilinear,
+                wrapMode = TextureWrapMode.Clamp,
+                hideFlags = HideFlags.HideAndDontSave,
+            };
+
+            float centre = size * 0.5f;
+            float half = size * 0.5f;
+            Color fill = PanelBackground();
+            Color frame = PanelEdge();
+            Color shadowColor = PanelShadow();
+
+            for (int y = 0; y < size; y++)
+            {
+                for (int x = 0; x < size; x++)
+                {
+                    float outer = RoundedDistance(x + 0.5f, y + 0.5f,
+                                                  centre, half + shadow, radius + shadow);
+                    float coverage = Mathf.Clamp01(0.5f - outer);
+                    if (coverage <= 0f)
+                    {
+                        texture.SetPixel(x, y, Color.clear);
+                        continue;
+                    }
+
+                    float actual = RoundedDistance(x + 0.5f, y + 0.5f,
+                                                   centre, half, radius);
+                    float innerHalf = half - edge;
+                    float inner = RoundedDistance(x + 0.5f, y + 0.5f,
+                                                  centre, innerHalf, Mathf.Max(1f, radius - edge));
+                    Color pixel = actual > 0.5f
+                        ? shadowColor
+                        : inner <= -0.5f ? fill : frame;
+                    pixel.a *= coverage;
+                    texture.SetPixel(x, y, pixel);
+                }
+            }
+
+            texture.Apply(updateMipmaps: false, makeNoLongerReadable: true);
+            panelSprite = Sprite.Create(
+                texture,
+                new Rect(0f, 0f, size, size),
+                new Vector2(0.5f, 0.5f),
+                100f,
+                0u,
+                SpriteMeshType.FullRect,
+                new Vector4(8f, 8f, 8f, 8f));
+            panelSprite.name = "WingCommand_VanillaPanelSprite";
+            panelSprite.hideFlags = HideFlags.HideAndDontSave;
+            return panelSprite;
+        }
+
+        private static float RoundedDistance(float x, float y, float centre,
+                                             float half, float radius)
+        {
+            float qx = Mathf.Abs(x - centre) - (half - radius);
+            float qy = Mathf.Abs(y - centre) - (half - radius);
+            float outside = Mathf.Sqrt(Mathf.Max(qx, 0f) * Mathf.Max(qx, 0f) +
+                                       Mathf.Max(qy, 0f) * Mathf.Max(qy, 0f));
+            float inside = Mathf.Min(Mathf.Max(qx, qy), 0f);
+            return outside + inside - radius;
+        }
 
         // ----------------------------------------------------------------------- text
 
@@ -959,18 +1286,7 @@ namespace WingCommand
             if (assigned != null && !assigned.disabled)
                 return UiTheme.Truncate(assigned.definition != null ? assigned.definition.code : assigned.unitName, 8);
 
-            switch (m.Order)
-            {
-                case WingOrder.Formation: return "FORM";
-                case WingOrder.Engage: return "ENGAGE";
-                case WingOrder.ReturnToBase: return "RTB";
-                case WingOrder.FallBack: return "FALLBACK";
-                case WingOrder.OrbitHere: return "ORBIT";
-                case WingOrder.DeliverCargo: return "CARGO";
-                case WingOrder.LandHere: return "LANDING";
-                case WingOrder.Attack: return "ATTACK";
-                default: return m.Order.ToString();
-            }
+            return WingOrderCatalog.ShortLabel(m.Order);
         }
     }
 
@@ -981,12 +1297,14 @@ namespace WingCommand
         private TMP_Text label;
         private Action onClick;
         private bool latched;
+        private bool interactable = true;
 
         public void Initialise(Image[] frame, TMP_Text label, Action onClick)
         {
             this.frame = frame;
             this.label = label;
             this.onClick = onClick;
+            Tint(WmcScreen.Green());
         }
 
         /// <summary>Hold this button lit, for a selected option in a group.</summary>
@@ -994,7 +1312,15 @@ namespace WingCommand
         {
             if (latched == on) return;
             latched = on;
-            Tint(on ? WmcScreen.Green() : WmcScreen.Grey());
+            Tint(on ? Color.white : WmcScreen.Green());
+        }
+
+        public void SetEnabled(bool on)
+        {
+            if (interactable == on) return;
+            interactable = on;
+            Tint(on ? (latched ? Color.white : WmcScreen.Green())
+                    : new Color(0.3f, 0.3f, 0.3f));
         }
 
         private void Tint(Color color)
@@ -1012,14 +1338,19 @@ namespace WingCommand
         public void OnPointerClick(PointerEventData eventData)
         {
             if (eventData.button != PointerEventData.InputButton.Left) return;
+            if (!interactable) return;
 
             try { onClick?.Invoke(); }
             catch (Exception e) { Plugin.Logger.LogError("WMC button failed: " + e); }
         }
 
-        public void OnPointerEnter(PointerEventData eventData) => Tint(WmcScreen.Green());
+        public void OnPointerEnter(PointerEventData eventData)
+        {
+            if (interactable) Tint(Color.white);
+        }
 
         public void OnPointerExit(PointerEventData eventData) =>
-            Tint(latched ? WmcScreen.Green() : WmcScreen.Grey());
+            Tint(interactable ? (latched ? Color.white : WmcScreen.Green())
+                              : new Color(0.3f, 0.3f, 0.3f));
     }
 }

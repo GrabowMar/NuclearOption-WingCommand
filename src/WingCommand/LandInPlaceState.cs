@@ -17,6 +17,8 @@ namespace WingCommand
     /// </summary>
     internal class LandInPlaceState : PilotBaseState
     {
+        private enum Phase { Transit, Settle, Descend, Down }
+
         /// <summary>Descent rate, in metres per second.</summary>
         private const float DescentRate = 3f;
 
@@ -26,17 +28,36 @@ namespace WingCommand
         /// <summary>Ground speed below which the aircraft is allowed to start descending.</summary>
         private const float SettleSpeed = 6f;
 
+        private const float TransitAltitude = 120f;
+        private const float SettleAltitude = 22f;
+        private const float ArrivalRadius = 90f;
+        private const float MaximumSlope = 18f;
+
         private readonly WingMember member;
 
         private GlobalPosition spot;
+        private GlobalPosition requestedSpot;
+        private bool hasRequestedSpot;
         private Vector3 facing;
         private float hold;
-        private bool down;
+        private Phase phase;
 
         public LandInPlaceState(WingMember member)
         {
             this.member = member;
             stateDisplayName = "landing";
+        }
+
+        public void SetDestination(GlobalPosition point)
+        {
+            requestedSpot = point;
+            hasRequestedSpot = true;
+        }
+
+        public void ClearDestination()
+        {
+            requestedSpot = default(GlobalPosition);
+            hasRequestedSpot = false;
         }
 
         public override void EnterState(Pilot pilot)
@@ -46,24 +67,35 @@ namespace WingCommand
             controlInputs = aircraft.GetInputs();
 
             aircraft.SetFlightAssist(enabled: true);
-            aircraft.SetGear(deployed: true);
+            aircraft.SetGear(deployed: !hasRequestedSpot);
 
             // Anchor at the ground beneath the aircraft, not at the aircraft itself.
             // Hover adds altitudeHold to the destination's own height difference, so with
             // the anchor on the deck the held height IS the altitudeHold argument, and
             // winding it down to zero is the descent.
-            spot = aircraft.GlobalPosition() - Vector3.up * aircraft.radarAlt;
-            hold = Mathf.Max(aircraft.radarAlt, 5f);
+            bool safe = hasRequestedSpot && TryFindLandingSpot(requestedSpot, out spot);
+            if (!safe)
+            {
+                spot = aircraft.GlobalPosition() - Vector3.up * aircraft.radarAlt;
+                if (hasRequestedSpot)
+                    WingCommandManager.Instance?.Toast(
+                        "No safe landing surface at that point - landing below current position");
+            }
+
+            float horizontal = HorizontalDistance(aircraft.GlobalPosition(), spot);
+            phase = safe && horizontal > ArrivalRadius ? Phase.Transit : Phase.Settle;
+            hold = phase == Phase.Transit
+                ? Mathf.Max(TransitAltitude, aircraft.radarAlt)
+                : Mathf.Max(SettleAltitude, aircraft.radarAlt);
 
             facing = aircraft.transform.forward;
             facing.y = 0f;
             if (facing.sqrMagnitude < 0.0001f) facing = Vector3.forward;
             facing.Normalize();
 
-            down = false;
-
             if (Plugin.Config2.VerboseLogging.Value)
-                Plugin.Logger.LogInfo($"[Wing] {aircraft.unitName} landing in place from {hold:F0} m");
+                Plugin.Logger.LogInfo(
+                    $"[Wing] {aircraft.unitName} landing ({phase}) from {hold:F0} m");
         }
 
         public override void LeaveState()
@@ -78,7 +110,7 @@ namespace WingCommand
         {
             if (aircraft == null || aircraft.disabled) return;
 
-            if (down)
+            if (phase == Phase.Down)
             {
                 // Stay put. Collective at zero with the brake on, so it does not creep or
                 // get nudged back into the air by its own rotor wash.
@@ -89,7 +121,7 @@ namespace WingCommand
 
             if (aircraft.radarAlt <= TouchdownAlt)
             {
-                down = true;
+                phase = Phase.Down;
                 WingComms.Say(member, WingComms.Call.Down);
 
                 if (Plugin.Config2.VerboseLogging.Value)
@@ -98,12 +130,81 @@ namespace WingCommand
                 return;
             }
 
-            // Come to a stop before descending. Descending while still translating is how a
-            // helicopter arrives somewhere other than where it was aimed, and fast.
-            if (aircraft.speed < SettleSpeed)
-                hold = Mathf.Max(0f, hold - DescentRate * Time.fixedDeltaTime);
+            switch (phase)
+            {
+                case Phase.Transit:
+                    Transit();
+                    if (HorizontalDistance(aircraft.GlobalPosition(), spot) <= ArrivalRadius)
+                    {
+                        phase = Phase.Settle;
+                        hold = SettleAltitude;
+                        aircraft.SetGear(deployed: true);
+                    }
+                    break;
 
-            aircraft.autopilot.Hover(spot, hold, facing);
+                case Phase.Settle:
+                    aircraft.autopilot.Hover(spot, hold, facing);
+                    if (aircraft.speed < SettleSpeed &&
+                        HorizontalDistance(aircraft.GlobalPosition(), spot) < 30f)
+                        phase = Phase.Descend;
+                    break;
+
+                case Phase.Descend:
+                    hold = Mathf.Max(0f, hold - DescentRate * Time.fixedDeltaTime);
+                    aircraft.autopilot.Hover(spot, hold, facing);
+                    break;
+            }
+        }
+
+        private void Transit()
+        {
+            AircraftParameters p = aircraft.GetAircraftParameters();
+            float agl = Mathf.Clamp(Mathf.Max(p.minimumRadarAlt, TransitAltitude), 40f, 1000f);
+            aircraft.autopilot.AutoAim(
+                destination: spot + Vector3.up * TransitAltitude,
+                altitudeHold: agl,
+                aimDirection: Vector3.zero,
+                targetVelocity: Vector3.zero,
+                followTerrain: true);
+        }
+
+        private static float HorizontalDistance(GlobalPosition a, GlobalPosition b)
+        {
+            Vector3 delta = a - b;
+            delta.y = 0f;
+            return delta.magnitude;
+        }
+
+        /// <summary>Choose the nearest reasonably flat static surface around a map click.</summary>
+        private static bool TryFindLandingSpot(GlobalPosition requested, out GlobalPosition result)
+        {
+            Vector3 centre = requested.ToLocalPosition();
+            float[] offsets = { 0f, 45f, -45f, 90f, -90f };
+            float bestDistance = float.MaxValue;
+            Vector3 best = Vector3.zero;
+            bool found = false;
+
+            for (int x = 0; x < offsets.Length; x++)
+            {
+                for (int z = 0; z < offsets.Length; z++)
+                {
+                    Vector3 sample = new Vector3(
+                        centre.x + offsets[x], Datum.LocalSeaY + 3000f, centre.z + offsets[z]);
+                    if (!Physics.Raycast(sample, Vector3.down, out RaycastHit hit, 6000f,
+                                         PhysicsLayers.StaticsMask))
+                        continue;
+                    if (Vector3.Angle(hit.normal, Vector3.up) > MaximumSlope) continue;
+
+                    float distance = offsets[x] * offsets[x] + offsets[z] * offsets[z];
+                    if (distance >= bestDistance) continue;
+                    bestDistance = distance;
+                    best = hit.point;
+                    found = true;
+                }
+            }
+
+            result = found ? best.ToGlobalPosition() : default(GlobalPosition);
+            return found;
         }
     }
 }

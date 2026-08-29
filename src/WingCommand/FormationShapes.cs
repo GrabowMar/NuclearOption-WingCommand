@@ -21,6 +21,17 @@ namespace WingCommand
         public static readonly FormationShape[] All =
             (FormationShape[])Enum.GetValues(typeof(FormationShape));
 
+        /// <summary>The compact release-facing set. Legacy shapes remain supported by the solver.</summary>
+        public static readonly FormationShape[] Core =
+        {
+            FormationShape.EchelonRight,
+            FormationShape.LineAbreast,
+            FormationShape.Trail,
+            FormationShape.CombatSpread,
+            FormationShape.FingerFour,
+            FormationShape.Vic,
+        };
+
         /// <summary>Display name. Every shape gets one — that is the point of this file.</summary>
         public static string Pretty(FormationShape shape)
         {
@@ -49,6 +60,17 @@ namespace WingCommand
             int next = (index + direction) % All.Length;
             if (next < 0) next += All.Length;
             return All[next];
+        }
+
+        /// <summary>Cycle only the six distinct shapes exposed by the release UI.</summary>
+        public static FormationShape CycleCore(FormationShape from, int direction)
+        {
+            int index = Array.IndexOf(Core, from);
+            if (index < 0) return direction < 0 ? Core[Core.Length - 1] : Core[0];
+
+            int next = (index + direction) % Core.Length;
+            if (next < 0) next += Core.Length;
+            return Core[next];
         }
     }
 }

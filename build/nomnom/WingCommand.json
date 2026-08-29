@@ -1,7 +1,7 @@
 {
   "id": "WingCommand",
   "displayName": "WingCommand",
-  "description": "Command AI aircraft as your wing. Recruit or buy wingmen, fly ten reactive formation shapes, coordinate targets, and issue orders - rejoin, engage on a tether, attack, fall back, orbit, deliver cargo, land. After pilot loss, replace a surviving wing aircraft with a fresh player-controlled copy. Wingmen defend themselves against missile warnings with seeker-aware countermeasures and resume their queued order. Includes radial, MFD and tactical-map controls plus HUD/map symbology. EARLY DEVELOPMENT: not balanced, host or single-player only, and expect behaviour and config to change between versions.",
+  "description": "Tactical AI wing command for Nuclear Option. Select individual wingmen on the map, issue scoped Form Up, Attack, Engage, Disengage, Hold, RTB, Cargo and Land orders, route selected wingmen with right-click and queue points with Shift, and manage confirmed paid assignments, faction-stock requisitions and optional native per-type reserves from focused Tactical and Supply WMC tabs. Six core formations with a dedicated radial formation dial, compact whole-wing combat commands, persistent map task markers, defensive reactions and pilot-loss takeover. Host or single-player only.",
   "tags": ["QoL", "Utility", "AI"],
   "authors": ["GrabowMar"],
   "isClientOrServer": "Client",
@@ -18,11 +18,11 @@
     {
       "type": "plugin",
       "fileName": "WingCommand.dll",
-      "downloadUrl": "https://github.com/GrabowMar/NuclearOption-WingCommand/releases/download/v0.8.3/WingCommand.dll",
+      "downloadUrl": "https://github.com/GrabowMar/NuclearOption-WingCommand/releases/download/v0.9.0/WingCommand.dll",
       "gameVersion": "0.34.2",
-      "version": "0.8.3",
+      "version": "0.9.0",
       "category": "Release",
-      "hash": "sha256:9b4021c64d5777ec278d6187e8a2ce06c3314ac18a28e682b48c8ce675ce954b"
+      "hash": "sha256:76fb3e8015ff5f01ea086b84da85d8f9358ff2765a243e0fbad88de528dc1d5a"
     }
   ]
 }

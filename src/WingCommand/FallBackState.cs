@@ -3,7 +3,7 @@ using UnityEngine;
 namespace WingCommand
 {
     /// <summary>
-    /// Emergency disengagement: scatter, flares, run, hold.
+    /// Emergency disengagement: scatter, flare, run, then rejoin.
     ///
     /// Three phases, because a retreat that is one long turn away looks like a manoeuvre
     /// and a retreat that starts with the whole wing breaking on different headings looks
@@ -13,7 +13,8 @@ namespace WingCommand
     ///    takes a different heading, fanned by slot, so the wing scatters rather than
     ///    wheeling as one block.
     /// 2. <b>Egress</b> — run for the rally point at full power and low altitude.
-    /// 3. <b>Hold</b> — orbit the rally point until recalled, via <see cref="OrbitSteering"/>.
+    /// 3. <b>Rejoin</b> — once clear, return to the leader instead of remaining in a
+    /// remote holding orbit with no obvious completion.
     ///
     /// The flare handling mirrors the stock AI exactly, including the
     /// <c>countermeasureTrigger</c> check before toggling: <c>Aircraft.Countermeasures</c>
@@ -113,8 +114,8 @@ namespace WingCommand
                     break;
 
                 case Phase.Hold:
-                    OrbitSteering.Fly(aircraft, controlInputs, rally,
-                                      Plugin.Config2.OrbitRadius.Value, member.Slot * 120f);
+                    // Advance switches state immediately; this is only a defensive guard.
+                    member.Apply(WingOrder.Formation);
                     break;
             }
         }
@@ -127,7 +128,8 @@ namespace WingCommand
             if (next == Phase.Hold)
             {
                 StopFlares();
-                WingComms.Say(member, WingComms.Call.Holding);
+                WingComms.Say(member, WingComms.Call.Rejoining);
+                member.Apply(WingOrder.Formation);
             }
         }
 

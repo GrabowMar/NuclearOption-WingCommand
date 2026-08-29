@@ -60,11 +60,21 @@ namespace WingCommand
 
                 WingMarkers.Role role = WingMarkers.RoleOf(unitIcon.unit);
                 WingMarkerBadge.Apply(unitIcon.iconImage, role);
+                bool commandSelected = false;
+                if (role == WingMarkers.Role.Member &&
+                    WmcScreen.TacticalCommandModeActive && unitIcon.unit is Aircraft aircraft)
+                {
+                    WingCommandManager manager = WingCommandManager.Instance;
+                    WingMember member = manager?.Wing.Find(aircraft);
+                    commandSelected = manager != null && manager.Selection.Contains(member);
+                }
+                WingMarkerBadge.ApplyCommandSelection(unitIcon.iconImage, commandSelected);
                 if (role == WingMarkers.Role.None) return;
 
                 // Keep the game's own selected-vs-unselected contrast by brightening the
                 // selected state rather than flattening both to one colour.
-                unitIcon.iconImage.color = WingMarkers.ColorFor(role, IsSelected(unitIcon));
+                unitIcon.iconImage.color = WingMarkers.ColorFor(
+                    role, IsSelected(unitIcon) || commandSelected);
             }
 
             private static bool IsSelected(UnitMapIcon icon)

@@ -144,19 +144,47 @@ namespace WingCommand
         /// <returns>Number of members given an order.</returns>
         public int AttackTargets(IReadOnlyList<Unit> targets, out int covered)
         {
+            return AttackTargets(members, targets, out covered, forceAll: false);
+        }
+
+        /// <summary>Distribute designated targets across an explicit command scope.</summary>
+        public int AttackTargets(IReadOnlyList<WingMember> candidates,
+                                 IReadOnlyList<Unit> targets, out int covered,
+                                 bool forceAll = false)
+        {
             covered = 0;
-            if (targets == null || targets.Count == 0) return 0;
+            if (candidates == null || targets == null || targets.Count == 0) return 0;
 
             var free = new List<WingMember>();
-            foreach (WingMember m in members)
+            foreach (WingMember m in candidates)
             {
-                if (m.Alive) free.Add(m);
+                if (m != null && m.Alive && members.Contains(m)) free.Add(m);
             }
             if (free.Count == 0) return 0;
 
             var seen = new HashSet<Unit>();
             var assigned = new Dictionary<Unit, int>();
             int ordered = 0;
+
+            // Whole-wing radial attacks are an explicit "everyone attack" command. The
+            // scoped WMC attack keeps useful-target caps and leaves surplus aircraft as
+            // cover, but the radial must not silently leave one member on Form Up when the
+            // player asked the wing to attack. Spread multiple designations round-robin so
+            // every live member receives a concrete attack directive.
+            if (forceAll)
+            {
+                int targetIndex = 0;
+                for (int i = 0; i < free.Count; i++)
+                {
+                    Unit target = NextLiveTarget(targets, ref targetIndex);
+                    if (target == null) break;
+
+                    free[i].AttackTarget(target);
+                    ordered++;
+                    if (seen.Add(target)) covered++;
+                }
+                return ordered;
+            }
 
             while (free.Count > 0)
             {
@@ -191,6 +219,20 @@ namespace WingCommand
                 free[i].Apply(WingOrder.Formation);
 
             return ordered;
+        }
+
+        private static Unit NextLiveTarget(IReadOnlyList<Unit> targets, ref int index)
+        {
+            if (targets == null || targets.Count == 0) return null;
+
+            for (int i = 0; i < targets.Count; i++)
+            {
+                Unit target = targets[index % targets.Count];
+                index++;
+                if (target != null && !target.disabled) return target;
+            }
+
+            return null;
         }
 
         /// <summary>Remove and return the member closest to a target.</summary>
@@ -288,11 +330,29 @@ namespace WingCommand
             return false;
         }
 
+        public bool Contains(WingMember member) => member != null && members.Contains(member);
+
+        public WingMember Find(Aircraft aircraft)
+        {
+            if (aircraft == null) return null;
+            for (int i = 0; i < members.Count; i++)
+            {
+                if (members[i].Aircraft == aircraft) return members[i];
+            }
+            return null;
+        }
+
         /// <summary>
         /// Recruit the nearest eligible friendly AI aircraft. Returns null when there is
         /// nothing to recruit (out of range, wing full, or no AI aircraft on our side).
         /// </summary>
         public WingMember RecruitNearest()
+        {
+            Aircraft best = FindNearestRecruitCandidate();
+            return best == null ? null : Add(best);
+        }
+
+        public Aircraft FindNearestRecruitCandidate()
         {
             if (Leader == null) return null;
             if (members.Count >= Plugin.Config2.MaxWingSize.Value) return null;
@@ -315,7 +375,38 @@ namespace WingCommand
                 }
             }
 
-            return best == null ? null : Add(best);
+            return best;
+        }
+
+        public bool CanRecruit(Aircraft candidate, out string reason)
+        {
+            reason = null;
+            if (Leader == null) { reason = "Not flying"; return false; }
+            if (members.Count >= Plugin.Config2.MaxWingSize.Value)
+            { reason = "Wing is full"; return false; }
+            if (candidate == null || candidate.disabled)
+            { reason = "Aircraft is no longer available"; return false; }
+            if (candidate == Leader || candidate.Player != null)
+            { reason = "Player aircraft cannot be assigned"; return false; }
+            if (Leader.NetworkHQ == null || candidate.NetworkHQ != Leader.NetworkHQ)
+            { reason = "Aircraft is not in your faction"; return false; }
+            if (Contains(candidate)) { reason = "Aircraft is already in the wing"; return false; }
+
+            Pilot pilot = PrimaryPilot(candidate);
+            if (pilot == null || pilot.dead || pilot.ejected)
+            { reason = "Aircraft has no available AI pilot"; return false; }
+            if (candidate.radarAlt < 10f)
+            { reason = "Aircraft must be airborne"; return false; }
+            if (!candidate.LocalSim)
+            { reason = "Aircraft is not controlled by this host"; return false; }
+            if (!TypeMatchesLeader(candidate))
+            {
+                reason = IsRotary(candidate)
+                    ? "Helicopters cannot formate on a fixed-wing leader"
+                    : "Fixed-wing aircraft cannot formate on a rotary leader";
+                return false;
+            }
+            return true;
         }
 
         private bool IsEligible(Aircraft candidate)

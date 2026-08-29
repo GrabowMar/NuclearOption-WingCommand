@@ -53,6 +53,7 @@ namespace WingCommand
                 case "fallback":    FallBack(c);            break;
                 case "cover":       Cover(c);               break;
                 case "orbit":       Orbit(c);               break;
+                case "move":        Move(c);                break;
                 case "tasking":     Tasking(c);             break;
                 case "cargo":       Cargo(c);               break;
                 case "land":        LandHere(c);            break;
@@ -205,6 +206,12 @@ namespace WingCommand
             c.Ring(48, 50, 26, 4f);
             c.Disc(48, 50, 5f);
             Delta(c, 48, 24, 12, 90f);
+        }
+
+        /// <summary>Small V/Vic flight marker used for a temporary map move.</summary>
+        private static void Move(Canvas c)
+        {
+            ShapeGlyph(c, FormationShape.Vic);
         }
 
         /// <summary>Tasking: a checklist.</summary>

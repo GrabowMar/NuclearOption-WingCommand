@@ -202,21 +202,12 @@ namespace WingCommand
                     int capacity = Mathf.Clamp(
                         Mathf.CeilToInt(station.WeaponInfo.CalcAttacksNeeded(candidate)), 1, 4);
                     if (candidate is Missile) capacity = 1;
-                    if (candidate is Aircraft playerCandidate && playerCandidate.Player != null)
-                        capacity = Mathf.Min(capacity, 2);
 
                     int committed = TacticalCoordinator.CountClaims(candidate, aircraft)
                                   + Mathf.Max(tracking.attackers, 0);
                     int excess = Mathf.Max(committed - capacity + 1, 0);
 
                     float pressure = 1f + excess * Plugin.Config2.TargetSaturationPenalty.Value;
-                    if (candidate is Aircraft targetAircraft && targetAircraft.Player != null)
-                    {
-                        // Do not grant immunity. Only amplify pressure after somebody is
-                        // already committed, which preserves a fair one-on-one selection.
-                        pressure += excess * Plugin.Config2.PlayerTargetPenalty.Value;
-                    }
-
                     score /= pressure;
                     if (score <= bestScore) continue;
 

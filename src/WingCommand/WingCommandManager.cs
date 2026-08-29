@@ -13,7 +13,11 @@ namespace WingCommand
         internal static WingCommandManager Instance { get; private set; }
 
         internal readonly WingRegistry Wing = new WingRegistry();
+        internal readonly WingCommandSelection Selection = new WingCommandSelection();
+        internal WingDirectiveDispatcher Commands { get; private set; }
         private MapCommandLayer mapLayer;
+
+        internal string MapStatus => mapLayer?.Status;
 
 
         // Radial menu state
@@ -24,23 +28,28 @@ namespace WingCommand
 
         private string toast;
         private float toastUntil;
+        private string lastToast;
+        private float lastToastAt;
+        private Aircraft pendingNearestRecruit;
+        private float nearestConfirmationUntil;
 
         private readonly System.Collections.Generic.List<Aircraft> recruitQueue =
             new System.Collections.Generic.List<Aircraft>();
 
         private static readonly RadialSlice[] Slices =
         {
-            new RadialSlice("Recruit\nNearest", WingAction.RecruitNearest),
-            new RadialSlice("Rejoin\nFormation", WingAction.Rejoin),
+            new RadialSlice("Form Up", WingAction.Rejoin),
+            new RadialSlice("Attack\nMy Target", WingAction.AttackMyTarget),
             new RadialSlice("Engage", WingAction.Engage),
+            new RadialSlice("Disengage", WingAction.FallBack),
             new RadialSlice("Return\nTo Base", WingAction.ReturnToBase),
-            new RadialSlice("Change\nShape", WingAction.CycleShape),
-            new RadialSlice("Disband", WingAction.Disband),
+            new RadialSlice("Cycle\nROE", WingAction.CycleRoe),
         };
 
         private void Awake()
         {
             Instance = this;
+            Commands = new WingDirectiveDispatcher(Wing, Selection);
             mapLayer = new MapCommandLayer(Wing);
             Wing.Roe = Plugin.Config2.DefaultRoe.Value;
         }
@@ -58,14 +67,22 @@ namespace WingCommand
                 WingMarkers.Reset();
                 AiCombatTweak.Reset();
                 WingShop.Reset();
+                WingRecruitment.Reset();
+                WingSupplyReserve.Reset();
                 WingTakeover.Reset();
+                mapLayer?.Reset();
                 Wing.Clear();
+                Selection.Reset();
+                pendingNearestRecruit = null;
+                nearestConfirmationUntil = 0f;
                 return;
             }
 
             // The player's own aircraft is always the formation leader.
             Wing.SetLeader(GameManager.GetLocalAircraft(out Aircraft local) ? local : null);
+            WingSupplyReserve.Tick(local);
             Wing.Prune();
+            Selection.Prune(Wing);
             WingTakeover.Tick();
             Wing.CheckThreats();
             Wing.CheckLeashes();
@@ -218,78 +235,65 @@ namespace WingCommand
 
         // ---------------------------------------------------------------- actions
 
-        internal void Execute(WingAction action)
+        internal void Execute(WingAction action) => Execute(action, wholeWing: true);
+
+        /// <summary>
+        /// Run an interface action. Radial/hotkey callers use the whole wing; WMC/map
+        /// callers explicitly pass <paramref name="wholeWing"/> as false.
+        /// </summary>
+        internal void Execute(WingAction action, bool wholeWing)
         {
             switch (action)
             {
                 case WingAction.RecruitNearest:
                 {
-                    if (Wing.Count >= Plugin.Config2.MaxWingSize.Value)
-                    {
-                        Toast("Wing is full");
-                        break;
-                    }
-                    WingMember m = Wing.RecruitNearest();
-                    Toast(m != null
-                        ? m.Name + " joined as " + SlotName(m.Slot)
-                        : "No eligible friendly AI aircraft in range");
+                    RecruitNearestWithConfirmation();
                     break;
                 }
 
                 case WingAction.Rejoin:
-                    if (RequireWing()) { Wing.OrderAll(WingOrder.Formation); Toast("Wing: rejoin formation"); }
+                    Show(Commands.Apply(WingDirective.Simple(WingOrder.Formation), wholeWing));
                     break;
 
                 case WingAction.Engage:
-                    if (RequireWing()) { Wing.OrderAll(WingOrder.Engage); Toast("Wing: engage"); }
+                    Show(Commands.Apply(WingDirective.Simple(WingOrder.Engage), wholeWing));
                     break;
 
                 case WingAction.ReturnToBase:
-                    if (RequireWing()) { Wing.OrderAll(WingOrder.ReturnToBase); Toast("Wing: return to base"); }
+                    Show(Commands.Apply(WingDirective.Simple(WingOrder.ReturnToBase), wholeWing));
                     break;
 
                 case WingAction.FallBack:
-                    if (RequireWing())
-                    {
-                        Wing.OrderAll(WingOrder.FallBack);
-                        WingComms.Say(Wing.Members.Count > 0 ? Wing.Members[0] : null,
-                                      WingComms.Call.FallingBack);
-                        Toast("Wing: FALL BACK");
-                    }
+                    Show(Commands.Apply(WingDirective.Simple(WingOrder.FallBack), wholeWing));
                     break;
 
                 case WingAction.OrbitHere:
-                    if (RequireWing()) { Wing.OrderAll(WingOrder.OrbitHere); Toast("Wing: orbit this position"); }
-                    break;
-
-                case WingAction.DeliverCargo:
                 {
-                    if (!RequireWing()) break;
-
-                    // Only the aircraft that can actually run cargo take the order, and the
-                    // toast says how many did - an order that silently applies to nobody is
-                    // worse than one that reports it applied to nobody.
-                    int sent = Wing.OrderCapable(WingOrder.DeliverCargo, m => m.CanDeliverCargo);
-                    Toast(sent > 0
-                        ? "Wing: " + sent + " delivering cargo"
-                        : "No wingman is carrying cargo");
+                    Aircraft leader = Wing.Leader;
+                    if (leader == null) { Toast("Not flying"); break; }
+                    Show(Commands.Apply(
+                        WingDirective.AtPoint(WingOrder.OrbitHere, leader.GlobalPosition()),
+                        wholeWing));
                     break;
                 }
 
+                case WingAction.DeliverCargo:
+                    Show(Commands.Apply(WingDirective.Simple(WingOrder.DeliverCargo), wholeWing));
+                    break;
+
                 case WingAction.LandHere:
                 {
-                    if (!RequireWing()) break;
-
-                    int landing = Wing.OrderCapable(WingOrder.LandHere, m => m.CanLandInPlace);
-                    Toast(landing > 0
-                        ? "Wing: " + landing + " landing"
-                        : "Only helicopters can land in place");
+                    Aircraft leader = Wing.Leader;
+                    if (leader == null) { Toast("Not flying"); break; }
+                    Show(Commands.Apply(
+                        WingDirective.AtPoint(WingOrder.LandHere, leader.GlobalPosition()),
+                        wholeWing));
                     break;
                 }
 
                 case WingAction.CycleShape:
                 {
-                    FormationShape next = FormationShapes.Cycle(Plugin.Config2.Shape.Value, 1);
+                    FormationShape next = FormationShapes.CycleCore(Plugin.Config2.Shape.Value, 1);
                     Plugin.Config2.Shape.Value = next;
                     Toast("Formation: " + FormationShapes.Pretty(next));
                     break;
@@ -297,24 +301,11 @@ namespace WingCommand
 
                 case WingAction.AttackMyTarget:
                 {
-                    if (!RequireWing()) break;
-
                     List<Unit> targets = CurrentPlayerTargets();
-                    if (targets.Count == 0)
-                    {
-                        Toast("No target selected");
-                        break;
-                    }
-
-                    int n = Wing.AttackTargets(targets, out int covered);
-
-                    if (targets.Count == 1)
-                        Toast("Wing: attacking " + targets[0].unitName + " (" + n + ")");
-                    else if (covered < targets.Count)
-                        Toast("Wing: " + n + " onto " + covered + " of " +
-                              targets.Count + " targets - not enough aircraft");
-                    else
-                        Toast("Wing: " + n + " aircraft onto " + covered + " targets");
+                    // The radial is the fast whole-wing command surface: every live
+                    // member receives the attack directive, unlike a scoped WMC attack
+                    // which deliberately caps useful simultaneous attackers.
+                    Show(Commands.Attack(targets, wholeWing, forceAll: wholeWing));
                     break;
                 }
 
@@ -335,6 +326,85 @@ namespace WingCommand
                         Toast("Wing disbanded (" + n + ")");
                     }
                     break;
+            }
+        }
+
+        private void RecruitNearestWithConfirmation()
+        {
+            Aircraft candidate = Wing.FindNearestRecruitCandidate();
+            if (candidate == null)
+            {
+                pendingNearestRecruit = null;
+                Toast(Wing.Count >= Plugin.Config2.MaxWingSize.Value
+                    ? "Wing is full"
+                    : "No eligible friendly AI aircraft in range");
+                return;
+            }
+
+            float cost = WingRecruitment.PriceOf(Wing, candidate);
+            if (WingShop.Allocation < cost)
+            {
+                pendingNearestRecruit = null;
+                Toast("Assignment costs " + Mathf.RoundToInt(cost) + ", have " +
+                      Mathf.RoundToInt(WingShop.Allocation));
+                return;
+            }
+
+            if (candidate != pendingNearestRecruit || Time.unscaledTime > nearestConfirmationUntil)
+            {
+                pendingNearestRecruit = candidate;
+                nearestConfirmationUntil = Time.unscaledTime + 5f;
+                Toast("Assign nearest " + candidate.unitName + " for " +
+                      Mathf.RoundToInt(cost) + " - press ASSIGN NEAREST again to confirm");
+                return;
+            }
+
+            pendingNearestRecruit = null;
+            nearestConfirmationUntil = 0f;
+            if (WingRecruitment.TryRecruit(Wing, candidate, out WingMember member, out string why))
+                Toast(member.Name + " joined as " + SlotName(member.Slot));
+            else
+                Toast(why);
+        }
+
+        internal void IssuePointOrder(WingOrder order, GlobalPosition point)
+        {
+            Show(Commands.Apply(WingDirective.AtPoint(order, point), wholeWing: false));
+        }
+
+        internal void ArmPointOrder(WingOrder order)
+        {
+            if (Selection.IsNone)
+            {
+                Toast("No wingmen selected");
+                return;
+            }
+            mapLayer?.ArmPointOrder(order);
+        }
+
+        internal void SelectMember(WingMember member, bool toggle)
+        {
+            if (toggle) Selection.Toggle(member);
+            else Selection.SelectOnly(member);
+            foreach (WingMember candidate in Wing.Members)
+                WingMarkers.Repaint(candidate.Aircraft);
+        }
+
+        internal void SelectAllMembers()
+        {
+            Selection.SelectAll();
+            foreach (WingMember member in Wing.Members) WingMarkers.Repaint(member.Aircraft);
+        }
+
+        private void Show(WingDispatchResult result)
+        {
+            Toast(result.Message);
+            if (result.Success && result.Applied > 0)
+            {
+                WingMember speaker = Commands.Scope(wholeWing: false).Count > 0
+                    ? Commands.Scope(wholeWing: false)[0]
+                    : Wing.Members.Count > 0 ? Wing.Members[0] : null;
+                WingComms.Say(speaker, WingComms.Call.Copy);
             }
         }
 
@@ -403,6 +473,11 @@ namespace WingCommand
         /// </summary>
         internal void Toast(string message)
         {
+            if (string.IsNullOrWhiteSpace(message)) return;
+            if (message == lastToast && Time.unscaledTime - lastToastAt < 1.25f) return;
+            lastToast = message;
+            lastToastAt = Time.unscaledTime;
+
             if (Plugin.Config2.VerboseLogging.Value)
                 Plugin.Logger.LogInfo("[Wing] " + message);
 
