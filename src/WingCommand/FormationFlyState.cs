@@ -149,6 +149,12 @@ namespace WingCommand
 
         public override void FixedUpdateState(Pilot pilot)
         {
+            // Keep the gear up while flying. The one-shot retraction in EnterState can be
+            // undone when the game's own spawn initialisation runs afterwards and lowers the
+            // gear, so re-assert it every tick.
+            if (aircraft != null && aircraft.gearState != LandingGear.GearState.LockedRetracted)
+                aircraft.SetGear(deployed: false);
+
             Aircraft leader = Leader;
 
             // Leader gone, or we are no longer flyable: hand back to the stock AI.

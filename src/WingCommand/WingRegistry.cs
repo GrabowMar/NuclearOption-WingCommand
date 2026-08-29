@@ -24,6 +24,12 @@ namespace WingCommand
 
         public void SetLeader(Aircraft leader)
         {
+            // A shot-down leader releases the wing. The player's aircraft is still returned
+            // by GetLocalAircraft for a while after the pilot ejects, and a disabled leader
+            // is no use to anyone — the wing belongs back in vanilla AI.
+            if (leader != null && leader.disabled)
+                leader = null;
+
             if (Leader == leader) return;
             Leader = leader;
             if (leader == null) DisbandAll("leader gone");

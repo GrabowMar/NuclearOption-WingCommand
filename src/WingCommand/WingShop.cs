@@ -84,6 +84,29 @@ namespace WingCommand
             return rotary;
         }
 
+        // Whether a definition is actually a flyable aircraft, resolved once per airframe.
+        //
+        // Blueprinter addons register ships and ground vehicles as AircraftDefinition too,
+        // but their prefabs carry no Autopilot — so a ship or tank would otherwise slip past
+        // MatchesLeader (IsRotary defaults to "rotary" when there is no autopilot) and be
+        // offered as a wingman it could never be flown as.
+        private static readonly Dictionary<AircraftDefinition, bool> autopilotCache =
+            new Dictionary<AircraftDefinition, bool>();
+
+        /// <summary>True when this definition's prefab is armed with an autopilot — i.e. it is an aircraft, not a ship or vehicle.</summary>
+        public static bool IsFlyableAircraft(AircraftDefinition definition)
+        {
+            if (definition == null) return false;
+
+            if (autopilotCache.TryGetValue(definition, out bool cached)) return cached;
+
+            GameObject prefab = definition.unitPrefab;
+            bool has = prefab != null &&
+                       prefab.GetComponentInChildren<Autopilot>(includeInactive: true) != null;
+            autopilotCache[definition] = has;
+            return has;
+        }
+
         /// <summary>
         /// Whether this airframe can join the player's formation at all.
         ///
@@ -204,6 +227,10 @@ namespace WingCommand
         private static bool Sellable(AircraftDefinition definition, FactionHQ hq, int rank)
         {
             if (definition == null) return false;
+
+            // Ships and ground vehicles registered as AircraftDefinition by Blueprinter
+            // addons are not flyable; never offer them, regardless of rotary/fixed-wing match.
+            if (!IsFlyableAircraft(definition)) return false;
 
             // Hide what could never join the formation, rather than selling it and leaving
             // the aircraft orphaned in the air with no way to command it.
