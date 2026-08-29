@@ -36,7 +36,7 @@ namespace WingCommand
             controlInputs = aircraft.GetInputs();
 
             aircraft.SetFlightAssist(enabled: true);
-            if (aircraft.gearState == LandingGear.GearState.LockedExtended)
+            if (aircraft.gearState != LandingGear.GearState.LockedRetracted)
                 aircraft.SetGear(deployed: false);
 
             pilot.flightInfo.HasTakenOff = true;

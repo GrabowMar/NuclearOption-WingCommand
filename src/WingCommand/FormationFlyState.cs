@@ -127,7 +127,10 @@ namespace WingCommand
             controlInputs = aircraft.GetInputs();
 
             aircraft.SetFlightAssist(enabled: true);
-            if (aircraft.gearState == LandingGear.GearState.LockedExtended)
+            // Retract the gear whenever it is not already up. A freshly spawned helicopter
+            // can still be Uninitialized here (a frame after spawn), and skipping that case
+            // is what left it sitting with the gear hanging out.
+            if (aircraft.gearState != LandingGear.GearState.LockedRetracted)
                 aircraft.SetGear(deployed: false);
 
             pilot.flightInfo.HasTakenOff = true;
