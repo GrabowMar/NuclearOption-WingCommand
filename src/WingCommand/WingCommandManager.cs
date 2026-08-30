@@ -35,12 +35,10 @@ namespace WingCommand
         private struct PendingRecruit
         {
             public Aircraft Aircraft;
+            public WingMember Member;
             public float ReadyAt;
             public float Deadline;
         }
-
-        /// <summary>Height, in metres, at which a delivery counts as airborne.</summary>
-        private const float AirborneHeight = 25f;
 
         /// <summary>How long a delivery has to taxi out and get off the ground.</summary>
         private const float RecruitTimeout = 420f;
@@ -121,21 +119,34 @@ namespace WingCommand
             FlushRecruitQueue();
         }
 
-        /// <summary>Assign an aircraft to the wing as soon as it is fit to fly formation.</summary>
+        /// <summary>
+        /// Put a delivery on the wing roster immediately, then wait to take command until the
+        /// airbase has launched it. The roster and HUD can therefore show the aircraft while
+        /// the stock taxi/door sequence still owns its controls.
+        /// </summary>
         internal void QueueRecruit(Aircraft aircraft)
         {
             if (aircraft == null) return;
 
+            if (Wing.Find(aircraft) != null) return;
+            for (int i = 0; i < recruitQueue.Count; i++)
+                if (recruitQueue[i].Aircraft == aircraft) return;
+
+            WingMember member = Wing.Count < Plugin.Config2.MaxWingSize.Value
+                ? Wing.Add(aircraft, deferCommand: true)
+                : null;
+
             recruitQueue.Add(new PendingRecruit
             {
                 Aircraft = aircraft,
+                Member = member,
                 ReadyAt = Time.unscaledTime + 0.25f,
                 Deadline = Time.unscaledTime + RecruitTimeout,
             });
         }
 
         /// <summary>
-        /// Adopt deliveries once they can actually hold station.
+        /// Activate deliveries once they can actually hold station.
         ///
         /// Two waits, for two different reasons. An aircraft spawned this frame has not
         /// finished initialising its pilot state machine, so nothing may touch it yet. And an
@@ -158,18 +169,38 @@ namespace WingCommand
 
                 if (Time.unscaledTime > p.Deadline)
                 {
+                    if (p.Member != null && Wing.Contains(p.Member))
+                        Wing.Remove(p.Member, "delivery never got airborne");
                     recruitQueue.RemoveAt(i);
                     Toast(a.unitName + " never got airborne - assign it from the map when it does");
                     continue;
                 }
 
-                // Wing full, or not yet flying: keep waiting rather than dropping it.
+                // If the immediate add had no slot, claim one as soon as another member
+                // leaves. Once claimed, it stays on the roster through taxi and launch.
+                if (p.Member == null)
+                {
+                    p.Member = Wing.Find(a);
+                    if (p.Member == null && Wing.Count < Plugin.Config2.MaxWingSize.Value)
+                        p.Member = Wing.Add(a, deferCommand: true);
+                    recruitQueue[i] = p;
+                    if (p.Member == null) continue;
+                }
+
+                // A player may release a still-parked delivery. Do not add it back from the
+                // queue after that explicit removal.
+                if (!Wing.Contains(p.Member))
+                {
+                    recruitQueue.RemoveAt(i);
+                    continue;
+                }
+
+                // Not yet flying: keep waiting while the roster already shows the member.
                 if (Time.unscaledTime < p.ReadyAt) continue;
-                if (Wing.Count >= Plugin.Config2.MaxWingSize.Value) continue;
-                if (a.radarAlt < AirborneHeight) continue;
+                if (!p.Member.IsAirborne) continue;
 
                 recruitQueue.RemoveAt(i);
-                Wing.Add(a);
+                p.Member.ActivateWhenAirborne();
             }
         }
 

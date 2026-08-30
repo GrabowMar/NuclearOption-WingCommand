@@ -36,7 +36,8 @@ namespace WingCommand
         /// by priority, respects occupancy and the clearance the airframe needs, runs a
         /// carrier's door sequence, and lets the stock AI taxi out and take off. That is a
         /// great deal more than this mod could reproduce, and it means a requisition arrives
-        /// the way the faction's own aircraft do rather than materialising in mid-air.
+        /// the way the faction's own aircraft do rather than materialising in mid-air. The
+        /// roster records it as departing immediately; command waits until it is airborne.
         ///
         /// It cannot always be used: a hangar stocks specific types, so an airframe the
         /// mission does have in supply may still have nowhere on the field to come from. The
@@ -189,7 +190,8 @@ namespace WingCommand
 
                 WingShop.NoteDelivery(aircraft, overLimit);
                 WingCommandManager.Instance?.QueueRecruit(aircraft);
-                Plugin.Logger.LogInfo("[Shop] " + aircraft.unitName + " rolled out; joining once airborne");
+                Plugin.Logger.LogInfo("[Shop] " + aircraft.unitName +
+                                     " registered; rostered, awaiting airborne activation");
                 return;
             }
         }

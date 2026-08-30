@@ -1159,6 +1159,7 @@ namespace WingCommand
 
             private static string ErrorText(WingMember m)
             {
+                if (m.DeliveryPending) return "WAIT";
                 if (m.IsPanicking || m.Order != WingOrder.Formation) return "-";
                 if (m.SlotError <= 0f) return "...";
                 return m.SlotError < 10000f
@@ -1301,6 +1302,7 @@ namespace WingCommand
         /// </summary>
         private static string ShortOrder(WingMember m)
         {
+            if (m.DeliveryPending) return "DEPT";
             if (m.IsPanicking) return "DEFENSIVE";
 
             Unit assigned = m.AssignedTarget;

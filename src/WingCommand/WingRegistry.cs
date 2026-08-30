@@ -113,7 +113,7 @@ namespace WingCommand
             int ordered = 0;
             foreach (WingMember m in members)
             {
-                if (!m.Alive) continue;
+                if (!m.IsCommandable) continue;
                 int capacity = WingWeapons.RecommendedAttackers(m.Aircraft, target);
                 if (ordered >= capacity)
                 {
@@ -158,7 +158,7 @@ namespace WingCommand
             var free = new List<WingMember>();
             foreach (WingMember m in candidates)
             {
-                if (m != null && m.Alive && members.Contains(m)) free.Add(m);
+                if (m != null && m.IsCommandable && members.Contains(m)) free.Add(m);
             }
             if (free.Count == 0) return 0;
 
@@ -410,7 +410,7 @@ namespace WingCommand
             return IsRotary(candidate) == IsRotary(Leader);
         }
 
-        public WingMember Add(Aircraft aircraft)
+        public WingMember Add(Aircraft aircraft, bool deferCommand = false)
         {
             if (aircraft == null || !aircraft.LocalSim) return null;
 
@@ -428,9 +428,10 @@ namespace WingCommand
             Pilot pilot = PrimaryPilot(aircraft);
             if (pilot == null) return null;
 
-            var member = new WingMember(this, aircraft, pilot, NearestFreeSlot(aircraft));
+            var member = new WingMember(this, aircraft, pilot, NearestFreeSlot(aircraft),
+                                        deferCommand);
             members.Add(member);
-            member.Apply(WingOrder.Formation);
+            if (!deferCommand) member.Apply(WingOrder.Formation);
             WingMarkers.Repaint(aircraft);
             WarnIfTooSlow(aircraft);
             return member;
@@ -504,7 +505,7 @@ namespace WingCommand
             int applied = 0;
             foreach (WingMember m in members)
             {
-                if (!m.Alive || !capable(m)) continue;
+                if (!m.IsCommandable || !capable(m)) continue;
                 m.Apply(order);
                 applied++;
             }
@@ -515,7 +516,7 @@ namespace WingCommand
         {
             foreach (WingMember m in members)
             {
-                if (m.Alive) m.Apply(order);
+                if (m.IsCommandable) m.Apply(order);
             }
         }
 

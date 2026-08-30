@@ -42,7 +42,7 @@ namespace WingCommand
 
         public static bool CanApply(WingMember member, WingOrder order)
         {
-            if (member == null || !member.Alive) return false;
+            if (member == null || !member.IsCommandable) return false;
             if (order == WingOrder.DeliverCargo) return member.CanDeliverCargo;
             if (order == WingOrder.LandHere) return member.CanLandInPlace;
             return true;

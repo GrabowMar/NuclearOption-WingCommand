@@ -264,7 +264,8 @@ The WMC Supply tab uses Nuclear Option's existing economy rather than creating a
 - Requisitioned aircraft launch from a friendly airbase and fly to the wing under their own
   power. Where a hangar on the field stocks that airframe, the game's own airbase spawn is
   used: the aircraft appears in the hangar, waits out any door sequence, taxis and takes off
-  exactly as the faction's own aircraft do, and joins the wing once it is airborne. Airframes
+  exactly as the faction's own aircraft do. It appears in your wing roster immediately as
+  departing and becomes commandable once airborne. Airframes
   no hangar stocks are delivered into the circuit overhead instead.
 - Undeclared-aircraft stock remains an advanced compatibility option, disabled by default.
 - The WMC **Wing Reserve** holds up to three specific airframes across all types. `HOLD`

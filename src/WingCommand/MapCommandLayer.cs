@@ -113,7 +113,7 @@ namespace WingCommand
             int moved = 0;
             foreach (WingMember member in scope)
             {
-                if (member == null || !member.Alive) continue;
+                if (member == null || !member.IsCommandable) continue;
                 member.IssueWaypoint(point, append);
                 moved++;
             }

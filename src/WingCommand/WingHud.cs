@@ -470,6 +470,7 @@ namespace WingCommand
 
             private static string OrderCode(WingMember member)
             {
+                if (member.DeliveryPending) return "DEPT";
                 if (member.IsPanicking) return "DEF";
 
                 switch (member.Order)

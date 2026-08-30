@@ -43,7 +43,7 @@ namespace WingCommand
             if (wing == null) return result;
             foreach (WingMember member in wing.Members)
             {
-                if (member != null && member.Alive) result.Add(member);
+                if (member != null && member.IsCommandable) result.Add(member);
             }
             return result;
         }

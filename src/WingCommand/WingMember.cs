@@ -29,13 +29,25 @@ namespace WingCommand
         private readonly float joinedAt;
         private WingRegistry owner;
         private readonly List<GlobalPosition> waypointQueue = new List<GlobalPosition>();
+        private bool deliveryPending;
 
-        public WingMember(WingRegistry owner, Aircraft aircraft, Pilot pilot, int slot)
+        /// <summary>True while a hangar delivery is still taxiing or waiting to launch.</summary>
+        public bool DeliveryPending => deliveryPending;
+
+        /// <summary>Whether the airframe has cleared the delivery launch threshold.</summary>
+        public bool IsAirborne => Aircraft != null && Aircraft.radarAlt >= 25f;
+
+        /// <summary>True when player commands may be applied to this member.</summary>
+        public bool IsCommandable => Alive && !deliveryPending;
+
+        public WingMember(WingRegistry owner, Aircraft aircraft, Pilot pilot, int slot,
+                          bool deliveryPending = false)
         {
             this.owner = owner;
             Aircraft = aircraft;
             Pilot = pilot;
             Slot = slot;
+            this.deliveryPending = deliveryPending;
             formationState = new FormationFlyState(this);
             fallBackState = new FallBackState(this);
             orbitState = new OrbitState(this);
@@ -63,6 +75,11 @@ namespace WingCommand
 
         public void Apply(WingDirective directive)
         {
+            // A hangar-delivered aircraft belongs to the roster immediately, but the stock
+            // taxi/launch state must own it until it is airborne. Dispatcher and automation
+            // filters also enforce this; keeping the guard here protects every call site.
+            if (deliveryPending) return;
+
             TacticalCoordinator.Release(Aircraft);
 
             if (directive.Order != WingOrder.MoveToPoint)
@@ -152,6 +169,16 @@ namespace WingCommand
                 Plugin.Logger.LogInfo($"[Wing] {Name} -> {directive.Order}");
         }
 
+        /// <summary>Release the stock launch state once a pending delivery is airborne.</summary>
+        internal bool ActivateWhenAirborne()
+        {
+            if (!deliveryPending || !IsAirborne) return false;
+
+            deliveryPending = false;
+            Apply(WingOrder.Formation);
+            return true;
+        }
+
         /// <summary>True when this aircraft can be told to run cargo.</summary>
         public bool CanDeliverCargo
         {
@@ -176,6 +203,15 @@ namespace WingCommand
         /// </summary>
         public void ReleaseToCombat(string reason)
         {
+            if (deliveryPending)
+            {
+                // The aircraft is still under the airbase's taxi/launch AI. Removing it from
+                // the player's roster must not switch that parked pilot into combat flight.
+                deliveryPending = false;
+                TacticalCoordinator.Release(Aircraft);
+                return;
+            }
+
             if (Plugin.Config2.VerboseLogging.Value)
                 Plugin.Logger.LogInfo($"[Wing] {Name} releasing to combat AI: {reason}");
 
@@ -224,7 +260,7 @@ namespace WingCommand
         /// </summary>
         public void AttackTarget(Unit target)
         {
-            if (target == null) return;
+            if (target == null || !IsCommandable) return;
             Apply(WingDirective.Attack(target));
             if (!IsPanicking)
                 WingComms.Say(this, WingComms.Call.Engaging, target.unitName);
@@ -234,7 +270,7 @@ namespace WingCommand
         /// <summary>Issue a tactical-map move, replacing or appending to this member's route.</summary>
         public void IssueWaypoint(GlobalPosition point, bool append)
         {
-            if (!Alive) return;
+            if (!IsCommandable) return;
             if (!append) waypointQueue.Clear();
             waypointQueue.Add(point);
 
@@ -278,7 +314,7 @@ namespace WingCommand
         /// </summary>
         public void CheckReserves()
         {
-            if (!Alive || !Plugin.Config2.AutoReturnOnEmpty.Value) return;
+            if (!IsCommandable || !Plugin.Config2.AutoReturnOnEmpty.Value) return;
             if (IsPanicking) return;
 
             // Orders that are already going somewhere deliberate are not interrupted by a
@@ -322,7 +358,7 @@ namespace WingCommand
         /// </summary>
         public void BreakToEngage(string reason)
         {
-            if (IsPanicking || OnLeash || Order != WingOrder.Formation) return;
+            if (!IsCommandable || IsPanicking || OnLeash || Order != WingOrder.Formation) return;
 
             if (Plugin.Config2.VerboseLogging.Value)
                 Plugin.Logger.LogInfo($"[Wing] {Name} breaking to engage: {reason}");
@@ -352,7 +388,7 @@ namespace WingCommand
         /// </summary>
         public void CheckLeash()
         {
-            if (!Alive || IsPanicking) return;
+            if (!IsCommandable || IsPanicking) return;
             if (Order != WingOrder.Engage && Order != WingOrder.Attack && !OnLeash) return;
 
             Aircraft leader = Leader;
@@ -420,7 +456,7 @@ namespace WingCommand
         /// <summary>Enter the temporary defensive interrupt when this aircraft is warned.</summary>
         public void CheckThreats()
         {
-            if (!Alive || IsPanicking || !Plugin.Config2.PanicSystem.Value) return;
+            if (!IsCommandable || IsPanicking || !Plugin.Config2.PanicSystem.Value) return;
             if (Aircraft.radarAlt < 5f) return;
 
             MissileWarning warning = Aircraft.GetMissileWarningSystem();
