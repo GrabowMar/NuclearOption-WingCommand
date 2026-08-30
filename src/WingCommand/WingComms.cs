@@ -33,6 +33,7 @@ namespace WingCommand
             Copy,
             Panic,
             DefensiveClear,
+            Recovered,
         }
 
         private const float RepeatCooldown = 12f;
@@ -107,6 +108,7 @@ namespace WingCommand
                     ? "missile " + detail + ", defensive!"
                     : "missile, defensive!";
                 case Call.DefensiveClear: return "threat clear, resuming";
+                case Call.Recovered:  return "down and shut down, airframe back in the pool";
                 default:              return "copy";
             }
         }

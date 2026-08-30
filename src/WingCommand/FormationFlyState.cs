@@ -82,12 +82,31 @@ namespace WingCommand
         /// </summary>
         private Vector3 smoothedLeaderDir;
 
+        /// <summary>The same track flattened into the horizontal plane; the formation's frame.</summary>
+        private Vector3 flatLeaderTrack = Vector3.forward;
+
+        /// <summary>Filtered rate of change of the leader's heading, in rad/s, positive to the right.</summary>
+        private float leaderTurnRate;
+
         /// <summary>
         /// Seconds of smoothing. Long enough to reject stick noise, short enough not to lag a
         /// turn. Tightened to half a second: the track still filters the leader's every
         /// twitch, but a genuine manoeuvre is now followed rather than trailed.
         /// </summary>
         private const float LeaderTrackSmoothing = 0.5f;
+
+        /// <summary>Seconds of smoothing on the differentiated heading rate.</summary>
+        private const float TurnRateSmoothing = 0.35f;
+
+        /// <summary>
+        /// Heading rate below which the leader counts as flying straight, in rad/s. A third
+        /// of a degree per second: far below any deliberate turn, and above the residue that
+        /// differentiating a filtered signal always leaves behind.
+        /// </summary>
+        private const float TurnRateDeadband = 0.006f;
+
+        /// <summary>Fastest heading rate treated as real, in rad/s. Well above any flyable turn.</summary>
+        private const float MaxCredibleTurnRate = 1.5f;
 
         /// <summary>
         /// One report every five seconds, per wingman. The timer lives here rather than in
@@ -106,6 +125,20 @@ namespace WingCommand
 
         private float lastReport;
 
+        /// <summary>
+        /// Advance the filtered leader track and the heading rate derived from it, and
+        /// return that track flattened into the horizontal plane.
+        ///
+        /// The heading rate is differentiated from the *smoothed track*, not read off the
+        /// leader's rigidbody, and that is the entire point of it. Expanding the body rates,
+        /// <c>Dot(angularVelocity, up)</c> comes out as
+        /// <c>p·sin(pitch) - q·sin(bank)·cos(pitch) + r·cos(bank)·cos(pitch)</c>, so the roll
+        /// rate leaks straight into it at any nose-up attitude. Ten degrees of pitch and a
+        /// gentle one rad/s roll reported 0.17 rad/s of "turn" — enough on its own to
+        /// saturate the formation's turn geometry and swing the steering aim point over a
+        /// hundred metres sideways, changing sign on every roll reversal. That is the slow
+        /// left-right sway. A differentiated heading cannot see roll at all.
+        /// </summary>
         private Vector3 TrackLeader(Aircraft leader)
         {
             Vector3 instant = leader.rb != null && leader.rb.velocity.sqrMagnitude > 1f
@@ -115,14 +148,41 @@ namespace WingCommand
             if (smoothedLeaderDir.sqrMagnitude < 0.5f)
             {
                 smoothedLeaderDir = instant;
-                return smoothedLeaderDir;
+                flatLeaderTrack = Flatten(instant);
+                leaderTurnRate = 0f;
+                return flatLeaderTrack;
             }
+
+            float dt = Mathf.Max(Time.fixedDeltaTime, 0.0001f);
 
             smoothedLeaderDir = Vector3.Slerp(
                 smoothedLeaderDir, instant,
-                1f - Mathf.Exp(-Time.fixedDeltaTime / LeaderTrackSmoothing)).normalized;
+                1f - Mathf.Exp(-dt / LeaderTrackSmoothing)).normalized;
 
-            return smoothedLeaderDir;
+            Vector3 flat = Flatten(smoothedLeaderDir);
+
+            // Clamped to a rate no aircraft can actually fly — a nine-g turn at combat speed
+            // is under half a rad/s — so that any discontinuity in the track, from whatever
+            // source, can never be read as a turn and thrown at the formation geometry.
+            float measured = Mathf.Clamp(
+                Vector3.SignedAngle(flatLeaderTrack, flat, Vector3.up) * Mathf.Deg2Rad / dt,
+                -MaxCredibleTurnRate, MaxCredibleTurnRate);
+            flatLeaderTrack = flat;
+
+            leaderTurnRate = Mathf.Lerp(
+                leaderTurnRate, measured, 1f - Mathf.Exp(-dt / TurnRateSmoothing));
+
+            return flat;
+        }
+
+        /// <summary>The turn rate the geometry acts on: filtered, and zero inside the noise band.</summary>
+        private float LeaderTurnRate =>
+            Mathf.Abs(leaderTurnRate) < TurnRateDeadband ? 0f : leaderTurnRate;
+
+        private static Vector3 Flatten(Vector3 direction)
+        {
+            direction.y = 0f;
+            return direction.sqrMagnitude > 0.0001f ? direction.normalized : Vector3.forward;
         }
 
 
@@ -141,6 +201,12 @@ namespace WingCommand
 
             pilot.flightInfo.HasTakenOff = true;
             slotLocalReady = false;
+
+            // Start the leader track from scratch. It survives a state exit, so a wingman
+            // that broke off to fight and is now rejoining would otherwise differentiate a
+            // heading minutes out of date and read it as one enormous turn.
+            smoothedLeaderDir = Vector3.zero;
+            leaderTurnRate = 0f;
 
             if (Plugin.Config2.VerboseLogging.Value)
                 Plugin.Logger.LogInfo($"[Formation] {aircraft.unitName} entering slot {member.Slot}");
@@ -176,6 +242,14 @@ namespace WingCommand
 
             RunEngagement(leader);
 
+            // One filtered leader signal drives every piece of geometry below: the frame the
+            // slots hang off, the prediction that anchors them, the turn compensation and the
+            // steering feed-forward. Those were derived separately from the nose direction,
+            // the world-y angular velocity and the raw velocity vector, and could therefore
+            // disagree with one another about which way the leader was actually going.
+            Vector3 track = TrackLeader(leader);
+            float turnRate = LeaderTurnRate;
+
             FormationShape shape = Plugin.Config2.Shape.Value;
 
             // Helicopters fly slower and much closer together than jets, so the same
@@ -190,10 +264,7 @@ namespace WingCommand
             // and opens the trail component slightly. That reduces the impossible speed
             // difference between inside and outside slots while keeping the formation
             // recognisable instead of letting it dissolve into individual chases.
-            float yawRate = leader.rb != null
-                ? Mathf.Abs(Vector3.Dot(leader.rb.angularVelocity, Vector3.up))
-                : 0f;
-            float turn = Mathf.Clamp01(yawRate / 0.18f);
+            float turn = Mathf.Clamp01(Mathf.Abs(turnRate) / 0.18f);
             float geometryBlend = 1f - Mathf.Exp(-Time.fixedDeltaTime / TurnGeometrySeconds);
             lateralTurnScale = Mathf.Lerp(lateralTurnScale, Mathf.Lerp(1f, 0.72f, turn), geometryBlend);
             trailTurnScale = Mathf.Lerp(trailTurnScale, Mathf.Lerp(1f, 1.12f, turn), geometryBlend);
@@ -217,16 +288,26 @@ namespace WingCommand
                     1f - Mathf.Exp(-Time.fixedDeltaTime / ShapeTransitionSeconds));
             }
 
-            Vector3 offset = FormationSolver.WorldOffset(
-                leader.transform.forward, smoothedSlotLocal);
+            // The frame the slots hang off is the leader's *track*, not its nose. Sideslip and
+            // yaw wobble swing the nose several degrees either side of the flight path, and
+            // rotating the whole formation by that moves every slot laterally in proportion
+            // to how far out it sits — so the outermost wingman travelled several times as
+            // far as the closest one, which is what the sway looked like.
+            Vector3 offset = FormationSolver.WorldOffset(track, smoothedSlotLocal);
 
             // Anchor the slot to where the leader is going, not where it is: a fast leader
             // drags an un-predicted slot behind it and the wingman spends the whole flight
             // chasing a moving target it can never sit on. Predicting the leader's own motion
             // removes that lag so station-keeping converges instead of perpetually trailing.
+            //
+            // The prediction runs along the filtered track rather than the instantaneous
+            // velocity: a whole second of prediction magnifies every degree of stick wobble
+            // into lateral slot motion. Only the vertical component stays raw, so a climb or
+            // a dive is still led honestly.
             Vector3 leaderVel = leader.rb != null ? leader.rb.velocity : Vector3.zero;
+            Vector3 predictedMotion = track * leader.speed + Vector3.up * leaderVel.y;
             GlobalPosition slotPos = leader.GlobalPosition()
-                                     + leaderVel * SlotPredictionSeconds
+                                     + predictedMotion * SlotPredictionSeconds
                                      + offset;
 
             // Separation keeps wingmen out of each other during a rejoin, and path-cut
@@ -275,7 +356,7 @@ namespace WingCommand
                     aircraft, leader, controlInputs, member.Slot,
                     slotPos, toSlot, distance, spacing,
                     new FixedWingFormation.Rejoin(rejoinHoldUntil, rejoinBoostUntil),
-                    TrackLeader(leader), DueToReport(), shape, lateralTurnScale);
+                    smoothedLeaderDir, turnRate, DueToReport(), shape, lateralTurnScale);
             }
             else
             {

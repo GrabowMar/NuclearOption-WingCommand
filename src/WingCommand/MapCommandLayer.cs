@@ -185,7 +185,7 @@ namespace WingCommand
 
             float total = 0f;
             for (int i = 0; i < recruited.Count; i++)
-                total += WingRecruitment.PriceOf(wing, recruited[i], i);
+                total += WingRecruitment.PriceOf(recruited[i]);
 
             if (WingShop.Allocation < total)
             {

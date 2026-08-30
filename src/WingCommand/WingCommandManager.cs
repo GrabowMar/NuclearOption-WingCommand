@@ -30,11 +30,22 @@ namespace WingCommand
         private float toastUntil;
         private string lastToast;
         private float lastToastAt;
-        private Aircraft pendingNearestRecruit;
-        private float nearestConfirmationUntil;
 
-        private readonly System.Collections.Generic.List<Aircraft> recruitQueue =
-            new System.Collections.Generic.List<Aircraft>();
+        /// <summary>An aircraft on its way into the wing, and how long it has to get there.</summary>
+        private struct PendingRecruit
+        {
+            public Aircraft Aircraft;
+            public float ReadyAt;
+            public float Deadline;
+        }
+
+        /// <summary>Height, in metres, at which a delivery counts as airborne.</summary>
+        private const float AirborneHeight = 25f;
+
+        /// <summary>How long a delivery has to taxi out and get off the ground.</summary>
+        private const float RecruitTimeout = 420f;
+
+        private readonly List<PendingRecruit> recruitQueue = new List<PendingRecruit>();
 
         private static readonly RadialSlice[] Slices =
         {
@@ -67,20 +78,25 @@ namespace WingCommand
                 WingMarkers.Reset();
                 AiCombatTweak.Reset();
                 WingShop.Reset();
+                WingShopDelivery.Reset();
                 WingRecruitment.Reset();
+                recruitQueue.Clear();
                 WingSupplyReserve.Reset();
                 WingTakeover.Reset();
+                WingUi.Reset();
                 mapLayer?.Reset();
                 Wing.Clear();
                 Selection.Reset();
-                pendingNearestRecruit = null;
-                nearestConfirmationUntil = 0f;
                 return;
             }
 
             // The player's own aircraft is always the formation leader.
             Wing.SetLeader(GameManager.GetLocalAircraft(out Aircraft local) ? local : null);
-            WingSupplyReserve.Tick(local);
+            WingSupplyReserve.Tick();
+
+            // Before Prune, deliberately: a wingman that has completed its RTB has an
+            // ejected pilot, which Prune would otherwise report as a combat loss.
+            WingRecovery.Tick(Wing);
             Wing.Prune();
             Selection.Prune(Wing);
             WingTakeover.Tick();
@@ -101,30 +117,58 @@ namespace WingCommand
             WingMarkers.Tick(Wing);
             WingHud.TickStatusPanel(Wing);
             WmcScreen.Tick(Wing);
+            WingShopDelivery.Tick();
             FlushRecruitQueue();
         }
 
-        /// <summary>Assign an aircraft to the wing on the next frame.</summary>
+        /// <summary>Assign an aircraft to the wing as soon as it is fit to fly formation.</summary>
         internal void QueueRecruit(Aircraft aircraft)
         {
-            if (aircraft != null) recruitQueue.Add(aircraft);
+            if (aircraft == null) return;
+
+            recruitQueue.Add(new PendingRecruit
+            {
+                Aircraft = aircraft,
+                ReadyAt = Time.unscaledTime + 0.25f,
+                Deadline = Time.unscaledTime + RecruitTimeout,
+            });
         }
 
         /// <summary>
-        /// Aircraft spawned during this frame have not finished initialising their pilot
-        /// state machine yet, so assignment is deferred by a frame.
+        /// Adopt deliveries once they can actually hold station.
+        ///
+        /// Two waits, for two different reasons. An aircraft spawned this frame has not
+        /// finished initialising its pilot state machine, so nothing may touch it yet. And an
+        /// aircraft delivered into a hangar is parked: it has to taxi out and take off under
+        /// the stock AI first, and switching it to formation flight on the apron would strand
+        /// it there with its gear up.
         /// </summary>
         private void FlushRecruitQueue()
         {
-            if (recruitQueue.Count == 0) return;
-
-            Aircraft[] batch = recruitQueue.ToArray();
-            recruitQueue.Clear();
-
-            foreach (Aircraft a in batch)
+            for (int i = recruitQueue.Count - 1; i >= 0; i--)
             {
-                if (a == null || a.disabled) continue;
-                if (Wing.Count >= Plugin.Config2.MaxWingSize.Value) break;
+                PendingRecruit p = recruitQueue[i];
+                Aircraft a = p.Aircraft;
+
+                if (a == null || a.disabled)
+                {
+                    recruitQueue.RemoveAt(i);
+                    continue;
+                }
+
+                if (Time.unscaledTime > p.Deadline)
+                {
+                    recruitQueue.RemoveAt(i);
+                    Toast(a.unitName + " never got airborne - assign it from the map when it does");
+                    continue;
+                }
+
+                // Wing full, or not yet flying: keep waiting rather than dropping it.
+                if (Time.unscaledTime < p.ReadyAt) continue;
+                if (Wing.Count >= Plugin.Config2.MaxWingSize.Value) continue;
+                if (a.radarAlt < AirborneHeight) continue;
+
+                recruitQueue.RemoveAt(i);
                 Wing.Add(a);
             }
         }
@@ -245,12 +289,6 @@ namespace WingCommand
         {
             switch (action)
             {
-                case WingAction.RecruitNearest:
-                {
-                    RecruitNearestWithConfirmation();
-                    break;
-                }
-
                 case WingAction.Rejoin:
                     Show(Commands.Apply(WingDirective.Simple(WingOrder.Formation), wholeWing));
                     break;
@@ -327,44 +365,6 @@ namespace WingCommand
                     }
                     break;
             }
-        }
-
-        private void RecruitNearestWithConfirmation()
-        {
-            Aircraft candidate = Wing.FindNearestRecruitCandidate();
-            if (candidate == null)
-            {
-                pendingNearestRecruit = null;
-                Toast(Wing.Count >= Plugin.Config2.MaxWingSize.Value
-                    ? "Wing is full"
-                    : "No eligible friendly AI aircraft in range");
-                return;
-            }
-
-            float cost = WingRecruitment.PriceOf(Wing, candidate);
-            if (WingShop.Allocation < cost)
-            {
-                pendingNearestRecruit = null;
-                Toast("Assignment costs " + Mathf.RoundToInt(cost) + ", have " +
-                      Mathf.RoundToInt(WingShop.Allocation));
-                return;
-            }
-
-            if (candidate != pendingNearestRecruit || Time.unscaledTime > nearestConfirmationUntil)
-            {
-                pendingNearestRecruit = candidate;
-                nearestConfirmationUntil = Time.unscaledTime + 5f;
-                Toast("Assign nearest " + candidate.unitName + " for " +
-                      Mathf.RoundToInt(cost) + " - press ASSIGN NEAREST again to confirm");
-                return;
-            }
-
-            pendingNearestRecruit = null;
-            nearestConfirmationUntil = 0f;
-            if (WingRecruitment.TryRecruit(Wing, candidate, out WingMember member, out string why))
-                Toast(member.Name + " joined as " + SlotName(member.Slot));
-            else
-                Toast(why);
         }
 
         internal void IssuePointOrder(WingOrder order, GlobalPosition point)
@@ -507,8 +507,8 @@ namespace WingCommand
         {
             if (!InPlayableState()) return;
 
-            WingTakeover.DrawWindow();
-
+            // The aircraft-recovery prompt is native uGUI and draws itself; only the
+            // fallback radial and the fallback toast still live here.
             if (radialOpen)
                 WingHud.DrawRadial(Slices, radialCentre, hoveredSlice);
 
@@ -519,7 +519,6 @@ namespace WingCommand
 
     internal enum WingAction
     {
-        RecruitNearest,
         Rejoin,
         Engage,
         ReturnToBase,

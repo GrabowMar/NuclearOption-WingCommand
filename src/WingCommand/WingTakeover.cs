@@ -3,7 +3,9 @@ using System.Collections.Generic;
 using HarmonyLib;
 using NuclearOption.Networking;
 using NuclearOption.SavedMission;
+using TMPro;
 using UnityEngine;
+using UnityEngine.UI;
 
 namespace WingCommand
 {
@@ -12,34 +14,39 @@ namespace WingCommand
     /// the selected AI aircraft with a fresh player-controlled copy. Spawning through the
     /// stock player path lets the game perform authority, cockpit, HUD, camera and local-sim
     /// setup itself; no live AI aircraft is ever possessed or manually rewired.
+    ///
+    /// The prompt is drawn with <see cref="WingUi"/>, the same widgets the WMC page is built
+    /// from, on a canvas of its own. It used to be an IMGUI window with a hand-picked slate
+    /// palette and Unity's default skin, which is why it read as a debug overlay dropped on
+    /// top of the game rather than as part of it.
     /// </summary>
     internal static class WingTakeover
     {
+        private const float PanelWidth = 720f;
+        private const float Pad = 24f;
+        private const float HeaderHeight = 36f;
+        private const float CardHeight = 70f;
+        private const float CardGap = 12f;
+        private const float CardStride = CardHeight + CardGap;
+        private const float CardsTop = 118f;
+
+        /// <summary>Cards built once; the roster can only shrink while the prompt is open.</summary>
+        private const int MaxCards = 8;
+
         private static WingRegistry wing;
         private static Aircraft lostLeader;
         private static GlobalPosition lossPosition;
         private static bool active;
         private static bool defeatSuppressed;
-        private static Rect window = new Rect(0f, 0f, 720f, 350f);
 
-        private static bool stylesReady;
-        private static GUIStyle panelStyle;
-        private static GUIStyle alertStyle;
-        private static GUIStyle titleStyle;
-        private static GUIStyle subtitleStyle;
-        private static GUIStyle cardStyle;
-        private static GUIStyle cardCallsignStyle;
-        private static GUIStyle cardTypeStyle;
-        private static GUIStyle cardMetaStyle;
-        private static GUIStyle keyStyle;
-        private static GUIStyle footerStyle;
-        private static GUIStyle secondaryButtonStyle;
-        private static Texture2D accentTexture;
-        private static Texture2D headerTexture;
-        private static Texture2D borderTexture;
-        private static Texture2D barBackgroundTexture;
-        private static Texture2D barReadyTexture;
-        private static Texture2D barWarningTexture;
+        private static GameObject canvasRoot;
+        private static RectTransform panel;
+        private static RectTransform content;
+        private static WingButton declineButton;
+        private static readonly List<Card> cards = new List<Card>();
+        private static readonly List<WingMember> candidates = new List<WingMember>();
+        private static float nextRefresh;
+        private static int lastCardCount = -1;
 
         public static bool Active => active;
 
@@ -52,7 +59,6 @@ namespace WingCommand
             lostLeader = previousLeader;
             lossPosition = previousLeader.GlobalPosition();
             active = true;
-            CentreWindow();
 
             // Put the choice in the same context as the game's normal post-loss flow. The
             // maximised tactical map also releases the cursor immediately instead of making
@@ -64,6 +70,7 @@ namespace WingCommand
             }
             catch { /* Numeric shortcuts still make the prompt usable if the map is absent. */ }
 
+            Build();
             Plugin.Logger.LogInfo($"[Takeover] leader lost; offering {CandidateCount()} aircraft");
             return true;
         }
@@ -93,8 +100,8 @@ namespace WingCommand
 
             // Immediate keyboard operation matters because death can occur while the cursor
             // is still captured. The visible cards use the same numbers.
-            var candidates = CurrentCandidates();
-            for (int i = 0; i < candidates.Count && i < 8; i++)
+            CurrentCandidates();
+            for (int i = 0; i < candidates.Count && i < MaxCards; i++)
             {
                 KeyCode alpha = (KeyCode)((int)KeyCode.Alpha1 + i);
                 KeyCode keypad = (KeyCode)((int)KeyCode.Keypad1 + i);
@@ -118,119 +125,272 @@ namespace WingCommand
                 local != null && local != lostLeader && !local.disabled)
             {
                 LeaderRestored(local);
+                return;
             }
+
+            if (Time.unscaledTime < nextRefresh && candidates.Count == lastCardCount) return;
+            nextRefresh = Time.unscaledTime + 0.2f;
+            Refresh();
         }
 
         public static void LeaderRestored(Aircraft leader)
         {
             if (!active) return;
-            active = false;
-            defeatSuppressed = false;
-            lostLeader = null;
-            lossPosition = default(GlobalPosition);
-            wing = null;
+            Close();
             Plugin.Logger.LogInfo("[Takeover] player acquired " + leader.unitName + " through the normal game flow");
         }
 
-        public static void DrawWindow()
-        {
-            if (!active || wing == null) return;
+        // ------------------------------------------------------------------------ panel
 
-            EnsureStyles();
-            int rows = Mathf.CeilToInt(CandidateCount() / 2f);
-            window.height = 166f + rows * 82f;
-            CentreWindow();
-            window = GUI.Window(0x574D43, window, DrawContents, GUIContent.none, panelStyle);
+        /// <summary>
+        /// One offered aircraft. Built once and rebound, so the numbers can tick over
+        /// without the panel being torn down under the player's cursor.
+        /// </summary>
+        private sealed class Card
+        {
+            public GameObject Root;
+            public TMP_Text Key;
+            public TMP_Text Callsign;
+            public TMP_Text Type;
+            public TMP_Text Meta;
+            public Image FuelTrack;
+            public Image FuelFill;
+            public WingMember Bound;
         }
 
-        private static void DrawContents(int id)
+        private static void Build()
         {
-            float width = window.width;
-            GUI.DrawTexture(new Rect(1f, 1f, width - 2f, 36f), headerTexture);
-            GUI.DrawTexture(new Rect(0f, 0f, width, 1f), borderTexture);
-            GUI.DrawTexture(new Rect(0f, window.height - 1f, width, 1f), borderTexture);
-            GUI.DrawTexture(new Rect(0f, 0f, 1f, window.height), borderTexture);
-            GUI.DrawTexture(new Rect(width - 1f, 0f, 1f, window.height), borderTexture);
-            GUI.DrawTexture(new Rect(18f, 36f, width - 36f, 1f), accentTexture);
+            if (canvasRoot != null) return;
 
-            GUI.Label(new Rect(24f, 9f, width - 48f, 20f), "WING COMMAND  /  AIRFRAME RECOVERY", titleStyle);
-            GUI.Label(new Rect(24f, 46f, width - 48f, 28f), "PILOT DOWN", alertStyle);
-            GUI.Label(new Rect(24f, 77f, width - 48f, 20f),
-                      "Select a surviving wing aircraft. A fresh player airframe will replace it in position.",
-                      subtitleStyle);
+            canvasRoot = new GameObject("WingCommand_Takeover", typeof(RectTransform),
+                                        typeof(Canvas), typeof(CanvasScaler), typeof(GraphicRaycaster));
+            UnityEngine.Object.DontDestroyOnLoad(canvasRoot);
 
-            List<WingMember> candidates = CurrentCandidates();
-            const float gap = 12f;
-            const float left = 24f;
-            const float cardHeight = 70f;
-            float cardWidth = (width - left * 2f - gap) * 0.5f;
-            float top = 107f;
+            var canvas = canvasRoot.GetComponent<Canvas>();
+            canvas.renderMode = RenderMode.ScreenSpaceOverlay;
+            // Above the map and the HUD: this is a modal choice, and anything drawn over it
+            // would be a choice the player cannot see they are making.
+            canvas.sortingOrder = 5000;
 
-            for (int i = 0; i < candidates.Count; i++)
+            var scaler = canvasRoot.GetComponent<CanvasScaler>();
+            scaler.uiScaleMode = CanvasScaler.ScaleMode.ScaleWithScreenSize;
+            scaler.referenceResolution = new Vector2(1920f, 1080f);
+            scaler.screenMatchMode = CanvasScaler.ScreenMatchMode.MatchWidthOrHeight;
+            scaler.matchWidthOrHeight = 0.5f;
+
+            var panelObject = new GameObject("Panel", typeof(RectTransform), typeof(Image));
+            panel = panelObject.GetComponent<RectTransform>();
+            panel.SetParent(canvasRoot.transform, worldPositionStays: false);
+            panel.anchorMin = panel.anchorMax = new Vector2(0.5f, 0.5f);
+            panel.pivot = new Vector2(0.5f, 0.5f);
+            panel.localScale = Vector3.one;
+
+            Image background = panelObject.GetComponent<Image>();
+            background.sprite = WingUi.PanelSprite();
+            background.type = Image.Type.Sliced;
+            background.color = Color.white;
+            background.raycastTarget = true;
+
+            var contentObject = new GameObject("Content", typeof(RectTransform));
+            content = contentObject.GetComponent<RectTransform>();
+            content.SetParent(panel, worldPositionStays: false);
+            WingUi.Stretch(content);
+
+            BuildHeader();
+            BuildCards();
+            BuildFooter();
+
+            lastCardCount = -1;
+            nextRefresh = 0f;
+            Refresh();
+        }
+
+        private static void BuildHeader()
+        {
+            float width = PanelWidth - Pad * 2f;
+
+            WingUi.Label(content, "WING COMMAND  /  AIRFRAME RECOVERY",
+                         new Rect(Pad, -10f, width, 20f), WingUi.Green, 13f,
+                         FontStyles.Normal, TextAlignmentOptions.Left);
+            WingUi.Rule(content, new Rect(Pad, -HeaderHeight, width, 1f), WingUi.Green);
+
+            WingUi.Label(content, "PILOT DOWN", new Rect(Pad, -48f, width, 28f),
+                         WingUi.Alert, 22f, FontStyles.Normal, TextAlignmentOptions.Left);
+            WingUi.Label(content,
+                         "Select a surviving wing aircraft. A fresh player airframe will replace it in position.",
+                         new Rect(Pad, -82f, width, 20f), WingUi.Friendly, 12f,
+                         FontStyles.Normal, TextAlignmentOptions.Left);
+        }
+
+        private static void BuildCards()
+        {
+            float cardWidth = (PanelWidth - Pad * 2f - CardGap) * 0.5f;
+
+            for (int i = 0; i < MaxCards; i++)
             {
-                WingMember member = candidates[i];
-                Aircraft aircraft = member.Aircraft;
                 int column = i % 2;
                 int row = i / 2;
-                Rect card = new Rect(left + column * (cardWidth + gap), top + row * 82f,
-                                     cardWidth, cardHeight);
+                var rect = new Rect(Pad + column * (cardWidth + CardGap),
+                                    -(CardsTop + row * CardStride), cardWidth, CardHeight);
 
-                if (GUI.Button(card, GUIContent.none, cardStyle))
+                var go = new GameObject("Card" + i, typeof(RectTransform));
+                RectTransform rt = go.GetComponent<RectTransform>();
+                rt.SetParent(content, worldPositionStays: false);
+                WingUi.Place(rt, rect);
+
+                WingUi.Panel(rt, new Rect(0f, 0f, cardWidth, CardHeight),
+                             WingMarkers.MemberColor.WithAlpha(0.58f));
+
+                var card = new Card { Root = go };
+
+                // The whole card is the button; the labels sit on top of it and never take
+                // the raycast, so there is no dead area inside a clickable row.
+                WingUi.HitButton(rt, new Rect(0f, 0f, cardWidth, CardHeight), () =>
                 {
-                    TakeControl(member);
-                    GUIUtility.ExitGUI();
-                }
+                    if (card.Bound != null) TakeControl(card.Bound);
+                });
 
-                GUI.Label(new Rect(card.x + 12f, card.y + 8f, 42f, 22f), (i + 1).ToString(), keyStyle);
-                GUI.Label(new Rect(card.x + 60f, card.y + 7f, 80f, 22f), Callsign(member), cardCallsignStyle);
+                card.Key = WingUi.Label(rt, "", new Rect(12f, -8f, 26f, 22f),
+                                        WingUi.Green, 15f, FontStyles.Normal,
+                                        TextAlignmentOptions.Center);
+                WingUi.Outline(rt, new Rect(10f, -6f, 30f, 26f), WingUi.FrameColor);
 
-                string type = aircraft.definition != null
-                    ? (!string.IsNullOrEmpty(aircraft.definition.code)
-                        ? aircraft.definition.code
-                        : aircraft.definition.unitName)
-                    : member.Name;
-                GUI.Label(new Rect(card.x + 142f, card.y + 8f, card.width - 154f, 20f),
-                          UiTheme.Truncate(type, 22), cardTypeStyle);
+                card.Callsign = WingUi.Label(rt, "", new Rect(50f, -7f, 90f, 22f),
+                                             WingMarkers.MemberColor, 15f, FontStyles.Normal,
+                                             TextAlignmentOptions.Left);
+                card.Type = WingUi.Label(rt, "", new Rect(144f, -8f, cardWidth - 156f, 20f),
+                                         WingUi.Friendly, 13f, FontStyles.Normal,
+                                         TextAlignmentOptions.Right);
+                card.Meta = WingUi.Label(rt, "", new Rect(50f, -34f, cardWidth - 62f, 18f),
+                                         WingUi.Dim, 10f, FontStyles.Normal,
+                                         TextAlignmentOptions.Left);
 
-                int fuel = Mathf.RoundToInt(member.Fuel * 100f);
-                float range = Mathf.Sqrt(FastMath.SquareDistance(aircraft.GlobalPosition(), lossPosition));
-                string rangeText = range >= 1000f
-                    ? (range / 1000f).ToString("F1") + " KM"
-                    : Mathf.RoundToInt(range) + " M";
-                GUI.Label(new Rect(card.x + 60f, card.y + 34f, card.width - 72f, 18f),
-                          "FUEL " + fuel + "%     STORES " + member.Ammo + "     RANGE " + rangeText,
-                          cardMetaStyle);
+                card.FuelTrack = WingUi.Rule(rt, new Rect(50f, -58f, cardWidth - 62f, 2f),
+                                             WingUi.Grey.WithAlpha(0.35f));
+                card.FuelFill = WingUi.Rule(rt, new Rect(50f, -58f, cardWidth - 62f, 2f),
+                                            WingUi.Friendly);
 
-                Rect fuelBar = new Rect(card.x + 60f, card.y + 56f, card.width - 72f, 3f);
-                GUI.DrawTexture(fuelBar, barBackgroundTexture);
-                fuelBar.width *= Mathf.Clamp01(member.Fuel);
-                GUI.DrawTexture(fuelBar,
-                    member.Fuel <= Plugin.Config2.BingoFuel.Value ? barWarningTexture : barReadyTexture);
-            }
-
-            float footerY = top + Mathf.CeilToInt(candidates.Count / 2f) * 82f + 6f;
-            GUI.Label(new Rect(24f, footerY, width - 260f, 28f),
-                      "[1–8] SELECT AIRCRAFT", footerStyle);
-
-            string decline = MissionHelper.CanRespawn ? "[R]  NORMAL RESPAWN" : "[R]  ACCEPT DEFEAT";
-            if (GUI.Button(new Rect(width - 226f, footerY - 3f, 202f, 30f), decline,
-                           secondaryButtonStyle))
-            {
-                ContinueWithoutTakeover("Returning to aircraft selection");
-                GUIUtility.ExitGUI();
+                go.SetActive(false);
+                cards.Add(card);
             }
         }
 
-        private static List<WingMember> CurrentCandidates()
+        /// <summary>
+        /// The keyboard hint and the decline button. Both are repositioned by
+        /// <see cref="Refresh"/>, which is the only place that knows how many rows of cards
+        /// the footer has to clear.
+        /// </summary>
+        private static void BuildFooter()
         {
-            var result = new List<WingMember>();
-            if (wing == null) return result;
+            footerHint = WingUi.Label(content, "[1-8]  SELECT AIRCRAFT",
+                                      new Rect(Pad, 0f, PanelWidth - Pad * 2f - 220f, 20f),
+                                      WingUi.Dim, 10f, FontStyles.Normal,
+                                      TextAlignmentOptions.Left).rectTransform;
+
+            declineButton = WingUi.Button(content, "",
+                                          new Rect(PanelWidth - Pad - 210f, 0f, 210f, WingUi.RowHeight),
+                                          () => ContinueWithoutTakeover("Returning to aircraft selection"));
+        }
+
+        private static RectTransform footerHint;
+
+        private static void Refresh()
+        {
+            if (canvasRoot == null) return;
+
+            CurrentCandidates();
+            int rows = Mathf.Max(1, Mathf.CeilToInt(candidates.Count / 2f));
+            float height = CardsTop + rows * CardStride + 46f;
+
+            panel.sizeDelta = new Vector2(PanelWidth, height);
+
+            if (candidates.Count != lastCardCount)
+            {
+                lastCardCount = candidates.Count;
+                float footerY = -(CardsTop + rows * CardStride + 4f);
+                if (footerHint != null)
+                    footerHint.anchoredPosition = new Vector2(Pad, footerY - 5f);
+                if (declineButton != null)
+                {
+                    ((RectTransform)declineButton.transform).anchoredPosition =
+                        new Vector2(PanelWidth - Pad - 210f, footerY);
+                }
+            }
+
+            declineButton?.SetText(MissionHelper.CanRespawn
+                ? "[R]  NORMAL RESPAWN"
+                : "[R]  ACCEPT DEFEAT");
+
+            for (int i = 0; i < cards.Count; i++)
+            {
+                Card card = cards[i];
+                if (i >= candidates.Count)
+                {
+                    card.Bound = null;
+                    if (card.Root.activeSelf) card.Root.SetActive(false);
+                    continue;
+                }
+
+                WingMember member = candidates[i];
+                card.Bound = member;
+                if (!card.Root.activeSelf) card.Root.SetActive(true);
+
+                Aircraft aircraft = member.Aircraft;
+                card.Key.text = (i + 1).ToString();
+                card.Callsign.text = Callsign(member);
+                card.Type.text = UiTheme.Truncate(TypeName(member), 22);
+
+                int fuel = Mathf.RoundToInt(member.Fuel * 100f);
+                float range = aircraft != null
+                    ? Mathf.Sqrt(FastMath.SquareDistance(aircraft.GlobalPosition(), lossPosition))
+                    : 0f;
+                card.Meta.text = "FUEL " + fuel + "%     STORES " + member.Ammo +
+                                 "     RANGE " + UnitConverter.DistanceReading(range);
+
+                bool low = member.Fuel <= Plugin.Config2.BingoFuel.Value;
+                RectTransform fill = card.FuelFill.rectTransform;
+                float trackWidth = card.FuelTrack.rectTransform.sizeDelta.x;
+                fill.sizeDelta = new Vector2(trackWidth * Mathf.Clamp01(member.Fuel),
+                                             fill.sizeDelta.y);
+                card.FuelFill.color = low ? WingUi.Warning : WingUi.Friendly;
+            }
+        }
+
+        private static string TypeName(WingMember member)
+        {
+            Aircraft aircraft = member.Aircraft;
+            if (aircraft == null || aircraft.definition == null) return member.Name;
+
+            return !string.IsNullOrEmpty(aircraft.definition.code)
+                ? aircraft.definition.code
+                : aircraft.definition.unitName;
+        }
+
+        private static void Teardown()
+        {
+            if (canvasRoot != null) UnityEngine.Object.Destroy(canvasRoot);
+            canvasRoot = null;
+            panel = null;
+            content = null;
+            declineButton = null;
+            footerHint = null;
+            cards.Clear();
+            candidates.Clear();
+            lastCardCount = -1;
+            nextRefresh = 0f;
+        }
+
+        // ----------------------------------------------------------------------- offers
+
+        private static void CurrentCandidates()
+        {
+            candidates.Clear();
+            if (wing == null) return;
 
             foreach (WingMember member in wing.Members)
             {
-                if (IsCandidate(member)) result.Add(member);
+                if (IsCandidate(member)) candidates.Add(member);
             }
-            return result;
         }
 
         private static void TakeControl(WingMember member)
@@ -289,11 +449,7 @@ namespace WingCommand
                 NetworkManagerNuclearOption.i.ServerObjectManager.Destroy(
                     target.Identity, !target.Identity.IsSceneObject);
 
-                active = false;
-                defeatSuppressed = false;
-                lostLeader = null;
-                lossPosition = default(GlobalPosition);
-                wing = null;
+                Close();
                 WingCommandManager.Instance?.Toast("Replacement aircraft ready: " + replacement.unitName);
                 Plugin.Logger.LogInfo("[Takeover] spawned player copy of " + target.unitName +
                                       " and removed the AI source");
@@ -306,15 +462,11 @@ namespace WingCommand
                 // SpawnAircraft commits player ownership during the spawn callback. If a
                 // later cleanup step fails, keep that valid player aircraft and only ensure
                 // the old AI source can no longer receive wing orders.
-                if (replacement != null &&
+                if (wing != null && replacement != null &&
                     GameManager.GetLocalAircraft(out Aircraft current) && current == replacement)
                 {
                     wing.ReplaceWithLeader(member, replacement);
-                    active = false;
-                    defeatSuppressed = false;
-                    lostLeader = null;
-                    lossPosition = default(GlobalPosition);
-                    wing = null;
+                    Close();
                 }
             }
         }
@@ -375,11 +527,7 @@ namespace WingCommand
             WingRegistry oldWing = wing;
             bool finishDefeat = defeatSuppressed && GameManager.gameResolution == GameResolution.Ongoing;
 
-            active = false;
-            defeatSuppressed = false;
-            lostLeader = null;
-            lossPosition = default(GlobalPosition);
-            wing = null;
+            Close();
 
             oldWing?.DisbandAll(reason);
             WingCommandManager.Instance?.Toast(reason);
@@ -388,20 +536,18 @@ namespace WingCommand
             if (finishDefeat) GameManager.FinishGame(GameResolution.Defeat);
         }
 
-        public static void Reset()
+        /// <summary>Dismiss the prompt and drop everything it was holding.</summary>
+        private static void Close()
         {
             active = false;
             defeatSuppressed = false;
             lostLeader = null;
             lossPosition = default(GlobalPosition);
             wing = null;
+            Teardown();
         }
 
-        private static void CentreWindow()
-        {
-            window.x = Mathf.Max(10f, (Screen.width - window.width) * 0.5f);
-            window.y = Mathf.Max(10f, (Screen.height - window.height) * 0.35f);
-        }
+        public static void Reset() => Close();
 
         private static string Callsign(WingMember member)
         {
@@ -412,106 +558,6 @@ namespace WingCommand
                 case 3: return "FOUR";
                 default: return "WING " + (member.Slot + 1);
             }
-        }
-
-        private static void EnsureStyles()
-        {
-            if (stylesReady) return;
-            stylesReady = true;
-
-            Color green = UiTheme.Green;
-            Color friendly = UiTheme.Friendly;
-            Color alert = UiTheme.Alert;
-
-            panelStyle = new GUIStyle(GUI.skin.box);
-            panelStyle.normal.background = Solid(new Color(0.105f, 0.135f, 0.165f, 0.96f));
-            panelStyle.border = new RectOffset(1, 1, 1, 1);
-
-            titleStyle = new GUIStyle(GUI.skin.label)
-            {
-                fontSize = 12,
-                fontStyle = FontStyle.Normal,
-                alignment = TextAnchor.MiddleLeft,
-            };
-            titleStyle.normal.textColor = new Color(0.78f, 1f, 0.80f, 1f);
-
-            alertStyle = new GUIStyle(GUI.skin.label)
-            {
-                fontSize = 20,
-                fontStyle = FontStyle.Normal,
-                alignment = TextAnchor.MiddleLeft,
-            };
-            alertStyle.normal.textColor = alert.WithAlpha(0.90f);
-
-            subtitleStyle = new GUIStyle(GUI.skin.label)
-            {
-                fontSize = 12,
-                alignment = TextAnchor.MiddleLeft,
-            };
-            subtitleStyle.normal.textColor = new Color(0.84f, 0.90f, 0.86f, 1f);
-
-            cardStyle = new GUIStyle(GUI.skin.button)
-            {
-                alignment = TextAnchor.MiddleLeft,
-                padding = new RectOffset(0, 0, 0, 0),
-            };
-            cardStyle.normal.background = Solid(new Color(0.18f, 0.22f, 0.26f, 0.96f));
-            cardStyle.hover.background = Solid(new Color(0.24f, 0.34f, 0.27f, 0.98f));
-            cardStyle.active.background = Solid(new Color(0.30f, 0.43f, 0.32f, 1f));
-
-            cardCallsignStyle = new GUIStyle(titleStyle) { fontSize = 14 };
-            cardCallsignStyle.normal.textColor = new Color(0.76f, 1f, 0.78f, 1f);
-            cardTypeStyle = new GUIStyle(titleStyle)
-            {
-                fontSize = 13,
-                alignment = TextAnchor.MiddleRight,
-            };
-            cardTypeStyle.normal.textColor = Color.white;
-            cardMetaStyle = new GUIStyle(subtitleStyle) { fontSize = 10 };
-            cardMetaStyle.normal.textColor = new Color(0.73f, 0.90f, 0.76f, 0.88f);
-
-            keyStyle = new GUIStyle(GUI.skin.box)
-            {
-                fontSize = 13,
-                fontStyle = FontStyle.Bold,
-                alignment = TextAnchor.MiddleCenter,
-            };
-            keyStyle.normal.background = Solid(new Color(0.30f, 0.34f, 0.36f, 0.98f));
-            keyStyle.normal.textColor = new Color(0.80f, 1f, 0.82f, 1f);
-
-            footerStyle = new GUIStyle(titleStyle) { fontSize = 10 };
-            footerStyle.normal.textColor = new Color(0.72f, 0.82f, 0.75f, 0.80f);
-
-            secondaryButtonStyle = new GUIStyle(GUI.skin.button)
-            {
-                fontSize = 10,
-                fontStyle = FontStyle.Bold,
-                alignment = TextAnchor.MiddleCenter,
-            };
-            secondaryButtonStyle.normal.background = Solid(new Color(0.34f, 0.36f, 0.37f, 0.96f));
-            secondaryButtonStyle.hover.background = Solid(new Color(0.29f, 0.48f, 0.32f, 0.98f));
-            secondaryButtonStyle.normal.textColor = new Color(0.93f, 0.96f, 0.93f);
-            secondaryButtonStyle.hover.textColor = Color.white;
-
-            accentTexture = Solid(green.WithAlpha(0.58f));
-            headerTexture = Solid(new Color(0.16f, 0.20f, 0.24f, 0.96f));
-            borderTexture = Solid(new Color(0.48f, 0.52f, 0.53f, 0.76f));
-            barBackgroundTexture = Solid(new Color(0.24f, 0.28f, 0.28f, 1f));
-            barReadyTexture = Solid(new Color(0.36f, 0.68f, 0.40f, 0.95f));
-            barWarningTexture = Solid(UiTheme.Warning.WithAlpha(0.95f));
-        }
-
-        private static Texture2D Solid(Color color)
-        {
-            var texture = new Texture2D(1, 1, TextureFormat.RGBA32, mipChain: false)
-            {
-                hideFlags = HideFlags.HideAndDontSave,
-                filterMode = FilterMode.Point,
-                wrapMode = TextureWrapMode.Clamp,
-            };
-            texture.SetPixel(0, 0, color);
-            texture.Apply(updateMipmaps: false, makeNoLongerReadable: true);
-            return texture;
         }
     }
 

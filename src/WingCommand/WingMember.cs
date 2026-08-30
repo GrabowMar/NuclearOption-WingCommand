@@ -243,6 +243,13 @@ namespace WingCommand
 
         public int WaypointCount => waypointQueue.Count;
 
+        /// <summary>
+        /// The route this member is flying, current leg first. Read by the tactical map to
+        /// draw the queue; the list is the live queue, so callers must not hold on to it
+        /// across a <see cref="CompleteWaypoint"/>.
+        /// </summary>
+        public IReadOnlyList<GlobalPosition> Route => waypointQueue;
+
         /// <summary>Advance a route, then resolve the wing's ROE at its final endpoint.</summary>
         internal void CompleteWaypoint()
         {

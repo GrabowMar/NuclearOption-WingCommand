@@ -342,42 +342,6 @@ namespace WingCommand
             return null;
         }
 
-        /// <summary>
-        /// Recruit the nearest eligible friendly AI aircraft. Returns null when there is
-        /// nothing to recruit (out of range, wing full, or no AI aircraft on our side).
-        /// </summary>
-        public WingMember RecruitNearest()
-        {
-            Aircraft best = FindNearestRecruitCandidate();
-            return best == null ? null : Add(best);
-        }
-
-        public Aircraft FindNearestRecruitCandidate()
-        {
-            if (Leader == null) return null;
-            if (members.Count >= Plugin.Config2.MaxWingSize.Value) return null;
-
-            float bestSq = float.MaxValue;
-            Aircraft best = null;
-
-            float range = Plugin.Config2.RecruitRange.Value;
-            float rangeSq = range * range;
-
-            foreach (Aircraft candidate in UnitRegistry.allAircraft)
-            {
-                if (!IsEligible(candidate)) continue;
-
-                float sq = FastMath.SquareDistance(candidate.GlobalPosition(), Leader.GlobalPosition());
-                if (sq < bestSq && sq <= rangeSq)
-                {
-                    bestSq = sq;
-                    best = candidate;
-                }
-            }
-
-            return best;
-        }
-
         public bool CanRecruit(Aircraft candidate, out string reason)
         {
             reason = null;
@@ -498,6 +462,22 @@ namespace WingCommand
             member.ReleaseToCombat(reason);
             members.Remove(member);
             WingMarkers.Repaint(released);
+        }
+
+        /// <summary>
+        /// Drop a member whose aircraft is about to stop existing.
+        ///
+        /// Unlike <see cref="Remove"/> this does not hand the pilot back to the combat AI:
+        /// <see cref="WingRecovery"/> calls it for an aircraft that has landed and is being
+        /// destroyed, and switching a parked pilot into a combat state on its way out would
+        /// only put it briefly back in the air.
+        /// </summary>
+        public void Recover(WingMember member)
+        {
+            if (member == null || !members.Remove(member)) return;
+
+            TacticalCoordinator.Release(member.Aircraft);
+            WingMarkers.Repaint(member.Aircraft);
         }
 
         public void DisbandAll(string reason)

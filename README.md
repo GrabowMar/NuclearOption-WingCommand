@@ -34,8 +34,8 @@ player reserves without turning Nuclear Option into an RTS.
   or repeatedly concentrating every hostile aircraft on the player.
 - Rules of engagement separate where a wingman flies from what it is allowed to shoot.
 - Reassign active AI for a confirmed allocation fee or requisition compatible faction stock.
-- Optionally extend Nuclear Option's native per-type reserve so replacement AI leaves stock
-  available for the player after a loss.
+- Hold up to three concrete airframes for the wing; recovered requisitions return to that
+  same reserve without being charged twice.
 - High-contrast wing and target symbology stays consistent between the HUD and map.
 
 ## Installation
@@ -54,7 +54,7 @@ NOMM handles BepInEx and future updates.
 3. Copy it to:
 
    ```text
-   Nuclear Option/BepInEx/plugins/WingCommand.dll
+   Nuclear Option/BepInEx/plugins/WingCommand/WingCommand.dll
    ```
 
 4. Launch the game and check `BepInEx/LogOutput.log` for:
@@ -65,7 +65,8 @@ NOMM handles BepInEx and future updates.
    ```
 
 The optional `WingCommand-0.9.0.zip` mirrors the game directory and can instead be
-extracted at the Nuclear Option root. Do not install both copies.
+extracted at the Nuclear Option root. Keep only this organized plugin path; a loose
+`BepInEx/plugins/WingCommand.dll` copy can make BepInEx load the wrong build.
 
 Settings are generated at:
 
@@ -133,8 +134,8 @@ The **WMC** page has two focused tabs:
 
 - **Tactical:** paged roster, independent command selection, ROE, six core formations,
   scoped orders, capability-gated Cargo/Land controls, and map-order status.
-- **Supply:** confirmed active-AI assignment, native reserve holdback, faction catalogue,
-  transparent compounded pricing, and deliberate base requisition.
+- **Supply:** funds, wing size and squadron capacity at a glance; the faction catalogue at
+  flat list prices; confirmed active-AI assignment; and a concrete three-airframe reserve.
 
 ### Tactical map
 
@@ -165,11 +166,17 @@ to formation; Free wingmen hand off to Engage and may resume autonomous combat.
 | **Hold Here** | Hold a combat air patrol around the selected point while continuing to apply ROE |
 | **Deliver Cargo** | Use the game's supply behaviour with compatible transport helicopters |
 | **Land Here** | Set compatible helicopters down near the order point |
-| **Return To Base** | Hand the aircraft to the stock landing state |
+| **Return To Base** | Fly the stock landing pattern home, then hand the airframe back to faction stock |
 | **Formation dial** | Choose one of the six core formation geometries from the radial Tasking menu |
 
 Orders are persistent. A temporary defensive reaction, fuel state, or Engage leash recall
 does not silently erase the task the player selected.
+
+**Return To Base completes.** Once the wingman is down and shut down at a friendly airbase,
+its airframe leaves the world and enters the three-slot wing reserve. A purchased airframe
+stays owned there and can be launched again without paying twice; an assigned mission
+airframe becomes a held reserve slot. Host or single-player only; set
+`Engagement/RtbReturnsToReserve` to `false` to leave recovered aircraft parked instead.
 
 ## Rules of engagement
 
@@ -248,18 +255,43 @@ The WMC and compact roster show `DEFENSIVE` / `DEF` during the interrupt.
 
 The WMC Supply tab uses Nuclear Option's existing economy rather than creating a separate one:
 
-- Reassigning an active AI costs 25% of its compounded next-slot price by default; releasing
-  and reassigning the same persistent aircraft does not charge twice.
-- Price comes from the aircraft definition and is paid from player allocation.
-- Declared aircraft consume the faction's mission supply.
-- Rank, mission restrictions, faction aircraft limits, and compatibility are respected.
-- Each existing wingman compounds the next aircraft's price.
-- Standard requisition uses **base delivery** and requires the aircraft to fly from an airbase.
-- Undeclared-aircraft stock and fast-delivery tuning remain advanced compatibility options,
-  disabled or absent from the normal WMC workflow.
-- The optional additional reserve extends the mission's native reserve by 0–2 aircraft
-  **per stocked type**; it does not create supply and only stops automatic AI replacement
-  from consuming the protected tail.
+- **One aircraft, one price.** An airframe costs its list value, the same number the player's
+  own aircraft menu prices from. Nothing compounds with wing size.
+- Reassigning an active AI costs a flat 25% of that list value by default; releasing and
+  reassigning the same persistent aircraft does not charge twice.
+- Price is paid from player allocation; declared aircraft consume the faction's mission supply.
+- Rank, mission restrictions, and fixed-wing/rotary compatibility are respected.
+- Requisitioned aircraft launch from a friendly airbase and fly to the wing under their own
+  power. Where a hangar on the field stocks that airframe, the game's own airbase spawn is
+  used: the aircraft appears in the hangar, waits out any door sequence, taxis and takes off
+  exactly as the faction's own aircraft do, and joins the wing once it is airborne. Airframes
+  no hangar stocks are delivered into the circuit overhead instead.
+- Undeclared-aircraft stock remains an advanced compatibility option, disabled by default.
+- The WMC **Wing Reserve** holds up to three specific airframes across all types. `HOLD`
+  moves one selected faction airframe out of AI-accessible stock; `RELEASE` returns it.
+  The reserve does not create supply and does not multiply by aircraft type.
+- A requisition that has already been paid for is marked owned. When it completes Return To
+  Base, that airframe returns to the same reserve and can be launched again without another
+  purchase. Recovered aircraft that were only active assignments return as ordinary held
+  reserve and are charged normally when requisitioned again.
+
+### Squadron capacity
+
+Missions cap how many AI aircraft a faction may have airborne, and that cap shrinks for each
+friendly player — single-player missions routinely leave a limit of zero. The Supply tab shows
+it permanently as `SQUADRON active / limit`, so a shop that cannot sell you anything says why
+instead of failing on a toast that has already gone.
+
+**OVER LIMIT** grants permission to requisition past that cap at **3× list price**, needs
+**rank 3**, and allows at most **3 over-limit airframes in the air at once**. It is permission
+rather than a mode: while the squadron has room it changes nothing, and the surcharge only
+applies to a purchase that actually exceeds the limit.
+
+The allowance counts *your* over-limit purchases that are still flying, not how far the
+faction as a whole exceeds its cap — missions script in AI regardless of the limit, and
+charging you for that would lock the shop on exactly the missions this exists to rescue. It
+frees up as those aircraft are lost or recovered. The three numbers are
+`Shop/ExceedSquadronLimitCost`, `ExceedSquadronLimitRank` and `ExceedSquadronLimitAllowance`.
 
 Every assignment previews its fee. Credits and supply move only after recruitment or spawn
 succeeds.
@@ -270,6 +302,10 @@ succeeds.
 - Active wing targets use amber markers.
 - Selected members brighten without losing aircraft type or heading information.
 - The compact roster shows order/state and live slot error, and hides while the map is open.
+- On the maximised map, a line runs from every tasked wingman to the point it is flying to.
+  A Shift-queued route is drawn as a chain, with the leg being flown at full strength, the
+  queue behind it dimmed, and a dot at each pending point. An attack draws to its target in
+  the same amber the target marker uses.
 
 Slot error is useful when tuning formation flight:
 
@@ -294,13 +330,17 @@ configuration files.
 | Engagement | `DefaultRoe` | `Hold` | Initial rules of engagement |
 | Engagement | `AutoReturnOnEmpty` | `true` | Automatic RTB on Winchester or bingo |
 | Engagement | `BingoFuel` | `0.15` | Automatic return fuel fraction |
+| Engagement | `RtbReturnsToReserve` | `true` | Recovered wing airframes return to wing reserve |
 | Engagement | `TakeoverOnDeath` | `true` | Offer a surviving wing aircraft after pilot loss |
-| Shop | `RecruitmentCostPercent` | `0.25` | Active-AI reassignment fee coefficient |
-| Shop | `AdditionalWingReservePerType` | `0` | Additive native AI holdback per stocked type |
+| Shop | `RecruitmentCostPercent` | `0.25` | Active-AI reassignment fee, as a fraction of list value |
+| Shop | `ExceedSquadronLimitCost` | `3` | Price multiplier past the mission's AI aircraft limit |
+| Shop | `ExceedSquadronLimitRank` | `3` | Rank required to exceed that limit |
+| Shop | `ExceedSquadronLimitAllowance` | `3` | Over-limit airframes you may have flying at once |
 | Comms | `RadioChatter` | `true` | Wing order and state reports |
-| UI | `ShowWingHud` | `true` | Compact in-flight roster |
+| UI | `ShowWingHud` | `true` | Compact roster docked beside the tactical map |
 
-Global AI `SkillScale`/`BraveryScale` and player-specific target protection are retired and
+Global AI `SkillScale`/`BraveryScale`, player-specific target protection, `WingPriceGrowth`,
+`RecruitRange`, `AdditionalWingReservePerType`, and the fast-delivery keys are retired and
 ignored, including when present in an older config.
 
 ## Troubleshooting

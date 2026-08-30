@@ -206,10 +206,17 @@ namespace WingCommand
             }
         }
 
+        /// <param name="leaderTurnRate">
+        /// The leader's filtered heading rate in rad/s, positive to the right, supplied by
+        /// <see cref="FormationFlyState"/>. It is not read from the rigidbody here: the
+        /// world-y component of the angular velocity picks up roll rate at any nose-up
+        /// attitude, and that leak was the formation's left-right sway.
+        /// </param>
         public static void Fly(Aircraft aircraft, Aircraft leader, ControlInputs controls,
                                int slot, GlobalPosition slotPos, Vector3 toSlot,
                                float distance, float spacing, Rejoin rejoin, Vector3 smoothedLeaderDir,
-                               bool report, FormationShape shape, float lateralScale)
+                               float leaderTurnRate, bool report, FormationShape shape,
+                               float lateralScale)
         {
             AircraftParameters p = aircraft.GetAircraftParameters();
             float leaderSpeed = Mathf.Max(leader.speed, 1f);
@@ -227,11 +234,12 @@ namespace WingCommand
 
             ThrottleState throttle = Throttle(aircraft, leader, controls, p, slot, toSlot, distance, capture, spacing,
                                               leaderSpeed, drift, aggression, damping, rejoin, outOfPosition,
-                                              shape, lateralScale);
+                                              shape, lateralScale, leaderTurnRate);
 
             float commandAngle = Steer(aircraft, leader, slotPos, toSlot, distance,
                                        leaderVel, drift, aggression, damping, spacing,
-                                       outOfPosition, smoothedLeaderDir, throttle, report);
+                                       outOfPosition, smoothedLeaderDir, leaderTurnRate,
+                                       throttle, report);
 
             MatchLeaderBank(aircraft, leader, controls, outOfPosition, commandAngle);
         }
@@ -244,20 +252,21 @@ namespace WingCommand
                                                float leaderSpeed, Vector3 drift,
                                                float aggression, float damping, Rejoin rejoin,
                                                float outOfPosition, FormationShape shape,
-                                               float lateralScale)
+                                               float lateralScale, float leaderTurnRate)
         {
             // --- Turn compensation: fly concentric arcs, not a swinging offset. ---
-            // When the leader turns at yaw rate w, every slot orbits the same centre, so a
-            // wingman at signed lateral offset d must fly at v_leader + w*d — the outside
+            // When the leader turns at heading rate w, every slot orbits the same centre, so
+            // a wingman at signed lateral offset d must fly at v_leader + w*d — the outside
             // one covers more ground, the inside one less. Without this the slot sweeps
             // around the leader and wingmen get whipped through every turn.
-            float yawRate = leader.rb != null
-                ? Vector3.Dot(leader.rb.angularVelocity, Vector3.up)
-                : 0f;
+            //
+            // w is the caller's filtered heading rate. Reading it off the rigidbody meant a
+            // rolling leader commanded its wingmen tens of m/s faster and slower by turns,
+            // for a turn that was not happening.
             float lateral = FormationSolver.SlotLateral(
                 slot, shape, spacing, lateralScale);
             float turnCompensation = Mathf.Clamp(
-                yawRate * lateral, -p.maxSpeed * 0.25f, p.maxSpeed * 0.25f);
+                leaderTurnRate * lateral, -p.maxSpeed * 0.25f, p.maxSpeed * 0.25f);
 
             // --- Arrival: deceleration-limited, rate-damped closure. ---
             // Two independent demands pull on the speed: the position error (gap ahead
@@ -341,7 +350,7 @@ namespace WingCommand
                                    Vector3 toSlot, float distance, Vector3 leaderVel,
                                    Vector3 drift, float aggression, float damping,
                                    float spacing, float outOfPosition, Vector3 smoothedLeaderDir,
-                                   ThrottleState throttle, bool report)
+                                   float leaderTurnRate, ThrottleState throttle, bool report)
         {
             // AutoAim is a pursuit controller: it rotates the aircraft's velocity toward the
             // destination and banks to chase it, so the distance to that destination sets the
@@ -365,15 +374,20 @@ namespace WingCommand
                 ? smoothedLeaderDir
                 : (leaderVel.sqrMagnitude > 1f ? leaderVel.normalized : leader.transform.forward);
 
-            // Feed the leader's yaw rate forward so the aim point rotates with a manoeuvre
-            // instead of trailing the (smoothed) heading. Without this the formation turns
-            // half a second after the player does, which is the difference between "in line
-            // with me" and "chasing me".
-            float yawRate = leader.rb != null ? leader.rb.angularVelocity.y : 0f;
-            if (yawRate != 0f)
+            // Feed the leader's heading rate forward so the aim point rotates with a
+            // manoeuvre instead of trailing the (smoothed) heading. Without this the
+            // formation turns half a second after the player does, which is the difference
+            // between "in line with me" and "chasing me".
+            //
+            // The rate is the caller's filtered one, and it has to be: this rotation is
+            // applied over a look-ahead well past a kilometre, so the roll-rate leak in the
+            // rigidbody's world-y angular velocity used to translate a few degrees of roll
+            // into a hundred metres of lateral aim swing — undoing, in one line, all of the
+            // smoothing the line above it exists to apply.
+            if (leaderTurnRate != 0f)
             {
                 baseDir = Quaternion.AngleAxis(
-                    yawRate * TurnLeadSeconds * Mathf.Rad2Deg, Vector3.up) * baseDir;
+                    leaderTurnRate * TurnLeadSeconds * Mathf.Rad2Deg, Vector3.up) * baseDir;
                 baseDir.Normalize();
             }
 
@@ -599,9 +613,26 @@ namespace WingCommand
                 ? Vector3.Dot(leader.rb.angularVelocity, leader.transform.forward)
                 : 0f;
 
-            float trim = error * BankAngleGain
-                       - myRollRate * BankRateGain
-                       + leaderRollRate * BankFeedForward;
+            // Bank angle and roll input run in *opposite* senses, and reconciling them is
+            // the fix for wingmen rocking beside a level leader.
+            //
+            // BankOf measures the right wing against the horizon about the forward axis, so
+            // a right bank reads negative, and a positive roll rate about that axis lifts
+            // the right wing. The autopilot's roll input goes the other way: it feeds
+            // GetAngleOnAxis(up, desiredUp, -velocity) into the roll PID, and that is
+            // negative when a right-banked aircraft is told to level — so positive input
+            // rolls right. Every term therefore has to be stated in the input's sense.
+            //
+            // Written in the measurement's sense, as this was, all three pushed the wrong
+            // way: the proportional term rolled *away* from the leader's bank and the rate
+            // term was negative damping, which is a limit cycle by construction. The flight
+            // log shows precisely that — a wingman sitting within ten metres of its slot
+            // behind a dead-level leader, rocking between 28 degrees of bank one way and 23
+            // the other at roll rates past 45 degrees a second, with a commanded course
+            // change of under one degree the whole time.
+            float trim = -error * BankAngleGain
+                       + myRollRate * BankRateGain
+                       - leaderRollRate * BankFeedForward;
             trim = Mathf.Clamp(trim, -1f, 1f);
 
             // Add a bounded trim rather than blending towards a command of our own. The

@@ -9,14 +9,19 @@ namespace WingCommand
     {
         private static readonly HashSet<PersistentID> paidAircraft = new HashSet<PersistentID>();
 
-        public static float PriceOf(WingRegistry wing, Aircraft aircraft, int additionalMembers = 0)
+        /// <summary>
+        /// A flat fraction of the airframe's list value, once per aircraft.
+        ///
+        /// It used to compound with wing size on top of that fraction, so the fee for the
+        /// same aircraft depended on how many wingmen you happened to have at the time and
+        /// no displayed number could be trusted twice.
+        /// </summary>
+        public static float PriceOf(Aircraft aircraft)
         {
             if (aircraft == null || aircraft.definition == null) return 0f;
             if (paidAircraft.Contains(aircraft.persistentID)) return 0f;
 
-            int size = (wing?.Count ?? 0) + Mathf.Max(0, additionalMembers);
-            return aircraft.definition.value * Plugin.Config2.RecruitmentCostRate.Value *
-                   Mathf.Pow(Plugin.Config2.WingPriceGrowth.Value, size);
+            return aircraft.definition.value * Plugin.Config2.RecruitmentCostRate.Value;
         }
 
         public static bool TryRecruit(WingRegistry wing, Aircraft aircraft,
@@ -38,7 +43,7 @@ namespace WingCommand
                 return false;
             }
 
-            float price = PriceOf(wing, aircraft);
+            float price = PriceOf(aircraft);
             if (player.Allocation < price)
             {
                 reason = "Assignment costs " + Mathf.RoundToInt(price) + ", have " +
@@ -59,21 +64,6 @@ namespace WingCommand
             Plugin.Logger.LogInfo(
                 $"[Recruit] assigned {aircraft.unitName} for {price:F0} allocation");
             return true;
-        }
-
-        public static bool TryRecruitNearest(WingRegistry wing,
-                                             out WingMember member, out string reason)
-        {
-            member = null;
-            Aircraft candidate = wing?.FindNearestRecruitCandidate();
-            if (candidate == null)
-            {
-                reason = wing != null && wing.Count >= Plugin.Config2.MaxWingSize.Value
-                    ? "Wing is full"
-                    : "No eligible friendly AI aircraft in range";
-                return false;
-            }
-            return TryRecruit(wing, candidate, out member, out reason);
         }
 
         public static void Reset() => paidAircraft.Clear();

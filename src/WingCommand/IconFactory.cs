@@ -208,10 +208,20 @@ namespace WingCommand
             Delta(c, 48, 24, 12, 90f);
         }
 
-        /// <summary>Small V/Vic flight marker used for a temporary map move.</summary>
+        /// <summary>
+        /// Move: a V pointing at the commanded point.
+        ///
+        /// This used to borrow the Vic formation glyph, which does not read as a V at all —
+        /// the solver puts the third wingman out to one side, so the icon came out as four
+        /// triangles in a lopsided cluster. A plain chevron over the point is what the marker
+        /// is for: it says "go here", not "fly this shape".
+        /// </summary>
         private static void Move(Canvas c)
         {
-            ShapeGlyph(c, FormationShape.Vic);
+            const float t = 8f;
+            c.Segment(24, 74, 48, 28, t);
+            c.Segment(48, 28, 72, 74, t);
+            c.Disc(48, 26, 5f);
         }
 
         /// <summary>Tasking: a checklist.</summary>

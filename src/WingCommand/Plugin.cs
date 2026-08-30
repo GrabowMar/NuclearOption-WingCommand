@@ -198,6 +198,7 @@ namespace WingCommand
         public readonly ConfigEntry<int> MaxWingmenPerTarget;
         public readonly ConfigEntry<bool> AutoReturnOnEmpty;
         public readonly ConfigEntry<float> BingoFuel;
+        public readonly ConfigEntry<bool> RtbReturnsToReserve;
         public readonly ConfigEntry<bool> TakeoverOnDeath;
 
         // --- Station keeping (safety) ---
@@ -212,6 +213,9 @@ namespace WingCommand
         public readonly ConfigEntry<bool> ShopEnabled;
         public readonly ConfigEntry<float> RecruitmentCostRate;
         public readonly ConfigEntry<int> AdditionalWingReserve;
+        public readonly ConfigEntry<float> ExceedLimitCostMultiplier;
+        public readonly ConfigEntry<int> ExceedLimitRank;
+        public readonly ConfigEntry<int> ExceedLimitAllowance;
         public readonly ConfigEntry<float> WingPriceGrowth;
         public readonly ConfigEntry<float> FastDeliverySurcharge;
         public readonly ConfigEntry<float> FastDeliveryDistance;
@@ -224,7 +228,6 @@ namespace WingCommand
         // --- UI ---
         public readonly ConfigEntry<bool> UseNativeRadial;
         public readonly ConfigEntry<bool> ShowHud;
-        public readonly ConfigEntry<HudCorner> HudCorner;
         public readonly ConfigEntry<bool> MapCommandEnabled;
         public readonly ConfigEntry<bool> UseMfdPanel;
         public readonly ConfigEntry<bool> HighlightWingOnMap;
@@ -262,9 +265,9 @@ namespace WingCommand
                     new AcceptableValueRange<float>(0f, 200f),
                     new ConfigurationManagerAttributes { IsAdvanced = true }));
             RecruitRange = c.Bind("Formation", "RecruitRange", 12000f,
-                new ConfigDescription("Maximum range at which a friendly AI aircraft can be recruited into the wing.",
-                    new AcceptableValueRange<float>(1000f, 60000f),
-                    new ConfigurationManagerAttributes { IsAdvanced = true }));
+                Hidden("Retired compatibility key. Assignment is by map selection, which has " +
+                       "no range limit of its own.",
+                    new AcceptableValueRange<float>(1000f, 60000f)));
             MaxWingSize = c.Bind("Formation", "MaxWingSize", 3,
                 new ConfigDescription("Maximum number of wingmen.",
                     new AcceptableValueRange<int>(1, 8)));
@@ -468,6 +471,11 @@ namespace WingCommand
             BingoFuel = c.Bind("Engagement", "BingoFuel", 0.15f,
                 new ConfigDescription("Fuel fraction at which a wingman calls bingo and heads home.",
                     new AcceptableValueRange<float>(0.05f, 0.5f)));
+            RtbReturnsToReserve = c.Bind("Engagement", "RtbReturnsToReserve", true,
+                "A wingman that completes a Return To Base order hands its airframe back to " +
+                "the faction's stock and leaves the world, instead of parking on the apron " +
+                "and being written off. Host or single-player only. Turn this off for " +
+                "missions that expect recovered aircraft to stay where they landed.");
             TakeoverOnDeath = c.Bind("Engagement", "TakeoverOnDeath", true,
                 "When your pilot dies or ejects, offer control of a surviving aircraft in " +
                 "your wing. Host or single-player only; mission failures unrelated to the " +
@@ -489,32 +497,45 @@ namespace WingCommand
                          "your faction's stock - so a purchase competes with the mission's own AI."));
             RecruitmentCostRate = c.Bind("Shop", "RecruitmentCostPercent", 0.25f,
                 new ConfigDescription(
-                    "Fraction of an airframe's compounded next-slot price charged the first " +
+                    "Fraction of an airframe's list price charged the first " +
                     "time an already-active mission aircraft is assigned to your wing.",
                     new AcceptableValueRange<float>(0f, 1f)));
             AdditionalWingReserve = c.Bind("Shop", "AdditionalWingReservePerType", 0,
-                new ConfigDescription(
-                    "Extra airframes of every stocked type protected from automatic friendly " +
-                    "AI deployment. This adds to the mission and per-player reserve; 0 is recommended.",
+                Hidden(
+                    "Retired compatibility key. The wing reserve now holds three concrete " +
+                    "airframes selected in WMC or returned safely from the wing.",
                     new AcceptableValueRange<int>(0, 2)));
+            ExceedLimitCostMultiplier = c.Bind("Shop", "ExceedSquadronLimitCost", 3f,
+                new ConfigDescription(
+                    "Price multiplier for an airframe requisitioned past the mission's AI " +
+                    "aircraft limit. Missions often leave a limit of zero once the player's " +
+                    "own presence is subtracted, so this is what keeps the shop usable there " +
+                    "without making the cap meaningless.",
+                    new AcceptableValueRange<float>(1f, 10f)));
+            ExceedLimitRank = c.Bind("Shop", "ExceedSquadronLimitRank", 3,
+                new ConfigDescription(
+                    "Player rank required before the squadron limit may be exceeded at all.",
+                    new AcceptableValueRange<int>(0, 10)));
+            ExceedLimitAllowance = c.Bind("Shop", "ExceedSquadronLimitAllowance", 3,
+                new ConfigDescription(
+                    "How many over-limit airframes you may have flying at once. The allowance " +
+                    "frees up as they are lost or recovered, so this caps how far past the " +
+                    "mission's cap the shop can take you rather than how often you may buy.",
+                    new AcceptableValueRange<int>(1, 3)));
+
+            // Retired with the move to flat pricing and base-only delivery. Kept so existing
+            // configuration files still parse; nothing reads them.
             WingPriceGrowth = c.Bind("Shop", "WingPriceGrowth", 1.5f,
-                new ConfigDescription(
-                    "Price multiplier per wingman already in the formation, compounding. At " +
-                    "1.5 a 1000-credit airframe costs 1000, 1500, 2250, 3375 as the wing " +
-                    "fills. Set to 1 for flat pricing.",
-                    new AcceptableValueRange<float>(1f, 3f),
-                    new ConfigurationManagerAttributes { IsAdvanced = true }));
+                Hidden("Retired compatibility key. Airframes are priced at list value; the " +
+                       "price no longer compounds with wing size.",
+                    new AcceptableValueRange<float>(1f, 3f)));
             FastDeliverySurcharge = c.Bind("Shop", "FastDeliverySurcharge", 0.25f,
-                new ConfigDescription(
-                    "Extra fraction of the price for delivery straight to your wing rather " +
-                    "than to the nearest airbase.",
-                    new AcceptableValueRange<float>(0f, 2f),
-                    new ConfigurationManagerAttributes { IsAdvanced = true }));
+                Hidden("Retired compatibility key. Fast delivery has been removed; " +
+                       "requisitioned aircraft always launch from an airbase.",
+                    new AcceptableValueRange<float>(0f, 2f)));
             FastDeliveryDistance = c.Bind("Shop", "FastDeliveryDistance", 2000f,
-                new ConfigDescription(
-                    "How far behind you a fast delivery appears, in metres.",
-                    new AcceptableValueRange<float>(500f, 10000f),
-                    new ConfigurationManagerAttributes { IsAdvanced = true }));
+                Hidden("Retired compatibility key. Fast delivery has been removed.",
+                    new AcceptableValueRange<float>(500f, 10000f)));
 
             IncludeUndeclaredAircraft = c.Bind("Shop", "IncludeUndeclaredAircraft", false,
                 Advanced("Compatibility option: also offer airframes the mission did not stock, " +
@@ -536,9 +557,8 @@ namespace WingCommand
                 Hidden("Development-only WMC actions. Both are cheats and host-only."));
 
             ShowHud = c.Bind("UI", "ShowWingHud", true,
-                "Draw the compact wing status readout in flight while you have wingmen assigned.");
-            HudCorner = c.Bind("UI", "WingHudCorner", WingCommand.HudCorner.MiddleRight,
-                Hidden("Retired compatibility key. The compact roster attaches above the tactical map."));
+                "Draw the compact wing status readout beside the tactical map while you have " +
+                "wingmen assigned.");
             UseMfdPanel = c.Bind("UI", "UseMfdPanel", true,
                 Advanced("Add a WMC screen to the cockpit MFD bezel, alongside BDF/MAP/HUD."));
             HighlightWingOnMap = c.Bind("UI", "HighlightWingOnMap", true,
@@ -560,16 +580,6 @@ namespace WingCommand
             VerboseLogging = c.Bind("Debug", "VerboseLogging", false,
                 Advanced("Log every order and state transition to the BepInEx console."));
         }
-    }
-
-    /// <summary>Screen placement for the in-flight wing readout.</summary>
-    internal enum HudCorner
-    {
-        TopLeft,
-        TopRight,
-        BottomLeft,
-        BottomRight,
-        MiddleRight,
     }
 
     internal enum FormationShape

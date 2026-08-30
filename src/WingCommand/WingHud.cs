@@ -68,8 +68,25 @@ namespace WingCommand
         private const float StatusRowHeight = 30f;
         private const float StatusPanelWidth = 210f;
         private const float StatusMapGap = 0f;
-        private const float StatusBackdropFeather = 10f;
-        private const int StatusBackdropTextureSize = 48;
+        private const float StatusBackdropOutsideFeather = 18f;
+        private const float StatusBackdropInnerFeather = 12f;
+        private const float StatusBackdropSeamOverlap = 18f;
+        private const int StatusBackdropTextureSize = 80;
+
+        // Three type sizes, named and reused everywhere, rather than a different number per
+        // label. The strip previously ran a 14 px callsign against a 9 px state code, a
+        // contrast wider than anything in the game's own symbology, which is a large part of
+        // why it read as a separate overlay rather than as part of the HUD.
+
+        /// <summary>The strip's own heading.</summary>
+        private const float HeaderText = 11f;
+
+        /// <summary>Callsign and range: what the strip is actually read for.</summary>
+        private const float PrimaryText = 13f;
+
+        /// <summary>Order code and other supporting detail.</summary>
+        private const float SecondaryText = 10f;
+
         private static float statusWidth = StatusPanelWidth;
 
         private static RectTransform statusRoot;
@@ -124,6 +141,13 @@ namespace WingCommand
             statusCanvas = null;
             statusFont = null;
             statusRows.Clear();
+            if (statusBackdropSprite != null)
+            {
+                Texture2D texture = statusBackdropSprite.texture;
+                Object.Destroy(statusBackdropSprite);
+                if (texture != null) Object.Destroy(texture);
+                statusBackdropSprite = null;
+            }
             nextStatusRefresh = 0f;
             lastStatusCount = -1;
         }
@@ -143,74 +167,155 @@ namespace WingCommand
             statusRoot.SetParent(map.hudMapAnchor, worldPositionStays: false);
             statusRoot.SetAsLastSibling();
 
-            CreateStatusBackdrop(statusRoot);
+            CreateStatusBackdrop(statusRoot, map);
 
             statusTitle = StatusLabel(statusRoot, "", new Rect(7f, -2f, statusWidth - 14f, 20f),
-                                      12f, UiTheme.Green.WithAlpha(0.90f), TextAlignmentOptions.Left);
+                                      HeaderText, UiTheme.Green.WithAlpha(0.90f),
+                                      TextAlignmentOptions.Left);
             PositionStatusPanel(map);
         }
 
         /// <summary>
         /// The minimized map is vignetted into the cockpit rather than framed by a hard
-        /// rectangle. Reproduce that treatment with a tiny nine-sliced alpha feather:
-        /// its opaque edge begins exactly at the roster bounds while the translucent
-        /// portion extends outside, allowing the map and roster fades to overlap.
+        /// rectangle. Continue that vignette behind the roster with a soft, one-sided alpha
+        /// haze. Unlike a panel sprite, the fade crosses the roster bounds: there is no hard
+        /// top or right silhouette for the eye to read as a second card.
         /// </summary>
-        private static void CreateStatusBackdrop(RectTransform parent)
+        private static void CreateStatusBackdrop(RectTransform parent, DynamicMap map)
         {
-            var go = new GameObject("Backdrop", typeof(RectTransform), typeof(Image));
+            var go = new GameObject("MapHaze", typeof(RectTransform), typeof(Image));
             RectTransform rect = go.GetComponent<RectTransform>();
             rect.SetParent(parent, worldPositionStays: false);
             rect.anchorMin = Vector2.zero;
             rect.anchorMax = Vector2.one;
             rect.pivot = new Vector2(0.5f, 0.5f);
-            rect.offsetMin = new Vector2(-StatusBackdropFeather, -StatusBackdropFeather);
-            rect.offsetMax = new Vector2(StatusBackdropFeather, StatusBackdropFeather);
+            rect.offsetMin = new Vector2(
+                -StatusBackdropSeamOverlap, -StatusBackdropOutsideFeather);
+            rect.offsetMax = new Vector2(
+                StatusBackdropOutsideFeather, StatusBackdropOutsideFeather);
             rect.localScale = Vector3.one;
             rect.SetAsFirstSibling();
 
             Image backdrop = go.GetComponent<Image>();
-            backdrop.sprite = StatusBackdropSprite();
+            backdrop.sprite = StatusBackdropSprite(MinimapFill(map));
             backdrop.type = Image.Type.Sliced;
-            backdrop.color = new Color(0.006f, 0.014f, 0.010f, 0.68f);
+            backdrop.color = Color.white;
             backdrop.raycastTarget = false;
         }
 
-        private static Sprite StatusBackdropSprite()
+        /// <summary>
+        /// Resolve the minimap's real interior colour rather than maintaining a second,
+        /// almost-but-not-quite matching HUD palette. Most map backgrounds are a white mask
+        /// tinted by the Image; others bake the dark fill into their sprite, so combine both.
+        /// </summary>
+        private static Color MinimapFill(DynamicMap map)
+        {
+            var fallback = new Color(0.012f, 0.030f, 0.034f, 0.80f);
+            Image source = map != null ? map.mapBackground : null;
+            if (source == null) return fallback;
+
+            Color fill = source.color;
+            if (source.sprite != null &&
+                TrySampleSpriteCentre(source.sprite, out Color spriteFill))
+            {
+                fill = new Color(
+                    fill.r * spriteFill.r,
+                    fill.g * spriteFill.g,
+                    fill.b * spriteFill.b,
+                    fill.a * spriteFill.a);
+            }
+
+            // An untextured white mask or a custom material does not expose its fill through
+            // the sprite. In that case the measured value is not useful; use the stock-map
+            // fallback observed before its shader instead of drawing a bright HUD cloud.
+            float luminance = fill.r * 0.2126f + fill.g * 0.7152f + fill.b * 0.0722f;
+            return fill.a > 0.05f && luminance < 0.40f ? fill : fallback;
+        }
+
+        /// <summary>Read one centre texel, with a GPU fallback for non-readable atlases.</summary>
+        private static bool TrySampleSpriteCentre(Sprite sprite, out Color color)
+        {
+            color = Color.white;
+            Texture2D source = sprite != null ? sprite.texture : null;
+            if (source == null) return false;
+
+            Rect region;
+            try { region = sprite.textureRect; }
+            catch { return false; }
+
+            float u = (region.x + region.width * 0.5f) / source.width;
+            float v = (region.y + region.height * 0.5f) / source.height;
+            if (source.isReadable)
+            {
+                color = source.GetPixelBilinear(u, v);
+                return true;
+            }
+
+            RenderTexture target = RenderTexture.GetTemporary(
+                1, 1, 0, RenderTextureFormat.ARGB32, RenderTextureReadWrite.Default);
+            RenderTexture previous = RenderTexture.active;
+            Texture2D sample = null;
+            try
+            {
+                // A zero scale maps the entire 1 px target to this atlas coordinate.
+                Graphics.Blit(source, target, Vector2.zero, new Vector2(u, v));
+                RenderTexture.active = target;
+                sample = new Texture2D(1, 1, TextureFormat.RGBA32, mipChain: false);
+                sample.ReadPixels(new Rect(0f, 0f, 1f, 1f), 0, 0, recalculateMipMaps: false);
+                sample.Apply(updateMipmaps: false, makeNoLongerReadable: false);
+                color = sample.GetPixel(0, 0);
+                return true;
+            }
+            catch
+            {
+                return false;
+            }
+            finally
+            {
+                RenderTexture.active = previous;
+                RenderTexture.ReleaseTemporary(target);
+                if (sample != null) Object.Destroy(sample);
+            }
+        }
+
+        private static Sprite StatusBackdropSprite(Color fill)
         {
             if (statusBackdropSprite != null) return statusBackdropSprite;
 
             const int size = StatusBackdropTextureSize;
-            const float margin = StatusBackdropFeather;
-            const float cornerRadius = 5f;
+            const float freeEdgeFade =
+                StatusBackdropOutsideFeather + StatusBackdropInnerFeather;
             var texture = new Texture2D(size, size, TextureFormat.RGBA32, mipChain: false)
             {
-                name = "WingCommand_StatusFeather",
+                name = "WingCommand_MapDock",
                 filterMode = FilterMode.Bilinear,
                 wrapMode = TextureWrapMode.Clamp,
                 hideFlags = HideFlags.HideAndDontSave,
             };
 
-            float half = size * 0.5f;
-            float boxHalf = half - margin;
             for (int y = 0; y < size; y++)
             {
                 for (int x = 0; x < size; x++)
                 {
-                    float qx = Mathf.Abs(x + 0.5f - half) - (boxHalf - cornerRadius);
-                    float qy = Mathf.Abs(y + 0.5f - half) - (boxHalf - cornerRadius);
-                    float outside = Mathf.Sqrt(
-                        Mathf.Max(qx, 0f) * Mathf.Max(qx, 0f) +
-                        Mathf.Max(qy, 0f) * Mathf.Max(qy, 0f));
-                    float inside = Mathf.Min(Mathf.Max(qx, qy), 0f);
-                    float distance = outside + inside - cornerRadius;
-                    float alpha = 1f - Mathf.SmoothStep(0f, margin, Mathf.Max(0f, distance));
-                    texture.SetPixel(x, y, new Color(1f, 1f, 1f, alpha));
+                    float px = x + 0.5f;
+                    float py = y + 0.5f;
+
+                    // The straight seam reaches full opacity where the roster begins. The
+                    // other edges start fading inside the roster and finish outside it, so
+                    // neither the top nor the right side can form a visible box outline.
+                    float seamAlpha = Mathf.SmoothStep(
+                        0f, StatusBackdropSeamOverlap, px);
+                    float rightAlpha = 1f - Mathf.SmoothStep(
+                        size - freeEdgeFade, size, px);
+                    float verticalAlpha = Mathf.SmoothStep(
+                        0f, freeEdgeFade, Mathf.Min(py, size - py));
+                    float alpha = seamAlpha * rightAlpha * verticalAlpha;
+                    texture.SetPixel(x, y, new Color(fill.r, fill.g, fill.b, fill.a * alpha));
                 }
             }
             texture.Apply(updateMipmaps: false, makeNoLongerReadable: true);
 
-            float border = margin + cornerRadius + 1f;
+            float freeEdgeBorder = freeEdgeFade + 1f;
             statusBackdropSprite = Sprite.Create(
                 texture,
                 new Rect(0f, 0f, size, size),
@@ -218,8 +323,9 @@ namespace WingCommand
                 100f,
                 0u,
                 SpriteMeshType.FullRect,
-                new Vector4(border, border, border, border));
-            statusBackdropSprite.name = "WingCommand_StatusFeatherSprite";
+                new Vector4(StatusBackdropSeamOverlap, freeEdgeBorder,
+                            freeEdgeBorder, freeEdgeBorder));
+            statusBackdropSprite.name = "WingCommand_MapHazeSprite";
             statusBackdropSprite.hideFlags = HideFlags.HideAndDontSave;
             return statusBackdropSprite;
         }
@@ -259,31 +365,13 @@ namespace WingCommand
             statusRoot.anchorMin = statusRoot.anchorMax = new Vector2(0.5f, 0.5f);
             statusRoot.pivot = Vector2.zero;
 
-            // Sit beside the minimap and share its baseline. The roster grows upward, so
-            // adding members never pushes it into the bottom screen edge or over the map.
+            // This is the roster's only placement: docked to the minimap's right edge and
+            // sharing its baseline. It grows upward, so membership changes never move the
+            // seam or detach the two surfaces.
             Vector3 worldBottomRight = mapRect.TransformPoint(
                 new Vector3(mapRect.rect.xMax, mapRect.rect.yMin, 0f));
             Vector3 position = map.hudMapAnchor.InverseTransformPoint(worldBottomRight)
                              + Vector3.right * StatusMapGap;
-
-            // Narrow resolutions may not have enough room beside the map. In that case
-            // keep the same compact vertical component but dock its baseline just above
-            // the minimap instead of allowing it to run off-screen.
-            Camera camera = statusCanvas != null &&
-                            statusCanvas.renderMode != RenderMode.ScreenSpaceOverlay
-                ? statusCanvas.worldCamera
-                : null;
-            Vector2 rightOnScreen = RectTransformUtility.WorldToScreenPoint(camera, worldBottomRight);
-            float canvasScale = statusCanvas != null ? statusCanvas.scaleFactor : 1f;
-            bool roomOnRight = rightOnScreen.x +
-                               (statusWidth + StatusMapGap) * canvasScale < Screen.width - 4f;
-            if (!roomOnRight)
-            {
-                Vector3 worldTopLeft = mapRect.TransformPoint(
-                    new Vector3(mapRect.rect.xMin, mapRect.rect.yMax, 0f));
-                position = map.hudMapAnchor.InverseTransformPoint(worldTopLeft)
-                         + Vector3.up * StatusMapGap;
-            }
 
             statusRoot.localPosition = position;
             statusRoot.localRotation = Quaternion.identity;
@@ -308,11 +396,11 @@ namespace WingCommand
                 rect.SetParent(parent, worldPositionStays: false);
 
                 icon = StatusIcon(rect, new Rect(7f, -6f, 18f, 18f));
-                identity = StatusLabel(rect, "", new Rect(32f, -2f, 92f, 17f), 14f,
+                identity = StatusLabel(rect, "", new Rect(32f, -2f, 92f, 17f), PrimaryText,
                                        WingMarkers.MemberColor, TextAlignmentOptions.Left);
-                state = StatusLabel(rect, "", new Rect(32f, -16f, 62f, 12f), 9f,
+                state = StatusLabel(rect, "", new Rect(32f, -17f, 62f, 13f), SecondaryText,
                                     WingMarkers.MemberColor.WithAlpha(0.62f), TextAlignmentOptions.Left);
-                distance = StatusLabel(rect, "", new Rect(126f, -3f, 76f, 16f), 11f,
+                distance = StatusLabel(rect, "", new Rect(126f, -3f, 76f, 16f), PrimaryText,
                                        WingMarkers.MemberColor.WithAlpha(0.78f), TextAlignmentOptions.Right);
                 rangeCue = StatusIcon(rect, new Rect(32f, -27f, 168f, 1f));
             }
@@ -352,6 +440,8 @@ namespace WingCommand
 
                 bool damaged = IsDamaged(aircraft);
                 bool lowStores = member.Fuel <= Plugin.Config2.BingoFuel.Value || member.Ammo <= 0;
+                // Colours come from the game's theme, so the strip follows a theme change the
+                // way the rest of the HUD does.
                 Color color = !member.Alive || damaged || member.IsPanicking
                     ? UiTheme.Alert
                     : lowStores ? UiTheme.Warning : WingMarkers.MemberColor;
