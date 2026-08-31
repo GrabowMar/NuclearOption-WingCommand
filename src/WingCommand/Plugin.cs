@@ -598,8 +598,8 @@ namespace WingCommand
                     new AcceptableValueRange<float>(0f, 1f)));
 
             RadioChatter = c.Bind("Comms", "RadioChatter", true,
-                "Wingmen report engagements, defending, Winchester and rejoins in the game's " +
-                "on-screen message feed.");
+                "Show named, pilot-specific squadron transmissions for orders, engagements, " +
+                "defensive calls, Winchester and rejoins.");
 
             UseNativeRadial = c.Bind("UI", "UseNativeRadial", true,
                 Advanced("Add a compact 'Wing Command' entry to the game's own radial menu. This uses " +

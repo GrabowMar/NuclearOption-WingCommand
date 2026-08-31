@@ -399,6 +399,19 @@ rank and record alongside the aircraft's fuel, ammunition, cargo and hull state.
 This is a backbone. A pregenerated wingman pool with portraits and an assignment screen is a
 later feature; three pilots are written by hand and the rest are generated.
 
+### Squadron radio
+
+Radio calls use dedicated frameless subtitles at the top centre rather than the general
+game-message feed. The speaker is identified as `M. "COBALT" ADEYEMI`, with the transmission
+beneath it, and urgent missile calls move ahead of routine traffic. A command sent to several aircraft produces a
+short staggered roll call from the pilots that actually accepted it; aircraft that were
+skipped do not answer as though they complied.
+
+Each pilot also carries a radio persona independent of rank and combat skill. COBALT is
+professional, HATCHET is aggressive and MERIDIAN is calm; generated pilots rotate through
+those voices and a dry one. The persona selects between several lines for the same event and
+is intentionally a small, data-facing seam for later mission and plot dialogue.
+
 ## HUD and map symbology
 
 - Wingmen use a configurable high-contrast green marker and map caret.
