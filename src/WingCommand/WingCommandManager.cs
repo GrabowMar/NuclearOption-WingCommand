@@ -19,6 +19,9 @@ namespace WingCommand
 
         internal string MapStatus => mapLayer?.Status;
 
+        /// <summary>True while the map layer has something specific to report.</summary>
+        internal bool MapStatusIsNotice => mapLayer != null && mapLayer.HasNotice;
+
 
         // Radial menu state
         private bool radialOpen;
@@ -78,6 +81,8 @@ namespace WingCommand
                 WingShop.Reset();
                 WingShopDelivery.Reset();
                 WingRecruitment.Reset();
+                WingPilotRoster.Reset();
+                WingKillCredit.Reset();
                 recruitQueue.Clear();
                 WingSupplyReserve.Reset();
                 WingTakeover.Reset();
@@ -112,6 +117,7 @@ namespace WingCommand
             if (Plugin.Config2.MapCommandEnabled.Value)
                 mapLayer.Update();
 
+            WingKillCredit.Tick();
             WingMarkers.Tick(Wing);
             WingHud.TickStatusPanel(Wing);
             WmcScreen.Tick(Wing);
@@ -419,6 +425,44 @@ namespace WingCommand
             else Selection.SelectOnly(member);
             foreach (WingMember candidate in Wing.Members)
                 WingMarkers.Repaint(candidate.Aircraft);
+        }
+
+        /// <summary>
+        /// Set which weapons the current command scope reaches for first.
+        ///
+        /// Scoped like an order rather than held wing-wide, so a mixed flight can be split
+        /// between the air and the ground without changing anyone's rules of engagement.
+        /// </summary>
+        internal void SetWeaponPreference(WingWeaponPreference preference)
+        {
+            List<WingMember> scope = Commands.Scope(wholeWing: false);
+            if (scope.Count == 0)
+            {
+                Toast("No wingmen selected");
+                return;
+            }
+
+            foreach (WingMember member in scope) member.WeaponPreference = preference;
+
+            Toast((Selection.IsAll ? "Wing" : scope.Count + " selected") + ": weapons " +
+                  WingWeaponPreferences.Label(preference));
+        }
+
+        /// <summary>
+        /// The preference shared by the current scope, or null when they disagree. The
+        /// selector uses this to decide which button to light.
+        /// </summary>
+        internal WingWeaponPreference? ScopeWeaponPreference()
+        {
+            List<WingMember> scope = Commands.Scope(wholeWing: false);
+            if (scope.Count == 0) return null;
+
+            WingWeaponPreference first = scope[0].WeaponPreference;
+            for (int i = 1; i < scope.Count; i++)
+            {
+                if (scope[i].WeaponPreference != first) return null;
+            }
+            return first;
         }
 
         internal void SelectAllMembers()

@@ -91,6 +91,12 @@ namespace WingCommand
             string name = member.Name;
             bool owned = WingShop.TakePurchased(aircraft);
 
+            // Read before the roster lets go of the member: the aircraft is about to be
+            // destroyed, and both of these are keyed off its persistent ID.
+            WingLoadoutChoice loadout = member.Loadout;
+            bool loadoutKnown = member.LoadoutKnown;
+            WingPilotRoster.NoteSortie(aircraft);
+
             // Whatever happens below, the member leaves the roster. A recovery that failed
             // half way and stayed on the books would be retried every frame for the rest of
             // the mission.
@@ -103,6 +109,15 @@ namespace WingCommand
                 bool stored = WingSupplyReserve.StoreRecovered(aircraft.definition, owned);
                 if (!stored && hq != null && aircraft.definition != null)
                     hq.AddSupplyUnit(aircraft.definition, 1);
+
+                // The airframe that comes back is a count in the reserve rather than an
+                // object, so its loadout is parked alongside it and collected by whichever
+                // requisition spends that slot. Without this a recovered wingman relaunched
+                // with the stock fit and the player's configuration quietly vanished at the
+                // one moment the mod is encouraging them to bring an aircraft home.
+                if (stored && loadoutKnown)
+                    WingLoadoutBook.StoreReserved(aircraft.definition, loadout);
+                WingLoadoutBook.Forget(aircraft);
 
                 NetworkManagerNuclearOption.i.ServerObjectManager.Destroy(
                     aircraft.Identity, !aircraft.Identity.IsSceneObject);

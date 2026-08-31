@@ -22,6 +22,15 @@ namespace WingCommand
 
         public bool PointArmed => pointArmed;
         public WingOrder ArmedOrder => armedOrder;
+
+        /// <summary>
+        /// True while <see cref="Status"/> is reporting something rather than repeating the
+        /// standing instructions. The WMC status line uses it to decide whether that line is
+        /// free to explain the current rules of engagement instead.
+        /// </summary>
+        public bool HasNotice => pointArmed ||
+            (pendingRecruit.Count > 0 && Time.unscaledTime <= recruitConfirmationUntil);
+
         public string Status => pointArmed
             ? WingOrderCatalog.Label(armedOrder).ToUpperInvariant() + " ARMED - CLICK MAP"
             : pendingRecruit.Count > 0 && Time.unscaledTime <= recruitConfirmationUntil

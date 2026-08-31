@@ -398,7 +398,7 @@ namespace WingCommand
                 icon = StatusIcon(rect, new Rect(7f, -6f, 18f, 18f));
                 identity = StatusLabel(rect, "", new Rect(32f, -2f, 92f, 17f), PrimaryText,
                                        WingMarkers.MemberColor, TextAlignmentOptions.Left);
-                state = StatusLabel(rect, "", new Rect(32f, -17f, 62f, 13f), SecondaryText,
+                state = StatusLabel(rect, "", new Rect(32f, -17f, 118f, 13f), SecondaryText,
                                     WingMarkers.MemberColor.WithAlpha(0.62f), TextAlignmentOptions.Left);
                 distance = StatusLabel(rect, "", new Rect(126f, -3f, 76f, 16f), PrimaryText,
                                        WingMarkers.MemberColor.WithAlpha(0.78f), TextAlignmentOptions.Right);
@@ -432,7 +432,7 @@ namespace WingCommand
                     ? Mathf.Sqrt(FastMath.SquareDistance(
                         aircraft.GlobalPosition(), leader.GlobalPosition()))
                     : 0f;
-                state.text = OrderCode(member);
+                state.text = StateText(member);
                 distance.text = UnitConverter.DistanceReading(range);
                 float proximity = 1f - Mathf.Clamp01(range / Plugin.Config2.LeashRadius.Value);
                 rangeCue.rectTransform.sizeDelta = new Vector2(
@@ -466,6 +466,22 @@ namespace WingCommand
                         return true;
                 }
                 return false;
+            }
+
+            /// <summary>
+            /// The order abbreviation, plus the weapon preference when it is not the
+            /// default.
+            ///
+            /// Appended rather than given a column of its own: the strip is docked against
+            /// the minimap and cannot grow sideways, and AUTO is both the default and the
+            /// common case — so an ordinary flight reads exactly as it did before.
+            /// </summary>
+            private static string StateText(WingMember member)
+            {
+                string order = OrderCode(member);
+                return member.WeaponPreference == WingWeaponPreference.Auto
+                    ? order
+                    : order + " · " + WingWeaponPreferences.ShortLabel(member.WeaponPreference);
             }
 
             private static string OrderCode(WingMember member)

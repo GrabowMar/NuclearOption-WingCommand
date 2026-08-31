@@ -54,6 +54,8 @@ namespace WingCommand
             overLimitPending = 0;
             ExceedLimit = false;
             squadronCachedAt = float.MinValue;
+            WingLoadoutBook.Reset();
+            WingLoadoutCatalog.Reset();
         }
 
         // Whether a definition is a helicopter, resolved once per airframe.
@@ -195,13 +197,18 @@ namespace WingCommand
             !UnitRegistry.TryGetUnit(id, out Unit unit) || unit == null || unit.disabled;
 
         /// <summary>Record a delivered requisition and, when applicable, its over-cap slot.</summary>
-        public static void NoteDelivery(Aircraft aircraft, bool overLimit)
+        public static void NoteDelivery(Aircraft aircraft, bool overLimit, WingLoadoutChoice loadout)
         {
             if (overLimit) overLimitPending = Mathf.Max(0, overLimitPending - 1);
             if (aircraft == null) return;
 
             purchasedAircraft.Add(aircraft.persistentID);
             if (overLimit) overLimitAircraft.Add(aircraft.persistentID);
+
+            // The airframe now exists, so the purchase order becomes a fact about this one
+            // aircraft. Every later reader — the panels, the recovery path — asks the book
+            // rather than the plan, which is what keeps one VT-7's fit off the next one.
+            WingLoadoutBook.NoteSpawned(aircraft, loadout);
         }
 
         /// <summary>
@@ -450,6 +457,14 @@ namespace WingCommand
                 return false;
             }
 
+            // A requisition carries whatever the player planned for that airframe, unless it
+            // is launching an airframe that has already flown for the wing and come home —
+            // in which case it carries what it came home with.
+            WingLoadoutChoice loadout = WingLoadoutBook.PlannedFor(definition);
+            if (reserveSource != WingSupplyReserve.Source.None &&
+                WingLoadoutBook.PeekReserved(definition, out WingLoadoutChoice recovered))
+                loadout = recovered;
+
             bool alreadyOwned = reserveSource == WingSupplyReserve.Source.Owned;
             float price = alreadyOwned ? 0f : PriceOf(definition) * multiplier;
             if (player.Allocation < price)
@@ -465,7 +480,7 @@ namespace WingCommand
             bool overLimit = Squadron(hq).AtCapacity;
             if (overLimit) overLimitPending++;
 
-            if (!WingShopDelivery.Deliver(definition, leader, hq, overLimit, out reason))
+            if (!WingShopDelivery.Deliver(definition, leader, hq, overLimit, loadout, out reason))
             {
                 if (overLimit) CancelOverLimitDelivery();
                 return false;
@@ -482,7 +497,12 @@ namespace WingCommand
             // ours, so the mission's own accounting is never handed entries it did not have.
             if (reserveSource != WingSupplyReserve.Source.None)
             {
-                if (!WingSupplyReserve.Consume(definition, reserveSource))
+                if (WingSupplyReserve.Consume(definition, reserveSource))
+                {
+                    // The parked loadout has now been collected by this launch.
+                    WingLoadoutBook.PopReserved(definition);
+                }
+                else
                 {
                     // World state changed between validation and commitment. The delivery is
                     // already authorised, so consume ordinary stock rather than duplicating
@@ -499,6 +519,7 @@ namespace WingCommand
 
             Plugin.Logger.LogInfo(
                 $"[Shop] requisitioned {definition.unitName} for {price:F0}" +
+                $" [{WingLoadoutCatalog.Label(definition, loadout)}]" +
                 (alreadyOwned ? " (owned reserve)" :
                  reserveSource == WingSupplyReserve.Source.Held ? " (held reserve)" : "") +
                 (multiplier > 1f ? $" ({multiplier:0.##}x over squadron limit)" : "") +

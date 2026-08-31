@@ -206,6 +206,13 @@ namespace WingCommand
         // --- Comms ---
         public readonly ConfigEntry<bool> RadioChatter;
 
+        public readonly ConfigEntry<bool> PilotProgression;
+        public readonly ConfigEntry<int> XpPerKill;
+        public readonly ConfigEntry<int> XpPerSortie;
+        public readonly ConfigEntry<int> XpPerEngagement;
+        public readonly ConfigEntry<int> XpPerRank;
+        public readonly ConfigEntry<float> RankEffect;
+
         // --- Capability ---
         public readonly ConfigEntry<bool> KeepUpReports;
 
@@ -545,6 +552,39 @@ namespace WingCommand
                     "How many of each undeclared airframe may be bought per mission.",
                     new AcceptableValueRange<float>(1f, 20f),
                     new ConfigurationManagerAttributes { IsAdvanced = true }));
+
+            // Pilots. The XP figures are deliberately ordinary numbers rather than a
+            // formula: the whole curve is one triangular step (XpPerRank), so moving a
+            // single value retunes progression without any two settings disagreeing.
+            PilotProgression = c.Bind("Pilot", "PilotProgression", true,
+                "Wing pilots keep a callsign, a record and a rank that rises with " +
+                "kills, completed sorties and engagements survived. Rank has a small " +
+                "effect on how well they shoot; see RankEffect.");
+            XpPerKill = c.Bind("Pilot", "XpPerKill", 25,
+                new ConfigDescription(
+                    "Experience awarded when a contact a wingman was shooting at is destroyed.",
+                    new AcceptableValueRange<int>(0, 500)));
+            XpPerSortie = c.Bind("Pilot", "XpPerSortie", 40,
+                new ConfigDescription(
+                    "Experience awarded for bringing an airframe home or completing a " +
+                    "cargo delivery.",
+                    new AcceptableValueRange<int>(0, 500)));
+            XpPerEngagement = c.Bind("Pilot", "XpPerEngagement", 10,
+                new ConfigDescription(
+                    "Experience awarded for surviving a missile engagement.",
+                    new AcceptableValueRange<int>(0, 500)));
+            XpPerRank = c.Bind("Pilot", "XpPerRank", 120,
+                new ConfigDescription(
+                    "Experience step between ranks. Thresholds grow triangularly from it: " +
+                    "Wingman at one step, Veteran at three, Ace at six, Legend at ten.",
+                    new AcceptableValueRange<int>(10, 2000)));
+            RankEffect = c.Bind("Pilot", "RankEffect", 1f,
+                new ConfigDescription(
+                    "How much rank actually changes a wingman's shooting. At 1 a Legend " +
+                    "gets roughly 12% more weapon reach and off-boresight tolerance and " +
+                    "cycles shots about 12% faster than a rookie; 0 makes rank purely a " +
+                    "record.",
+                    new AcceptableValueRange<float>(0f, 1f)));
 
             RadioChatter = c.Bind("Comms", "RadioChatter", true,
                 "Wingmen report engagements, defending, Winchester and rejoins in the game's " +

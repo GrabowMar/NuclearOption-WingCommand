@@ -14,6 +14,26 @@ namespace WingCommand
     /// </summary>
     internal static class WingWeapons
     {
+        /// <summary>
+        /// How long this aircraft waits between shots.
+        ///
+        /// The configured interval, shortened slightly for an experienced pilot. This is
+        /// the "reaction" half of the rank effect and the only place the cadence is read,
+        /// so every firing path — formation, orbit and attack run — inherits it.
+        /// </summary>
+        public static float FireInterval(Aircraft aircraft) =>
+            Plugin.Config2.FireInterval.Value * WingPilotRoster.ReactionScale(aircraft);
+
+        /// <summary>
+        /// The weapon preference standing for this aircraft, or Auto when it is not a
+        /// commandable member of the player's wing.
+        /// </summary>
+        private static WingWeaponPreference PreferenceOf(Aircraft aircraft)
+        {
+            WingMember member = WingCommandManager.Instance?.Wing?.Find(aircraft);
+            return member != null ? member.WeaponPreference : WingWeaponPreference.Auto;
+        }
+
         /// <summary>What a wingman is currently allowed to shoot at.</summary>
         internal enum Allow
         {
@@ -48,7 +68,7 @@ namespace WingCommand
             if (!ShotIsValid(aircraft, station, target)) return false;
             if (!TacticalCoordinator.TryClaim(
                     target, aircraft, capacity,
-                    Mathf.Max(Plugin.Config2.FireInterval.Value * 1.5f, 3f)))
+                    Mathf.Max(FireInterval(aircraft) * 1.5f, 3f)))
                 return false;
 
             wm.currentWeaponStation = station;
@@ -58,6 +78,7 @@ namespace WingCommand
 
             pilot.SetPrimaryTarget(target);
             pilot.Fire();
+            WingKillCredit.NoteShot(aircraft, target);
             return true;
         }
 
@@ -77,8 +98,14 @@ namespace WingCommand
 
             TargetRequirements req = info.targetRequirements;
 
+            // An experienced pilot gets slightly more out of the same weapon: a little more
+            // reach and a little more off-boresight tolerance. The scale is never below one,
+            // so rank can only ever widen this envelope — a low-ranked pilot shoots exactly
+            // as the mod always made them shoot.
+            float envelope = WingPilotRoster.EnvelopeScale(aircraft);
+
             float distance = FastMath.Distance(target.GlobalPosition(), aircraft.GlobalPosition());
-            if (req.maxRange > 0f && distance > req.maxRange) return false;
+            if (req.maxRange > 0f && distance > req.maxRange * envelope) return false;
             if (distance < req.minRange) return false;
 
             // Alignment: the target has to be somewhere near the nose. minAlignment is the
@@ -86,7 +113,7 @@ namespace WingCommand
             if (req.minAlignment > 0f)
             {
                 Vector3 toTarget = target.GlobalPosition() - aircraft.GlobalPosition();
-                if (Vector3.Angle(aircraft.transform.forward, toTarget) > req.minAlignment)
+                if (Vector3.Angle(aircraft.transform.forward, toTarget) > req.minAlignment * envelope)
                     return false;
             }
 
@@ -122,7 +149,7 @@ namespace WingCommand
             int capacity = RequiredAttackers(station, target);
             if (!TacticalCoordinator.TryClaim(
                     target, aircraft, capacity,
-                    Mathf.Max(Plugin.Config2.FireInterval.Value * 1.5f, 3f)))
+                    Mathf.Max(FireInterval(aircraft) * 1.5f, 3f)))
                 return false;
 
             wm.currentWeaponStation = station;
@@ -132,6 +159,7 @@ namespace WingCommand
 
             pilot.SetPrimaryTarget(target);
             pilot.Fire();
+            WingKillCredit.NoteShot(aircraft, target);
             return true;
         }
 
@@ -189,6 +217,11 @@ namespace WingCommand
             bool wantAir = allow == Allow.AirOnly || allow == Allow.AirAndGround;
             bool wantGround = allow == Allow.GroundOnly || allow == Allow.AirAndGround;
 
+            // The preference biases which kind of contact is worth breaking off for. It
+            // deliberately does not clear wantAir/wantGround: a wingman told to prefer
+            // air-to-air still shoots the tank in front of it rather than nothing.
+            WingWeaponPreference preference = PreferenceOf(aircraft);
+
             // Resolve the two candidate stations once. Doing this per unit meant walking
             // every weapon station for every unit on the map on every engagement tick.
             WeaponStation airStation = wantAir ? BestStationFor(aircraft, TargetClass.Air) : null;
@@ -239,6 +272,7 @@ namespace WingCommand
                 // BattlefieldGrid happened to enumerate first for every wingman.
                 score *= Mathf.Lerp(1f, 0.35f, Mathf.Clamp01(distance / weaponRange));
                 score /= 1f + committed * Plugin.Config2.TargetSaturationPenalty.Value;
+                score *= ClassBias(preference, isAir);
                 if (score <= bestScore) continue;
 
                 bestScore = score;
@@ -250,6 +284,24 @@ namespace WingCommand
             scratch.Clear();
             station = bestStation;
             return best;
+        }
+
+        /// <summary>
+        /// How much the player's weapon preference favours this class of contact.
+        ///
+        /// A multiplier rather than a filter, and a mild one: the preferred class has to be
+        /// clearly worse before the other is chosen, but it can still be chosen. The damped
+        /// side is never zero, so a preference can reorder targets and can never empty the
+        /// list.
+        /// </summary>
+        private static float ClassBias(WingWeaponPreference preference, bool isAir)
+        {
+            switch (preference)
+            {
+                case WingWeaponPreference.AirToAir:    return isAir ? 1.75f : 0.6f;
+                case WingWeaponPreference.AirToGround: return isAir ? 0.6f : 1.75f;
+                default:                               return 1f;
+            }
         }
 
         /// <summary>Closest-time unclaimed missile aimed at the protected aircraft.</summary>
@@ -308,11 +360,23 @@ namespace WingCommand
         /// <summary>Reused across calls so target search allocates nothing per tick.</summary>
         private static readonly List<Unit> scratch = new List<Unit>(64);
 
-        /// <summary>Highest-effectiveness ready station for a target class.</summary>
-        private static WeaponStation BestStationFor(Aircraft aircraft, TargetClass targetClass)
+        /// <summary>
+        /// The ready station this aircraft should use against a class of target.
+        ///
+        /// Effectiveness still decides, as it always has. The player's preference only
+        /// reweights stations that are already valid for this target class, so the choice
+        /// stays inside the same set the stock ranking would have picked from — and an
+        /// aircraft whose preferred stores are empty, unready or absent simply gets the
+        /// most effective station it has, exactly as before.
+        /// </summary>
+        private static WeaponStation BestStationFor(Aircraft aircraft, TargetClass targetClass) =>
+            BestStationFor(aircraft, targetClass, PreferenceOf(aircraft));
+
+        private static WeaponStation BestStationFor(Aircraft aircraft, TargetClass targetClass,
+                                                    WingWeaponPreference preference)
         {
             WeaponStation best = null;
-            float bestValue = 0f;
+            float bestScore = 0f;
 
             foreach (WeaponStation station in aircraft.weaponStations)
             {
@@ -330,14 +394,43 @@ namespace WingCommand
                     default:                  value = role.antiSurface; break;
                 }
 
-                if (value > bestValue)
+                if (value <= 0f) continue;
+
+                float score = value * StationBias(preference, station, targetClass);
+                if (score > bestScore)
                 {
-                    bestValue = value;
+                    bestScore = score;
                     best = station;
                 }
             }
 
-            return bestValue > 0f ? best : null;
+            return best;
+        }
+
+        /// <summary>
+        /// The preference's weighting of one already-valid station.
+        ///
+        /// Missile defence is deliberately excluded: shooting down an inbound missile is
+        /// the most time-critical thing a wingman does, and there is no sense in which the
+        /// player wanting the gun used on trucks should change which interceptor it picks.
+        ///
+        /// The close-in weighting reads reach from the weapon's own stated maximum range,
+        /// so "the gun end of the loadout" needs no list of weapon names to identify: on
+        /// every airframe it is simply the shortest-ranged store that can take the shot.
+        /// </summary>
+        private static float StationBias(WingWeaponPreference preference, WeaponStation station,
+                                         TargetClass targetClass)
+        {
+            if (preference != WingWeaponPreference.ShortRange ||
+                targetClass == TargetClass.Missile)
+                return 1f;
+
+            float reach = Mathf.Max(station.WeaponInfo.targetRequirements.maxRange, 1f);
+
+            // 2x at gun range, tapering to no advantage by the time a store reaches out
+            // past ten kilometres. A short-ranged store therefore wins a close contest but
+            // never displaces a weapon that is several times more effective.
+            return Mathf.Lerp(2f, 1f, Mathf.Clamp01(reach / 10000f));
         }
 
         /// <summary>True when the aircraft carries anything able to engage missiles.</summary>

@@ -16,6 +16,32 @@ namespace WingCommand
         public WingDirective Directive { get; private set; }
         public WingOrder Order => Directive.Order;
 
+        /// <summary>
+        /// Which of its own weapons this wingman reaches for first.
+        ///
+        /// Held per member rather than per wing because the useful case is a mixed flight:
+        /// two aircraft holding the missiles for the fighters while the third works the
+        /// ground with rockets. Read by <see cref="WingWeapons"/> on every station choice.
+        /// </summary>
+        public WingWeaponPreference WeaponPreference { get; set; } = WingWeaponPreference.Auto;
+
+        /// <summary>What this airframe is carrying, as far as this mod configured it.</summary>
+        public WingLoadoutChoice Loadout => WingLoadoutBook.AboardOf(Aircraft);
+
+        /// <summary>
+        /// False for an aircraft this mod did not fit — an active mission aircraft the
+        /// player assigned arrives with whatever the mission gave it, and the panel says so
+        /// rather than claiming it is carrying the standard fit.
+        /// </summary>
+        public bool LoadoutKnown => WingLoadoutBook.IsKnown(Aircraft);
+
+        /// <summary>
+        /// The person flying it, or null before one has been assigned. Distinct from
+        /// <see cref="Pilot"/>, which is the game's pilot state machine rather than a
+        /// squadron record.
+        /// </summary>
+        public WingPilot Crew => WingPilotRoster.Of(Aircraft);
+
         private readonly FormationFlyState formationState;
         private readonly FallBackState fallBackState;
         private readonly OrbitState orbitState;
@@ -30,6 +56,11 @@ namespace WingCommand
         private WingRegistry owner;
         private readonly List<GlobalPosition> waypointQueue = new List<GlobalPosition>();
         private bool deliveryPending;
+
+        /// <summary>Cargo aboard when the current supply run was ordered.</summary>
+        private int cargoAtStart;
+        private float cargoRunStarted;
+        private bool cargoDropped;
 
         /// <summary>True while a hangar delivery is still taxiing or waiting to launch.</summary>
         public bool DeliveryPending => deliveryPending;
@@ -136,6 +167,16 @@ namespace WingCommand
                     // The stock transport state configures itself in EnterState — nearest
                     // airbase, nearest known ground enemy, landing zone search — so this is
                     // a complete supply-run behaviour for the cost of a state switch.
+                    //
+                    // What it does not do is report back. The order used to end here: the
+                    // wingman entered the state and the mod never learned whether cargo was
+                    // ever set down, so a helicopter that could not find a drop-off simply
+                    // flew away and stayed away. CheckCargoRun watches the cargo station
+                    // itself, which is the only ground truth available, and either calls
+                    // the delivery or gives the airframe back.
+                    cargoAtStart = CargoAmmo;
+                    cargoRunStarted = Time.timeSinceLevelLoad;
+                    cargoDropped = false;
                     Pilot.SwitchState(Pilot.AIHeloTransportState);
                     break;
 
@@ -195,8 +236,90 @@ namespace WingCommand
             }
         }
 
+        /// <summary>Cargo remaining across every cargo station.</summary>
+        public int CargoAmmo
+        {
+            get
+            {
+                if (Aircraft == null || Aircraft.weaponStations == null) return 0;
+
+                int total = 0;
+                foreach (WeaponStation s in Aircraft.weaponStations)
+                {
+                    if (s != null && s.Cargo) total += s.Ammo;
+                }
+                return total;
+            }
+        }
+
+        /// <summary>How long a supply run may go unfulfilled before it is abandoned.</summary>
+        private const float CargoRunTimeout = 300f;
+
+        /// <summary>
+        /// Follow a supply run to its end.
+        ///
+        /// A drop is visible as the cargo station's own ammunition falling, which is the
+        /// same field <see cref="CanDeliverCargo"/> gates on — so this confirms a real
+        /// delivery rather than trusting that entering the stock transport state implies
+        /// one. An empty transport rejoins; one that has been out for five minutes with its
+        /// cargo still aboard has not found anywhere to put it and is given back rather
+        /// than left circling for the rest of the mission.
+        /// </summary>
+        public void CheckCargoRun()
+        {
+            if (Order != WingOrder.DeliverCargo || !IsCommandable || IsPanicking) return;
+
+            int remaining = CargoAmmo;
+
+            if (remaining < cargoAtStart)
+            {
+                cargoAtStart = remaining;
+                cargoDropped = true;
+                WingComms.Say(this, WingComms.Call.Delivered);
+            }
+
+            if (remaining <= 0)
+            {
+                if (cargoDropped) WingPilotRoster.NoteSortie(Aircraft);
+                Apply(WingOrder.Formation);
+                return;
+            }
+
+            if (cargoDropped || Time.timeSinceLevelLoad - cargoRunStarted < CargoRunTimeout)
+                return;
+
+            WingComms.Say(this, WingComms.Call.NoDropOff);
+            WingCommandManager.Instance?.Toast(
+                Name + " found nowhere to deliver its cargo - rejoining");
+            Apply(WingOrder.Formation);
+        }
+
         /// <summary>True when this aircraft can set down where it is.</summary>
         public bool CanLandInPlace => WingRegistry.IsRotary(Aircraft);
+
+        /// <summary>
+        /// How intact the airframe is, 0-1, from the game's own part hit points. Read by
+        /// the Wing tab; a detached part counts as fully lost rather than merely damaged.
+        /// </summary>
+        public float Integrity
+        {
+            get
+            {
+                if (Aircraft == null || Aircraft.partLookup == null) return 0f;
+
+                int counted = 0;
+                float total = 0f;
+
+                foreach (UnitPart part in Aircraft.partLookup)
+                {
+                    if (part == null) continue;
+                    counted++;
+                    total += part.IsDetached() ? 0f : Mathf.Clamp01(part.hitPoints / 100f);
+                }
+
+                return counted > 0 ? total / counted : 1f;
+            }
+        }
         /// <summary>
         /// Give control back to the stock combat AI. Used both for an explicit Engage
         /// order and for automatic breaks (leader lost, mutual support).
@@ -488,6 +611,7 @@ namespace WingCommand
             if (Plugin.Config2.VerboseLogging.Value)
                 Plugin.Logger.LogInfo($"[Panic] {Name} clear -> {resume.Order}");
 
+            WingPilotRoster.NoteSurvivedEngagement(Aircraft);
             Apply(resume);
         }
 

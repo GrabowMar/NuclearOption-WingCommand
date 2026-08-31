@@ -24,27 +24,40 @@ namespace WingCommand
     internal static class WmcScreen
     {
         private const float PanelWidth = 430f;
-        private const float PanelHeight = 620f;
         private const float Pad = 12f;
         private const float RowHeight = 30f;
         private const float Gap = 4f;
-        private const int RosterRowsPerPage = 4;
+
+        /// <summary>
+        /// Roster rows visible at once, on every page that lists the flight.
+        ///
+        /// Three, matching the default MaxWingSize, rather than the four this used to
+        /// reserve. With four tabs sharing one bezel the page has to earn its height back
+        /// somewhere, and a permanently empty fourth row was the cheapest 32 pixels
+        /// available. A larger configured wing still pages.
+        /// </summary>
+        private const int RosterRowsPerPage = 3;
 
         private enum Page
         {
             Tactical,
             Supply,
+            Loadout,
+            Wing,
         }
 
+        private const int PageCount = 4;
+
         private static MFDScreen screen;
-        private static RectTransform tacticalRoot;
-        private static RectTransform supplyRoot;
+
+        // Indexed by Page, so adding a tab is a matter of building one more root rather
+        // than adding a third parallel set of fields to every lifecycle method.
+        private static readonly RectTransform[] pageRoots = new RectTransform[PageCount];
+        private static readonly WingButton[] pageTabs = new WingButton[PageCount];
+        private static readonly float[] pageHeights = new float[PageCount];
+
         private static Page page;
-        private static WingButton tacticalTab;
-        private static WingButton supplyTab;
         private static RectTransform panelRect;
-        private static float tacticalHeight;
-        private static float supplyHeight;
         private static RectTransform rosterArea;
         private static WingButton rosterPrevButton;
         private static WingButton rosterNextButton;
@@ -52,12 +65,70 @@ namespace WingCommand
         private static TMP_Text summaryLabel;
         private static TMP_Text rosterPageLabel;
         private static TMP_Text commandStatusLabel;
-        private static TMP_Text postureLabel;
         private static WingButton holdButton;
         private static WingButton escortButton;
         private static WingButton freeButton;
         private static WingButton cargoButton;
         private static WingButton landButton;
+        private static readonly WingButton[] preferenceButtons =
+            new WingButton[WingWeaponPreferences.All.Length];
+
+        // --- Loadout page ---
+        private static readonly List<PickRow> loadoutRows = new List<PickRow>();
+        private static RectTransform loadoutRosterArea;
+        private static TMP_Text loadoutAirframeLabel;
+        private static TMP_Text loadoutStatusLabel;
+        private static TMP_Text loadoutFlightNote;
+        private static TMP_Text cargoLabel;
+        private static WingButton cargoPrevButton;
+        private static WingButton cargoNextButton;
+        private static readonly List<WingButton> presetButtons = new List<WingButton>();
+        private static readonly List<WingLoadoutPreset> presetScratch =
+            new List<WingLoadoutPreset>();
+
+        /// <summary>Every preset a button could ever stand for, in selector order.</summary>
+        private static readonly WingLoadoutPreset[] AllPresets =
+        {
+            WingLoadoutPreset.Standard,
+            WingLoadoutPreset.AirToAir,
+            WingLoadoutPreset.AirToGround,
+            WingLoadoutPreset.Balanced,
+            WingLoadoutPreset.Cargo,
+        };
+
+        // --- Wing page ---
+        private static readonly List<PickRow> wingRows = new List<PickRow>();
+        private static RectTransform wingRosterArea;
+        private static TMP_Text pilotIdentityLabel;
+        private static TMP_Text pilotRankLabel;
+        private static Image pilotXpBar;
+        private static float pilotXpBarWidth;
+        private static TMP_Text pilotBackgroundLabel;
+        private static TMP_Text airframeTypeLabel;
+        private static TMP_Text airframeStateLabel;
+        private static TMP_Text airframeOrderLabel;
+        private static TMP_Text airframeLoadoutLabel;
+
+        /// <summary>
+        /// The wingman the Loadout and Wing tabs are inspecting.
+        ///
+        /// Deliberately separate from the command selection: those two pages are about one
+        /// aircraft at a time, and borrowing the command scope for them would mean opening
+        /// the Wing tab silently changed who the next order went to.
+        /// </summary>
+        private static WingMember focusMember;
+
+        /// <summary>
+        /// Which page of the flight the Loadout and Wing tabs are showing.
+        ///
+        /// Shared by both, and separate from the Tactical page's own cursor: those two
+        /// inspect one aircraft at a time and should not jump about because the command
+        /// page happened to be scrolled somewhere else.
+        /// </summary>
+        private static int inspectPage;
+
+        private static RosterPager loadoutPager;
+        private static RosterPager wingPager;
 
         private static readonly List<RosterRow> rosterRows = new List<RosterRow>();
         private static readonly List<ShopRow> shopRows = new List<ShopRow>();
@@ -72,6 +143,7 @@ namespace WingCommand
         private static WingButton reserveReleaseButton;
         private static WingButton reserveHoldButton;
         private static TMP_Text offerDetailLabel;
+        private static TMP_Text offerLoadoutLabel;
         private static WingButton exceedLimitButton;
         private static WingButton requisitionButton;
         private static AircraftDefinition selectedOffer;
@@ -124,14 +196,16 @@ namespace WingCommand
         public static void Reset()
         {
             screen = null;
-            tacticalRoot = null;
-            supplyRoot = null;
             page = Page.Tactical;
-            tacticalTab = null;
-            supplyTab = null;
             panelRect = null;
-            tacticalHeight = 0f;
-            supplyHeight = 0f;
+
+            for (int i = 0; i < PageCount; i++)
+            {
+                pageRoots[i] = null;
+                pageTabs[i] = null;
+                pageHeights[i] = 0f;
+            }
+
             rosterArea = null;
             rosterPrevButton = null;
             rosterNextButton = null;
@@ -152,17 +226,45 @@ namespace WingCommand
             reserveReleaseButton = null;
             reserveHoldButton = null;
             offerDetailLabel = null;
+            offerLoadoutLabel = null;
             exceedLimitButton = null;
             requisitionButton = null;
             selectedOffer = null;
             shopPage = 0;
             rosterPage = 0;
-            postureLabel = null;
             holdButton = null;
             escortButton = null;
             freeButton = null;
             cargoButton = null;
             landButton = null;
+
+            for (int i = 0; i < preferenceButtons.Length; i++) preferenceButtons[i] = null;
+
+            loadoutRows.Clear();
+            presetButtons.Clear();
+            loadoutRosterArea = null;
+            loadoutAirframeLabel = null;
+            loadoutStatusLabel = null;
+            loadoutFlightNote = null;
+            cargoLabel = null;
+            cargoPrevButton = null;
+            cargoNextButton = null;
+            loadoutPager = null;
+            wingPager = null;
+            inspectPage = 0;
+
+            wingRows.Clear();
+            wingRosterArea = null;
+            pilotIdentityLabel = null;
+            pilotRankLabel = null;
+            pilotXpBar = null;
+            pilotBackgroundLabel = null;
+            airframeTypeLabel = null;
+            airframeStateLabel = null;
+            airframeOrderLabel = null;
+            airframeLoadoutLabel = null;
+            focusMember = null;
+
             gaveUp = false;
         }
 
@@ -311,14 +413,16 @@ namespace WingCommand
             y = AddTitle(contentRt, y);
             y = AddTabs(contentRt, y);
 
-            tacticalRoot = PageRoot(contentRt, "TacticalPage");
-            supplyRoot = PageRoot(contentRt, "SupplyPage");
+            pageRoots[(int)Page.Tactical] = PageRoot(contentRt, "TacticalPage");
+            pageRoots[(int)Page.Supply] = PageRoot(contentRt, "SupplyPage");
+            pageRoots[(int)Page.Loadout] = PageRoot(contentRt, "LoadoutPage");
+            pageRoots[(int)Page.Wing] = PageRoot(contentRt, "WingPage");
 
+            RectTransform tacticalRoot = pageRoots[(int)Page.Tactical];
             float tacticalY = y;
             tacticalY = AddSummary(tacticalRoot, tacticalY);
             tacticalY = AddRosterArea(tacticalRoot, tacticalY);
-            tacticalY = AddPostureSelector(tacticalRoot, tacticalY);
-            tacticalY = AddShapeSelector(tacticalRoot, tacticalY);
+            tacticalY = AddEngagementSection(tacticalRoot, tacticalY);
             tacticalY = AddActions(tacticalRoot, tacticalY);
             tacticalY = AddCommandStatus(tacticalRoot, tacticalY);
             tacticalY = AddDebug(tacticalRoot, tacticalY);
@@ -327,6 +431,7 @@ namespace WingCommand
             // can I afford and is there room, then buying one, then conscripting one that is
             // already flying, then the holdback knob that only matters once you care about
             // what the AI is doing with the rest of the stock.
+            RectTransform supplyRoot = pageRoots[(int)Page.Supply];
             float supplyY = y;
             supplyY = AddSupplyStatus(supplyRoot, supplyY);
             supplyY = AddShop(supplyRoot, supplyY);
@@ -334,14 +439,19 @@ namespace WingCommand
             supplyY = AddReserve(supplyRoot, supplyY);
             supplyY = AddDebug(supplyRoot, supplyY);
 
-            // Each page is sized to its own content rather than both to the taller of the
-            // two. Supply is much shorter than Tactical, so sharing one height left a third
-            // of the panel as empty framed space below the last control.
-            tacticalHeight = Mathf.Abs(tacticalY) + Pad;
-            supplyHeight = Mathf.Abs(supplyY) + Pad;
+            float loadoutY = AddLoadoutPage(pageRoots[(int)Page.Loadout], y);
+            float wingY = AddWingPage(pageRoots[(int)Page.Wing], y);
+
+            // Each page is sized to its own content rather than all four to the tallest.
+            // Supply and Tactical differ by nearly a third of the panel, and sharing one
+            // height left the shorter one framing a block of empty space.
+            pageHeights[(int)Page.Tactical] = Mathf.Abs(tacticalY) + Pad;
+            pageHeights[(int)Page.Supply] = Mathf.Abs(supplyY) + Pad;
+            pageHeights[(int)Page.Loadout] = Mathf.Abs(loadoutY) + Pad;
+            pageHeights[(int)Page.Wing] = Mathf.Abs(wingY) + Pad;
 
             panelRect = rt;
-            rt.sizeDelta = new Vector2(PanelWidth, tacticalHeight);
+            rt.sizeDelta = new Vector2(PanelWidth, pageHeights[(int)Page.Tactical]);
 
             MFDScreen s = root.AddComponent<MFDScreen>();
             s.shortName = "WMC";
@@ -382,30 +492,46 @@ namespace WingCommand
             return y - 8f;
         }
 
+        /// <summary>
+        /// One row of four, rather than the two rows a 2x2 grid would need.
+        ///
+        /// Four short words fit across the panel at this size, and a single row keeps the
+        /// tabs where a two-tab player already expects them — the page below simply gains
+        /// two more places to go rather than moving down the screen.
+        /// </summary>
         private static float AddTabs(RectTransform parent, float y)
         {
-            float w = (PanelWidth - Pad * 2f - Gap) * 0.5f;
-            tacticalTab = Button(parent, "TACTICAL", new Rect(Pad, y, w, RowHeight),
-                                 () => SetPage(Page.Tactical));
-            supplyTab = Button(parent, "SUPPLY", new Rect(Pad + w + Gap, y, w, RowHeight),
-                               () => SetPage(Page.Supply));
+            float w = (PanelWidth - Pad * 2f - Gap * (PageCount - 1)) / PageCount;
+
+            pageTabs[(int)Page.Tactical] = Tab(parent, "TACTICAL", Page.Tactical, Pad, y, w);
+            pageTabs[(int)Page.Supply] = Tab(parent, "SUPPLY", Page.Supply, Pad + w + Gap, y, w);
+            pageTabs[(int)Page.Loadout] = Tab(parent, "LOADOUT", Page.Loadout,
+                                              Pad + (w + Gap) * 2f, y, w);
+            pageTabs[(int)Page.Wing] = Tab(parent, "WING", Page.Wing, Pad + (w + Gap) * 3f, y, w);
+
             return y - RowHeight - 8f;
         }
+
+        private static WingButton Tab(RectTransform parent, string text, Page target,
+                                      float x, float y, float w) =>
+            WingUi.Button(parent, text, new Rect(x, y, w, RowHeight), 11f, () => SetPage(target));
 
         private static void SetPage(Page next)
         {
             page = next;
-            if (tacticalRoot != null) tacticalRoot.gameObject.SetActive(next == Page.Tactical);
-            if (supplyRoot != null) supplyRoot.gameObject.SetActive(next == Page.Supply);
+
+            for (int i = 0; i < PageCount; i++)
+            {
+                bool active = i == (int)next;
+                if (pageRoots[i] != null) pageRoots[i].gameObject.SetActive(active);
+                pageTabs[i]?.SetLatched(active);
+            }
 
             if (panelRect != null)
-            {
-                panelRect.sizeDelta = new Vector2(
-                    PanelWidth, next == Page.Tactical ? tacticalHeight : supplyHeight);
-            }
-            tacticalTab?.SetLatched(next == Page.Tactical);
-            supplyTab?.SetLatched(next == Page.Supply);
+                panelRect.sizeDelta = new Vector2(PanelWidth, pageHeights[(int)next]);
 
+            // Leaving Tactical stops the map intercepting wing-icon clicks, so the icons
+            // have to lose their command-selection bracket at the same moment.
             WingCommandManager manager = WingCommandManager.Instance;
             if (manager != null)
             {
@@ -421,46 +547,72 @@ namespace WingCommand
         private static float Heading(RectTransform parent, float y, string text) =>
             WingUi.Heading(parent, y, text, PanelWidth);
 
-        private static float AddShapeSelector(RectTransform parent, float y)
+        /// <summary>
+        /// The three standing choices that shape a fight, in one labelled block: what a
+        /// wingman may shoot, which of its own weapons it reaches for, and where it sits.
+        ///
+        /// Grouped under one heading with a left gutter rather than given a heading each.
+        /// Three headings and a hint line cost sixty pixels of a panel that now shares its
+        /// bezel with four tabs, and they were labelling three rows that all answer the
+        /// same question — how does this flight fight. The per-choice explanations moved to
+        /// the status line at the foot of the page, where only the one being changed is
+        /// shown and it has the width to be a sentence.
+        /// </summary>
+        private static float AddEngagementSection(RectTransform parent, float y)
         {
-            y = Heading(parent, y, "FORMATION");
-            float w = PanelWidth - Pad * 2f;
+            y = Heading(parent, y, "ENGAGEMENT");
 
-            Panel(parent, new Rect(Pad, y, w, RowHeight), RowColor());
+            const float gutter = 62f;
+            float left = Pad + gutter;
+            float w = PanelWidth - Pad - left;
 
-            Button(parent, "<", new Rect(Pad + 4f, y - 3f, 30f, RowHeight - 6f),
+            // Rules of engagement: three rungs, so three buttons. They are an escalation
+            // rather than a toggle — each answers "the leader is being shot at" differently,
+            // which is the whole reason there are three of them. Wing-wide.
+            Gutter(parent, y, "ROE");
+            float roeWidth = (w - Gap * 2f) / 3f;
+            holdButton = Button(parent, "DEFEND", new Rect(left, y, roeWidth, RowHeight),
+                                () => SetRoe(WingRoe.Hold));
+            escortButton = Button(parent, "ESCORT",
+                                  new Rect(left + roeWidth + Gap, y, roeWidth, RowHeight),
+                                  () => SetRoe(WingRoe.Escort));
+            freeButton = Button(parent, "FREE",
+                                new Rect(left + (roeWidth + Gap) * 2f, y, roeWidth, RowHeight),
+                                () => SetRoe(WingRoe.Free));
+            y -= RowHeight + Gap;
+
+            // Weapon preference. Unlike the two rows around it this one is scoped to the
+            // current selection, which is what makes a mixed flight possible: two wingmen
+            // holding their missiles for aircraft while the third works the ground.
+            Gutter(parent, y, "WEAPON");
+            float preferenceWidth = (w - Gap * (preferenceButtons.Length - 1)) / preferenceButtons.Length;
+            for (int i = 0; i < preferenceButtons.Length; i++)
+            {
+                WingWeaponPreference preference = WingWeaponPreferences.All[i];
+                preferenceButtons[i] = WingUi.Button(
+                    parent, WingWeaponPreferences.Label(preference),
+                    new Rect(left + (preferenceWidth + Gap) * i, y, preferenceWidth, RowHeight),
+                    11f,
+                    () => WingCommandManager.Instance?.SetWeaponPreference(preference));
+            }
+            y -= RowHeight + Gap;
+
+            Gutter(parent, y, "FORM");
+            Panel(parent, new Rect(left, y, w, RowHeight), RowColor());
+            Button(parent, "<", new Rect(left + 4f, y - 3f, 26f, RowHeight - 6f),
                    () => CycleShape(-1));
-            Button(parent, ">", new Rect(Pad + w - 34f, y - 3f, 30f, RowHeight - 6f),
+            Button(parent, ">", new Rect(left + w - 30f, y - 3f, 26f, RowHeight - 6f),
                    () => CycleShape(1));
-
-            shapeLabel = Label(parent, "", new Rect(Pad + 38f, y, w - 76f, RowHeight),
-                               Friendly(), 13f, FontStyles.Normal, TextAlignmentOptions.Center);
+            shapeLabel = Label(parent, "", new Rect(left + 34f, y, w - 68f, RowHeight),
+                               Friendly(), 12f, FontStyles.Normal, TextAlignmentOptions.Center);
 
             return y - (RowHeight + Gap);
         }
 
-        private static float AddPostureSelector(RectTransform parent, float y)
-        {
-            y = Heading(parent, y, "RULES OF ENGAGEMENT");
-
-            // Three rungs, so three buttons. They are an escalation rather than a toggle:
-            // each answers "the leader is being shot at" differently, which is the whole
-            // reason there are three of them.
-            float w = (PanelWidth - Pad * 2f - Gap * 2f) / 3f;
-
-            holdButton = Button(parent, "DEFEND", new Rect(Pad, y, w, RowHeight),
-                                () => SetRoe(WingRoe.Hold));
-            escortButton = Button(parent, "ESCORT", new Rect(Pad + w + Gap, y, w, RowHeight),
-                                  () => SetRoe(WingRoe.Escort));
-            freeButton = Button(parent, "FREE", new Rect(Pad + (w + Gap) * 2f, y, w, RowHeight),
-                                () => SetRoe(WingRoe.Free));
-
-            y -= RowHeight + 2f;
-
-            postureLabel = Label(parent, "", new Rect(Pad, y, PanelWidth - Pad * 2f, 16f),
-                                 Dim(), 10f, FontStyles.Normal, TextAlignmentOptions.Left);
-            return y - 22f;
-        }
+        /// <summary>The dim row label in the left gutter of the engagement block.</summary>
+        private static void Gutter(RectTransform parent, float y, string text) =>
+            Label(parent, text, new Rect(Pad, y, 58f, RowHeight), Dim(), 10f,
+                  FontStyles.Normal, TextAlignmentOptions.Left);
 
         private static void SetRoe(WingRoe roe)
         {
@@ -486,13 +638,15 @@ namespace WingCommand
 
             // Column headers, so the numbers in each row are readable without guessing.
             float w = PanelWidth - Pad * 2f;
-            Label(parent, "CALLSIGN", new Rect(Pad + 26f, y, 108f, 14f), Dim(), 9f,
+            Label(parent, "CALLSIGN", new Rect(Pad + 26f, y, 100f, 14f), Dim(), 9f,
                   FontStyles.Normal, TextAlignmentOptions.Left);
-            Label(parent, "STATE", new Rect(Pad + 136f, y, 62f, 14f), Dim(), 9f,
+            Label(parent, "STATE", new Rect(Pad + 128f, y, 58f, 14f), Dim(), 9f,
                   FontStyles.Normal, TextAlignmentOptions.Left);
-            Label(parent, "SLOT ERR", new Rect(Pad + 198f, y, 62f, 14f), Dim(), 9f,
+            Label(parent, "WPN", new Rect(Pad + 188f, y, 30f, 14f), Dim(), 9f,
+                  FontStyles.Normal, TextAlignmentOptions.Left);
+            Label(parent, "SLOT ERR", new Rect(Pad + 220f, y, 52f, 14f), Dim(), 9f,
                   FontStyles.Normal, TextAlignmentOptions.Right);
-            Label(parent, "FUEL  AMMO", new Rect(Pad + 264f, y, 70f, 14f), Dim(), 9f,
+            Label(parent, "FUEL  AMMO", new Rect(Pad + 276f, y, 70f, 14f), Dim(), 9f,
                   FontStyles.Normal, TextAlignmentOptions.Right);
             y -= 16f;
 
@@ -665,9 +819,46 @@ namespace WingCommand
 
         // -------------------------------------------------------------------- refreshing
 
+        /// <summary>
+        /// Repaint the page the player is actually looking at.
+        ///
+        /// Only the visible page is refreshed. With two tabs that distinction was academic;
+        /// with four it is not, because rebuilding the requisition catalogue walks the
+        /// faction's whole supply dictionary and would otherwise be paid five times a second
+        /// while the player was reading the flight roster.
+        /// </summary>
         private static void Refresh(WingRegistry wing)
         {
+            PruneFocus(wing);
+
+            switch (page)
+            {
+                case Page.Supply:
+                    RefreshSupplyStatus();
+                    RefreshShop();
+                    // Refreshed after the catalogue, because selecting or exhausting a shop
+                    // row can change which reserve action is valid for the current airframe.
+                    RefreshReserve();
+                    break;
+
+                case Page.Loadout:
+                    RefreshLoadoutPage(wing);
+                    break;
+
+                case Page.Wing:
+                    RefreshWingPage(wing);
+                    break;
+
+                default:
+                    RefreshTactical(wing);
+                    break;
+            }
+        }
+
+        private static void RefreshTactical(WingRegistry wing)
+        {
             WingCommandManager manager = WingCommandManager.Instance;
+
             if (shapeLabel != null)
                 shapeLabel.text = FormationShapes.Pretty(Plugin.Config2.Shape.Value);
 
@@ -675,12 +866,15 @@ namespace WingCommand
                 summaryLabel.text = "COMMAND: " + (manager?.Selection.Summary(wing) ?? "ALL") +
                                     "   ·   WING " + wing.Count + "/" + Plugin.Config2.MaxWingSize.Value;
 
-            if (postureLabel != null)
-                postureLabel.text = RoeRules.Hint(wing.Roe);
-
             holdButton?.SetLatched(wing.Roe == WingRoe.Hold);
             escortButton?.SetLatched(wing.Roe == WingRoe.Escort);
             freeButton?.SetLatched(wing.Roe == WingRoe.Free);
+
+            // A scope whose members disagree lights nothing, rather than lighting the first
+            // one's choice and inviting the player to believe the whole scope shares it.
+            WingWeaponPreference? shared = manager?.ScopeWeaponPreference();
+            for (int i = 0; i < preferenceButtons.Length; i++)
+                preferenceButtons[i]?.SetLatched(shared == WingWeaponPreferences.All[i]);
 
             if (manager != null)
             {
@@ -697,14 +891,37 @@ namespace WingCommand
             }
 
             if (commandStatusLabel != null)
-                commandStatusLabel.text = manager?.MapStatus ?? "Select wingmen, then issue an order.";
+            {
+                // The map has first claim on this line: an armed point order or a pending
+                // assignment fee is a live instruction, and the engagement hints are not.
+                commandStatusLabel.text =
+                    manager != null && manager.MapStatusIsNotice
+                        ? manager.MapStatus
+                        : EngagementHint(wing, shared);
+            }
 
-            RefreshSupplyStatus();
-            RefreshShop();
-            // Refresh after the catalogue, because selecting or exhausting a shop row can
-            // change which reserve action is valid for the current airframe.
-            RefreshReserve();
+            RefreshRoster(wing);
+        }
 
+        /// <summary>
+        /// What the two engagement rows currently mean, in one sentence.
+        ///
+        /// The rules of engagement line is the important half and comes first; the weapon
+        /// preference is only mentioned when it is doing something, so an ordinary AUTO
+        /// flight reads exactly as it did before this control existed.
+        /// </summary>
+        private static string EngagementHint(WingRegistry wing, WingWeaponPreference? shared)
+        {
+            string hint = RoeRules.Hint(wing.Roe);
+
+            if (shared == null) return hint + "  ·  Weapon preference varies across the selection.";
+            if (shared.Value == WingWeaponPreference.Auto) return hint;
+
+            return hint + "  ·  " + WingWeaponPreferences.Hint(shared.Value);
+        }
+
+        private static void RefreshRoster(WingRegistry wing)
+        {
             int pages = Mathf.Max(1, Mathf.CeilToInt(wing.Count / (float)RosterRowsPerPage));
             rosterPage = Mathf.Clamp(rosterPage, 0, pages - 1);
             if (rosterPageLabel != null)
@@ -722,6 +939,14 @@ namespace WingCommand
                 if (index < wing.Count) rosterRows[i].Bind(wing.Members[index]);
                 else rosterRows[i].Hide();
             }
+        }
+
+        /// <summary>Keep the inspection focus on an aircraft that still exists.</summary>
+        private static void PruneFocus(WingRegistry wing)
+        {
+            if (focusMember != null && wing.Contains(focusMember)) return;
+
+            focusMember = wing.Count > 0 ? wing.Members[0] : null;
         }
 
         /// <summary>Refresh the concrete three-airframe wing reserve.</summary>
@@ -818,6 +1043,13 @@ namespace WingCommand
             // which is a thing to decode rather than a thing to read.
             offerDetailLabel = Label(parent, "", new Rect(Pad, y, PanelWidth - Pad * 2f, 16f),
                                      Dim(), 10f, FontStyles.Normal, TextAlignmentOptions.Left);
+            y -= 18f;
+
+            // What is actually being bought. A requisition now carries a loadout, and a
+            // price/stock breakdown that named only the airframe would be describing half
+            // the purchase.
+            offerLoadoutLabel = Label(parent, "", new Rect(Pad, y, PanelWidth - Pad * 2f, 16f),
+                                      Dim(), 10f, FontStyles.Normal, TextAlignmentOptions.Left);
             y -= 20f;
 
             float exceedWidth = PanelWidth - Pad * 2f - Gap - 130f;
@@ -908,18 +1140,26 @@ namespace WingCommand
                 else shopRows[i].Hide();
             }
 
-            bool selectedStillOffered = false;
+            ValidateSelectedOffer(offers);
+            RefreshOfferDetail(offers);
+        }
+
+        /// <summary>
+        /// Drop a selection the catalogue no longer contains.
+        ///
+        /// Stock runs out under the player, and both the Supply and Loadout tabs act on this
+        /// one selection — so it is re-checked against what is actually on offer wherever it
+        /// is read, not only where it is set.
+        /// </summary>
+        private static void ValidateSelectedOffer(IReadOnlyList<WingShop.Offer> offers)
+        {
+            if (selectedOffer == null) return;
+
             for (int i = 0; i < offers.Count; i++)
             {
-                if (offers[i].Definition == selectedOffer)
-                {
-                    selectedStillOffered = true;
-                    break;
-                }
+                if (offers[i].Definition == selectedOffer) return;
             }
-            if (!selectedStillOffered) selectedOffer = null;
-
-            RefreshOfferDetail(offers);
+            selectedOffer = null;
         }
 
         /// <summary>
@@ -964,6 +1204,35 @@ namespace WingCommand
                         (ownedCount > 0 ? "  ·  " + ownedCount + " owned reserve" :
                          reservedCount > 0 ? "  ·  held in wing reserve" : "");
                     offerDetailLabel.color = WingShop.Allocation >= cost ? Friendly() : Warning();
+                }
+            }
+
+            if (offerLoadoutLabel != null)
+            {
+                if (selectedOffer == null)
+                {
+                    offerLoadoutLabel.text = "";
+                }
+                else
+                {
+                    // A recovered airframe launches with the fit it came home with, so the
+                    // planned loadout is not what the next one of these will carry. Saying
+                    // which of the two applies is the difference between a breakdown and a
+                    // guess.
+                    WingLoadoutChoice fit = WingLoadoutBook.PlannedFor(selectedOffer);
+                    bool fromReserve = false;
+
+                    if (WingSupplyReserve.NextSource(selectedOffer) != WingSupplyReserve.Source.None &&
+                        WingLoadoutBook.PeekReserved(selectedOffer, out WingLoadoutChoice stored))
+                    {
+                        fit = stored;
+                        fromReserve = true;
+                    }
+
+                    offerLoadoutLabel.text =
+                        "FIT  " + WingLoadoutCatalog.Label(selectedOffer, fit) +
+                        (fromReserve ? "  ·  as recovered" : "  ·  change it on LOADOUT");
+                    offerLoadoutLabel.color = Dim();
                 }
             }
 
@@ -1080,7 +1349,7 @@ namespace WingCommand
         private sealed class RosterRow
         {
             private readonly GameObject go;
-            private readonly TMP_Text slot, name, order, error, reserves;
+            private readonly TMP_Text slot, name, order, preference, error, reserves;
             private readonly Image selectionRule;
             private WingMember bound;
 
@@ -1106,13 +1375,15 @@ namespace WingCommand
 
                 slot  = Label(rt, "", new Rect(6f, 0f, 18f, RowHeight), Dim(), 12f,
                               FontStyles.Normal, TextAlignmentOptions.Left);
-                name  = Label(rt, "", new Rect(26f, 0f, 108f, RowHeight), WingColor(), 12f,
+                name  = Label(rt, "", new Rect(26f, 0f, 100f, RowHeight), WingColor(), 12f,
                               FontStyles.Normal, TextAlignmentOptions.Left);
-                order = Label(rt, "", new Rect(136f, 0f, 62f, RowHeight), Dim(), 12f,
+                order = Label(rt, "", new Rect(128f, 0f, 58f, RowHeight), Dim(), 12f,
                               FontStyles.Normal, TextAlignmentOptions.Left);
-                error = Label(rt, "", new Rect(198f, 0f, 62f, RowHeight), Dim(), 12f,
+                preference = Label(rt, "", new Rect(188f, 0f, 30f, RowHeight), Dim(), 10f,
+                              FontStyles.Normal, TextAlignmentOptions.Left);
+                error = Label(rt, "", new Rect(220f, 0f, 52f, RowHeight), Dim(), 12f,
                               FontStyles.Normal, TextAlignmentOptions.Right);
-                reserves = Label(rt, "", new Rect(264f, 0f, 70f, RowHeight), Dim(), 11f,
+                reserves = Label(rt, "", new Rect(276f, 0f, 70f, RowHeight), Dim(), 11f,
                               FontStyles.Normal, TextAlignmentOptions.Right);
 
                 Button(rt, "REL", new Rect(width - 48f, -3f, 42f, RowHeight - 6f), () =>
@@ -1138,6 +1409,15 @@ namespace WingCommand
                 name.color = selected ? Green() : WingColor();
                 selectionRule.color = selected ? Green() : MemberFrameColor();
                 order.text = ShortOrder(m);
+
+                // The weapon preference gets its own narrow column rather than being
+                // appended to the state text. Sharing that cell would have truncated the
+                // order — which is the more important of the two — the moment anything but
+                // AUTO was selected.
+                preference.text = WingWeaponPreferences.ShortLabel(m.WeaponPreference);
+                preference.color = m.WeaponPreference == WingWeaponPreference.Auto
+                    ? Dim()
+                    : Accent();
 
                 reserves.text = Mathf.RoundToInt(m.Fuel * 100f) + "%  " + m.Ammo;
                 reserves.color = m.Fuel <= Plugin.Config2.BingoFuel.Value || m.Ammo <= 0
@@ -1165,6 +1445,605 @@ namespace WingCommand
                 return m.SlotError < 10000f
                     ? m.SlotError.ToString("F0") + " m"
                     : (m.SlotError / 1000f).ToString("F1") + " km";
+            }
+        }
+
+        // ----------------------------------------------------------------- loadout page
+
+        /// <summary>
+        /// Where a wingman's equipment is decided.
+        ///
+        /// The page is built around the one honest fact about aircraft loadouts in this
+        /// game: they are fitted when the airframe is created and cannot be changed while it
+        /// is flying. So the top half configures the <em>next</em> requisition, which is the
+        /// only decision the player can actually make, and the bottom half reports what is
+        /// already in the air and says plainly that it is fixed. Presenting both as editable
+        /// and quietly ignoring one would be the worse lie.
+        /// </summary>
+        private static float AddLoadoutPage(RectTransform parent, float y)
+        {
+            y = Heading(parent, y, "NEXT REQUISITION");
+
+            // The airframe here is the Supply tab's selection. Sharing it keeps the two
+            // tabs describing one purchase: pick the aircraft on either page, configure it
+            // on this one, buy it on that one.
+            float w = PanelWidth - Pad * 2f;
+            Panel(parent, new Rect(Pad, y, w, RowHeight), RowColor());
+            Button(parent, "<", new Rect(Pad + 4f, y - 3f, 26f, RowHeight - 6f),
+                   () => CycleOffer(-1));
+            Button(parent, ">", new Rect(Pad + w - 30f, y - 3f, 26f, RowHeight - 6f),
+                   () => CycleOffer(1));
+            loadoutAirframeLabel = Label(parent, "", new Rect(Pad + 34f, y, w - 68f, RowHeight),
+                                         Friendly(), 12f, FontStyles.Normal,
+                                         TextAlignmentOptions.Center);
+            y -= RowHeight + Gap;
+
+            const float gutter = 62f;
+            float left = Pad + gutter;
+            float inner = PanelWidth - Pad - left;
+
+            Gutter(parent, y, "FIT");
+            float presetWidth = (inner - Gap * (AllPresets.Length - 1)) / AllPresets.Length;
+            presetButtons.Clear();
+            for (int i = 0; i < AllPresets.Length; i++)
+            {
+                WingLoadoutPreset preset = AllPresets[i];
+                presetButtons.Add(WingUi.Button(
+                    parent, WingLoadoutCatalog.Label(preset),
+                    new Rect(left + (presetWidth + Gap) * i, y, presetWidth, RowHeight), 9f,
+                    () => SetPreset(preset)));
+            }
+            y -= RowHeight + Gap;
+
+            Gutter(parent, y, "CARGO");
+            Panel(parent, new Rect(left, y, inner, RowHeight), RowColor());
+            cargoPrevButton = Button(parent, "<", new Rect(left + 4f, y - 3f, 26f, RowHeight - 6f),
+                                     () => CycleCargo(-1));
+            cargoNextButton = Button(parent, ">",
+                                     new Rect(left + inner - 30f, y - 3f, 26f, RowHeight - 6f),
+                                     () => CycleCargo(1));
+            cargoLabel = Label(parent, "", new Rect(left + 34f, y, inner - 68f, RowHeight),
+                               Friendly(), 11f, FontStyles.Normal, TextAlignmentOptions.Center);
+            y -= RowHeight + 2f;
+
+            loadoutStatusLabel = Label(parent, "", new Rect(Pad, y, PanelWidth - Pad * 2f, 16f),
+                                       Dim(), 10f, FontStyles.Normal, TextAlignmentOptions.Left);
+            y -= 20f;
+
+            y = Heading(parent, y, "IN THE AIR");
+            Label(parent, "CALLSIGN", new Rect(Pad + 26f, y, 120f, 14f), Dim(), 9f,
+                  FontStyles.Normal, TextAlignmentOptions.Left);
+            Label(parent, "CARRYING", new Rect(Pad + 160f, y, PanelWidth - Pad * 2f - 168f, 14f),
+                  Dim(), 9f, FontStyles.Normal, TextAlignmentOptions.Right);
+            y -= 16f;
+
+            loadoutRosterArea = RosterViewport(parent, "LoadoutRoster", y);
+            y -= (RowHeight + 2f) * RosterRowsPerPage + Gap;
+
+            loadoutPager = new RosterPager(parent, y);
+            y -= RowHeight + Gap;
+
+            loadoutFlightNote = Label(parent, "",
+                                      new Rect(Pad, y, PanelWidth - Pad * 2f, 32f), Dim(), 10f,
+                                      FontStyles.Normal, TextAlignmentOptions.TopLeft);
+            loadoutFlightNote.enableWordWrapping = true;
+            return y - 36f;
+        }
+
+        /// <summary>A fixed-height area that roster rows are laid out inside.</summary>
+        private static RectTransform RosterViewport(RectTransform parent, string name, float y)
+        {
+            var area = new GameObject(name, typeof(RectTransform));
+            RectTransform rt = area.GetComponent<RectTransform>();
+            rt.SetParent(parent, worldPositionStays: false);
+            Place(rt, new Rect(Pad, y, PanelWidth - Pad * 2f,
+                               (RowHeight + 2f) * RosterRowsPerPage));
+            return rt;
+        }
+
+        /// <summary>Step the shared airframe selection through the requisition catalogue.</summary>
+        private static void CycleOffer(int direction)
+        {
+            IReadOnlyList<WingShop.Offer> offers = WingShop.Catalogue();
+            if (offers.Count == 0)
+            {
+                WingCommandManager.Instance?.Toast("Nothing in stock for your airframe");
+                return;
+            }
+
+            int index = -1;
+            for (int i = 0; i < offers.Count; i++)
+            {
+                if (offers[i].Definition != selectedOffer) continue;
+                index = i;
+                break;
+            }
+
+            index = index < 0 ? 0 : (index + direction + offers.Count) % offers.Count;
+            selectedOffer = offers[index].Definition;
+        }
+
+        private static void SetPreset(WingLoadoutPreset preset)
+        {
+            if (selectedOffer == null)
+            {
+                WingCommandManager.Instance?.Toast("Select an airframe first");
+                return;
+            }
+
+            WingLoadoutCatalog.PresetsFor(selectedOffer, presetScratch);
+            if (!presetScratch.Contains(preset))
+            {
+                WingCommandManager.Instance?.Toast(
+                    selectedOffer.unitName + " has no stock stores for a " +
+                    WingLoadoutCatalog.Label(preset) + " fit");
+                return;
+            }
+
+            WingLoadoutChoice choice = WingLoadoutBook.PlannedFor(selectedOffer).WithPreset(preset);
+
+            // A cargo fit with no cargo chosen takes the first the airframe offers, so the
+            // preset is never left in a state that cannot be built.
+            if (preset == WingLoadoutPreset.Cargo && choice.CargoKey == null &&
+                WingLoadoutCatalog.ResolveCargo(selectedOffer, null,
+                                                out WingLoadoutCatalog.CargoOption first))
+                choice = choice.WithCargo(first.Key);
+
+            WingLoadoutBook.Plan(selectedOffer, choice);
+        }
+
+        private static void CycleCargo(int direction)
+        {
+            if (selectedOffer == null) return;
+
+            IReadOnlyList<WingLoadoutCatalog.CargoOption> options =
+                WingLoadoutCatalog.CargoOptionsFor(selectedOffer);
+            if (options.Count == 0) return;
+
+            WingLoadoutChoice choice = WingLoadoutBook.PlannedFor(selectedOffer);
+
+            int index = 0;
+            for (int i = 0; i < options.Count; i++)
+            {
+                if (options[i].Key != choice.CargoKey) continue;
+                index = i;
+                break;
+            }
+
+            index = (index + direction + options.Count) % options.Count;
+            WingLoadoutBook.Plan(selectedOffer, choice.WithCargo(options[index].Key));
+        }
+
+        private static void RefreshLoadoutPage(WingRegistry wing)
+        {
+            IReadOnlyList<WingShop.Offer> offers = WingShop.Catalogue();
+            ValidateSelectedOffer(offers);
+
+            if (selectedOffer == null && offers.Count > 0) selectedOffer = offers[0].Definition;
+
+            if (loadoutAirframeLabel != null)
+            {
+                loadoutAirframeLabel.text = selectedOffer != null
+                    ? UiTheme.Truncate(selectedOffer.unitName, 26)
+                    : "NOTHING IN STOCK";
+                loadoutAirframeLabel.color = selectedOffer != null ? Friendly() : Dim();
+            }
+
+            WingLoadoutChoice planned = WingLoadoutBook.PlannedFor(selectedOffer);
+            presetScratch.Clear();
+            if (selectedOffer != null) WingLoadoutCatalog.PresetsFor(selectedOffer, presetScratch);
+
+            for (int i = 0; i < presetButtons.Count; i++)
+            {
+                WingLoadoutPreset preset = AllPresets[i];
+                presetButtons[i].SetEnabled(presetScratch.Contains(preset));
+                presetButtons[i].SetLatched(planned.Preset == preset);
+            }
+
+            RefreshCargoSelector(planned);
+            RefreshLoadoutStatus(planned);
+            RefreshLoadoutRoster(wing);
+        }
+
+        private static void RefreshCargoSelector(WingLoadoutChoice planned)
+        {
+            bool cargoFit = selectedOffer != null && planned.Preset == WingLoadoutPreset.Cargo;
+            bool hasOptions = selectedOffer != null && WingLoadoutCatalog.SupportsCargo(selectedOffer);
+
+            cargoPrevButton?.SetEnabled(cargoFit && hasOptions);
+            cargoNextButton?.SetEnabled(cargoFit && hasOptions);
+
+            if (cargoLabel == null) return;
+
+            if (!hasOptions)
+            {
+                cargoLabel.text = "NOT A TRANSPORT";
+                cargoLabel.color = Dim();
+                return;
+            }
+
+            WingLoadoutCatalog.ResolveCargo(selectedOffer, planned.CargoKey,
+                                            out WingLoadoutCatalog.CargoOption option);
+            cargoLabel.text = UiTheme.Truncate(option.Label, 26);
+            cargoLabel.color = cargoFit ? Friendly() : Dim();
+        }
+
+        private static void RefreshLoadoutStatus(WingLoadoutChoice planned)
+        {
+            if (loadoutStatusLabel == null) return;
+
+            if (selectedOffer == null)
+            {
+                loadoutStatusLabel.text = "No airframe your flight can formate on is in stock.";
+                loadoutStatusLabel.color = Dim();
+                return;
+            }
+
+            if (!WingLoadoutCatalog.Available)
+            {
+                loadoutStatusLabel.text =
+                    "Stock station data unreadable on this build - standard fit only.";
+                loadoutStatusLabel.color = Warning();
+                return;
+            }
+
+            if (!WingLoadoutCatalog.HasPresets(selectedOffer))
+            {
+                loadoutStatusLabel.text =
+                    UiTheme.Truncate(selectedOffer.unitName, 18) +
+                    " offers only its own standard fit.";
+                loadoutStatusLabel.color = Dim();
+                return;
+            }
+
+            loadoutStatusLabel.text =
+                "Requisitions of " + UiTheme.Truncate(selectedOffer.unitName, 16) + " launch with " +
+                WingLoadoutCatalog.Label(selectedOffer, planned) +
+                (WingLoadoutBook.ReservedCount(selectedOffer) > 0
+                    ? "  ·  a recovered airframe keeps what it came home with"
+                    : "");
+            loadoutStatusLabel.color = Friendly();
+        }
+
+        private static void RefreshLoadoutRoster(WingRegistry wing)
+        {
+            SyncPickRows(loadoutRows, loadoutRosterArea);
+            int first = loadoutPager != null ? loadoutPager.Refresh(wing) : 0;
+
+            for (int i = 0; i < loadoutRows.Count; i++)
+            {
+                int index = first + i;
+                if (index >= wing.Count)
+                {
+                    loadoutRows[i].Hide();
+                    continue;
+                }
+
+                WingMember member = wing.Members[index];
+                loadoutRows[i].Bind(member, member.LoadoutKnown
+                    ? WingLoadoutCatalog.Label(DefinitionOf(member), member.Loadout)
+                    : "AS FOUND");
+            }
+
+            if (loadoutFlightNote == null) return;
+
+            loadoutFlightNote.text = wing.Count == 0
+                ? "No wingmen assigned. Requisition one from SUPPLY, or assign an active " +
+                  "mission aircraft from the map."
+                : "Equipment is fitted at launch and cannot be changed in flight. An " +
+                  "assigned mission aircraft flies as found; send a wingman home with RTB " +
+                  "and its airframe keeps this fit into the wing reserve.";
+        }
+
+        // -------------------------------------------------------------------- wing page
+
+        /// <summary>
+        /// Who is flying, how they are doing, and what state their aircraft is in.
+        ///
+        /// Read-only by design. Everything that can be changed about a wingman already has
+        /// a control somewhere else, and duplicating those here would give the player two
+        /// places to look for the same switch.
+        /// </summary>
+        private static float AddWingPage(RectTransform parent, float y)
+        {
+            y = Heading(parent, y, "FLIGHT");
+            Label(parent, "CALLSIGN", new Rect(Pad + 26f, y, 120f, 14f), Dim(), 9f,
+                  FontStyles.Normal, TextAlignmentOptions.Left);
+            Label(parent, "STATE", new Rect(Pad + 160f, y, PanelWidth - Pad * 2f - 168f, 14f),
+                  Dim(), 9f, FontStyles.Normal, TextAlignmentOptions.Right);
+            y -= 16f;
+
+            wingRosterArea = RosterViewport(parent, "WingRoster", y);
+            y -= (RowHeight + 2f) * RosterRowsPerPage + Gap;
+
+            wingPager = new RosterPager(parent, y);
+            y -= RowHeight + Gap;
+
+            y = Heading(parent, y, "PILOT");
+            float w = PanelWidth - Pad * 2f;
+
+            pilotIdentityLabel = Label(parent, "", new Rect(Pad, y, w, 18f), Green(), 13f,
+                                       FontStyles.Normal, TextAlignmentOptions.Left);
+            y -= 18f;
+
+            pilotRankLabel = Label(parent, "", new Rect(Pad, y, w, 16f), Friendly(), 11f,
+                                   FontStyles.Normal, TextAlignmentOptions.Left);
+            y -= 16f;
+
+            // Track first, fill second: the fill is resized every refresh, so it must be the
+            // later sibling or a full bar would be drawn underneath its own background.
+            Rule(parent, new Rect(Pad, y, w, 3f), FrameColor());
+            pilotXpBar = Rule(parent, new Rect(Pad, y, w, 3f), Accent());
+            pilotXpBarWidth = w;
+            y -= 10f;
+
+            pilotBackgroundLabel = Label(parent, "", new Rect(Pad, y, w, 16f), Dim(), 10f,
+                                         FontStyles.Italic, TextAlignmentOptions.Left);
+            y -= 20f;
+
+            y = Heading(parent, y, "AIRFRAME");
+
+            airframeTypeLabel = Label(parent, "", new Rect(Pad, y, w, 16f), Friendly(), 11f,
+                                      FontStyles.Normal, TextAlignmentOptions.Left);
+            y -= 18f;
+            airframeStateLabel = Label(parent, "", new Rect(Pad, y, w, 16f), Friendly(), 11f,
+                                       FontStyles.Normal, TextAlignmentOptions.Left);
+            y -= 18f;
+            airframeOrderLabel = Label(parent, "", new Rect(Pad, y, w, 16f), Friendly(), 11f,
+                                       FontStyles.Normal, TextAlignmentOptions.Left);
+            y -= 18f;
+            airframeLoadoutLabel = Label(parent, "", new Rect(Pad, y, w, 16f), Dim(), 10f,
+                                         FontStyles.Normal, TextAlignmentOptions.Left);
+            return y - 20f;
+        }
+
+        private static void RefreshWingPage(WingRegistry wing)
+        {
+            SyncPickRows(wingRows, wingRosterArea);
+            int first = wingPager != null ? wingPager.Refresh(wing) : 0;
+
+            for (int i = 0; i < wingRows.Count; i++)
+            {
+                int index = first + i;
+                if (index >= wing.Count)
+                {
+                    wingRows[i].Hide();
+                    continue;
+                }
+
+                WingMember member = wing.Members[index];
+                wingRows[i].Bind(member, ShortOrder(member));
+            }
+
+            WingMember focus = focusMember;
+            if (focus == null)
+            {
+                SetWingDetail("NO WINGMEN ASSIGNED", "", 0f, "", "", "", "", "");
+                return;
+            }
+
+            WingPilot crew = focus.Crew;
+            string identity = crew != null
+                ? crew.Callsign + "  ·  " + crew.Name
+                : "UNASSIGNED CREW";
+
+            string rank;
+            float progress;
+            if (crew == null)
+            {
+                rank = "";
+                progress = 0f;
+            }
+            else if (crew.Rank >= WingPilotRoster.TopRank)
+            {
+                rank = WingPilotRoster.RankName(crew.Rank) + "   XP " + crew.Xp +
+                       "   " + crew.Kills + " KILL(S)   " + crew.Sorties + " SORTIE(S)";
+                progress = 1f;
+            }
+            else
+            {
+                int floor = WingPilotRoster.XpForRank(crew.Rank);
+                int ceiling = WingPilotRoster.XpForRank(crew.Rank + 1);
+                rank = WingPilotRoster.RankName(crew.Rank) + "   XP " + crew.Xp + " / " + ceiling +
+                       "   " + crew.Kills + " KILL(S)   " + crew.Sorties + " SORTIE(S)";
+                progress = ceiling > floor
+                    ? Mathf.Clamp01((crew.Xp - floor) / (float)(ceiling - floor))
+                    : 0f;
+            }
+
+            Aircraft aircraft = focus.Aircraft;
+            AircraftDefinition definition = DefinitionOf(focus);
+
+            string type = definition != null
+                ? UiTheme.Truncate(definition.unitName, 22) + "   SLOT " + focus.Slot
+                : "AIRFRAME   SLOT " + focus.Slot;
+
+            string state =
+                "FUEL " + Mathf.RoundToInt(focus.Fuel * 100f) + "%" +
+                "   AMMO " + focus.Ammo +
+                "   HULL " + Mathf.RoundToInt(focus.Integrity * 100f) + "%" +
+                (focus.CanDeliverCargo ? "   CARGO " + focus.CargoAmmo : "");
+
+            string order =
+                "ORDER " + WingOrderCatalog.ShortLabel(focus.Order) +
+                "   WEAPONS " + WingWeaponPreferences.Label(focus.WeaponPreference) +
+                (focus.DeliveryPending ? "   (DEPARTING)" : "") +
+                (focus.IsPanicking ? "   (DEFENSIVE)" : "");
+
+            string loadout = focus.LoadoutKnown
+                ? "LOADOUT " + WingLoadoutCatalog.Label(definition, focus.Loadout) +
+                  " - fitted at requisition"
+                : "LOADOUT as found - assigned mission aircraft keep their own fit";
+
+            SetWingDetail(identity, rank, progress,
+                          crew != null ? crew.Background : "", type, state, order, loadout);
+
+            if (airframeStateLabel != null)
+            {
+                bool poor = focus.Fuel <= Plugin.Config2.BingoFuel.Value ||
+                            focus.Ammo <= 0 || focus.Integrity < 0.75f;
+                airframeStateLabel.color = poor ? Warning() : Friendly();
+            }
+
+            // Nothing on this page writes to the aircraft, so an unreachable one is worth
+            // saying rather than worth disabling controls over.
+            if (airframeTypeLabel != null && aircraft != null && !aircraft.LocalSim)
+                airframeTypeLabel.text = type + "   (NOT LOCALLY SIMULATED)";
+        }
+
+        private static void SetWingDetail(string identity, string rank, float progress,
+                                          string background, string type, string state,
+                                          string order, string loadout)
+        {
+            if (pilotIdentityLabel != null) pilotIdentityLabel.text = identity;
+            if (pilotRankLabel != null) pilotRankLabel.text = rank;
+            if (pilotBackgroundLabel != null) pilotBackgroundLabel.text = background;
+            if (airframeTypeLabel != null)
+            {
+                airframeTypeLabel.text = type;
+                airframeTypeLabel.color = Friendly();
+            }
+            if (airframeStateLabel != null) airframeStateLabel.text = state;
+            if (airframeOrderLabel != null) airframeOrderLabel.text = order;
+            if (airframeLoadoutLabel != null) airframeLoadoutLabel.text = loadout;
+
+            if (pilotXpBar != null)
+                pilotXpBar.rectTransform.sizeDelta =
+                    new Vector2(Mathf.Max(1f, pilotXpBarWidth * Mathf.Clamp01(progress)), 3f);
+        }
+
+        // ------------------------------------------------------- shared roster plumbing
+
+        private static AircraftDefinition DefinitionOf(WingMember member) =>
+            member != null && member.Aircraft != null ? member.Aircraft.definition : null;
+
+        /// <summary>
+        /// The <c>&lt;</c> page <c>&gt;</c> strip under an inspection roster.
+        ///
+        /// MaxWingSize goes to eight, and a page built for three rows would otherwise hide
+        /// the rest of a large wing with nothing on screen to say so. Both arrows go dead on
+        /// a single page rather than looking available and doing nothing.
+        /// </summary>
+        private sealed class RosterPager
+        {
+            private readonly WingButton prev;
+            private readonly WingButton next;
+            private readonly TMP_Text label;
+
+            public RosterPager(RectTransform parent, float y)
+            {
+                float w = PanelWidth - Pad * 2f;
+
+                prev = Button(parent, "<", new Rect(Pad, y, 34f, RowHeight), () => Turn(-1));
+                label = Label(parent, "", new Rect(Pad + 38f, y, w - 76f, RowHeight), Dim(), 10f,
+                              FontStyles.Normal, TextAlignmentOptions.Center);
+                next = Button(parent, ">", new Rect(PanelWidth - Pad - 34f, y, 34f, RowHeight),
+                              () => Turn(1));
+            }
+
+            private static void Turn(int direction) =>
+                inspectPage = Mathf.Max(0, inspectPage + direction);
+
+            /// <summary>Clamp against the live roster and return the first visible index.</summary>
+            public int Refresh(WingRegistry wing)
+            {
+                int pages = Mathf.Max(1, Mathf.CeilToInt(wing.Count / (float)RosterRowsPerPage));
+                inspectPage = Mathf.Clamp(inspectPage, 0, pages - 1);
+
+                if (label != null)
+                    label.text = "flight page " + (inspectPage + 1) + " of " + pages;
+
+                prev?.SetEnabled(inspectPage > 0);
+                next?.SetEnabled(inspectPage < pages - 1);
+
+                return inspectPage * RosterRowsPerPage;
+            }
+        }
+
+        private static void SyncPickRows(List<PickRow> rows, RectTransform area)
+        {
+            if (area == null) return;
+            while (rows.Count < RosterRowsPerPage) rows.Add(new PickRow(area, rows.Count));
+        }
+
+        /// <summary>
+        /// Inspect one wingman on the Loadout and Wing tabs.
+        ///
+        /// Picking a member on the Loadout page also moves the requisition selection onto
+        /// its airframe, which is nearly always what was meant: the reason to click a VT-7
+        /// on that page is to configure the next VT-7.
+        /// </summary>
+        private static void Focus(WingMember member)
+        {
+            focusMember = member;
+
+            if (page != Page.Loadout) return;
+
+            AircraftDefinition definition = DefinitionOf(member);
+            if (definition != null) selectedOffer = definition;
+        }
+
+        /// <summary>
+        /// A compact selectable roster line, shared by the Loadout and Wing tabs.
+        ///
+        /// Deliberately not the Tactical page's <see cref="RosterRow"/>: that row carries
+        /// five live columns and a release button, and clicking it changes the command
+        /// scope. These two pages need one column of detail and a selection that means
+        /// "show me this one".
+        /// </summary>
+        private sealed class PickRow
+        {
+            private readonly GameObject go;
+            private readonly TMP_Text slot, name, detail;
+            private readonly Image selectionRule;
+            private WingMember bound;
+
+            public PickRow(RectTransform parent, int index)
+            {
+                float width = parent.rect.width;
+                float y = -index * (RowHeight + 2f);
+
+                go = new GameObject("Pick" + index, typeof(RectTransform));
+                var rt = go.GetComponent<RectTransform>();
+                rt.SetParent(parent, worldPositionStays: false);
+                Place(rt, new Rect(0f, y, width, RowHeight));
+
+                Panel(rt, new Rect(0f, 0f, width, RowHeight), MemberFrameColor());
+                selectionRule = Rule(rt, new Rect(0f, 0f, 3f, RowHeight), WingColor());
+
+                HitButton(rt, new Rect(0f, 0f, width, RowHeight), () =>
+                {
+                    if (bound != null) Focus(bound);
+                });
+
+                slot = Label(rt, "", new Rect(6f, 0f, 18f, RowHeight), Dim(), 12f,
+                             FontStyles.Normal, TextAlignmentOptions.Left);
+                name = Label(rt, "", new Rect(26f, 0f, 120f, RowHeight), WingColor(), 12f,
+                             FontStyles.Normal, TextAlignmentOptions.Left);
+                detail = Label(rt, "", new Rect(150f, 0f, width - 158f, RowHeight), Dim(), 11f,
+                               FontStyles.Normal, TextAlignmentOptions.Right);
+
+                go.SetActive(false);
+            }
+
+            public void Bind(WingMember member, string detailText)
+            {
+                bound = member;
+                if (!go.activeSelf) go.SetActive(true);
+
+                bool selected = focusMember == member;
+                slot.text = member.Slot.ToString();
+                slot.color = selected ? Green() : Dim();
+                name.text = UiTheme.Truncate(member.Name, 18);
+                name.color = selected ? Green() : WingColor();
+                selectionRule.color = selected ? Green() : MemberFrameColor();
+                detail.text = detailText;
+            }
+
+            public void Hide()
+            {
+                bound = null;
+                if (go.activeSelf) go.SetActive(false);
             }
         }
 

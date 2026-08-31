@@ -129,6 +129,11 @@ namespace WingCommand
 
             if (entry.Total == 0) entries.Remove(definition);
             hq.AddSupplyUnit(definition, 1);
+
+            // An airframe that has gone back to the faction is no longer the player's to
+            // configure, so the loadout parked against its slot goes with it.
+            WingLoadoutBook.DropReserved(definition);
+
             Plugin.Logger.LogInfo(
                 "[Reserve] returned " + definition.unitName + " to faction stock (" +
                 Count + "/" + Capacity + ")");

@@ -128,7 +128,7 @@ namespace WingCommand
 
         private void Shoot(Unit target)
         {
-            if (Time.timeSinceLevelLoad - lastFiredTime < Plugin.Config2.FireInterval.Value) return;
+            if (Time.timeSinceLevelLoad - lastFiredTime < WingWeapons.FireInterval(aircraft)) return;
 
             // The same weapon selection and validity checks the formation path uses, so an
             // attack run cannot dump the loadout at a target it has no business shooting.

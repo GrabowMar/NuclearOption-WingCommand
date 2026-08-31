@@ -90,7 +90,7 @@ namespace WingCommand
                     fired = WingWeapons.Engage(aircraft, pilot, allow, range);
                 if (fired) WingComms.Say(member, WingComms.Call.Defending);
             }
-            else if (Time.timeSinceLevelLoad - lastFiredTime >= Plugin.Config2.FireInterval.Value)
+            else if (Time.timeSinceLevelLoad - lastFiredTime >= WingWeapons.FireInterval(aircraft))
             {
                 Unit target = null;
                 Aircraft leader = member.Leader;

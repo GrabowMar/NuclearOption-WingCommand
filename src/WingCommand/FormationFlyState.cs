@@ -460,7 +460,7 @@ namespace WingCommand
             // A weapon that passes its own checks would otherwise be fired on every tick,
             // emptying the aircraft in seconds. The stock AI leaves five seconds between
             // launches; this is the same idea, exposed so it can be tuned.
-            bool mayFire = Time.timeSinceLevelLoad - lastFiredTime >= Plugin.Config2.FireInterval.Value;
+            bool mayFire = Time.timeSinceLevelLoad - lastFiredTime >= WingWeapons.FireInterval(aircraft);
 
             WingRoe roe = RoeRules.Current;
 

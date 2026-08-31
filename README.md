@@ -23,6 +23,9 @@ player reserves without turning Nuclear Option into an RTS.
 ## Highlights
 
 - Command the whole wing quickly from the native radial, or select individual wingmen in WMC.
+- Requisition wingmen with a chosen loadout, kept per airframe from purchase through recovery.
+- Tell a wingman which of its own weapons to reach for first, separately from its ROE.
+- Read live aircraft and pilot state, and a callsign, rank and record that grow with the mission.
 - Click wing icons on the tactical map to build a command scope independent of weapon targets.
 - Place Hold and Land orders directly on the map and read persistent task markers at a glance.
 - Choose from six distinct release-facing formations with smooth shape transitions.
@@ -86,7 +89,9 @@ using **F1**.
 3. Switch to **WMC > Tactical**. Click a roster row or wing icon; Shift-click builds a
    multi-aircraft scope and **Select All** restores whole-wing scope.
 4. Issue an order. **Hold Here** and **Land Here** arm the map cursor; click the destination.
-5. Use the compact **Wing Command** radial when you need immediate whole-wing combat orders.
+5. Before requisitioning, open **WMC > Loadout** to choose the fit that airframe launches
+   with — and, for a transport, what it is carrying.
+6. Use the compact **Wing Command** radial when you need immediate whole-wing combat orders.
 
 If your pilot is killed or ejects while wingmen survive, WingCommand holds them in safe
 orbits and opens a takeover window. Selecting one spawns a fresh player-controlled copy at
@@ -130,12 +135,17 @@ remain available as advanced settings and are unbound by default.
 
 ### WMC MFD page
 
-The **WMC** page has two focused tabs:
+The **WMC** page has four focused tabs:
 
-- **Tactical:** paged roster, independent command selection, ROE, six core formations,
-  scoped orders, capability-gated Cargo/Land controls, and map-order status.
+- **Tactical:** paged roster, independent command selection, ROE, preferred weapon, six core
+  formations, scoped orders, capability-gated Cargo/Land controls, and map-order status.
 - **Supply:** funds, wing size and squadron capacity at a glance; the faction catalogue at
-  flat list prices; confirmed active-AI assignment; and a concrete three-airframe reserve.
+  flat list prices, including the loadout each requisition will carry; confirmed active-AI
+  assignment; and a concrete three-airframe reserve.
+- **Loadout:** the fit the next requisition of an airframe launches with, the cargo a
+  transport carries, and what every wingman already in the air is carrying.
+- **Wing:** fuel, ammunition, cargo, hull state and current order for one wingman, with its
+  pilot's callsign, rank, record and background.
 
 ### Tactical map
 
@@ -150,7 +160,7 @@ The **WMC** page has two focused tabs:
 | Right-click or Escape while an order is armed | Cancel it |
 
 Hostile, friendly non-wing, ground, and naval icon behavior remains stock. Closing WMC or
-switching to Supply stops intercepting wing-icon clicks.
+switching to any other tab stops intercepting wing-icon clicks.
 
 Map moves are temporary routes. On the final point, Defend/Hold and Escort wingmen return
 to formation; Free wingmen hand off to Engage and may resume autonomous combat.
@@ -164,7 +174,7 @@ to formation; Free wingmen hand off to Engage and may resume autonomous combat.
 | **Engage** | Hunt autonomously within the configured leash and return when too far away |
 | **Disengage** | Break on separated headings, use countermeasures, egress, then form up again |
 | **Hold Here** | Hold a combat air patrol around the selected point while continuing to apply ROE |
-| **Deliver Cargo** | Use the game's supply behaviour with compatible transport helicopters |
+| **Deliver Cargo** | Run the game's supply behaviour with compatible transport helicopters, then report the delivery and rejoin |
 | **Land Here** | Set compatible helicopters down near the order point |
 | **Return To Base** | Fly the stock landing pattern home, then hand the airframe back to faction stock |
 | **Formation dial** | Choose one of the six core formation geometries from the radial Tasking menu |
@@ -297,6 +307,66 @@ frees up as those aircraft are lost or recovered. The three numbers are
 Every assignment previews its fee. Credits and supply move only after recruitment or spawn
 succeeds.
 
+## Loadouts
+
+A requisition is configured before it launches, on **WMC > Loadout**.
+
+- Options come from the airframe's own weapon stations — the same stores the game's aircraft
+  selection menu offers for that hardpoint. WingCommand adds no weapons of its own.
+- Five fits: `STANDARD` (the airframe's own AI loadout), `AIR-AIR`, `AIR-GND`, `BALANCED`,
+  and `CARGO` for transports. A fit an airframe has no stores for is not offered.
+- The choice belongs to the airframe, not the type. Configuring one VT-7 does not configure
+  the next one you buy.
+- Equipment is fitted when an aircraft is created, so a wingman already in the air cannot be
+  reconfigured. The Loadout tab shows what each one is carrying and says so.
+- An active mission aircraft you assign from the map flies **as found**. It arrives with
+  whatever the mission gave it and cannot be refitted.
+- Return To Base keeps the fit. A recovered airframe goes into the wing reserve carrying
+  what it came home with, and launches that way again.
+
+Loadouts do not change what an airframe costs. A requisition is list price, exactly as before.
+
+### Cargo
+
+For a transport, the Loadout tab also chooses **what it is carrying**, from the cargo mounts
+the airframe itself offers. A cargo run now finishes: the wingman calls the delivery when the
+cargo actually leaves the aircraft and rejoins when it is empty, and a helicopter that cannot
+find anywhere to put its load says so and brings it back instead of circling for the mission.
+
+## Preferred weapon
+
+An order says where a wingman flies. ROE says what it may shoot. **Preferred weapon** says
+which of its own stores it reaches for first.
+
+| Setting | Effect |
+|---|---|
+| **AUTO** | The most effective ready station for the target |
+| **A-A** | Prefers hostile aircraft and anti-air stores |
+| **A-G** | Prefers surface contacts and anti-surface stores |
+| **GUNS** | Prefers close-in stores, saving standoff weapons |
+
+Set it per selection on **WMC > Tactical**; it shows in the roster and the compact HUD strip
+beside the order. Every setting is a bias, never a restriction: a preferred store that is
+empty, unready or out of range falls back to the usual choice, and no setting can make a
+wingman hold fire when it has a valid alternative.
+
+## Pilots
+
+Each wingman is flown by someone. **WMC > Wing** shows their callsign, name, background,
+rank and record alongside the aircraft's fuel, ammunition, cargo and hull state.
+
+- Pilots belong to the squadron. One who lands, or whose aircraft you release, goes back on
+  the list with their record and flies the next airframe you requisition.
+- A pilot who is killed does not come back.
+- Experience comes from kills, completed sorties and engagements survived, and rank rises
+  through Rookie, Wingman, Veteran, Ace and Legend.
+- Rank has a small real effect: at the top it is worth roughly 12% more weapon reach and
+  off-boresight tolerance and about 12% faster shot cycling. Set `Pilot/RankEffect` to `0`
+  to keep the record and remove the mechanics.
+
+This is a backbone. A pregenerated wingman pool with portraits and an assignment screen is a
+later feature; three pilots are written by hand and the rest are generated.
+
 ## HUD and map symbology
 
 - Wingmen use a configurable high-contrast green marker and map caret.
@@ -337,6 +407,9 @@ configuration files.
 | Shop | `ExceedSquadronLimitCost` | `3` | Price multiplier past the mission's AI aircraft limit |
 | Shop | `ExceedSquadronLimitRank` | `3` | Rank required to exceed that limit |
 | Shop | `ExceedSquadronLimitAllowance` | `3` | Over-limit airframes you may have flying at once |
+| Pilot | `PilotProgression` | `true` | Wing pilots keep a record, a rank and a small skill effect |
+| Pilot | `RankEffect` | `1` | How much rank changes shooting; `0` makes rank a record only |
+| Pilot | `XpPerRank` | `120` | Experience step between ranks |
 | Comms | `RadioChatter` | `true` | Wing order and state reports |
 | UI | `ShowWingHud` | `true` | Compact roster docked beside the tactical map |
 

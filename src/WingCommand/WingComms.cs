@@ -28,6 +28,8 @@ namespace WingCommand
             Covering,
             Orbiting,
             Delivering,
+            Delivered,
+            NoDropOff,
             Down,
             Unable,
             Copy,
@@ -103,6 +105,8 @@ namespace WingCommand
                 case Call.Covering:   return "covering you";
                 case Call.Orbiting:   return "on station, orbiting";
                 case Call.Delivering: return "running the cargo in";
+                case Call.Delivered:  return "cargo away, delivery complete";
+                case Call.NoDropOff:  return "no drop-off available, bringing the cargo back";
                 case Call.Down:       return "on the deck";
                 case Call.Panic:      return detail != null
                     ? "missile " + detail + ", defensive!"

@@ -73,6 +73,10 @@ namespace WingCommand
         {
             if (member == null || newLeader == null || !members.Remove(member)) return false;
 
+            // The player is now in that seat, so its pilot goes back on the squadron list
+            // rather than being written off with the AI airframe that is about to be removed.
+            WingPilotRoster.Retire(member, survived: true);
+
             Leader = newLeader;
             WingMarkers.Repaint(member.Aircraft);
             OrderAll(WingOrder.Formation);
@@ -82,16 +86,22 @@ namespace WingCommand
         private float nextReserveCheck;
 
         /// <summary>
-        /// Send home any member out of fuel or ammunition. Throttled: reading fuel walks
-        /// the tanks and reading ammunition walks every weapon station, which is wasted
-        /// work at frame rate for a quantity that changes slowly.
+        /// The once-a-second housekeeping pass: send home any member out of fuel or
+        /// ammunition, and follow any supply run to its end.
+        ///
+        /// Throttled together because both walk every weapon station on every member, which
+        /// is wasted work at frame rate for quantities that change slowly.
         /// </summary>
         public void CheckReserves()
         {
             if (Time.timeSinceLevelLoad < nextReserveCheck) return;
             nextReserveCheck = Time.timeSinceLevelLoad + 1f;
 
-            for (int i = 0; i < members.Count; i++) members[i].CheckReserves();
+            for (int i = 0; i < members.Count; i++)
+            {
+                members[i].CheckCargoRun();
+                members[i].CheckReserves();
+            }
         }
 
         /// <summary>
@@ -283,6 +293,10 @@ namespace WingCommand
                 if (Plugin.Config2.VerboseLogging.Value)
                     Plugin.Logger.LogInfo("[Wing] lost " + m.Name + ": " + LostReason(m));
 
+                // Prune only ever sees losses; a wingman that recovered at base was claimed
+                // by WingRecovery a moment earlier and never reaches here.
+                WingPilotRoster.Retire(m, survived: false);
+                WingLoadoutBook.Forget(m.Aircraft);
                 TacticalCoordinator.Release(m.Aircraft);
                 members.RemoveAt(i);
             }
@@ -431,6 +445,10 @@ namespace WingCommand
             var member = new WingMember(this, aircraft, pilot, NearestFreeSlot(aircraft),
                                         deferCommand);
             members.Add(member);
+
+            // Someone has to be flying it. Assigning here rather than at each call site
+            // covers requisition, active-AI assignment and the debug spawn alike.
+            WingPilotRoster.Assign(aircraft);
             if (!deferCommand) member.Apply(WingOrder.Formation);
             WingMarkers.Repaint(aircraft);
             WarnIfTooSlow(aircraft);
@@ -460,6 +478,7 @@ namespace WingCommand
         {
             if (member == null) return;
             Aircraft released = member.Aircraft;
+            WingPilotRoster.Retire(member, survived: true);
             member.ReleaseToCombat(reason);
             members.Remove(member);
             WingMarkers.Repaint(released);
@@ -477,6 +496,7 @@ namespace WingCommand
         {
             if (member == null || !members.Remove(member)) return;
 
+            WingPilotRoster.Retire(member, survived: true);
             TacticalCoordinator.Release(member.Aircraft);
             WingMarkers.Repaint(member.Aircraft);
         }
@@ -487,6 +507,7 @@ namespace WingCommand
             foreach (WingMember m in members.ToList())
             {
                 released.Add(m.Aircraft);
+                WingPilotRoster.Retire(m, survived: m.Alive);
                 if (m.Alive) m.ReleaseToCombat(reason);
             }
             members.Clear();

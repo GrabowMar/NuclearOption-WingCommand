@@ -51,23 +51,54 @@ namespace WingCommand
         /// Whether this purchase was made past the squadron cap, so the allowance can be
         /// charged against the airframe once it actually exists.
         /// </param>
+        /// <param name="choice">
+        /// The loadout the player requisitioned this airframe with. It is fitted here, at
+        /// the spawn, because that is the only moment either delivery route accepts one —
+        /// and it is recorded against the aircraft only once the aircraft exists, which
+        /// keeps the commit-after-spawn invariant the rest of this file is built on.
+        /// </param>
         public static bool Deliver(AircraftDefinition definition, Aircraft leader, FactionHQ hq,
-                                   bool overLimit, out string reason)
+                                   bool overLimit, WingLoadoutChoice choice, out string reason)
         {
             reason = null;
 
-            if (TryHangarDelivery(definition, leader, hq, overLimit)) return true;
+            Loadout loadout = BuildLoadout(definition, choice);
 
-            Aircraft spawned = Spawn(definition, leader, hq);
+            if (TryHangarDelivery(definition, leader, hq, overLimit, choice, loadout)) return true;
+
+            Aircraft spawned = Spawn(definition, leader, hq, loadout);
             if (spawned == null)
             {
                 reason = "Delivery failed - see the BepInEx log";
                 return false;
             }
 
-            WingShop.NoteDelivery(spawned, overLimit);
+            WingShop.NoteDelivery(spawned, overLimit, choice);
             WingCommandManager.Instance?.QueueRecruit(spawned);
             return true;
+        }
+
+        /// <summary>
+        /// Fit the chosen preset, never letting a bad fit stop a delivery.
+        ///
+        /// A null result means "use the airframe's own standard equipment", which is both
+        /// the Standard preset's meaning and the safe answer to every failure. A requisition
+        /// that refused to arrive because a preset could not be built would be a far worse
+        /// outcome than one that arrives configured as the faction's own aircraft are.
+        /// </summary>
+        private static Loadout BuildLoadout(AircraftDefinition definition, WingLoadoutChoice choice)
+        {
+            try
+            {
+                return WingLoadoutCatalog.Build(definition, choice);
+            }
+            catch (Exception e)
+            {
+                Plugin.Logger.LogWarning(
+                    "[Shop] could not build the " + WingLoadoutCatalog.Label(choice.Preset) +
+                    " loadout; using the standard fit: " + e.Message);
+                return null;
+            }
         }
 
         // ------------------------------------------------------------------ hangar path
@@ -77,13 +108,15 @@ namespace WingCommand
             public AircraftDefinition Definition;
             public float ExpiresAt;
             public bool OverLimit;
+            public WingLoadoutChoice Choice;
         }
 
         private static readonly List<PendingDelivery> pending = new List<PendingDelivery>();
         private static FactionHQ watched;
 
         private static bool TryHangarDelivery(AircraftDefinition definition, Aircraft leader,
-                                              FactionHQ hq, bool overLimit)
+                                              FactionHQ hq, bool overLimit,
+                                              WingLoadoutChoice choice, Loadout loadout)
         {
             if (hq == null || leader == null) return false;
 
@@ -107,6 +140,7 @@ namespace WingCommand
                 Definition = definition,
                 ExpiresAt = Time.unscaledTime + HangarDeliveryTimeout,
                 OverLimit = overLimit,
+                Choice = choice,
             };
 
             Watch(hq);
@@ -116,8 +150,10 @@ namespace WingCommand
             try
             {
                 // A null loadout makes the hangar fit the airframe's own AI weapon selection,
-                // which is what the faction's aircraft launch with.
-                result = airbase.TrySpawnAircraft(null, definition, livery, null, fuel);
+                // which is what the faction's aircraft launch with. A requisition with a
+                // preset hands the field the fit the player asked for instead; the hangar
+                // arms it on the ramp exactly as it arms the faction's own aircraft.
+                result = airbase.TrySpawnAircraft(null, definition, livery, loadout, fuel);
             }
             catch (Exception e)
             {
@@ -134,6 +170,7 @@ namespace WingCommand
 
             Plugin.Logger.LogInfo(
                 "[Shop] " + definition.unitName + " ordered from a hangar at " + airbase.name +
+                " with the " + WingLoadoutCatalog.Label(definition, choice) + " fit" +
                 (result.DelayedSpawn ? " (waiting on hangar doors)" : ""));
             return true;
         }
@@ -185,10 +222,11 @@ namespace WingCommand
                 if (pending[i].Definition != aircraft.definition) continue;
 
                 bool overLimit = pending[i].OverLimit;
+                WingLoadoutChoice choice = pending[i].Choice;
                 pending.RemoveAt(i);
                 if (pending.Count == 0) Watch(null);
 
-                WingShop.NoteDelivery(aircraft, overLimit);
+                WingShop.NoteDelivery(aircraft, overLimit, choice);
                 WingCommandManager.Instance?.QueueRecruit(aircraft);
                 Plugin.Logger.LogInfo("[Shop] " + aircraft.unitName +
                                      " registered; rostered, awaiting airborne activation");
@@ -220,7 +258,8 @@ namespace WingCommand
 
         // ----------------------------------------------------------------- circuit path
 
-        private static Aircraft Spawn(AircraftDefinition definition, Aircraft leader, FactionHQ hq)
+        private static Aircraft Spawn(AircraftDefinition definition, Aircraft leader,
+                                      FactionHQ hq, Loadout loadout)
         {
             Spawner spawner = NetworkSceneSingleton<Spawner>.i;
             if (spawner == null)
@@ -257,12 +296,13 @@ namespace WingCommand
                 return spawner.SpawnAircraft(
                     player: null,
                     prefab: prefab,
-                    // Null, never a shared Loadout instance. Aircraft initialisation
+                    // Null unless the player requisitioned a preset. Aircraft initialisation
                     // substitutes the airframe's own standard loadout when this is null,
                     // whereas handing over an existing object shares one mutable loadout
                     // between aircraft - which once left a whole spawned wing with no
-                    // ammunition and sent all of them straight home Winchester.
-                    loadout: null,
+                    // ammunition and sent all of them straight home Winchester. Every
+                    // requisition therefore gets a freshly built container of its own.
+                    loadout: loadout,
                     fuelLevel: fuel,
                     livery: livery,
                     globalPosition: position.ToGlobalPosition(),
