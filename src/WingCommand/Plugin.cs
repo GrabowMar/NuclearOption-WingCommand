@@ -239,7 +239,15 @@ namespace WingCommand
         public readonly ConfigEntry<float> UndeclaredStock;
 
         // --- Debug ---
+        /// <summary>Carrier for the Debug category's one-line warning banner. Never read.</summary>
+        public readonly ConfigEntry<bool> DebugWarning;
         public readonly ConfigEntry<bool> EnableDebugActions;
+
+        /// <summary>
+        /// Carrier for the spawn action's button row in the settings window. Never read —
+        /// see its <c>CustomDrawer</c>.
+        /// </summary>
+        public readonly ConfigEntry<bool> SpawnDebugWing;
         public readonly ConfigEntry<bool> FreePlanePurchases;
         public readonly ConfigEntry<bool> DisableWingSizeLimit;
 
@@ -405,9 +413,8 @@ namespace WingCommand
             AiBraveryScale = c.Bind("AI", "BraveryScale", 1.0f,
                 Hidden("Retired compatibility key.", new AcceptableValueRange<float>(0.25f, 3f)));
             MutualSupport = c.Bind("AI", "MutualSupport", true,
-                Advanced("Wingmen break formation to engage when the leader is under missile attack. " +
-                         "Free rules of engagement only - Defend shoots the missile down instead, and " +
-                         "Escort shoots the aircraft that launched it, both from the slot."));
+                Hidden("Retired compatibility key. ROE no longer changes the current flight task; " +
+                       "use the Engage order to authorise pursuit."));
             AiTargetDeconfliction = c.Bind("AI", "TargetDeconfliction", true,
                 Advanced("Coordinate locally simulated AI target choices so several aircraft do not " +
                          "independently pile onto the same contact while useful alternatives exist."));
@@ -436,9 +443,9 @@ namespace WingCommand
             // would not parse as a WingRoe anyway - so these had to be new names for the
             // new defaults to take at all. The old keys go inert.
             DefaultRoe = c.Bind("Engagement", "DefaultRoe", WingRoe.Hold,
-                "Rules of engagement the wing starts a mission with. Hold never leaves the " +
-                "slot and shoots only what threatens it; Escort is weapons free and guards " +
-                "you first; Free is weapons free and will break formation if you are shot at.");
+                "Rules of engagement the wing starts a mission with. Defend limits fire to " +
+                "missile defence and mirrored attacks; Escort prioritises threats around " +
+                "the formation; Free may shoot opportunity targets without changing orders.");
             MissileDefence = c.Bind("Engagement", "MissileDefence", true,
                 Advanced("Defensive wingmen prioritise shooting down inbound missiles, on themselves or " +
                          "on you, when they carry a weapon capable of it."));
@@ -604,8 +611,50 @@ namespace WingCommand
             UseNativeRadial = c.Bind("UI", "UseNativeRadial", true,
                 Advanced("Add a compact 'Wing Command' entry to the game's own radial menu. This uses " +
                          "the game's Rewired look-axis input while the cursor is captured."));
+            // A display-only row. ConfigurationManager has no notion of a category header,
+            // so the way to say something once above a group is to bind an entry nobody
+            // reads and let its drawer be a sentence. Ordered above everything else in the
+            // category; the stored value is meaningless.
+            DebugWarning = c.Bind("Debug", "DebugWarningBanner", false,
+                new ConfigDescription(
+                    "Display only. The Debug settings are cheats: unbalanced, barely tested, " +
+                    "and liable to break mission or mod progression.",
+                    null,
+                    new ConfigurationManagerAttributes
+                    {
+                        Order = 50,
+                        CustomDrawer = WingDebugActions.DrawWarning,
+                        HideSettingName = true,
+                        HideDefaultButton = true,
+                    }));
+
+            // Visible, where it used to be Browsable=false. The action it gates now lives in
+            // this window rather than on the WMC panel, and a switch you can only reach by
+            // hand-editing the .cfg is not a switch the button below it can tell you to flip.
             EnableDebugActions = c.Bind("Debug", "EnableDebugActions", false,
-                Hidden("Development-only WMC actions. Both are cheats and host-only."));
+                new ConfigDescription(
+                    "Allow the development-only actions below. They are cheats and host-only.",
+                    null,
+                    new ConfigurationManagerAttributes
+                    {
+                        DispName = "Enable debug actions",
+                        Order = 40,
+                    }));
+            SpawnDebugWing = c.Bind("Debug", "SpawnDebugWing", false,
+                new ConfigDescription(
+                    "DEBUG CHEAT: Spawn a full wing of your own aircraft type, already in " +
+                    "formation slots, and assign them. Requires the switch above.",
+                    null,
+                    new ConfigurationManagerAttributes
+                    {
+                        DispName = "Spawn wing of my aircraft",
+                        Order = 30,
+                        CustomDrawer = WingDebugActions.DrawSpawnButton,
+
+                        // The stored value is never read — the row is a button, and a
+                        // reset-to-default control on it would be meaningless.
+                        HideDefaultButton = true,
+                    }));
             FreePlanePurchases = c.Bind("Debug", "FreePlanePurchases", false,
                 new ConfigDescription(
                     "DEBUG CHEAT: Requisitioned aircraft cost no allocation. Stock, rank and " +
@@ -614,7 +663,7 @@ namespace WingCommand
                     null,
                     new ConfigurationManagerAttributes
                     {
-                        DispName = "Free plane purchases (PROBABLY BREAKS MOD)",
+                        DispName = "Free plane purchases",
                         Order = 20,
                     }));
             DisableWingSizeLimit = c.Bind("Debug", "DisableWingSizeLimit", false,
@@ -625,7 +674,7 @@ namespace WingCommand
                     null,
                     new ConfigurationManagerAttributes
                     {
-                        DispName = "Disable wing size limit (PROBABLY BREAKS MOD)",
+                        DispName = "Disable wing size limit",
                         Order = 10,
                     }));
 

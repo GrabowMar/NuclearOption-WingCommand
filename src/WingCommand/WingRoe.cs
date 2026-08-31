@@ -11,40 +11,21 @@ namespace WingCommand
     /// meaning "hold station but shoot what is hunting the leader", which is a weapons
     /// policy wearing an order's clothes.
     ///
-    /// The three rungs are an escalation, and each has its own answer to the same event —
-    /// the leader being shot at. That is the test of whether the model earns its place:
+    /// The three rungs are an escalation inside the current task. None of them is allowed
+    /// to invent an Engage order or replace a point/target directive:
     ///
     /// <list type="bullet">
-    /// <item>Hold shoots the missile down and stays put.</item>
-    /// <item>Escort shoots the aircraft that launched it, and stays put.</item>
-    /// <item>Free breaks formation and goes after the shooter.</item>
+    /// <item>Hold fires only for missile defence or when mirroring the player's attack.</item>
+    /// <item>Escort prioritises aircraft threatening the leader or wingman.</item>
+    /// <item>Free may fire at any valid opportunity target while maintaining the task.</item>
     /// </list>
     /// </summary>
-    internal enum WingRoe
-    {
-        /// <summary>
-        /// Holds the slot no matter what. Intercepts inbound missiles at itself or the
-        /// leader, and attacks ground targets only while the player is attacking ground.
-        /// </summary>
-        Hold,
-
-        /// <summary>
-        /// Holds the slot, but may engage hostile aircraft while looking after the leader:
-        /// targets whatever is threatening the leader in preference to what is nearest.
-        /// </summary>
-        Escort,
-
-        /// <summary>
-        /// Weapons free, and the only rung that will leave formation on its own — and then
-        /// only for the emergency of the leader being under missile attack. Routine hunting
-        /// is an explicit Engage order, not a posture.
-        /// </summary>
-        Free,
-    }
-
     /// <summary>Resolves what a wingman may shoot at, given the rules of engagement.</summary>
     internal static class RoeRules
     {
+        /// <summary>Player-facing name; Hold remains only as the legacy config enum value.</summary>
+        public static string Label(WingRoe roe) => roe == WingRoe.Hold ? "Defend" : roe.ToString();
+
         /// <summary>
         /// The wing's current rules of engagement.
         ///
@@ -60,11 +41,10 @@ namespace WingCommand
         /// <summary>What the wingman may currently fire at.</summary>
         public static WingWeapons.Allow WeaponsFree(WingRoe roe, Aircraft aircraft)
         {
-            // Missile defence outranks everything below Free: a missile in the air is the
-            // most time-critical thing on the battlefield, and both cautious rungs exist to
-            // keep the leader alive.
-            if (roe != WingRoe.Free &&
-                Plugin.Config2.MissileDefence.Value &&
+            // Missile defence is immediate self-preservation and therefore precedes both
+            // incidental ROE fire and explicit target selection. It does not replace the
+            // standing directive; the defensive state resumes that exact directive.
+            if (Plugin.Config2.MissileDefence.Value &&
                 WingWeapons.HasMissileDefence(aircraft) &&
                 MissileDefenceProtectee(aircraft) != null)
             {
@@ -124,18 +104,27 @@ namespace WingCommand
             return null;
         }
 
-        /// <summary>True when this rung prefers threats to the leader over its own.</summary>
-        public static bool GuardsLeader(WingRoe roe) => roe == WingRoe.Escort;
+        /// <summary>
+        /// Pick the target that gives Escort its protective character. Unlike Free's broad
+        /// opportunity search, Escort anchors the search on the leader first and the firing
+        /// wingman second, and never turns that target choice into a movement order.
+        /// </summary>
+        public static Unit PriorityTarget(WingRoe roe, Aircraft aircraft, Aircraft leader,
+                                          float range)
+        {
+            if (roe != WingRoe.Escort) return null;
+
+            Unit target = WingWeapons.NearestThreatTo(leader, range);
+            return target ?? WingWeapons.NearestThreatTo(aircraft, range);
+        }
 
         /// <summary>
-        /// True when this rung may leave formation on its own.
-        ///
-        /// Only Free, and only for the leader-under-missile emergency. The generic "break
-        /// for any air threat in range" that used to live here is gone: it made Aggressive
-        /// plus Formation behave almost identically to an Engage order, which is why the
-        /// two were impossible to tell apart.
+        /// Whether the generic opportunity search may run after a priority target was not
+        /// found. Escort deliberately says no: it protects the package; Free says yes and
+        /// may shoot any valid contact; Defend's mirrored ground-fire allowance also needs
+        /// the generic selector to find the player's kind of target.
         /// </summary>
-        public static bool MayBreakForEmergency(WingRoe roe) => roe == WingRoe.Free;
+        public static bool MayChooseOpportunityTarget(WingRoe roe) => roe != WingRoe.Escort;
 
         /// <summary>Engagement range for a rung, in metres.</summary>
         public static float EngageRange(WingRoe roe)
@@ -147,6 +136,15 @@ namespace WingCommand
                 : Plugin.Config2.HoldEngageRange.Value;
         }
 
+        /// <summary>
+        /// Range cap for a target explicitly designated by the player. ROE must not shorten
+        /// an Attack or Fire For Effect order; the selected weapon's own envelope remains
+        /// the final authority on whether a shot is valid.
+        /// </summary>
+        public static float ExplicitOrderRange() =>
+            UnityEngine.Mathf.Max(Plugin.Config2.HoldEngageRange.Value,
+                                  Plugin.Config2.FreeEngageRange.Value);
+
         /// <summary>The one-line hint shown under the selector.</summary>
         public static string Hint(WingRoe roe)
         {
@@ -155,7 +153,7 @@ namespace WingCommand
                 case WingRoe.Escort:
                     return "Holds the slot. Engages aircraft, guarding you first.";
                 case WingRoe.Free:
-                    return "Weapons free. Breaks formation only if you are shot at.";
+                    return "Weapons free from the current task. Engage authorises pursuit.";
                 default:
                     return "Holds the slot. Intercepts missiles. Ground fire only when you fire.";
             }

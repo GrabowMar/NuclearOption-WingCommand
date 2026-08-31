@@ -46,7 +46,6 @@ namespace WingCommand
         /// <summary>How long it must keep losing ground before a wingman gives up.</summary>
         private const float UnableSeconds = 20f;
 
-        private float lastSupportCheck;
         private float lastEngageCheck;
         private float lastFiredTime;
         private float rejoinBoostUntil;
@@ -201,6 +200,8 @@ namespace WingCommand
 
             pilot.flightInfo.HasTakenOff = true;
             slotLocalReady = false;
+            lastRotaryMode = (RotaryFormation.Mode)(-1);
+            lastRotaryReport = 0f;
 
             // Start the leader track from scratch. It survives a state exit, so a wingman
             // that broke off to fight and is now rejoining would otherwise differentiate a
@@ -236,9 +237,6 @@ namespace WingCommand
                 member.ReleaseToCombat("leader lost");
                 return;
             }
-
-            if (CheckMutualSupport(leader))
-                return;
 
             RunEngagement(leader);
 
@@ -377,13 +375,17 @@ namespace WingCommand
         /// </summary>
         private void ReportRotaryMode(RotaryFormation.Mode mode, float distance, float horizontalError)
         {
+            bool changed = mode != lastRotaryMode;
+            // Flight-state memory is control state, not diagnostic state. This used to be
+            // assigned below the verbose-logging guard, which disabled hover/cruise
+            // hysteresis during normal gameplay.
+            lastRotaryMode = mode;
+
             if (!Plugin.Config2.VerboseLogging.Value) return;
 
-            bool changed = mode != lastRotaryMode;
             bool due = Time.timeSinceLevelLoad - lastRotaryReport > 5f;
             if (!changed && !due) return;
 
-            lastRotaryMode = mode;
             lastRotaryReport = Time.timeSinceLevelLoad;
 
             Aircraft leader = Leader;
@@ -449,6 +451,9 @@ namespace WingCommand
             if (Time.timeSinceLevelLoad - lastEngageCheck < EngageInterval) return;
             lastEngageCheck = Time.timeSinceLevelLoad;
 
+            OrderEngagementAuthority authority = OrderRoePolicy.Authority(member.Order);
+            if (authority == OrderEngagementAuthority.DefensiveOnly) return;
+
             // A weapon that passes its own checks would otherwise be fired on every tick,
             // emptying the aircraft in seconds. The stock AI leaves five seconds between
             // launches; this is the same idea, exposed so it can be tuned.
@@ -456,8 +461,15 @@ namespace WingCommand
 
             WingRoe roe = RoeRules.Current;
 
-            WingWeapons.Allow allow = RoeRules.WeaponsFree(roe, aircraft);
-            float range = RoeRules.EngageRange(roe);
+            WingWeapons.Allow allow = authority == OrderEngagementAuthority.AutonomousCombat
+                ? WingWeapons.Allow.AirAndGround
+                : RoeRules.WeaponsFree(roe, aircraft);
+            bool explicitTargetOrder = authority == OrderEngagementAuthority.ExplicitTarget;
+            bool orderOwnsWeapons = explicitTargetOrder ||
+                                     authority == OrderEngagementAuthority.AutonomousCombat;
+            float range = orderOwnsWeapons
+                ? RoeRules.ExplicitOrderRange()
+                : RoeRules.EngageRange(roe);
 
             // An explicitly assigned target outranks whatever the wingman would pick, and
             // survives until it dies. Missile defence still takes precedence: a missile in
@@ -475,9 +487,9 @@ namespace WingCommand
             // between Escort and Hold - station-keeping and fire gating are untouched, only
             // the choice of target changes.
             bool coveringLeader = false;
-            if (assigned == null && RoeRules.GuardsLeader(roe))
+            if (assigned == null)
             {
-                assigned = WingWeapons.NearestThreatTo(leader, range);
+                assigned = RoeRules.PriorityTarget(roe, aircraft, leader, range);
                 coveringLeader = assigned != null;
             }
 
@@ -495,7 +507,10 @@ namespace WingCommand
             }
             else
             {
-                fired = mayFire && WingWeapons.Engage(aircraft, pilot, allow, range);
+                fired = mayFire &&
+                        (authority == OrderEngagementAuthority.AutonomousCombat ||
+                         RoeRules.MayChooseOpportunityTarget(roe)) &&
+                        WingWeapons.Engage(aircraft, pilot, allow, range);
             }
 
             if (fired)
@@ -503,31 +518,6 @@ namespace WingCommand
                 lastFiredTime = Time.timeSinceLevelLoad;
                 if (coveringLeader) WingComms.Say(member, WingComms.Call.Covering);
             }
-        }
-
-        /// <summary>
-        /// Break formation to fight when the leader is being shot at. This is the
-        /// "smarter AI" behaviour: stock wingmen have no idea their leader is in trouble.
-        /// </summary>
-        private bool CheckMutualSupport(Aircraft leader)
-        {
-            if (!Plugin.Config2.MutualSupport.Value) return false;
-
-            // Only the Free rung leaves the slot, and only for this. The cautious rungs
-            // answer the same event with a weapon rather than a manoeuvre: Hold shoots the
-            // missile down, Escort shoots the aircraft that launched it. Three different
-            // responses to one event is what makes the three rungs worth having.
-            if (!RoeRules.MayBreakForEmergency(RoeRules.Current)) return false;
-
-            if (Time.timeSinceLevelLoad - lastSupportCheck < 1f) return false;
-            lastSupportCheck = Time.timeSinceLevelLoad;
-
-            MissileWarning mw = leader.GetMissileWarningSystem();
-            if (mw == null || !mw.IsWarning())
-                return false;
-
-            member.BreakToEngage("leader under missile attack");
-            return true;
         }
 
         /// <summary>

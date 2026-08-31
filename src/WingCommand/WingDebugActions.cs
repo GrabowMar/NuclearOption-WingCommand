@@ -1,4 +1,5 @@
 using System;
+using BepInEx.Configuration;
 using UnityEngine;
 
 namespace WingCommand
@@ -91,6 +92,44 @@ namespace WingCommand
         }
 
         // -------------------------------------------------------------------- spawn
+
+        /// <summary>
+        /// The one warning that covers everything in the Debug category.
+        ///
+        /// It used to be stapled to each cheat's name — "Free plane purchases (PROBABLY
+        /// BREAKS MOD)", "Disable wing size limit (PROBABLY BREAKS MOD)" — which made the
+        /// names long enough to crowd their own controls and made the warning easy to stop
+        /// reading by the second time. Said once, at the top, it applies to the section.
+        /// </summary>
+        public static void DrawWarning(ConfigEntryBase entry)
+        {
+            Color previous = GUI.color;
+            GUI.color = new Color(1f, 0.55f, 0.2f);
+            GUILayout.Label(
+                "(PROBABLY BREAKS MOD)  Everything below is a cheat: unbalanced, barely " +
+                "tested, and liable to break mission or mod progression.",
+                GUILayout.ExpandWidth(true));
+            GUI.color = previous;
+        }
+
+        /// <summary>
+        /// The settings-window row this action is offered from.
+        ///
+        /// It used to be a button on the WMC panel's own DEBUG section, which meant the
+        /// cockpit carried a permanently-built block of cheat UI — and a heading, and a
+        /// rule — that only exists to be pressed during development. The config window
+        /// already has a Debug category holding the other two cheats, so this is where it
+        /// belongs; the panel gets those pixels back.
+        ///
+        /// No enablement check here on purpose. <see cref="SpawnWingLikePlayer"/> guards
+        /// itself and says which precondition failed, so a pressed button always answers
+        /// rather than sometimes being inert for a reason the window cannot show.
+        /// </summary>
+        public static void DrawSpawnButton(ConfigEntryBase entry)
+        {
+            if (GUILayout.Button("Spawn wing of my aircraft", GUILayout.ExpandWidth(true)))
+                SpawnWingLikePlayer(WingCommandManager.Instance?.Wing);
+        }
 
         /// <summary>
         /// Spawn a fresh wing of the player's own aircraft type, already in their slots,

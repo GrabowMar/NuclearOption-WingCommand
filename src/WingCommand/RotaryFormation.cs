@@ -89,14 +89,20 @@ namespace WingCommand
 
             Vector3 slotDir = flat > 0.5f ? toSlotFlat / flat : heading;
 
-            bool onStation = distance < spacing * StationSpacings;
-
+            // A rotary wingman may use the leader's hover regime only after it has actually
+            // reached the slot. Hover is an excellent position hold but a poor long-range
+            // rejoin command: selecting it merely because the leader stopped left aircraft
+            // hanging hundreds of metres away instead of closing into formation.
             float hoverSpeed = Plugin.Config2.RotaryHoverSpeed.Value;
             bool wasHovering = previous == Mode.Hover;
-            float threshold = wasHovering ? hoverSpeed + HoverHysteresis
-                                          : hoverSpeed - HoverHysteresis;
+            bool onStation = flat < spacing * StationSpacings;
 
-            if (leader.speed < threshold)
+            // Use horizontal velocity rather than Aircraft.speed. A helicopter climbing or
+            // settling vertically beside the player is still hovering for formation
+            // purposes, and should not make every wingman alternate into cruise.
+            if (RotaryHoverPolicy.ShouldHover(
+                    wasHovering, leaderVelFlat.magnitude, flat, spacing, hoverSpeed,
+                    HoverHysteresis, StationSpacings))
             {
                 // The game's real position hold: instant tilt, no waypoint lag. Face the
                 // direction of travel while closing, then swing onto the leader's heading on

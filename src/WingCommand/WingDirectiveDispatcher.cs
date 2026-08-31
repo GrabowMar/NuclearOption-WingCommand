@@ -121,6 +121,7 @@ namespace WingCommand
             foreach (WingMember member in scope)
             {
                 if (!WingOrderCatalog.CanApply(member, WingOrder.FireForEffect)) continue;
+                if (!WingWeapons.CanStillEngage(member.Aircraft, target)) continue;
                 member.FireForEffect(target);
                 applied++;
             }

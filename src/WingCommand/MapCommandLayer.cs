@@ -1,6 +1,7 @@
 using System.Collections.Generic;
 using HarmonyLib;
 using UnityEngine;
+using UnityEngine.EventSystems;
 
 namespace WingCommand
 {
@@ -114,6 +115,21 @@ namespace WingCommand
 
             WingCommandManager manager = WingCommandManager.Instance;
             if (manager == null || !manager.Selection.IsExplicit) return;
+
+            // Right-clicking a hostile is an attack, not a move.
+            //
+            // The gesture already meant "selection, go there", and on top of an enemy icon
+            // that is nearly always the long way of saying "selection, kill that" — the
+            // wingmen would fly to the contact's last known position and then need a second
+            // order to do anything about it. Checked before the cursor is resolved to a
+            // ground point so the two readings of the same click cannot both fire.
+            Unit hostile = HostileUnderCursor();
+            if (hostile != null)
+            {
+                manager.AttackUnit(hostile);
+                return;
+            }
+
             if (!map.TryGetCursorCoordinates(out GlobalPosition point)) return;
 
             List<WingMember> scope = manager.Commands.Scope(wholeWing: false);
@@ -133,6 +149,42 @@ namespace WingCommand
                 manager.Toast((append ? "Queued point for " : "Moving ") + moved +
                               " selected wingman" + (moved == 1 ? "" : "men"));
             }
+        }
+
+        /// <summary>
+        /// The hostile unit the map cursor is over, if any.
+        ///
+        /// Resolved by asking the event system what is under the pointer rather than by
+        /// searching the icon list for the nearest one: the icons are ordinary clickable UI,
+        /// so the raycast already answers "what would a click land on" exactly as the game
+        /// itself would answer it, including overlap and z-order.
+        /// </summary>
+        private static Unit HostileUnderCursor()
+        {
+            EventSystem events = EventSystem.current;
+            if (events == null) return null;
+
+            var pointer = new PointerEventData(events) { position = Input.mousePosition };
+            var hits = new List<RaycastResult>();
+            events.RaycastAll(pointer, hits);
+
+            foreach (RaycastResult hit in hits)
+            {
+                if (hit.gameObject == null) continue;
+
+                UnitMapIcon icon = hit.gameObject.GetComponentInParent<UnitMapIcon>();
+                Unit unit = icon != null ? icon.unit : null;
+                if (unit == null || unit.disabled) continue;
+
+                // Only actual enemies. Neutrals and unknown contacts fall through to the
+                // move behaviour, because ordering an attack on something the faction has
+                // not called hostile is not a thing a misplaced click should be able to do.
+                if (DynamicMap.GetFactionMode(unit.NetworkHQ) != FactionMode.Enemy) continue;
+
+                return unit;
+            }
+
+            return null;
         }
 
         /// <summary>

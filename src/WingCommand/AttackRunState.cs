@@ -168,7 +168,9 @@ namespace WingCommand
             // attack run cannot dump the loadout at a target it has no business shooting.
             // Fire For Effect keeps those checks and drops only the wing-wide concurrency
             // cap and the long cooldown between launches.
-            float range = RoeRules.EngageRange(RoeRules.Current);
+            // A designated target is an explicit weapons authorization. The ROE still owns
+            // incidental fire elsewhere, but cannot shorten or veto this order.
+            float range = RoeRules.ExplicitOrderRange();
 
             bool fired = massed
                 ? WingWeapons.EngageMassed(aircraft, pilot, target, range)

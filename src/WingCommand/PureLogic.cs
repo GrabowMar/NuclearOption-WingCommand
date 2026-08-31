@@ -3,6 +3,86 @@ using System.Collections.Generic;
 
 namespace WingCommand
 {
+    /// <summary>
+    /// What a wingman has been told to do. Movement/task authority is deliberately separate
+    /// from the standing rules of engagement below.
+    /// </summary>
+    internal enum WingOrder
+    {
+        Formation,
+        Engage,
+        ReturnToBase,
+        FallBack,
+        OrbitHere,
+        DeliverCargo,
+        LandHere,
+        Attack,
+        FireForEffect,
+        MoveToPoint,
+    }
+
+    /// <summary>Standing weapons policy for the wing.</summary>
+    internal enum WingRoe
+    {
+        Hold,
+        Escort,
+        Free,
+    }
+
+    internal enum OrderEngagementAuthority
+    {
+        /// <summary>The standing ROE may select and fire on incidental targets.</summary>
+        StandingRoe,
+
+        /// <summary>The player-designated target and order own weapons employment.</summary>
+        ExplicitTarget,
+
+        /// <summary>The task allows self-preservation only, not opportunity fire.</summary>
+        DefensiveOnly,
+
+        /// <summary>The order hands flying and fighting to the combat AI.</summary>
+        AutonomousCombat,
+    }
+
+    /// <summary>Pure precedence table shared by runtime code and tests.</summary>
+    internal static class OrderRoePolicy
+    {
+        public static OrderEngagementAuthority Authority(WingOrder order)
+        {
+            switch (order)
+            {
+                case WingOrder.Formation:
+                case WingOrder.OrbitHere:
+                    return OrderEngagementAuthority.StandingRoe;
+
+                case WingOrder.Attack:
+                case WingOrder.FireForEffect:
+                    return OrderEngagementAuthority.ExplicitTarget;
+
+                case WingOrder.Engage:
+                    return OrderEngagementAuthority.AutonomousCombat;
+
+                default:
+                    return OrderEngagementAuthority.DefensiveOnly;
+            }
+        }
+    }
+
+    /// <summary>Pure rotary hover transition, separated from Unity steering for tests.</summary>
+    internal static class RotaryHoverPolicy
+    {
+        public static bool ShouldHover(bool wasHovering, float leaderHorizontalSpeed,
+                                       float horizontalSlotError, float spacing,
+                                       float hoverSpeed, float hysteresis,
+                                       float stationSpacings)
+        {
+            float threshold = wasHovering ? hoverSpeed + hysteresis
+                                          : hoverSpeed - hysteresis;
+            bool onStation = horizontalSlotError < spacing * stationSpacings;
+            return onStation && leaderHorizontalSpeed < threshold;
+        }
+    }
+
     /// <summary>Idempotent reverse-order compensation for a transaction's completed effects.</summary>
     internal sealed class RollbackJournal
     {

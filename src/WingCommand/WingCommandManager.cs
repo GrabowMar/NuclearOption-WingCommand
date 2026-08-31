@@ -52,8 +52,12 @@ namespace WingCommand
         {
             new RadialSlice("Form Up", WingAction.Rejoin),
             new RadialSlice("Attack\nMy Target", WingAction.AttackMyTarget),
+            new RadialSlice("Fire For\nEffect", WingAction.FireForEffect),
             new RadialSlice("Engage", WingAction.Engage),
             new RadialSlice("Disengage", WingAction.FallBack),
+            new RadialSlice("Hold\nPosition", WingAction.OrbitHere),
+            new RadialSlice("Deliver\nCargo", WingAction.DeliverCargo),
+            new RadialSlice("Land\nHere", WingAction.LandHere),
             new RadialSlice("Return\nTo Base", WingAction.ReturnToBase),
             new RadialSlice("Cycle\nROE", WingAction.CycleRoe),
         };
@@ -395,7 +399,7 @@ namespace WingCommand
                     // Cycles all three rungs rather than toggling two, so the wheel can
                     // reach the whole escalation without a submenu.
                     Wing.Roe = (WingRoe)(((int)Wing.Roe + 1) % 3);
-                    Toast("ROE: " + Wing.Roe.ToString().ToUpperInvariant());
+                    Toast("ROE: " + RoeRules.Label(Wing.Roe).ToUpperInvariant());
                     break;
                 }
 
@@ -414,6 +418,30 @@ namespace WingCommand
         {
             Show(Commands.Apply(WingDirective.AtPoint(order, point), wholeWing: false));
         }
+
+        /// <summary>
+        /// Send the current command scope after one named unit, from the map.
+        ///
+        /// Unlike <see cref="WingAction.AttackMyTarget"/> this does not go through the
+        /// player's own lock list — the target is whatever was pointed at on the map, which
+        /// the player may never have designated in the cockpit at all.
+        ///
+        /// <c>forceAll</c>, unlike the WMC Attack button. That button caps attackers at the
+        /// useful number and leaves the surplus as cover, which is right for a considered
+        /// order given from a panel. This is the gesture that used to mean "everything I
+        /// have selected, go there", so it has to mean "everything I have selected, hit
+        /// that" — capping it would take the aircraft that missed the cut and quietly put
+        /// them back on Form Up, which is a worse outcome than the move it replaced.
+        /// </summary>
+        internal void AttackUnit(Unit target)
+        {
+            if (target == null || target.disabled) return;
+            mapAttackScratch.Clear();
+            mapAttackScratch.Add(target);
+            Show(Commands.Attack(mapAttackScratch, wholeWing: false, forceAll: true));
+        }
+
+        private static readonly List<Unit> mapAttackScratch = new List<Unit>();
 
         internal void ArmPointOrder(WingOrder order)
         {

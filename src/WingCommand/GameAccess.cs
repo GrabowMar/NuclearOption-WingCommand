@@ -47,6 +47,18 @@ namespace WingCommand
         /// <summary>True when the VirtualMFD internals resolved, enabling the WMC screen.</summary>
         public static bool MfdAvailable { get; private set; }
 
+        // Where a landing aircraft is actually going. Both stock landing states keep their
+        // destination private, and it is the only honest source for it: Return To Base
+        // hands off to the game's own state, which picks its own airbase, so anything the
+        // mod computed itself would be a guess that disagrees with the aircraft whenever
+        // the nearest base is not the one it chose.
+        private static AccessTools.FieldRef<AIPilotLandingState, Airbase> landingAirbaseRef;
+        private static AccessTools.FieldRef<AIHeloLandingState, Airbase.VerticalLandingPoint>
+            heloLandingPointRef;
+
+        /// <summary>True when a landing aircraft's destination can be read.</summary>
+        public static bool LandingDestinationAvailable { get; private set; }
+
         public static void Initialise()
         {
             try
@@ -81,6 +93,23 @@ namespace WingCommand
                     Plugin.Logger.LogWarning(
                         "MFD panel integration unavailable (" + mfd.Message +
                         "). The map overlay panel will be used instead.");
+                }
+
+                // Cosmetic on its own: without it the map simply draws no line for a
+                // wingman that is on its way home.
+                try
+                {
+                    landingAirbaseRef = Field<AIPilotLandingState, Airbase>("airbase");
+                    heloLandingPointRef =
+                        Field<AIHeloLandingState, Airbase.VerticalLandingPoint>("landingPoint");
+                    LandingDestinationAvailable = true;
+                }
+                catch (Exception landing)
+                {
+                    LandingDestinationAvailable = false;
+                    Plugin.Logger.LogWarning(
+                        "Landing destination unreadable (" + landing.Message +
+                        "). RTB will not be drawn on the map.");
                 }
             }
             catch (Exception e)
@@ -123,6 +152,49 @@ namespace WingCommand
         public static List<Button> GetRightButtons(VirtualMFD mfd) => rightButtonsRef(mfd);
         public static List<MFDScreen> GetLeftScreens(VirtualMFD mfd) => leftScreensRef(mfd);
         public static List<MFDScreen> GetRightScreens(VirtualMFD mfd) => rightScreensRef(mfd);
+
+        // ------------------------------------------------------------------- landing
+
+        /// <summary>
+        /// Where an aircraft that is currently landing is going, if it has picked somewhere.
+        ///
+        /// Both stock landing states settle on their destination inside their own update,
+        /// so this returns false for the first moments after the order is given as well as
+        /// on any build where the fields did not resolve. Callers draw nothing rather than
+        /// falling back to a guessed airbase — a line to the wrong base is worse than no
+        /// line, because the map is the thing the player would use to check.
+        /// </summary>
+        public static bool TryGetLandingDestination(Pilot pilot, out GlobalPosition destination)
+        {
+            destination = default;
+            if (!LandingDestinationAvailable || pilot == null) return false;
+
+            try
+            {
+                if (pilot.currentState == pilot.AILandingState && pilot.AILandingState != null)
+                {
+                    Airbase airbase = landingAirbaseRef(pilot.AILandingState);
+                    if (airbase == null) return false;
+                    destination = airbase.transform.GlobalPosition();
+                    return true;
+                }
+
+                if (pilot.currentState == pilot.AIHeloLandingState && pilot.AIHeloLandingState != null)
+                {
+                    Airbase.VerticalLandingPoint point = heloLandingPointRef(pilot.AIHeloLandingState);
+                    if (point == null || point.point == null) return false;
+                    destination = point.point.GlobalPosition();
+                    return true;
+                }
+            }
+            catch (Exception e)
+            {
+                if (Plugin.Config2.VerboseLogging.Value)
+                    Plugin.Logger.LogWarning("Landing destination read failed: " + e.Message);
+            }
+
+            return false;
+        }
 
         // ---------------------------------------------------------- RadialMenuAction
 

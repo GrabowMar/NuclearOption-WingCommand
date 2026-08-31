@@ -117,8 +117,14 @@ Wing Command
 ├─ Engage
 ├─ Disengage
 ├─ Rules Of Engagement
+│  ├─ Defend
+│  ├─ Escort
+│  └─ Free
 └─ Tasking
+   ├─ Fire For Effect
    ├─ Hold Position
+   ├─ Deliver Cargo
+   ├─ Land Here
    ├─ Return To Base
    └─ Formation
       ├─ Echelon Right
@@ -162,8 +168,8 @@ The **WMC** page has four focused tabs:
 Hostile, friendly non-wing, ground, and naval icon behavior remains stock. Closing WMC or
 switching to any other tab stops intercepting wing-icon clicks.
 
-Map moves are temporary routes. On the final point, Defend/Hold and Escort wingmen return
-to formation; Free wingmen hand off to Engage and may resume autonomous combat.
+Map moves are temporary routes. At the final point every wingman returns to formation;
+Free ROE permits opportunity fire but does not invent an Engage order.
 
 ## Orders
 
@@ -195,12 +201,12 @@ An order controls **where the wingman flies**. ROE controls **what it may shoot*
 
 | ROE | Leaves formation? | Weapons policy | When the player is attacked |
 |---|---|---|---|
-| **Defend** (`Hold` in config) | No | Incoming missiles, self-defence, and mirrored ground attacks | Attempts to intercept the missile |
-| **Escort** | No | Weapons free from the assigned slot, prioritising threats to the leader | Engages the launching aircraft while covering |
-| **Free** | Only for emergencies | Weapons free | May break formation and pursue the launcher |
+| **Defend** (`Hold` in config) | No | Incoming missiles and mirrored ground attacks | Attempts to intercept the missile |
+| **Escort** | No | Engages air threats around the protected formation | Prioritises the threat to the player |
+| **Free** | No | Any valid opportunity target in range | Fires while maintaining the current task |
 
-Every wingman may temporarily leave its slot to defend itself from an immediate missile
-warning, regardless of ROE.
+Every wingman may temporarily leave its slot for its own immediate missile warning,
+regardless of ROE. This self-preservation interrupt resumes the exact standing order.
 
 ## Reactive formation system
 
@@ -468,7 +474,7 @@ ignored, including when present in an older config.
 
 - Confirm you are playing single-player or hosting the multiplayer session.
 - Fixed-wing and rotary-wing aircraft cannot join the same formation.
-- Cargo and Land Here apply only to compatible helicopters.
+- Cargo requires a carried load; Land Here applies only to compatible helicopters.
 - Aircraft that are landing, destroyed, or no longer locally simulated cannot be controlled.
 
 ### Formation feels unstable

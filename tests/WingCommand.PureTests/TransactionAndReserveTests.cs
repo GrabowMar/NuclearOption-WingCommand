@@ -90,5 +90,46 @@ namespace WingCommand
             Assert.Equal(0, purchase); // already-paid recovered airframe and its fit
             Assert.Equal(1, release);  // manual hold, not either recovered fit
         }
+
+        [Fact]
+        public void Rotary_hover_requires_both_a_hovering_leader_and_an_established_slot()
+        {
+            Assert.False(RotaryHoverPolicy.ShouldHover(
+                wasHovering: false, leaderHorizontalSpeed: 0f, horizontalSlotError: 500f,
+                spacing: 100f, hoverSpeed: 8f, hysteresis: 3f, stationSpacings: 1.5f));
+
+            Assert.True(RotaryHoverPolicy.ShouldHover(
+                wasHovering: false, leaderHorizontalSpeed: 2f, horizontalSlotError: 80f,
+                spacing: 100f, hoverSpeed: 8f, hysteresis: 3f, stationSpacings: 1.5f));
+
+            // Once hovering, hysteresis keeps the mode stable through small speed changes.
+            Assert.True(RotaryHoverPolicy.ShouldHover(
+                wasHovering: true, leaderHorizontalSpeed: 9f, horizontalSlotError: 80f,
+                spacing: 100f, hoverSpeed: 8f, hysteresis: 3f, stationSpacings: 1.5f));
+        }
+
+        [Fact]
+        public void Explicit_orders_own_engagement_while_movement_tasks_only_apply_roe_when_compatible()
+        {
+            Assert.Equal(OrderEngagementAuthority.ExplicitTarget,
+                         OrderRoePolicy.Authority(WingOrder.Attack));
+            Assert.Equal(OrderEngagementAuthority.ExplicitTarget,
+                         OrderRoePolicy.Authority(WingOrder.FireForEffect));
+            Assert.Equal(OrderEngagementAuthority.StandingRoe,
+                         OrderRoePolicy.Authority(WingOrder.Formation));
+            Assert.Equal(OrderEngagementAuthority.StandingRoe,
+                         OrderRoePolicy.Authority(WingOrder.OrbitHere));
+            Assert.Equal(OrderEngagementAuthority.AutonomousCombat,
+                         OrderRoePolicy.Authority(WingOrder.Engage));
+
+            WingOrder[] defensiveOnly =
+            {
+                WingOrder.ReturnToBase, WingOrder.FallBack, WingOrder.DeliverCargo,
+                WingOrder.LandHere, WingOrder.MoveToPoint,
+            };
+            foreach (WingOrder order in defensiveOnly)
+                Assert.Equal(OrderEngagementAuthority.DefensiveOnly,
+                             OrderRoePolicy.Authority(order));
+        }
     }
 }

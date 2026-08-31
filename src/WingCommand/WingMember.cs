@@ -470,12 +470,9 @@ namespace WingCommand
                 return;
             }
 
-            // A map move is temporary. Defend and Escort return to formation, where their
-            // ROE owns weapons policy; Free transitions into autonomous combat.
-            if (RoeRules.Current == WingRoe.Free)
-                Apply(WingOrder.Engage);
-            else
-                Apply(WingOrder.Formation);
+            // A map move is temporary. Completion returns to formation for every ROE;
+            // weapons-free permission is not permission to invent an Engage order.
+            Apply(WingOrder.Formation);
         }
 
         /// <summary>
@@ -534,7 +531,8 @@ namespace WingCommand
                 Plugin.Logger.LogInfo($"[Wing] {Name} breaking to engage: {reason}");
 
             OnLeash = true;
-            Directive = WingDirective.Simple(WingOrder.Engage);
+            // This is a temporary state interruption, not a new player directive. Keeping
+            // the directive intact is what lets an explicit Form Up order survive it.
             WingComms.Say(this, WingComms.Call.Breaking);
             SwitchToCombat();
         }
@@ -690,28 +688,4 @@ namespace WingCommand
         }
     }
 
-    /// <summary>
-    /// What a wingman has been told to do - that is, where it flies. What it *shoots* is
-    /// the separate question answered by <see cref="WingRoe"/>.
-    /// </summary>
-    internal enum WingOrder
-    {
-        Formation,
-        Engage,
-        ReturnToBase,
-        FallBack,
-        OrbitHere,
-        DeliverCargo,
-        LandHere,
-        Attack,
-
-        /// <summary>
-        /// Attack, but expending. Kept as its own order rather than a flag on Attack so the
-        /// roster, the map and the radio can all tell the player which of the two a wingman
-        /// is actually flying.
-        /// </summary>
-        FireForEffect,
-
-        MoveToPoint,
-    }
 }

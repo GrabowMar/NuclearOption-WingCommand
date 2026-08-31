@@ -18,18 +18,60 @@ namespace WingCommand
     /// stock look is defined.
     ///
     /// Colours come from <see cref="UiTheme"/>, which reads the game's live theme and falls
-    /// back safely before the UI has initialised.
+    /// back safely before the UI has initialised. The spacing and type constants below are
+    /// the panel's whole scale: a four-pixel rhythm and five text sizes. Anything laid out
+    /// with a number that is not one of these has drifted off the grid.
     /// </summary>
     internal static class WingUi
     {
+        // ------------------------------------------------------------------- spacing
+
+        /// <summary>The spacing rhythm. Every inset and gap on the panel is one of these.</summary>
+        public const float Space1 = 4f;
+        public const float Space2 = 8f;
+        public const float Space3 = 12f;
+        public const float Space4 = 16f;
+        public const float Space5 = 20f;
+        public const float Space6 = 24f;
+
         /// <summary>Standard control height, matching the stock panel rows.</summary>
         public const float RowHeight = 30f;
 
+        /// <summary>Height of a page selector, which sits above the content it switches.</summary>
+        public const float TabHeight = 32f;
+
         /// <summary>Standard gap between adjacent controls.</summary>
-        public const float Gap = 4f;
+        public const float Gap = Space1;
 
         /// <summary>Standard inset from a panel edge.</summary>
-        public const float Pad = 12f;
+        public const float Pad = Space3;
+
+        /// <summary>Vertical pitch between stacked list rows.</summary>
+        public const float RowPitch = RowHeight + 2f;
+
+        // ---------------------------------------------------------------------- type
+
+        /// <summary>
+        /// Five sizes, not the six near-identical ones this panel used to mix.
+        ///
+        /// The old set ran 9/10/11/12/13/18, which is close enough to continuous that no
+        /// step in it read as a step: a 9px column header and an 11px value looked like the
+        /// same rank of information. Nine pixels of grey on a dark panel is also below what
+        /// is comfortably readable, so the floor is ten.
+        /// </summary>
+        public const float FontMicro = 10f;
+
+        /// <summary>Secondary values and dense table cells.</summary>
+        public const float FontSmall = 11f;
+
+        /// <summary>The default: control labels and roster values.</summary>
+        public const float FontBody = 12f;
+
+        /// <summary>A line that should be read first inside its own block.</summary>
+        public const float FontLead = 14f;
+
+        /// <summary>The panel title.</summary>
+        public const float FontTitle = 18f;
 
         private static TMP_FontAsset font;
         private static Sprite panelSprite;
@@ -71,15 +113,61 @@ namespace WingCommand
 
         public static Color Alert => UiTheme.Alert;
 
-        /// <summary>Secondary text: present, but not asking to be read.</summary>
-        public static Color Dim => Grey;
+        /// <summary>
+        /// Secondary text: present, but not asking to be read.
+        ///
+        /// Lightened off flat <c>Color.grey</c>. Half-grey on the panel ground clears about
+        /// four to one, and the panel spends most of this colour on ten- and eleven-pixel
+        /// text — hint lines, column headers, table cells — which is exactly the case the
+        /// 4.5:1 floor exists for. Deepening the panel did part of the work; this is the
+        /// rest of it.
+        /// </summary>
+        public static Color Dim => new Color(0.64f, 0.68f, 0.70f);
+
+        /// <summary>Text and edges of a control that is present but currently inert.</summary>
+        public static Color Disabled => new Color(0.42f, 0.45f, 0.46f, 0.75f);
 
         /// <summary>A frame that should recede behind its contents.</summary>
-        public static Color FrameColor => new Color(Grey.r, Grey.g, Grey.b, 0.75f);
+        public static Color FrameColor => new Color(0.52f, 0.55f, 0.56f, 0.55f);
 
-        private static Color PanelBackground => new Color(0.075f, 0.12f, 0.16f, 0.84f);
-        private static Color PanelEdge => new Color(0.33f, 0.33f, 0.33f, 1f);
-        private static Color PanelShadow => new Color(0.24f, 0.24f, 0.24f, 1f);
+        /// <summary>
+        /// Section headings, one rank below the panel title.
+        ///
+        /// Headings used to be drawn in the same full-strength accent as the title, so a
+        /// page opened with half a dozen things all shouting at the same volume and no way
+        /// to tell the name of the panel from the name of a block inside it.
+        /// </summary>
+        public static Color HeadingColor
+        {
+            get
+            {
+                Color c = Friendly;
+                return new Color(c.r * 0.88f, c.g * 0.88f, c.b * 0.88f, 1f);
+            }
+        }
+
+        /// <summary>
+        /// The panel ground.
+        ///
+        /// Darker and more opaque than it was. The map underneath is busy, and at the old
+        /// 84% the terrain read straight through the panel and competed with the text on top
+        /// of it; deepening the fill also buys back the contrast the small grey text needs.
+        /// </summary>
+        private static Color PanelBackground => Unity(UiPalette.PanelGround);
+        private static Color PanelEdge => new Color(0.30f, 0.34f, 0.36f, 1f);
+        private static Color PanelShadow => new Color(0.06f, 0.07f, 0.08f, 1f);
+
+        /// <summary>The interior of a framed box: a hole punched in the panel, not a block.</summary>
+        public static Color CardFill => new Color(0f, 0f, 0f, UiPalette.RowRestShade);
+
+        /// <summary>The same interior, lifted for a row the pointer is over.</summary>
+        public static Color CardFillHover =>
+            Unity(UiPalette.Wash(Rgba(Green), UiPalette.RowHoverScale, UiPalette.RowHoverAlpha));
+
+        /// <summary>The same interior for a row that is currently selected.</summary>
+        public static Color CardFillSelected =>
+            Unity(UiPalette.Wash(Rgba(Green), UiPalette.RowSelectedScale,
+                                 UiPalette.RowSelectedAlpha));
 
         // ---------------------------------------------------------------------- widgets
 
@@ -120,7 +208,7 @@ namespace WingCommand
 
             Image img = go.GetComponent<Image>();
             img.raycastTarget = false;
-            img.color = new Color(0f, 0f, 0f, 0.25f);
+            img.color = CardFill;
 
             Outline(parent, rect, color);
             return img;
@@ -155,34 +243,49 @@ namespace WingCommand
         }
 
         /// <summary>
-        /// An outlined button in the stock idiom: grey frame and text at rest, green when
-        /// hovered — the same on/off treatment HUD OPTIONS gives its MAXIMIZE buttons.
+        /// An outlined button in the stock idiom: a frame and a label, the frame carrying
+        /// the state.
         /// </summary>
         public static WingButton Button(RectTransform parent, string text, Rect rect, Action onClick) =>
-            Button(parent, text, rect, 12f, onClick);
+            Button(parent, text, rect, FontBody, UiButtonStyle.Default, onClick);
 
         public static WingButton Button(RectTransform parent, string text, Rect rect,
-                                        float fontSize, Action onClick)
+                                        float fontSize, Action onClick) =>
+            Button(parent, text, rect, fontSize, UiButtonStyle.Default, onClick);
+
+        public static WingButton Button(RectTransform parent, string text, Rect rect,
+                                        UiButtonStyle style, Action onClick) =>
+            Button(parent, text, rect, FontBody, style, onClick);
+
+        public static WingButton Button(RectTransform parent, string text, Rect rect,
+                                        float fontSize, UiButtonStyle style, Action onClick)
         {
             var go = new GameObject("Button", typeof(RectTransform), typeof(Image));
             var rt = go.GetComponent<RectTransform>();
             rt.SetParent(parent, worldPositionStays: false);
             Place(rt, rect);
 
-            // A near-transparent fill keeps the whole rect clickable while the frame does the
-            // drawing, so the button reads as an outline like the stock controls.
-            Image img = go.GetComponent<Image>();
-            img.raycastTarget = true;
-            img.color = new Color(0f, 0f, 0f, 0.30f);
+            // The fill is what separates the four states from one another. At rest it is
+            // near-black and the frame does all the drawing, so the control still reads as
+            // an outline like the stock ones; selected and pressed wash it with the accent,
+            // which is a cue hover cannot be confused with because hover never fills.
+            Image fill = go.GetComponent<Image>();
+            fill.raycastTarget = true;
 
             Image[] frame = Outline(rt, new Rect(0f, 0f, rect.width, rect.height), Grey);
+
+            // A page selector is underlined rather than boxed on its active edge, so the
+            // lit tab reads as attached to the page below it.
+            Image underline = style == UiButtonStyle.Tab
+                ? Rule(rt, new Rect(0f, -(rect.height - 3f), rect.width, 3f), Color.clear)
+                : null;
 
             TMP_Text label = Label(rt, text, new Rect(0f, 0f, rect.width, rect.height),
                                    Grey, fontSize, FontStyles.Normal,
                                    TextAlignmentOptions.Center);
 
             WingButton behaviour = go.AddComponent<WingButton>();
-            behaviour.Initialise(frame, label, onClick);
+            behaviour.Initialise(style, fill, frame, underline, label, onClick);
             return behaviour;
         }
 
@@ -199,7 +302,7 @@ namespace WingCommand
             hit.raycastTarget = true;
 
             WingButton behaviour = go.AddComponent<WingButton>();
-            behaviour.Initialise(null, null, onClick);
+            behaviour.InitialiseHit(onClick);
             return behaviour;
         }
 
@@ -211,13 +314,13 @@ namespace WingCommand
         {
             float labelWidth = 8f * text.Length + 10f;
 
-            Label(parent, text, new Rect(Pad, y, labelWidth, 16f),
-                  Green, 11f, FontStyles.Normal, TextAlignmentOptions.Left);
+            Label(parent, text, new Rect(Pad, y, labelWidth, Space4),
+                  HeadingColor, FontSmall, FontStyles.Normal, TextAlignmentOptions.Left);
 
             float ruleX = Pad + labelWidth + 6f;
-            Rule(parent, new Rect(ruleX, y - 8f, width - Pad - ruleX, 1f), FrameColor);
+            Rule(parent, new Rect(ruleX, y - Space2, width - Pad - ruleX, 1f), FrameColor);
 
-            return y - 20f;
+            return y - Space5;
         }
 
         /// <summary>Anchor a rect to the parent's top-left and place it in pixels.</summary>
@@ -240,6 +343,38 @@ namespace WingCommand
             rt.offsetMax = Vector2.zero;
             rt.localScale = Vector3.one;
         }
+
+        // -------------------------------------------------------------- button palette
+
+        /// <summary>The live theme, in the Unity-free form <see cref="UiPalette"/> works in.</summary>
+        private static UiPaletteInputs PaletteInputs => new UiPaletteInputs
+        {
+            Accent = Rgba(Green),
+            Alert = Rgba(Alert),
+            Frame = Rgba(FrameColor),
+            Dim = Rgba(Dim),
+            Disabled = Rgba(Disabled),
+        };
+
+        /// <summary>
+        /// Resolve a button's colours from everything that is currently true about it.
+        ///
+        /// One function rather than a tint call at each event, because the states overlap —
+        /// a latched button can also be hovered, and a disabled one must ignore both — and
+        /// the old code answered that by letting whichever handler fired last win. Hovering
+        /// a selected button and moving away used to leave it looking unselected.
+        ///
+        /// The decision itself lives in <see cref="UiPalette"/>, which knows nothing about
+        /// Unity and so can be measured in the test project rather than by squinting at a
+        /// running mission.
+        /// </summary>
+        internal static UiButtonPaint Paint(UiButtonStyle style, bool enabled,
+                                            bool latched, bool hover, bool pressed) =>
+            UiPalette.Paint(style, PaletteInputs, enabled, latched, hover, pressed);
+
+        private static Rgba Rgba(Color c) => new Rgba(c.r, c.g, c.b, c.a);
+
+        public static Color Unity(Rgba c) => new Color(c.R, c.G, c.B, c.A);
 
         // ----------------------------------------------------------------- panel sprite
 
@@ -321,21 +456,105 @@ namespace WingCommand
         }
     }
 
-    /// <summary>Minimal clickable button with a hover tint, so no stock UI script is reused.</summary>
-    internal class WingButton : MonoBehaviour, IPointerClickHandler, IPointerEnterHandler, IPointerExitHandler
+    /// <summary>
+    /// Minimal clickable button, so no stock UI script is reused.
+    ///
+    /// It carries four independent facts — enabled, latched, hovered, pressed — and repaints
+    /// from all four at once through <see cref="WingUi.Paint"/>. It used to tint from
+    /// whichever event fired last, which is why hovering a selected control and moving away
+    /// left it looking unselected, and why a selected control and a hovered one were the
+    /// same shade of white to begin with.
+    /// </summary>
+    internal class WingButton : MonoBehaviour, IPointerClickHandler, IPointerEnterHandler,
+                                IPointerExitHandler, IPointerDownHandler, IPointerUpHandler
     {
+        private UiButtonStyle style;
+        private Image fill;
         private Image[] frame;
+        private Image underline;
         private TMP_Text label;
         private Action onClick;
+
         private bool latched;
         private bool interactable = true;
+        private bool hovered;
+        private bool pressed;
+        private bool decorated;
 
-        public void Initialise(Image[] frame, TMP_Text label, Action onClick)
+        // A hit target laid over something that draws itself — a roster row — still owes
+        // the reader a hover cue, so it tints the row's own fill instead of its own.
+        private Image rowFill;
+        private Color rowRest;
+        private Color rowHover;
+
+        private string tooltip;
+
+        /// <summary>
+        /// What the control under the pointer says about itself, or null when the pointer
+        /// is over nothing that explains itself.
+        ///
+        /// A static rather than an event, because there is exactly one pointer and exactly
+        /// one place on the panel that reports what it is over. Cleared by whichever button
+        /// the pointer leaves, so a control destroyed while hovered — a roster row being
+        /// hidden, a page being switched away from — cannot leave its description stranded
+        /// on screen.
+        /// </summary>
+        public static string HoveredTooltip { get; private set; }
+
+        public static void ClearTooltip() => HoveredTooltip = null;
+
+        /// <summary>Describe this control for the panel's status line. Null disables it.</summary>
+        public WingButton WithTooltip(string text)
         {
+            tooltip = text;
+            return this;
+        }
+
+        private void PublishTooltip(bool entering)
+        {
+            if (entering)
+            {
+                if (!string.IsNullOrEmpty(tooltip)) HoveredTooltip = tooltip;
+            }
+            else if (!string.IsNullOrEmpty(tooltip) && HoveredTooltip == tooltip)
+            {
+                HoveredTooltip = null;
+            }
+        }
+
+        public void Initialise(UiButtonStyle style, Image fill, Image[] frame,
+                               Image underline, TMP_Text label, Action onClick)
+        {
+            this.style = style;
+            this.fill = fill;
             this.frame = frame;
+            this.underline = underline;
             this.label = label;
             this.onClick = onClick;
-            Tint(WingUi.Green);
+            decorated = true;
+            Apply();
+        }
+
+        /// <summary>A bare click target with nothing of its own to paint.</summary>
+        public void InitialiseHit(Action onClick)
+        {
+            this.onClick = onClick;
+            decorated = false;
+        }
+
+        /// <summary>
+        /// Give a bare hit target a row background to light up while the pointer is on it.
+        ///
+        /// Called again whenever the row's resting colour changes, so hover and selection do
+        /// not fight over the same image: the row owns what it looks like at rest, and this
+        /// only ever adds the pointer's contribution on top.
+        /// </summary>
+        public void SetRowHighlight(Image target, Color rest, Color hover)
+        {
+            rowFill = target;
+            rowRest = rest;
+            rowHover = hover;
+            if (rowFill != null) rowFill.color = hovered && interactable ? rowHover : rowRest;
         }
 
         /// <summary>Hold this button lit, for a selected option in a group.</summary>
@@ -343,14 +562,15 @@ namespace WingCommand
         {
             if (latched == on) return;
             latched = on;
-            Tint(on ? Color.white : WingUi.Green);
+            Apply();
         }
 
         public void SetEnabled(bool on)
         {
             if (interactable == on) return;
             interactable = on;
-            Tint(Resting());
+            if (!interactable) { hovered = false; pressed = false; }
+            Apply();
         }
 
         /// <summary>Set the label without rebuilding the button.</summary>
@@ -359,22 +579,30 @@ namespace WingCommand
             if (label != null) label.text = text;
         }
 
-        private Color Resting()
+        private void Apply()
         {
-            if (!interactable) return new Color(0.3f, 0.3f, 0.3f);
-            return latched ? Color.white : WingUi.Green;
-        }
+            if (rowFill != null) rowFill.color = hovered && interactable ? rowHover : rowRest;
+            if (!decorated) return;
 
-        private void Tint(Color color)
-        {
+            UiButtonPaint paint =
+                WingUi.Paint(style, interactable, latched, hovered, pressed);
+
+            if (fill != null) fill.color = WingUi.Unity(paint.Fill);
+            if (label != null) label.color = WingUi.Unity(paint.Text);
+
             if (frame != null)
             {
+                Color edgeColor = WingUi.Unity(paint.Frame);
                 foreach (Image edge in frame)
                 {
-                    if (edge != null) edge.color = color;
+                    if (edge != null) edge.color = edgeColor;
                 }
             }
-            if (label != null) label.color = color;
+
+            // The tab's underline is the cue that survives at a glance: it is the only mark
+            // on the strip that says which page you are on without reading four words.
+            if (underline != null)
+                underline.color = latched && interactable ? WingUi.Unity(paint.Frame) : Color.clear;
         }
 
         public void OnPointerClick(PointerEventData eventData)
@@ -388,9 +616,44 @@ namespace WingCommand
 
         public void OnPointerEnter(PointerEventData eventData)
         {
-            if (interactable) Tint(Color.white);
+            hovered = true;
+            PublishTooltip(entering: true);
+            Apply();
         }
 
-        public void OnPointerExit(PointerEventData eventData) => Tint(Resting());
+        public void OnPointerExit(PointerEventData eventData)
+        {
+            hovered = false;
+            pressed = false;
+            PublishTooltip(entering: false);
+            Apply();
+        }
+
+        public void OnPointerDown(PointerEventData eventData)
+        {
+            if (eventData.button != PointerEventData.InputButton.Left) return;
+            pressed = true;
+            Apply();
+        }
+
+        public void OnPointerUp(PointerEventData eventData)
+        {
+            if (eventData.button != PointerEventData.InputButton.Left) return;
+            pressed = false;
+            Apply();
+        }
+
+        /// <summary>
+        /// A roster row is hidden by deactivating it, which never delivers the pointer-exit
+        /// the hover state is waiting for. Without this a row left mid-hover comes back lit.
+        /// </summary>
+        private void OnDisable()
+        {
+            if (!hovered && !pressed) return;
+            hovered = false;
+            pressed = false;
+            PublishTooltip(entering: false);
+            Apply();
+        }
     }
 }

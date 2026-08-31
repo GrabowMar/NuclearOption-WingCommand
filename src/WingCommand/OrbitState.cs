@@ -94,12 +94,12 @@ namespace WingCommand
             {
                 Unit target = null;
                 Aircraft leader = member.Leader;
-                if (leader != null && RoeRules.GuardsLeader(roe))
-                    target = WingWeapons.NearestThreatTo(leader, range);
+                target = RoeRules.PriorityTarget(roe, aircraft, leader, range);
 
                 fired = target != null
                     ? WingWeapons.EngageSpecific(aircraft, pilot, target, range)
-                    : WingWeapons.Engage(aircraft, pilot, allow, range);
+                    : RoeRules.MayChooseOpportunityTarget(roe) &&
+                      WingWeapons.Engage(aircraft, pilot, allow, range);
             }
 
             if (fired) lastFiredTime = Time.timeSinceLevelLoad;

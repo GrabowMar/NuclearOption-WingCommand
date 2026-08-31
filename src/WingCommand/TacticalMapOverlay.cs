@@ -49,6 +49,16 @@ namespace WingCommand
         }
 
         private static readonly List<Group> groups = new List<Group>();
+
+        /// <summary>
+        /// Where each wingman currently on its way home is actually going.
+        ///
+        /// Rebuilt on the marker timer rather than per frame: reading it crosses a
+        /// reflection boundary into the stock landing state, and an airbase does not move.
+        /// The legs, which are rebuilt every frame, read this rather than recomputing it.
+        /// </summary>
+        private static readonly Dictionary<WingMember, GlobalPosition> rtbDestinations =
+            new Dictionary<WingMember, GlobalPosition>();
         private static readonly List<Marker> markers = new List<Marker>();
         private static readonly List<Leg> legs = new List<Leg>();
         private static readonly List<Image> lines = new List<Image>();
@@ -101,6 +111,7 @@ namespace WingCommand
             nodes.Clear();
             groups.Clear();
             legs.Clear();
+            rtbDestinations.Clear();
             nextRefresh = 0f;
         }
 
@@ -110,30 +121,46 @@ namespace WingCommand
         private static void Collect(WingRegistry wing)
         {
             groups.Clear();
+            rtbDestinations.Clear();
             if (wing == null) return;
 
             foreach (WingMember member in wing.Members)
             {
-                WingDirective directive = member.Directive;
-                if (!member.Alive || !directive.HasPoint || !IsMarkerOrder(directive.Order))
+                if (!member.Alive) continue;
+
+                // Return To Base has no commanded point — it hands off to the stock landing
+                // state, which picks its own airbase — so its destination is read back out
+                // of that state rather than taken from the directive.
+                if (member.Order == WingOrder.ReturnToBase)
+                {
+                    if (GameAccess.TryGetLandingDestination(member.Pilot,
+                                                            out GlobalPosition home))
+                    {
+                        rtbDestinations[member] = home;
+                        Add(WingOrder.ReturnToBase, home);
+                    }
                     continue;
-
-                Group found = null;
-                foreach (Group group in groups)
-                {
-                    if (group.Order != directive.Order) continue;
-                    Vector3 delta = group.Point - directive.Point;
-                    delta.y = 0f;
-                    if (delta.sqrMagnitude <= 2500f) { found = group; break; }
                 }
 
-                if (found == null)
-                {
-                    found = new Group { Order = directive.Order, Point = directive.Point };
-                    groups.Add(found);
-                }
-                found.Count++;
+                WingDirective directive = member.Directive;
+                if (!directive.HasPoint || !IsMarkerOrder(directive.Order)) continue;
+
+                Add(directive.Order, directive.Point);
             }
+        }
+
+        /// <summary>Fold one commanded point into the marker groups, merging near-coincident ones.</summary>
+        private static void Add(WingOrder order, GlobalPosition point)
+        {
+            foreach (Group group in groups)
+            {
+                if (group.Order != order) continue;
+                Vector3 delta = group.Point - point;
+                delta.y = 0f;
+                if (delta.sqrMagnitude <= 2500f) { group.Count++; return; }
+            }
+
+            groups.Add(new Group { Order = order, Point = point, Count = 1 });
         }
 
         /// <summary>
@@ -177,6 +204,21 @@ namespace WingCommand
                     continue;
                 }
 
+                // The way home, from the destination the landing state actually chose. Drawn
+                // dimmer than a commanded leg: RTB is a wingman leaving the fight under an
+                // order already given, not a place the player is still directing it to.
+                if (member.Order == WingOrder.ReturnToBase &&
+                    rtbDestinations.TryGetValue(member, out GlobalPosition home))
+                {
+                    legs.Add(new Leg
+                    {
+                        From = from,
+                        To = home,
+                        Color = color.WithAlpha(color.a * QueuedAlpha),
+                    });
+                    continue;
+                }
+
                 WingDirective directive = member.Directive;
                 if (directive.HasPoint && IsMarkerOrder(directive.Order))
                 {
@@ -212,7 +254,8 @@ namespace WingCommand
                 markers[i].Icon.sprite = IconFactory.Get(
                     group.Order == WingOrder.LandHere ? "land" :
                     group.Order == WingOrder.MoveToPoint ? "move" :
-                    group.Order == WingOrder.DeliverCargo ? "cargo" : "orbit");
+                    group.Order == WingOrder.DeliverCargo ? "cargo" :
+                    group.Order == WingOrder.ReturnToBase ? "rtb" : "orbit");
                 markers[i].Label.text = WingOrderCatalog.Label(group.Order).ToUpperInvariant() +
                                         (group.Count > 1 ? " · " + group.Count : "");
             }

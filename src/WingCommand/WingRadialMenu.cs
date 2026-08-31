@@ -27,6 +27,7 @@ namespace WingCommand
         private static WingMenuAction[] commanderMenu;
         private static WingMenuAction[] taskingMenu;
         private static WingMenuAction[] formationMenu;
+        private static WingMenuAction[] roeMenu;
 
         /// <summary>The stock wheel contents, captured the first time we swap away.</summary>
         private static RadialMenuAction[] stockActions;
@@ -127,15 +128,26 @@ namespace WingCommand
                 Leaf("Attack My Target", WingAction.AttackMyTarget, "attack"),
                 Leaf("Engage", WingAction.Engage, "engage"),
                 Leaf("Disengage", WingAction.FallBack, "fallback"),
-                Leaf("Rules Of Engagement", WingAction.CycleRoe, "posture"),
+                Icon(WingMenuAction.Create("Rules Of Engagement", _ => ShowRoeMenu()), "posture"),
                 Icon(WingMenuAction.Create("Tasking", _ => ShowTaskingMenu()), "tasking"),
             };
 
             var tasking = new List<WingMenuAction>
             {
+                Leaf("Fire For Effect", WingAction.FireForEffect, "attack"),
                 Leaf("Hold Position", WingAction.OrbitHere, "orbit"),
+                Leaf("Deliver Cargo", WingAction.DeliverCargo, "cargo"),
+                Leaf("Land Here", WingAction.LandHere, "land"),
                 Leaf("Return To Base", WingAction.ReturnToBase, "rtb"),
                 Icon(WingMenuAction.Create("Formation", _ => ShowFormationMenu()), "formation"),
+                Icon(WingMenuAction.Create("Back", _ => ShowCommanderMenu()), "back"),
+            };
+
+            var roes = new List<WingMenuAction>
+            {
+                Roe("Defend", WingRoe.Hold),
+                Roe("Escort", WingRoe.Escort),
+                Roe("Free", WingRoe.Free),
                 Icon(WingMenuAction.Create("Back", _ => ShowCommanderMenu()), "back"),
             };
 
@@ -156,6 +168,7 @@ namespace WingCommand
             commanderMenu = commander.ToArray();
             taskingMenu = tasking.ToArray();
             formationMenu = formations.ToArray();
+            roeMenu = roes.ToArray();
 
             // Take the wedge background and colours from a stock entry so the slices match
             // the game's styling, then overwrite the icon with our own drawn glyph.
@@ -163,6 +176,7 @@ namespace WingCommand
             ApplyAll(commanderMenu, template);
             ApplyAll(taskingMenu, template);
             ApplyAll(formationMenu, template);
+            ApplyAll(roeMenu, template);
         }
 
         private static void ApplyAll(WingMenuAction[] entries, Func<int, RadialMenuAction> template)
@@ -207,6 +221,21 @@ namespace WingCommand
             return Icon(entry, iconKey);
         }
 
+        /// <summary>Select a concrete ROE instead of making the player cycle blindly.</summary>
+        private static WingMenuAction Roe(string label, WingRoe roe)
+        {
+            WingMenuAction entry = WingMenuAction.Create(label, _ =>
+            {
+                if (Mgr != null)
+                {
+                    Mgr.Wing.Roe = roe;
+                    Mgr.Toast("ROE: " + label.ToUpperInvariant());
+                }
+                RestoreStockWheel();
+            });
+            return Icon(entry, "posture");
+        }
+
 
         // ------------------------------------------------------------------ swapping
 
@@ -215,6 +244,8 @@ namespace WingCommand
         private static void ShowTaskingMenu() => Swap(taskingMenu, submenu: true);
 
         private static void ShowFormationMenu() => Swap(formationMenu, submenu: true);
+
+        private static void ShowRoeMenu() => Swap(roeMenu, submenu: true);
 
         internal static void RestoreStockWheel()
         {

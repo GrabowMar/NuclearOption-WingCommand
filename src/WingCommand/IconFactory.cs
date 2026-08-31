@@ -60,6 +60,7 @@ namespace WingCommand
                 case "buy":         Buy(c);                 break;
                 case "back":        Back(c);                break;
                 case "wing-badge":  WingBadge(c);           break;
+                case "selection":   SelectionBrackets(c);   break;
 
                 default:
                     // Shape glyphs are derived from the solver, so any formation added to
@@ -97,6 +98,38 @@ namespace WingCommand
             const float t = 3.5f;
             c.Segment(31, 78, 48, 86, t);
             c.Segment(48, 86, 65, 78, t);
+        }
+
+        /// <summary>
+        /// Four corner brackets round the icon: "this one is under command".
+        ///
+        /// The command selection used to be drawn with <see cref="WingBadge"/> at 134% and
+        /// a brighter tint — the same caret as the membership mark, only slightly larger.
+        /// Two marks that differ by a third of their size and nothing else are one mark as
+        /// far as the eye is concerned, so on a busy map there was no reading which of four
+        /// wingmen the next order was going to. Corner brackets are a different shape
+        /// entirely, and they are the shape every military display already uses for
+        /// designation, so it needs no learning.
+        /// </summary>
+        private static void SelectionBrackets(Canvas c)
+        {
+            const float t = 5f;
+            const float lo = 12f;
+            const float hi = 84f;
+            const float arm = 22f;
+
+            // Bottom-left, bottom-right, top-left, top-right.
+            c.Segment(lo, lo, lo + arm, lo, t);
+            c.Segment(lo, lo, lo, lo + arm, t);
+
+            c.Segment(hi, lo, hi - arm, lo, t);
+            c.Segment(hi, lo, hi, lo + arm, t);
+
+            c.Segment(lo, hi, lo + arm, hi, t);
+            c.Segment(lo, hi, lo, hi - arm, t);
+
+            c.Segment(hi, hi, hi - arm, hi, t);
+            c.Segment(hi, hi, hi, hi - arm, t);
         }
 
         /// <summary>One aircraft plus a "+" — bring another into the wing.</summary>
