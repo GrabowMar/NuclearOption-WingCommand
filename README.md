@@ -1,109 +1,103 @@
-# WingCommand
+<div align="center">
 
-**Tactical AI wing command for Nuclear Option.** Select individual wingmen on the tactical
-map, issue scoped combat orders, and manage paid aircraft assignments, requisitions, and
-player reserves without turning Nuclear Option into an RTS.
+# ✈️ WING COMMAND
+### Tactical AI Wing Control for Nuclear Option
 
-| | |
-|---|---|
-| Current release | `0.9.0` |
-| Game version | Nuclear Option `0.34.2` |
-| Requirements | BepInEx `5.4.23.3` or newer |
-| Supported play | Single-player and multiplayer host |
-| Licence | MIT |
+[![Release](https://img.shields.io/badge/release-0.9.0-blue?style=for-the-badge)](https://github.com/GrabowMar/NuclearOption-WingCommand/releases)
+[![Game Version](https://img.shields.io/badge/Nuclear%20Option-0.34.2-orange?style=for-the-badge)](https://store.steampowered.com/app/2247020/Nuclear_Option/)
+[![BepInEx](https://img.shields.io/badge/BepInEx-5.4.23.3%2B-lightgrey?style=for-the-badge)](https://github.com/BepInEx/BepInEx/releases)
+[![License](https://img.shields.io/badge/license-MIT-green?style=for-the-badge)](LICENSE)
+
+**Stop babysitting one wingman at a time. Command your whole squadron like a flight lead.**
+
+[Install](#-installation) • [Quick Start](#-quick-start) • [Tips & Tricks](#-tips--tricks) • [FAQ](#-faq) • [Troubleshooting](#-troubleshooting)
+
+</div>
+
+---
+
+> [!TIP]
+> **New here?** Skip to [Quick Start](#-quick-start) — you'll be running a wing in under two minutes.
 
 > [!IMPORTANT]
-> WingCommand is in active development. Balance, controls, configuration, and AI behaviour
-> may change between releases. The squadron shop can make missions substantially easier.
+> WingCommand is in active development. Balance and controls can shift between releases, and the squadron shop can make missions noticeably easier — pace yourself.
 
 > [!NOTE]
-> Nuclear Option's AI pilots are server-authoritative. WingCommand works correctly in
-> single-player and for the multiplayer host; non-host clients cannot reliably control AI.
+> Nuclear Option's AI is controlled by whoever hosts the match. WingCommand works fully in **single-player** and for the **host** of a multiplayer session. If you join someone else's server, you won't be able to command AI reliably — that's a game limitation, not a bug.
 
-## Highlights
+## Why you'll want this
 
-- Command the whole wing quickly from the native radial, or select individual wingmen in WMC.
-- Click wing icons on the tactical map to build a command scope independent of weapon targets.
-- Place Hold and Land orders directly on the map and read persistent task markers at a glance.
-- Choose from six distinct release-facing formations with smooth shape transitions.
-- Wingmen react to turns, nearby threats, closing traffic, terrain, and missile warnings.
-- After pilot death or ejection, take control of a surviving aircraft from your wing.
-- Seeker-aware defensive manoeuvres use the appropriate countermeasures, then resume the
-  interrupted order.
-- Target reservations spread attacks across useful contacts instead of dog-piling one unit
-  or repeatedly concentrating every hostile aircraft on the player.
-- Rules of engagement separate where a wingman flies from what it is allowed to shoot.
-- Reassign active AI for a confirmed allocation fee or requisition compatible faction stock.
-- Hold up to three concrete airframes for the wing; recovered requisitions return to that
-  same reserve without being charged twice.
-- High-contrast wing and target symbology stays consistent between the HUD and map.
+Vanilla Nuclear Option gives you a wingman who mostly does their own thing. WingCommand turns your wing into an actual squadron:
 
-## Installation
+🎯 **Point-and-click tactical control** — click wingmen on the map, drag a selection, issue orders like a real flight lead
+🛩️ **Six battle-tested formations** — Finger Four, Combat Spread, Trail, and more, with smooth transitions between them
+🛡️ **Wingmen that don't die like idiots** — they react to missiles, terrain, and threats *on their own*, no micromanagement required
+💰 **A real squadron shop** — buy aircraft, hold a personal reserve, requisition replacements mid-mission
+💀 **Second chances** — lose your jet? Jump into a surviving wingman's cockpit and keep fighting
+🎯 **No more dogpiling** — your wing spreads attacks across targets instead of five planes shooting the same guy
 
-### NOMM
+## 📸 Screenshots
 
-Search for **WingCommand** in [NOMM](https://github.com/Combat787/NOMM) and install it.
-NOMM handles BepInEx and future updates.
+<div align="center">
+<!-- Drop screenshots or a short GIF into docs/images/ and reference them here, e.g.: -->
+<!-- <img src="docs/images/tactical-map.png" width="800" alt="Tactical map wing selection"> -->
+<!-- <img src="docs/images/wmc-supply.png" width="800" alt="Supply tab"> -->
 
-### Manual installation
+*Add screenshots of the tactical map, the WMC Supply tab, and a formation in flight to `docs/images/` — this section is ready for them.*
 
-1. Install [BepInEx 5](https://github.com/BepInEx/BepInEx/releases) into the Nuclear Option
-   directory and launch the game once.
-2. Download `WingCommand.dll` from the
-   [latest release](https://github.com/GrabowMar/NuclearOption-WingCommand/releases).
-3. Copy it to:
+</div>
+
+## 📦 Installation
+
+### Option A — NOMM (recommended)
+
+The easy way. [NOMM](https://github.com/Combat787/NOMM) handles BepInEx and keeps WingCommand updated for you.
+
+1. Install [NOMM](https://github.com/Combat787/NOMM).
+2. Search for **WingCommand** and hit install.
+3. Launch Nuclear Option. Done.
+
+### Option B — Manual install
+
+1. Install [BepInEx 5](https://github.com/BepInEx/BepInEx/releases) into your Nuclear Option folder and launch the game once (this lets BepInEx set itself up).
+2. Grab `WingCommand.dll` from the [latest release](https://github.com/GrabowMar/NuclearOption-WingCommand/releases).
+3. Drop it here:
 
    ```text
    Nuclear Option/BepInEx/plugins/WingCommand/WingCommand.dll
    ```
 
-4. Launch the game and check `BepInEx/LogOutput.log` for:
+4. Launch the game and peek at `BepInEx/LogOutput.log` — you should see:
 
    ```text
    Harmony patched ... method(s)
    WingCommand 0.9.0 loaded.
    ```
 
-The optional `WingCommand-0.9.0.zip` mirrors the game directory and can instead be
-extracted at the Nuclear Option root. Keep only this organized plugin path; a loose
-`BepInEx/plugins/WingCommand.dll` copy can make BepInEx load the wrong build.
+   No line like that? Head to [Troubleshooting](#-troubleshooting).
 
-Settings are generated at:
+> [!WARNING]
+> Only keep the DLL in the organized `plugins/WingCommand/` folder. A stray copy directly in `plugins/` can trick BepInEx into loading the wrong build.
 
-```text
-Nuclear Option/BepInEx/config/com.marci.wingcommand.cfg
-```
+### Changing settings
 
-They can also be edited in-game with
-[BepInEx ConfigurationManager](https://github.com/BepInEx/BepInEx.ConfigurationManager)
-using **F1**.
+Settings live in `Nuclear Option/BepInEx/config/com.marci.wingcommand.cfg`. The easiest way to tweak them is in-game with [BepInEx ConfigurationManager](https://github.com/BepInEx/BepInEx.ConfigurationManager) — press **F1** to open it.
 
-## Quick start
+## 🚀 Quick Start
 
-1. Enter a mission as the host or in single-player.
-2. Open **WMC > Supply**. Select friendly AI using the stock map selection, then press
-   **Assign Selected** twice: the first press quotes the total fee and the second confirms it.
-3. Switch to **WMC > Tactical**. Click a roster row or wing icon; Shift-click builds a
-   multi-aircraft scope and **Select All** restores whole-wing scope.
-4. Issue an order. **Hold Here** and **Land Here** arm the map cursor; click the destination.
-5. Use the compact **Wing Command** radial when you need immediate whole-wing combat orders.
+1. **Load into a mission** as host or single-player.
+2. **Buy your wing.** Open **WMC → Supply**, select friendly AI on the stock map, then press **Assign Selected** — once to see the price, again to confirm.
+3. **Take tactical control.** Switch to **WMC → Tactical**. Click a wing icon or roster row to select one pilot, Shift-click to add more, or hit **Select All** to command everyone.
+4. **Give an order.** Try **Hold Here** or **Land Here** — the cursor arms, click your target spot on the map.
+5. **Or just use the radial.** Open the normal radial menu (same button as always) and pick **Wing Command** for instant whole-wing orders — no menus needed.
 
-If your pilot is killed or ejects while wingmen survive, WingCommand holds them in safe
-orbits and opens a takeover window. Selecting one spawns a fresh player-controlled copy at
-its position with the same airframe, loadout, fuel, livery and motion, then removes the AI
-source. This avoids reusing its AI/network state. You may instead use the normal respawn or
-defeat flow. The recovery panel opens over the tactical map and supports number-key selection.
-Replacement is available in single-player and to the host.
+That's it. You're flight lead now.
 
-Fixed-wing and rotary-wing aircraft cannot share a formation. Recruitment and the shop
-automatically filter incompatible aircraft.
+## 🕹️ Command interfaces
 
-## Command interfaces
+### The radial menu (fast, whole-wing orders)
 
-### Native radial menu
-
-Open the game's normal radial menu and select **Wing Command**. The submenu uses the same
-look controls and bindings as the stock wheel.
+Your muscle-memory radial menu now has a **Wing Command** entry:
 
 ```text
 Wing Command
@@ -124,298 +118,157 @@ Wing Command
       └─ Vic
 ```
 
-Radial and direct hotkey orders always apply to the whole wing. Recruitment, release, and
-requisition are intentionally absent. The fallback radial and direct Form Up/Engage hotkeys
-remain available as advanced settings and are unbound by default.
+Radial orders always hit the *entire* wing at once — great for split-second calls in a furball.
 
-### WMC MFD page
+### The WMC screen (precise, scoped orders)
 
-The **WMC** page has two focused tabs:
+Two tabs do the heavy lifting:
 
-- **Tactical:** paged roster, independent command selection, ROE, six core formations,
-  scoped orders, capability-gated Cargo/Land controls, and map-order status.
-- **Supply:** funds, wing size and squadron capacity at a glance; the faction catalogue at
-  flat list prices; confirmed active-AI assignment; and a concrete three-airframe reserve.
+- **Tactical** — your roster, map-based selection, ROE, formations, and orders
+- **Supply** — funds, wing size, the faction shop, and your personal reserve
 
-### Tactical map
+### Tactical map cheat sheet
 
-| Input | Action |
+| Do this | To get this |
 |---|---|
-| Click a wing icon while **WMC > Tactical** is open | Select only that wingman |
-| Shift-click another wing icon or roster row | Add/remove it from command scope |
-| **Select All** | Restore whole-wing WMC scope |
-| Press **Hold Here** or **Land Here**, then click map | Place the selected order |
-| Right-click map with explicitly selected wingmen | Move those wingmen to the point and show a `MOVE` marker |
-| Shift-right-click map | Queue another move point |
-| Right-click or Escape while an order is armed | Cancel it |
+| Click a wing icon (WMC → Tactical open) | Select just that wingman |
+| Shift-click another icon/roster row | Add or remove it from your selection |
+| **Select All** | Back to commanding the whole wing |
+| Press **Hold Here** / **Land Here**, then click the map | Order that spot |
+| Right-click the map with wingmen selected | Send them there (drops a `MOVE` marker) |
+| Shift-right-click | Queue up another waypoint |
+| Right-click again / Escape | Cancel the armed order |
 
-Hostile, friendly non-wing, ground, and naval icon behavior remains stock. Closing WMC or
-switching to Supply stops intercepting wing-icon clicks.
+## 📋 Orders, explained
 
-Map moves are temporary routes. On the final point, Defend/Hold and Escort wingmen return
-to formation; Free wingmen hand off to Engage and may resume autonomous combat.
-
-## Orders
-
-| Order | Behaviour |
+| Order | What it does |
 |---|---|
-| **Form Up** | Close on assigned slots and hold station on the player |
-| **Attack My Target** | Radial command assigns every wingman an attack; scoped WMC attacks distribute contacts and may retain surplus cover |
-| **Engage** | Hunt autonomously within the configured leash and return when too far away |
-| **Disengage** | Break on separated headings, use countermeasures, egress, then form up again |
-| **Hold Here** | Hold a combat air patrol around the selected point while continuing to apply ROE |
-| **Deliver Cargo** | Use the game's supply behaviour with compatible transport helicopters |
-| **Land Here** | Set compatible helicopters down near the order point |
-| **Return To Base** | Fly the stock landing pattern home, then hand the airframe back to faction stock |
-| **Formation dial** | Choose one of the six core formation geometries from the radial Tasking menu |
+| **Form Up** | Get back in formation and hold station on you |
+| **Attack My Target** | Jump the target you're locked on (spread across it if you send the whole wing) |
+| **Engage** | Hunt on their own within a leash range, come back if they stray too far |
+| **Disengage** | Break off, pop countermeasures, egress, then reform |
+| **Hold Here** | Set up a CAP around a point while still following ROE |
+| **Deliver Cargo** | Compatible transport helicopters run supply drops |
+| **Land Here** | Compatible helicopters set down near the point |
+| **Return To Base** | Fly the landing pattern home and go back into the squadron's pool |
+| **Formation** | Swap between the six formation shapes on the fly |
 
-Orders are persistent. A temporary defensive reaction, fuel state, or Engage leash recall
-does not silently erase the task the player selected.
+Orders stick. A wingman ducking a missile or landing to refuel doesn't forget what you told it to do — it picks the order back up.
 
-**Return To Base completes.** Once the wingman is down and shut down at a friendly airbase,
-its airframe leaves the world and enters the three-slot wing reserve. A purchased airframe
-stays owned there and can be launched again without paying twice; an assigned mission
-airframe becomes a held reserve slot. Host or single-player only; set
-`Engagement/RtbReturnsToReserve` to `false` to leave recovered aircraft parked instead.
+## 🎯 Rules of Engagement
 
-## Rules of engagement
+Orders decide **where** a wingman flies. ROE decides **what it's allowed to shoot at**.
 
-An order controls **where the wingman flies**. ROE controls **what it may shoot**.
-
-| ROE | Leaves formation? | Weapons policy | When the player is attacked |
+| ROE | Leaves formation? | Fires at | If you get shot at |
 |---|---|---|---|
-| **Defend** (`Hold` in config) | No | Incoming missiles, self-defence, and mirrored ground attacks | Attempts to intercept the missile |
-| **Escort** | No | Weapons free from the assigned slot, prioritising threats to the leader | Engages the launching aircraft while covering |
-| **Free** | Only for emergencies | Weapons free | May break formation and pursue the launcher |
+| **Defend** | No | Incoming missiles + self-defense only | Tries to intercept the missile |
+| **Escort** | No | Anything, but prioritizes protecting you | Engages whoever shot at you, from position |
+| **Free** | For emergencies only | Anything | May break formation and go hunt the shooter |
 
-Every wingman may temporarily leave its slot to defend itself from an immediate missile
-warning, regardless of ROE.
+Every wingman will duck out of formation for a split second to dodge an inbound missile no matter what ROE is set — self-preservation always wins.
 
-## Reactive formation system
+## 🛩️ Formations
 
-WingCommand exposes six core formation shapes:
-
-| Shape | Character |
+| Shape | Best for |
 |---|---|
-| **Echelon Right** | Swept tactical line with element staggering |
-| **Line Abreast** | Broad sensor and weapons frontage |
-| **Trail** | Compact column with alternating vertical separation |
-| **Combat Spread** | Wide mutual-support spacing |
-| **Finger Four** | Asymmetric four-ship elements that repeat for larger wings |
-| **Vic** | Balanced V geometry for compact groups |
+| **Echelon Right** | General-purpose swept line |
+| **Line Abreast** | Wide sensor/weapons coverage |
+| **Trail** | Tight column through narrow corridors |
+| **Combat Spread** | Wide mutual support, hard to bracket |
+| **Finger Four** | Classic four-ship, scales to bigger wings |
+| **Vic** | Tight, balanced V for small groups |
 
-Echelon Left, Diamond, Ladder, and Wall remain supported for old configuration files, but
-are not shown in the normal selector. Choosing any core shape returns the selector to the
-compact six-shape cycle.
+Formations reshape themselves automatically during hard turns and widen out when a missile warning or nearby threat pops up, then tuck back in once it's clear. You don't have to babysit spacing.
 
-Formation slots are calculated in leader-local space and transition gradually when the
-shape or spacing changes. During hard turns, lateral spacing compresses and trail depth
-increases so inside and outside wingmen are not given impossible speed demands.
+## 🛒 Squadron shop
 
-Separation predicts the closest approach over the next four seconds. It reacts before two
-aircraft overlap, adds vertical deconfliction near terrain, and keeps avoidance corrections
-bounded so emergency steering does not destabilise the formation. Fixed-wing speed requests
-respect the airframe's own limits, and bank commands are capped below inversion.
+- Aircraft cost the same list price you'd pay from the normal aircraft menu — no markup for having a bigger wing.
+- Reassigning an already-active AI pilot costs a flat fee instead of a full purchase.
+- Your **Wing Reserve** holds up to three specific airframes. Land one with **Return To Base** and it comes home to the reserve — launch it again later for free, no double-charging.
+- Missions cap how many AI aircraft can be airborne at once, and that cap shrinks with more players. The Supply tab always shows you `SQUADRON active / limit` so you know exactly why the shop might be empty.
+- Need more than the cap allows? **OVER LIMIT** purchases let you push past it at a price premium, once you hit the required rank — capped at a handful of extra airframes in the air at a time.
+- Every purchase shows its price before you confirm. Nothing is charged silently.
 
-Threat spacing activates only when a missile warning exists or hostile aircraft are close.
-The formation widens smoothly, then settles back to its selected geometry when the threat
-clears.
+## 💀 When your jet goes down
 
-## AI coordination and self-preservation
+If you're killed or eject while wingmen are still flying, they'll hold in a safe orbit and a takeover window pops up. Pick one (number keys work) and you'll spawn in a fresh copy of that aircraft — same loadout, fuel, and paint — and take the stick. You can also just respawn normally instead. Available in single-player and to the host.
 
-### Target deconfliction
+## 💡 Tips & Tricks
 
-Locally simulated AI shares short-lived target reservations. Stock opportunity, threat,
-weapon, range, and bravery calculations still decide whether a contact is useful, while
-existing commitments encourage the next pilot to select a comparable unsaturated target.
+- **Buy first, select second.** You need to own AI pilots via Supply before Tactical selection means anything.
+- **Use Shift-click for surgical strikes.** Send two wingmen to flank while the rest hold formation on you.
+- **Watch the slot error readout** if formation flying looks janky — small and steady is healthy, climbing steadily means the wingman can't keep up (usually a performance mismatch, not a bug).
+- **Free ROE is a leash, not a suggestion.** Wingmen on Free will break off to chase a shooter — great for a furball, risky if you need them covering your approach.
+- **Widen out before the merge.** Combat Spread or Line Abreast make you much harder to bracket than a tight Trail.
+- **Reserve your favorite airframe.** Hold it in the Wing Reserve so a lucky kill doesn't cost you another purchase.
+- **Check `SQUADRON active/limit` before panic-buying.** An empty shop usually just means the mission's AI cap is full, not that something's broken.
+- **Fixed-wing and rotary can't mix formations.** The shop and recruitment screens auto-filter this for you, so if an aircraft isn't listed, that's why.
 
-- Follow-on attackers increasingly prefer another worthwhile unsaturated contact.
-- Explicit wing attacks estimate how many aircraft are useful and retain the rest as cover.
-- Missile defence assigns one interceptor to an inbound missile instead of wasting the
-  entire wing's weapons on it.
+## ❓ FAQ
 
-This reduces dog-piling without making the player or any other target artificially immune.
+**Does this work in multiplayer?**
+Yes, if you're the **host**. Nuclear Option's AI is controlled by the host, so joining someone else's game means you can't reliably command AI wingmen — that's how the base game works, not a WingCommand limitation.
 
-### Defensive panic system
+**Can I still use the vanilla wingman controls?**
+Yes. The stock radial and Form Up/Engage hotkeys still exist as advanced settings (unbound by default) if you want them alongside WingCommand.
 
-When a wingman receives its own missile warning it calls the threat and enters a temporary
-defensive state:
+**Does WingCommand work with BOTE?**
+Yes, it's designed to coexist with BOTE's radial submenus.
 
-- Radar-guided threats trigger a terrain-aware beam/notch, speed, chaff, and jamming when
-  available.
-- Infrared threats trigger an away/beam manoeuvre, reduced power, and flares.
-- Unknown seekers use a conservative mixed response.
-- Fixed-wing and rotary-wing aircraft receive different steering logic.
+**Why can't I put helicopters and jets in the same formation?**
+They fly too differently to formate together — the shop and recruitment lists automatically hide incompatible types so you won't accidentally try.
 
-After the warning remains clear for the configured interval, the wingman announces that it
-is clear and resumes the queued order—including an order issued while it was defensive.
-The WMC and compact roster show `DEFENSIVE` / `DEF` during the interrupt.
+**I bought an aircraft, but it says the squadron is at its limit — did I get scammed?**
+No — missions cap total AI aircraft in the air, and that cap shrinks with more players in the match (some single-player missions start at zero room). The Supply tab shows the live `active/limit` count so you always know why. You can push past it with **OVER LIMIT** once you hit the rank requirement.
 
-## Squadron supply
+**Do I get charged twice for the same aircraft?**
+No. A **Return To Base** landing sends a purchased aircraft back to your reserve, and launching it again later is free.
 
-The WMC Supply tab uses Nuclear Option's existing economy rather than creating a separate one:
+**My wingmen look shaky in formation — is that a bug?**
+Usually not — check the slot error readout on the WMC panel first. Small oscillation is normal; if it keeps climbing, the leader may be asking for more performance than the wingman's airframe can give.
 
-- **One aircraft, one price.** An airframe costs its list value, the same number the player's
-  own aircraft menu prices from. Nothing compounds with wing size.
-- Reassigning an active AI costs a flat 25% of that list value by default; releasing and
-  reassigning the same persistent aircraft does not charge twice.
-- Price is paid from player allocation; declared aircraft consume the faction's mission supply.
-- Rank, mission restrictions, and fixed-wing/rotary compatibility are respected.
-- Requisitioned aircraft launch from a friendly airbase and fly to the wing under their own
-  power. Where a hangar on the field stocks that airframe, the game's own airbase spawn is
-  used: the aircraft appears in the hangar, waits out any door sequence, taxis and takes off
-  exactly as the faction's own aircraft do. It appears in your wing roster immediately as
-  departing and becomes commandable once airborne. Airframes
-  no hangar stocks are delivered into the circuit overhead instead.
-- Undeclared-aircraft stock remains an advanced compatibility option, disabled by default.
-- The WMC **Wing Reserve** holds up to three specific airframes across all types. `HOLD`
-  moves one selected faction airframe out of AI-accessible stock; `RELEASE` returns it.
-  The reserve does not create supply and does not multiply by aircraft type.
-- A requisition that has already been paid for is marked owned. When it completes Return To
-  Base, that airframe returns to the same reserve and can be launched again without another
-  purchase. Recovered aircraft that were only active assignments return as ordinary held
-  reserve and are charged normally when requisitioned again.
+**Is this compatible with the newest Nuclear Option update?**
+Check the badges at the top of this page for the game version WingCommand currently targets. If the radial menu integration breaks after a game update, a fallback keybind is available under advanced settings until the mod is patched.
 
-### Squadron capacity
+## 🛠️ Troubleshooting
 
-Missions cap how many AI aircraft a faction may have airborne, and that cap shrinks for each
-friendly player — single-player missions routinely leave a limit of zero. The Supply tab shows
-it permanently as `SQUADRON active / limit`, so a shop that cannot sell you anything says why
-instead of failing on a toast that has already gone.
+<details>
+<summary><strong>Wing Command doesn't show up in the radial menu</strong></summary>
 
-**OVER LIMIT** grants permission to requisition past that cap at **3× list price**, needs
-**rank 3**, and allows at most **3 over-limit airframes in the air at once**. It is permission
-rather than a mode: while the squadron has room it changes nothing, and the surcharge only
-applies to a purchase that actually exceeds the limit.
+- Make sure `WingCommand.dll` is actually inside `BepInEx/plugins/`.
+- Check for duplicate or older WingCommand DLLs sitting in other plugin folders.
+- Open `LogOutput.log` and confirm you see the version + Harmony patch lines from the [install steps](#option-b--manual-install).
+- If a recent game update broke the native radial hook, bind the fallback radial key in advanced settings.
 
-The allowance counts *your* over-limit purchases that are still flying, not how far the
-faction as a whole exceeds its cap — missions script in AI regardless of the limit, and
-charging you for that would lock the shop on exactly the missions this exists to rescue. It
-frees up as those aircraft are lost or recovered. The three numbers are
-`Shop/ExceedSquadronLimitCost`, `ExceedSquadronLimitRank` and `ExceedSquadronLimitAllowance`.
+</details>
 
-Every assignment previews its fee. Credits and supply move only after recruitment or spawn
-succeeds.
+<details>
+<summary><strong>My aircraft won't follow orders</strong></summary>
 
-## HUD and map symbology
+- Confirm you're the **host** or in single-player — non-host clients can't reliably command AI.
+- Fixed-wing and rotary-wing can't share a formation.
+- **Deliver Cargo** and **Land Here** only work on compatible helicopters.
+- An aircraft that's already landing, destroyed, or no longer being simulated locally can't take new orders.
 
-- Wingmen use a configurable high-contrast green marker and map caret.
-- Active wing targets use amber markers.
-- Selected members brighten without losing aircraft type or heading information.
-- The compact roster shows order/state and live slot error, and hides while the map is open.
-- On the maximised map, a line runs from every tasked wingman to the point it is flying to.
-  A Shift-queued route is drawn as a chain, with the leg being flown at full strength, the
-  queue behind it dimmed, and a dot at each pending point. An attack draws to its target in
-  the same amber the target marker uses.
+</details>
 
-Slot error is useful when tuning formation flight:
+<details>
+<summary><strong>Formation flying looks unstable</strong></summary>
 
-| Reading | Meaning |
-|---|---|
-| Small and steady | The aircraft is established in its slot |
-| Repeated rise and fall | Correction or throttle gain may be too aggressive |
-| Continually increasing | The wingman cannot keep up or is no longer under local control |
-| `-` | The wingman is not currently on a formation order |
+- Reset `Aggression`, `Damping`, and `ThrottleGain` to their defaults if you've been tweaking them.
+- Make sure you (the leader) aren't outrunning the wingman's performance envelope.
+- Turn on `Debug/VerboseLogging` and check the slot error readout before filing a bug report.
 
-## Configuration reference
+</details>
 
-The ordinary ConfigurationManager view is intentionally limited to the release-facing
-settings below. Controller gains, integration toggles, compatibility features, colors, and
-diagnostics remain under **Advanced settings**; retired keys are hidden but still parse old
-configuration files.
+Found a bug or have balance feedback? [Open a GitHub issue](https://github.com/GrabowMar/NuclearOption-WingCommand/issues) and include your game version, the aircraft/order/formation involved, and the relevant bit of `LogOutput.log`.
 
-| Section | Setting | Default | Purpose |
-|---|---|---:|---|
-| Formation | `Shape` | `EchelonRight` | Initial formation |
-| Formation | `MaxWingSize` | `3` | Maximum recruited wingmen |
-| Engagement | `DefaultRoe` | `Hold` | Initial rules of engagement |
-| Engagement | `AutoReturnOnEmpty` | `true` | Automatic RTB on Winchester or bingo |
-| Engagement | `BingoFuel` | `0.15` | Automatic return fuel fraction |
-| Engagement | `RtbReturnsToReserve` | `true` | Recovered wing airframes return to wing reserve |
-| Engagement | `TakeoverOnDeath` | `true` | Offer a surviving wing aircraft after pilot loss |
-| Shop | `RecruitmentCostPercent` | `0.25` | Active-AI reassignment fee, as a fraction of list value |
-| Shop | `ExceedSquadronLimitCost` | `3` | Price multiplier past the mission's AI aircraft limit |
-| Shop | `ExceedSquadronLimitRank` | `3` | Rank required to exceed that limit |
-| Shop | `ExceedSquadronLimitAllowance` | `3` | Over-limit airframes you may have flying at once |
-| Comms | `RadioChatter` | `true` | Wing order and state reports |
-| UI | `ShowWingHud` | `true` | Compact roster docked beside the tactical map |
+---
 
-Global AI `SkillScale`/`BraveryScale`, player-specific target protection, `WingPriceGrowth`,
-`RecruitRange`, `AdditionalWingReservePerType`, and the fast-delivery keys are retired and
-ignored, including when present in an older config.
+<div align="center">
 
-## Troubleshooting
+**[⬆ Back to top](#-wing-command)**
 
-### Wing Command does not appear
+Made for the Nuclear Option community • [MIT Licensed](LICENSE)
 
-- Confirm `WingCommand.dll` is inside `BepInEx/plugins/`.
-- Remove duplicate or older WingCommand DLLs from other plugin subdirectories.
-- Check `LogOutput.log` for the version and Harmony patch lines shown above.
-- If native radial integration fails after a game update, configure the fallback radial key.
-
-### Aircraft ignore orders
-
-- Confirm you are playing single-player or hosting the multiplayer session.
-- Fixed-wing and rotary-wing aircraft cannot join the same formation.
-- Cargo and Land Here apply only to compatible helicopters.
-- Aircraft that are landing, destroyed, or no longer locally simulated cannot be controlled.
-
-### Formation feels unstable
-
-- Start with the default `Aggression`, `Damping`, and `ThrottleGain` values.
-- Check whether the leader is exceeding the wingman's performance envelope.
-- Use WMC slot error and enable `Debug/VerboseLogging` before reporting a reproducible issue.
-
-Please report bugs and balance feedback through
-[GitHub Issues](https://github.com/GrabowMar/NuclearOption-WingCommand/issues). Include the
-game version, aircraft type, order, formation, and relevant `LogOutput.log` section.
-
-## Compatibility and implementation
-
-WingCommand adds no custom network messages. It drives aircraft through the game's existing
-pilot states and autopilot interfaces, uses the stock economy and supply calls, and limits
-Harmony patches to UI dispatch, marker colour, missile-warning repair, and AI target
-deconfliction.
-
-The mod is designed to coexist with BOTE's radial submenus. Private game members required by
-the native radial integration are resolved through Harmony reflection; if a game update
-renames one, the mod logs the problem and leaves the fallback interface available.
-
-Much of WingCommand has been developed with AI coding assistance under maintainer direction,
-review, and live flight testing. Contributions and detailed test reports are welcome.
-
-## Building
-
-Requires the .NET 8 SDK, BepInEx 5, and a local Nuclear Option installation at the default
-Steam path referenced by the project.
-
-```powershell
-dotnet build src/WingCommand/WingCommand.csproj -c Release
-```
-
-Build output:
-
-```text
-src/WingCommand/bin/Release/netstandard2.1/WingCommand.dll
-```
-
-Create release assets:
-
-```powershell
-pwsh build/package.ps1
-```
-
-This produces:
-
-```text
-dist/WingCommand.dll
-dist/WingCommand-0.9.0.zip
-```
-
-Attach **`WingCommand.dll` first** to a GitHub release. NOMM installs the bare plugin DLL;
-the ZIP is provided for manual installation. The package script reads the version directly
-from the built assembly and prints SHA-256 hashes for both assets.
-
-## Licence
-
-[MIT](LICENSE)
+</div>
