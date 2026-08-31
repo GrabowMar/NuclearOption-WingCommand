@@ -259,12 +259,12 @@ Designate a target, select your scope, and press **Splash 'Em** on **WMC → Tac
 
 ### Building a template
 
-- Pick the airframe, press **+**, and you get a template seeded from that aircraft's first factory loadout — not a stripped airframe.
+- Pick the airframe and press **+** to create an empty template.
 - The **PYLONS** list is the airframe's own hardpoints, under the names the airframe gives them. Click a pylon to choose what hangs on it, from the same stores the game's aircraft selection menu offers for that hardpoint. WingCommand adds no weapons of its own.
 - **Empty is a choice.** Leave a station clean to take the weight off.
 - A left/right pair is one row and moves together, because the game won't let them differ.
 - A pylon that the rest of your fit rules out reads `BLOCKED` and goes inert. That's the airframe's own exclusion rule, asked of the game rather than guessed at.
-- **SEED** fills every pylon at once from a role preset — `AIR-AIR`, `AIR-GND`, `BALANCED`, `CARGO` — and **STOCK** fills it from one of the airframe's own named factory loadouts. Both are starting points to edit, not final answers.
+- Fit the template pylon by pylon. Empty pylons remain empty until you choose a store.
 - The line under the list totals what you've built: pylons filled, weight, and role.
 - Name the template in the **NAME** field. Flight controls are held off while you type.
 

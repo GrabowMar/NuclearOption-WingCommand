@@ -144,15 +144,11 @@ namespace WingCommand
         private static WingButton templateNewButton;
         private static WingButton templateCopyButton;
         private static WingButton templateDeleteButton;
-        private static WingButton stockSeedButton;
         private static RectTransform pylonArea;
         private static WingButton pylonPrevButton;
         private static WingButton pylonNextButton;
         private static TMP_Text pylonPageLabel;
         private static readonly List<PylonRow> pylonRows = new List<PylonRow>();
-        private static readonly List<WingButton> presetButtons = new List<WingButton>();
-        private static readonly List<WingLoadoutPreset> presetScratch =
-            new List<WingLoadoutPreset>();
 
         /// <summary>The list the popup is currently showing, rebuilt on each open.</summary>
         private static readonly List<WingUi.PopupEntry> popupEntries =
@@ -160,9 +156,6 @@ namespace WingCommand
 
         private static readonly List<WingLoadoutCatalog.StoreOption> storeScratch =
             new List<WingLoadoutCatalog.StoreOption>();
-
-        private static readonly List<WingLoadoutCatalog.StockLoadout> stockScratch =
-            new List<WingLoadoutCatalog.StockLoadout>();
 
         private static WingUi.Popup loadoutPopup;
         private static WingUi.Popup shopTemplatePopup;
@@ -184,16 +177,6 @@ namespace WingCommand
         /// of the page, and most airframes fit in one or two pages of four.
         /// </summary>
         private const int PylonRowsPerPage = 4;
-
-        /// <summary>Every preset a button could ever stand for, in selector order.</summary>
-        private static readonly WingLoadoutPreset[] AllPresets =
-        {
-            WingLoadoutPreset.Standard,
-            WingLoadoutPreset.AirToAir,
-            WingLoadoutPreset.AirToGround,
-            WingLoadoutPreset.Balanced,
-            WingLoadoutPreset.Cargo,
-        };
 
         // --- Wing page ---
         private static readonly List<PickRow> wingRows = new List<PickRow>();
@@ -375,7 +358,6 @@ namespace WingCommand
 
             for (int i = 0; i < preferenceButtons.Length; i++) preferenceButtons[i] = null;
 
-            presetButtons.Clear();
             pylonRows.Clear();
             loadoutAirframeLabel = null;
             loadoutStatusLabel = null;
@@ -386,7 +368,6 @@ namespace WingCommand
             templateNewButton = null;
             templateCopyButton = null;
             templateDeleteButton = null;
-            stockSeedButton = null;
             pylonArea = null;
             pylonPrevButton = null;
             pylonNextButton = null;
@@ -2153,11 +2134,10 @@ namespace WingCommand
         /// <summary>
         /// Where loadout templates are built: a store on every pylon, saved under a name.
         ///
-        /// The page used to be a five-button preset picker over a read-only list of what the
-        /// flight was already carrying. Both halves have gone, for opposite reasons. The
-        /// presets survive as seed buttons — they are a good first guess and a bad final
-        /// answer — and the flight list has gone entirely, because it reported something the
-        /// player could not act on from here and the WING tab already says it.
+        /// The page used to offer bulk-generated role and factory fits. Those paths proved
+        /// unreliable, so templates now start empty and every store is chosen explicitly.
+        /// The old flight list is also gone because it reported something the player could
+        /// not act on from here and the WING tab already says it.
         ///
         /// What is left is a workshop, and nothing on it is per-mission. A template is a
         /// standing preference kept in the config file, and this page never touches the
@@ -2218,8 +2198,7 @@ namespace WingCommand
             // templates keep the numbered names they are created with — a name is worth
             // having, but not at the price of typing one into the flight controls.
             Gutter(parent, y, "NAME");
-            const float stockWidth = 62f;
-            float nameWidth = inner - stockWidth - Gap;
+            float nameWidth = inner;
 
             if (WingKeyboardGuard.Available)
             {
@@ -2236,29 +2215,6 @@ namespace WingCommand
                                       TextAlignmentOptions.Left);
             }
 
-            stockSeedButton = WingUi.Button(parent, "STOCK",
-                                            new Rect(left + nameWidth + Gap, y, stockWidth,
-                                                     RowHeight),
-                                            FontMicro, UiButtonStyle.Default,
-                                            () => OpenStockPicker(left, y, inner))
-                                   .WithTooltip(LoadoutHint.Stock);
-            y -= RowHeight + Gap;
-
-            // The old preset buttons, doing a different job. They no longer decide what a
-            // wingman flies with; they fill every pylon at once so the player has something
-            // to edit rather than a bare aircraft.
-            Gutter(parent, y, "SEED");
-            float presetWidth = (inner - Gap * (AllPresets.Length - 1)) / AllPresets.Length;
-            presetButtons.Clear();
-            for (int i = 0; i < AllPresets.Length; i++)
-            {
-                WingLoadoutPreset preset = AllPresets[i];
-                presetButtons.Add(WingUi.Button(
-                    parent, WingLoadoutCatalog.Label(preset),
-                    new Rect(left + (presetWidth + Gap) * i, y, presetWidth, RowHeight),
-                    FontMicro, UiButtonStyle.Default, () => SeedFromPreset(preset))
-                    .WithTooltip(LoadoutHint.Seed(preset)));
-            }
             y -= RowHeight + Gap;
 
             y = Heading(parent, y, "PYLONS");
@@ -2407,51 +2363,6 @@ namespace WingCommand
             });
         }
 
-        /// <summary>
-        /// Offer the airframe's own factory loadouts as a starting point.
-        ///
-        /// These are what the aircraft selection menu lists, and they are a better seed than
-        /// anything this mod computes: they are the fits the airframe was designed around.
-        /// </summary>
-        private static void OpenStockPicker(float x, float y, float width)
-        {
-            LoadoutTemplateRecord template = EditingTemplate();
-            if (template == null)
-            {
-                WingCommandManager.Instance?.Toast("Make a template first");
-                return;
-            }
-
-            WingLoadoutCatalog.StockLoadoutsFor(selectedOffer, stockScratch);
-            if (stockScratch.Count == 0)
-            {
-                WingCommandManager.Instance?.Toast(
-                    selectedOffer.unitName + " publishes no factory loadouts");
-                return;
-            }
-
-            var keys = new List<List<string>>(stockScratch.Count);
-            popupEntries.Clear();
-            for (int i = 0; i < stockScratch.Count; i++)
-            {
-                List<string> resolved = WingLoadoutTemplates.KeysOf(stockScratch[i].Loadout);
-                keys.Add(resolved);
-                popupEntries.Add(new WingUi.PopupEntry(
-                    UiTheme.Truncate(stockScratch[i].Name, 24), CountFitted(resolved) + " fitted"));
-            }
-
-            loadoutPopup?.Show(new Rect(x, y - RowHeight, width, 0f), popupEntries, index =>
-            {
-                if (index < 0 || index >= keys.Count) return;
-
-                LoadoutTemplateRecord target = EditingTemplate();
-                if (target == null) return;
-
-                WingLoadoutTemplates.SetAllMounts(target, keys[index]);
-                WingCommandManager.Instance?.Toast("Seeded from the factory loadout");
-            });
-        }
-
         private static void NewTemplate()
         {
             if (selectedOffer == null)
@@ -2467,16 +2378,8 @@ namespace WingCommand
                 return;
             }
 
-            // Seeded from the airframe's first factory loadout rather than created bare. A
-            // new template that starts as a stripped aircraft is a worse blank page than one
-            // that starts as the aircraft the player already knows.
-            WingLoadoutCatalog.StockLoadoutsFor(selectedOffer, stockScratch);
-            List<string> seed = stockScratch.Count > 0
-                ? WingLoadoutTemplates.KeysOf(stockScratch[0].Loadout)
-                : null;
-
             LoadoutTemplateRecord created = WingLoadoutTemplates.Create(
-                selectedOffer, WingLoadoutTemplates.NextDefaultName(selectedOffer), seed);
+                selectedOffer, WingLoadoutTemplates.NextDefaultName(selectedOffer), null);
 
             if (created == null)
             {
@@ -2673,64 +2576,6 @@ namespace WingCommand
             return ammo.Length == 0 ? tag : tag + "  " + ammo;
         }
 
-        // -------------------------------------------------------------------- seeding
-
-        /// <summary>
-        /// Fill every pylon from one of the mod's role presets.
-        ///
-        /// The preset logic is unchanged and still picks from the airframe's own stores by
-        /// its own stock effectiveness figures. What has changed is that the result is now a
-        /// starting point the player can overrule station by station, rather than the final
-        /// word on what a wingman flies with.
-        /// </summary>
-        private static void SeedFromPreset(WingLoadoutPreset preset)
-        {
-            LoadoutTemplateRecord template = EditingTemplate();
-            if (template == null)
-            {
-                WingCommandManager.Instance?.Toast("Make a template first");
-                return;
-            }
-
-            if (preset == WingLoadoutPreset.Standard)
-            {
-                // Standard is the airframe's own fit, which is expressed as "no loadout at
-                // all" and therefore has no keys to copy. Clearing every pylon would be a
-                // stripped aircraft, which is the opposite of what the button says.
-                WingCommandManager.Instance?.Toast(
-                    "STANDARD is the airframe's own fit - use STOCK to copy a factory loadout");
-                return;
-            }
-
-            WingLoadoutCatalog.PresetsFor(selectedOffer, presetScratch);
-            if (!presetScratch.Contains(preset))
-            {
-                WingCommandManager.Instance?.Toast(
-                    selectedOffer.unitName + " has no stock stores for a " +
-                    WingLoadoutCatalog.Label(preset) + " fit");
-                return;
-            }
-
-            var choice = new WingLoadoutChoice(preset);
-            if (preset == WingLoadoutPreset.Cargo &&
-                WingLoadoutCatalog.ResolveCargo(selectedOffer, null,
-                                                out WingLoadoutCatalog.CargoOption first))
-                choice = choice.WithCargo(first.Key);
-
-            Loadout built = WingLoadoutCatalog.Build(selectedOffer, choice);
-            if (built == null)
-            {
-                WingCommandManager.Instance?.Toast(
-                    "Could not work out a " + WingLoadoutCatalog.Label(preset) +
-                    " fit for " + selectedOffer.unitName);
-                return;
-            }
-
-            WingLoadoutTemplates.SetAllMounts(template, WingLoadoutTemplates.KeysOf(built));
-            WingCommandManager.Instance?.Toast(
-                "Seeded from the " + WingLoadoutCatalog.Label(preset) + " preset");
-        }
-
         // -------------------------------------------------------------------- refresh
 
         private static void RefreshLoadoutPage()
@@ -2777,8 +2622,6 @@ namespace WingCommand
             templateCopyButton?.SetEnabled(template != null &&
                                            saved < WingLoadoutTemplates.MaxPerAirframe);
             templateDeleteButton?.SetEnabled(template != null);
-            stockSeedButton?.SetEnabled(template != null);
-
             // The name field is written only when the template underneath it changes, so
             // typing is never interrupted by the refresh loop.
             if (!ReferenceEquals(lastNamedTemplate, template))
@@ -2787,26 +2630,11 @@ namespace WingCommand
                 SyncNameField();
             }
 
-            for (int i = 0; i < presetButtons.Count; i++)
-            {
-                WingLoadoutPreset preset = AllPresets[i];
-                bool offered = template != null && preset != WingLoadoutPreset.Standard &&
-                               PresetOffered(preset);
-                presetButtons[i].SetEnabled(offered);
-            }
-
             RefreshTemplateSummary(template);
         }
 
         /// <summary>The template the name field was last written for. See SyncNameField.</summary>
         private static LoadoutTemplateRecord lastNamedTemplate;
-
-        private static bool PresetOffered(WingLoadoutPreset preset)
-        {
-            if (selectedOffer == null) return false;
-            WingLoadoutCatalog.PresetsFor(selectedOffer, presetScratch);
-            return presetScratch.Contains(preset);
-        }
 
         /// <summary>
         /// What the template adds up to: how many stations are loaded, what it weighs, and
@@ -2986,7 +2814,7 @@ namespace WingCommand
                 "Switch between the templates saved for this airframe.";
 
             public const string New =
-                "Start a new template, seeded from the airframe's first factory loadout.";
+                "Start a new empty template and fit it pylon by pylon.";
 
             public const string Copy =
                 "Copy this template, so a variation can be made without losing the original.";
@@ -2997,20 +2825,12 @@ namespace WingCommand
             public const string Name =
                 "Name the template. Flight controls are held off while you type here.";
 
-            public const string Stock =
-                "Fill every pylon from one of the airframe's own factory loadouts.";
-
             public const string Pylon =
                 "Choose what hangs on this pylon. A symmetric pair is set together.";
 
             public const string Blocked =
                 "Another store already fitted rules this pylon out. Clear that one to use it.";
 
-            public static string Seed(WingLoadoutPreset preset) =>
-                preset == WingLoadoutPreset.Standard
-                    ? "STANDARD is the airframe's own fit and has nothing to copy - use STOCK."
-                    : "Fill every pylon with the best " + WingLoadoutCatalog.Label(preset) +
-                      " store the airframe carries, then edit from there.";
         }
 
         /// <summary>

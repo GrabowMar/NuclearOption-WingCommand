@@ -505,56 +505,6 @@ namespace WingCommand
         private static readonly Loadout scratchLoadout =
             new Loadout { weapons = new List<WeaponMount>() };
 
-        /// <summary>
-        /// The airframe's own factory loadouts, as the aircraft selection menu lists them.
-        ///
-        /// Offered as seeds for a template rather than as fits of their own: they are a good
-        /// starting point precisely because they are what the designers thought the aircraft
-        /// was for, and the player is here to change one of them.
-        /// </summary>
-        public static void StockLoadoutsFor(AircraftDefinition definition,
-                                            List<StockLoadout> into)
-        {
-            if (into == null) return;
-            into.Clear();
-            if (definition == null) return;
-
-            try
-            {
-                AircraftParameters parameters = definition.aircraftParameters;
-                StandardLoadout[] stock = parameters != null ? parameters.StandardLoadouts : null;
-                if (stock == null) return;
-
-                for (int i = 0; i < stock.Length; i++)
-                {
-                    StandardLoadout entry = stock[i];
-                    if (entry == null || entry.disabled || entry.loadout == null) continue;
-
-                    string name = string.IsNullOrEmpty(entry.Name) ? "STOCK " + (i + 1) : entry.Name;
-                    into.Add(new StockLoadout(name, entry.loadout));
-                }
-            }
-            catch (Exception e)
-            {
-                into.Clear();
-                Fail("reading " + SafeName(definition) + "'s factory loadouts failed: " +
-                     e.Message);
-            }
-        }
-
-        /// <summary>One of the airframe's named factory loadouts.</summary>
-        internal readonly struct StockLoadout
-        {
-            public readonly string Name;
-            public readonly Loadout Loadout;
-
-            public StockLoadout(string name, Loadout loadout)
-            {
-                Name = name;
-                Loadout = loadout;
-            }
-        }
-
         /// <summary>Short label for a preset on its own, used by the selector buttons.</summary>
         public static string Label(WingLoadoutPreset preset)
         {

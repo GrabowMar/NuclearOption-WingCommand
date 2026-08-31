@@ -149,7 +149,7 @@ namespace WingCommand
         // ----------------------------------------------------------------- mutation
 
         /// <summary>
-        /// Add a template for an airframe, seeded with the given store keys.
+        /// Add a template for an airframe, initialized with the given store keys.
         ///
         /// Returns null when the airframe cannot be keyed or the per-airframe cap is
         /// reached, so the caller can say why rather than silently doing nothing.
@@ -215,39 +215,6 @@ namespace WingCommand
             if (record.KeyAt(pylon) == key) return;
             record.SetKeyAt(pylon, key);
             Save();
-        }
-
-        /// <summary>Replace every pylon at once, which is what a seed button does.</summary>
-        public static void SetAllMounts(LoadoutTemplateRecord record, IEnumerable<string> keys)
-        {
-            EnsureLoaded();
-            if (record == null) return;
-
-            record.MountKeys.Clear();
-            if (keys != null) record.MountKeys.AddRange(keys);
-            Save();
-        }
-
-        // -------------------------------------------------------------------- seeding
-
-        /// <summary>
-        /// The store keys a built <c>Loadout</c> represents, in pylon order.
-        ///
-        /// The single conversion both seed paths go through: the mod's own role presets
-        /// produce a <c>Loadout</c> via <see cref="WingLoadoutCatalog.Build"/>, and the
-        /// airframe's factory loadouts already are one.
-        /// </summary>
-        public static List<string> KeysOf(Loadout loadout)
-        {
-            var keys = new List<string>();
-            if (loadout == null || loadout.weapons == null) return keys;
-
-            for (int i = 0; i < loadout.weapons.Count; i++)
-            {
-                WeaponMount mount = loadout.weapons[i];
-                keys.Add(mount != null ? mount.jsonKey : null);
-            }
-            return keys;
         }
 
         // --------------------------------------------------------------------- naming
