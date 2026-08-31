@@ -374,6 +374,10 @@ namespace WingCommand
                     break;
                 }
 
+                case WingAction.FireForEffect:
+                    Show(Commands.FireForEffect(CurrentPlayerTargets(), wholeWing));
+                    break;
+
                 case WingAction.AttackMyTarget:
                 {
                     List<Unit> targets = CurrentPlayerTargets();
@@ -417,6 +421,35 @@ namespace WingCommand
                 return;
             }
             mapLayer?.ArmPointOrder(order);
+        }
+
+        /// <summary>
+        /// Deliver Cargo, which is the one order with two useful shapes.
+        ///
+        /// The first press arms a drop point, because "put it there" is the thing the order
+        /// could not previously express. Pressing again while armed gives up the point and
+        /// runs the stock supply route instead, which is what the order has always done and
+        /// is still the right answer when the player does not care where it goes. The status
+        /// line says so while the cursor is armed.
+        /// </summary>
+        internal void RequestCargoRun()
+        {
+            if (Selection.IsNone)
+            {
+                Toast("No wingmen selected");
+                return;
+            }
+
+            if (mapLayer != null && mapLayer.PointArmed &&
+                mapLayer.ArmedOrder == WingOrder.DeliverCargo)
+            {
+                mapLayer.CancelPointOrder(notify: false);
+                Show(Commands.Apply(WingDirective.Simple(WingOrder.DeliverCargo),
+                                    wholeWing: false));
+                return;
+            }
+
+            mapLayer?.ArmPointOrder(WingOrder.DeliverCargo);
         }
 
         internal void SelectMember(WingMember member, bool toggle)
@@ -596,6 +629,7 @@ namespace WingCommand
     {
         Rejoin,
         Engage,
+        FireForEffect,
         ReturnToBase,
         FallBack,
         OrbitHere,

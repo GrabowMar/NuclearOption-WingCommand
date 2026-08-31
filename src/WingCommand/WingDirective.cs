@@ -28,8 +28,14 @@ namespace WingCommand
         public static WingDirective Simple(WingOrder order) =>
             new WingDirective(order, null, default(GlobalPosition), false);
 
-        public static WingDirective Attack(Unit target) =>
-            new WingDirective(WingOrder.Attack, target, default(GlobalPosition), false);
+        public static WingDirective Attack(Unit target) => AtTarget(WingOrder.Attack, target);
+
+        /// <summary>
+        /// Any order that prosecutes a specific unit. Attack and Fire For Effect differ in
+        /// how hard they press, not in what they carry, so they share this payload.
+        /// </summary>
+        public static WingDirective AtTarget(WingOrder order, Unit target) =>
+            new WingDirective(order, target, default(GlobalPosition), false);
 
         public static WingDirective AtPoint(WingOrder order, GlobalPosition point) =>
             new WingDirective(order, null, point, true);

@@ -498,6 +498,7 @@ namespace WingCommand
                     case WingOrder.DeliverCargo: return "CARGO";
                     case WingOrder.LandHere:    return "LAND";
                     case WingOrder.Attack:      return "ATK";
+                    case WingOrder.FireForEffect: return "FFE";
                     default:                    return "FORM";
                 }
             }

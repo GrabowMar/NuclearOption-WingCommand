@@ -98,6 +98,54 @@ namespace WingCommand
             return new WingDispatchResult(applied, skipped, message, covered);
         }
 
+        /// <summary>
+        /// Put every wingman in scope onto one designation, expending.
+        ///
+        /// No distribution and no useful-attacker cap, unlike <see cref="Attack"/>. Those
+        /// exist to stop a wing wasting itself on a target that needed one missile; an
+        /// order whose entire meaning is "everyone, everything, that one" is the case they
+        /// were never meant to govern.
+        /// </summary>
+        public WingDispatchResult FireForEffect(IReadOnlyList<Unit> targets, bool wholeWing)
+        {
+            List<WingMember> scope = Scope(wholeWing);
+            if (scope.Count == 0)
+                return new WingDispatchResult(0, 0,
+                    wholeWing ? "No wingmen assigned" : "No wingmen selected");
+
+            Unit target = FirstLive(targets);
+            if (target == null)
+                return new WingDispatchResult(0, scope.Count, "No target selected");
+
+            int applied = 0;
+            foreach (WingMember member in scope)
+            {
+                if (!WingOrderCatalog.CanApply(member, WingOrder.FireForEffect)) continue;
+                member.FireForEffect(target);
+                applied++;
+            }
+
+            int skipped = scope.Count - applied;
+            if (applied == 0)
+                return new WingDispatchResult(0, skipped,
+                    WingOrderCatalog.UnavailableReason(WingOrder.FireForEffect));
+
+            string message = ScopePrefix(wholeWing, applied) + ": fire for effect on " +
+                             target.unitName;
+            if (skipped > 0) message += " (" + skipped + " unable)";
+            return new WingDispatchResult(applied, skipped, message, 1);
+        }
+
+        private static Unit FirstLive(IReadOnlyList<Unit> targets)
+        {
+            if (targets == null) return null;
+            for (int i = 0; i < targets.Count; i++)
+            {
+                if (targets[i] != null && !targets[i].disabled) return targets[i];
+            }
+            return null;
+        }
+
         private static string ScopePrefix(bool wholeWing, int applied) =>
             wholeWing ? "Wing" : applied + " selected";
     }

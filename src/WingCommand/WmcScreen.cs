@@ -668,31 +668,54 @@ namespace WingCommand
             return y - RowHeight - Gap;
         }
 
+        /// <summary>
+        /// The nine scoped orders, in three columns.
+        ///
+        /// Two columns became three when Fire For Effect made the set nine. A fifth row of
+        /// pairs would have cost this page more height than the two new tabs left it, where
+        /// a three-by-three grid holds all nine in three rows and hands 34 pixels back. It
+        /// reads better as well: rejoin and the two target orders, then the autonomous and
+        /// positional ones, then the three that end a sortie.
+        /// </summary>
         private static float AddActions(RectTransform parent, float y)
         {
             y = Heading(parent, y, "ORDERS - SELECTED SCOPE");
-            float w = (PanelWidth - Pad * 2f - Gap) * 0.5f;
+            float w = (PanelWidth - Pad * 2f - Gap * 2f) / 3f;
 
-            y = Pair(parent, y, w,
-                "Form Up", () => WingCommandManager.Instance?.Execute(WingAction.Rejoin, wholeWing: false),
-                "Attack", () => WingCommandManager.Instance?.Execute(WingAction.AttackMyTarget, wholeWing: false));
+            y = Triple(parent, y, w,
+                "Form Up", () => Order(WingAction.Rejoin),
+                "Attack", () => Order(WingAction.AttackMyTarget),
+                "Fire For Effect", () => Order(WingAction.FireForEffect));
 
-            y = Pair(parent, y, w,
-                "Engage", () => WingCommandManager.Instance?.Execute(WingAction.Engage, wholeWing: false),
-                "Disengage", () => WingCommandManager.Instance?.Execute(WingAction.FallBack, wholeWing: false));
+            y = Triple(parent, y, w,
+                "Engage", () => Order(WingAction.Engage),
+                "Disengage", () => Order(WingAction.FallBack),
+                "Hold Here", () => WingCommandManager.Instance?.ArmPointOrder(WingOrder.OrbitHere));
 
-            y = Pair(parent, y, w,
-                "Hold Here", () => WingCommandManager.Instance?.ArmPointOrder(WingOrder.OrbitHere),
-                "Return To Base", () => WingCommandManager.Instance?.Execute(WingAction.ReturnToBase, wholeWing: false));
+            GridButton(parent, "Return To Base", Pad, y, w,
+                       () => Order(WingAction.ReturnToBase));
 
-            cargoButton = Button(parent, "Deliver Cargo", new Rect(Pad, y, w, RowHeight),
-                () => WingCommandManager.Instance?.Execute(WingAction.DeliverCargo, wholeWing: false));
-            landButton = Button(parent, "Land Here", new Rect(Pad + w + Gap, y, w, RowHeight),
-                () => WingCommandManager.Instance?.ArmPointOrder(WingOrder.LandHere));
+            // Deliver Cargo arms a drop point, and says on the status line that pressing it
+            // again falls back to the stock supply route.
+            cargoButton = GridButton(parent, "Deliver Cargo", Pad + w + Gap, y, w,
+                                     () => WingCommandManager.Instance?.RequestCargoRun());
+            landButton = GridButton(parent, "Land Here", Pad + (w + Gap) * 2f, y, w,
+                                    () => WingCommandManager.Instance?.ArmPointOrder(WingOrder.LandHere));
             y -= RowHeight + Gap;
 
             return y;
         }
+
+        private static void Order(WingAction action) =>
+            WingCommandManager.Instance?.Execute(action, wholeWing: false);
+
+        /// <summary>
+        /// One cell of the order grid. Smaller type than the rest of the page, because a
+        /// third of the panel has to hold "Fire For Effect" without clipping it.
+        /// </summary>
+        private static WingButton GridButton(RectTransform parent, string text, float x, float y,
+                                             float w, Action onClick) =>
+            WingUi.Button(parent, text, new Rect(x, y, w, RowHeight), 10f, onClick);
 
         private static float AddCommandStatus(RectTransform parent, float y)
         {
@@ -808,12 +831,14 @@ namespace WingCommand
 
             return y - RowHeight;
         }
-        private static float Pair(RectTransform parent, float y, float w,
-                                  string leftText, Action leftAction,
-                                  string rightText, Action rightAction)
+        private static float Triple(RectTransform parent, float y, float w,
+                                    string leftText, Action leftAction,
+                                    string middleText, Action middleAction,
+                                    string rightText, Action rightAction)
         {
-            Button(parent, leftText, new Rect(Pad, y, w, RowHeight), leftAction);
-            Button(parent, rightText, new Rect(Pad + w + Gap, y, w, RowHeight), rightAction);
+            GridButton(parent, leftText, Pad, y, w, leftAction);
+            GridButton(parent, middleText, Pad + w + Gap, y, w, middleAction);
+            GridButton(parent, rightText, Pad + (w + Gap) * 2f, y, w, rightAction);
             return y - (RowHeight + Gap);
         }
 
@@ -2183,6 +2208,13 @@ namespace WingCommand
         {
             if (m.DeliveryPending) return "DEPT";
             if (m.IsPanicking) return "DEFENSIVE";
+
+            // Fire For Effect keeps its own name rather than borrowing the target's. The
+            // column is too narrow for both, and which of the two target orders a wingman
+            // is flying is the thing that cannot be read anywhere else on this page - the
+            // map already draws an amber line to the unit either way.
+            if (m.Order == WingOrder.FireForEffect)
+                return WingOrderCatalog.ShortLabel(m.Order);
 
             Unit assigned = m.AssignedTarget;
             if (assigned != null && !assigned.disabled)

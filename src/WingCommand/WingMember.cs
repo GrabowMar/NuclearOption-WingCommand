@@ -46,6 +46,7 @@ namespace WingCommand
         private readonly FallBackState fallBackState;
         private readonly OrbitState orbitState;
         private readonly LandInPlaceState landState;
+        private readonly CargoRunState cargoRunState;
         private readonly WaypointTaskState waypointState;
         private readonly AttackRunState attackState;
         private readonly DefensiveManeuverState defensiveState;
@@ -83,6 +84,7 @@ namespace WingCommand
             fallBackState = new FallBackState(this);
             orbitState = new OrbitState(this);
             landState = new LandInPlaceState(this);
+            cargoRunState = new CargoRunState(this);
             waypointState = new WaypointTaskState(this);
             attackState = new AttackRunState(this);
             defensiveState = new DefensiveManeuverState(this);
@@ -164,21 +166,46 @@ namespace WingCommand
                 }
 
                 case WingOrder.DeliverCargo:
-                    // The stock transport state configures itself in EnterState — nearest
-                    // airbase, nearest known ground enemy, landing zone search — so this is
-                    // a complete supply-run behaviour for the cost of a state switch.
+                {
+                    // Two routes, and the difference is whether the player named a place.
                     //
-                    // What it does not do is report back. The order used to end here: the
-                    // wingman entered the state and the mod never learned whether cargo was
-                    // ever set down, so a helicopter that could not find a drop-off simply
-                    // flew away and stayed away. CheckCargoRun watches the cargo station
-                    // itself, which is the only ground truth available, and either calls
-                    // the delivery or gives the airframe back.
+                    // With a drop point, CargoRunState flies there and releases — the same
+                    // shape as Hold and Land, and available to any airframe carrying a load
+                    // rather than only to helicopters.
+                    //
+                    // Without one, the stock transport state configures itself in EnterState
+                    // — nearest airbase, nearest known ground enemy, landing zone search — so
+                    // it remains a complete supply-run behaviour for the cost of a state
+                    // switch, and is what the order has always done.
+                    //
+                    // Neither reports back on its own. CheckCargoRun watches the cargo
+                    // station itself, which is the only ground truth available, and either
+                    // calls the delivery or gives the airframe back.
                     cargoAtStart = CargoAmmo;
                     cargoRunStarted = Time.timeSinceLevelLoad;
                     cargoDropped = false;
-                    Pilot.SwitchState(Pilot.AIHeloTransportState);
+
+                    if (directive.HasPoint)
+                    {
+                        cargoRunState.SetDestination(directive.Point);
+                        Pilot.SwitchState(cargoRunState);
+                        break;
+                    }
+
+                    if (Pilot.AIHeloTransportState != null)
+                    {
+                        Pilot.SwitchState(Pilot.AIHeloTransportState);
+                        break;
+                    }
+
+                    // A fixed-wing transport has no stock supply route to fall back on, so
+                    // say which half of the order is missing rather than silently doing
+                    // nothing with a load aboard.
+                    WingCommandManager.Instance?.Toast(
+                        Name + " needs a drop point - it has no standard supply route");
+                    Apply(WingOrder.Formation);
                     break;
+                }
 
                 case WingOrder.LandHere:
                     if (directive.HasPoint) landState.SetDestination(directive.Point);
@@ -197,12 +224,18 @@ namespace WingCommand
                     break;
 
                 case WingOrder.Attack:
+                case WingOrder.FireForEffect:
                     // Reached only if something re-applies a standing attack order.
                     // AttackTarget is the normal entry point and sets the target first.
                     if (AssignedTarget != null && !AssignedTarget.disabled)
+                    {
+                        attackState.SetMassed(directive.Order == WingOrder.FireForEffect);
                         Pilot.SwitchState(attackState);
+                    }
                     else
+                    {
                         Pilot.SwitchState(formationState);
+                    }
                     break;
             }
 
@@ -220,12 +253,19 @@ namespace WingCommand
             return true;
         }
 
-        /// <summary>True when this aircraft can be told to run cargo.</summary>
+        /// <summary>
+        /// True when this aircraft can be told to run cargo.
+        ///
+        /// A loaded cargo station and nothing else. It used to require the stock helicopter
+        /// transport state as well, which quietly made the order rotary-only — but nothing
+        /// about a cargo station is rotary-specific, and a fixed-wing transport with a load
+        /// aboard can fly it to a drop point perfectly well. The stock state is only needed
+        /// for the point-less route, and is checked where that route is taken.
+        /// </summary>
         public bool CanDeliverCargo
         {
             get
             {
-                if (Pilot == null || Pilot.AIHeloTransportState == null) return false;
                 if (Aircraft == null || Aircraft.weaponStations == null) return false;
 
                 foreach (WeaponStation s in Aircraft.weaponStations)
@@ -388,6 +428,21 @@ namespace WingCommand
             if (!IsPanicking)
                 WingComms.Say(this, WingComms.Call.Engaging, target.unitName);
         }
+        /// <summary>
+        /// Order this member to expend on a target.
+        ///
+        /// Deliberately separate from <see cref="AttackTarget"/> rather than a parameter on
+        /// it: the two orders read differently on the roster, on the map and on the radio,
+        /// and a player who asked for one should never be shown the other.
+        /// </summary>
+        public void FireForEffect(Unit target)
+        {
+            if (target == null || !IsCommandable) return;
+            Apply(WingDirective.AtTarget(WingOrder.FireForEffect, target));
+            if (!IsPanicking)
+                WingComms.Say(this, WingComms.Call.FireForEffect, target.unitName);
+        }
+
         public void ClearAssignedTarget() => Directive = Directive.WithoutTarget();
 
         /// <summary>Issue a tactical-map move, replacing or appending to this member's route.</summary>
@@ -512,7 +567,8 @@ namespace WingCommand
         public void CheckLeash()
         {
             if (!IsCommandable || IsPanicking) return;
-            if (Order != WingOrder.Engage && Order != WingOrder.Attack && !OnLeash) return;
+            if (Order != WingOrder.Engage && !WingOrderCatalog.IsTargetOrder(Order) &&
+                !OnLeash) return;
 
             Aircraft leader = Leader;
             if (leader == null)
@@ -557,14 +613,16 @@ namespace WingCommand
             // Resume whatever the standing order actually was. An attack order goes back to
             // its target rather than to free hunting, which is the difference between "go
             // and get that" and "go and find something".
-            if (Order == WingOrder.Attack && AssignedTarget != null && !AssignedTarget.disabled)
+            if (WingOrderCatalog.IsTargetOrder(Order) &&
+                AssignedTarget != null && !AssignedTarget.disabled)
             {
                 WingComms.Say(this, WingComms.Call.Engaging, AssignedTarget.unitName);
+                attackState.SetMassed(Order == WingOrder.FireForEffect);
                 Pilot.SwitchState(attackState);
                 return;
             }
 
-            if (Order == WingOrder.Attack)
+            if (WingOrderCatalog.IsTargetOrder(Order))
             {
                 // Target died while we were on our way back.
                 ClearAssignedTarget();
@@ -602,7 +660,7 @@ namespace WingCommand
             WingDirective resume = Directive;
             IsPanicking = false;
 
-            if (resume.Order == WingOrder.Attack &&
+            if (WingOrderCatalog.IsTargetOrder(resume.Order) &&
                 (resume.Target == null || resume.Target.disabled))
             {
                 resume = WingDirective.Simple(WingOrder.Formation);
@@ -654,6 +712,14 @@ namespace WingCommand
         DeliverCargo,
         LandHere,
         Attack,
+
+        /// <summary>
+        /// Attack, but expending. Kept as its own order rather than a flag on Attack so the
+        /// roster, the map and the radio can all tell the player which of the two a wingman
+        /// is actually flying.
+        /// </summary>
+        FireForEffect,
+
         MoveToPoint,
     }
 }

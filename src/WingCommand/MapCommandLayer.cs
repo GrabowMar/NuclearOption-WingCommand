@@ -32,7 +32,8 @@ namespace WingCommand
             (pendingRecruit.Count > 0 && Time.unscaledTime <= recruitConfirmationUntil);
 
         public string Status => pointArmed
-            ? WingOrderCatalog.Label(armedOrder).ToUpperInvariant() + " ARMED - CLICK MAP"
+            ? WingOrderCatalog.Label(armedOrder).ToUpperInvariant() + " ARMED - CLICK MAP" +
+              (armedOrder == WingOrder.DeliverCargo ? ", OR PRESS AGAIN FOR THE STANDARD ROUTE" : "")
             : pendingRecruit.Count > 0 && Time.unscaledTime <= recruitConfirmationUntil
                 ? "CONFIRM ASSIGNMENT: " + pendingRecruit.Count + " AIRCRAFT · " +
                   Mathf.RoundToInt(pendingRecruitCost) + " FUNDS"
@@ -57,7 +58,7 @@ namespace WingCommand
 
         public void ArmPointOrder(WingOrder order)
         {
-            if (!WingOrderCatalog.NeedsPoint(order)) return;
+            if (!WingOrderCatalog.TakesPoint(order)) return;
             pointArmed = true;
             armedOrder = order;
             armedFrame = Time.frameCount;

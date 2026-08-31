@@ -154,7 +154,7 @@ The **WMC** page has four focused tabs:
 | Click a wing icon while **WMC > Tactical** is open | Select only that wingman |
 | Shift-click another wing icon or roster row | Add/remove it from command scope |
 | **Select All** | Restore whole-wing WMC scope |
-| Press **Hold Here** or **Land Here**, then click map | Place the selected order |
+| Press **Hold Here**, **Land Here** or **Deliver Cargo**, then click map | Place the selected order |
 | Right-click map with explicitly selected wingmen | Move those wingmen to the point and show a `MOVE` marker |
 | Shift-right-click map | Queue another move point |
 | Right-click or Escape while an order is armed | Cancel it |
@@ -171,10 +171,11 @@ to formation; Free wingmen hand off to Engage and may resume autonomous combat.
 |---|---|
 | **Form Up** | Close on assigned slots and hold station on the player |
 | **Attack My Target** | Radial command assigns every wingman an attack; scoped WMC attacks distribute contacts and may retain surplus cover |
+| **Fire For Effect** | Every selected wingman expends on one designated target until it is dead or they are dry |
 | **Engage** | Hunt autonomously within the configured leash and return when too far away |
 | **Disengage** | Break on separated headings, use countermeasures, egress, then form up again |
 | **Hold Here** | Hold a combat air patrol around the selected point while continuing to apply ROE |
-| **Deliver Cargo** | Run the game's supply behaviour with compatible transport helicopters, then report the delivery and rejoin |
+| **Deliver Cargo** | Fly cargo to a chosen map point and put it down there, then report the delivery and rejoin |
 | **Land Here** | Set compatible helicopters down near the order point |
 | **Return To Base** | Fly the stock landing pattern home, then hand the airframe back to faction stock |
 | **Formation dial** | Choose one of the six core formation geometries from the radial Tasking menu |
@@ -329,9 +330,40 @@ Loadouts do not change what an airframe costs. A requisition is list price, exac
 ### Cargo
 
 For a transport, the Loadout tab also chooses **what it is carrying**, from the cargo mounts
-the airframe itself offers. A cargo run now finishes: the wingman calls the delivery when the
-cargo actually leaves the aircraft and rejoins when it is empty, and a helicopter that cannot
-find anywhere to put its load says so and brings it back instead of circling for the mission.
+the airframe itself offers.
+
+**Deliver Cargo takes a drop point.** Press it, then click the map, exactly as Hold Here and
+Land Here work; a cargo marker appears at the point and a line runs to it from every wingman
+on the run. Helicopters descend and set the load down there, fixed-wing transports run in and
+release over it. Any airframe carrying a load can be given the order — it is no longer
+helicopter-only.
+
+Press **Deliver Cargo** a second time while the cursor is armed to give up the point and use
+the game's own supply route instead, which is what the order did before.
+
+A cargo run now finishes either way: the wingman calls the delivery when the cargo actually
+leaves the aircraft and rejoins when it is empty, and one that cannot put its load down says
+so and brings it back instead of circling for the rest of the mission.
+
+## Fire For Effect
+
+**Attack** is measured. It spreads designations across the wing, caps how many aircraft are
+useful against one contact, holds surplus wingmen back as cover, and leaves several seconds
+between launches so nobody empties themselves on a truck.
+
+**Fire For Effect** is the other thing. Every selected wingman goes after the same designated
+target and keeps shooting — no concurrency cap, no long cooldown — working down through
+missiles, then rockets, then guns as each runs dry, until the target is dead or there is
+nothing left aboard that could hurt it. Then they call `expended` and rejoin.
+
+What it does *not* drop is weapon/target matching: a station still has to be effective
+against that kind of target and the shot still has to be inside the weapon's own envelope, so
+this expends a loadout on something worth expending it on rather than throwing air-to-air
+missiles at a tank. Bingo fuel and Winchester still send a wingman home.
+
+Designate a target as usual, select your scope, and press **Fire For Effect** on
+**WMC > Tactical**. The roster shows `FFE`. It is deliberately not on the radial: it is a
+considered decision, not a quick call.
 
 ## Preferred weapon
 

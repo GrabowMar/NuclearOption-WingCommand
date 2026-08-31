@@ -124,7 +124,30 @@ namespace WingCommand
         /// Fire at one specific unit, chosen by the player rather than by the wingman.
         /// Returns true if it fired.
         /// </summary>
-        public static bool EngageSpecific(Aircraft aircraft, Pilot pilot, Unit target, float maxRange)
+        public static bool EngageSpecific(Aircraft aircraft, Pilot pilot, Unit target, float maxRange) =>
+            EngageDesignated(aircraft, pilot, target, maxRange, massed: false);
+
+        /// <summary>
+        /// Put everything that can hurt this target into it, without the wing-wide
+        /// concurrency cap.
+        ///
+        /// This is the Fire For Effect order's shooting, and the only place in the mod that
+        /// deliberately skips <see cref="TacticalCoordinator"/>. Massed fire on one
+        /// designation is the entire point of the order, so the reservation that normally
+        /// stops a four-ship spending four missiles on a two-missile target is exactly what
+        /// has to be suspended — the player has asked for that.
+        ///
+        /// What is <em>not</em> suspended is the weapon/target matching. A station still has
+        /// to be effective against this class of target and the shot still has to be inside
+        /// the weapon's own stated envelope, so a wingman works down through its missiles,
+        /// then its rockets, then its gun as each runs dry, rather than throwing anti-air
+        /// missiles at a tank. "Everything it has" means everything that can do the job.
+        /// </summary>
+        public static bool EngageMassed(Aircraft aircraft, Pilot pilot, Unit target, float maxRange) =>
+            EngageDesignated(aircraft, pilot, target, maxRange, massed: true);
+
+        private static bool EngageDesignated(Aircraft aircraft, Pilot pilot, Unit target,
+                                             float maxRange, bool massed)
         {
             if (aircraft == null || pilot == null || target == null || target.disabled) return false;
 
@@ -138,19 +161,21 @@ namespace WingCommand
                 > maxRange * maxRange)
                 return false;
 
-            bool isAir = target.definition.typeIdentity.air > 0.5f;
-            WeaponStation station = BestStationFor(aircraft, isAir ? TargetClass.Air : TargetClass.Surface);
+            WeaponStation station = DesignatedStationFor(aircraft, target, massed);
             if (station == null) return false;
             if (!ShotIsValid(aircraft, station, target)) return false;
 
             // Explicit attack orders may deliberately mass some fire, but still respect the
             // wing-wide cap. This keeps a four-ship from launching four missiles at a target
-            // that only needed one or two.
-            int capacity = RequiredAttackers(station, target);
-            if (!TacticalCoordinator.TryClaim(
-                    target, aircraft, capacity,
-                    Mathf.Max(FireInterval(aircraft) * 1.5f, 3f)))
-                return false;
+            // that only needed one or two. Fire For Effect is the one order that does not.
+            if (!massed)
+            {
+                int capacity = RequiredAttackers(station, target);
+                if (!TacticalCoordinator.TryClaim(
+                        target, aircraft, capacity,
+                        Mathf.Max(FireInterval(aircraft) * 1.5f, 3f)))
+                    return false;
+            }
 
             wm.currentWeaponStation = station;
             wm.ClearTargetList();
@@ -160,6 +185,73 @@ namespace WingCommand
             pilot.SetPrimaryTarget(target);
             pilot.Fire();
             WingKillCredit.NoteShot(aircraft, target);
+            return true;
+        }
+
+        /// <summary>
+        /// The station to use against a designated unit.
+        ///
+        /// A massed attack ignores the player's weapon preference. The preference exists to
+        /// husband particular stores, and an order to expend everything on one target has
+        /// already answered that question the other way.
+        /// </summary>
+        private static WeaponStation DesignatedStationFor(Aircraft aircraft, Unit target, bool massed)
+        {
+            bool isAir = target.definition != null && target.definition.typeIdentity.air > 0.5f;
+            TargetClass targetClass = isAir ? TargetClass.Air : TargetClass.Surface;
+
+            return massed
+                ? BestStationFor(aircraft, targetClass, WingWeaponPreference.Auto)
+                : BestStationFor(aircraft, targetClass);
+        }
+
+        /// <summary>
+        /// Whether this aircraft still carries anything worth using on a target.
+        ///
+        /// Read by the Fire For Effect run to know when it has genuinely finished, rather
+        /// than circling a survivor with nothing left that can touch it.
+        /// </summary>
+        public static bool CanStillEngage(Aircraft aircraft, Unit target)
+        {
+            if (aircraft == null || target == null || target.disabled) return false;
+            return DesignatedStationFor(aircraft, target, massed: true) != null;
+        }
+
+        /// <summary>
+        /// Let go of one cargo load, using the same station-select-and-fire sequence every
+        /// other shot in this file uses.
+        ///
+        /// There is no target list: a cargo station drops what it is carrying where the
+        /// aircraft is. Whether the stock station answers <c>Fire</c> on the ground is not
+        /// something a plugin build can prove, so the caller watches the station's own
+        /// ammunition for the answer and falls back to the stock transport behaviour if
+        /// nothing moves.
+        /// </summary>
+        public static bool ReleaseCargo(Aircraft aircraft, Pilot pilot)
+        {
+            if (aircraft == null || pilot == null || aircraft.weaponStations == null) return false;
+
+            WeaponManager wm = aircraft.weaponManager;
+            if (wm == null) return false;
+
+            WeaponStation current = wm.currentWeaponStation;
+            if (current != null && current.SalvoInProgress) return false;
+
+            WeaponStation cargo = null;
+            foreach (WeaponStation station in aircraft.weaponStations)
+            {
+                if (station == null || !station.Cargo) continue;
+                if (station.Ammo <= 0 || !station.Ready()) continue;
+                cargo = station;
+                break;
+            }
+
+            if (cargo == null) return false;
+
+            wm.currentWeaponStation = cargo;
+            wm.ClearTargetList();
+            wm.TargetListChanged();
+            pilot.Fire();
             return true;
         }
 

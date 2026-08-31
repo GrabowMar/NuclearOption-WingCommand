@@ -116,6 +116,7 @@ Each phase builds and is independently reviewable.
 | 4 | `LOADOUT` tab | `WmcScreen.cs` |
 | 5 | `WING` tab | `WmcScreen.cs` |
 | 6 | Cargo completion, and the four-tab layout budget | `WingMember.cs`, `WingComms.cs`, `WmcScreen.cs`, `WingHud.cs` |
+| 7 | Cargo drop points, and the Fire For Effect order | `CargoRunState.cs`, `AttackRunState.cs`, `WingWeapons.cs`, `WingOrderCatalog.cs`, `MapCommandLayer.cs`, `TacticalMapOverlay.cs` |
 
 ## 5. Loadout system
 
@@ -259,6 +260,57 @@ Chosen on the Loadout tab from the airframe's own cargo mounts. `CanDeliverCargo
 extended, not replaced: it still requires a cargo station with ammunition, which is now the
 station the player chose.
 
+### 8.4 Drop points
+
+Deliver Cargo takes a map point, on the same arm-then-click flow as Hold and Land, with a
+cargo marker and a route line. `CargoRunState` transits to the point, then a helicopter
+settles and lets down onto it while a fixed-wing transport runs in and releases overhead.
+
+Two consequences worth stating:
+
+- **`CanDeliverCargo` no longer requires the stock helicopter transport state.** It required
+  it only because the point-less route needs it, which quietly made the whole order
+  rotary-only. Nothing about a cargo station is rotary-specific. The stock state is now
+  checked where that route is actually taken, and a fixed-wing transport asked to deliver
+  without a point is told it needs one rather than silently doing nothing.
+- **The point-less route is still reachable.** Pressing Deliver Cargo again while the cursor
+  is armed abandons the point and runs the stock supply behaviour, and the status line says
+  so. It remains the right answer when the player does not care where the load goes.
+
+Whether a cargo station answers `Fire` on the ground is not provable from a plugin build, so
+`CargoRunState` never assumes it worked: the station's own ammunition is the only evidence
+accepted, and a delivery phase that shifts nothing in 45 seconds hands the job to the stock
+transport state (saying so) rather than hovering over a field for the mission. The order is
+therefore never worse than it was before drop points existed.
+
+## 8a. Fire For Effect
+
+A second target order beside Attack, using US fire-support nomenclature for what it is: stop
+adjusting, put everything on it.
+
+Attack is deliberately measured — designations spread across the wing, a useful-attacker cap
+per contact, surplus aircraft held as cover, seconds between launches. Those are the right
+defaults and none of them change. Fire For Effect is the case they were never meant to
+govern:
+
+| | Attack | Fire For Effect |
+|---|---|---|
+| Designations | Spread across the scope | Every wingman onto one |
+| Concurrency cap | `MaxWingmenPerTarget` | None |
+| Interval between launches | `FireInterval`, ~5 s | 0.8 s |
+| Weapon preference | Honoured | Ignored — the order already answered that question |
+| Ends when | Target dead or invalid | Target dead, or nothing aboard can still hurt it |
+
+What it keeps is the weapon/target matching and the shot envelope, so a wingman works down
+through its missiles, then its rockets, then its gun as each runs dry rather than throwing
+anti-air missiles at a tank. "Everything it has" means everything that can do the job — the
+difference between the order being rad and the order being broken. Bingo and Winchester still
+recall it, and the leash still applies.
+
+It shares `AttackRunState`'s flying entirely; the difference is one flag and which
+`WingWeapons` entry point the run calls. It is not on the radial: six slices is the plan's
+cap, and this is a considered decision rather than a quick call.
+
 ## 9. Four-tab layout budget
 
 Two tabs became four on the same bezel, so the Tactical page had to give height back before
@@ -266,7 +318,7 @@ it could take any. It is now **shorter** than it was:
 
 | | Before | After |
 |---|---:|---:|
-| Tactical | 640 px | 602 px |
+| Tactical | 640 px | 568 px |
 | Supply | ~430 px | ~450 px |
 | Loadout | — | ~450 px |
 | Wing | — | ~445 px |
@@ -281,6 +333,9 @@ Where it came from:
 - The per-choice explanations moved to the status line at the foot of the page, where only
   the one in force is shown and it has the width to be a sentence. The map keeps first claim
   on that line: an armed point order or a pending assignment fee outranks a hint.
+- The order block went from two columns to three when Fire For Effect made the set nine. A
+  fifth row of pairs would have cost more height than the new tabs left; a three-by-three
+  grid holds all nine in three rows and hands another 34 px back.
 
 Each page is still sized to its own content, and only the visible page is refreshed — which
 matters now that rebuilding the requisition catalogue walks the faction's supply dictionary

@@ -211,7 +211,8 @@ namespace WingCommand
                 Group group = groups[i];
                 markers[i].Icon.sprite = IconFactory.Get(
                     group.Order == WingOrder.LandHere ? "land" :
-                    group.Order == WingOrder.MoveToPoint ? "move" : "orbit");
+                    group.Order == WingOrder.MoveToPoint ? "move" :
+                    group.Order == WingOrder.DeliverCargo ? "cargo" : "orbit");
                 markers[i].Label.text = WingOrderCatalog.Label(group.Order).ToUpperInvariant() +
                                         (group.Count > 1 ? " · " + group.Count : "");
             }
@@ -231,7 +232,7 @@ namespace WingCommand
 
         private static bool IsMarkerOrder(WingOrder order) =>
             order == WingOrder.OrbitHere || order == WingOrder.LandHere ||
-            order == WingOrder.MoveToPoint;
+            order == WingOrder.MoveToPoint || order == WingOrder.DeliverCargo;
 
         private static Marker Create(DynamicMap map)
         {
