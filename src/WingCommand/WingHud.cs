@@ -91,6 +91,7 @@ namespace WingCommand
 
         private static RectTransform statusRoot;
         private static TMP_Text statusTitle;
+        private static CombatHUD statusHud;
         private static Canvas statusCanvas;
         private static TMP_FontAsset statusFont;
         private static Sprite statusBackdropSprite;
@@ -109,8 +110,18 @@ namespace WingCommand
             bool visible = Plugin.Config2.ShowHud.Value && wing.Count > 0 &&
                            !DynamicMap.mapMaximized && hud != null && hud.isActiveAndEnabled &&
                            map != null && map.gameObject.activeInHierarchy;
-            Canvas canvas = hud != null ? hud.GetComponentInParent<Canvas>() : null;
-            if (!visible || canvas == null)
+            if (!visible)
+            {
+                if (statusRoot != null) statusRoot.gameObject.SetActive(false);
+                return;
+            }
+
+            // The HUD and its canvas are scene objects. Resolve the hierarchy only when the
+            // panel is first built or the scene supplies a different HUD instance.
+            Canvas canvas = statusRoot != null && statusHud == hud
+                ? statusCanvas
+                : hud.GetComponentInParent<Canvas>();
+            if (canvas == null)
             {
                 if (statusRoot != null) statusRoot.gameObject.SetActive(false);
                 return;
@@ -138,6 +149,7 @@ namespace WingCommand
             if (statusRoot != null) Object.Destroy(statusRoot.gameObject);
             statusRoot = null;
             statusTitle = null;
+            statusHud = null;
             statusCanvas = null;
             statusFont = null;
             statusRows.Clear();
@@ -156,6 +168,7 @@ namespace WingCommand
         {
             TMP_Text template = hud.GetComponentInChildren<TMP_Text>(includeInactive: true);
             statusFont = template != null ? template.font : null;
+            statusHud = hud;
             statusCanvas = canvas;
             statusWidth = StatusPanelWidth;
 
@@ -388,6 +401,7 @@ namespace WingCommand
             private readonly TMP_Text distance;
             private readonly Image rangeCue;
             private float cueWidth;
+            private WingMember bound;
 
             public StatusRow(RectTransform parent, int index)
             {
@@ -420,13 +434,17 @@ namespace WingCommand
                 if (!go.activeSelf) go.SetActive(true);
 
                 Aircraft aircraft = member.Aircraft;
-                icon.sprite = aircraft != null && aircraft.definition != null
-                    ? aircraft.definition.friendlyIcon
-                    : null;
-                identity.text = member.Slot + "  " +
-                                (aircraft != null && aircraft.definition != null
-                                    ? aircraft.definition.code
-                                    : "AIRCRAFT");
+                if (bound != member)
+                {
+                    bound = member;
+                    icon.sprite = aircraft != null && aircraft.definition != null
+                        ? aircraft.definition.friendlyIcon
+                        : null;
+                    identity.text = member.Slot + "  " +
+                                    (aircraft != null && aircraft.definition != null
+                                        ? aircraft.definition.code
+                                        : "AIRCRAFT");
+                }
 
                 float range = aircraft != null && leader != null
                     ? Mathf.Sqrt(FastMath.SquareDistance(

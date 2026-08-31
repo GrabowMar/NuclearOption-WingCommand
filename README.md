@@ -359,6 +359,8 @@ Each transmission opens with the game's own radio click — the same sound missi
 
 Each pilot carries a radio persona independent of rank and combat skill. COBALT is professional, HATCHET is aggressive, MERIDIAN is calm; generated pilots rotate through those voices and a dry one. The persona picks between several lines for the same event, and is intentionally a small data-facing seam for later mission and plot dialogue.
 
+Airborne crews also very occasionally trade jokes, aviation folklore and rumours when the radio is otherwise quiet. Some are answered by another pilot, and named pilots have a small seam for lines or exchanges that belong only to them. This ambient banter is checked on a sparse timer rather than every frame and can be disabled separately with `Comms/CrewBanter`.
+
 ## 💀 When your jet goes down
 
 If you're killed or eject while wingmen are still flying, they hold in a safe orbit and a takeover window pops up. Pick one (number keys work) and you'll spawn in a fresh copy of that aircraft — same airframe, loadout, fuel, livery and motion — and take the stick, with the AI source removed. This avoids reusing its AI/network state. You can also just use the normal respawn or defeat flow. The panel opens over the tactical map; available in single-player and to the host.
@@ -493,6 +495,7 @@ The ordinary ConfigurationManager view is intentionally limited to the release-f
 | Pilot | `XpPerRank` | `120` | Experience step between ranks |
 | Comms | `RadioChatter` | `true` | Wing order and state reports |
 | Comms | `RadioChatterSound` | `true` | Open each transmission with the game's radio click |
+| Comms | `CrewBanter` | `true` | Rare jokes and rumours between airborne wing pilots |
 | UI | `ShowWingHud` | `true` | Compact roster docked beside the tactical map |
 | Debug | `FreePlanePurchases` | `false` | Free requisitions; **probably breaks the mod** |
 | Debug | `DisableWingSizeLimit` | `false` | Ignore `MaxWingSize`; **probably breaks the mod** |

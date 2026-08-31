@@ -180,6 +180,8 @@ namespace WingCommand
         }
 
         private static readonly List<Offer> catalogue = new List<Offer>();
+        private static readonly HashSet<AircraftDefinition> listedDefinitions =
+            new HashSet<AircraftDefinition>();
         private static readonly HashSet<PurchaseTransaction> activeTransactions =
             new HashSet<PurchaseTransaction>();
 
@@ -199,6 +201,7 @@ namespace WingCommand
                      new List<PurchaseTransaction>(activeTransactions))
                 transaction.Rollback("mission reset");
             activeTransactions.Clear();
+            listedDefinitions.Clear();
             undeclaredBought.Clear();
             purchasedAircraft.Clear();
             overLimitAircraft.Clear();
@@ -214,6 +217,10 @@ namespace WingCommand
         /// <summary>Retry compensations that an external game API did not accept last frame.</summary>
         public static void Tick()
         {
+            // The normal case is no in-flight purchase. Avoid allocating an empty snapshot
+            // every frame; a snapshot is still required while Rollback may mutate the set.
+            if (activeTransactions.Count == 0) return;
+
             foreach (PurchaseTransaction transaction in
                      new List<PurchaseTransaction>(activeTransactions))
                 if (transaction.Status == PurchaseTransaction.State.RollingBack)
@@ -433,6 +440,7 @@ namespace WingCommand
         public static IReadOnlyList<Offer> Catalogue()
         {
             catalogue.Clear();
+            listedDefinitions.Clear();
 
             Aircraft leader = WingCommandManager.Instance?.Wing?.Leader;
             FactionHQ hq = leader != null ? leader.NetworkHQ : null;
@@ -440,7 +448,6 @@ namespace WingCommand
 
             GameManager.GetLocalPlayer(out Player player);
             int rank = player != null ? player.PlayerRank : 0;
-            var listed = new HashSet<AircraftDefinition>();
 
             foreach (KeyValuePair<AircraftDefinition, FactionHQ.RuntimeSupply> entry in hq.AircraftSupply)
             {
@@ -450,7 +457,7 @@ namespace WingCommand
 
                 catalogue.Add(new Offer(entry.Key, entry.Key.unitName,
                                         entry.Key.value, available));
-                listed.Add(entry.Key);
+                listedDefinitions.Add(entry.Key);
             }
 
             // A held airframe remains selectable even when it was the faction's final one.
@@ -458,17 +465,17 @@ namespace WingCommand
             // mission's supply dictionary.
             foreach (AircraftDefinition definition in WingSupplyReserve.Definitions)
             {
-                if (definition == null || listed.Contains(definition)) continue;
+                if (definition == null || listedDefinitions.Contains(definition)) continue;
                 int available = WingSupplyReserve.CountOf(definition);
                 if (available <= 0 || !Sellable(definition, hq, rank)) continue;
 
                 catalogue.Add(new Offer(definition, definition.unitName,
                                         definition.value, available));
-                listed.Add(definition);
+                listedDefinitions.Add(definition);
             }
 
             if (Plugin.Config2.IncludeUndeclaredAircraft.Value)
-                AddUndeclared(hq, rank, listed);
+                AddUndeclared(hq, rank, listedDefinitions);
 
             catalogue.Sort((a, b) => a.BasePrice.CompareTo(b.BasePrice));
             return catalogue;

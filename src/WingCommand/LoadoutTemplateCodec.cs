@@ -15,7 +15,8 @@ namespace WingCommand
     /// than refusing to load.
     ///
     /// This is the same shape the game uses for its own saved loadouts: a flat ordered list
-    /// of mount <c>jsonKey</c>s.
+    /// of mount identities. These are normally <c>jsonKey</c>s; older workshop stores that
+    /// omit one use a namespaced ScriptableObject asset name.
     /// </summary>
     internal sealed class LoadoutTemplateRecord
     {

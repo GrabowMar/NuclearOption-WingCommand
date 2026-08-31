@@ -15,6 +15,7 @@ namespace WingCommand
         }
 
         private readonly HashSet<WingMember> selected = new HashSet<WingMember>();
+        private readonly List<WingMember> stale = new List<WingMember>();
 
         public Mode CurrentMode { get; private set; } = Mode.All;
 
@@ -60,7 +61,14 @@ namespace WingCommand
         public void Prune(WingRegistry wing)
         {
             if (CurrentMode == Mode.All || wing == null) return;
-            selected.RemoveWhere(m => m == null || !m.Alive || !wing.Contains(m));
+
+            // RemoveWhere would allocate a capturing predicate on this per-frame path.
+            stale.Clear();
+            foreach (WingMember member in selected)
+                if (member == null || !member.Alive || !wing.Contains(member))
+                    stale.Add(member);
+            for (int i = 0; i < stale.Count; i++) selected.Remove(stale[i]);
+            stale.Clear();
         }
 
         public List<WingMember> Snapshot(WingRegistry wing)

@@ -61,6 +61,7 @@ namespace WingCommand
                 case "back":        Back(c);                break;
                 case "wing-badge":  WingBadge(c);           break;
                 case "selection":   SelectionBrackets(c);   break;
+                case "airframe":    Airframe(c);            break;
 
                 default:
                     // Shape glyphs are derived from the solver, so any formation added to
@@ -98,6 +99,16 @@ namespace WingCommand
             const float t = 3.5f;
             c.Segment(31, 78, 48, 86, t);
             c.Segment(48, 86, 65, 78, t);
+        }
+
+        /// <summary>
+        /// A broad top-down aircraft silhouette. WMC uses this at very low opacity behind
+        /// the airframe dossier, where an outline would turn into visual noise beneath the
+        /// readouts.
+        /// </summary>
+        private static void Airframe(Canvas c)
+        {
+            Delta(c, 48f, 47f, 38f, 0f);
         }
 
         /// <summary>

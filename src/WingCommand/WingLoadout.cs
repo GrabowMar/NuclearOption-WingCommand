@@ -428,12 +428,11 @@ namespace WingCommand
             }
             catch (Exception e)
             {
-                // A pylon whose exclusion rules cannot be evaluated is shown as usable. The
-                // spawner applies the same rules again when it fits the aircraft, so the
-                // worst case is an option that turns out not to take.
+                // Fail closed. Showing this station as usable would let a malformed modded
+                // exclusion rule create a fit we cannot prove the airframe accepts.
                 Fail("checking whether " + SafeName(definition) + " pylon " + (index + 1) +
                      " is blocked failed: " + e.Message);
-                return false;
+                return true;
             }
         }
 
@@ -468,12 +467,73 @@ namespace WingCommand
                 weapons.Add(pick?.Mount);
             }
 
+            int blocked = ClearBlockedMounts(definition, profile, weapons);
+
             if (anyUnknown)
                 Plugin.Logger.LogInfo(
                     "[Loadout] a saved template for " + SafeName(definition) +
                     " names stores this build does not have; those pylons launch empty.");
 
+            if (blocked > 0)
+                Plugin.Logger.LogWarning(
+                    "[Loadout] removed " + blocked + " blocked " +
+                    (blocked == 1 ? "store" : "stores") + " from " +
+                    SafeName(definition) + " before spawning.");
+
             return new Loadout { weapons = weapons };
+        }
+
+        /// <summary>
+        /// Apply the airframe's own hardpoint-exclusion rules to a completed template.
+        ///
+        /// The editor performs the same checks for presentation, but saved config can be
+        /// stale or hand-edited and a newly selected store can block an already-filled
+        /// station. The spawn path is therefore authoritative and removes every store the
+        /// game reports as blocked. Repeating reaches a stable result when clearing one
+        /// station changes another station's answer.
+        /// </summary>
+        private static int ClearBlockedMounts(AircraftDefinition definition, Profile profile,
+                                              List<WeaponMount> weapons)
+        {
+            if (profile?.Sets == null || weapons == null) return 0;
+
+            var loadout = new Loadout { weapons = weapons };
+            int removed = 0;
+            bool changed;
+
+            do
+            {
+                changed = false;
+                for (int i = 0; i < profile.Sets.Length && i < weapons.Count; i++)
+                {
+                    if (weapons[i] == null) continue;
+
+                    HardpointSet set = profile.Sets[i];
+                    if (set == null) continue;
+
+                    bool blocked;
+                    try
+                    {
+                        blocked = set.BlockedByOtherHardpoint(loadout);
+                    }
+                    catch (Exception e)
+                    {
+                        // A store whose exclusion rules throw is not safe to pass to the
+                        // spawner. Remove only that store and leave the rest of the fit.
+                        blocked = true;
+                        Fail("validating " + SafeName(definition) + " pylon " + (i + 1) +
+                             " failed: " + e.Message);
+                    }
+
+                    if (!blocked) continue;
+                    weapons[i] = null;
+                    removed++;
+                    changed = true;
+                }
+            }
+            while (changed);
+
+            return removed;
         }
 
         /// <summary>
@@ -549,17 +609,25 @@ namespace WingCommand
             if (!profile.HasRoleData && profile.Cargo.Count == 0) return null;
 
             var weapons = new List<WeaponMount>(profile.Sets.Length);
-            bool anyArmed = false;
-            bool anyCargo = false;
-
             for (int i = 0; i < profile.Sets.Length; i++)
             {
                 MountInfo pick = Select(profile, i, choice);
                 weapons.Add(pick != null ? pick.Mount : null);
+            }
 
-                if (pick == null) continue;
-                if (pick.Cargo) anyCargo = true;
-                else if (pick.Armed) anyArmed = true;
+            ClearBlockedMounts(definition, profile, weapons);
+
+            bool anyArmed = false;
+            bool anyCargo = false;
+            for (int i = 0; i < weapons.Count; i++)
+            {
+                WeaponMount mount = weapons[i];
+                if (mount == null) continue;
+
+                MountInfo fitted = Lookup(profile, i, StoreKey(mount));
+                if (fitted == null) continue;
+                if (fitted.Cargo) anyCargo = true;
+                else if (fitted.Armed) anyArmed = true;
             }
 
             // A cargo fit is complete when it is carrying cargo, even with nothing armed;
@@ -717,7 +785,28 @@ namespace WingCommand
                     // a disallowed one is event content or a store this game build has locked.
                     if (mount == null || mount.NotAllowed(includeEventContent: false)) continue;
 
-                    MountInfo info = Describe(mount);
+                    MountInfo info;
+                    try
+                    {
+                        info = Describe(mount);
+                    }
+                    catch (Exception e)
+                    {
+                        // One malformed workshop store must not hide every other store on
+                        // the aircraft. Keep profiling the rest of the hardpoint.
+                        Plugin.Logger.LogWarning(
+                            "[Loadout] skipped unreadable store " + NameOf(mount) + " on " +
+                            SafeName(definition) + ": " + e.Message);
+                        continue;
+                    }
+
+                    if (string.IsNullOrEmpty(info.Key))
+                    {
+                        Plugin.Logger.LogWarning(
+                            "[Loadout] skipped store with no persistent identity on " +
+                            SafeName(definition) + ": " + NameOf(mount));
+                        continue;
+                    }
                     options.Add(info);
 
                     if (info.Armed)
@@ -803,7 +892,10 @@ namespace WingCommand
             var info = new MountInfo
             {
                 Mount = mount,
-                Key = mount.jsonKey,
+                // Workshop mounts normally publish jsonKey exactly like built-in mounts.
+                // A few older mods omit it; the ScriptableObject asset name is stable
+                // enough to let those stores participate in saved templates as well.
+                Key = StoreKey(mount),
                 Label = NameOf(mount),
 
                 // Straight off the mount, which the station walk below cannot improve on.
@@ -966,6 +1058,18 @@ namespace WingCommand
             string name = mount.mountName;
             if (string.IsNullOrEmpty(name)) name = mount.name;
             return string.IsNullOrEmpty(name) ? "STORE" : name;
+        }
+
+        private const string AssetNameKeyPrefix = "@asset:";
+
+        private static string StoreKey(WeaponMount mount)
+        {
+            if (mount == null) return null;
+            if (!string.IsNullOrEmpty(mount.jsonKey)) return mount.jsonKey;
+
+            string assetName = mount.name;
+            if (string.IsNullOrEmpty(assetName)) assetName = mount.mountName;
+            return string.IsNullOrEmpty(assetName) ? null : AssetNameKeyPrefix + assetName;
         }
 
         private static string SafeName(AircraftDefinition definition) =>

@@ -215,6 +215,7 @@ namespace WingCommand
         // --- Comms ---
         public readonly ConfigEntry<bool> RadioChatter;
         public readonly ConfigEntry<bool> RadioChatterSound;
+        public readonly ConfigEntry<bool> CrewBanter;
 
         public readonly ConfigEntry<bool> PilotProgression;
         public readonly ConfigEntry<int> XpPerKill;
@@ -624,6 +625,10 @@ namespace WingCommand
             RadioChatterSound = c.Bind("Comms", "RadioChatterSound", true,
                 "Open each squadron transmission with the game's own radio click - the same " +
                 "sound mission and HQ messages use. Has no effect while RadioChatter is off.");
+
+            CrewBanter = c.Bind("Comms", "CrewBanter", true,
+                "Occasionally let airborne wing pilots exchange rare jokes and rumours. " +
+                "Banter waits for an idle radio. Has no effect while RadioChatter is off.");
 
             UseNativeRadial = c.Bind("UI", "UseNativeRadial", true,
                 Advanced("Add a compact 'Wing Command' entry to the game's own radial menu. This uses " +

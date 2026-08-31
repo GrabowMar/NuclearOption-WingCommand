@@ -21,7 +21,7 @@ namespace WingCommand
             Skipped = skipped;
             Message = message;
             CoveredTargets = coveredTargets;
-            Responders = responders ?? new WingMember[0];
+            Responders = responders ?? System.Array.Empty<WingMember>();
             Order = order;
         }
     }

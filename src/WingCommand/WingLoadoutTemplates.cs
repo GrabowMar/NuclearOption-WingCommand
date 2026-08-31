@@ -16,9 +16,9 @@ namespace WingCommand
     /// requisition will carry — stays in <see cref="WingLoadoutBook"/> and still dies with
     /// the mission.
     ///
-    /// Templates are keyed by <c>AircraftDefinition.jsonKey</c> and hold store
-    /// <c>jsonKey</c>s, never prefab references: a config file outlives any number of game
-    /// updates, and the whole store has to survive a key it no longer recognises.
+    /// Templates are keyed by <c>AircraftDefinition.jsonKey</c> and hold stable store
+    /// identities, never prefab references: a config file outlives any number of game
+    /// updates, and the whole store has to survive an identity it no longer recognises.
     /// </summary>
     internal static class WingLoadoutTemplates
     {

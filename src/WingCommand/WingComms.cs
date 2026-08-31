@@ -15,6 +15,25 @@ namespace WingCommand
     /// </summary>
     internal static class WingComms
     {
+        private readonly struct SpeechKey : System.IEquatable<SpeechKey>
+        {
+            private readonly int slot;
+            private readonly Call call;
+
+            public SpeechKey(WingMember member, Call call)
+            {
+                slot = member != null ? member.Slot : -1;
+                this.call = call;
+            }
+
+            public bool Equals(SpeechKey other) =>
+                slot == other.slot && call == other.call;
+
+            public override bool Equals(object obj) => obj is SpeechKey other && Equals(other);
+
+            public override int GetHashCode() => (slot * 397) ^ (int)call;
+        }
+
         internal enum Call
         {
             Engaging,
@@ -43,20 +62,24 @@ namespace WingCommand
         }
 
         private const float RepeatCooldown = 12f;
+        private const float BanterCheckMin = 80f;
+        private const float BanterCheckMax = 160f;
+        private const float BanterChance = 0.28f;
 
-        /// <summary>Per member+kind cooldowns, keyed so one wingman cannot spam the feed.</summary>
-        private static readonly Dictionary<string, float> lastSpoken =
-            new Dictionary<string, float>();
+        /// <summary>
+        /// Per slot+kind cooldowns. A value key avoids allocating a callsign string every
+        /// time a rapidly repeating combat state asks to speak while still on cooldown, and
+        /// slot keys keep the table bounded even through many replacements in a long mission.
+        /// </summary>
+        private static readonly Dictionary<SpeechKey, float> lastSpoken =
+            new Dictionary<SpeechKey, float>();
+        private static float nextBanterCheck;
 
         public static void Say(WingMember member, Call call, string detail = null)
         {
             if (!Plugin.Config2.RadioChatter.Value || member == null) return;
 
-            WingPilot pilot = member.Crew;
-            string speakerKey = pilot != null && !string.IsNullOrWhiteSpace(pilot.Callsign)
-                ? pilot.Callsign
-                : member.Slot.ToString();
-            string key = speakerKey + ":" + call;
+            var key = new SpeechKey(member, call);
             if (lastSpoken.TryGetValue(key, out float last) &&
                 Time.timeSinceLevelLoad - last < RepeatCooldown)
                 return;
@@ -91,13 +114,139 @@ namespace WingCommand
             }
         }
 
-        public static void Tick() => WingChatterHud.Tick();
+        public static void Tick(WingRegistry wing)
+        {
+            WingChatterHud.Tick();
+
+            if (!Plugin.Config2.RadioChatter.Value || !Plugin.Config2.CrewBanter.Value ||
+                wing == null)
+                return;
+
+            float now = Time.unscaledTime;
+            if (nextBanterCheck <= 0f)
+            {
+                nextBanterCheck = now + Random.Range(BanterCheckMin, BanterCheckMax);
+                return;
+            }
+
+            // The common path is one timestamp comparison. Only the infrequent check walks
+            // the small wing roster, and busy operational radio always wins over a joke.
+            if (now < nextBanterCheck) return;
+            nextBanterCheck = now + Random.Range(BanterCheckMin, BanterCheckMax);
+            if (!WingChatterHud.IsIdle || Random.value > BanterChance) return;
+
+            IReadOnlyList<WingMember> members = wing.Members;
+            int eligible = 0;
+            for (int i = 0; i < members.Count; i++)
+                if (CanBanter(members[i])) eligible++;
+            if (eligible == 0) return;
+
+            if (!TryChooseBanter(members, eligible, Random.Range(0, int.MaxValue),
+                                 out WingMember first, out WingMember second,
+                                 out ChatterExchange exchange))
+                return;
+
+            Broadcast(first, exchange.Opening, urgent: false);
+
+            if (exchange.Reply != null)
+                Broadcast(second, exchange.Reply, urgent: false);
+        }
 
         public static void Reset()
         {
             lastSpoken.Clear();
+            nextBanterCheck = 0f;
             WingChatterHud.Reset();
         }
+
+        private static bool CanBanter(WingMember member) =>
+            member != null && member.Alive && member.IsAirborne && member.Crew != null;
+
+        private static WingMember EligibleAt(IReadOnlyList<WingMember> members, int ordinal)
+        {
+            for (int i = 0; i < members.Count; i++)
+            {
+                if (!CanBanter(members[i])) continue;
+                if (ordinal-- == 0) return members[i];
+            }
+
+            return null;
+        }
+
+        /// <summary>
+        /// Find a valid exchange and its cast without temporary lists. This runs only after
+        /// the sparse timer and random gate succeed, so scanning the static dialogue table is
+        /// substantially cheaper than maintaining indexes as pilots join and leave.
+        /// </summary>
+        private static bool TryChooseBanter(IReadOnlyList<WingMember> members, int eligible,
+                                            int seed, out WingMember first,
+                                            out WingMember second,
+                                            out ChatterExchange exchange)
+        {
+            first = null;
+            second = null;
+            exchange = default;
+            int start = seed == int.MinValue ? 0 : System.Math.Abs(seed);
+
+            for (int offset = 0; offset < ChatterDialogue.AmbientCount; offset++)
+            {
+                ChatterExchange candidate = ChatterDialogue.AmbientAt(start + offset);
+                WingMember opener = candidate.SpeakerTag != null
+                    ? EligibleWithTag(members, candidate.SpeakerTag, except: null)
+                    : EligibleAt(members, (start + offset) % eligible);
+                if (opener == null) continue;
+
+                WingMember responder = null;
+                if (candidate.Reply != null)
+                {
+                    if (eligible < 2) continue;
+                    responder = candidate.ReplyTag != null
+                        ? EligibleWithTag(members, candidate.ReplyTag, opener)
+                        : OtherEligible(members, opener, (start + offset) % (eligible - 1));
+                    if (responder == null) continue;
+                }
+
+                first = opener;
+                second = responder;
+                exchange = candidate;
+                return true;
+            }
+
+            return false;
+        }
+
+        private static WingMember EligibleWithTag(IReadOnlyList<WingMember> members,
+                                                   string tag, WingMember except)
+        {
+            for (int i = 0; i < members.Count; i++)
+            {
+                WingMember member = members[i];
+                if (member == except || !CanBanter(member)) continue;
+                if (string.Equals(DialogueTag(member.Crew), tag,
+                                  System.StringComparison.OrdinalIgnoreCase))
+                    return member;
+            }
+
+            return null;
+        }
+
+        private static WingMember OtherEligible(IReadOnlyList<WingMember> members,
+                                                WingMember except, int ordinal)
+        {
+            for (int i = 0; i < members.Count; i++)
+            {
+                WingMember member = members[i];
+                if (member == except || !CanBanter(member)) continue;
+                if (ordinal-- == 0) return member;
+            }
+
+            return null;
+        }
+
+        private static string DialogueTag(WingPilot pilot) =>
+            pilot == null || string.IsNullOrWhiteSpace(pilot.DialogueTag)
+                ? pilot?.Callsign
+                : pilot.DialogueTag;
 
         private static void Broadcast(WingMember member, string line, bool urgent)
         {

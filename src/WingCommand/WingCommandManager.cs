@@ -33,6 +33,7 @@ namespace WingCommand
         private float toastUntil;
         private string lastToast;
         private float lastToastAt;
+        private bool resetForNonPlayableState;
 
         /// <summary>An aircraft on its way into the wing, and how long it has to get there.</summary>
         private struct PendingRecruit
@@ -74,6 +75,10 @@ namespace WingCommand
         {
             if (!InPlayableState())
             {
+                // Update continues to run in menus. Teardown is transition work, not frame
+                // work: several resets clear caches, destroy UI, or roll back transactions.
+                if (resetForNonPlayableState) return;
+
                 if (radialOpen) CloseRadial(apply: false);
                 WingHud.ResetStatusPanel();
                 WmcScreen.Reset();
@@ -81,7 +86,6 @@ namespace WingCommand
                 WingComms.Reset();
                 TacticalCoordinator.Reset();
                 WingMarkers.Reset();
-                AiCombatTweak.Reset();
                 WingShopDelivery.Reset();
                 WingShop.Reset();
                 WingRecruitment.Reset();
@@ -96,8 +100,11 @@ namespace WingCommand
                 mapLayer?.Reset();
                 Wing.Clear();
                 Selection.Reset();
+                resetForNonPlayableState = true;
                 return;
             }
+
+            resetForNonPlayableState = false;
 
             // The player's own aircraft is always the formation leader.
             Wing.SetLeader(GameManager.GetLocalAircraft(out Aircraft local) ? local : null);
@@ -128,7 +135,7 @@ namespace WingCommand
             WingMarkers.Tick(Wing);
             WingHud.TickStatusPanel(Wing);
             WmcScreen.Tick(Wing);
-            WingComms.Tick();
+            WingComms.Tick(Wing);
             WingShopDelivery.Tick();
             FlushRecruitQueue();
         }

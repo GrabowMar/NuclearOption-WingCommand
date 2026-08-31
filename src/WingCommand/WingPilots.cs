@@ -34,6 +34,13 @@ namespace WingCommand
         /// </summary>
         public ChatterPersona Persona;
 
+        /// <summary>
+        /// Stable selector for dialogue written for this person. Custom pilot providers may
+        /// set it independently of the displayed callsign; a missing tag falls back to the
+        /// callsign, so existing providers need no changes.
+        /// </summary>
+        public string DialogueTag;
+
         /// <summary>One line of flavour. Shown on the Wing tab and nowhere else.</summary>
         public string Background;
 
@@ -313,6 +320,7 @@ namespace WingCommand
                     {
                         Name = "M. Adeyemi",
                         Callsign = "COBALT",
+                        DialogueTag = "COBALT",
                         Persona = ChatterPersona.Professional,
                         Background = "Ex-interceptor squadron. Flies the merge cold and patient.",
                     };
@@ -321,6 +329,7 @@ namespace WingCommand
                     {
                         Name = "R. Vasquez",
                         Callsign = "HATCHET",
+                        DialogueTag = "HATCHET",
                         Persona = ChatterPersona.Aggressive,
                         Background = "Came up on close support. Prefers to be under the weather.",
                     };
@@ -329,6 +338,7 @@ namespace WingCommand
                     {
                         Name = "K. Lindqvist",
                         Callsign = "MERIDIAN",
+                        DialogueTag = "MERIDIAN",
                         Persona = ChatterPersona.Calm,
                         Background = "Transferred from maritime patrol. Reads a radar picture early.",
                     };
@@ -339,6 +349,7 @@ namespace WingCommand
             {
                 Name = Surnames[n % Surnames.Length],
                 Callsign = Callsigns[n % Callsigns.Length],
+                DialogueTag = Callsigns[n % Callsigns.Length],
                 Persona = (ChatterPersona)(n % 4),
                 Background = Postings[n % Postings.Length],
             };
