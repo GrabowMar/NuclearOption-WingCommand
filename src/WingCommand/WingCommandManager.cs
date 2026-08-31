@@ -138,7 +138,7 @@ namespace WingCommand
             for (int i = 0; i < recruitQueue.Count; i++)
                 if (recruitQueue[i].Aircraft == aircraft) return;
 
-            WingMember member = Wing.Count < Plugin.Config2.MaxWingSize.Value
+            WingMember member = WingRegistry.HasRoom(Wing.Count)
                 ? Wing.Add(aircraft, deferCommand: true)
                 : null;
 
@@ -187,7 +187,7 @@ namespace WingCommand
                 if (p.Member == null)
                 {
                     p.Member = Wing.Find(a);
-                    if (p.Member == null && Wing.Count < Plugin.Config2.MaxWingSize.Value)
+                    if (p.Member == null && WingRegistry.HasRoom(Wing.Count))
                         p.Member = Wing.Add(a, deferCommand: true);
                     recruitQueue[i] = p;
                     if (p.Member == null) continue;

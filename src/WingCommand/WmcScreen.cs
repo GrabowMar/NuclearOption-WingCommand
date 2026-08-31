@@ -889,7 +889,7 @@ namespace WingCommand
 
             if (summaryLabel != null)
                 summaryLabel.text = "COMMAND: " + (manager?.Selection.Summary(wing) ?? "ALL") +
-                                    "   ·   WING " + wing.Count + "/" + Plugin.Config2.MaxWingSize.Value;
+                                    "   ·   WING " + wing.Count + "/" + WingRegistry.WingLimitLabel;
 
             holdButton?.SetLatched(wing.Roe == WingRoe.Hold);
             escortButton?.SetLatched(wing.Roe == WingRoe.Escort);
@@ -1272,7 +1272,7 @@ namespace WingCommand
 
             int wing = WingCommandManager.Instance?.Wing?.Count ?? 0;
             supplyFundsLabel.text = "FUNDS " + Mathf.RoundToInt(WingShop.Allocation) +
-                                    "   ·   WING " + wing + " / " + Plugin.Config2.MaxWingSize.Value;
+                                    "   ·   WING " + wing + " / " + WingRegistry.WingLimitLabel;
 
             WingShop.SquadronState squadron = WingShop.Squadron();
             string text = "SQUADRON " + squadron.Active + " / " + squadron.Limit;

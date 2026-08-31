@@ -148,6 +148,7 @@ namespace WingCommand
         /// returned safely to the wing reserve has already been paid for.
         /// </summary>
         public static float CurrentPriceOf(AircraftDefinition definition) =>
+            Plugin.Config2.FreePlanePurchases.Value ||
             WingSupplyReserve.OwnedOf(definition) > 0
                 ? 0f
                 : PriceOf(definition) * (WouldExceedLimit ? ExceedLimitMultiplier : 1f);
@@ -421,7 +422,7 @@ namespace WingCommand
                 return false;
             }
 
-            if (wing.Count >= Plugin.Config2.MaxWingSize.Value)
+            if (!WingRegistry.HasRoom(wing.Count))
             {
                 reason = "Wing is full";
                 return false;
@@ -466,7 +467,8 @@ namespace WingCommand
                 loadout = recovered;
 
             bool alreadyOwned = reserveSource == WingSupplyReserve.Source.Owned;
-            float price = alreadyOwned ? 0f : PriceOf(definition) * multiplier;
+            bool debugFree = Plugin.Config2.FreePlanePurchases.Value;
+            float price = alreadyOwned || debugFree ? 0f : PriceOf(definition) * multiplier;
             if (player.Allocation < price)
             {
                 reason = "Need " + Mathf.RoundToInt(price) + ", have " +
@@ -522,6 +524,7 @@ namespace WingCommand
                 $" [{WingLoadoutCatalog.Label(definition, loadout)}]" +
                 (alreadyOwned ? " (owned reserve)" :
                  reserveSource == WingSupplyReserve.Source.Held ? " (held reserve)" : "") +
+                (debugFree && !alreadyOwned ? " (debug free purchase)" : "") +
                 (multiplier > 1f ? $" ({multiplier:0.##}x over squadron limit)" : "") +
                 $", {Available(definition, hq)} available");
 

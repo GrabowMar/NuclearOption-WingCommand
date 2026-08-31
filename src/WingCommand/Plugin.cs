@@ -43,6 +43,14 @@ namespace WingCommand
                 Logger.LogWarning(
                     "Legacy player concentration protection is ignored in this release.");
             }
+            if (Config2.FreePlanePurchases.Value || Config2.DisableWingSizeLimit.Value)
+            {
+                Logger.LogWarning(
+                    "Unsafe Debug cheats are enabled: " +
+                    $"FreePlanePurchases={Config2.FreePlanePurchases.Value}, " +
+                    $"DisableWingSizeLimit={Config2.DisableWingSizeLimit.Value}. " +
+                    "These options may break mission balance, UI, formations or the mod itself.");
+            }
 
             if (!FormationSolver.ValidateGeometry(Config2.MaxWingSize.Value, out string geometryProblem))
                 Logger.LogError("Formation geometry validation failed: " + geometryProblem);
@@ -231,6 +239,8 @@ namespace WingCommand
 
         // --- Debug ---
         public readonly ConfigEntry<bool> EnableDebugActions;
+        public readonly ConfigEntry<bool> FreePlanePurchases;
+        public readonly ConfigEntry<bool> DisableWingSizeLimit;
 
         // --- UI ---
         public readonly ConfigEntry<bool> UseNativeRadial;
@@ -595,6 +605,28 @@ namespace WingCommand
                          "the game's Rewired look-axis input while the cursor is captured."));
             EnableDebugActions = c.Bind("Debug", "EnableDebugActions", false,
                 Hidden("Development-only WMC actions. Both are cheats and host-only."));
+            FreePlanePurchases = c.Bind("Debug", "FreePlanePurchases", false,
+                new ConfigDescription(
+                    "DEBUG CHEAT: Requisitioned aircraft cost no allocation. Stock, rank and " +
+                    "squadron-cap rules still apply. This is unbalanced, insufficiently tested, " +
+                    "and may break mission or mod progression.",
+                    null,
+                    new ConfigurationManagerAttributes
+                    {
+                        DispName = "Free plane purchases (PROBABLY BREAKS MOD)",
+                        Order = 20,
+                    }));
+            DisableWingSizeLimit = c.Bind("Debug", "DisableWingSizeLimit", false,
+                new ConfigDescription(
+                    "DEBUG CHEAT: Ignore MaxWingSize when assigning or requisitioning aircraft. " +
+                    "Formation geometry, HUD layout, performance and mission scripting are not " +
+                    "supported for an unlimited wing and may break.",
+                    null,
+                    new ConfigurationManagerAttributes
+                    {
+                        DispName = "Disable wing size limit (PROBABLY BREAKS MOD)",
+                        Order = 10,
+                    }));
 
             ShowHud = c.Bind("UI", "ShowWingHud", true,
                 "Draw the compact wing status readout beside the tactical map while you have " +

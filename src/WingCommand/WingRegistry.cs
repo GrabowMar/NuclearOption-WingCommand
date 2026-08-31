@@ -356,11 +356,29 @@ namespace WingCommand
             return null;
         }
 
+        /// <summary>
+        /// Whether another member may be added at the supplied occupancy.
+        ///
+        /// The debug bypass is deliberately centralised here. Purchases, active-aircraft
+        /// assignment and delayed hangar deliveries all reach the roster through different
+        /// paths; letting any one of them keep its own MaxWingSize check would make the F1
+        /// option appear to work only some of the time.
+        /// </summary>
+        public static bool HasRoom(int occupied) =>
+            Plugin.Config2.DisableWingSizeLimit.Value ||
+            occupied < Plugin.Config2.MaxWingSize.Value;
+
+        /// <summary>Text used beside the live count when the unsafe bypass is enabled.</summary>
+        public static string WingLimitLabel =>
+            Plugin.Config2.DisableWingSizeLimit.Value
+                ? "NO LIMIT"
+                : Plugin.Config2.MaxWingSize.Value.ToString();
+
         public bool CanRecruit(Aircraft candidate, out string reason)
         {
             reason = null;
             if (Leader == null) { reason = "Not flying"; return false; }
-            if (members.Count >= Plugin.Config2.MaxWingSize.Value)
+            if (!HasRoom(members.Count))
             { reason = "Wing is full"; return false; }
             if (candidate == null || candidate.disabled)
             { reason = "Aircraft is no longer available"; return false; }
@@ -427,6 +445,7 @@ namespace WingCommand
         public WingMember Add(Aircraft aircraft, bool deferCommand = false)
         {
             if (aircraft == null || !aircraft.LocalSim) return null;
+            if (!HasRoom(members.Count)) return null;
 
             // Checked here as well as in IsEligible, because map selection and the debug
             // spawn both add directly without passing through the eligibility filter.
@@ -558,7 +577,12 @@ namespace WingCommand
         /// </summary>
         private int NearestFreeSlot(Aircraft joining)
         {
-            int max = Plugin.Config2.MaxWingSize.Value;
+            // Unlimited cannot be represented as a loop bound. Count + 1 is sufficient:
+            // among that many 1-based slots there must be a free one, even when surviving
+            // members retain high slot numbers after losses.
+            int max = Plugin.Config2.DisableWingSizeLimit.Value
+                ? members.Count + 1
+                : Plugin.Config2.MaxWingSize.Value;
 
             if (Leader == null || joining == null)
                 return members.Count + 1;

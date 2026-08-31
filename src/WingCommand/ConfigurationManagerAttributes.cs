@@ -12,6 +12,9 @@
 /// </summary>
 internal sealed class ConfigurationManagerAttributes
 {
+    /// <summary>Override the key name shown in ConfigurationManager.</summary>
+    public string DispName;
+
     /// <summary>Higher sorts higher within a category. Defaults to 0.</summary>
     public int? Order;
 

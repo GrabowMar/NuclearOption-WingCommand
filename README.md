@@ -444,6 +444,12 @@ configuration files.
 | Pilot | `XpPerRank` | `120` | Experience step between ranks |
 | Comms | `RadioChatter` | `true` | Wing order and state reports |
 | UI | `ShowWingHud` | `true` | Compact roster docked beside the tactical map |
+| Debug | `FreePlanePurchases` | `false` | Free requisitions; **probably breaks the mod** |
+| Debug | `DisableWingSizeLimit` | `false` | Ignore `MaxWingSize`; **probably breaks the mod** |
+
+The two Debug cheats are exposed only as F1 ConfigurationManager options. They are
+deliberately off by default, unsupported for balance and large-wing layout, and can break
+mission scripting or the mod itself.
 
 Global AI `SkillScale`/`BraveryScale`, player-specific target protection, `WingPriceGrowth`,
 `RecruitRange`, `AdditionalWingReservePerType`, and the fast-delivery keys are retired and

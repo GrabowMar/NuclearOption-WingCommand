@@ -172,11 +172,10 @@ namespace WingCommand
             }
 
             recruited.Clear();
-            int max = Plugin.Config2.MaxWingSize.Value;
 
             foreach (MapIcon icon in map.selectedIcons)
             {
-                if (wing.Count + recruited.Count >= max) break;
+                if (!WingRegistry.HasRoom(wing.Count + recruited.Count)) break;
                 if (!(icon is UnitMapIcon unitIcon)) continue;
                 if (!(unitIcon.unit is Aircraft aircraft)) continue;
                 if (aircraft == wing.Leader || aircraft.Player != null) continue;
@@ -188,7 +187,7 @@ namespace WingCommand
             if (recruited.Count == 0)
             {
                 pendingRecruit.Clear();
-                if (wing.Count >= max) Toast("Wing is full");
+                if (!WingRegistry.HasRoom(wing.Count)) Toast("Wing is full");
                 else Toast("No eligible friendly AI aircraft selected");
                 return;
             }
@@ -234,7 +233,7 @@ namespace WingCommand
                 Toast("Wing: " + added + " aircraft assigned (" + wing.Count + " total)");
             else if (!string.IsNullOrEmpty(lastReason))
                 Toast(lastReason);
-            else if (wing.Count >= max)
+            else if (!WingRegistry.HasRoom(wing.Count))
                 Toast("Wing is full");
             else
                 Toast("No eligible friendly AI aircraft selected");

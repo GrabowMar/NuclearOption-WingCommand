@@ -1,3 +1,6 @@
+using System;
+using System.Collections;
+using System.Reflection;
 using UnityEngine;
 
 namespace WingCommand
@@ -17,6 +20,16 @@ namespace WingCommand
         private const float FixedWingRunDistance = 8000f;
         private const float RotaryRunDistance = 4000f;
 
+        // CountermeasureManager exposes deployment but keeps its stations private. Panic
+        // needs the jammer station specifically: ChooseCountermeasure selects the normal
+        // flare/chaff response, so merely holding Aircraft.countermeasureTrigger can never
+        // activate ECM alongside chaff. Resolve the same native station list once and use
+        // the manager's own deployment path rather than calling a jammer component by hand.
+        private static readonly FieldInfo CountermeasureStationsField =
+            typeof(CountermeasureManager).GetField(
+                "countermeasureStations", BindingFlags.Instance | BindingFlags.NonPublic);
+        private static MethodInfo getFirstCountermeasureMethod;
+
         private readonly WingMember member;
         private Missile threat;
         private string countermeasureType;
@@ -24,6 +37,9 @@ namespace WingCommand
         private float clearSince;
         private float nextThreatRefresh;
         private bool countermeasuresActive;
+        private int radarJammerIndex;
+        private bool radarJammerResolved;
+        private bool radarJammerErrorReported;
 
         public DefensiveManeuverState(WingMember member)
         {
@@ -45,6 +61,9 @@ namespace WingCommand
             nextThreatRefresh = 0f;
             threat = null;
             countermeasureType = string.Empty;
+            radarJammerIndex = -1;
+            radarJammerResolved = false;
+            radarJammerErrorReported = false;
             RefreshThreat(force: true);
 
             string detail = threat != null ? threat.GetSeekerType() : null;
@@ -135,8 +154,13 @@ namespace WingCommand
             Vector3 beam = Vector3.Dot(beamA, aircraft.transform.forward) >=
                            Vector3.Dot(beamB, aircraft.transform.forward) ? beamA : beamB;
 
-            bool infrared = countermeasureType == "IR";
-            bool radar = countermeasureType == "SARH" || countermeasureType == "ARH";
+            // Classify the threat from the missile, not from whether an expendable station
+            // could be selected. An ECM-equipped aircraft with no chaff can legitimately get
+            // an empty ChooseCountermeasure result; treating that as an unknown seeker is the
+            // exact path that used to leave its jammer idle against a radar missile.
+            string seekerType = threat.GetSeekerType();
+            bool infrared = seekerType == "IR";
+            bool radar = seekerType == "SARH" || seekerType == "ARH";
 
             // Radar: place the threat on the beam and descend toward clutter. IR: unload
             // the engine, dispense flares, and open aspect away from the missile. Unknown
@@ -158,6 +182,12 @@ namespace WingCommand
             bool dispense = !string.IsNullOrEmpty(countermeasureType) &&
                             (infrared || impactTime < 8f);
             SetCountermeasures(dispense);
+
+            // RadarJammer.Fire lasts only a fraction of a second. Re-deploy through the
+            // manager every physics tick while a SARH/ARH threat is live, temporarily
+            // selecting the jammer and then restoring the chaff station selected above.
+            // When the warning clears, the final pulse expires on its own.
+            if (radar) RunRadarJammer();
 
             float runDistance = aircraft.autopilot is AutopilotPlane
                 ? FixedWingRunDistance
@@ -201,6 +231,88 @@ namespace WingCommand
 
             aircraft.Countermeasures(active, aircraft.countermeasureManager.activeIndex);
             countermeasuresActive = active;
+        }
+
+        /// <summary>Keep the native ECM countermeasure active during a radar-missile break.</summary>
+        private void RunRadarJammer()
+        {
+            CountermeasureManager manager = aircraft != null
+                ? aircraft.countermeasureManager
+                : null;
+            if (manager == null) return;
+
+            int index = ResolveRadarJammer(manager);
+            if (index < 0 || index > byte.MaxValue) return;
+
+            byte previous = manager.activeIndex;
+            try
+            {
+                manager.activeIndex = (byte)index;
+                manager.DeployCountermeasure(aircraft);
+            }
+            catch (Exception e)
+            {
+                if (!radarJammerErrorReported)
+                {
+                    radarJammerErrorReported = true;
+                    Plugin.Logger.LogWarning(
+                        "[Panic] Could not activate ECM on " + aircraft.unitName + ": " +
+                        e.GetType().Name + " - " + e.Message);
+                }
+            }
+            finally
+            {
+                // The ordinary flare/chaff trigger is still held by SetCountermeasures.
+                // Leaving the jammer selected here would silently turn that trigger into a
+                // second ECM driver and stop the selected expendable from being released.
+                manager.activeIndex = previous;
+            }
+        }
+
+        private int ResolveRadarJammer(CountermeasureManager manager)
+        {
+            if (radarJammerResolved) return radarJammerIndex;
+
+            radarJammerResolved = true;
+            radarJammerIndex = -1;
+
+            try
+            {
+                IList stations = CountermeasureStationsField?.GetValue(manager) as IList;
+                if (stations == null) return -1;
+
+                for (int i = 0; i < stations.Count; i++)
+                {
+                    object station = stations[i];
+                    if (station == null) continue;
+
+                    if (getFirstCountermeasureMethod == null ||
+                        getFirstCountermeasureMethod.DeclaringType != station.GetType())
+                    {
+                        getFirstCountermeasureMethod = station.GetType().GetMethod(
+                            "GetFirstCountermeasure", BindingFlags.Instance | BindingFlags.Public);
+                    }
+
+                    Countermeasure countermeasure =
+                        getFirstCountermeasureMethod?.Invoke(station, null) as Countermeasure;
+                    if (!(countermeasure is RadarJammer)) continue;
+
+                    radarJammerIndex = i;
+                    break;
+                }
+            }
+            catch (Exception e)
+            {
+                if (!radarJammerErrorReported)
+                {
+                    radarJammerErrorReported = true;
+                    Plugin.Logger.LogWarning(
+                        "[Panic] Could not inspect ECM on " + aircraft.unitName + ": " +
+                        e.GetType().Name + " - " + e.Message);
+                }
+            }
+
+            return radarJammerIndex;
         }
 
         private void StopCountermeasures()
