@@ -36,6 +36,8 @@ namespace WingCommand
         private static TMP_Text contextLabel;
         private static TMP_Text messageLabel;
 
+        public static bool IsIdle => current == null && queue.Count == 0;
+
         public static void Enqueue(string identity, string context, string message,
                                    bool urgent = false)
         {

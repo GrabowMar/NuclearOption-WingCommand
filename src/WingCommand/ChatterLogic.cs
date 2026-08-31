@@ -14,12 +14,126 @@ namespace WingCommand
         Dry,
     }
 
+    /// <summary>A rare bit of ambient flight banter, optionally answered by another pilot.</summary>
+    internal readonly struct ChatterExchange
+    {
+        public readonly string Opening;
+        public readonly string Reply;
+        public readonly string SpeakerTag;
+        public readonly string ReplyTag;
+
+        public ChatterExchange(string opening, string reply = null,
+                               string speakerTag = null, string replyTag = null)
+        {
+            Opening = opening;
+            Reply = reply;
+            SpeakerTag = speakerTag;
+            ReplyTag = replyTag;
+        }
+
+        public bool SpeakerMatches(string tag) => Matches(SpeakerTag, tag);
+        public bool ReplyMatches(string tag) => Matches(ReplyTag, tag);
+
+        private static bool Matches(string required, string actual) =>
+            required == null || string.Equals(required, actual,
+                                               StringComparison.OrdinalIgnoreCase);
+    }
+
     /// <summary>
     /// Presentation and line-selection logic with no Unity dependency, so it can be tested
     /// without loading the game. Plot context can later be added beside persona and event.
     /// </summary>
     internal static class ChatterDialogue
     {
+        // Static data keeps the ambient path allocation-free. The references are phrased as
+        // things pilots in this world might actually say, rather than breaking character to
+        // name another game.
+        private static readonly ChatterExchange[] ambient =
+        {
+            new ChatterExchange("If the sky turns orange, I'm blaming the briefing officer.",
+                                "Briefing said scattered clouds. Orange is technically scattered."),
+            new ChatterExchange("Somebody remind me: are borders the thing we're defending or the thing we're crossing?",
+                                "Ask after we land. Preferably very quietly."),
+            new ChatterExchange("I count one fighter, two bombers, and at least twelve dramatic backstories.",
+                                "Tally the fighters. The backstories will find us."),
+            new ChatterExchange("Command says the enemy ace has a personal emblem.",
+                                "Great. Aim for the expensive paint."),
+            new ChatterExchange("Anyone else smell cordium?",
+                                "That's reactor coolant. Cordium isn't real."),
+            new ChatterExchange("They promised this sortie would be cost-effective.",
+                                "It is. We're spending their aircraft."),
+            new ChatterExchange("I spent eight minutes aligning the nav system.",
+                                "And how long remembering the master arm?"),
+            new ChatterExchange("My checklist says 'fly the aircraft.' That's underlined twice."),
+            new ChatterExchange("The radar says that's a tank. My missiles say it's a philosophical question.",
+                                "Ask it at high explosive velocity."),
+            new ChatterExchange("How did that vehicle survive the first hit?",
+                                "It angled its optimism."),
+            new ChatterExchange("Ground crew says every aircraft is perfectly balanced.",
+                                "On which wing?"),
+            new ChatterExchange("If I pull any harder, the maintenance log becomes a confession."),
+            new ChatterExchange("Fox three. Because apparently sending one was too subtle."),
+            new ChatterExchange("I have visual on the runway and emotional contact with the arresting gear."),
+            new ChatterExchange("Who put the nuclear option on the bottom of the checklist?",
+                                "The optimist."),
+            new ChatterExchange("The fires are ravenging the forests",
+                                "Then let's make sure they don't reach the airfields."),
+            new ChatterExchange("Something big is coming",
+                                "Radar is clean. I don't think you mean an aircraft."),
+            new ChatterExchange("I can feel the buildings shaking",
+                                "We're ten kilometres out and I can feel it too."),
+            new ChatterExchange("They say it will be hot summer",
+                                "With our sortie rate? That's one forecast I trust."),
+            new ChatterExchange("Do you ever feel like the missile knows where it is because it knows where it isn't?",
+                                "Keep philosophising and it'll know exactly where you are."),
+            new ChatterExchange("Good news: the warning light works.",
+                                "Bad news: it has several opinions."),
+            new ChatterExchange("If we make it home, I'm naming the next manoeuvre after whoever buys the drinks."),
+            new ChatterExchange("This valley looked wider on the tactical map.",
+                                "So did your wingspan."),
+            new ChatterExchange("My flight manual calls this an edge case.",
+                                "We're flying along the edge, so that checks out."),
+
+            // Pilot-specific seam. A null tag means "any pilot"; a named tag makes the
+            // exchange eligible only while that person is actually airborne. ReplyTag can
+            // independently require a particular second pilot.
+            new ChatterExchange("Clean picture. Let's keep it that way.",
+                                speakerTag: "COBALT"),
+            new ChatterExchange("If it's below the weather, it belongs to me.",
+                                speakerTag: "HATCHET"),
+            new ChatterExchange("The sea is calm. Radar isn't.",
+                                speakerTag: "MERIDIAN"),
+            new ChatterExchange("Hatchet, your definition of close support concerns me.",
+                                "Nobody complained from the ground.",
+                                speakerTag: "COBALT", replyTag: "HATCHET"),
+            new ChatterExchange("Cobalt, permission to improve their radar picture?",
+                                "Permission to remove it.",
+                                speakerTag: "HATCHET", replyTag: "COBALT"),
+            new ChatterExchange("Meridian, you always this calm?",
+                                "No. Sometimes I'm asleep.",
+                                speakerTag: "HATCHET", replyTag: "MERIDIAN"),
+        };
+
+        public static int AmbientCount => ambient.Length;
+
+        public static ChatterExchange Ambient(int seed, bool repliesAllowed = true)
+        {
+            int start = Index(seed, ambient.Length);
+            if (repliesAllowed || AmbientAt(start).Reply == null) return AmbientAt(start);
+
+            // A lone wingman gets a line that does not hang as an unanswered question.
+            for (int offset = 1; offset < ambient.Length; offset++)
+            {
+                ChatterExchange candidate = AmbientAt(start + offset);
+                if (candidate.Reply == null) return candidate;
+            }
+
+            return AmbientAt(start);
+        }
+
+        public static ChatterExchange AmbientAt(int index) =>
+            ambient[Index(index, ambient.Length)];
+
         public static string Identity(string name, string callsign)
         {
             string cleanName = string.IsNullOrWhiteSpace(name) ? "UNKNOWN" : name.Trim();
@@ -289,8 +403,10 @@ namespace WingCommand
         private static string Pick(string[] lines, int seed)
         {
             if (lines == null || lines.Length == 0) return "Copy.";
-            int index = seed == int.MinValue ? 0 : Math.Abs(seed) % lines.Length;
-            return lines[index];
+            return lines[Index(seed, lines.Length)];
         }
+
+        private static int Index(int seed, int count) =>
+            seed == int.MinValue || count <= 0 ? 0 : Math.Abs(seed) % count;
     }
 }

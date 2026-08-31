@@ -54,6 +54,14 @@ namespace WingCommand
         private float losingGroundSince;
         private Vector3 smoothedAvoidance;
         private float threatSpacing = 1f;
+
+        // Every member has the same leader, so scanning the global aircraft registry once
+        // per member on every physics tick repeats an identical answer. Missile warnings
+        // remain immediate; only the secondary "hostile nearby" cue is shared and polled.
+        private const float NearbyThreatRefreshSeconds = 0.25f;
+        private static Aircraft nearbyThreatLeader;
+        private static float nextNearbyThreatRefresh;
+        private static bool nearbyThreatPresent;
         private Vector3 smoothedSlotLocal;
         private bool slotLocalReady;
         private float lateralTurnScale = 1f;
@@ -433,7 +441,7 @@ namespace WingCommand
                 // before a missile is in the air. ROE alone is not: selecting Free while
                 // cruising in an empty sky should not permanently scatter the wing.
                 if (!threatened)
-                    threatened = WingWeapons.NearestThreatTo(leader, 8000f) != null;
+                    threatened = NearbyThreatToLeader(leader);
 
                 if (threatened) target = scale;
             }
@@ -444,6 +452,20 @@ namespace WingCommand
 
             return threatSpacing;
         }
+
+        private static bool NearbyThreatToLeader(Aircraft leader)
+        {
+            float now = Time.timeSinceLevelLoad;
+            if (leader != nearbyThreatLeader || now >= nextNearbyThreatRefresh)
+            {
+                nearbyThreatLeader = leader;
+                nextNearbyThreatRefresh = now + NearbyThreatRefreshSeconds;
+                nearbyThreatPresent = WingWeapons.NearestThreatTo(leader, 8000f) != null;
+            }
+
+            return nearbyThreatPresent;
+        }
+
         /// <summary>
         /// Apply the wing's rules of engagement from inside the slot.
         ///

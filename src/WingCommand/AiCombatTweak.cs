@@ -11,8 +11,6 @@ namespace WingCommand
     [HarmonyPatch(typeof(AIPilotCombatModes), nameof(AIPilotCombatModes.EnterState))]
     internal static class AiCombatTweak
     {
-        public static void Reset() { }
-
         [HarmonyPostfix]
         private static void Postfix(AIPilotCombatModes __instance, Pilot pilot)
         {

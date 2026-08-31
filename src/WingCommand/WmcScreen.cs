@@ -183,6 +183,8 @@ namespace WingCommand
         private static RectTransform wingRosterArea;
         private static TMP_Text pilotIdentityLabel;
         private static TMP_Text pilotRankLabel;
+        private static TMP_Text pilotStatsLabel;
+        private static TMP_Text pilotPersonaLabel;
         private static Image pilotXpBar;
         private static float pilotXpBarWidth;
         private static TMP_Text pilotBackgroundLabel;
@@ -190,6 +192,7 @@ namespace WingCommand
         private static TMP_Text airframeStateLabel;
         private static TMP_Text airframeOrderLabel;
         private static TMP_Text airframeLoadoutLabel;
+        private static TMP_Text airframeWeaponsLabel;
 
         /// <summary>
         /// The wingman the Loadout and Wing tabs are inspecting.
@@ -388,12 +391,15 @@ namespace WingCommand
             wingRosterArea = null;
             pilotIdentityLabel = null;
             pilotRankLabel = null;
+            pilotStatsLabel = null;
+            pilotPersonaLabel = null;
             pilotXpBar = null;
             pilotBackgroundLabel = null;
             airframeTypeLabel = null;
             airframeStateLabel = null;
             airframeOrderLabel = null;
             airframeLoadoutLabel = null;
+            airframeWeaponsLabel = null;
             focusMember = null;
 
             lastTooltip = null;
@@ -2064,6 +2070,7 @@ namespace WingCommand
 
             public void Bind(WingMember m)
             {
+                bool memberChanged = bound != m;
                 bound = m;
                 if (!go.activeSelf) go.SetActive(true);
 
@@ -2077,9 +2084,12 @@ namespace WingCommand
                 // in the MFD font, so every row rendered the same tofu box and the marker
                 // said nothing — while the lit edge and the green callsign beside it were
                 // already showing selection perfectly well.
-                slot.text = m.Slot.ToString();
+                if (memberChanged)
+                {
+                    slot.text = m.Slot.ToString();
+                    name.text = UiTheme.Truncate(m.Name, 16);
+                }
                 slot.color = selected ? Green() : Dim();
-                name.text = UiTheme.Truncate(m.Name, 16);
                 name.color = selected ? Green() : WingColor();
                 selectionRule.color = selected ? Green() : MemberFrameColor();
 
@@ -2100,8 +2110,12 @@ namespace WingCommand
                     ? Dim()
                     : Accent();
 
-                reserves.text = Mathf.RoundToInt(m.Fuel * 100f) + "%  " + m.Ammo;
-                reserves.color = m.Fuel <= Plugin.Config2.BingoFuel.Value || m.Ammo <= 0
+                // Fuel and stores are aggregate queries over every tank/station. Sample
+                // each once so binding one row does not walk both collections twice.
+                float fuel = m.Fuel;
+                int ammo = m.Ammo;
+                reserves.text = Mathf.RoundToInt(fuel * 100f) + "%  " + ammo;
+                reserves.color = fuel <= Plugin.Config2.BingoFuel.Value || ammo <= 0
                     ? new Color(1f, 0.55f, 0.2f)
                     : Dim();
 
@@ -2720,13 +2734,17 @@ namespace WingCommand
                 }
 
                 int pylon = visiblePylons[slot];
-                bool blocked = WingLoadoutCatalog.IsPylonBlocked(selectedOffer, pylon, inProgress);
+                bool blocked = false;
+                int represented = MirrorCount(pylon);
+                for (int mirror = 0; mirror < represented && !blocked; mirror++)
+                    blocked = WingLoadoutCatalog.IsPylonBlocked(
+                        selectedOffer, pylon + mirror, inProgress);
 
                 pylonRows[i].Bind(
                     pylon, i,
                     WingLoadoutCatalog.PylonName(selectedOffer, pylon),
                     WingLoadoutCatalog.StoreOn(selectedOffer, pylon, template.KeyAt(pylon)),
-                    MirrorCount(pylon),
+                    represented,
                     blocked);
             }
         }
@@ -2831,6 +2849,9 @@ namespace WingCommand
             public const string Blocked =
                 "Another store already fitted rules this pylon out. Clear that one to use it.";
 
+            public const string BlockedFitted =
+                "Another store rules this fitted pylon out. Click to clear this pylon.";
+
         }
 
         /// <summary>
@@ -2890,10 +2911,15 @@ namespace WingCommand
                     store.color = Warning();
                     name.color = Dim();
 
-                    hit.SetAction(null);
-                    hit.SetEnabled(false);
-                    hit.WithTooltip(LoadoutHint.Blocked);
-                    hit.SetRowHighlight(fill, WingUi.CardFill, WingUi.CardFill);
+                    // A newly selected store elsewhere can block a station that was already
+                    // fitted. Keep that row actionable so the conflicting store can be
+                    // cleared instead of trapping the template in an invalid state.
+                    bool canClear = !fitted.IsEmpty;
+                    hit.SetAction(canClear ? () => SetStore(pylon, null) : (Action)null);
+                    hit.SetEnabled(canClear);
+                    hit.WithTooltip(canClear ? LoadoutHint.BlockedFitted : LoadoutHint.Blocked);
+                    hit.SetRowHighlight(fill, WingUi.CardFill,
+                                        canClear ? WingUi.CardFillHover : WingUi.CardFill);
                     return;
                 }
 
@@ -2937,31 +2963,62 @@ namespace WingCommand
             y = Heading(parent, y, "PILOT");
             float w = PanelWidth - Pad * 2f;
 
+            const float portrait = 82f;
+            const float portraitGap = Space3;
+            Panel(parent, new Rect(Pad, y, portrait, portrait), WingUi.CardFill);
+            Outline(parent, new Rect(Pad, y, portrait, portrait), FrameColor());
+            AddSprite(parent, "PilotPortrait", PilotPortrait.Sprite,
+                      new Rect(Pad + 3f, y - 3f, portrait - 6f, portrait - 6f), Color.white);
+
+            float dossierX = Pad + portrait + portraitGap;
+            float dossierW = w - portrait - portraitGap;
+
             // The pilot's name is the one line on this page that is read first, so it is a
             // step up from the readouts beneath it rather than a pixel up from them.
-            pilotIdentityLabel = Label(parent, "", new Rect(Pad, y, w, Space5), Green(), FontLead,
+            pilotIdentityLabel = Label(parent, "", new Rect(dossierX, y, dossierW, Space5), Green(), FontLead,
                                        FontStyles.Normal, TextAlignmentOptions.Left);
-            y -= Space5;
+            float detailY = y - Space5;
 
-            pilotRankLabel = Label(parent, "", new Rect(Pad, y, w, LineHeight), Friendly(),
+            pilotRankLabel = Label(parent, "", new Rect(dossierX, detailY, dossierW, LineHeight), Friendly(),
                                    FontSmall, FontStyles.Normal, TextAlignmentOptions.Left);
-            y -= LineHeight;
+            detailY -= LineHeight;
 
             // Track first, fill second: the fill is resized every refresh, so it must be the
             // later sibling or a full bar would be drawn underneath its own background.
-            Rule(parent, new Rect(Pad, y, w, 3f), FrameColor());
-            pilotXpBar = Rule(parent, new Rect(Pad, y, w, 3f), Accent());
-            pilotXpBarWidth = w;
-            y -= Space3;
+            Rule(parent, new Rect(dossierX, detailY, dossierW, 3f), FrameColor());
+            pilotXpBar = Rule(parent, new Rect(dossierX, detailY, dossierW, 3f), Accent());
+            pilotXpBarWidth = dossierW;
+            detailY -= Space3;
 
-            pilotBackgroundLabel = Label(parent, "", new Rect(Pad, y, w, LineHeight), Dim(),
-                                         FontMicro, FontStyles.Italic, TextAlignmentOptions.Left);
-            y -= Space5;
+            pilotStatsLabel = Label(parent, "", new Rect(dossierX, detailY, dossierW, LineHeight), Friendly(),
+                                    FontSmall, FontStyles.Normal, TextAlignmentOptions.Left);
+            detailY -= LineHeight;
+
+            pilotPersonaLabel = Label(parent, "", new Rect(dossierX, detailY, dossierW, LineHeight), Dim(),
+                                      FontMicro, FontStyles.Normal, TextAlignmentOptions.Left);
+
+            y -= portrait + Space2;
+
+            Label(parent, "BIO", new Rect(Pad, y, 34f, Space4), WingColor(), FontMicro,
+                  FontStyles.Normal, TextAlignmentOptions.Left);
+            pilotBackgroundLabel = Label(parent, "", new Rect(Pad + 38f, y, w - 38f, Space6 + Space3),
+                                         Friendly(), FontMicro, FontStyles.Italic,
+                                         TextAlignmentOptions.TopLeft);
+            pilotBackgroundLabel.enableWordWrapping = true;
+            pilotBackgroundLabel.overflowMode = TextOverflowModes.Ellipsis;
+            y -= Space6 + Space4;
 
             y = Heading(parent, y, "AIRFRAME");
 
+            // A quiet aircraft silhouette turns the empty lower card into an airframe
+            // dossier without competing with the live numbers drawn over it.
+            Color ghost = WingColor();
+            ghost.a = 0.075f;
+            AddSprite(parent, "AirframeSilhouette", IconFactory.Get("airframe"),
+                      new Rect(PanelWidth - Pad - 132f, y - 8f, 128f, 128f), ghost);
+
             airframeTypeLabel = Label(parent, "", new Rect(Pad, y, w, LineHeight), Friendly(),
-                                      FontSmall, FontStyles.Normal, TextAlignmentOptions.Left);
+                                      FontLead, FontStyles.Normal, TextAlignmentOptions.Left);
             y -= LineHeight + 2f;
             airframeStateLabel = Label(parent, "", new Rect(Pad, y, w, LineHeight), Friendly(),
                                        FontSmall, FontStyles.Normal, TextAlignmentOptions.Left);
@@ -2971,7 +3028,12 @@ namespace WingCommand
             y -= LineHeight + 2f;
             airframeLoadoutLabel = Label(parent, "", new Rect(Pad, y, w, LineHeight), Dim(),
                                          FontMicro, FontStyles.Normal, TextAlignmentOptions.Left);
-            return y - Space5;
+            y -= LineHeight + 2f;
+            airframeWeaponsLabel = Label(parent, "", new Rect(Pad, y, w, Space6 + Space2), Friendly(),
+                                         FontMicro, FontStyles.Normal, TextAlignmentOptions.TopLeft);
+            airframeWeaponsLabel.enableWordWrapping = true;
+            airframeWeaponsLabel.overflowMode = TextOverflowModes.Ellipsis;
+            return y - (Space6 + Space2) - Space5;
         }
 
         private static void RefreshWingPage(WingRegistry wing)
@@ -2995,7 +3057,7 @@ namespace WingCommand
             WingMember focus = focusMember;
             if (focus == null)
             {
-                SetWingDetail("NO WINGMEN ASSIGNED", "", 0f, "", "", "", "", "");
+                SetWingDetail("NO WINGMEN ASSIGNED", "", "", "", 0f, "", "", "", "", "", "");
                 return;
             }
 
@@ -3011,21 +3073,23 @@ namespace WingCommand
                 rank = "";
                 progress = 0f;
             }
-            else if (crew.Rank >= WingPilotRoster.TopRank)
-            {
-                rank = WingPilotRoster.RankName(crew.Rank) + "   XP " + crew.Xp +
-                       "   " + crew.Kills + " KILL(S)   " + crew.Sorties + " SORTIE(S)";
-                progress = 1f;
-            }
             else
             {
-                int floor = WingPilotRoster.XpForRank(crew.Rank);
-                int ceiling = WingPilotRoster.XpForRank(crew.Rank + 1);
-                rank = WingPilotRoster.RankName(crew.Rank) + "   XP " + crew.Xp + " / " + ceiling +
-                       "   " + crew.Kills + " KILL(S)   " + crew.Sorties + " SORTIE(S)";
-                progress = ceiling > floor
-                    ? Mathf.Clamp01((crew.Xp - floor) / (float)(ceiling - floor))
-                    : 0f;
+                WingRank crewRank = crew.Rank;
+                if (crewRank >= WingPilotRoster.TopRank)
+                {
+                    rank = WingPilotRoster.RankName(crewRank) + "   XP " + crew.Xp + "   MAX RANK";
+                    progress = 1f;
+                }
+                else
+                {
+                    int floor = WingPilotRoster.XpForRank(crewRank);
+                    int ceiling = WingPilotRoster.XpForRank(crewRank + 1);
+                    rank = WingPilotRoster.RankName(crewRank) + "   XP " + crew.Xp + " / " + ceiling;
+                    progress = ceiling > floor
+                        ? Mathf.Clamp01((crew.Xp - floor) / (float)(ceiling - floor))
+                        : 0f;
+                }
             }
 
             Aircraft aircraft = focus.Aircraft;
@@ -3035,10 +3099,15 @@ namespace WingCommand
                 ? UiTheme.Truncate(definition.unitName, 22) + "   SLOT " + focus.Slot
                 : "AIRFRAME   SLOT " + focus.Slot;
 
+            // These properties aggregate live component collections. Keep the values
+            // coherent within this refresh and avoid repeating the same scans below.
+            float fuel = focus.Fuel;
+            int ammo = focus.Ammo;
+            float integrity = focus.Integrity;
             string state =
-                "FUEL " + Mathf.RoundToInt(focus.Fuel * 100f) + "%" +
-                "   AMMO " + focus.Ammo +
-                "   HULL " + Mathf.RoundToInt(focus.Integrity * 100f) + "%" +
+                "FUEL " + Mathf.RoundToInt(fuel * 100f) + "%" +
+                "   AMMO " + ammo +
+                "   HULL " + Mathf.RoundToInt(integrity * 100f) + "%" +
                 (focus.CanDeliverCargo ? "   CARGO " + focus.CargoAmmo : "");
 
             string order =
@@ -3052,13 +3121,21 @@ namespace WingCommand
                   " - fitted at requisition"
                 : "LOADOUT as found - assigned mission aircraft keep their own fit";
 
-            SetWingDetail(identity, rank, progress,
-                          crew != null ? crew.Background : "", type, state, order, loadout);
+            string stats = crew != null
+                ? "COMBAT RECORD   " + crew.Kills + " KILL(S)   /   " + crew.Sorties + " SORTIE(S)"
+                : "";
+            string persona = crew != null
+                ? "RADIO PROFILE   " + crew.Persona.ToString().ToUpperInvariant()
+                : "";
+
+            SetWingDetail(identity, rank, stats, persona, progress,
+                          crew != null ? crew.Background : "", type, state, order, loadout,
+                          WeaponManifest(aircraft));
 
             if (airframeStateLabel != null)
             {
-                bool poor = focus.Fuel <= Plugin.Config2.BingoFuel.Value ||
-                            focus.Ammo <= 0 || focus.Integrity < 0.75f;
+                bool poor = fuel <= Plugin.Config2.BingoFuel.Value ||
+                            ammo <= 0 || integrity < 0.75f;
                 airframeStateLabel.color = poor ? Warning() : Friendly();
             }
 
@@ -3068,12 +3145,15 @@ namespace WingCommand
                 airframeTypeLabel.text = type + "   (NOT LOCALLY SIMULATED)";
         }
 
-        private static void SetWingDetail(string identity, string rank, float progress,
-                                          string background, string type, string state,
-                                          string order, string loadout)
+        private static void SetWingDetail(string identity, string rank, string stats,
+                                          string persona, float progress, string background,
+                                          string type, string state, string order, string loadout,
+                                          string weapons)
         {
             if (pilotIdentityLabel != null) pilotIdentityLabel.text = identity;
             if (pilotRankLabel != null) pilotRankLabel.text = rank;
+            if (pilotStatsLabel != null) pilotStatsLabel.text = stats;
+            if (pilotPersonaLabel != null) pilotPersonaLabel.text = persona;
             if (pilotBackgroundLabel != null) pilotBackgroundLabel.text = background;
             if (airframeTypeLabel != null)
             {
@@ -3083,10 +3163,54 @@ namespace WingCommand
             if (airframeStateLabel != null) airframeStateLabel.text = state;
             if (airframeOrderLabel != null) airframeOrderLabel.text = order;
             if (airframeLoadoutLabel != null) airframeLoadoutLabel.text = loadout;
+            if (airframeWeaponsLabel != null) airframeWeaponsLabel.text = weapons;
 
             if (pilotXpBar != null)
                 pilotXpBar.rectTransform.sizeDelta =
                     new Vector2(Mathf.Max(1f, pilotXpBarWidth * Mathf.Clamp01(progress)), 3f);
+        }
+
+        /// <summary>A compact live inventory, grouped by the weapon definition on each station.</summary>
+        private static string WeaponManifest(Aircraft aircraft)
+        {
+            if (aircraft == null || aircraft.weaponStations == null) return "WEAPONS   —";
+
+            var names = new List<string>();
+            var ammo = new List<int>();
+            var stations = new List<int>();
+
+            foreach (WeaponStation station in aircraft.weaponStations)
+            {
+                if (station == null || station.Cargo) continue;
+
+                string name = station.WeaponInfo != null ? station.WeaponInfo.name : "STORE";
+                if (string.IsNullOrEmpty(name)) name = "STORE";
+                name = name.Replace("(Clone)", "").Replace("_", " ").Trim().ToUpperInvariant();
+
+                int index = names.IndexOf(name);
+                if (index < 0)
+                {
+                    names.Add(name);
+                    ammo.Add(Mathf.Max(0, station.Ammo));
+                    stations.Add(1);
+                }
+                else
+                {
+                    ammo[index] += Mathf.Max(0, station.Ammo);
+                    stations[index]++;
+                }
+            }
+
+            if (names.Count == 0) return "WEAPONS   UNARMED";
+
+            string result = "WEAPONS   ";
+            for (int i = 0; i < names.Count; i++)
+            {
+                if (i > 0) result += "   ·   ";
+                string count = stations[i] > 1 ? stations[i] + "x " : "";
+                result += count + UiTheme.Truncate(names[i], 20) + "  [" + ammo[i] + "]";
+            }
+            return result;
         }
 
         // ------------------------------------------------------- shared roster plumbing
@@ -3238,6 +3362,22 @@ namespace WingCommand
 
         private static Image Panel(RectTransform parent, Rect rect, Color color) =>
             WingUi.Panel(parent, rect, color);
+
+        private static Image AddSprite(RectTransform parent, string name, Sprite sprite,
+                                       Rect rect, Color color)
+        {
+            var go = new GameObject(name, typeof(RectTransform), typeof(Image));
+            RectTransform rt = go.GetComponent<RectTransform>();
+            rt.SetParent(parent, worldPositionStays: false);
+            Place(rt, rect);
+
+            Image image = go.GetComponent<Image>();
+            image.sprite = sprite;
+            image.color = color;
+            image.preserveAspect = true;
+            image.raycastTarget = false;
+            return image;
+        }
 
         private static Image[] Outline(RectTransform parent, Rect rect, Color color) =>
             WingUi.Outline(parent, rect, color);

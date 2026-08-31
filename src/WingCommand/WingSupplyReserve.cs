@@ -46,6 +46,8 @@ namespace WingCommand
         }
 
         private static readonly List<Slot> slots = new List<Slot>();
+        private static readonly List<AircraftDefinition> definitions =
+            new List<AircraftDefinition>(Capacity);
         private static FactionHQ hq;
         private static bool isHost;
 
@@ -55,16 +57,18 @@ namespace WingCommand
         /// <summary>Occupied reserve capacity, including a slot reserved by a pending order.</summary>
         public static int Count => slots.Count;
 
-        public static IEnumerable<AircraftDefinition> Definitions
+        public static IReadOnlyList<AircraftDefinition> Definitions
         {
             get
             {
-                var seen = new HashSet<AircraftDefinition>();
+                definitions.Clear();
                 for (int i = 0; i < slots.Count; i++)
                 {
                     AircraftDefinition definition = slots[i].Definition;
-                    if (definition != null && seen.Add(definition)) yield return definition;
+                    if (definition != null && !definitions.Contains(definition))
+                        definitions.Add(definition);
                 }
+                return definitions;
             }
         }
 
@@ -237,6 +241,7 @@ namespace WingCommand
         public static void Reset()
         {
             ReturnAllToFaction();
+            definitions.Clear();
             hq = null;
             isHost = false;
         }
