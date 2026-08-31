@@ -59,6 +59,9 @@ namespace WingCommand
         private bool deliveryPending;
 
         private readonly CargoProgressTracker cargoProgress = new CargoProgressTracker();
+        private float lastIntegrity;
+        private bool damageReported;
+        private bool criticalDamageReported;
 
         /// <summary>True while a hangar delivery is still taxiing or waiting to launch.</summary>
         public bool DeliveryPending => deliveryPending;
@@ -87,6 +90,7 @@ namespace WingCommand
             defensiveState = new DefensiveManeuverState(this);
             joinedAt = Time.timeSinceLevelLoad;
             Directive = WingDirective.Simple(WingOrder.Formation);
+            lastIntegrity = Integrity;
         }
 
         public Aircraft Leader => owner?.Leader;
@@ -360,6 +364,33 @@ namespace WingCommand
                 return counted > 0 ? total / counted : 1f;
             }
         }
+
+        /// <summary>
+        /// Report meaningful damage transitions, not every hit-point tick. A heavy first hit
+        /// goes straight to the critical call instead of queuing both lines back-to-back.
+        /// </summary>
+        public void CheckDamage()
+        {
+            // partLookup is populated asynchronously. Integrity deliberately reads zero
+            // while it is absent for the roster UI, but treating that temporary zero as
+            // combat damage would make a freshly spawned aircraft report itself critical.
+            if (!Alive || Aircraft.partLookup == null) return;
+
+            float current = Integrity;
+            if (!criticalDamageReported && current <= 0.35f)
+            {
+                criticalDamageReported = true;
+                damageReported = true;
+                WingComms.Say(this, WingComms.Call.Critical);
+            }
+            else if (!damageReported && current <= 0.72f && lastIntegrity > 0.72f)
+            {
+                damageReported = true;
+                WingComms.Say(this, WingComms.Call.Damaged);
+            }
+
+            lastIntegrity = current;
+        }
         /// <summary>
         /// Give control back to the stock combat AI. Used both for an explicit Engage
         /// order and for automatic breaks (leader lost, mutual support).
@@ -464,11 +495,11 @@ namespace WingCommand
         /// is flying - it was ignored entirely. The Pilot.SetPrimaryTarget call that looked
         /// like it bridged the gap was dead code; AIPilotCombatModes never reads it.
         /// </summary>
-        public void AttackTarget(Unit target)
+        public void AttackTarget(Unit target, bool report = true)
         {
             if (target == null || !IsCommandable) return;
             Apply(WingDirective.Attack(target));
-            if (!IsPanicking)
+            if (report && !IsPanicking)
                 WingComms.Say(this, WingComms.Call.Engaging, target.unitName);
         }
         /// <summary>
@@ -478,11 +509,11 @@ namespace WingCommand
         /// it: the two orders read differently on the roster, on the map and on the radio,
         /// and a player who asked for one should never be shown the other.
         /// </summary>
-        public void FireForEffect(Unit target)
+        public void FireForEffect(Unit target, bool report = true)
         {
             if (target == null || !IsCommandable) return;
             Apply(WingDirective.AtTarget(WingOrder.FireForEffect, target));
-            if (!IsPanicking)
+            if (report && !IsPanicking)
                 WingComms.Say(this, WingComms.Call.FireForEffect, target.unitName);
         }
 

@@ -6,14 +6,15 @@ using UnityEngine.UI;
 namespace WingCommand
 {
     /// <summary>
-    /// Dedicated radio subtitle surface. Operational notices still use MessageUI; separating
-    /// the two lets a transmission give the pilot and spoken line different visual weight.
+    /// Dedicated radio subtitle surface. It stays frameless and clear of the game's legacy
+    /// message boxes while giving speaker, aircraft context and dialogue distinct weight.
     /// </summary>
     internal static class WingChatterHud
     {
         private sealed class Transmission
         {
             public string Identity;
+            public string Context;
             public string Message;
             public bool Urgent;
             public float QueuedAt;
@@ -32,15 +33,18 @@ namespace WingCommand
         private static RectTransform card;
         private static CanvasGroup group;
         private static TMP_Text identityLabel;
+        private static TMP_Text contextLabel;
         private static TMP_Text messageLabel;
 
-        public static void Enqueue(string identity, string message, bool urgent = false)
+        public static void Enqueue(string identity, string context, string message,
+                                   bool urgent = false)
         {
             if (string.IsNullOrWhiteSpace(identity) || string.IsNullOrWhiteSpace(message)) return;
 
             var transmission = new Transmission
             {
                 Identity = identity.Trim(),
+                Context = context?.Trim() ?? string.Empty,
                 Message = message.Trim(),
                 Urgent = urgent,
                 QueuedAt = Time.unscaledTime,
@@ -119,6 +123,7 @@ namespace WingCommand
             card = null;
             group = null;
             identityLabel = null;
+            contextLabel = null;
             messageLabel = null;
         }
 
@@ -138,8 +143,16 @@ namespace WingCommand
             WingRadioAudio.Transmission();
 
             identityLabel.text = current.Identity;
+            contextLabel.text = current.Context;
             messageLabel.text = "<<  " + current.Message + "  >>";
             identityLabel.color = current.Urgent ? WingUi.Warning : Cyan();
+            contextLabel.color = current.Urgent ? WingUi.Warning.WithAlpha(0.75f) : Cyan(0.62f);
+            messageLabel.color = current.Urgent
+                ? Color.Lerp(MessageColor(), WingUi.Warning, 0.28f)
+                : MessageColor();
+            messageLabel.fontStyle = current.Urgent
+                ? FontStyles.Bold | FontStyles.Italic
+                : FontStyles.Italic;
             group.alpha = 0f;
             canvasRoot.SetActive(true);
         }
@@ -168,7 +181,7 @@ namespace WingCommand
             card.SetParent(canvasRoot.transform, worldPositionStays: false);
             card.anchorMin = card.anchorMax = new Vector2(0.5f, 1f);
             card.pivot = new Vector2(0.5f, 1f);
-            card.sizeDelta = new Vector2(760f, 68f);
+            card.sizeDelta = new Vector2(900f, 88f);
             card.anchoredPosition = new Vector2(0f, -26f);
             card.localScale = Vector3.one;
 
@@ -178,16 +191,24 @@ namespace WingCommand
             group.blocksRaycasts = false;
 
             Color cyan = Cyan();
-            identityLabel = WingUi.Label(card, "", new Rect(0f, -2f, 760f, 24f),
-                cyan, 14f, FontStyles.Bold, TextAlignmentOptions.Center);
-            messageLabel = WingUi.Label(card, "", new Rect(0f, -29f, 760f, 28f),
-                new Color(0.90f, 0.97f, 1f, 1f), 16f, FontStyles.Italic,
+            identityLabel = WingUi.Label(card, "", new Rect(0f, -1f, 900f, 22f),
+                cyan, 13.5f, FontStyles.Bold, TextAlignmentOptions.Center);
+            identityLabel.characterSpacing = 0.8f;
+            contextLabel = WingUi.Label(card, "", new Rect(0f, -21f, 900f, 16f),
+                Cyan(0.62f), 9f, FontStyles.Normal, TextAlignmentOptions.Center);
+            contextLabel.characterSpacing = 1.8f;
+            messageLabel = WingUi.Label(card, "", new Rect(0f, -42f, 900f, 30f),
+                MessageColor(), 16.5f, FontStyles.Italic,
                 TextAlignmentOptions.Center);
+            messageLabel.enableWordWrapping = false;
+            messageLabel.overflowMode = TextOverflowModes.Ellipsis;
 
             canvasRoot.SetActive(false);
         }
 
         private static Color Cyan(float alpha = 1f) => new Color(0.25f, 0.88f, 1f, alpha);
+
+        private static Color MessageColor() => new Color(0.92f, 0.98f, 1f, 1f);
 
         private static bool Same(Transmission a, Transmission b) =>
             a != null && b != null && a.Identity == b.Identity && a.Message == b.Message;

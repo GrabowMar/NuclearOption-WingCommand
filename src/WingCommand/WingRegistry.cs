@@ -104,6 +104,7 @@ namespace WingCommand
             for (int i = 0; i < members.Count; i++)
             {
                 members[i].CheckCargoRun();
+                members[i].CheckDamage();
                 members[i].CheckReserves();
             }
 
@@ -286,7 +287,7 @@ namespace WingCommand
                     Unit target = NextLiveTarget(targets, ref targetIndex);
                     if (target == null) break;
 
-                    free[i].AttackTarget(target);
+                    free[i].AttackTarget(target, report: false);
                     orderedMembers?.Add(free[i]);
                     ordered++;
                     if (seen.Add(target)) covered++;
@@ -310,7 +311,7 @@ namespace WingCommand
                     WingMember nearest = TakeNearest(free, target);
                     if (nearest == null) continue;
 
-                    nearest.AttackTarget(target);
+                    nearest.AttackTarget(target, report: false);
                     orderedMembers?.Add(nearest);
                     ordered++;
                     assignedThisPass = true;
@@ -392,6 +393,8 @@ namespace WingCommand
 
                 if (Plugin.Config2.VerboseLogging.Value)
                     Plugin.Logger.LogInfo("[Wing] lost " + m.Name + ": " + LostReason(m));
+
+                WingComms.ReportLoss(m, members);
 
                 // Prune only ever sees losses; a wingman that recovered at base was claimed
                 // by WingRecovery a moment earlier and never reaches here.

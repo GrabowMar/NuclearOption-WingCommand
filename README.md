@@ -353,11 +353,30 @@ This is a backbone. A pregenerated wingman pool with portraits and an assignment
 
 ### Squadron radio
 
-Radio calls use dedicated frameless subtitles at the top centre rather than the general game-message feed. The speaker is identified as `M. "COBALT" ADEYEMI` with the transmission beneath, and urgent missile calls jump ahead of routine traffic. A command sent to several aircraft produces a short staggered roll call from the pilots that actually accepted it; aircraft that were skipped don't answer as though they complied.
+Radio calls use dedicated frameless subtitles at the top centre rather than the general
+game-message feed. The speaker is identified as `M. "COBALT" ADEYEMI`; a smaller line names
+their flight position and aircraft, such as `WING 2 // VT-7`. Urgent missile, critical-damage
+and loss calls move ahead of routine traffic.
 
-Each transmission opens with the game's own radio click — the same sound mission and HQ messages use — so wing chatter reads as radio rather than as captions. Turn it off with `Comms/RadioChatterSound` while keeping the subtitles.
+A command sent to several aircraft produces one element acknowledgement from its lead pilot,
+such as `Three and Four, with me. We're going in.` This confirms the responding group without
+making every pilot repeat the same order. Single-aircraft and target calls remain specific.
+Aircraft that were skipped do not answer as though they complied.
 
-Each pilot carries a radio persona independent of rank and combat skill. COBALT is professional, HATCHET is aggressive, MERIDIAN is calm; generated pilots rotate through those voices and a dry one. The persona picks between several lines for the same event, and is intentionally a small data-facing seam for later mission and plot dialogue.
+The mod no longer writes ordinary gameplay notices into the game's black message boxes. Map
+and WMC state stay on their respective interfaces, pilot events use squadron radio, and only
+explicit development/debug actions may use the legacy message surface.
+
+Each pilot also carries a radio persona independent of rank and combat skill. COBALT is
+professional, HATCHET is aggressive and MERIDIAN is calm; generated pilots rotate through
+those voices and a dry one. The persona selects between several lines for the same event and
+is intentionally a small, data-facing seam for later mission and plot dialogue. Radio events
+cover orders, attacks, missile defence, damage, critical damage, ejection, pilot or airframe
+loss, bingo/Winchester RTB, landing, delivery, recovery and kills.
+
+Each transmission opens with the game's own radio click — the same sound mission and HQ
+messages use — so wing chatter reads as radio rather than as captions. Turn it off with
+`Comms/RadioChatterSound` while keeping the subtitles.
 
 ## 💀 When your jet goes down
 

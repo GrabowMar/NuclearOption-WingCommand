@@ -132,7 +132,7 @@ namespace WingCommand
             {
                 if (!WingOrderCatalog.CanApply(member, WingOrder.FireForEffect)) continue;
                 if (!WingWeapons.CanStillEngage(member.Aircraft, target)) continue;
-                member.FireForEffect(target);
+                member.FireForEffect(target, report: false);
                 responders.Add(member);
             }
 

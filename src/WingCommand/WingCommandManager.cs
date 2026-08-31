@@ -608,20 +608,25 @@ namespace WingCommand
         }
 
         /// <summary>
-        /// Confirmation of a player order. Routed into the game's own on-screen message
-        /// feed rather than drawn as a custom overlay, so it matches everything else on
-        /// screen by construction instead of by imitation. The IMGUI box remains only as a
-        /// fallback for when that feed is unavailable.
+        /// Internal gameplay notice. These remain available to verbose diagnostics but no
+        /// longer enter MessageUI: its black boxes were the obsolete second chatter/log
+        /// surface. Command state belongs on the map/WMC; pilot events belong on radio.
         /// </summary>
         internal void Toast(string message)
         {
             if (string.IsNullOrWhiteSpace(message)) return;
+            if (Plugin.Config2.VerboseLogging.Value)
+                Plugin.Logger.LogInfo("[Wing] " + message);
+        }
+
+        /// <summary>The only mod messages intentionally allowed into the old game feed.</summary>
+        internal void DebugToast(string message)
+        {
+            if (!Plugin.Config2.EnableDebugActions.Value || string.IsNullOrWhiteSpace(message))
+                return;
             if (message == lastToast && Time.unscaledTime - lastToastAt < 1.25f) return;
             lastToast = message;
             lastToastAt = Time.unscaledTime;
-
-            if (Plugin.Config2.VerboseLogging.Value)
-                Plugin.Logger.LogInfo("[Wing] " + message);
 
             try
             {
@@ -650,7 +655,7 @@ namespace WingCommand
             if (!InPlayableState()) return;
 
             // The aircraft-recovery prompt is native uGUI and draws itself; only the
-            // fallback radial and the fallback toast still live here.
+            // fallback radial and the debug-only fallback toast still live here.
             if (radialOpen)
                 WingHud.DrawRadial(Slices, radialCentre, hoveredSlice);
 

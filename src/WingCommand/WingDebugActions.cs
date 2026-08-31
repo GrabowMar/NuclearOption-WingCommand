@@ -257,7 +257,7 @@ namespace WingCommand
 
         private static void Toast(string message)
         {
-            WingCommandManager.Instance?.Toast(message);
+            WingCommandManager.Instance?.DebugToast(message);
             if (Plugin.Config2.VerboseLogging.Value)
                 Plugin.Logger.LogInfo("[Debug] " + message);
         }
