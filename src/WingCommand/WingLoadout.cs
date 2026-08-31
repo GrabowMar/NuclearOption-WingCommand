@@ -29,8 +29,17 @@ namespace WingCommand
     }
 
     /// <summary>
-    /// One aircraft's loadout decision: which preset, and — for a transport — which of the
-    /// airframe's own cargo mounts it is carrying.
+    /// One aircraft's loadout decision.
+    ///
+    /// Three things it can be, in order of precedence: a saved per-pylon template, a role
+    /// preset with an optional cargo choice, or the airframe's own standard fit. A template
+    /// wins when one is set, because it is the more specific statement — the player named
+    /// every station rather than describing a job.
+    ///
+    /// This stays one struct with three cases rather than three types because every part of
+    /// the mod that moves a loadout about — the shop, delivery, the reserve, recovery,
+    /// takeover — carries it by value and never inspects it. Adding a case here reaches all
+    /// of them without any of them changing.
     /// </summary>
     internal readonly struct WingLoadoutChoice
     {
@@ -43,21 +52,41 @@ namespace WingCommand
         /// </summary>
         public readonly string CargoKey;
 
-        public WingLoadoutChoice(WingLoadoutPreset preset, string cargoKey = null)
+        /// <summary>
+        /// The saved template this fit came from, or null when it is a preset.
+        ///
+        /// An id rather than the record itself, for the same reason the cargo mount is a
+        /// key: an in-flight aircraft, a reserve slot and a purchase order may all outlive
+        /// the template they were fitted from, and none of them should keep it alive or
+        /// follow it through a rename into something else.
+        /// </summary>
+        public readonly string TemplateId;
+
+        public WingLoadoutChoice(WingLoadoutPreset preset, string cargoKey = null,
+                                 string templateId = null)
         {
             Preset = preset;
             CargoKey = cargoKey;
+            TemplateId = templateId;
         }
 
         public static WingLoadoutChoice Standard => new WingLoadoutChoice(WingLoadoutPreset.Standard);
 
+        /// <summary>Choosing a preset abandons any template: they are alternatives.</summary>
         public WingLoadoutChoice WithPreset(WingLoadoutPreset preset) =>
             new WingLoadoutChoice(preset, CargoKey);
 
         public WingLoadoutChoice WithCargo(string cargoKey) =>
-            new WingLoadoutChoice(Preset, cargoKey);
+            new WingLoadoutChoice(Preset, cargoKey, TemplateId);
 
-        public bool IsStandard => Preset == WingLoadoutPreset.Standard;
+        /// <summary>Fit from a saved template, or pass null to go back to the preset.</summary>
+        public WingLoadoutChoice WithTemplate(string templateId) =>
+            new WingLoadoutChoice(Preset, CargoKey, templateId);
+
+        public bool IsTemplate => !string.IsNullOrEmpty(TemplateId);
+
+        /// <summary>True when nothing at all has been chosen and the game fits its own.</summary>
+        public bool IsStandard => !IsTemplate && Preset == WingLoadoutPreset.Standard;
     }
 
     /// <summary>
@@ -93,7 +122,53 @@ namespace WingCommand
             public float MaxRange;
             public bool Cargo;
 
+            /// <summary>Rounds carried, straight off the mount. Zero where it is not a count.</summary>
+            public int Ammo;
+
+            /// <summary>Loaded mass, for the fitted-weight line under the pylon list.</summary>
+            public float Mass;
+
             public bool Armed => AntiAir > 0f || AntiSurface > 0f || AntiMissile > 0f;
+        }
+
+        /// <summary>
+        /// One store the player can put on one pylon, as the editor needs to draw it.
+        ///
+        /// A projection of <see cref="MountInfo"/> rather than the thing itself: the editor
+        /// has no business holding a <c>WeaponMount</c> prefab reference, and the figures
+        /// here are the ones a row shows.
+        /// </summary>
+        internal readonly struct StoreOption
+        {
+            public readonly string Key;
+            public readonly string Label;
+            public readonly int Ammo;
+            public readonly float Mass;
+            public readonly float AntiAir;
+            public readonly float AntiSurface;
+            public readonly bool Cargo;
+
+            public StoreOption(string key, string label, int ammo, float mass,
+                               float antiAir, float antiSurface, bool cargo)
+            {
+                Key = key;
+                Label = label;
+                Ammo = ammo;
+                Mass = mass;
+                AntiAir = antiAir;
+                AntiSurface = antiSurface;
+                Cargo = cargo;
+            }
+
+            public bool IsEmpty => string.IsNullOrEmpty(Key);
+
+            /// <summary>What the store is for, in the two letters a table cell can hold.</summary>
+            public string RoleTag =>
+                Cargo ? "CGO"
+                : AntiAir <= 0f && AntiSurface <= 0f ? ""
+                : AntiAir > AntiSurface * 1.5f ? "A-A"
+                : AntiSurface > AntiAir * 1.5f ? "A-G"
+                : "MLT";
         }
 
         /// <summary>Everything known about one airframe's hardpoints, resolved once.</summary>
@@ -169,20 +244,6 @@ namespace WingCommand
             if (profile.Cargo.Count > 0) into.Add(WingLoadoutPreset.Cargo);
         }
 
-        /// <summary>True when this airframe offers anything beyond its standard fit.</summary>
-        public static bool HasPresets(AircraftDefinition definition)
-        {
-            Profile profile = ProfileOf(definition);
-            return profile != null && (profile.HasRoleData || profile.Cargo.Count > 0);
-        }
-
-        /// <summary>True when this airframe has a stock cargo mount and can run supplies.</summary>
-        public static bool SupportsCargo(AircraftDefinition definition)
-        {
-            Profile profile = ProfileOf(definition);
-            return profile != null && profile.Cargo.Count > 0;
-        }
-
         /// <summary>The cargo types the airframe's own hardpoints offer.</summary>
         public static IReadOnlyList<CargoOption> CargoOptionsFor(AircraftDefinition definition)
         {
@@ -214,6 +275,13 @@ namespace WingCommand
         /// <summary>Short panel label for a choice, e.g. <c>AIR-GND</c> or <c>CARGO SUPPLY</c>.</summary>
         public static string Label(AircraftDefinition definition, WingLoadoutChoice choice)
         {
+            // Every readout on the panel — the shop's fit line, the wing tab's carrying
+            // column, the reserve — comes through here, so naming the template in one place
+            // names it everywhere.
+            if (choice.IsTemplate)
+                return UiTheme.Truncate(WingLoadoutTemplates.NameOf(choice.TemplateId), 20)
+                             .ToUpperInvariant();
+
             switch (choice.Preset)
             {
                 case WingLoadoutPreset.AirToAir:    return "AIR-AIR";
@@ -224,6 +292,266 @@ namespace WingCommand
                         ? "CARGO " + UiTheme.Truncate(cargo.Label, 12).ToUpperInvariant()
                         : "CARGO";
                 default: return "STANDARD";
+            }
+        }
+
+        // ------------------------------------------------------------- pylon editing
+
+        /// <summary>How many hardpoint sets this airframe declares. Zero when unreadable.</summary>
+        public static int PylonCount(AircraftDefinition definition)
+        {
+            Profile profile = ProfileOf(definition);
+            return profile?.Sets?.Length ?? 0;
+        }
+
+        /// <summary>
+        /// What to call one pylon.
+        ///
+        /// The airframe names its own hardpoint sets, so the editor shows the game's names
+        /// rather than inventing "STATION 3". A symmetric pair is named once, from
+        /// <c>SymmetryName</c>, because the two are edited together.
+        /// </summary>
+        public static string PylonName(AircraftDefinition definition, int index)
+        {
+            Profile profile = ProfileOf(definition);
+            if (profile?.Sets == null || index < 0 || index >= profile.Sets.Length)
+                return "PYLON " + (index + 1);
+
+            HardpointSet set = profile.Sets[index];
+            if (set == null) return "PYLON " + (index + 1);
+
+            string name = IsSymmetric(profile, index) && !string.IsNullOrEmpty(set.SymmetryName)
+                ? set.SymmetryName
+                : set.name;
+
+            return string.IsNullOrEmpty(name) ? "PYLON " + (index + 1) : name;
+        }
+
+        /// <summary>
+        /// True when this pylon mirrors the one before it.
+        ///
+        /// The editor hides the mirror and drives it from its partner, because presenting a
+        /// left and a right wing station the player cannot arm differently as two rows is a
+        /// list twice as long that says half as much.
+        /// </summary>
+        public static bool MirrorsPrevious(AircraftDefinition definition, int index)
+        {
+            Profile profile = ProfileOf(definition);
+            if (profile?.Sets == null || index <= 0 || index >= profile.Sets.Length) return false;
+            return profile.Sets[index] != null && profile.Sets[index].SymmetryWithPrev;
+        }
+
+        private static bool IsSymmetric(Profile profile, int index)
+        {
+            if (profile?.Sets == null) return false;
+            if (index >= 0 && index < profile.Sets.Length &&
+                profile.Sets[index] != null && profile.Sets[index].SymmetryWithPrev)
+                return true;
+
+            int next = index + 1;
+            return next < profile.Sets.Length && profile.Sets[next] != null &&
+                   profile.Sets[next].SymmetryWithPrev;
+        }
+
+        /// <summary>
+        /// Every store this pylon will take, the bare pylon first.
+        ///
+        /// The empty option is a real choice, not a placeholder: an aircraft may launch with
+        /// a station left clean, and it is how the player takes weight off.
+        /// </summary>
+        public static void OptionsFor(AircraftDefinition definition, int index,
+                                      List<StoreOption> into)
+        {
+            if (into == null) return;
+            into.Clear();
+            into.Add(new StoreOption(null, "— EMPTY —", 0, 0f, 0f, 0f, false));
+
+            Profile profile = ProfileOf(definition);
+            if (profile?.Options == null || index < 0 || index >= profile.Options.Length) return;
+
+            List<MountInfo> options = profile.Options[index];
+            if (options == null) return;
+
+            for (int i = 0; i < options.Count; i++) into.Add(Project(options[i]));
+        }
+
+        /// <summary>The store a key stands for on one pylon, or the empty option.</summary>
+        public static StoreOption StoreOn(AircraftDefinition definition, int index, string key)
+        {
+            var empty = new StoreOption(null, "— EMPTY —", 0, 0f, 0f, 0f, false);
+            if (string.IsNullOrEmpty(key)) return empty;
+
+            MountInfo info = Lookup(ProfileOf(definition), index, key);
+            return info != null ? Project(info) : new StoreOption(key, "UNKNOWN STORE", 0, 0f,
+                                                                  0f, 0f, false);
+        }
+
+        private static StoreOption Project(MountInfo info) =>
+            new StoreOption(info.Key, info.Label, info.Ammo, info.Mass,
+                            info.AntiAir, info.AntiSurface, info.Cargo);
+
+        private static MountInfo Lookup(Profile profile, int index, string key)
+        {
+            if (profile?.Options == null || index < 0 || index >= profile.Options.Length)
+                return null;
+
+            List<MountInfo> options = profile.Options[index];
+            if (options == null) return null;
+
+            for (int i = 0; i < options.Count; i++)
+            {
+                if (options[i].Key == key) return options[i];
+            }
+            return null;
+        }
+
+        /// <summary>
+        /// Whether the airframe's own rules currently forbid loading this pylon.
+        ///
+        /// Asks the game, rather than reimplementing exclusion from
+        /// <c>precludingHardpointSets</c>: a conformal tank that blocks the station beneath
+        /// it is the airframe's business, and a second opinion here would only be a second
+        /// thing to keep in step with the game.
+        /// </summary>
+        public static bool IsPylonBlocked(AircraftDefinition definition, int index,
+                                          Loadout inProgress)
+        {
+            Profile profile = ProfileOf(definition);
+            if (profile?.Sets == null || index < 0 || index >= profile.Sets.Length) return false;
+
+            HardpointSet set = profile.Sets[index];
+            if (set == null || inProgress == null) return false;
+
+            try
+            {
+                return set.BlockedByOtherHardpoint(inProgress);
+            }
+            catch (Exception e)
+            {
+                // A pylon whose exclusion rules cannot be evaluated is shown as usable. The
+                // spawner applies the same rules again when it fits the aircraft, so the
+                // worst case is an option that turns out not to take.
+                Fail("checking whether " + SafeName(definition) + " pylon " + (index + 1) +
+                     " is blocked failed: " + e.Message);
+                return false;
+            }
+        }
+
+        /// <summary>
+        /// Turn a template's store keys into a spawnable loadout.
+        ///
+        /// A key the current build does not recognise leaves that pylon empty rather than
+        /// failing the whole fit — the same trade the preset path makes, for the same
+        /// reason. Unlike a preset, an all-empty result is honoured: a player who stripped
+        /// every station meant it.
+        /// </summary>
+        public static Loadout BuildFromKeys(AircraftDefinition definition,
+                                            IReadOnlyList<string> keys)
+        {
+            Profile profile = ProfileOf(definition);
+            if (profile?.Sets == null || profile.Sets.Length == 0) return null;
+
+            var weapons = new List<WeaponMount>(profile.Sets.Length);
+            bool anyUnknown = false;
+
+            for (int i = 0; i < profile.Sets.Length; i++)
+            {
+                string key = keys != null && i < keys.Count ? keys[i] : null;
+                if (string.IsNullOrEmpty(key))
+                {
+                    weapons.Add(null);
+                    continue;
+                }
+
+                MountInfo pick = Lookup(profile, i, key);
+                if (pick == null) anyUnknown = true;
+                weapons.Add(pick?.Mount);
+            }
+
+            if (anyUnknown)
+                Plugin.Logger.LogInfo(
+                    "[Loadout] a saved template for " + SafeName(definition) +
+                    " names stores this build does not have; those pylons launch empty.");
+
+            return new Loadout { weapons = weapons };
+        }
+
+        /// <summary>
+        /// The same fit as <see cref="BuildFromKeys"/>, into a reused loadout.
+        ///
+        /// For the editor only, which asks what a half-finished template blocks several
+        /// times a second. Never hand the result to the spawner: an aircraft keeps the
+        /// <c>Loadout</c> it was given, and two aircraft sharing one is the bug
+        /// <see cref="WingTakeover"/> and <see cref="WingShopDelivery"/> both carry warnings
+        /// about — a whole wing that launches with no ammunition.
+        /// </summary>
+        public static Loadout FillScratch(AircraftDefinition definition,
+                                          IReadOnlyList<string> keys)
+        {
+            Profile profile = ProfileOf(definition);
+            if (profile?.Sets == null || profile.Sets.Length == 0) return null;
+
+            scratchLoadout.weapons.Clear();
+            for (int i = 0; i < profile.Sets.Length; i++)
+            {
+                string key = keys != null && i < keys.Count ? keys[i] : null;
+                scratchLoadout.weapons.Add(string.IsNullOrEmpty(key)
+                    ? null
+                    : Lookup(profile, i, key)?.Mount);
+            }
+            return scratchLoadout;
+        }
+
+        private static readonly Loadout scratchLoadout =
+            new Loadout { weapons = new List<WeaponMount>() };
+
+        /// <summary>
+        /// The airframe's own factory loadouts, as the aircraft selection menu lists them.
+        ///
+        /// Offered as seeds for a template rather than as fits of their own: they are a good
+        /// starting point precisely because they are what the designers thought the aircraft
+        /// was for, and the player is here to change one of them.
+        /// </summary>
+        public static void StockLoadoutsFor(AircraftDefinition definition,
+                                            List<StockLoadout> into)
+        {
+            if (into == null) return;
+            into.Clear();
+            if (definition == null) return;
+
+            try
+            {
+                AircraftParameters parameters = definition.aircraftParameters;
+                StandardLoadout[] stock = parameters != null ? parameters.StandardLoadouts : null;
+                if (stock == null) return;
+
+                for (int i = 0; i < stock.Length; i++)
+                {
+                    StandardLoadout entry = stock[i];
+                    if (entry == null || entry.disabled || entry.loadout == null) continue;
+
+                    string name = string.IsNullOrEmpty(entry.Name) ? "STOCK " + (i + 1) : entry.Name;
+                    into.Add(new StockLoadout(name, entry.loadout));
+                }
+            }
+            catch (Exception e)
+            {
+                into.Clear();
+                Fail("reading " + SafeName(definition) + "'s factory loadouts failed: " +
+                     e.Message);
+            }
+        }
+
+        /// <summary>One of the airframe's named factory loadouts.</summary>
+        internal readonly struct StockLoadout
+        {
+            public readonly string Name;
+            public readonly Loadout Loadout;
+
+            public StockLoadout(string name, Loadout loadout)
+            {
+                Name = name;
+                Loadout = loadout;
             }
         }
 
@@ -254,6 +582,16 @@ namespace WingCommand
         /// </summary>
         public static Loadout Build(AircraftDefinition definition, WingLoadoutChoice choice)
         {
+            // A template is an explicit statement about every pylon, so it is answered
+            // before any of the preset machinery below gets a say. A template that has since
+            // been deleted falls through to whatever preset the choice also carries, which
+            // for a purchase order made from the panel is Standard.
+            if (choice.IsTemplate)
+            {
+                LoadoutTemplateRecord template = WingLoadoutTemplates.ById(choice.TemplateId);
+                if (template != null) return BuildFromKeys(definition, template.MountKeys);
+            }
+
             if (choice.IsStandard) return null;
 
             Profile profile = ProfileOf(definition);
@@ -517,7 +855,19 @@ namespace WingCommand
                 Mount = mount,
                 Key = mount.jsonKey,
                 Label = NameOf(mount),
+
+                // Straight off the mount, which the station walk below cannot improve on.
+                Ammo = mount.ammo,
+                Mass = mount.mass,
+                Cargo = mount.Cargo || mount.Troops,
             };
+
+            // The mount's own weapon info is the direct route to role data and covers the
+            // ordinary single-weapon store. The station walk after it is what handles a
+            // mount that carries several different weapons, and a build where this member
+            // has moved.
+            WeaponInfo direct = mount.info;
+            if (direct != null) Absorb(info, direct);
 
             List<WeaponStation> stations = StationsOf(mount);
             for (int i = 0; i < stations.Count; i++)
@@ -534,14 +884,21 @@ namespace WingCommand
                 WeaponInfo weapon = station.WeaponInfo;
                 if (weapon == null) continue;
 
-                RoleIdentity role = weapon.effectiveness;
-                info.AntiAir = Mathf.Max(info.AntiAir, role.antiAir);
-                info.AntiSurface = Mathf.Max(info.AntiSurface, role.antiSurface);
-                info.AntiMissile = Mathf.Max(info.AntiMissile, role.antiMissile);
-                info.MaxRange = Mathf.Max(info.MaxRange, weapon.targetRequirements.maxRange);
+                Absorb(info, weapon);
             }
 
             return info;
+        }
+
+        /// <summary>Take the best figures this weapon offers into the mount's summary.</summary>
+        private static void Absorb(MountInfo info, WeaponInfo weapon)
+        {
+            RoleIdentity role = weapon.effectiveness;
+            info.AntiAir = Mathf.Max(info.AntiAir, role.antiAir);
+            info.AntiSurface = Mathf.Max(info.AntiSurface, role.antiSurface);
+            info.AntiMissile = Mathf.Max(info.AntiMissile, role.antiMissile);
+            info.MaxRange = Mathf.Max(info.MaxRange, weapon.targetRequirements.maxRange);
+            if (weapon.cargo || weapon.troops) info.Cargo = true;
         }
 
         /// <summary>

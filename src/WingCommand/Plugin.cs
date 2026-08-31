@@ -225,6 +225,9 @@ namespace WingCommand
         // --- Capability ---
         public readonly ConfigEntry<bool> KeepUpReports;
 
+        // --- Loadout ---
+        public readonly ConfigEntry<string> LoadoutTemplates;
+
         // --- Shop ---
         public readonly ConfigEntry<bool> ShopEnabled;
         public readonly ConfigEntry<float> RecruitmentCostRate;
@@ -516,6 +519,15 @@ namespace WingCommand
                     "into a fast flight.",
                     null,
                     new ConfigurationManagerAttributes { IsAdvanced = true }));
+            // Written by the LOADOUT tab, not by hand, but left visible rather than hidden
+            // so a player who has made a mess of their templates can clear the value
+            // instead of hunting for where they live. The reader drops any record it
+            // cannot parse, so editing it badly costs that record and nothing else.
+            LoadoutTemplates = c.Bind("Loadout", "SavedTemplates", "",
+                Advanced("Saved per-pylon loadout templates, written by the WMC LOADOUT tab. " +
+                       "One record per template as airframe|id|name|store keys, records " +
+                       "separated by semicolons. Clear this to delete every saved template."));
+
             ShopEnabled = c.Bind("Shop", "ShopEnabled", true,
                 Advanced("Allow buying wingmen. Aircraft are priced from the same value the player's " +
                          "own aircraft menu uses, paid for out of your allocation, and drawn from " +

@@ -2,7 +2,8 @@
 
 **Target:** `0.9.x`, after the tactical layer overhaul
 **Baseline:** WingCommand `0.9.0`, Nuclear Option `0.34.2`
-**Status:** implemented
+**Status:** implemented, partly superseded — see
+[the pylon editor note](#12-superseded-the-pylon-editor)
 **Release posture:** additive. The formation controller, defensive manoeuvres, target
 deconfliction, takeover and economy invariants are not touched.
 
@@ -365,3 +366,42 @@ Re-checked against `TACTICAL_OVERHAUL_PLAN.md` §7 and §15.
 - A per-weapon-station loadout editor.
 - Multiplayer sync of loadout or pilot state.
 - Any balance tuning beyond keeping loadout pricing and rank effects non-broken.
+
+## 12. Superseded: the pylon editor
+
+§11 listed "a per-weapon-station loadout editor" as out of scope, and §5 built the LOADOUT
+tab around five role presets instead. That call has been reversed: the tab is now a
+template editor with a row per hardpoint set and a store list per row.
+
+**What changed and why.** The presets were a rule over the airframe's stock stores, chosen
+so the panel would never have to name a weapon. In use that turned out to be the wrong
+economy — the player who cares enough to buy a wingman generally cares which missile it
+carries, and the preset could not be argued with. Reading the game's own data more closely
+also removed the reason the editor looked expensive: `HardpointSet` publishes `name`,
+`SymmetryWithPrev`/`SymmetryName`, and `BlockedByOtherHardpoint(Loadout)`, and
+`AircraftParameters.StandardLoadouts` publishes the airframe's own named factory fits.
+Every rule the editor needs is the game's, so none of it is this mod's invention.
+
+**What the tab is now.** A workshop, and nothing on it is per-mission:
+
+- One template = airframe + name + one store `jsonKey` per hardpoint set. Empty is legal.
+- Symmetric pairs are drawn and edited as one row; the mirror is written with its partner.
+- A pylon the current fit rules out is drawn greyed and says why, on the game's own answer.
+- The role presets survive as **seed** buttons, alongside the airframe's factory loadouts,
+  filling every pylon at once so the editor never starts from a stripped aircraft.
+- The "IN THE AIR" list is gone. It reported something the player cannot change from here,
+  and the WING tab already says what each wingman is carrying.
+
+**Where a fit is chosen.** On SUPPLY, next to the price — a FIT dropdown listing the
+standard fit and the templates saved for that airframe. §5.3's split is unchanged
+underneath: `WingLoadoutChoice` gained a `TemplateId` case, and everything that carries a
+choice by value — the shop, delivery, the reserve, recovery, takeover — was untouched.
+
+**Newly in scope, deliberately:** template persistence across missions (a
+`ConfigEntry<string>` blob, `Loadout/SavedTemplates`) and the mod's first text input, which
+requires holding the Rewired keyboard off the aircraft while the field is focused
+(`WingKeyboardGuard`). **Still out of scope:** multiplayer sync of template state, fuel
+ratio, and editing an aircraft that is already flying.
+
+Also note: §5.3's table mentions a `WingLoadoutBook.reserved` FIFO that no longer exists.
+Recovery fits live on the concrete `WingSupplyReserve.Slot` instead.

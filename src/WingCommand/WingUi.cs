@@ -306,6 +306,317 @@ namespace WingCommand
             return behaviour;
         }
 
+        // ------------------------------------------------------------------ text entry
+
+        /// <summary>
+        /// A single-line text field in the panel's idiom.
+        ///
+        /// The field carries a real risk the rest of this file does not: while it has focus
+        /// every keystroke is also a flight control, so typing a template name would roll the
+        /// aircraft and fire its weapons. <see cref="WingKeyboardGuard"/> holds the game's
+        /// keyboard off for exactly as long as the field is focused, the same way the game's
+        /// own chat box does.
+        /// </summary>
+        public static TMP_InputField InputField(RectTransform parent, Rect rect,
+                                                int characterLimit, Action<string> onChanged,
+                                                string tooltip = null)
+        {
+            var go = new GameObject("InputField", typeof(RectTransform), typeof(Image));
+            var rt = go.GetComponent<RectTransform>();
+            rt.SetParent(parent, worldPositionStays: false);
+            Place(rt, rect);
+
+            Image background = go.GetComponent<Image>();
+            background.color = CardFill;
+            background.raycastTarget = true;
+            Outline(rt, new Rect(0f, 0f, rect.width, rect.height), FrameColor);
+
+            // The viewport clips the text; TMP_InputField insists on one and will build a
+            // broken field without it.
+            var viewportGo = new GameObject("Viewport", typeof(RectTransform), typeof(RectMask2D));
+            var viewport = viewportGo.GetComponent<RectTransform>();
+            viewport.SetParent(rt, worldPositionStays: false);
+            Place(viewport, new Rect(Space2, 0f, rect.width - Space2 * 2f, rect.height));
+
+            TMP_Text text = Label(viewport, "", new Rect(0f, 0f, rect.width - Space2 * 2f,
+                                                         rect.height),
+                                  Friendly, FontBody, FontStyles.Normal,
+                                  TextAlignmentOptions.Left);
+            text.raycastTarget = false;
+
+            TMP_Text placeholder = Label(viewport, "NAME",
+                                         new Rect(0f, 0f, rect.width - Space2 * 2f, rect.height),
+                                         Disabled, FontBody, FontStyles.Italic,
+                                         TextAlignmentOptions.Left);
+            placeholder.raycastTarget = false;
+
+            var field = go.AddComponent<TMP_InputField>();
+            field.textViewport = viewport;
+            field.textComponent = text;
+            field.placeholder = placeholder;
+            field.lineType = TMP_InputField.LineType.SingleLine;
+            field.characterLimit = characterLimit;
+            field.richText = false;
+            field.restoreOriginalTextOnEscape = true;
+            field.caretWidth = 2;
+            field.customCaretColor = true;
+            field.caretColor = Green;
+            field.selectionColor = new Color(Green.r, Green.g, Green.b, 0.35f);
+
+            // Commit on end-edit rather than per keystroke: the value is written to a config
+            // file, and saving it once per character typed is a file write per character.
+            if (onChanged != null) field.onEndEdit.AddListener(v => onChanged(v));
+
+            field.onSelect.AddListener(_ => WingKeyboardGuard.Capture());
+            field.onDeselect.AddListener(_ => WingKeyboardGuard.Release());
+
+            if (!string.IsNullOrEmpty(tooltip))
+                go.AddComponent<WingHoverNote>().Note = tooltip;
+
+            return field;
+        }
+
+        // ---------------------------------------------------------------------- popup
+
+        /// <summary>
+        /// An overlay list anchored under a control: the panel's dropdown.
+        ///
+        /// It exists because the two lists this rework needs — the stores that fit a pylon,
+        /// and the templates saved for an airframe — are both far too tall to give permanent
+        /// room to on a panel already carrying four pages. Drawn as a late sibling of the
+        /// page root so it covers the content beneath it, behind a full-page scrim that
+        /// swallows the click that dismisses it.
+        ///
+        /// One popup is open at a time, tracked statically, because there is one pointer and
+        /// two open lists would be two things claiming the same clicks.
+        /// </summary>
+        public sealed class Popup
+        {
+            private readonly GameObject root;
+            private readonly RectTransform listRect;
+            private readonly Image listGround;
+            private readonly List<PopupRow> rows = new List<PopupRow>();
+
+            private static Popup open;
+
+            /// <summary>
+            /// Rows the list draws at once.
+            ///
+            /// Seven, which is as much as can hang off a control without the list running
+            /// past the bottom of the panel from a row near the foot of the page. A longer
+            /// list pages: the last row becomes the page turn.
+            /// </summary>
+            public const int MaxRows = 7;
+
+            /// <summary>Content rows on a list long enough to need the page-turn row.</summary>
+            private const int PagedRows = MaxRows - 1;
+
+            public Popup(RectTransform pageRoot, float panelWidth)
+            {
+                root = new GameObject("Popup", typeof(RectTransform));
+                var rt = root.GetComponent<RectTransform>();
+                rt.SetParent(pageRoot, worldPositionStays: false);
+                Stretch(rt);
+
+                // The scrim is the whole page, transparent, and eats any click that is not
+                // on a row. Without it a click meant to dismiss the list lands on whatever
+                // control happens to be underneath and does that instead.
+                HitButton(rt, new Rect(0f, 0f, panelWidth, 4000f), Close);
+
+                // The list gets an opaque ground and a frame of its own. It is drawn over
+                // live content rather than over the panel card, so without both it reads as
+                // rows floating on top of the controls they are covering.
+                var listGo = new GameObject("PopupList", typeof(RectTransform), typeof(Image));
+                listRect = listGo.GetComponent<RectTransform>();
+                listRect.SetParent(rt, worldPositionStays: false);
+
+                // The stock card sprite rather than a hand-built outline: it is sliced, so it
+                // keeps its edge and corners at whatever height the list turns out to be,
+                // and a hairline Outline would have to be rebuilt on every open.
+                listGround = listGo.GetComponent<Image>();
+                listGround.sprite = PanelSprite();
+                listGround.type = Image.Type.Sliced;
+                listGround.color = Color.white;
+                listGround.raycastTarget = true;
+
+                root.SetActive(false);
+            }
+
+            public bool IsOpen => root != null && root.activeSelf;
+
+            /// <summary>Close whatever list is open, wherever it is.</summary>
+            public static void CloseAny() => open?.Close();
+
+            /// <summary>
+            /// Show the list at a position, bound to a set of entries.
+            ///
+            /// The caller owns the entries and what selecting one means; this only draws
+            /// them and reports the index back.
+            /// </summary>
+            public void Show(Rect area, IReadOnlyList<PopupEntry> entries, Action<int> onPick)
+            {
+                page = 0;
+                Render(area, entries, onPick);
+            }
+
+            /// <summary>
+            /// Draw one page of the list.
+            ///
+            /// Separate from <see cref="Show"/> so the page-turn row can call it again with
+            /// the same arguments. A list that fits needs none of this; a pylon offering a
+            /// dozen stores does, and silently showing the first six of them would be a menu
+            /// that lies about what the aircraft can carry.
+            /// </summary>
+            private void Render(Rect area, IReadOnlyList<PopupEntry> entries, Action<int> onPick)
+            {
+                if (root == null) return;
+
+                open?.Close();
+                open = this;
+
+                int total = entries?.Count ?? 0;
+                bool paged = total > MaxRows;
+                int perPage = paged ? PagedRows : MaxRows;
+                int pages = paged ? Mathf.CeilToInt(total / (float)perPage) : 1;
+
+                page = pages > 0 ? ((page % pages) + pages) % pages : 0;
+
+                int first = page * perPage;
+                int shown = Mathf.Min(perPage, total - first);
+                int used = shown + (paged ? 1 : 0);
+
+                float height = Mathf.Max(RowPitch, RowPitch * used) + Space1 * 2f;
+                Place(listRect, new Rect(area.x, area.y, area.width, height));
+
+                while (rows.Count < MaxRows) rows.Add(new PopupRow(listRect, rows.Count));
+
+                for (int i = 0; i < rows.Count; i++)
+                {
+                    if (i < shown)
+                    {
+                        int index = first + i;
+                        rows[i].Bind(entries[index], area.width, () =>
+                        {
+                            Close();
+                            onPick?.Invoke(index);
+                        });
+                    }
+                    else if (paged && i == shown)
+                    {
+                        // The page turn is a row of the list rather than an arrow beside it:
+                        // the list is already a floating thing over live content, and giving
+                        // it furniture of its own would make it a second panel.
+                        rows[i].Bind(
+                            new WingUi.PopupEntry(
+                                "MORE...", "page " + (page + 1) + " of " + pages),
+                            area.width,
+                            () =>
+                            {
+                                page++;
+                                Render(area, entries, onPick);
+                            });
+                    }
+                    else
+                    {
+                        rows[i].Hide();
+                    }
+                }
+
+                root.SetActive(true);
+
+                // Last sibling so it draws over the page it is covering. Re-asserted on every
+                // open because anything built after it would otherwise sit on top.
+                root.transform.SetAsLastSibling();
+            }
+
+            /// <summary>Which page of a long list is showing.</summary>
+            private int page;
+
+            public void Close()
+            {
+                if (root == null) return;
+                root.SetActive(false);
+                if (ReferenceEquals(open, this)) open = null;
+            }
+        }
+
+        /// <summary>One line of a <see cref="Popup"/>: what it says and whether it is current.</summary>
+        public readonly struct PopupEntry
+        {
+            public readonly string Text;
+            public readonly string Detail;
+            public readonly bool Selected;
+            public readonly bool Enabled;
+
+            public PopupEntry(string text, string detail = null, bool selected = false,
+                              bool enabled = true)
+            {
+                Text = text;
+                Detail = detail;
+                Selected = selected;
+                Enabled = enabled;
+            }
+        }
+
+        private sealed class PopupRow
+        {
+            private readonly GameObject go;
+            private readonly Image fill;
+            private readonly TMP_Text label;
+            private readonly TMP_Text detail;
+            private readonly WingButton hit;
+            private readonly int index;
+
+            public PopupRow(RectTransform parent, int index)
+            {
+                this.index = index;
+                go = new GameObject("PopupRow" + index, typeof(RectTransform), typeof(Image));
+                var rt = go.GetComponent<RectTransform>();
+                rt.SetParent(parent, worldPositionStays: false);
+
+                fill = go.GetComponent<Image>();
+                fill.color = PanelBackground;
+                fill.raycastTarget = true;
+
+                label = Label(rt, "", new Rect(Space2, 0f, 10f, RowHeight), Friendly, FontSmall,
+                              FontStyles.Normal, TextAlignmentOptions.Left);
+                detail = Label(rt, "", new Rect(0f, 0f, 10f, RowHeight), Dim, FontMicro,
+                               FontStyles.Normal, TextAlignmentOptions.Right);
+
+                hit = HitButton(rt, new Rect(0f, 0f, 10f, RowHeight), null);
+                go.SetActive(false);
+            }
+
+            public void Bind(PopupEntry entry, float width, Action onPick)
+            {
+                Place((RectTransform)go.transform,
+                      new Rect(0f, -(RowPitch * index) - Space1, width, RowHeight));
+
+                float detailWidth = string.IsNullOrEmpty(entry.Detail) ? 0f : 96f;
+                Place((RectTransform)label.transform,
+                      new Rect(Space2, 0f, width - Space2 * 2f - detailWidth, RowHeight));
+                Place((RectTransform)detail.transform,
+                      new Rect(width - Space2 - detailWidth, 0f, detailWidth, RowHeight));
+                Place((RectTransform)hit.transform, new Rect(0f, 0f, width, RowHeight));
+
+                label.text = entry.Text ?? "";
+                label.color = !entry.Enabled ? Disabled : entry.Selected ? Green : Friendly;
+                detail.text = entry.Detail ?? "";
+
+                Color rest = entry.Selected ? CardFillSelected : PanelBackground;
+                hit.SetRowHighlight(fill, rest, CardFillHover);
+                hit.SetAction(entry.Enabled ? onPick : null);
+                hit.SetEnabled(entry.Enabled);
+
+                if (!go.activeSelf) go.SetActive(true);
+            }
+
+            public void Hide()
+            {
+                if (go.activeSelf) go.SetActive(false);
+            }
+        }
+
         /// <summary>
         /// Section heading with a rule running out to the right of it, which is how the stock
         /// panels separate their groups.
@@ -503,6 +814,19 @@ namespace WingCommand
 
         public static void ClearTooltip() => HoveredTooltip = null;
 
+        /// <summary>Publish a note from something that is not a button. See <see cref="WingHoverNote"/>.</summary>
+        internal static void PublishExternal(string text, bool entering)
+        {
+            if (entering)
+            {
+                if (!string.IsNullOrEmpty(text)) HoveredTooltip = text;
+            }
+            else if (!string.IsNullOrEmpty(text) && HoveredTooltip == text)
+            {
+                HoveredTooltip = null;
+            }
+        }
+
         /// <summary>Describe this control for the panel's status line. Null disables it.</summary>
         public WingButton WithTooltip(string text)
         {
@@ -572,6 +896,16 @@ namespace WingCommand
             if (!interactable) { hovered = false; pressed = false; }
             Apply();
         }
+
+        /// <summary>
+        /// Point this control at a different action without rebuilding it.
+        ///
+        /// For rows that are rebound rather than recreated — a popup line stands for a
+        /// different store every time the list opens, and a row still wired to the previous
+        /// list's action is the worst kind of bug a menu can have. A null action leaves the
+        /// row inert.
+        /// </summary>
+        public void SetAction(Action action) => onClick = action;
 
         /// <summary>Set the label without rebuilding the button.</summary>
         public void SetText(string text)

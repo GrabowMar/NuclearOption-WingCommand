@@ -23,7 +23,8 @@ player reserves without turning Nuclear Option into an RTS.
 ## Highlights
 
 - Command the whole wing quickly from the native radial, or select individual wingmen in WMC.
-- Requisition wingmen with a chosen loadout, kept per airframe from purchase through recovery.
+- Requisition wingmen with a loadout you built yourself, pylon by pylon, kept per airframe
+  from purchase through recovery.
 - Tell a wingman which of its own weapons to reach for first, separately from its ROE.
 - Read live aircraft and pilot state, and a callsign, rank and record that grow with the mission.
 - Click wing icons on the tactical map to build a command scope independent of weapon targets.
@@ -89,8 +90,8 @@ using **F1**.
 3. Switch to **WMC > Tactical**. Click a roster row or wing icon; Shift-click builds a
    multi-aircraft scope and **Select All** restores whole-wing scope.
 4. Issue an order. **Hold Here** and **Land Here** arm the map cursor; click the destination.
-5. Before requisitioning, open **WMC > Loadout** to choose the fit that airframe launches
-   with — and, for a transport, what it is carrying.
+5. Build a loadout template on **WMC > Loadout**, pylon by pylon, then choose it in the
+   **FIT** row on **WMC > Supply** before you requisition.
 6. Use the compact **Wing Command** radial when you need immediate whole-wing combat orders.
 
 If your pilot is killed or ejects while wingmen survive, WingCommand holds them in safe
@@ -146,10 +147,10 @@ The **WMC** page has four focused tabs:
 - **Tactical:** paged roster, independent command selection, ROE, preferred weapon, six core
   formations, scoped orders, capability-gated Cargo/Land controls, and map-order status.
 - **Supply:** funds, wing size and squadron capacity at a glance; the faction catalogue at
-  flat list prices, including the loadout each requisition will carry; confirmed active-AI
-  assignment; and a concrete three-airframe reserve.
-- **Loadout:** the fit the next requisition of an airframe launches with, the cargo a
-  transport carries, and what every wingman already in the air is carrying.
+  flat list prices; the fit each requisition will carry, chosen from your saved templates;
+  confirmed active-AI assignment; and a concrete three-airframe reserve.
+- **Loadout:** a per-pylon editor for named loadout templates — the airframe's own
+  hardpoints, its own stores, and its own exclusion rules — saved across missions.
 - **Wing:** fuel, ammunition, cargo, hull state and current order for one wingman, with its
   pilot's callsign, rank, record and background.
 
@@ -316,27 +317,49 @@ succeeds.
 
 ## Loadouts
 
-A requisition is configured before it launches, on **WMC > Loadout**.
+**WMC > Loadout** is a workbench: you build named templates there, pylon by pylon. **WMC >
+Supply** is where you choose which template the next requisition actually flies with.
 
-- Options come from the airframe's own weapon stations — the same stores the game's aircraft
+### Building a template
+
+- Pick the airframe, press **+**, and you get a template seeded from that aircraft's first
+  factory loadout — not a stripped airframe.
+- The **PYLONS** list is the airframe's own hardpoints, under the names the airframe gives
+  them. Click a pylon to choose what hangs on it, from the same stores the game's aircraft
   selection menu offers for that hardpoint. WingCommand adds no weapons of its own.
-- Five fits: `STANDARD` (the airframe's own AI loadout), `AIR-AIR`, `AIR-GND`, `BALANCED`,
-  and `CARGO` for transports. A fit an airframe has no stores for is not offered.
-- The choice belongs to the airframe, not the type. Configuring one VT-7 does not configure
-  the next one you buy.
+- **Empty is a choice.** Leave a station clean to take the weight off.
+- A left/right pair is one row and moves together, because the game will not let them differ.
+- A pylon that the rest of your fit rules out reads `BLOCKED` and goes inert. That is the
+  airframe's own exclusion rule, asked of the game rather than guessed at.
+- **SEED** fills every pylon at once from a role preset — `AIR-AIR`, `AIR-GND`, `BALANCED`,
+  `CARGO` — and **STOCK** fills it from one of the airframe's own named factory loadouts.
+  Both are starting points to edit, not final answers.
+- The line under the list totals what you have built: pylons filled, weight, and role.
+- Name the template in the **NAME** field. Flight controls are held off while you type.
+
+Templates are saved to the config file and survive restarts. Up to eight per airframe.
+
+### Flying one
+
+On **Supply**, the **FIT** row picks between the airframe's standard fit and any template
+you have saved for it. That is what the next requisition of that type launches with.
+
 - Equipment is fitted when an aircraft is created, so a wingman already in the air cannot be
-  reconfigured. The Loadout tab shows what each one is carrying and says so.
+  reconfigured. The **Wing** tab shows what each one is carrying.
 - An active mission aircraft you assign from the map flies **as found**. It arrives with
   whatever the mission gave it and cannot be refitted.
 - Return To Base keeps the fit. A recovered airframe goes into the wing reserve carrying
-  what it came home with, and launches that way again.
+  what it came home with, and launches that way again — a template chosen afterwards applies
+  to the next *new* airframe, and Supply says which of the two you are about to get.
+- Deleting a template does not disturb anything already flying it; a purchase order pointing
+  at a deleted template falls back to the standard fit.
 
 Loadouts do not change what an airframe costs. A requisition is list price, exactly as before.
 
 ### Cargo
 
-For a transport, the Loadout tab also chooses **what it is carrying**, from the cargo mounts
-the airframe itself offers.
+A transport carries whatever cargo pod you put on its cargo pylon, chosen the same way as
+any other store.
 
 **Deliver Cargo takes a drop point.** Press it, then click the map, exactly as Hold Here and
 Land Here work; a cargo marker appears at the point and a line runs to it from every wingman

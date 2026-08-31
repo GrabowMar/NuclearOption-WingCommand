@@ -89,17 +89,6 @@ namespace WingCommand
             return total;
         }
 
-        public static int LoadoutCountOf(AircraftDefinition definition)
-        {
-            if (definition == null) return 0;
-            int total = 0;
-            for (int i = 0; i < slots.Count; i++)
-                if (slots[i].Definition == definition && slots[i].HasLoadout &&
-                    !slots[i].ReservedForPurchase)
-                    total++;
-            return total;
-        }
-
         public static int FactionStockOf(AircraftDefinition definition) =>
             hq != null && definition != null ? hq.GetUnitSupply(definition) : 0;
 
