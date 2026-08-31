@@ -138,7 +138,7 @@ namespace WingCommand
 
         /// <summary>
         /// Range cap for a target explicitly designated by the player. ROE must not shorten
-        /// an Attack or Fire For Effect order; the selected weapon's own envelope remains
+        /// an Attack or Splash 'Em order; the selected weapon's own envelope remains
         /// the final authority on whether a shot is valid.
         /// </summary>
         public static float ExplicitOrderRange() =>

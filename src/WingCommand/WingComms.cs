@@ -39,6 +39,7 @@ namespace WingCommand
             Panic,
             DefensiveClear,
             Recovered,
+            Detached,
         }
 
         private const float RepeatCooldown = 12f;

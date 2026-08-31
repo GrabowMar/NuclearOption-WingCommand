@@ -158,6 +158,10 @@ namespace WingCommand
 
         private void Transit(bool rotary)
         {
+            // Both routes to the drop point are cruises. Anything left configured to hover
+            // from a previous let-down would never make the transit.
+            HoverAssist.Release(aircraft);
+
             if (rotary)
             {
                 AircraftParameters p = aircraft.GetAircraftParameters();
@@ -191,7 +195,7 @@ namespace WingCommand
         private void DeliverRotary()
         {
             hold = Mathf.Max(0f, hold - DescentRate * Time.fixedDeltaTime);
-            aircraft.autopilot.Hover(point, hold, facing);
+            HoverAssist.Hover(aircraft, point, hold, facing);
 
             if (aircraft.radarAlt <= ReleaseAltitude) TryRelease();
             CheckStalled();
@@ -259,7 +263,7 @@ namespace WingCommand
                     aircraft.SetGear(deployed: false);
 
                 hold = Mathf.Min(EgressAltitude, hold + DescentRate * 2f * Time.fixedDeltaTime);
-                aircraft.autopilot.Hover(point, hold, facing);
+                HoverAssist.Hover(aircraft, point, hold, facing);
                 return;
             }
 

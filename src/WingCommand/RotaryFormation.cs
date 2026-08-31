@@ -108,9 +108,15 @@ namespace WingCommand
                 // direction of travel while closing, then swing onto the leader's heading on
                 // station — that swing is what a helicopter does on the pad.
                 Vector3 lookDir = onStation ? heading : slotDir;
-                aircraft.autopilot.Hover(slotPos, 0f, lookDir);
+                HoverAssist.Hover(aircraft, slotPos, 0f, lookDir);
                 return Mode.Hover;
             }
+
+            // Leaving the hover regime has to undo the hovering configuration as well as
+            // change the command. A thrust-vectoring wingman that keeps auto-hover set holds
+            // its nozzles down and cannot accelerate, so the leader departs and it never
+            // gets back out of the mode it needs speed to leave.
+            HoverAssist.Release(aircraft);
 
             Cruise(aircraft, leader, toSlotFlat, flat, slotDir, heading, leaderVel,
                    leaderVelFlat, spacing, slotStack, onStation);

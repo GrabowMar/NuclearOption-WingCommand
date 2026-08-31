@@ -109,6 +109,7 @@ namespace WingCommand
 
         public static void Reset()
         {
+            WingRadioAudio.Reset();
             queue.Clear();
             current = null;
             currentAt = 0f;
@@ -130,6 +131,11 @@ namespace WingCommand
             queue.RemoveAt(0);
             currentAt = Time.unscaledTime;
             currentDuration = Mathf.Clamp(2.35f + current.Message.Length * 0.018f, 2.65f, 4.1f);
+
+            // Voiced here rather than at Enqueue: a queued line may wait several seconds
+            // behind the flight ahead of it, and a click that arrives before its own
+            // subtitle belongs to nothing the player can read.
+            WingRadioAudio.Transmission();
 
             identityLabel.text = current.Identity;
             messageLabel.text = "<<  " + current.Message + "  >>";

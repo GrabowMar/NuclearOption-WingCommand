@@ -40,6 +40,11 @@ namespace WingCommand
             controlInputs = aircraft.GetInputs();
 
             aircraft.SetFlightAssist(enabled: true);
+
+            // An orbit is flown, not hovered. Anything arriving here from a hover has to
+            // have that configuration taken off it before it is asked to fly a circle.
+            HoverAssist.Release(aircraft);
+
             if (aircraft.gearState != LandingGear.GearState.LockedRetracted)
                 aircraft.SetGear(deployed: false);
 

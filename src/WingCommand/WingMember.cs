@@ -326,8 +326,16 @@ namespace WingCommand
             Apply(WingOrder.Formation);
         }
 
-        /// <summary>True when this aircraft can set down where it is.</summary>
-        public bool CanLandInPlace => WingRegistry.IsRotary(Aircraft);
+        /// <summary>
+        /// True when this aircraft can set down where it is.
+        ///
+        /// Asked of the hover controller rather than the autopilot type. The two disagree
+        /// on exactly the aircraft this order exists for: a thrust-vectoring jet flies an
+        /// <c>AutopilotPlane</c>, so it failed the rotary test, but it hovers and lands
+        /// vertically as readily as any helicopter. <see cref="WingRegistry.IsRotary"/>
+        /// still decides which formation model to fly, which is a different question.
+        /// </summary>
+        public bool CanLandInPlace => HoverAssist.CanHover(Aircraft);
 
         /// <summary>
         /// How intact the airframe is, 0-1, from the game's own part hit points. Read by
@@ -374,6 +382,49 @@ namespace WingCommand
             OnLeash = false;
             IsPanicking = false;
             SwitchToCombat();
+        }
+
+        /// <summary>
+        /// Dismiss this aircraft: send it home rather than back to the stock combat AI.
+        ///
+        /// The right ending for a release the player asked for. Handing a released wingman
+        /// to the combat AI left it fighting on the player's behalf without being theirs to
+        /// command, and holding a squadron slot indefinitely; flying it home ends the sortie
+        /// properly, returns the airframe to stock and gives the capacity back.
+        ///
+        /// Automatic breaks still use <see cref="ReleaseToCombat"/> — a wingman that loses
+        /// its leader mid-fight should keep fighting, not run for the runway.
+        /// </summary>
+        public void SendHome(string reason)
+        {
+            if (deliveryPending)
+            {
+                // Still under the airbase's own taxi/launch AI, and not airborne to be sent
+                // anywhere. Hand it back untouched.
+                deliveryPending = false;
+                TacticalCoordinator.Release(Aircraft);
+                return;
+            }
+
+            if (Plugin.Config2.VerboseLogging.Value)
+                Plugin.Logger.LogInfo($"[Wing] {Name} released and sent home: {reason}");
+
+            TacticalCoordinator.Release(Aircraft);
+            Directive = WingDirective.Simple(WingOrder.ReturnToBase);
+            OnLeash = false;
+            IsPanicking = false;
+
+            // The pilot flew a sortie and is going home from it, exactly as one ordered to
+            // Return To Base does. Credited here because the settlement that normally
+            // credits it runs long after this pilot has left the seat.
+            WingPilotRoster.NoteSortie(Aircraft);
+
+            // Registered before the state switch, so that an aircraft already sitting on a
+            // runway - settled by the very next recovery pass - is tracked rather than
+            // settled as an aircraft nobody released.
+            WingDeparture.Begin(this);
+            WingComms.Say(this, WingComms.Call.Detached);
+            SwitchToLanding();
         }
 
         /// <summary>True while this member is off the wing on a leashed engagement.</summary>
