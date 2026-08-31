@@ -38,13 +38,37 @@ Vanilla Nuclear Option gives you a wingman who mostly does their own thing. Wing
 
 ## 📸 Screenshots
 
+<!--
+GALLERY — replace the src paths below once real screenshots are in docs/images/.
+Keep filenames matching what's referenced here, or update the paths to match yours.
+Recommended size: 1280x720 screenshots, compressed PNG or JPG (GitHub doesn't limit
+file size much, but keep the repo lean — a few hundred KB per image is plenty).
+-->
+<table align="center">
+  <tr>
+    <td align="center" width="50%">
+      <img src="docs/images/tactical-map.png" width="100%" alt="Tactical map with wing selected"><br>
+      <sub>Tactical map — selecting and tasking a wing</sub>
+    </td>
+    <td align="center" width="50%">
+      <img src="docs/images/wmc-supply.png" width="100%" alt="WMC Supply tab"><br>
+      <sub>WMC Supply — buying and reserving aircraft</sub>
+    </td>
+  </tr>
+  <tr>
+    <td align="center" width="50%">
+      <img src="docs/images/formation-flying.png" width="100%" alt="Wing flying in formation"><br>
+      <sub>Finger Four holding formation on a strike run</sub>
+    </td>
+    <td align="center" width="50%">
+      <img src="docs/images/radial-menu.png" width="100%" alt="Wing Command radial menu"><br>
+      <sub>The Wing Command radial menu</sub>
+    </td>
+  </tr>
+</table>
+
 <div align="center">
-<!-- Drop screenshots or a short GIF into docs/images/ and reference them here, e.g.: -->
-<!-- <img src="docs/images/tactical-map.png" width="800" alt="Tactical map wing selection"> -->
-<!-- <img src="docs/images/wmc-supply.png" width="800" alt="Supply tab"> -->
-
-*Add screenshots of the tactical map, the WMC Supply tab, and a formation in flight to `docs/images/` — this section is ready for them.*
-
+<sub>Have better shots or a gameplay GIF? Swap the files in <code>docs/images/</code> — the paths above already point there.</sub>
 </div>
 
 ## 📦 Installation
