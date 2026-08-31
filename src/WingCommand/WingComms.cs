@@ -1,13 +1,14 @@
+using System.Collections.Generic;
 using UnityEngine;
 
 namespace WingCommand
 {
     /// <summary>
-    /// Wingman radio calls, written into the game's own on-screen message feed.
+    /// Wingman radio calls, written into the dedicated squadron subtitle surface.
     ///
     /// Until now the only way to tell what the wing was doing was to read the BepInEx
-    /// log, which is a poor way to command a flight. <c>MessageUI.GameMessage</c> is public
-    /// on a SceneSingleton, so this needs no patching.
+    /// log, which is a poor way to command a flight. Operational notices continue to use
+    /// the game's feed; spoken radio gets a speaker identity and a separately styled line.
     ///
     /// Calls are rate-limited per member per kind: a wingman that is repeatedly defending
     /// should say so once, not once per engagement tick.
@@ -43,84 +44,74 @@ namespace WingCommand
         private const float RepeatCooldown = 12f;
 
         /// <summary>Per member+kind cooldowns, keyed so one wingman cannot spam the feed.</summary>
-        private static readonly System.Collections.Generic.Dictionary<string, float> lastSpoken =
-            new System.Collections.Generic.Dictionary<string, float>();
+        private static readonly Dictionary<string, float> lastSpoken =
+            new Dictionary<string, float>();
 
         public static void Say(WingMember member, Call call, string detail = null)
         {
             if (!Plugin.Config2.RadioChatter.Value || member == null) return;
 
-            string key = member.Slot + ":" + call;
+            WingPilot pilot = member.Crew;
+            string speakerKey = pilot != null && !string.IsNullOrWhiteSpace(pilot.Callsign)
+                ? pilot.Callsign
+                : member.Slot.ToString();
+            string key = speakerKey + ":" + call;
             if (lastSpoken.TryGetValue(key, out float last) &&
                 Time.timeSinceLevelLoad - last < RepeatCooldown)
                 return;
 
             lastSpoken[key] = Time.timeSinceLevelLoad;
-            Broadcast(Callsign(member) + ", " + Phrase(call, detail));
-        }
-
-        /// <summary>A call from the flight as a whole, in response to a player order.</summary>
-
-        public static void Reset() => lastSpoken.Clear();
-
-        private static void Broadcast(string line)
-        {
-            try
-            {
-                MessageUI ui = SceneSingleton<MessageUI>.i;
-                if (ui != null) ui.GameMessage(line);
-            }
-            catch
-            {
-                // The feed is cosmetic; never let a missing UI break the wing.
-            }
+            string phrase = ChatterDialogue.Event(
+                Persona(member), call.ToString(), detail, Random.Range(0, int.MaxValue));
+            Broadcast(member, phrase, call == Call.Panic || call == Call.Breaking);
         }
 
         /// <summary>
-        /// Wingmen are numbered from two, as in a real flight: the player is One.
+        /// A short roll-call response from exactly the aircraft that accepted an order.
+        /// The HUD queue staggers the lines, so a group command reads as a flight answering
+        /// in turn instead of one anonymous "Wing: copy" notification.
         /// </summary>
-        private static string Callsign(WingMember member)
+        public static void Acknowledge(IReadOnlyList<WingMember> members, WingOrder order)
         {
-            switch (member.Slot)
+            if (!Plugin.Config2.RadioChatter.Value || members == null) return;
+
+            // AttackTarget and FireForEffect already produce contextual "in hot" calls at
+            // the moment each target is assigned. Adding a second copy here would make the
+            // same pilot answer twice to one command.
+            if (order == WingOrder.Attack || order == WingOrder.FireForEffect) return;
+
+            for (int i = 0; i < members.Count; i++)
             {
-                case 1: return "Two";
-                case 2: return "Three";
-                case 3: return "Four";
-                default: return "Number " + (member.Slot + 1);
+                WingMember member = members[i];
+                if (member == null) continue;
+                string phrase = ChatterDialogue.Acknowledge(
+                    Persona(member), order.ToString(), Random.Range(0, int.MaxValue));
+                Broadcast(member, phrase, urgent: false);
             }
         }
 
-        private static string Phrase(Call call, string detail)
+        public static void Tick() => WingChatterHud.Tick();
+
+        public static void Reset()
         {
-            switch (call)
-            {
-                case Call.Engaging:   return detail != null ? "engaging " + detail : "engaging";
-                case Call.Defending:  return "defending";
-                case Call.Splash:     return detail != null ? "splash " + detail : "splash one";
-                case Call.Winchester: return "Winchester, returning to base";
-                case Call.Bingo:      return "bingo fuel, returning to base";
-                case Call.Rejoining:  return "rejoining";
-                case Call.Unable:     return "unable to keep up, returning to base";
-                case Call.Breaking:   return detail != null ? "breaking " + detail : "breaking";
-                case Call.FallingBack: return "breaking off, falling back";
-                case Call.Holding:    return "holding at standoff";
-                case Call.Covering:   return "covering you";
-                case Call.Orbiting:   return "on station, orbiting";
-                case Call.Delivering: return "running the cargo in";
-                case Call.Delivered:  return "cargo away, delivery complete";
-                case Call.NoDropOff:  return "no drop-off available, bringing the cargo back";
-                case Call.FireForEffect: return detail != null
-                    ? "in hot on " + detail + ", fire for effect"
-                    : "in hot, fire for effect";
-                case Call.Expended:   return "rounds complete, expended, off target";
-                case Call.Down:       return "on the deck";
-                case Call.Panic:      return detail != null
-                    ? "missile " + detail + ", defensive!"
-                    : "missile, defensive!";
-                case Call.DefensiveClear: return "threat clear, resuming";
-                case Call.Recovered:  return "down and shut down, airframe back in the pool";
-                default:              return "copy";
-            }
+            lastSpoken.Clear();
+            WingChatterHud.Reset();
         }
+
+        private static void Broadcast(WingMember member, string line, bool urgent)
+        {
+            if (member == null || string.IsNullOrWhiteSpace(line)) return;
+            WingChatterHud.Enqueue(Identity(member), line, urgent);
+        }
+
+        private static string Identity(WingMember member)
+        {
+            WingPilot pilot = member.Crew;
+            if (pilot != null) return ChatterDialogue.Identity(pilot.Name, pilot.Callsign);
+            return "WING " + (member.Slot + 1) + " \"NO CALLSIGN\"";
+        }
+
+        private static ChatterPersona Persona(WingMember member) =>
+            member?.Crew != null ? member.Crew.Persona : ChatterPersona.Professional;
     }
 }

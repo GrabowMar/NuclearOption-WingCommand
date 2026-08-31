@@ -127,6 +127,7 @@ namespace WingCommand
             WingMarkers.Tick(Wing);
             WingHud.TickStatusPanel(Wing);
             WmcScreen.Tick(Wing);
+            WingComms.Tick();
             WingShopDelivery.Tick();
             FlushRecruitQueue();
         }
@@ -536,14 +537,16 @@ namespace WingCommand
 
         private void Show(WingDispatchResult result)
         {
-            Toast(result.Message);
-            if (result.Success && result.Applied > 0)
+            if (!result.Success)
             {
-                WingMember speaker = Commands.Scope(wholeWing: false).Count > 0
-                    ? Commands.Scope(wholeWing: false)[0]
-                    : Wing.Members.Count > 0 ? Wing.Members[0] : null;
-                WingComms.Say(speaker, WingComms.Call.Copy);
+                Toast(result.Message);
+                return;
             }
+
+            // Successful orders are confirmed by the pilots themselves. Mirroring the same
+            // event into MessageUI produced the old black "Wing: Engage" box beside the new
+            // radio subtitle. Keep the native feed for actual command failures only.
+            WingComms.Acknowledge(result.Responders, result.Order);
         }
 
         /// <summary>Drop one member back to the stock AI. Used by the map panel.</summary>

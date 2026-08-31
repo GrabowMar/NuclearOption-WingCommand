@@ -159,7 +159,8 @@ namespace WingCommand
         /// <summary>Distribute designated targets across an explicit command scope.</summary>
         public int AttackTargets(IReadOnlyList<WingMember> candidates,
                                  IReadOnlyList<Unit> targets, out int covered,
-                                 bool forceAll = false)
+                                 bool forceAll = false,
+                                 List<WingMember> orderedMembers = null)
         {
             covered = 0;
             if (candidates == null || targets == null || targets.Count == 0) return 0;
@@ -189,6 +190,7 @@ namespace WingCommand
                     if (target == null) break;
 
                     free[i].AttackTarget(target);
+                    orderedMembers?.Add(free[i]);
                     ordered++;
                     if (seen.Add(target)) covered++;
                 }
@@ -212,6 +214,7 @@ namespace WingCommand
                     if (nearest == null) continue;
 
                     nearest.AttackTarget(target);
+                    orderedMembers?.Add(nearest);
                     ordered++;
                     assignedThisPass = true;
                     assigned[target] = already + 1;

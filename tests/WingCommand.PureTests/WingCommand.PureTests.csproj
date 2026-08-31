@@ -7,6 +7,7 @@
 
   <ItemGroup>
     <Compile Include="../../src/WingCommand/PureLogic.cs" Link="PureLogic.cs" />
+    <Compile Include="../../src/WingCommand/ChatterLogic.cs" Link="ChatterLogic.cs" />
     <Compile Include="../../src/WingCommand/LoadoutTemplateCodec.cs" Link="LoadoutTemplateCodec.cs" />
     <Compile Include="../../src/WingCommand/UiPalette.cs" Link="UiPalette.cs" />
     <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.12.0" />

@@ -8,15 +8,21 @@ namespace WingCommand
         public readonly int Skipped;
         public readonly int CoveredTargets;
         public readonly string Message;
+        public readonly IReadOnlyList<WingMember> Responders;
+        public readonly WingOrder Order;
 
         public bool Success => Applied > 0;
 
-        public WingDispatchResult(int applied, int skipped, string message, int coveredTargets = 0)
+        public WingDispatchResult(int applied, int skipped, string message, int coveredTargets = 0,
+                                  IReadOnlyList<WingMember> responders = null,
+                                  WingOrder order = WingOrder.Formation)
         {
             Applied = applied;
             Skipped = skipped;
             Message = message;
             CoveredTargets = coveredTargets;
+            Responders = responders ?? new WingMember[0];
+            Order = order;
         }
     }
 
@@ -58,14 +64,15 @@ namespace WingCommand
             if (WingOrderCatalog.NeedsPoint(directive.Order) && !directive.HasPoint)
                 return new WingDispatchResult(0, scope.Count, "Select a point on the map");
 
-            int applied = 0;
+            var responders = new List<WingMember>();
             foreach (WingMember member in scope)
             {
                 if (!WingOrderCatalog.CanApply(member, directive.Order)) continue;
                 member.Apply(directive);
-                applied++;
+                responders.Add(member);
             }
 
+            int applied = responders.Count;
             int skipped = scope.Count - applied;
             if (applied == 0)
                 return new WingDispatchResult(0, skipped,
@@ -74,7 +81,8 @@ namespace WingCommand
             string message = ScopePrefix(wholeWing, applied) + ": " +
                              WingOrderCatalog.Label(directive.Order);
             if (skipped > 0) message += " (" + skipped + " unable)";
-            return new WingDispatchResult(applied, skipped, message);
+            return new WingDispatchResult(applied, skipped, message, responders: responders,
+                                          order: directive.Order);
         }
 
         public WingDispatchResult Attack(IReadOnlyList<Unit> targets, bool wholeWing,
@@ -87,7 +95,8 @@ namespace WingCommand
             if (targets == null || targets.Count == 0)
                 return new WingDispatchResult(0, scope.Count, "No target selected");
 
-            int applied = wing.AttackTargets(scope, targets, out int covered, forceAll);
+            var responders = new List<WingMember>();
+            int applied = wing.AttackTargets(scope, targets, out int covered, forceAll, responders);
             int skipped = scope.Count - applied;
             if (applied == 0)
                 return new WingDispatchResult(0, skipped, "No valid target selected");
@@ -95,7 +104,8 @@ namespace WingCommand
             string message = ScopePrefix(wholeWing, applied) + ": attack";
             if (targets.Count > 1) message += " " + covered + " target(s)";
             if (skipped > 0) message += " (" + skipped + " covering)";
-            return new WingDispatchResult(applied, skipped, message, covered);
+            return new WingDispatchResult(applied, skipped, message, covered, responders,
+                                          WingOrder.Attack);
         }
 
         /// <summary>
@@ -117,15 +127,16 @@ namespace WingCommand
             if (target == null)
                 return new WingDispatchResult(0, scope.Count, "No target selected");
 
-            int applied = 0;
+            var responders = new List<WingMember>();
             foreach (WingMember member in scope)
             {
                 if (!WingOrderCatalog.CanApply(member, WingOrder.FireForEffect)) continue;
                 if (!WingWeapons.CanStillEngage(member.Aircraft, target)) continue;
                 member.FireForEffect(target);
-                applied++;
+                responders.Add(member);
             }
 
+            int applied = responders.Count;
             int skipped = scope.Count - applied;
             if (applied == 0)
                 return new WingDispatchResult(0, skipped,
@@ -134,7 +145,8 @@ namespace WingCommand
             string message = ScopePrefix(wholeWing, applied) + ": fire for effect on " +
                              target.unitName;
             if (skipped > 0) message += " (" + skipped + " unable)";
-            return new WingDispatchResult(applied, skipped, message, 1);
+            return new WingDispatchResult(applied, skipped, message, 1, responders,
+                                          WingOrder.FireForEffect);
         }
 
         private static Unit FirstLive(IReadOnlyList<Unit> targets)
