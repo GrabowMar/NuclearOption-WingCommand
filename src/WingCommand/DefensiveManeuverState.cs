@@ -1,6 +1,4 @@
 using System;
-using System.Collections;
-using System.Reflection;
 using UnityEngine;
 
 namespace WingCommand
@@ -17,18 +15,11 @@ namespace WingCommand
     {
         private const float MinimumDefenceSeconds = 2f;
         private const float ThreatRefreshSeconds = 0.2f;
+        // RadarJammer stays active for 0.1 seconds after Fire. Pulse below that lifetime,
+        // rather than once per physics tick, to keep continuous coverage at a known cadence.
+        private const float RadarJammerPulseSeconds = 0.075f;
         private const float FixedWingRunDistance = 8000f;
         private const float RotaryRunDistance = 4000f;
-
-        // CountermeasureManager exposes deployment but keeps its stations private. Panic
-        // needs the jammer station specifically: ChooseCountermeasure selects the normal
-        // flare/chaff response, so merely holding Aircraft.countermeasureTrigger can never
-        // activate ECM alongside chaff. Resolve the same native station list once and use
-        // the manager's own deployment path rather than calling a jammer component by hand.
-        private static readonly FieldInfo CountermeasureStationsField =
-            typeof(CountermeasureManager).GetField(
-                "countermeasureStations", BindingFlags.Instance | BindingFlags.NonPublic);
-        private static MethodInfo getFirstCountermeasureMethod;
 
         private readonly WingMember member;
         private Missile threat;
@@ -40,6 +31,7 @@ namespace WingCommand
         private int radarJammerIndex;
         private bool radarJammerResolved;
         private bool radarJammerErrorReported;
+        private float nextRadarJammerPulse;
 
         public DefensiveManeuverState(WingMember member)
         {
@@ -64,6 +56,7 @@ namespace WingCommand
             radarJammerIndex = -1;
             radarJammerResolved = false;
             radarJammerErrorReported = false;
+            nextRadarJammerPulse = 0f;
             RefreshThreat(force: true);
 
             string detail = threat != null ? threat.GetSeekerType() : null;
@@ -183,8 +176,8 @@ namespace WingCommand
                             (infrared || impactTime < 8f);
             SetCountermeasures(dispense);
 
-            // RadarJammer.Fire lasts only a fraction of a second. Re-deploy through the
-            // manager every physics tick while a SARH/ARH threat is live, temporarily
+            // RadarJammer.Fire lasts one tenth of a second. Re-deploy at a fixed cadence
+            // while a SARH/ARH threat is live, temporarily
             // selecting the jammer and then restoring the chaff station selected above.
             // When the warning clears, the final pulse expires on its own.
             if (radar) RunRadarJammer();
@@ -243,6 +236,8 @@ namespace WingCommand
 
             int index = ResolveRadarJammer(manager);
             if (index < 0 || index > byte.MaxValue) return;
+            if (Time.timeSinceLevelLoad < nextRadarJammerPulse) return;
+            nextRadarJammerPulse = Time.timeSinceLevelLoad + RadarJammerPulseSeconds;
 
             byte previous = manager.activeIndex;
             try
@@ -276,39 +271,15 @@ namespace WingCommand
             radarJammerResolved = true;
             radarJammerIndex = -1;
 
-            try
-            {
-                IList stations = CountermeasureStationsField?.GetValue(manager) as IList;
-                if (stations == null) return -1;
-
-                for (int i = 0; i < stations.Count; i++)
-                {
-                    object station = stations[i];
-                    if (station == null) continue;
-
-                    if (getFirstCountermeasureMethod == null ||
-                        getFirstCountermeasureMethod.DeclaringType != station.GetType())
-                    {
-                        getFirstCountermeasureMethod = station.GetType().GetMethod(
-                            "GetFirstCountermeasure", BindingFlags.Instance | BindingFlags.Public);
-                    }
-
-                    Countermeasure countermeasure =
-                        getFirstCountermeasureMethod?.Invoke(station, null) as Countermeasure;
-                    if (!(countermeasure is RadarJammer)) continue;
-
-                    radarJammerIndex = i;
-                    break;
-                }
-            }
-            catch (Exception e)
+            if (!CountermeasureAccess.TryFindRadarJammer(manager, out radarJammerIndex,
+                                                         out string reason) &&
+                !string.IsNullOrEmpty(reason))
             {
                 if (!radarJammerErrorReported)
                 {
                     radarJammerErrorReported = true;
                     Plugin.Logger.LogWarning(
-                        "[Panic] Could not inspect ECM on " + aircraft.unitName + ": " +
-                        e.GetType().Name + " - " + e.Message);
+                        "[Panic] Could not inspect ECM on " + aircraft.unitName + ": " + reason);
                 }
             }
 

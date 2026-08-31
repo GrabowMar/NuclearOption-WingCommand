@@ -532,10 +532,6 @@ namespace WingCommand
         }
 
         /// <summary>
-        /// Whether a hostile aircraft is close enough to be worth breaking formation for.
-        /// Used only by the Aggressive posture.
-        /// </summary>
-        /// <summary>
         /// The enemy aircraft most threatening a given aircraft, or null.
         ///
         /// Used by the Cover Me order, which is the whole difference between it and plain

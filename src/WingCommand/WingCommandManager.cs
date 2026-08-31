@@ -78,12 +78,13 @@ namespace WingCommand
                 TacticalCoordinator.Reset();
                 WingMarkers.Reset();
                 AiCombatTweak.Reset();
-                WingShop.Reset();
                 WingShopDelivery.Reset();
+                WingShop.Reset();
                 WingRecruitment.Reset();
                 WingPilotRoster.Reset();
                 WingKillCredit.Reset();
                 recruitQueue.Clear();
+                WingRecovery.Reset();
                 WingSupplyReserve.Reset();
                 WingTakeover.Reset();
                 WingUi.Reset();
@@ -96,6 +97,7 @@ namespace WingCommand
             // The player's own aircraft is always the formation leader.
             Wing.SetLeader(GameManager.GetLocalAircraft(out Aircraft local) ? local : null);
             WingSupplyReserve.Tick();
+            WingShop.Tick();
 
             // Before Prune, deliberately: a wingman that has completed its RTB has an
             // ejected pilot, which Prune would otherwise report as a combat loss.

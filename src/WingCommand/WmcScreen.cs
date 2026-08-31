@@ -1192,7 +1192,8 @@ namespace WingCommand
         /// </summary>
         private static void RefreshOfferDetail(IReadOnlyList<WingShop.Offer> offers)
         {
-            bool overLimit = WingShop.WouldExceedLimit;
+            WingShop.PurchaseQuote quote = WingShop.Quote(selectedOffer);
+            bool overLimit = quote.OverLimit;
 
             if (exceedLimitButton != null)
             {
@@ -1210,7 +1211,7 @@ namespace WingCommand
                 }
                 else
                 {
-                    float cost = WingShop.CurrentPriceOf(selectedOffer);
+                    float cost = quote.Price;
                     int reservedCount = WingSupplyReserve.CountOf(selectedOffer);
                     int ownedCount = WingSupplyReserve.OwnedOf(selectedOffer);
                     int stock = 0;
@@ -1221,14 +1222,15 @@ namespace WingCommand
                         break;
                     }
 
-                    offerDetailLabel.text =
-                        UiTheme.Truncate(selectedOffer.unitName, 18) +
-                        "  ·  " + Mathf.RoundToInt(cost) + " funds" +
-                        (overLimit ? " (over limit)" : "") +
-                        "  ·  " + stock + " available" +
-                        (ownedCount > 0 ? "  ·  " + ownedCount + " owned reserve" :
-                         reservedCount > 0 ? "  ·  held in wing reserve" : "");
-                    offerDetailLabel.color = WingShop.Allocation >= cost ? Friendly() : Warning();
+                    offerDetailLabel.text = quote.CanBuy
+                        ? UiTheme.Truncate(selectedOffer.unitName, 18) +
+                          "  ·  " + Mathf.RoundToInt(cost) + " funds" +
+                          (overLimit ? " (over limit)" : "") +
+                          "  ·  " + stock + " available" +
+                          (ownedCount > 0 ? "  ·  " + ownedCount + " owned reserve" :
+                           reservedCount > 0 ? "  ·  held in wing reserve" : "")
+                        : "UNAVAILABLE  ·  " + quote.Reason;
+                    offerDetailLabel.color = quote.CanBuy ? Friendly() : Warning();
                 }
             }
 
@@ -1247,8 +1249,8 @@ namespace WingCommand
                     WingLoadoutChoice fit = WingLoadoutBook.PlannedFor(selectedOffer);
                     bool fromReserve = false;
 
-                    if (WingSupplyReserve.NextSource(selectedOffer) != WingSupplyReserve.Source.None &&
-                        WingLoadoutBook.PeekReserved(selectedOffer, out WingLoadoutChoice stored))
+                    if (WingSupplyReserve.PeekLoadout(selectedOffer,
+                                                      out WingLoadoutChoice stored))
                     {
                         fit = stored;
                         fromReserve = true;
@@ -1261,8 +1263,7 @@ namespace WingCommand
                 }
             }
 
-            requisitionButton?.SetEnabled(selectedOffer != null &&
-                WingShop.Allocation >= WingShop.CurrentPriceOf(selectedOffer));
+            requisitionButton?.SetEnabled(quote.CanBuy);
         }
 
         /// <summary>Funds, wing size, and how much of the mission's AI aircraft cap is left.</summary>
@@ -1276,6 +1277,8 @@ namespace WingCommand
 
             WingShop.SquadronState squadron = WingShop.Squadron();
             string text = "SQUADRON " + squadron.Active + " / " + squadron.Limit;
+            if (Plugin.Config2.DisableWingSizeLimit.Value)
+                text += "  ·  WING NO LIMIT DOES NOT BYPASS THIS CAP";
 
             if (!squadron.AtCapacity)
             {
@@ -1724,7 +1727,7 @@ namespace WingCommand
             loadoutStatusLabel.text =
                 "Requisitions of " + UiTheme.Truncate(selectedOffer.unitName, 16) + " launch with " +
                 WingLoadoutCatalog.Label(selectedOffer, planned) +
-                (WingLoadoutBook.ReservedCount(selectedOffer) > 0
+                (WingSupplyReserve.LoadoutCountOf(selectedOffer) > 0
                     ? "  ·  a recovered airframe keeps what it came home with"
                     : "");
             loadoutStatusLabel.color = Friendly();

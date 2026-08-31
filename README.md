@@ -6,7 +6,7 @@ player reserves without turning Nuclear Option into an RTS.
 
 | | |
 |---|---|
-| Current release | `0.9.0` |
+| Current release | `0.9.1.1` |
 | Game version | Nuclear Option `0.34.2` |
 | Requirements | BepInEx `5.4.23.3` or newer |
 | Supported play | Single-player and multiplayer host |
@@ -64,10 +64,10 @@ NOMM handles BepInEx and future updates.
 
    ```text
    Harmony patched ... method(s)
-   WingCommand 0.9.0 loaded.
+   WingCommand 0.9.1.1 loaded.
    ```
 
-The optional `WingCommand-0.9.0.zip` mirrors the game directory and can instead be
+The optional `WingCommand-0.9.1.1.zip` mirrors the game directory and can instead be
 extracted at the Nuclear Option root. Keep only this organized plugin path; a loose
 `BepInEx/plugins/WingCommand.dll` copy can make BepInEx load the wrong build.
 
@@ -520,7 +520,7 @@ This produces:
 
 ```text
 dist/WingCommand.dll
-dist/WingCommand-0.9.0.zip
+dist/WingCommand-0.9.1.1.zip
 ```
 
 Attach **`WingCommand.dll` first** to a GitHub release. NOMM installs the bare plugin DLL;

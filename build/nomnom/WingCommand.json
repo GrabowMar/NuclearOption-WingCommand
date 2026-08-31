@@ -18,9 +18,9 @@
     {
       "type": "plugin",
       "fileName": "WingCommand.dll",
-      "downloadUrl": "https://github.com/GrabowMar/NuclearOption-WingCommand/releases/download/v0.9.0/WingCommand.dll",
+      "downloadUrl": "https://github.com/GrabowMar/NuclearOption-WingCommand/releases/download/v0.9.1.1/WingCommand.dll",
       "gameVersion": "0.34.2",
-      "version": "0.9.0",
+      "version": "0.9.1.1",
       "category": "Release",
       "hash": "sha256:76fb3e8015ff5f01ea086b84da85d8f9358ff2765a243e0fbad88de528dc1d5a"
     }

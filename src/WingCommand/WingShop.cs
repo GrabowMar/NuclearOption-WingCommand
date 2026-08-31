@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using NuclearOption.Networking;
 using UnityEngine;
@@ -34,7 +35,153 @@ namespace WingCommand
             }
         }
 
+        /// <summary>
+        /// One authoritative answer to "can this be bought now?" Shared by the button and
+        /// the mutation path so the UI cannot promise a purchase that <see cref="Buy"/>
+        /// immediately rejects for host, roster, stock, rank, squadron or funds.
+        /// </summary>
+        internal readonly struct PurchaseQuote
+        {
+            public readonly bool CanBuy;
+            public readonly string Reason;
+            public readonly float Price;
+            public readonly int Stock;
+            public readonly bool OverLimit;
+            public readonly WingLoadoutChoice Loadout;
+
+            internal readonly Player Player;
+            internal readonly FactionHQ Hq;
+            internal readonly WingSupplyReserve.Source Source;
+            internal readonly bool Declared;
+
+            internal PurchaseQuote(bool canBuy, string reason, float price, int stock,
+                                   bool overLimit, WingLoadoutChoice loadout, Player player,
+                                   FactionHQ hq, WingSupplyReserve.Source source, bool declared)
+            {
+                CanBuy = canBuy;
+                Reason = reason;
+                Price = price;
+                Stock = stock;
+                OverLimit = overLimit;
+                Loadout = loadout;
+                Player = player;
+                Hq = hq;
+                Source = source;
+                Declared = declared;
+            }
+        }
+
+        /// <summary>
+        /// Funds, stock, fit and both capacity reservations for one accepted order.
+        ///
+        /// The economy is reserved before a field is asked to spawn anything, committed only
+        /// when that exact aircraft registers, and restored by an idempotent rollback if no
+        /// aircraft arrives. This object is the single owner of every compensating action.
+        /// </summary>
+        internal sealed class PurchaseTransaction
+        {
+            internal enum State { Reserving, AwaitingAircraft, RollingBack, Committed, RolledBack }
+
+            internal readonly AircraftDefinition Definition;
+            internal readonly Player Player;
+            internal readonly FactionHQ Hq;
+            internal readonly float Price;
+            internal readonly bool OverLimit;
+            internal readonly bool Declared;
+            internal readonly WingSupplyReserve.Source Source;
+            internal readonly WingLoadoutChoice Loadout;
+
+            internal WingSupplyReserve.Slot ReserveSlot;
+            internal State Status { get; private set; }
+
+            private readonly RollbackJournal rollback = new RollbackJournal();
+            private bool capacityReserved;
+
+            internal PurchaseTransaction(AircraftDefinition definition, PurchaseQuote quote)
+            {
+                Definition = definition;
+                Player = quote.Player;
+                Hq = quote.Hq;
+                Price = quote.Price;
+                OverLimit = quote.OverLimit;
+                Declared = quote.Declared;
+                Source = quote.Source;
+                Loadout = quote.Loadout;
+                Status = State.Reserving;
+            }
+
+            internal void NoteReserveSlot(WingSupplyReserve.Slot slot)
+            {
+                ReserveSlot = slot;
+                rollback.Add(() => WingSupplyReserve.CancelPurchase(slot));
+            }
+
+            internal void NoteFundsDebit() =>
+                rollback.Add(() => Player?.AddAllocation(Price));
+
+            internal void NoteFactionStockDebit() =>
+                rollback.Add(() => Hq?.AddSupplyUnit(Definition, 1));
+
+            internal void NoteUndeclaredStockDebit() =>
+                rollback.Add(() => DecrementUndeclared(Definition));
+
+            internal void ReserveCapacity()
+            {
+                capacityReservations.Reserve(OverLimit);
+                capacityReserved = true;
+                Status = State.AwaitingAircraft;
+            }
+
+            internal bool Commit(Aircraft aircraft)
+            {
+                if (Status != State.AwaitingAircraft || aircraft == null) return false;
+
+                if (ReserveSlot != null && !WingSupplyReserve.CommitPurchase(ReserveSlot))
+                {
+                    Plugin.Logger.LogError(
+                        "[Shop] delivered " + Definition.unitName +
+                        " but its concrete reserve slot was no longer present");
+                }
+
+                rollback.Commit();
+                ReleaseCapacity();
+                Status = State.Committed;
+                activeTransactions.Remove(this);
+                NoteDelivery(aircraft, OverLimit, Loadout);
+                return true;
+            }
+
+            internal bool Rollback(string reason)
+            {
+                if (Status == State.Committed || Status == State.RolledBack) return true;
+                Status = State.RollingBack;
+
+                if (!rollback.Rollback(e => Plugin.Logger.LogError(
+                    "[Shop] rollback of " +
+                    (Definition != null ? Definition.unitName : "order") + " failed: " + e)))
+                    return false;
+
+                ReleaseCapacity();
+                Status = State.RolledBack;
+                activeTransactions.Remove(this);
+
+                Plugin.Logger.LogWarning(
+                    "[Shop] cancelled " + (Definition != null ? Definition.unitName : "order") +
+                    "; funds and stock restored (" + reason + ")");
+                return true;
+            }
+
+            private void ReleaseCapacity()
+            {
+                if (!capacityReserved) return;
+                capacityReservations.Release(OverLimit);
+                capacityReserved = false;
+            }
+        }
+
         private static readonly List<Offer> catalogue = new List<Offer>();
+        private static readonly HashSet<PurchaseTransaction> activeTransactions =
+            new HashSet<PurchaseTransaction>();
 
         /// <summary>
         /// Whether the player has chosen to requisition past the mission's AI aircraft cap.
@@ -48,14 +195,29 @@ namespace WingCommand
         /// <summary>Forget what was bought, and the over-limit choice, when a mission ends.</summary>
         public static void Reset()
         {
+            foreach (PurchaseTransaction transaction in
+                     new List<PurchaseTransaction>(activeTransactions))
+                transaction.Rollback("mission reset");
+            activeTransactions.Clear();
             undeclaredBought.Clear();
             purchasedAircraft.Clear();
             overLimitAircraft.Clear();
-            overLimitPending = 0;
+            capacityReservations.Reset();
             ExceedLimit = false;
             squadronCachedAt = float.MinValue;
+            rotaryCache.Clear();
+            autopilotCache.Clear();
             WingLoadoutBook.Reset();
             WingLoadoutCatalog.Reset();
+        }
+
+        /// <summary>Retry compensations that an external game API did not accept last frame.</summary>
+        public static void Tick()
+        {
+            foreach (PurchaseTransaction transaction in
+                     new List<PurchaseTransaction>(activeTransactions))
+                if (transaction.Status == PurchaseTransaction.State.RollingBack)
+                    transaction.Rollback("retrying failed compensation");
         }
 
         // Whether a definition is a helicopter, resolved once per airframe.
@@ -182,7 +344,13 @@ namespace WingCommand
 
         // Bought but not yet in the world: a hangar delivery waits on the door sequence, and
         // without this the allowance could be spent several times over in that gap.
-        private static int overLimitPending;
+        // Every accepted order owns a future roster and squadron slot until its exact
+        // aircraft registers or the order rolls back. Active recruitment consults the wing
+        // count through WingRegistry.HasRoom, so it cannot steal capacity already paid for.
+        private static readonly CapacityReservations capacityReservations =
+            new CapacityReservations();
+
+        internal static int PendingWingSlots => capacityReservations.Wing;
 
         /// <summary>Over-cap airframes still outstanding, counting deliveries in progress.</summary>
         public static int OverLimitOutstanding
@@ -190,7 +358,7 @@ namespace WingCommand
             get
             {
                 overLimitAircraft.RemoveWhere(StillFlying);
-                return overLimitAircraft.Count + overLimitPending;
+                return overLimitAircraft.Count + capacityReservations.OverLimit;
             }
         }
 
@@ -200,7 +368,6 @@ namespace WingCommand
         /// <summary>Record a delivered requisition and, when applicable, its over-cap slot.</summary>
         public static void NoteDelivery(Aircraft aircraft, bool overLimit, WingLoadoutChoice loadout)
         {
-            if (overLimit) overLimitPending = Mathf.Max(0, overLimitPending - 1);
             if (aircraft == null) return;
 
             purchasedAircraft.Add(aircraft.persistentID);
@@ -218,15 +385,18 @@ namespace WingCommand
         /// </summary>
         public static bool TakePurchased(Aircraft aircraft)
         {
-            if (aircraft == null) return false;
-            PersistentID id = aircraft.persistentID;
+            return aircraft != null && TakePurchased(aircraft.persistentID);
+        }
+
+        internal static bool TakePurchased(PersistentID id)
+        {
             overLimitAircraft.Remove(id);
             return purchasedAircraft.Remove(id);
         }
 
-        /// <summary>Release the reservation for a delivery that never arrived.</summary>
-        public static void CancelOverLimitDelivery() =>
-            overLimitPending = Mathf.Max(0, overLimitPending - 1);
+        /// <summary>Read ownership without transferring it out of the live aircraft.</summary>
+        public static bool IsPurchased(Aircraft aircraft) =>
+            aircraft != null && purchasedAircraft.Contains(aircraft.persistentID);
 
         /// <summary>Whether the local player has earned the right to exceed the cap.</summary>
         public static bool MeetsExceedLimitRank =>
@@ -234,7 +404,8 @@ namespace WingCommand
             player.PlayerRank >= ExceedLimitRank;
 
         /// <summary>True when the next purchase would be an over-cap one, and is allowed to be.</summary>
-        public static bool WouldExceedLimit => ExceedLimit && Squadron().AtCapacity;
+        public static bool WouldExceedLimit =>
+            ExceedLimit && Squadron().WouldExceed(capacityReservations.Squadron);
 
         /// <summary>The player's spendable allocation, or zero when there is no player.</summary>
         public static float Allocation =>
@@ -366,169 +537,197 @@ namespace WingCommand
 
         // ------------------------------------------------------------------ purchase
 
+        /// <summary>Evaluate every purchase gate without changing funds, stock or capacity.</summary>
+        public static PurchaseQuote Quote(AircraftDefinition definition)
+        {
+            WingLoadoutChoice loadout = WingLoadoutBook.PlannedFor(definition);
+            Player player = null;
+            FactionHQ hq = null;
+            WingSupplyReserve.Source source = WingSupplyReserve.Source.None;
+            bool declared = false;
+            int stock = 0;
+            float price = CurrentPriceOf(definition);
+            bool overLimit = false;
+
+            PurchaseQuote Denied(string why) =>
+                new PurchaseQuote(false, why, price, stock, overLimit, loadout,
+                                  player, hq, source, declared);
+
+            if (!Plugin.Config2.ShopEnabled.Value) return Denied("The shop is disabled in config");
+            if (definition == null) return Denied("No aircraft selected");
+
+            WingRegistry wing = WingCommandManager.Instance?.Wing;
+            Aircraft leader = wing?.Leader;
+            if (leader == null) return Denied("Not flying");
+            if (!leader.IsServer) return Denied("Host or single-player only");
+            if (!WingRegistry.HasRoom(wing.Count)) return Denied("Wing is full");
+
+            hq = leader.NetworkHQ;
+            if (hq == null) return Denied("No faction");
+            if (!GameManager.GetLocalPlayer(out player) || player == null) return Denied("No player");
+
+            if (!IsFlyableAircraft(definition)) return Denied("Selected unit is not a flyable aircraft");
+            if (!MatchesLeader(definition))
+                return Denied(IsRotary(definition)
+                    ? "Helicopters cannot formate on a jet"
+                    : "Jets cannot formate on a helicopter");
+            if (hq.restrictedAircraft != null && hq.restrictedAircraft.Contains(definition.unitName))
+                return Denied(definition.unitName + " is restricted in this mission");
+            if (definition.aircraftParameters != null &&
+                definition.aircraftParameters.rankRequired > player.PlayerRank)
+                return Denied("Requires rank " + definition.aircraftParameters.rankRequired);
+
+            declared = hq.AircraftSupply.ContainsKey(definition);
+            source = WingSupplyReserve.NextSource(definition);
+            int factionStock = declared ? hq.GetUnitSupply(definition) : UndeclaredRemaining(definition);
+            stock = factionStock + WingSupplyReserve.CountOf(definition);
+            if (stock <= 0) return Denied(definition.unitName + ": none left in stock");
+
+            if (source != WingSupplyReserve.Source.None &&
+                WingSupplyReserve.PeekLoadout(definition, out WingLoadoutChoice recovered))
+                loadout = recovered;
+
+            if (!ClearedForPurchase(hq, out float multiplier, out string capReason,
+                                    out overLimit))
+                return Denied(capReason);
+
+            bool alreadyOwned = source == WingSupplyReserve.Source.Owned;
+            bool debugFree = Plugin.Config2.FreePlanePurchases.Value;
+            price = alreadyOwned || debugFree ? 0f : PriceOf(definition) * multiplier;
+            if (player.Allocation < price)
+                return Denied("Need " + Mathf.RoundToInt(price) + ", have " +
+                              Mathf.RoundToInt(player.Allocation));
+
+            return new PurchaseQuote(true, null, price, stock, overLimit, loadout,
+                                     player, hq, source, declared);
+        }
+
         /// <summary>
-        /// Try to buy one aircraft. Returns false with a reason the caller can show.
-        ///
-        /// Order matters more here than anywhere else in the mod: every gate runs, and the
-        /// spawn happens, before a single credit or airframe moves. A purchase that took
-        /// the money and then failed to produce an aircraft would be the worst bug this
-        /// feature could have, so it is made structurally impossible rather than merely
-        /// avoided.
+        /// Reserve one purchase, ask the delivery system to produce it, and leave the
+        /// transaction open until the exact aircraft registers. A synchronous failure rolls
+        /// back here; a delayed timeout rolls back in <see cref="WingShopDelivery.Tick"/>.
         /// </summary>
-        /// <param name="paid">
-        /// What was actually charged. The capacity check here is deliberately live while the
-        /// panel's is memoised, so the two can disagree for a fraction of a second as the
-        /// squadron fills — reporting the real figure means the player always sees the price
-        /// they were charged rather than the one the row happened to be showing.
-        /// </param>
         public static bool Buy(AircraftDefinition definition, out string reason, out float paid)
         {
             reason = null;
             paid = 0f;
 
-            if (!Plugin.Config2.ShopEnabled.Value)
+            PurchaseQuote quote = Quote(definition);
+            if (!quote.CanBuy)
             {
-                reason = "The shop is disabled in config";
+                reason = quote.Reason;
                 return false;
             }
 
-            if (definition == null)
+            if (!BeginTransaction(definition, quote, out PurchaseTransaction transaction,
+                                  out reason))
+                return false;
+
+            if (!WingShopDelivery.Deliver(transaction, WingCommandManager.Instance.Wing.Leader,
+                                          quote.Hq, out reason))
             {
-                reason = "No aircraft selected";
+                transaction.Rollback(reason ?? "delivery could not be started");
                 return false;
             }
 
-            WingRegistry wing = WingCommandManager.Instance?.Wing;
-            Aircraft leader = wing?.Leader;
-            if (leader == null)
-            {
-                reason = "Not flying";
-                return false;
-            }
-
-            // Spawning is world state, which only the server may write.
-            if (!leader.IsServer)
-            {
-                reason = "Host or single-player only";
-                return false;
-            }
-
-            if (!MatchesLeader(definition))
-            {
-                bool rotary = IsRotary(definition);
-                reason = rotary
-                    ? "Helicopters cannot formate on a jet"
-                    : "Jets cannot formate on a helicopter";
-                return false;
-            }
-
-            if (!WingRegistry.HasRoom(wing.Count))
-            {
-                reason = "Wing is full";
-                return false;
-            }
-
-            FactionHQ hq = leader.NetworkHQ;
-            if (hq == null)
-            {
-                reason = "No faction";
-                return false;
-            }
-
-            bool declared = hq.AircraftSupply.ContainsKey(definition);
-            WingSupplyReserve.Source reserveSource = WingSupplyReserve.NextSource(definition);
-            int factionStock = declared ? hq.GetUnitSupply(definition) : UndeclaredRemaining(definition);
-            int stock = factionStock + WingSupplyReserve.CountOf(definition);
-
-            if (stock <= 0)
-            {
-                reason = definition.unitName + ": none left in stock";
-                return false;
-            }
-
-            if (!ClearedForPurchase(hq, out float multiplier, out string capReason))
-            {
-                reason = capReason;
-                return false;
-            }
-
-            if (!GameManager.GetLocalPlayer(out Player player) || player == null)
-            {
-                reason = "No player";
-                return false;
-            }
-
-            // A requisition carries whatever the player planned for that airframe, unless it
-            // is launching an airframe that has already flown for the wing and come home —
-            // in which case it carries what it came home with.
-            WingLoadoutChoice loadout = WingLoadoutBook.PlannedFor(definition);
-            if (reserveSource != WingSupplyReserve.Source.None &&
-                WingLoadoutBook.PeekReserved(definition, out WingLoadoutChoice recovered))
-                loadout = recovered;
-
-            bool alreadyOwned = reserveSource == WingSupplyReserve.Source.Owned;
+            paid = quote.Price;
+            bool alreadyOwned = quote.Source == WingSupplyReserve.Source.Owned;
             bool debugFree = Plugin.Config2.FreePlanePurchases.Value;
-            float price = alreadyOwned || debugFree ? 0f : PriceOf(definition) * multiplier;
-            if (player.Allocation < price)
+
+            Plugin.Logger.LogInfo(
+                $"[Shop] requisitioned {definition.unitName} for {quote.Price:F0}" +
+                $" [{WingLoadoutCatalog.Label(definition, quote.Loadout)}]" +
+                (alreadyOwned ? " (owned reserve)" :
+                 quote.Source == WingSupplyReserve.Source.Held ? " (held reserve)" : "") +
+                (debugFree && !alreadyOwned ? " (debug free purchase)" : "") +
+                (quote.OverLimit ? $" ({ExceedLimitMultiplier:0.##}x over squadron limit)" : "") +
+                $", {Available(definition, quote.Hq)} available");
+            return true;
+        }
+
+        private static bool BeginTransaction(AircraftDefinition definition, PurchaseQuote quote,
+                                             out PurchaseTransaction transaction,
+                                             out string reason)
+        {
+            transaction = new PurchaseTransaction(definition, quote);
+            activeTransactions.Add(transaction);
+            reason = null;
+
+            try
             {
-                reason = "Need " + Mathf.RoundToInt(price) + ", have " +
-                         Mathf.RoundToInt(player.Allocation);
-                return false;
-            }
-
-            // Capacity and price are separate facts. A host may configure a 1x multiplier;
-            // that purchase is still over the cap and must still consume one of the three
-            // outstanding slots.
-            bool overLimit = Squadron(hq).AtCapacity;
-            if (overLimit) overLimitPending++;
-
-            if (!WingShopDelivery.Deliver(definition, leader, hq, overLimit, loadout, out reason))
-            {
-                if (overLimit) CancelOverLimitDelivery();
-                return false;
-            }
-
-            // Only now, with the field committed to producing an aircraft, does anything get
-            // spent. A hangar delivery may still be a few seconds from rolling out, but
-            // TrySpawnAircraft returning Allowed is the game's own commitment to it — the
-            // same signal FactionHQ treats as a successful deployment.
-            player.AddAllocation(-price);
-            paid = price;
-
-            // Declared airframes come out of the faction's books; undeclared ones out of
-            // ours, so the mission's own accounting is never handed entries it did not have.
-            if (reserveSource != WingSupplyReserve.Source.None)
-            {
-                if (WingSupplyReserve.Consume(definition, reserveSource))
+                if (quote.Source != WingSupplyReserve.Source.None)
                 {
-                    // The parked loadout has now been collected by this launch.
-                    WingLoadoutBook.PopReserved(definition);
+                    if (!WingSupplyReserve.ReserveForPurchase(definition, quote.Source,
+                                                              out WingSupplyReserve.Slot slot))
+                    {
+                        reason = definition.unitName + ": reserve changed before purchase";
+                        transaction.Rollback(reason);
+                        return false;
+                    }
+                    transaction.NoteReserveSlot(slot);
+                }
+                else if (quote.Declared)
+                {
+                    int before = quote.Hq.GetUnitSupply(definition);
+                    if (before <= 0)
+                    {
+                        reason = definition.unitName + ": none left in stock";
+                        transaction.Rollback(reason);
+                        return false;
+                    }
+
+                    try
+                    {
+                        quote.Hq.AddSupplyUnit(definition, -1);
+                    }
+                    finally
+                    {
+                        if (quote.Hq.GetUnitSupply(definition) < before)
+                            transaction.NoteFactionStockDebit();
+                    }
                 }
                 else
                 {
-                    // World state changed between validation and commitment. The delivery is
-                    // already authorised, so consume ordinary stock rather than duplicating
-                    // an airframe or charging the reserve twice.
-                    if (declared) hq.AddSupplyUnit(definition, -1);
-                    else undeclaredBought[definition] =
+                    if (UndeclaredRemaining(definition) <= 0)
+                    {
+                        reason = definition.unitName + ": none left in stock";
+                        transaction.Rollback(reason);
+                        return false;
+                    }
+                    undeclaredBought[definition] =
                         (undeclaredBought.TryGetValue(definition, out int used) ? used : 0) + 1;
+                    transaction.NoteUndeclaredStockDebit();
                 }
+
+                if (quote.Price > 0f)
+                {
+                    float before = quote.Player.Allocation;
+                    try
+                    {
+                        quote.Player.AddAllocation(-quote.Price);
+                    }
+                    finally
+                    {
+                        if (quote.Player.Allocation < before) transaction.NoteFundsDebit();
+                    }
+                }
+
+                transaction.ReserveCapacity();
+                return true;
             }
-            else if (declared)
-                hq.AddSupplyUnit(definition, -1);
-            else
-                undeclaredBought[definition] = (undeclaredBought.TryGetValue(definition, out int n) ? n : 0) + 1;
+            catch (Exception e)
+            {
+                reason = "Purchase reservation failed - " + e.Message;
+                transaction.Rollback(reason);
+                return false;
+            }
+        }
 
-            Plugin.Logger.LogInfo(
-                $"[Shop] requisitioned {definition.unitName} for {price:F0}" +
-                $" [{WingLoadoutCatalog.Label(definition, loadout)}]" +
-                (alreadyOwned ? " (owned reserve)" :
-                 reserveSource == WingSupplyReserve.Source.Held ? " (held reserve)" : "") +
-                (debugFree && !alreadyOwned ? " (debug free purchase)" : "") +
-                (multiplier > 1f ? $" ({multiplier:0.##}x over squadron limit)" : "") +
-                $", {Available(definition, hq)} available");
-
-            return true;
+        private static void DecrementUndeclared(AircraftDefinition definition)
+        {
+            if (definition == null || !undeclaredBought.TryGetValue(definition, out int used)) return;
+            if (used <= 1) undeclaredBought.Remove(definition);
+            else undeclaredBought[definition] = used - 1;
         }
 
         private static int Available(AircraftDefinition definition, FactionHQ hq)
@@ -560,6 +759,9 @@ namespace WingCommand
 
             /// <summary>True when there is no room for one more aircraft.</summary>
             public bool AtCapacity => Active + 1 > Limit;
+
+            /// <summary>Whether one more aircraft exceeds the cap after accepted orders.</summary>
+            public bool WouldExceed(int pending) => Active + Mathf.Max(0, pending) + 1 > Limit;
         }
 
         private static SquadronState cachedSquadron;
@@ -627,17 +829,21 @@ namespace WingCommand
         /// list price and only at rank, which keeps it a deliberate expense rather than a
         /// dead end.
         /// </summary>
-        private static bool ClearedForPurchase(FactionHQ hq, out float multiplier, out string reason)
+        private static bool ClearedForPurchase(FactionHQ hq, out float multiplier,
+                                               out string reason, out bool overLimit)
         {
             reason = null;
             multiplier = 1f;
 
             SquadronState squadron = Squadron(hq);
-            if (!squadron.AtCapacity) return true;
+            overLimit = squadron.WouldExceed(capacityReservations.Squadron);
+            if (!overLimit) return true;
 
             if (!ExceedLimit)
             {
-                reason = "Squadron at capacity (" + squadron.Active + " of " + squadron.Limit +
+                reason = "Squadron at capacity (" +
+                         (squadron.Active + capacityReservations.Squadron) +
+                         " of " + squadron.Limit +
                          ") - enable EXCEED LIMIT to requisition anyway";
                 return false;
             }

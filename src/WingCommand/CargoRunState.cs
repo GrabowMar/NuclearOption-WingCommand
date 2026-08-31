@@ -64,8 +64,7 @@ namespace WingCommand
         private Phase phase;
         private float hold;
         private float lastRelease;
-        private float deliverStarted;
-        private int cargoAtEntry;
+        private readonly CargoProgressTracker cargoProgress = new CargoProgressTracker();
         private bool handedOff;
 
         public CargoRunState(WingMember member)
@@ -102,15 +101,14 @@ namespace WingCommand
             phase = Phase.Transit;
             hold = Mathf.Max(TransitAltitude, aircraft.radarAlt);
             lastRelease = 0f;
-            deliverStarted = 0f;
-            cargoAtEntry = member.CargoAmmo;
+            cargoProgress.Reset(member.CargoAmmo, Time.timeSinceLevelLoad);
             handedOff = false;
 
             WingComms.Say(member, WingComms.Call.Delivering);
 
             if (Plugin.Config2.VerboseLogging.Value)
                 Plugin.Logger.LogInfo(
-                    $"[Cargo] {aircraft.unitName} running {cargoAtEntry} load(s) to the drop point");
+                    $"[Cargo] {aircraft.unitName} running {cargoProgress.LastAmount} load(s) to the drop point");
         }
 
         public override void LeaveState()
@@ -139,7 +137,7 @@ namespace WingCommand
                     if (HorizontalDistance(aircraft.GlobalPosition(), point) <= ArrivalRadius)
                     {
                         phase = Phase.Deliver;
-                        deliverStarted = Time.timeSinceLevelLoad;
+                        cargoProgress.Reset(member.CargoAmmo, Time.timeSinceLevelLoad);
                         hold = rotary ? SettleAltitude : hold;
                         if (rotary) aircraft.SetGear(deployed: true);
                     }
@@ -226,8 +224,8 @@ namespace WingCommand
         /// </summary>
         private void CheckStalled()
         {
-            if (member.CargoAmmo < cargoAtEntry) return;
-            if (Time.timeSinceLevelLoad - deliverStarted < DeliverTimeout) return;
+            cargoProgress.Observe(member.CargoAmmo, Time.timeSinceLevelLoad);
+            if (!cargoProgress.IsStalled(Time.timeSinceLevelLoad, DeliverTimeout)) return;
 
             handedOff = true;
 

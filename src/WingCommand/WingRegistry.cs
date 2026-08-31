@@ -16,7 +16,6 @@ namespace WingCommand
         public Aircraft Leader { get; private set; }
 
         /// <summary>Standing rules of engagement for the whole wing.</summary>
-        /// <summary>Standing rules of engagement for the whole wing.</summary>
         public WingRoe Roe { get; set; } = WingRoe.Hold;
 
         public IReadOnlyList<WingMember> Members => members;
@@ -289,6 +288,7 @@ namespace WingCommand
             {
                 WingMember m = members[i];
                 if (m.Alive) continue;
+                if (WingRecovery.IsPending(m)) continue;
 
                 if (Plugin.Config2.VerboseLogging.Value)
                     Plugin.Logger.LogInfo("[Wing] lost " + m.Name + ": " + LostReason(m));
@@ -366,7 +366,7 @@ namespace WingCommand
         /// </summary>
         public static bool HasRoom(int occupied) =>
             Plugin.Config2.DisableWingSizeLimit.Value ||
-            occupied < Plugin.Config2.MaxWingSize.Value;
+            occupied + WingShop.PendingWingSlots < Plugin.Config2.MaxWingSize.Value;
 
         /// <summary>Text used beside the live count when the unsafe bypass is enabled.</summary>
         public static string WingLimitLabel =>
@@ -405,31 +405,6 @@ namespace WingCommand
             return true;
         }
 
-        private bool IsEligible(Aircraft candidate)
-        {
-            if (candidate == null || candidate.disabled) return false;
-            if (candidate == Leader) return false;
-            if (candidate.Player != null) return false;             // never commandeer another human
-            if (Leader.NetworkHQ == null) return false;
-            if (candidate.NetworkHQ != Leader.NetworkHQ) return false;
-            if (Contains(candidate)) return false;
-
-            Pilot pilot = PrimaryPilot(candidate);
-            if (pilot == null || pilot.dead || pilot.ejected) return false;
-
-            // Only aircraft that are actually airborne and under AI control.
-            if (candidate.radarAlt < 10f) return false;
-
-            // AI pilot states only tick where the aircraft is simulated. On a non-host
-            // client a remote aircraft would accept the state switch and then never run
-            // it, so refuse rather than appear to work and silently do nothing.
-            if (!candidate.LocalSim) return false;
-
-            if (!TypeMatchesLeader(candidate)) return false;
-
-            return true;
-        }
-
         /// <summary>
         /// Rotary and fixed-wing aircraft cannot share a formation. They fly different
         /// autopilots, hold station by different means, and differ in speed by a factor of
@@ -447,8 +422,8 @@ namespace WingCommand
             if (aircraft == null || !aircraft.LocalSim) return null;
             if (!HasRoom(members.Count)) return null;
 
-            // Checked here as well as in IsEligible, because map selection and the debug
-            // spawn both add directly without passing through the eligibility filter.
+            // Checked here as well as in CanRecruit, because map selection and the debug
+            // spawn can add directly without passing through the eligibility filter.
             if (!TypeMatchesLeader(aircraft))
             {
                 WingCommandManager.Instance?.Toast(

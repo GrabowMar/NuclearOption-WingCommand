@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Reflection;
+using NuclearOption.SavedMission;
 using UnityEngine;
 
 namespace WingCommand
@@ -425,8 +426,8 @@ namespace WingCommand
                     WeaponMount mount = available[j];
 
                     // A null entry is the game's own "nothing on this station" choice, and
-                    // a disabled one is a store the mission or the player's rank has locked.
-                    if (mount == null || mount.disabled) continue;
+                    // a disallowed one is event content or a store this game build has locked.
+                    if (mount == null || mount.NotAllowed(includeEventContent: false)) continue;
 
                     MountInfo info = Describe(mount);
                     options.Add(info);

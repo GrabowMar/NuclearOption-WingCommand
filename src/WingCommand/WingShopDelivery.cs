@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using NuclearOption.Networking;
+using NuclearOption.SavedMission;
 using UnityEngine;
 
 namespace WingCommand
@@ -47,24 +48,20 @@ namespace WingCommand
         /// spawn can be several seconds away. The faction's own <c>onRegisterUnit</c> event
         /// is what closes that gap.
         /// </summary>
-        /// <param name="overLimit">
-        /// Whether this purchase was made past the squadron cap, so the allowance can be
-        /// charged against the airframe once it actually exists.
-        /// </param>
-        /// <param name="choice">
-        /// The loadout the player requisitioned this airframe with. It is fitted here, at
-        /// the spawn, because that is the only moment either delivery route accepts one —
-        /// and it is recorded against the aircraft only once the aircraft exists, which
-        /// keeps the commit-after-spawn invariant the rest of this file is built on.
-        /// </param>
-        public static bool Deliver(AircraftDefinition definition, Aircraft leader, FactionHQ hq,
-                                   bool overLimit, WingLoadoutChoice choice, out string reason)
+        public static bool Deliver(WingShop.PurchaseTransaction transaction, Aircraft leader,
+                                   FactionHQ hq, out string reason)
         {
             reason = null;
+            if (transaction == null || transaction.Definition == null)
+            {
+                reason = "Invalid purchase transaction";
+                return false;
+            }
 
-            Loadout loadout = BuildLoadout(definition, choice);
+            AircraftDefinition definition = transaction.Definition;
+            Loadout loadout = BuildLoadout(definition, transaction.Loadout);
 
-            if (TryHangarDelivery(definition, leader, hq, overLimit, choice, loadout)) return true;
+            if (TryHangarDelivery(transaction, leader, hq, loadout)) return true;
 
             Aircraft spawned = Spawn(definition, leader, hq, loadout);
             if (spawned == null)
@@ -73,7 +70,11 @@ namespace WingCommand
                 return false;
             }
 
-            WingShop.NoteDelivery(spawned, overLimit, choice);
+            if (!transaction.Commit(spawned))
+            {
+                reason = "Delivery transaction could not be committed";
+                return false;
+            }
             WingCommandManager.Instance?.QueueRecruit(spawned);
             return true;
         }
@@ -105,20 +106,24 @@ namespace WingCommand
 
         private sealed class PendingDelivery
         {
-            public AircraftDefinition Definition;
+            public WingShop.PurchaseTransaction Transaction;
+            public Airbase Origin;
+            public Hangar Hangar;
+            public float RequestedAt;
             public float ExpiresAt;
-            public bool OverLimit;
-            public WingLoadoutChoice Choice;
+            public bool Starting;
+            public readonly List<Aircraft> EarlyCandidates = new List<Aircraft>();
         }
 
         private static readonly List<PendingDelivery> pending = new List<PendingDelivery>();
         private static FactionHQ watched;
 
-        private static bool TryHangarDelivery(AircraftDefinition definition, Aircraft leader,
-                                              FactionHQ hq, bool overLimit,
-                                              WingLoadoutChoice choice, Loadout loadout)
+        private static bool TryHangarDelivery(WingShop.PurchaseTransaction transaction,
+                                              Aircraft leader, FactionHQ hq, Loadout loadout)
         {
             if (hq == null || leader == null) return false;
+
+            AircraftDefinition definition = transaction.Definition;
 
             // The nearest airbase is not necessarily one that can produce this airframe — a
             // hangar stocks specific types — so take the closest field that can.
@@ -137,16 +142,18 @@ namespace WingCommand
             // may already have claimed and removed it.
             var order = new PendingDelivery
             {
-                Definition = definition,
+                Transaction = transaction,
+                Origin = airbase,
+                RequestedAt = Time.unscaledTime,
                 ExpiresAt = Time.unscaledTime + HangarDeliveryTimeout,
-                OverLimit = overLimit,
-                Choice = choice,
+                Starting = true,
             };
 
             Watch(hq);
             pending.Add(order);
 
             Airbase.TrySpawnResult result;
+            int stockBeforeNative = hq.GetUnitSupply(definition);
             try
             {
                 // A null loadout makes the hangar fit the airframe's own AI weapon selection,
@@ -160,6 +167,23 @@ namespace WingCommand
                 Plugin.Logger.LogWarning("[Shop] hangar delivery threw, falling back: " + e.Message);
                 result = default(Airbase.TrySpawnResult);
             }
+            finally
+            {
+                // Hangar.TrySpawnAircraft charges faction supply itself when player is null.
+                // The purchase transaction already reserved its exact source, so retain only
+                // that debit and compensate the hangar's otherwise duplicate charge.
+                int stockAfterNative = hq.GetUnitSupply(definition);
+                if (stockAfterNative < stockBeforeNative)
+                    hq.AddSupplyUnit(definition, stockBeforeNative - stockAfterNative);
+                order.Starting = false;
+            }
+
+            order.Hangar = result.Hangar;
+
+            // An immediate hangar spawn registers inside TrySpawnAircraft, before it returns
+            // the native Hangar identifier. Re-evaluate only after that identifier is known.
+            for (int i = 0; i < order.EarlyCandidates.Count; i++)
+                TryClaim(order.EarlyCandidates[i]);
 
             if (!result.Allowed)
             {
@@ -170,7 +194,7 @@ namespace WingCommand
 
             Plugin.Logger.LogInfo(
                 "[Shop] " + definition.unitName + " ordered from a hangar at " + airbase.name +
-                " with the " + WingLoadoutCatalog.Label(definition, choice) + " fit" +
+                " with the " + WingLoadoutCatalog.Label(definition, transaction.Loadout) + " fit" +
                 (result.DelayedSpawn ? " (waiting on hangar doors)" : ""));
             return true;
         }
@@ -204,34 +228,74 @@ namespace WingCommand
             if (watched != null) watched.onRegisterUnit += OnUnitRegistered;
         }
 
-        /// <summary>
-        /// Claim a newly registered aircraft against the oldest matching order.
-        ///
-        /// Matching on type is as precise as this can be — the faction registers its own
-        /// aircraft through the same event and nothing distinguishes them at that point — so
-        /// a mission that happens to deploy the same airframe in the same moment could be
-        /// claimed instead. The consequence is only which of two identical aircraft joins
-        /// the wing.
-        /// </summary>
+        /// <summary>Claim only the aircraft emitted by the native hangar that accepted the order.</summary>
         private static void OnUnitRegistered(Unit unit)
         {
             if (!(unit is Aircraft aircraft) || aircraft.Player != null) return;
 
+            // Immediate spawns can arrive before TrySpawnAircraft returns its Hangar. Keep
+            // only candidates from the requested origin, then require the exact native spawn
+            // identifier once the call returns.
             for (int i = 0; i < pending.Count; i++)
             {
-                if (pending[i].Definition != aircraft.definition) continue;
+                PendingDelivery order = pending[i];
+                if (!order.Starting || order.Transaction.Definition != aircraft.definition)
+                    continue;
+                Hangar spawningHangar = aircraft.NetworkspawningHangar;
+                if (spawningHangar == null || spawningHangar.parentAirbase != order.Origin) continue;
+                order.EarlyCandidates.Add(aircraft);
+            }
 
-                bool overLimit = pending[i].OverLimit;
-                WingLoadoutChoice choice = pending[i].Choice;
-                pending.RemoveAt(i);
-                if (pending.Count == 0) Watch(null);
+            TryClaim(aircraft);
+        }
 
-                WingShop.NoteDelivery(aircraft, overLimit, choice);
-                WingCommandManager.Instance?.QueueRecruit(aircraft);
-                Plugin.Logger.LogInfo("[Shop] " + aircraft.unitName +
-                                     " registered; rostered, awaiting airborne activation");
+        private static void TryClaim(Aircraft aircraft)
+        {
+            if (aircraft == null || aircraft.Player != null || aircraft.NetworkspawningHangar == null)
+                return;
+
+            PendingDelivery match = null;
+            int matches = 0;
+            for (int i = 0; i < pending.Count; i++)
+            {
+                PendingDelivery order = pending[i];
+                if (!Matches(order, aircraft)) continue;
+                match = order;
+                matches++;
+            }
+
+            if (matches > 1)
+            {
+                Plugin.Logger.LogWarning(
+                    "[Shop] ambiguous hangar registration for " + aircraft.unitName +
+                    "; refusing to commandeer it");
                 return;
             }
+            if (matches != 1 || match == null) return;
+
+            pending.Remove(match);
+            if (pending.Count == 0) Watch(null);
+
+            if (!match.Transaction.Commit(aircraft)) return;
+            WingCommandManager.Instance?.QueueRecruit(aircraft);
+            Plugin.Logger.LogInfo("[Shop] " + aircraft.unitName +
+                                  " registered from " + match.Origin.name +
+                                  "; rostered, awaiting airborne activation");
+        }
+
+        private static bool Matches(PendingDelivery order, Aircraft aircraft)
+        {
+            if (order == null || order.Starting || order.Hangar == null ||
+                order.Transaction == null || aircraft == null)
+                return false;
+            if (order.Transaction.Definition != aircraft.definition) return false;
+            if (aircraft.NetworkHQ != order.Transaction.Hq) return false;
+            if (aircraft.NetworkspawningHangar != order.Hangar) return false;
+            if (Time.unscaledTime + 0.01f < order.RequestedAt) return false;
+
+            Transform spawn = order.Hangar.GetSpawnTransform();
+            return spawn == null || (aircraft.transform.position - spawn.position).sqrMagnitude <=
+                   1000f * 1000f;
         }
 
         /// <summary>Write off orders the field never produced, so nothing waits for ever.</summary>
@@ -242,8 +306,14 @@ namespace WingCommand
                 if (Time.unscaledTime < pending[i].ExpiresAt) continue;
 
                 Plugin.Logger.LogWarning(
-                    "[Shop] hangar delivery of " + pending[i].Definition.unitName + " never arrived");
-                if (pending[i].OverLimit) WingShop.CancelOverLimitDelivery();
+                    "[Shop] hangar delivery of " +
+                    pending[i].Transaction.Definition.unitName + " never arrived");
+                bool restored = pending[i].Transaction.Rollback("hangar delivery timed out");
+                WingCommandManager.Instance?.Toast(
+                    pending[i].Transaction.Definition.unitName +
+                    (restored
+                        ? " delivery failed - funds and stock restored"
+                        : " delivery failed - refund is retrying"));
                 pending.RemoveAt(i);
             }
 
@@ -252,6 +322,8 @@ namespace WingCommand
 
         public static void Reset()
         {
+            for (int i = 0; i < pending.Count; i++)
+                pending[i].Transaction?.Rollback("mission reset");
             pending.Clear();
             Watch(null);
         }

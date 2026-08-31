@@ -2,7 +2,7 @@
   "id": "com.marci.wingcommand",
   "artifact": {
     "fileName": "WingCommand.dll",
-    "version": "0.9.0",
+    "version": "0.9.1.1",
     "category": "release",
     "type": "plugin",
     "gameVersion": "0.34.2",

@@ -58,10 +58,7 @@ namespace WingCommand
         private readonly List<GlobalPosition> waypointQueue = new List<GlobalPosition>();
         private bool deliveryPending;
 
-        /// <summary>Cargo aboard when the current supply run was ordered.</summary>
-        private int cargoAtStart;
-        private float cargoRunStarted;
-        private bool cargoDropped;
+        private readonly CargoProgressTracker cargoProgress = new CargoProgressTracker();
 
         /// <summary>True while a hangar delivery is still taxiing or waiting to launch.</summary>
         public bool DeliveryPending => deliveryPending;
@@ -181,9 +178,7 @@ namespace WingCommand
                     // Neither reports back on its own. CheckCargoRun watches the cargo
                     // station itself, which is the only ground truth available, and either
                     // calls the delivery or gives the airframe back.
-                    cargoAtStart = CargoAmmo;
-                    cargoRunStarted = Time.timeSinceLevelLoad;
-                    cargoDropped = false;
+                    cargoProgress.Reset(CargoAmmo, Time.timeSinceLevelLoad);
 
                     if (directive.HasPoint)
                     {
@@ -311,22 +306,19 @@ namespace WingCommand
 
             int remaining = CargoAmmo;
 
-            if (remaining < cargoAtStart)
+            if (cargoProgress.Observe(remaining, Time.timeSinceLevelLoad))
             {
-                cargoAtStart = remaining;
-                cargoDropped = true;
                 WingComms.Say(this, WingComms.Call.Delivered);
             }
 
             if (remaining <= 0)
             {
-                if (cargoDropped) WingPilotRoster.NoteSortie(Aircraft);
+                if (cargoProgress.MadeProgress) WingPilotRoster.NoteSortie(Aircraft);
                 Apply(WingOrder.Formation);
                 return;
             }
 
-            if (cargoDropped || Time.timeSinceLevelLoad - cargoRunStarted < CargoRunTimeout)
-                return;
+            if (!cargoProgress.IsStalled(Time.timeSinceLevelLoad, CargoRunTimeout)) return;
 
             WingComms.Say(this, WingComms.Call.NoDropOff);
             WingCommandManager.Instance?.Toast(

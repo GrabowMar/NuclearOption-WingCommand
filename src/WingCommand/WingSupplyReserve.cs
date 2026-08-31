@@ -6,15 +6,11 @@ namespace WingCommand
     /// <summary>
     /// Three concrete airframes held for the player's wing.
     ///
-    /// The old system raised <c>FactionHQ.reserveAirframes</c>, a per-type floor used by the
-    /// game's AI deployment. A value of two therefore protected two of every stocked type
-    /// and the UI needed a mission + player + mod formula to explain the result. That was
-    /// neither a three-aircraft reserve nor an intuitive inventory.
-    ///
-    /// This reserve is literal. Holding an airframe removes one unit from faction supply so
-    /// native AI cannot spend it; releasing or ending the mission puts it back. Recovered
-    /// wing aircraft enter the same three slots. An airframe previously requisitioned at
-    /// full price is marked owned and may be launched again without buying it twice.
+    /// A slot owns all facts about one airframe: its definition, whether it was already
+    /// purchased, and the loadout (if any) it carried home. Keeping those facts together is
+    /// important. Parallel per-type counters and loadout FIFOs can consume a held frame while
+    /// discarding an owned frame's fit, which quietly changes which physical aircraft the
+    /// player still owns.
     /// </summary>
     internal static class WingSupplyReserve
     {
@@ -27,43 +23,82 @@ namespace WingCommand
             Owned,
         }
 
-        private sealed class Entry
+        /// <summary>One literal reserve airframe. Purchase reservation keeps the slot present.</summary>
+        internal sealed class Slot
         {
-            public int Held;
-            public int Owned;
-            public int Total => Held + Owned;
+            internal readonly AircraftDefinition Definition;
+            internal readonly Source Source;
+            internal readonly bool HasLoadout;
+            internal readonly WingLoadoutChoice Loadout;
+            internal readonly object RecoveryToken;
+            internal bool ReservedForPurchase;
+
+            internal Slot(AircraftDefinition definition, Source source,
+                          bool hasLoadout, WingLoadoutChoice loadout,
+                          object recoveryToken = null)
+            {
+                Definition = definition;
+                Source = source;
+                HasLoadout = hasLoadout;
+                Loadout = loadout;
+                RecoveryToken = recoveryToken;
+            }
         }
 
-        private static readonly Dictionary<AircraftDefinition, Entry> entries =
-            new Dictionary<AircraftDefinition, Entry>();
-
+        private static readonly List<Slot> slots = new List<Slot>();
         private static FactionHQ hq;
         private static bool isHost;
 
         public static bool IsHost => isHost;
         public static bool HasFaction => hq != null;
 
-        public static int Count
+        /// <summary>Occupied reserve capacity, including a slot reserved by a pending order.</summary>
+        public static int Count => slots.Count;
+
+        public static IEnumerable<AircraftDefinition> Definitions
         {
             get
             {
-                int total = 0;
-                foreach (Entry entry in entries.Values) total += entry.Total;
-                return total;
+                var seen = new HashSet<AircraftDefinition>();
+                for (int i = 0; i < slots.Count; i++)
+                {
+                    AircraftDefinition definition = slots[i].Definition;
+                    if (definition != null && seen.Add(definition)) yield return definition;
+                }
             }
         }
 
-        public static IEnumerable<AircraftDefinition> Definitions => entries.Keys;
+        /// <summary>Launchable slots of this type; pending purchase reservations are excluded.</summary>
+        public static int CountOf(AircraftDefinition definition)
+        {
+            if (definition == null) return 0;
+            int total = 0;
+            for (int i = 0; i < slots.Count; i++)
+                if (slots[i].Definition == definition && !slots[i].ReservedForPurchase) total++;
+            return total;
+        }
 
-        public static int CountOf(AircraftDefinition definition) =>
-            definition != null && entries.TryGetValue(definition, out Entry entry)
-                ? entry.Total
-                : 0;
+        public static int OwnedOf(AircraftDefinition definition)
+        {
+            if (definition == null) return 0;
+            int total = 0;
+            for (int i = 0; i < slots.Count; i++)
+                if (slots[i].Definition == definition &&
+                    slots[i].Source == Source.Owned && !slots[i].ReservedForPurchase)
+                    total++;
+            return total;
+        }
 
-        public static int OwnedOf(AircraftDefinition definition) =>
-            definition != null && entries.TryGetValue(definition, out Entry entry)
-                ? entry.Owned
-                : 0;
+        public static int LoadoutCountOf(AircraftDefinition definition)
+        {
+            if (definition == null) return 0;
+            int total = 0;
+            for (int i = 0; i < slots.Count; i++)
+                if (slots[i].Definition == definition && slots[i].HasLoadout &&
+                    !slots[i].ReservedForPurchase)
+                    total++;
+            return total;
+        }
 
         public static int FactionStockOf(AircraftDefinition definition) =>
             hq != null && definition != null ? hq.GetUnitSupply(definition) : 0;
@@ -98,41 +133,38 @@ namespace WingCommand
             }
 
             hq.AddSupplyUnit(definition, -1);
-            GetOrCreate(definition).Held++;
+            slots.Add(new Slot(definition, Source.Held, false, WingLoadoutChoice.Standard));
             Plugin.Logger.LogInfo(
                 "[Reserve] held " + definition.unitName + " for the wing (" +
                 Count + "/" + Capacity + ")");
             return true;
         }
 
-        /// <summary>Return one selected reserve airframe to ordinary faction stock.</summary>
+        /// <summary>Return one exact, unreserved airframe to ordinary faction stock.</summary>
         public static bool Release(AircraftDefinition definition, out bool wasOwned,
                                    out string reason)
         {
             wasOwned = false;
             reason = null;
             if (!CanWrite(definition, out reason)) return false;
-            if (!entries.TryGetValue(definition, out Entry entry) || entry.Total <= 0)
+
+            // Prefer an unpaid hold, but remove that concrete slot and its own loadout only.
+            int index = ReserveSlotPolicy.SelectForRelease(
+                slots.Count,
+                i => slots[i].Definition == definition,
+                i => slots[i].Source == Source.Owned,
+                i => slots[i].HasLoadout,
+                i => slots[i].ReservedForPurchase);
+            if (index < 0)
             {
-                reason = definition.unitName + " is not in the wing reserve";
+                reason = definition.unitName + " is not available in the wing reserve";
                 return false;
             }
 
-            // Give back an unpaid hold before an owned airframe. This makes room without
-            // accidentally surrendering something the player already bought.
-            if (entry.Held > 0) entry.Held--;
-            else
-            {
-                entry.Owned--;
-                wasOwned = true;
-            }
-
-            if (entry.Total == 0) entries.Remove(definition);
+            Slot slot = slots[index];
+            slots.RemoveAt(index);
+            wasOwned = slot.Source == Source.Owned;
             hq.AddSupplyUnit(definition, 1);
-
-            // An airframe that has gone back to the faction is no longer the player's to
-            // configure, so the loadout parked against its slot goes with it.
-            WingLoadoutBook.DropReserved(definition);
 
             Plugin.Logger.LogInfo(
                 "[Reserve] returned " + definition.unitName + " to faction stock (" +
@@ -140,54 +172,77 @@ namespace WingCommand
             return true;
         }
 
-        /// <summary>
-        /// Put a safely recovered wingman into the same reserve, preserving whether its full
-        /// requisition price was already paid. Returns false when the three slots are full.
-        /// </summary>
-        public static bool StoreRecovered(AircraftDefinition definition, bool owned)
+        /// <summary>Store one recovered airframe with its ownership and fit in one slot.</summary>
+        public static bool StoreRecovered(AircraftDefinition definition, bool owned,
+                                          bool loadoutKnown, WingLoadoutChoice loadout,
+                                          object recoveryToken)
         {
-            if (definition == null || hq == null || !isHost || Count >= Capacity) return false;
+            if (definition == null || hq == null || !isHost) return false;
+            if (recoveryToken != null)
+            {
+                for (int i = 0; i < slots.Count; i++)
+                    if (ReferenceEquals(slots[i].RecoveryToken, recoveryToken)) return true;
+            }
+            if (Count >= Capacity) return false;
 
-            Entry entry = GetOrCreate(definition);
-            if (owned) entry.Owned++;
-            else entry.Held++;
-
+            slots.Add(new Slot(definition, owned ? Source.Owned : Source.Held,
+                               loadoutKnown, loadout, recoveryToken));
             Plugin.Logger.LogInfo(
                 "[Reserve] recovered " + definition.unitName +
                 (owned ? " (owned)" : "") + " into slot " + Count + "/" + Capacity);
             return true;
         }
 
-        /// <summary>Which reserve bucket the next requisition should consume.</summary>
-        public static Source NextSource(AircraftDefinition definition)
+        /// <summary>Which exact slot the next requisition would consume.</summary>
+        internal static bool PeekForPurchase(AircraftDefinition definition, out Slot slot)
         {
-            if (definition == null || !entries.TryGetValue(definition, out Entry entry))
-                return Source.None;
-
-            // Use an already-paid airframe before charging for a merely held one.
-            if (entry.Owned > 0) return Source.Owned;
-            return entry.Held > 0 ? Source.Held : Source.None;
+            int index = ReserveSlotPolicy.SelectForPurchase(
+                slots.Count,
+                i => slots[i].Definition == definition,
+                i => slots[i].Source == Source.Owned,
+                i => slots[i].ReservedForPurchase);
+            slot = index >= 0 ? slots[index] : null;
+            return slot != null;
         }
 
-        /// <summary>Commit a successful requisition against one reserved airframe.</summary>
-        public static bool Consume(AircraftDefinition definition, Source source)
+        public static Source NextSource(AircraftDefinition definition) =>
+            PeekForPurchase(definition, out Slot slot) ? slot.Source : Source.None;
+
+        public static bool PeekLoadout(AircraftDefinition definition,
+                                       out WingLoadoutChoice loadout)
         {
-            if (source == Source.None || definition == null ||
-                !entries.TryGetValue(definition, out Entry entry)) return false;
-
-            if (source == Source.Owned)
-            {
-                if (entry.Owned <= 0) return false;
-                entry.Owned--;
-            }
-            else
-            {
-                if (entry.Held <= 0) return false;
-                entry.Held--;
-            }
-
-            if (entry.Total == 0) entries.Remove(definition);
+            loadout = WingLoadoutChoice.Standard;
+            if (!PeekForPurchase(definition, out Slot slot) || !slot.HasLoadout) return false;
+            loadout = slot.Loadout;
             return true;
+        }
+
+        /// <summary>Reserve the concrete slot without freeing capacity for another recovery.</summary>
+        internal static bool ReserveForPurchase(AircraftDefinition definition, Source expected,
+                                                out Slot slot)
+        {
+            slot = null;
+            if (!PeekForPurchase(definition, out Slot candidate)) return false;
+            if (expected != Source.None && candidate.Source != expected) return false;
+            candidate.ReservedForPurchase = true;
+            slot = candidate;
+            return true;
+        }
+
+        /// <summary>Commit a delivered purchase by consuming exactly the reserved slot.</summary>
+        internal static bool CommitPurchase(Slot slot)
+        {
+            if (slot == null || !slot.ReservedForPurchase) return false;
+            int index = slots.IndexOf(slot);
+            if (index < 0) return false;
+            slots.RemoveAt(index);
+            return true;
+        }
+
+        /// <summary>Roll back an order while preserving the slot's identity and FIFO position.</summary>
+        internal static void CancelPurchase(Slot slot)
+        {
+            if (slot != null && slots.Contains(slot)) slot.ReservedForPurchase = false;
         }
 
         public static void Reset()
@@ -195,14 +250,6 @@ namespace WingCommand
             ReturnAllToFaction();
             hq = null;
             isHost = false;
-        }
-
-        private static Entry GetOrCreate(AircraftDefinition definition)
-        {
-            if (entries.TryGetValue(definition, out Entry entry)) return entry;
-            entry = new Entry();
-            entries.Add(definition, entry);
-            return entry;
         }
 
         private static bool CanWrite(AircraftDefinition definition, out string reason)
@@ -230,13 +277,13 @@ namespace WingCommand
         {
             if (hq != null && isHost)
             {
-                foreach (KeyValuePair<AircraftDefinition, Entry> pair in entries)
+                for (int i = 0; i < slots.Count; i++)
                 {
-                    if (pair.Key != null && pair.Value.Total > 0)
-                        hq.AddSupplyUnit(pair.Key, pair.Value.Total);
+                    Slot slot = slots[i];
+                    if (slot.Definition != null) hq.AddSupplyUnit(slot.Definition, 1);
                 }
             }
-            entries.Clear();
+            slots.Clear();
         }
     }
 }

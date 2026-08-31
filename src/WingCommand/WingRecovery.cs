@@ -1,145 +1,244 @@
 using System;
+using System.Collections.Generic;
 using NuclearOption.Networking;
 using UnityEngine;
 
 namespace WingCommand
 {
     /// <summary>
-    /// Finishes a Return To Base order: when the wingman is home and shut down, its airframe
-    /// enters the three-slot wing reserve and the aircraft leaves the world.
-    ///
-    /// Without this an RTB order simply ended. The stock states land the aircraft perfectly
-    /// well — <c>AIPilotLandingState</c> hands off to <c>AIPilotTaxiState</c>, which taxis to
-    /// a service point, calls <c>StartEjectionSequence</c> and parks; the rotary path in
-    /// <c>AIHeloLandingState</c> ends the same way — but nothing credits the airframe back.
-    /// <c>FactionHQ.RemoveFactionUnit</c> only drops it from the active-AI list, so a wingman
-    /// sent home consumed its airframe exactly as if it had been shot down.
-    ///
-    /// It read that way too. The ejection at the end of the taxi clears
-    /// <see cref="WingMember.Alive"/>, so <see cref="WingRegistry.Prune"/> reported a
-    /// successful recovery as "pilot ejected" — a loss. This runs immediately before Prune
-    /// so it claims the aircraft first.
+    /// Settles Return To Base as an idempotent sequence: capture facts, credit exactly one
+    /// inventory destination, confirm network destruction, then release ownership and roster
+    /// tracking. A failed stage remains pending and is retried instead of losing the aircraft
+    /// between unrelated mutations.
     /// </summary>
     internal static class WingRecovery
     {
-        /// <summary>Height, in metres, below which the aircraft counts as being on the ground.</summary>
         private const float GroundHeight = 5f;
-
-        /// <summary>Speed, in m/s, below which a landed aircraft counts as stopped.</summary>
         private const float StoppedSpeed = 3f;
+        private const float RetrySeconds = 1f;
+
+        private sealed class Settlement
+        {
+            public WingRegistry Wing;
+            public WingMember Member;
+            public Aircraft Aircraft;
+            public PersistentID AircraftId;
+            public AircraftDefinition Definition;
+            public FactionHQ Hq;
+            public string Name;
+            public bool Owned;
+            public bool LoadoutKnown;
+            public WingLoadoutChoice Loadout;
+            public bool InventoryCredited;
+            public bool StoredInReserve;
+            public bool DestroyConfirmed;
+            public bool OwnershipTransferred;
+            public bool RosterReleased;
+            public bool Completed;
+            public bool SortieNoted;
+            public float RetryAt;
+        }
+
+        private static readonly List<Settlement> pending = new List<Settlement>();
 
         public static void Tick(WingRegistry wing)
         {
             if (wing == null || !Plugin.Config2.RtbReturnsToReserve.Value) return;
 
-            // Iterate backwards: a recovery removes its member from the roster.
+            for (int i = pending.Count - 1; i >= 0; i--)
+            {
+                Settlement settlement = pending[i];
+                Advance(settlement);
+                if (settlement.Completed) pending.RemoveAt(i);
+            }
+
+            // Iterate backwards because a newly started settlement can complete immediately
+            // and remove its member from the roster.
             for (int i = wing.Count - 1; i >= 0; i--)
             {
                 WingMember member = wing.Members[i];
                 if (member == null || member.Order != WingOrder.ReturnToBase) continue;
-                if (!IsHome(member)) continue;
+                if (IsPending(member) || !IsHome(member)) continue;
 
-                Recover(wing, member);
+                Settlement settlement = Begin(wing, member);
+                pending.Add(settlement);
+                Advance(settlement);
+                if (settlement.Completed) pending.Remove(settlement);
             }
         }
 
-        /// <summary>
-        /// Whether this wingman has finished its recovery.
-        ///
-        /// Two ways in, because the stock flow can stop at either. A fixed-wing aircraft
-        /// brakes to a halt at a service point and only then ejects its pilot; a helicopter
-        /// touches down and ejects immediately. Both are "home", and so is an aircraft that
-        /// simply came to rest on the apron because the taxi state gave up. What all of them
-        /// share is an intact airframe, stationary, on the ground, inside a friendly airbase.
-        /// </summary>
+        /// <summary>Prune must not report a staged recovery as a combat loss between retries.</summary>
+        public static bool IsPending(WingMember member)
+        {
+            if (member == null) return false;
+            for (int i = 0; i < pending.Count; i++)
+                if (pending[i].Member == member) return true;
+            return false;
+        }
+
+        public static void Reset() => pending.Clear();
+
+        private static Settlement Begin(WingRegistry wing, WingMember member)
+        {
+            Aircraft aircraft = member.Aircraft;
+            var settlement = new Settlement
+            {
+                Wing = wing,
+                Member = member,
+                Aircraft = aircraft,
+                AircraftId = aircraft != null ? aircraft.persistentID : default(PersistentID),
+                Definition = aircraft != null ? aircraft.definition : null,
+                Hq = aircraft != null ? aircraft.NetworkHQ : null,
+                Name = member.Name,
+                Owned = WingShop.IsPurchased(aircraft),
+                Loadout = member.Loadout,
+                LoadoutKnown = member.LoadoutKnown,
+            };
+
+            WingComms.Say(member, WingComms.Call.Recovered);
+            return settlement;
+        }
+
+        private static void Advance(Settlement settlement)
+        {
+            if (settlement == null || settlement.Completed) return;
+            if (Time.unscaledTime < settlement.RetryAt) return;
+
+            try
+            {
+                if (!settlement.SortieNoted)
+                {
+                    WingPilotRoster.NoteSortie(settlement.Aircraft);
+                    settlement.SortieNoted = true;
+                }
+
+                if (!settlement.InventoryCredited && !CreditInventory(settlement))
+                {
+                    Retry(settlement, "no inventory destination available");
+                    return;
+                }
+
+                // Retire the pilot and release native state while the aircraft reference is
+                // still valid. If destruction then fails, this settlement remains the durable
+                // owner of the aircraft and retries instead of abandoning an untracked frame.
+                if (!settlement.RosterReleased)
+                {
+                    settlement.Wing.Recover(settlement.Member);
+                    settlement.RosterReleased = !settlement.Wing.Contains(settlement.Member);
+                    if (!settlement.RosterReleased)
+                    {
+                        Retry(settlement, "roster release did not complete");
+                        return;
+                    }
+                }
+
+                if (!settlement.DestroyConfirmed)
+                {
+                    if (settlement.Aircraft == null ||
+                        !UnitRegistry.TryGetUnit(settlement.AircraftId, out Unit tracked) ||
+                        tracked == null)
+                    {
+                        settlement.DestroyConfirmed = true;
+                    }
+                    else
+                    {
+                        NetworkManagerNuclearOption.i.ServerObjectManager.Destroy(
+                            settlement.Aircraft.Identity,
+                            !settlement.Aircraft.Identity.IsSceneObject);
+                        // Treat the network registry as confirmation, not a void method
+                        // returning. If destruction is deferred, retain and retry the staged
+                        // settlement without transferring ownership in the meantime.
+                        if (UnitRegistry.TryGetUnit(settlement.AircraftId, out tracked) &&
+                            tracked != null)
+                        {
+                            Retry(settlement, "waiting for network destruction confirmation");
+                            return;
+                        }
+                        settlement.DestroyConfirmed = true;
+                    }
+                }
+
+                // Ownership transfers only after inventory credit and network destruction.
+                if (!settlement.OwnershipTransferred)
+                {
+                    if (settlement.Owned) WingShop.TakePurchased(settlement.AircraftId);
+                    settlement.OwnershipTransferred = true;
+                }
+
+                WingLoadoutBook.Forget(settlement.AircraftId);
+
+                int stock = settlement.Hq != null && settlement.Definition != null
+                    ? settlement.Hq.GetUnitSupply(settlement.Definition)
+                    : 0;
+                settlement.Completed = true;
+                WingCommandManager.Instance?.Toast(settlement.StoredInReserve
+                    ? settlement.Name + " recovered to wing reserve (" + WingSupplyReserve.Count +
+                      "/" + WingSupplyReserve.Capacity + ")"
+                    : settlement.Name + " recovered to faction stock - wing reserve full");
+                Plugin.Logger.LogInfo(
+                    "[Recovery] " + settlement.Name + " recovered at base; " +
+                    (settlement.Definition != null ? settlement.Definition.unitName : "airframe") +
+                    (settlement.StoredInReserve
+                        ? " stored in wing reserve"
+                        : " faction stock now " + stock));
+            }
+            catch (Exception e)
+            {
+                Retry(settlement, e.GetType().Name + " - " + e.Message);
+            }
+        }
+
+        private static bool CreditInventory(Settlement settlement)
+        {
+            if (settlement.Definition == null) return false;
+
+            if (WingSupplyReserve.StoreRecovered(
+                    settlement.Definition, settlement.Owned,
+                    settlement.LoadoutKnown, settlement.Loadout, settlement))
+            {
+                settlement.StoredInReserve = true;
+                settlement.InventoryCredited = true;
+                return true;
+            }
+
+            if (settlement.Hq == null) return false;
+
+            int before = settlement.Hq.GetUnitSupply(settlement.Definition);
+            try
+            {
+                settlement.Hq.AddSupplyUnit(settlement.Definition, 1);
+            }
+            finally
+            {
+                // If AddSupplyUnit changed the count and then threw, the settlement is still
+                // credited and must not repeat that side effect on the next retry.
+                settlement.InventoryCredited =
+                    settlement.Hq.GetUnitSupply(settlement.Definition) > before;
+            }
+            return settlement.InventoryCredited;
+        }
+
+        private static void Retry(Settlement settlement, string reason)
+        {
+            settlement.RetryAt = Time.unscaledTime + RetrySeconds;
+            Plugin.Logger.LogWarning(
+                "[Recovery] " + settlement.Name + " settlement pending: " + reason);
+        }
+
         private static bool IsHome(WingMember member)
         {
             Aircraft aircraft = member.Aircraft;
             if (aircraft == null || aircraft.disabled) return false;
-
-            // Only the host may write supply or destroy a network object.
             if (!aircraft.IsServer || !aircraft.LocalSim) return false;
             if (aircraft.radarAlt > GroundHeight) return false;
 
             FactionHQ hq = aircraft.NetworkHQ;
             if (hq == null || !hq.AnyNearAirbase(aircraft.transform.position, out _)) return false;
-
             if (aircraft.speed <= StoppedSpeed) return true;
 
-            // Still rolling, but nobody is flying it any more: the pilot has climbed out or
-            // the aircraft has been handed to the parked state. Either way it is finished.
             Pilot pilot = member.Pilot;
             return pilot != null &&
                    (pilot.ejected || pilot.dead || pilot.currentState is PilotParkedState);
-        }
-
-        /// <summary>
-        /// Put the airframe in the wing reserve and take the aircraft out of the world.
-        ///
-        /// An owned requisition remains owned, while an active mission aircraft becomes a
-        /// normal held slot. If all three slots are occupied, the frame is returned to the
-        /// faction's ordinary stock instead.
-        ///
-        /// The aircraft is destroyed rather than disabled, for the reason
-        /// <see cref="WingTakeover"/> destroys its source aircraft: <c>DisableUnit</c> would
-        /// register a kill, a score event and a supply loss for an aircraft that landed
-        /// safely.
-        /// </summary>
-        private static void Recover(WingRegistry wing, WingMember member)
-        {
-            Aircraft aircraft = member.Aircraft;
-            string name = member.Name;
-            bool owned = WingShop.TakePurchased(aircraft);
-
-            // Read before the roster lets go of the member: the aircraft is about to be
-            // destroyed, and both of these are keyed off its persistent ID.
-            WingLoadoutChoice loadout = member.Loadout;
-            bool loadoutKnown = member.LoadoutKnown;
-            WingPilotRoster.NoteSortie(aircraft);
-
-            // Whatever happens below, the member leaves the roster. A recovery that failed
-            // half way and stayed on the books would be retried every frame for the rest of
-            // the mission.
-            WingComms.Say(member, WingComms.Call.Recovered);
-            wing.Recover(member);
-
-            try
-            {
-                FactionHQ hq = aircraft.NetworkHQ;
-                bool stored = WingSupplyReserve.StoreRecovered(aircraft.definition, owned);
-                if (!stored && hq != null && aircraft.definition != null)
-                    hq.AddSupplyUnit(aircraft.definition, 1);
-
-                // The airframe that comes back is a count in the reserve rather than an
-                // object, so its loadout is parked alongside it and collected by whichever
-                // requisition spends that slot. Without this a recovered wingman relaunched
-                // with the stock fit and the player's configuration quietly vanished at the
-                // one moment the mod is encouraging them to bring an aircraft home.
-                if (stored && loadoutKnown)
-                    WingLoadoutBook.StoreReserved(aircraft.definition, loadout);
-                WingLoadoutBook.Forget(aircraft);
-
-                NetworkManagerNuclearOption.i.ServerObjectManager.Destroy(
-                    aircraft.Identity, !aircraft.Identity.IsSceneObject);
-
-                int stock = hq != null && aircraft.definition != null
-                    ? hq.GetUnitSupply(aircraft.definition)
-                    : 0;
-
-                WingCommandManager.Instance?.Toast(stored
-                    ? name + " recovered to wing reserve (" + WingSupplyReserve.Count +
-                      "/" + WingSupplyReserve.Capacity + ")"
-                    : name + " recovered to faction stock - wing reserve full");
-                Plugin.Logger.LogInfo(
-                    "[Recovery] " + name + " recovered at base; " +
-                    (aircraft.definition != null ? aircraft.definition.unitName : "airframe") +
-                    (stored ? " stored in wing reserve" : " faction stock now " + stock));
-            }
-            catch (Exception e)
-            {
-                Plugin.Logger.LogError("[Recovery] " + name + " could not be returned to stock: " + e);
-                WingCommandManager.Instance?.Toast(name + " landed; airframe could not be returned");
-            }
         }
     }
 }

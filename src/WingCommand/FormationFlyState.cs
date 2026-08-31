@@ -437,14 +437,6 @@ namespace WingCommand
             return threatSpacing;
         }
         /// <summary>
-        /// Roll with the leader once settled.
-        ///
-        /// AutopilotPlane derives roll from the desired flight direction and offers no way
-        /// to command it, so this blends the result afterwards and re-filters. Wingmen that
-        /// stay wings-level through a banked turn are one of the clearest giveaways that a
-        /// formation is being simulated rather than flown.
-        /// </summary>
-        /// <summary>
         /// Apply the wing's rules of engagement from inside the slot.
         ///
         /// Nothing here touches attitude or throttle, so a Defensive wingman can shoot
