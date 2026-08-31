@@ -192,6 +192,12 @@ namespace WingCommand
             controlInputs = aircraft.GetInputs();
 
             aircraft.SetFlightAssist(enabled: true);
+
+            // Start out of the hovering configuration whatever the last state left behind.
+            // A rotary or thrust-vectoring wingman that needs it back gets it the moment
+            // RotaryFormation selects its hover regime, and a rejoin is a cruise.
+            HoverAssist.Release(aircraft);
+
             // Retract the gear whenever it is not already up. A freshly spawned helicopter
             // can still be Uninitialized here (a frame after spawn), and skipping that case
             // is what left it sitting with the gear hanging out.

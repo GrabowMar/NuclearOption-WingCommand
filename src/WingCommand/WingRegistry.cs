@@ -38,6 +38,11 @@ namespace WingCommand
             Aircraft previous = Leader;
             Leader = leader;
 
+            // The deck hold describes one leader's situation. Carrying it across a change of
+            // seat would leave the wing orbiting for an aircraft that is no longer theirs.
+            heldOnDeck.Clear();
+            leaderOnDeck = false;
+
             if (leader == null)
             {
                 if (previous != null && WingTakeover.Begin(this, previous))
@@ -101,6 +106,96 @@ namespace WingCommand
                 members[i].CheckCargoRun();
                 members[i].CheckReserves();
             }
+
+            CheckLeaderOnDeck();
+        }
+
+        // ------------------------------------------------------- leader on the ground
+
+        /// <summary>Radar altitude below which a gear-down leader is treated as on the deck.</summary>
+        private const float DeckAltitude = 10f;
+
+        /// <summary>Radar altitude the leader must regain before the wing rejoins.</summary>
+        private const float AirborneAltitude = 40f;
+
+        /// <summary>Members holding overhead because the leader is on the ground.</summary>
+        private readonly HashSet<WingMember> heldOnDeck = new HashSet<WingMember>();
+
+        private bool leaderOnDeck;
+
+        /// <summary>
+        /// Whether the leader is on the ground rather than merely low.
+        ///
+        /// The distinction is the whole point: flying an ingress at ten metres is ordinary
+        /// in this game and must not disband the formation, whereas an approach, a landing
+        /// roll or a parked aircraft must. Extended gear separates the two — nobody runs a
+        /// low-level attack with the gear hanging out — and the exit threshold sits far
+        /// enough above the entry one that a bounce on touchdown cannot flap the wing back
+        /// and forth between holding and rejoining.
+        /// </summary>
+        private bool LeaderIsOnDeck()
+        {
+            Aircraft leader = Leader;
+            if (leader == null || leader.disabled) return false;
+
+            if (leaderOnDeck) return leader.radarAlt < AirborneAltitude;
+            return leader.gearDeployed && leader.radarAlt < DeckAltitude;
+        }
+
+        /// <summary>
+        /// Hold the wing overhead while the player is landing, landed or taxiing.
+        ///
+        /// A formation slot is defined relative to the leader, so a leader on the runway
+        /// puts every slot on the runway too — and the wingmen flew at them, which is a
+        /// wing of aircraft diving into the ground the moment the player touches down. They
+        /// orbit the field instead until the leader is airborne again, then rejoin.
+        ///
+        /// Only members actually trying to hold formation are moved, and only they are
+        /// given back: an explicit order — an attack, a hold somewhere else, an RTB — is the
+        /// player's, and outlives their landing.
+        /// </summary>
+        public void CheckLeaderOnDeck()
+        {
+            bool onDeck = LeaderIsOnDeck();
+
+            if (!onDeck)
+            {
+                if (!leaderOnDeck) return;
+                leaderOnDeck = false;
+
+                foreach (WingMember member in heldOnDeck)
+                {
+                    if (member == null || !members.Contains(member)) continue;
+                    if (!member.IsCommandable || member.Order != WingOrder.OrbitHere) continue;
+                    member.Apply(WingOrder.Formation);
+                }
+
+                heldOnDeck.Clear();
+                return;
+            }
+
+            // Runs on every pass, not only on the transition: a wingman that finishes an
+            // attack while the player is still on the ground rejoins into a formation order
+            // of its own accord, and would fly the same slot into the same runway.
+            GlobalPosition overhead = Leader.GlobalPosition();
+            bool announced = leaderOnDeck;
+            leaderOnDeck = true;
+
+            foreach (WingMember member in members)
+            {
+                if (member == null || !member.IsCommandable) continue;
+                if (member.Order != WingOrder.Formation) continue;
+
+                member.Apply(WingDirective.AtPoint(WingOrder.OrbitHere, overhead));
+                heldOnDeck.Add(member);
+
+                if (!announced)
+                {
+                    announced = true;
+                    WingCommandManager.Instance?.Toast(
+                        "Leader on the deck - wing holding overhead");
+                }
+            }
         }
 
         /// <summary>
@@ -111,6 +206,8 @@ namespace WingCommand
         public void Clear()
         {
             members.Clear();
+            heldOnDeck.Clear();
+            leaderOnDeck = false;
             Leader = null;
         }
 
@@ -471,13 +568,24 @@ namespace WingCommand
                 $"[Wing] {recruit.unitName} max speed {mine:F0} vs leader {leader:F0} - cannot hold station");
         }
 
+        /// <summary>
+        /// Release one member at the player's request.
+        ///
+        /// Sends it home rather than to the combat AI: see <see cref="WingMember.SendHome"/>
+        /// for why a dismissal and an automatic break want opposite endings.
+        /// </summary>
         public void Remove(WingMember member, string reason)
         {
             if (member == null) return;
             Aircraft released = member.Aircraft;
+
+            // Sign off before retiring the pilot, not after. Retire clears the seat
+            // assignment, and a sign-off from an aircraft with nobody assigned to it comes
+            // out as an anonymous slot number instead of the pilot the player knows.
+            member.SendHome(reason);
             WingPilotRoster.Retire(member, survived: true);
-            member.ReleaseToCombat(reason);
             members.Remove(member);
+            heldOnDeck.Remove(member);
             WingMarkers.Repaint(released);
         }
 

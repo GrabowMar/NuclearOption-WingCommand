@@ -813,6 +813,13 @@ namespace WingCommand
                 if (a == null || a.disabled) continue;
                 if (a.NetworkHQ != hq) continue;
                 if (a.Player != null) continue;
+
+                // An aircraft the player has released is on its way home to be despawned.
+                // Counting it holds capacity against a slot that is already being given
+                // back, which is exactly the trap releasing a wingman to afford a better
+                // one used to fall into.
+                if (WingDeparture.Contains(a)) continue;
+
                 aiCount++;
             }
 

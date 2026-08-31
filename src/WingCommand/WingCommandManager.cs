@@ -52,7 +52,7 @@ namespace WingCommand
         {
             new RadialSlice("Form Up", WingAction.Rejoin),
             new RadialSlice("Attack\nMy Target", WingAction.AttackMyTarget),
-            new RadialSlice("Fire For\nEffect", WingAction.FireForEffect),
+            new RadialSlice("Splash\n'Em", WingAction.FireForEffect),
             new RadialSlice("Engage", WingAction.Engage),
             new RadialSlice("Disengage", WingAction.FallBack),
             new RadialSlice("Hold\nPosition", WingAction.OrbitHere),
@@ -89,6 +89,7 @@ namespace WingCommand
                 WingKillCredit.Reset();
                 recruitQueue.Clear();
                 WingRecovery.Reset();
+                WingDeparture.Reset();
                 WingSupplyReserve.Reset();
                 WingTakeover.Reset();
                 WingUi.Reset();
@@ -555,7 +556,7 @@ namespace WingCommand
             if (member == null) return;
             string name = member.Name;
             Wing.Remove(member, "removed from the map panel");
-            Toast(name + " released");
+            Toast(name + " released - returning to base");
         }
 
         /// <summary>Assign the current map selection to the wing. Used by the map panel.</summary>

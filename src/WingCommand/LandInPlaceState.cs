@@ -143,7 +143,7 @@ namespace WingCommand
                     break;
 
                 case Phase.Settle:
-                    aircraft.autopilot.Hover(spot, hold, facing);
+                    HoverAssist.Hover(aircraft, spot, hold, facing);
                     if (aircraft.speed < SettleSpeed &&
                         HorizontalDistance(aircraft.GlobalPosition(), spot) < 30f)
                         phase = Phase.Descend;
@@ -151,13 +151,18 @@ namespace WingCommand
 
                 case Phase.Descend:
                     hold = Mathf.Max(0f, hold - DescentRate * Time.fixedDeltaTime);
-                    aircraft.autopilot.Hover(spot, hold, facing);
+                    HoverAssist.Hover(aircraft, spot, hold, facing);
                     break;
             }
         }
 
         private void Transit()
         {
+            // Transit is flown, not hovered. Holding the hovering configuration across the
+            // cruise out to the spot would stop a thrust-vectoring aircraft ever getting
+            // there.
+            HoverAssist.Release(aircraft);
+
             AircraftParameters p = aircraft.GetAircraftParameters();
             float agl = Mathf.Clamp(Mathf.Max(p.minimumRadarAlt, TransitAltitude), 40f, 1000f);
             aircraft.autopilot.AutoAim(

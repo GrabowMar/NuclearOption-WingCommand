@@ -131,7 +131,7 @@ namespace WingCommand
         /// Put everything that can hurt this target into it, without the wing-wide
         /// concurrency cap.
         ///
-        /// This is the Fire For Effect order's shooting, and the only place in the mod that
+        /// This is the Splash 'Em order's shooting, and the only place in the mod that
         /// deliberately skips <see cref="TacticalCoordinator"/>. Massed fire on one
         /// designation is the entire point of the order, so the reservation that normally
         /// stops a four-ship spending four missiles on a two-missile target is exactly what
@@ -167,7 +167,7 @@ namespace WingCommand
 
             // Explicit attack orders may deliberately mass some fire, but still respect the
             // wing-wide cap. This keeps a four-ship from launching four missiles at a target
-            // that only needed one or two. Fire For Effect is the one order that does not.
+            // that only needed one or two. Splash 'Em is the one order that does not.
             if (!massed)
             {
                 int capacity = RequiredAttackers(station, target);
@@ -208,7 +208,7 @@ namespace WingCommand
         /// <summary>
         /// Whether this aircraft still carries anything worth using on a target.
         ///
-        /// Read by the Fire For Effect run to know when it has genuinely finished, rather
+        /// Read by the Splash 'Em run to know when it has genuinely finished, rather
         /// than circling a survivor with nothing left that can touch it.
         /// </summary>
         public static bool CanStillEngage(Aircraft aircraft, Unit target)

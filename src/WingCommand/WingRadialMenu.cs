@@ -134,7 +134,7 @@ namespace WingCommand
 
             var tasking = new List<WingMenuAction>
             {
-                Leaf("Fire For Effect", WingAction.FireForEffect, "attack"),
+                Leaf("Splash 'Em", WingAction.FireForEffect, "attack"),
                 Leaf("Hold Position", WingAction.OrbitHere, "orbit"),
                 Leaf("Deliver Cargo", WingAction.DeliverCargo, "cargo"),
                 Leaf("Land Here", WingAction.LandHere, "land"),

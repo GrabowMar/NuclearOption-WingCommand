@@ -58,6 +58,12 @@ namespace WingCommand
             controlInputs = aircraft.GetInputs();
 
             aircraft.SetFlightAssist(enabled: true);
+
+            // Nothing here hovers. A wingman arriving from a hover - a cargo let-down, a
+            // rotary slot beside a stopped leader - must have its hovering configuration
+            // taken off it, or a thrust-vectoring airframe keeps its nozzles down and
+            // cannot make the speed this state assumes.
+            HoverAssist.Release(aircraft);
             if (aircraft.gearState != LandingGear.GearState.LockedRetracted)
                 aircraft.SetGear(deployed: false);
 

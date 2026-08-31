@@ -121,6 +121,9 @@ namespace WingCommand
                 case "BINGO": return Pick(seed, "Bingo fuel. Returning to base.",
                                                  "Bingo. Turning for home.");
                 case "REJOINING": return Pick(seed, "Rejoining.", "Coming back to formation.");
+                // A released wingman signs off exactly as one ordered home does: it is
+                // the same thing happening to it, arrived at from the other direction.
+                case "DETACHED": return Acknowledge(persona, "RETURNTOBASE", seed);
                 case "BREAKING": return subject == null
                     ? Pick(seed, "Breaking!", "Breaking off!")
                     : Pick(seed, "Breaking " + subject + "!", "Defensive, " + subject + "!");
@@ -135,8 +138,8 @@ namespace WingCommand
                                                      "Load delivered. Egressing.");
                 case "NODROPOFF": return "No drop-off available. Bringing the cargo back.";
                 case "FIREFOREFFECT": return subject == null
-                    ? Pick(seed, "In hot. Fire for effect.", "Commencing full attack.")
-                    : Pick(seed, "In hot on " + subject + ". Fire for effect.",
+                    ? Pick(seed, "In hot. Splashing 'em.", "Commencing full attack.")
+                    : Pick(seed, "In hot on " + subject + ". Splashing 'em.",
                                  "All weapons on " + subject + ".");
                 case "EXPENDED": return Pick(seed, "Rounds complete. Off target.",
                                                     "Expended. Coming off target.");

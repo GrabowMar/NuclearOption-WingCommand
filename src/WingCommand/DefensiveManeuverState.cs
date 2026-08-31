@@ -45,6 +45,11 @@ namespace WingCommand
             aircraft = pilot.aircraft;
             controlInputs = aircraft.GetInputs();
             aircraft.SetFlightAssist(enabled: true);
+
+            // Nothing here hovers, and this is the state that most needs the energy: a
+            // thrust-vectoring wingman still configured for a hover cannot outrun anything.
+            HoverAssist.Release(aircraft);
+
             if (aircraft.gearState != LandingGear.GearState.LockedRetracted)
                 aircraft.SetGear(deployed: false);
 

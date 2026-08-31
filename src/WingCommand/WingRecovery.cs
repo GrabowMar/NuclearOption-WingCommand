@@ -19,8 +19,15 @@ namespace WingCommand
 
         private sealed class Settlement
         {
+            /// <summary>Null for a released aircraft, which is already off the roster.</summary>
             public WingRegistry Wing;
+
+            /// <summary>Null for a released aircraft, which no longer has a member.</summary>
             public WingMember Member;
+
+            /// <summary>The departure record to close out, for a released aircraft.</summary>
+            public WingDeparture.Departing Departing;
+
             public Aircraft Aircraft;
             public PersistentID AircraftId;
             public AircraftDefinition Definition;
@@ -43,7 +50,19 @@ namespace WingCommand
 
         public static void Tick(WingRegistry wing)
         {
-            if (wing == null || !Plugin.Config2.RtbReturnsToReserve.Value) return;
+            if (wing == null) return;
+
+            if (!Plugin.Config2.RtbReturnsToReserve.Value)
+            {
+                // Recovery is switched off, so nothing is credited or despawned. Released
+                // aircraft still have to stop being tracked once they are down, or the
+                // squadron count would go on excusing capacity they are still occupying.
+                WingDeparture.Prune();
+                IReadOnlyList<WingDeparture.Departing> landed = WingDeparture.Outbound;
+                for (int i = landed.Count - 1; i >= 0; i--)
+                    if (IsHome(landed[i].Aircraft)) WingDeparture.Forget(landed[i]);
+                return;
+            }
 
             for (int i = pending.Count - 1; i >= 0; i--)
             {
@@ -65,6 +84,21 @@ namespace WingCommand
                 Advance(settlement);
                 if (settlement.Completed) pending.Remove(settlement);
             }
+
+            // Released aircraft settle on exactly the same terms, but they are no longer on
+            // the roster to be found by the loop above.
+            WingDeparture.Prune();
+            IReadOnlyList<WingDeparture.Departing> outbound = WingDeparture.Outbound;
+            for (int i = outbound.Count - 1; i >= 0; i--)
+            {
+                WingDeparture.Departing departing = outbound[i];
+                if (IsPending(departing) || !IsHome(departing.Aircraft)) continue;
+
+                Settlement settlement = Begin(departing);
+                pending.Add(settlement);
+                Advance(settlement);
+                if (settlement.Completed) pending.Remove(settlement);
+            }
         }
 
         /// <summary>Prune must not report a staged recovery as a combat loss between retries.</summary>
@@ -73,6 +107,14 @@ namespace WingCommand
             if (member == null) return false;
             for (int i = 0; i < pending.Count; i++)
                 if (pending[i].Member == member) return true;
+            return false;
+        }
+
+        private static bool IsPending(WingDeparture.Departing departing)
+        {
+            if (departing == null) return false;
+            for (int i = 0; i < pending.Count; i++)
+                if (pending[i].Departing == departing) return true;
             return false;
         }
 
@@ -99,6 +141,28 @@ namespace WingCommand
             return settlement;
         }
 
+        /// <summary>
+        /// The same settlement for an aircraft the player released, which reached its base
+        /// after leaving the roster. The facts were captured at the moment of release, while
+        /// there was still a member to read them from.
+        /// </summary>
+        private static Settlement Begin(WingDeparture.Departing departing)
+        {
+            Aircraft aircraft = departing.Aircraft;
+            return new Settlement
+            {
+                Departing = departing,
+                Aircraft = aircraft,
+                AircraftId = departing.AircraftId,
+                Definition = aircraft != null ? aircraft.definition : null,
+                Hq = aircraft != null ? aircraft.NetworkHQ : null,
+                Name = departing.Name,
+                Owned = departing.Owned,
+                Loadout = departing.Loadout,
+                LoadoutKnown = departing.LoadoutKnown,
+            };
+        }
+
         private static void Advance(Settlement settlement)
         {
             if (settlement == null || settlement.Completed) return;
@@ -123,12 +187,22 @@ namespace WingCommand
                 // owner of the aircraft and retries instead of abandoning an untracked frame.
                 if (!settlement.RosterReleased)
                 {
-                    settlement.Wing.Recover(settlement.Member);
-                    settlement.RosterReleased = !settlement.Wing.Contains(settlement.Member);
-                    if (!settlement.RosterReleased)
+                    if (settlement.Member == null || settlement.Wing == null)
                     {
-                        Retry(settlement, "roster release did not complete");
-                        return;
+                        // A released aircraft left the roster when the player dismissed it,
+                        // so there is nothing to retire here. Its native state was already
+                        // handed back at that point.
+                        settlement.RosterReleased = true;
+                    }
+                    else
+                    {
+                        settlement.Wing.Recover(settlement.Member);
+                        settlement.RosterReleased = !settlement.Wing.Contains(settlement.Member);
+                        if (!settlement.RosterReleased)
+                        {
+                            Retry(settlement, "roster release did not complete");
+                            return;
+                        }
                     }
                 }
 
@@ -171,6 +245,7 @@ namespace WingCommand
                     ? settlement.Hq.GetUnitSupply(settlement.Definition)
                     : 0;
                 settlement.Completed = true;
+                WingDeparture.Forget(settlement.Departing);
                 WingCommandManager.Instance?.Toast(settlement.StoredInReserve
                     ? settlement.Name + " recovered to wing reserve (" + WingSupplyReserve.Count +
                       "/" + WingSupplyReserve.Capacity + ")"
@@ -225,9 +300,11 @@ namespace WingCommand
                 "[Recovery] " + settlement.Name + " settlement pending: " + reason);
         }
 
-        private static bool IsHome(WingMember member)
+        private static bool IsHome(WingMember member) =>
+            member != null && IsHome(member.Aircraft);
+
+        private static bool IsHome(Aircraft aircraft)
         {
-            Aircraft aircraft = member.Aircraft;
             if (aircraft == null || aircraft.disabled) return false;
             if (!aircraft.IsServer || !aircraft.LocalSim) return false;
             if (aircraft.radarAlt > GroundHeight) return false;
@@ -236,7 +313,7 @@ namespace WingCommand
             if (hq == null || !hq.AnyNearAirbase(aircraft.transform.position, out _)) return false;
             if (aircraft.speed <= StoppedSpeed) return true;
 
-            Pilot pilot = member.Pilot;
+            Pilot pilot = WingRegistry.PrimaryPilot(aircraft);
             return pilot != null &&
                    (pilot.ejected || pilot.dead || pilot.currentState is PilotParkedState);
         }

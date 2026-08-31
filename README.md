@@ -141,7 +141,7 @@ Wing Command
 │  ├─ Escort
 │  └─ Free
 └─ Tasking
-   ├─ Fire For Effect
+   ├─ Splash 'Em
    ├─ Hold Position
    ├─ Deliver Cargo
    ├─ Land Here
@@ -188,7 +188,7 @@ Map moves are temporary routes. At the final point every wingman returns to form
 |---|---|
 | **Form Up** | Close on assigned slots and hold station on you |
 | **Attack My Target** | Jump the target you're locked on. Radial sends everyone; scoped WMC attacks distribute contacts and may hold surplus wingmen back as cover |
-| **Fire For Effect** | Every selected wingman expends on one target until it's dead or they're dry |
+| **Splash 'Em** | Every selected wingman expends on one target until it's dead or they're dry |
 | **Engage** | Hunt on their own within the configured leash, come back if they stray too far |
 | **Disengage** | Break on separated headings, use countermeasures, egress, then form up again |
 | **Hold Here** | Set up a CAP around a point while still applying ROE |
@@ -243,15 +243,15 @@ An order says where a wingman flies. ROE says what it may shoot. **Preferred wea
 
 Set it per selection on **WMC → Tactical**; it shows in the roster and the compact HUD strip beside the order. Every setting is a bias, never a restriction: a preferred store that's empty, unready or out of range falls back to the usual choice, and no setting can make a wingman hold fire when it has a valid alternative.
 
-## 🔥 Fire For Effect
+## 🔥 Splash 'Em
 
 **Attack** is measured. It spreads designations across the wing, caps how many aircraft are useful against one contact, holds surplus wingmen back as cover, and leaves several seconds between launches so nobody empties themselves on a truck.
 
-**Fire For Effect** is the other thing. Every selected wingman goes after the same designated target and keeps shooting — no concurrency cap, no long cooldown — working down through missiles, then rockets, then guns as each runs dry, until the target is dead or there's nothing left aboard that could hurt it. Then they call `expended` and rejoin.
+**Splash 'Em** is the other thing. Every selected wingman goes after the same designated target and keeps shooting — no concurrency cap, no long cooldown — working down through missiles, then rockets, then guns as each runs dry, until the target is dead or there's nothing left aboard that could hurt it. Then they call `expended` and rejoin.
 
 What it does *not* drop is weapon/target matching: a station still has to be effective against that kind of target and the shot still has to be inside the weapon's own envelope, so this expends a loadout on something worth expending it on rather than throwing air-to-air missiles at a tank. Bingo fuel and Winchester still send a wingman home.
 
-Designate a target, select your scope, and press **Fire For Effect** on **WMC → Tactical**. The roster shows `FFE`. It's deliberately not on the radial: it's a considered decision, not a quick call.
+Designate a target, select your scope, and press **Splash 'Em** on **WMC → Tactical**. The roster shows `SPLASH`. It's deliberately not on the radial: it's a considered decision, not a quick call.
 
 ## 🧰 Loadouts
 
@@ -300,6 +300,7 @@ The Supply tab uses Nuclear Option's existing economy rather than inventing a se
 - Price is paid from your allocation; declared aircraft consume the faction's mission supply. Rank, mission restrictions and fixed-wing/rotary compatibility are all respected.
 - Requisitioned aircraft launch from a friendly airbase and fly to the wing under their own power. Where a hangar on the field stocks that airframe, the game's own airbase spawn is used — the aircraft appears in the hangar, waits out any door sequence, taxis and takes off exactly as the faction's own aircraft do. It shows in your roster immediately as departing and becomes commandable once airborne. Airframes no hangar stocks are delivered into the circuit overhead instead.
 - Your **Wing Reserve** holds up to three specific airframes across all types. `HOLD` moves one selected faction airframe out of AI-accessible stock; `RELEASE` returns it. The reserve doesn't create supply and doesn't multiply by aircraft type.
+- **Releasing a wingman sends it home.** `REL` on the Wing roster discharges it from the wing and it flies the stock landing pattern back to base rather than wandering off under the combat AI. It stops counting against the squadron aircraft limit the moment you release it, so you can release one and requisition its replacement straight away, and its airframe is credited back on landing exactly as a Return To Base is.
 - A requisition you've already paid for is marked owned. When it completes Return To Base that airframe comes back to the same reserve and can be launched again without another purchase. Recovered aircraft that were only active assignments return as ordinary held reserve and are charged normally next time.
 - Undeclared-aircraft stock remains an advanced compatibility option, disabled by default.
 - Every purchase and assignment previews its fee. Credits and supply move only after recruitment or spawn succeeds.
@@ -323,6 +324,10 @@ Locally simulated AI shares short-lived target reservations. Stock opportunity, 
 - Missile defence assigns one interceptor to an inbound missile instead of wasting the whole wing's weapons on it.
 
 This reduces dog-piling without making you or any other target artificially immune.
+
+### When you land
+
+A formation slot is measured from the leader, so a leader on the runway puts every slot on the runway. Wingmen holding formation now recognise that you're on the deck — low with the gear down, whether that's an approach, a landing roll, or parked — and orbit the field instead of flying their slots into it. They rejoin on their own once you're airborne again. An explicit order is untouched: a wingman you sent to attack something, hold somewhere else, or return to base keeps doing that while you land.
 
 ### Defensive panic system
 
@@ -349,6 +354,8 @@ This is a backbone. A pregenerated wingman pool with portraits and an assignment
 ### Squadron radio
 
 Radio calls use dedicated frameless subtitles at the top centre rather than the general game-message feed. The speaker is identified as `M. "COBALT" ADEYEMI` with the transmission beneath, and urgent missile calls jump ahead of routine traffic. A command sent to several aircraft produces a short staggered roll call from the pilots that actually accepted it; aircraft that were skipped don't answer as though they complied.
+
+Each transmission opens with the game's own radio click — the same sound mission and HQ messages use — so wing chatter reads as radio rather than as captions. Turn it off with `Comms/RadioChatterSound` while keeping the subtitles.
 
 Each pilot carries a radio persona independent of rank and combat skill. COBALT is professional, HATCHET is aggressive, MERIDIAN is calm; generated pilots rotate through those voices and a dry one. The persona picks between several lines for the same event, and is intentionally a small data-facing seam for later mission and plot dialogue.
 
@@ -379,7 +386,7 @@ Slot error is the number to watch when tuning formation flight:
 - **Build one template per job.** An A-A sweep fit and a strike fit for the same airframe, named, and you're one dropdown away from either.
 - **Empty pylons are free performance.** Strip the stations you won't use — the summary line under the pylon list shows the weight coming off.
 - **Use Shift-click for surgical strikes.** Send two wingmen to flank while the rest hold formation on you.
-- **Save Fire For Effect for something worth it.** It's designed to empty a wing's ordnance into one target; that's a great way to kill a ship and a terrible way to kill a jeep.
+- **Save Splash 'Em for something worth it.** It's designed to empty a wing's ordnance into one target; that's a great way to kill a ship and a terrible way to kill a jeep.
 - **Watch the slot error readout** if formation flying looks janky — small and steady is healthy, continually climbing usually means a performance mismatch, not a bug.
 - **Free ROE is a leash, not a suggestion.** Wingmen on Free will fire at opportunity targets — great in a furball, noisy if you need a quiet approach.
 - **Widen out before the merge.** Combat Spread or Line Abreast make you much harder to bracket than a tight Trail.
@@ -485,6 +492,7 @@ The ordinary ConfigurationManager view is intentionally limited to the release-f
 | Pilot | `RankEffect` | `1` | How much rank changes shooting; `0` makes rank a record only |
 | Pilot | `XpPerRank` | `120` | Experience step between ranks |
 | Comms | `RadioChatter` | `true` | Wing order and state reports |
+| Comms | `RadioChatterSound` | `true` | Open each transmission with the game's radio click |
 | UI | `ShowWingHud` | `true` | Compact roster docked beside the tactical map |
 | Debug | `FreePlanePurchases` | `false` | Free requisitions; **probably breaks the mod** |
 | Debug | `DisableWingSizeLimit` | `false` | Ignore `MaxWingSize`; **probably breaks the mod** |

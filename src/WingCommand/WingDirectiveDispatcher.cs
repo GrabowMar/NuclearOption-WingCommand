@@ -142,7 +142,7 @@ namespace WingCommand
                 return new WingDispatchResult(0, skipped,
                     WingOrderCatalog.UnavailableReason(WingOrder.FireForEffect));
 
-            string message = ScopePrefix(wholeWing, applied) + ": fire for effect on " +
+            string message = ScopePrefix(wholeWing, applied) + ": splash 'em on " +
                              target.unitName;
             if (skipped > 0) message += " (" + skipped + " unable)";
             return new WingDispatchResult(applied, skipped, message, 1, responders,

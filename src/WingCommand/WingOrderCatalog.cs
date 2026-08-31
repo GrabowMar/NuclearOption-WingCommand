@@ -9,7 +9,7 @@ namespace WingCommand
             {
                 case WingOrder.Formation:    return "Form Up";
                 case WingOrder.Attack:       return "Attack";
-                case WingOrder.FireForEffect: return "Fire For Effect";
+                case WingOrder.FireForEffect: return "Splash 'Em";
                 case WingOrder.Engage:       return "Engage";
                 case WingOrder.OrbitHere:    return "Hold";
                 case WingOrder.FallBack:     return "Disengage";
@@ -27,7 +27,7 @@ namespace WingCommand
             {
                 case WingOrder.Formation:    return "FORM";
                 case WingOrder.Attack:       return "ATTACK";
-                case WingOrder.FireForEffect: return "FFE";
+                case WingOrder.FireForEffect: return "SPLASH";
                 case WingOrder.Engage:       return "ENGAGE";
                 case WingOrder.OrbitHere:    return "HOLD";
                 case WingOrder.FallBack:     return "DISENG";

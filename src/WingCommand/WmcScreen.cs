@@ -952,7 +952,7 @@ namespace WingCommand
         /// <summary>
         /// The nine scoped orders, in three columns.
         ///
-        /// Two columns became three when Fire For Effect made the set nine. A fifth row of
+        /// Two columns became three when Splash 'Em made the set nine. A fifth row of
         /// pairs would have cost this page more height than the two new tabs left it, where
         /// a three-by-three grid holds all nine in three rows and hands 34 pixels back. It
         /// reads better as well: rejoin and the two target orders, then the autonomous and
@@ -966,7 +966,7 @@ namespace WingCommand
             y = Triple(parent, y, w,
                 "Form Up", OrderHint.Rejoin, () => Order(WingAction.Rejoin),
                 "Attack", OrderHint.Attack, () => Order(WingAction.AttackMyTarget),
-                "Fire For Effect", OrderHint.FireForEffect, () => Order(WingAction.FireForEffect));
+                "Splash 'Em", OrderHint.FireForEffect, () => Order(WingAction.FireForEffect));
 
             y = Triple(parent, y, w,
                 "Engage", OrderHint.Engage, () => Order(WingAction.Engage),
@@ -1010,7 +1010,7 @@ namespace WingCommand
                 "shared out across the scope so several wingmen do not chase one contact.";
 
             public const string FireForEffect =
-                "FIRE FOR EFFECT - empty everything that will bear on your locked target. " +
+                "SPLASH 'EM - empty everything that will bear on your locked target. " +
                 "Expends ordnance freely; use it to finish something, not to open on it.";
 
             public const string Engage =
@@ -1042,7 +1042,8 @@ namespace WingCommand
                 "whole flight.";
 
             public const string Release =
-                "Discharge this wingman from the wing for good. Press once to arm, again " +
+                "Discharge this wingman from the wing for good. It flies home, gives its " +
+                "airframe back and stops using a squadron slot. Press once to arm, again " +
                 "to confirm.";
 
             public const string Roe =
@@ -1088,7 +1089,7 @@ namespace WingCommand
 
         /// <summary>
         /// One cell of the order grid. Smaller type than the rest of the page, because a
-        /// third of the panel has to hold "Fire For Effect" without clipping it.
+        /// third of the panel has to hold the longest order name without clipping it.
         /// </summary>
         private static WingButton GridButton(RectTransform parent, string text, float x, float y,
                                              float w, Action onClick) =>
@@ -3534,7 +3535,7 @@ namespace WingCommand
             if (m.DeliveryPending) return "DEPT";
             if (m.IsPanicking) return "DEFENSIVE";
 
-            // Fire For Effect keeps its own name rather than borrowing the target's. The
+            // Splash 'Em keeps its own name rather than borrowing the target's. The
             // column is too narrow for both, and which of the two target orders a wingman
             // is flying is the thing that cannot be read anywhere else on this page - the
             // map already draws an amber line to the unit either way.

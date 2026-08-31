@@ -31,7 +31,7 @@ namespace WingCommand
         public static WingDirective Attack(Unit target) => AtTarget(WingOrder.Attack, target);
 
         /// <summary>
-        /// Any order that prosecutes a specific unit. Attack and Fire For Effect differ in
+        /// Any order that prosecutes a specific unit. Attack and Splash 'Em differ in
         /// how hard they press, not in what they carry, so they share this payload.
         /// </summary>
         public static WingDirective AtTarget(WingOrder order, Unit target) =>

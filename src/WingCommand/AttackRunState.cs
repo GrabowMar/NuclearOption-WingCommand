@@ -34,7 +34,7 @@ namespace WingCommand
         private float lastFiredTime;
 
         /// <summary>
-        /// True while flying a Fire For Effect run rather than a measured attack. The flying
+        /// True while flying a Splash 'Em run rather than a measured attack. The flying
         /// is identical - the difference is entirely in how hard the weapons are worked.
         /// </summary>
         private bool massed;
@@ -51,7 +51,7 @@ namespace WingCommand
         public void SetMassed(bool value)
         {
             massed = value;
-            stateDisplayName = value ? "fire for effect" : "attacking";
+            stateDisplayName = value ? "splash 'em" : "attacking";
         }
 
         public override void EnterState(Pilot pilot)
@@ -61,6 +61,12 @@ namespace WingCommand
             controlInputs = aircraft.GetInputs();
 
             aircraft.SetFlightAssist(enabled: true);
+
+            // Nothing here hovers. A wingman arriving from a hover - a cargo let-down, a
+            // rotary slot beside a stopped leader - must have its hovering configuration
+            // taken off it, or a thrust-vectoring airframe keeps its nozzles down and
+            // cannot make the speed this state assumes.
+            HoverAssist.Release(aircraft);
             if (aircraft.gearState != LandingGear.GearState.LockedRetracted)
                 aircraft.SetGear(deployed: false);
 
@@ -73,7 +79,7 @@ namespace WingCommand
                 Plugin.Logger.LogInfo(
                     $"[Attack] {aircraft.unitName} running in on " +
                     (target != null ? target.unitName : "(no target)") +
-                    (massed ? " (fire for effect)" : ""));
+                    (massed ? " (splash 'em)" : ""));
             }
         }
 
@@ -103,7 +109,7 @@ namespace WingCommand
 
             // An expending run ends when there is nothing left aboard that could hurt this
             // target. A measured attack does not need the check - it keeps its station in
-            // reserve and the bingo/Winchester pass sends it home - but Fire For Effect is
+            // reserve and the bingo/Winchester pass sends it home - but Splash 'Em is
             // meant to run itself dry, and without this it would then circle a survivor it
             // could no longer touch.
             if (massed && !WingWeapons.CanStillEngage(aircraft, target))
@@ -166,7 +172,7 @@ namespace WingCommand
 
             // The same weapon selection and validity checks the formation path uses, so an
             // attack run cannot dump the loadout at a target it has no business shooting.
-            // Fire For Effect keeps those checks and drops only the wing-wide concurrency
+            // Splash 'Em keeps those checks and drops only the wing-wide concurrency
             // cap and the long cooldown between launches.
             // A designated target is an explicit weapons authorization. The ROE still owns
             // incidental fire elsewhere, but cannot shorten or veto this order.
