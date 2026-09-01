@@ -37,11 +37,10 @@ namespace WingCommand
         private static float AddAssignment(RectTransform parent, float y)
         {
             y = Heading(parent, y, "ACTIVE AIRCRAFT ASSIGNMENT");
-            Hint(parent, y,
-                 "Select friendly AI on the map, then press twice to confirm the fee.");
+            Hint(parent, y, "Select a friendly AI aircraft on the map first.");
             y -= LineHeight + Space1;
 
-            WingUi.Button(parent, "Assign Selected",
+            WingUi.Button(parent, "ASSIGN SELECTED",
                           new Rect(Pad, y, PanelWidth - Pad * 2f, RowHeight),
                           FontBody, UiButtonStyle.Primary,
                           () => WingCommandManager.Instance?.AddSelectedFromMap())
@@ -53,7 +52,7 @@ namespace WingCommand
         {
             y = Heading(parent, y, "WING RESERVE");
 
-            const float actionWidth = 104f;
+            const float actionWidth = WingUi.ButtonAction;
 
             // RELEASE hands an airframe back to the AI pool and cannot be undone from here;
             // HOLD only takes one out of it. Drawing them at the same weight, side by side,
@@ -205,6 +204,14 @@ namespace WingCommand
         }
 
 
+        /// <summary>The three-column header over the requisition list.</summary>
+        private static readonly Column[] ShopColumns =
+        {
+            new Column("AIRFRAME", Space2, 176f),
+            new Column("STOCK", 190f, 56f),
+            new Column("COST", 250f, PanelWidth - Pad * 2f - 250f - Space3, rightAligned: true),
+        };
+
         /// <summary>
         /// The shop: a row per airframe the faction has in stock, then the two controls that
         /// decide what a purchase costs and whether it is allowed.
@@ -232,6 +239,10 @@ namespace WingCommand
             shopPageLabel = PagerLabel(parent, y);
             shopNextButton = Pager(parent, y, ">", () => TurnPage(1));
             y -= RowHeight + Gap;
+
+            // Headers, so the trailing green figure is read as a cost rather than guessed
+            // at, and the stock cell can drop the "available" it repeated on every row.
+            y = ColumnHeaders(parent, y, ShopColumns);
 
             var area = new GameObject("ShopArea", typeof(RectTransform));
             shopArea = area.GetComponent<RectTransform>();
@@ -279,9 +290,10 @@ namespace WingCommand
                                       Dim(), FontMicro, FontStyles.Normal, TextAlignmentOptions.Left);
             y -= LineHeight + Space1;
 
-            // How full the tanks are when it launches. A checkbox rather than a latch
-            // styled like OVER LIMIT: this one starts switched on, and a lit toggle that is
-            // lit by default reads as a warning rather than as a setting.
+            // How full the tanks are when it launches. A setting that states its own value
+            // in words — "LAUNCH FUEL: FULL" / "LAUNCH FUEL: 50%" — rather than the old
+            // "[X] SPAWN WITH FULL FUEL": an ASCII checkbox is not the panel's idiom, and
+            // this one defaults on, so a latch lit by default would read as a warning.
             fullFuelButton = WingUi.Button(parent, "",
                                            new Rect(Pad, y, PanelWidth - Pad * 2f, RowHeight),
                                            FontSmall, UiButtonStyle.Quiet, ToggleFullFuel)
@@ -291,7 +303,7 @@ namespace WingCommand
             // REQUISITION is the reason this page exists and is drawn as such; the
             // over-limit permission beside it is a modifier on that purchase and reads a
             // rank quieter until it is switched on, at which point it latches lit.
-            const float buyWidth = 130f;
+            const float buyWidth = WingUi.ButtonPrimary;
             float exceedWidth = PanelWidth - Pad * 2f - Gap - buyWidth;
             exceedLimitButton = WingUi.Button(parent, "", new Rect(Pad, y, exceedWidth, RowHeight),
                                               FontBody, UiButtonStyle.Quiet, ToggleExceedLimit)
@@ -361,7 +373,7 @@ namespace WingCommand
 
             bool bought = WingShop.Buy(selectedOffer, out string why, out float paid);
             WingCommandManager.Instance?.Toast(bought
-                ? selectedOffer.unitName + " requisitioned for " + Mathf.RoundToInt(paid) +
+                ? selectedOffer.unitName + " requisitioned for " + Grouped(paid) +
                   " - departing friendly base"
                 : why);
         }
@@ -438,13 +450,14 @@ namespace WingCommand
 
             if (fullFuelButton != null)
             {
-                // The box states the choice; the trailing clause states what the other
-                // state would cost, so the consequence is readable without toggling it.
+                // The label is the whole state: full, or the partial percentage. It never
+                // latches — the value is in the words, and a permanently-lit toggle on the
+                // default choice would read louder than the setting deserves.
                 fullFuelButton.SetText(WingShop.FullFuel
-                    ? "[X]  SPAWN WITH FULL FUEL"
-                    : "[ ]  SPAWN WITH FULL FUEL  -  launching at " +
+                    ? "LAUNCH FUEL:  FULL"
+                    : "LAUNCH FUEL:  " +
                       Mathf.RoundToInt(WingTuning.PartialFuelLevel * 100f) + "%");
-                fullFuelButton.SetLatched(WingShop.FullFuel);
+                fullFuelButton.SetLatched(false);
             }
 
             if (offerDetailLabel != null)
@@ -469,7 +482,7 @@ namespace WingCommand
 
                     offerDetailLabel.text = quote.CanBuy
                         ? UiTheme.Truncate(selectedOffer.unitName, 18) +
-                          "  ·  " + Mathf.RoundToInt(cost) + " funds" +
+                          "  ·  " + Grouped(cost) + " funds" +
                           (overLimit ? " (over limit)" : "") +
                           "  ·  " + stock + " available" +
                           (ownedCount > 0 ? "  ·  " + ownedCount + " owned reserve" :
@@ -607,7 +620,7 @@ namespace WingCommand
             if (supplyFundsLabel == null) return;
 
             int wing = WingCommandManager.Instance?.Wing?.Count ?? 0;
-            supplyFundsLabel.text = "FUNDS " + Mathf.RoundToInt(WingShop.Allocation) +
+            supplyFundsLabel.text = "FUNDS " + Grouped(WingShop.Allocation) +
                                     "   ·   WING " + wing + " / " + WingRegistry.WingLimitLabel;
 
             WingShop.SquadronState squadron = WingShop.Squadron();
@@ -626,8 +639,9 @@ namespace WingCommand
             // that it is the reason and what can be done about it.
             if (WingShop.ExceedLimit && WingShop.MeetsExceedLimitRank)
             {
-                supplySquadronLabel.text = text + "  ·  OVER LIMIT x" +
-                                           WingShop.ExceedLimitMultiplier.ToString("0.##");
+                // The multiplier is on the OVER LIMIT button itself; the status line only
+                // needs to say the cap is being flown past.
+                supplySquadronLabel.text = text + "  ·  OVER LIMIT";
             }
             else if (!WingShop.MeetsExceedLimitRank)
             {
@@ -675,11 +689,12 @@ namespace WingCommand
                     if (bound != null) selectedOffer = bound;
                 });
 
-                name  = Label(rt, "", new Rect(Space2 + 2f, 0f, 170f, RowHeight), Friendly(),
+                // Cells sit under ShopColumns — AIRFRAME, STOCK, COST.
+                name  = Label(rt, "", new Rect(Space2, 0f, 176f, RowHeight), Friendly(),
                               FontBody, FontStyles.Normal, TextAlignmentOptions.Left);
-                stock = Label(rt, "", new Rect(186f, 0f, 90f, RowHeight), Dim(), FontSmall,
+                stock = Label(rt, "", new Rect(190f, 0f, 56f, RowHeight), Dim(), FontSmall,
                               FontStyles.Normal, TextAlignmentOptions.Left);
-                price = Label(rt, "", new Rect(280f, 0f, width - 280f - Space3, RowHeight), Dim(),
+                price = Label(rt, "", new Rect(250f, 0f, width - 250f - Space3, RowHeight), Dim(),
                               FontBody, FontStyles.Normal, TextAlignmentOptions.Right);
 
                 go.SetActive(false);
@@ -696,9 +711,9 @@ namespace WingCommand
                 bool affordable = WingShop.Allocation >= cost;
                 bool selected = selectedOffer == offer.Definition;
 
-                name.text = UiTheme.Truncate(offer.Name, 22);
-                stock.text = offer.Stock + " available";
-                price.text = Mathf.RoundToInt(cost).ToString();
+                name.text = UiTheme.Truncate(offer.Name, 24);
+                stock.text = offer.Stock.ToString();
+                price.text = Grouped(cost);
 
                 // Grey the price when it cannot be met, so the constraint reads at a glance
                 // rather than only on a failed press.

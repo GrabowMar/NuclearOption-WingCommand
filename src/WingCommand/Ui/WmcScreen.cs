@@ -115,6 +115,7 @@ namespace WingCommand
         private static Page page;
         private static RectTransform panelRect;
         private static RectTransform rosterArea;
+        private static TMP_Text rosterEmptyLabel;
         private static WingButton rosterPrevButton;
         private static WingButton rosterNextButton;
         private static TMP_Text shapeLabel;
@@ -265,6 +266,7 @@ namespace WingCommand
 
             RosterRow.Disarm();
             rosterArea = null;
+            rosterEmptyLabel = null;
             rosterPrevButton = null;
             rosterNextButton = null;
             shapeLabel = null;
@@ -327,6 +329,7 @@ namespace WingCommand
 
             wingRows.Clear();
             wingRosterArea = null;
+            wingEmptyLabel = null;
             pilotIdentityLabel = null;
             pilotRankLabel = null;
             pilotStatsLabel = null;
@@ -338,6 +341,7 @@ namespace WingCommand
             airframeOrderLabel = null;
             airframeLoadoutLabel = null;
             airframeWeaponsLabel = null;
+            airframeSilhouette = null;
             focusMember = null;
 
             lastTooltip = null;
@@ -711,13 +715,17 @@ namespace WingCommand
             }
         }
 
+        // Four columns, not seven. WPN duplicated the weapon row in the engagement block,
+        // SLOT ERR was a formed-up indicator the WING tab already carries, and squeezing
+        // both in clipped their two-word headers and drove the fuel/ammo readout into the
+        // REL button. What is left is what a glance at the flight actually asks: who, doing
+        // what, with how much fuel and ammo. Every header is one word so none of them wrap.
         private static readonly Column[] RosterColumns =
         {
-            new Column("CALLSIGN", 26f, 100f),
-            new Column("STATE", 128f, 58f),
-            new Column("WPN", 188f, 30f),
-            new Column("SLOT ERR", 220f, 52f, rightAligned: true),
-            new Column("FUEL  AMMO", 276f, 70f, rightAligned: true),
+            new Column("CALLSIGN", 26f, 108f),
+            new Column("STATE", 138f, 86f),
+            new Column("FUEL", 224f, 52f, rightAligned: true),
+            new Column("AMMO", 280f, 40f, rightAligned: true),
         };
 
         /// <summary>The two-column header the Wing tab's pick list uses.</summary>
@@ -754,12 +762,13 @@ namespace WingCommand
                   Dim(), FontMicro, FontStyles.Normal, TextAlignmentOptions.Center);
 
         /// <summary>
-        /// One cell of the order grid. Smaller type than the rest of the page, because a
-        /// third of the panel has to hold the longest order name without clipping it.
+        /// One cell of the order grid. Carries the panel's body size now that the order
+        /// names are single words — the ten-pixel type this used to need was a symptom of
+        /// labels like "Deliver Cargo" fighting a third of the panel for room.
         /// </summary>
         private static WingButton GridButton(RectTransform parent, string text, float x, float y,
                                              float w, Action onClick) =>
-            WingUi.Button(parent, text, new Rect(x, y, w, RowHeight), FontMicro, onClick);
+            WingUi.Button(parent, text, new Rect(x, y, w, RowHeight), FontSmall, onClick);
 
         /// <summary>
         /// The panel's one feedback channel, given a place of its own on every page.
@@ -819,6 +828,25 @@ namespace WingCommand
 
             label.text = hovering ? tooltip : fallback;
             label.color = hovering ? Friendly() : Dim();
+        }
+
+        /// <summary>
+        /// A centred line for a list area with nothing to list.
+        ///
+        /// An empty roster used to be column headers over blank rows, which reads as a table
+        /// still loading rather than as a flight with nobody in it. Built inactive and shown
+        /// by the refresh when the list it belongs to is empty.
+        /// </summary>
+        private static TMP_Text EmptyNote(RectTransform area, string text)
+        {
+            TMP_Text label = Label(area, text,
+                                   new Rect(Space4, 0f, area.rect.width - Space4 * 2f,
+                                            area.rect.height),
+                                   Dim(), FontMicro, FontStyles.Italic,
+                                   TextAlignmentOptions.Center);
+            label.enableWordWrapping = true;
+            label.gameObject.SetActive(false);
+            return label;
         }
 
         /// <summary>A line of explanatory text under a heading, at the panel's hint weight.</summary>
@@ -914,8 +942,14 @@ namespace WingCommand
                 int pages = Mathf.Max(1, Mathf.CeilToInt(wing.Count / (float)RosterRowsPerPage));
                 inspectPage = Mathf.Clamp(inspectPage, 0, pages - 1);
 
+                // Nothing to page through reads better as a blank strip than as
+                // "flight page 1 of 1"; a single page keeps the count but drops the arrows.
                 if (label != null)
-                    label.text = "flight page " + (inspectPage + 1) + " of " + pages;
+                    label.text = wing.Count == 0
+                        ? ""
+                        : pages == 1
+                            ? wing.Count + (wing.Count == 1 ? " wingman" : " wingmen")
+                            : "flight page " + (inspectPage + 1) + " of " + pages;
 
                 prev?.SetEnabled(inspectPage > 0);
                 next?.SetEnabled(inspectPage < pages - 1);
@@ -1144,6 +1178,16 @@ namespace WingCommand
         private static Color FrameColor() => WingUi.FrameColor;
 
         // ----------------------------------------------------------------------- text
+
+        /// <summary>
+        /// A round figure with thousands separators: funds, prices, kilograms.
+        ///
+        /// Four- and five-digit numbers are common on this panel — a mid-game funds balance,
+        /// an airframe price, a loadout's mass — and "20640" is read a digit at a time where
+        /// "20,640" is read at a glance.
+        /// </summary>
+        private static string Grouped(float amount) =>
+            Mathf.RoundToInt(amount).ToString("N0", System.Globalization.CultureInfo.InvariantCulture);
 
 
         /// <summary>

@@ -90,7 +90,7 @@ namespace WingCommand
         {
             // SELECT ALL is what this row is for — the label beside it only reports. It is
             // drawn as the row's primary action so it can be found without being read.
-            const float actionWidth = 88f;
+            const float actionWidth = WingUi.ButtonAction;
             summaryLabel = Label(parent, "",
                                  new Rect(Pad, y, PanelWidth - Pad * 2f - actionWidth - Space2,
                                           RowHeight),
@@ -118,6 +118,10 @@ namespace WingCommand
             rosterArea.SetParent(parent, worldPositionStays: false);
             Place(rosterArea, new Rect(Pad, y, w, h));
 
+            rosterEmptyLabel = EmptyNote(rosterArea,
+                "No wingmen. Requisition aircraft on the SUPPLY tab, or ASSIGN a friendly " +
+                "AI aircraft selected on the map.");
+
             y -= h + Gap;
 
             rosterPrevButton = Pager(parent, y, "<", () => TurnRosterPage(-1));
@@ -140,30 +144,33 @@ namespace WingCommand
             y = Heading(parent, y, "ORDERS - SELECTED SCOPE");
             float w = (PanelWidth - Pad * 2f - Gap * 2f) / 3f;
 
+            // Short labels that read as a set — Attack / Splash / Engage / Disengage —
+            // instead of the old jokey "Splash 'Em" sitting next to plain "Attack". The
+            // full sentence for each still lands on the status strip on hover.
             y = Triple(parent, y, w,
                 "Form Up", OrderHint.Rejoin, () => Order(WingAction.Rejoin),
                 "Attack", OrderHint.Attack, () => Order(WingAction.AttackMyTarget),
-                "Splash 'Em", OrderHint.FireForEffect, () => Order(WingAction.FireForEffect));
+                "Splash", OrderHint.FireForEffect, () => Order(WingAction.FireForEffect));
 
             GridButton(parent, "Engage", Pad, y, w,
                        () => Order(WingAction.Engage)).WithTooltip(OrderHint.Engage);
             GridButton(parent, "Disengage", Pad + w + Gap, y, w,
                        () => Order(WingAction.FallBack)).WithTooltip(OrderHint.Disengage);
-            jamButton = GridButton(parent, "Jam Target", Pad + (w + Gap) * 2f, y, w,
+            jamButton = GridButton(parent, "Jam", Pad + (w + Gap) * 2f, y, w,
                                    () => Order(WingAction.JamMyTarget))
                         .WithTooltip(OrderHint.Jam);
             y -= RowHeight + Gap;
 
-            GridButton(parent, "Hold Here", Pad, y, w,
+            GridButton(parent, "Hold", Pad, y, w,
                        () => WingCommandManager.Instance?.ArmPointOrder(WingOrder.OrbitHere))
                 .WithTooltip(OrderHint.HoldHere);
 
             // Deliver Cargo arms a drop point, and says on the status line that pressing it
             // again falls back to the stock supply route.
-            cargoButton = GridButton(parent, "Deliver Cargo", Pad + w + Gap, y, w,
+            cargoButton = GridButton(parent, "Cargo", Pad + w + Gap, y, w,
                                      () => WingCommandManager.Instance?.RequestCargoRun())
                           .WithTooltip(OrderHint.DeliverCargo);
-            landButton = GridButton(parent, "Land Here", Pad + (w + Gap) * 2f, y, w,
+            landButton = GridButton(parent, "Land", Pad + (w + Gap) * 2f, y, w,
                                     () => WingCommandManager.Instance?.ArmPointOrder(WingOrder.LandHere))
                          .WithTooltip(OrderHint.LandHere);
             y -= RowHeight + Gap;
@@ -198,7 +205,7 @@ namespace WingCommand
                 "shared out across the scope so several wingmen do not chase one contact.";
 
             public const string FireForEffect =
-                "SPLASH 'EM - empty everything that will bear on your locked target. " +
+                "SPLASH - empty everything that will bear on your locked target. " +
                 "Expends ordnance freely; use it to finish something, not to open on it.";
 
             public const string Engage =
@@ -362,10 +369,18 @@ namespace WingCommand
 
         private static void RefreshRoster(WingRegistry wing)
         {
+            bool empty = wing.Count == 0;
+            if (rosterEmptyLabel != null && rosterEmptyLabel.gameObject.activeSelf != empty)
+                rosterEmptyLabel.gameObject.SetActive(empty);
+
             int pages = Mathf.Max(1, Mathf.CeilToInt(wing.Count / (float)RosterRowsPerPage));
             rosterPage = Mathf.Clamp(rosterPage, 0, pages - 1);
             if (rosterPageLabel != null)
-                rosterPageLabel.text = "flight page " + (rosterPage + 1) + " of " + pages;
+                rosterPageLabel.text = empty
+                    ? ""
+                    : pages == 1
+                        ? wing.Count + (wing.Count == 1 ? " wingman" : " wingmen")
+                        : "flight page " + (rosterPage + 1) + " of " + pages;
 
             rosterPrevButton?.SetEnabled(rosterPage > 0);
             rosterNextButton?.SetEnabled(rosterPage < pages - 1);
@@ -400,11 +415,11 @@ namespace WingCommand
         }
 
 
-        /// <summary>One line of the roster: slot, name, order, slot error, release button.</summary>
+        /// <summary>One line of the roster: slot, name, state, fuel, ammo, release button.</summary>
         private sealed class RosterRow
         {
             private readonly GameObject go;
-            private readonly TMP_Text slot, name, order, preference, error, reserves;
+            private readonly TMP_Text slot, name, order, fuel, ammo;
             private readonly Image selectionRule;
             private readonly Image fill;
             private readonly WingButton hit;
@@ -436,7 +451,7 @@ namespace WingCommand
                 fill = Panel(rt, new Rect(0f, 0f, width, RowHeight), MemberFrameColor());
                 selectionRule = Rule(rt, new Rect(0f, 0f, 3f, RowHeight), WingColor());
 
-                const float releaseWidth = 42f;
+                const float releaseWidth = WingUi.ButtonCompact;
                 hit = HitButton(rt, new Rect(0f, 0f, width - releaseWidth - Space2, RowHeight), () =>
                 {
                     if (bound == null) return;
@@ -444,17 +459,17 @@ namespace WingCommand
                     WingCommandManager.Instance?.SelectMember(bound, toggle);
                 });
 
+                // Cells sit under the four columns in RosterColumns — CALLSIGN, STATE,
+                // FUEL, AMMO — so a header and the value beneath it cannot drift apart.
                 slot  = Label(rt, "", new Rect(6f, 0f, 18f, RowHeight), Dim(), FontBody,
                               FontStyles.Normal, TextAlignmentOptions.Left);
-                name  = Label(rt, "", new Rect(26f, 0f, 100f, RowHeight), WingColor(), FontBody,
+                name  = Label(rt, "", new Rect(26f, 0f, 108f, RowHeight), WingColor(), FontBody,
                               FontStyles.Normal, TextAlignmentOptions.Left);
-                order = Label(rt, "", new Rect(128f, 0f, 58f, RowHeight), Dim(), FontBody,
+                order = Label(rt, "", new Rect(138f, 0f, 86f, RowHeight), Dim(), FontBody,
                               FontStyles.Normal, TextAlignmentOptions.Left);
-                preference = Label(rt, "", new Rect(188f, 0f, 30f, RowHeight), Dim(), FontMicro,
-                              FontStyles.Normal, TextAlignmentOptions.Left);
-                error = Label(rt, "", new Rect(220f, 0f, 52f, RowHeight), Dim(), FontBody,
+                fuel  = Label(rt, "", new Rect(224f, 0f, 52f, RowHeight), Dim(), FontSmall,
                               FontStyles.Normal, TextAlignmentOptions.Right);
-                reserves = Label(rt, "", new Rect(276f, 0f, 70f, RowHeight), Dim(), FontSmall,
+                ammo  = Label(rt, "", new Rect(280f, 0f, 40f, RowHeight), Dim(), FontSmall,
                               FontStyles.Normal, TextAlignmentOptions.Right);
 
                 // REL discharges a wingman for good, and it sat one row-width from the row
@@ -521,29 +536,17 @@ namespace WingCommand
                                      WingUi.CardFillHover);
                 order.text = ShortOrder(m);
 
-                // The weapon preference gets its own narrow column rather than being
-                // appended to the state text. Sharing that cell would have truncated the
-                // order — which is the more important of the two — the moment anything but
-                // AUTO was selected.
-                preference.text = WingWeaponPreferences.ShortLabel(m.WeaponPreference);
-                preference.color = m.WeaponPreference == WingWeaponPreference.Auto
-                    ? Dim()
-                    : Accent();
-
                 // Fuel and stores are aggregate queries over every tank/station. Sample
-                // each once so binding one row does not walk both collections twice.
-                float fuel = m.Fuel;
-                int ammo = m.Ammo;
-                reserves.text = Mathf.RoundToInt(fuel * 100f) + "%  " + ammo;
-                reserves.color = fuel <= WingTuning.BingoFuel || ammo <= 0
-                    ? new Color(1f, 0.55f, 0.2f)
-                    : Dim();
-
-                error.text = ErrorText(m);
-                error.color = !m.IsPanicking && HoldsFormationSlot(m.Order) &&
-                              m.SlotError > 0f && m.SlotError < 250f
-                    ? Accent()
-                    : Dim();
+                // each once so binding one row does not walk both collections twice. Each
+                // reads under its own header and turns amber on its own threshold, rather
+                // than the old shared "45%  12" cell that went amber for either.
+                float fuelFraction = m.Fuel;
+                int ammoCount = m.Ammo;
+                Color low = new Color(1f, 0.55f, 0.2f);
+                fuel.text = Mathf.RoundToInt(fuelFraction * 100f) + "%";
+                fuel.color = fuelFraction <= WingTuning.BingoFuel ? low : Dim();
+                ammo.text = ammoCount.ToString();
+                ammo.color = ammoCount <= 0 ? low : Dim();
             }
 
             public void Hide()
@@ -551,20 +554,6 @@ namespace WingCommand
                 bound = null;
                 if (go.activeSelf) go.SetActive(false);
             }
-
-            private static string ErrorText(WingMember m)
-            {
-                if (m.DeliveryPending) return "WAIT";
-                if (m.IsPanicking || !HoldsFormationSlot(m.Order)) return "-";
-                if (m.SlotError <= 0f) return "...";
-                return m.SlotError < 10000f
-                    ? m.SlotError.ToString("F0") + " m"
-                    : (m.SlotError / 1000f).ToString("F1") + " km";
-            }
-
-            /// <summary>Orders flown from the formation slot, so a slot error means something.</summary>
-            private static bool HoldsFormationSlot(WingOrder order) =>
-                order == WingOrder.Formation || order == WingOrder.JamTarget;
         }
 
     }
