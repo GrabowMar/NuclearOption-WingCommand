@@ -643,7 +643,7 @@ namespace WingCommand
 
             Plugin.Logger.LogInfo(
                 $"[Shop] requisitioned {definition.unitName} for {quote.Price:F0}" +
-                $" [{WingLoadoutCatalog.Label(definition, quote.Loadout)}]" +
+                $" [{WingLoadoutCatalog.Label(quote.Loadout)}]" +
                 (alreadyOwned ? " (owned reserve)" :
                  quote.Source == WingSupplyReserve.Source.Held ? " (held reserve)" : "") +
                 (debugFree && !alreadyOwned ? " (debug free purchase)" : "") +

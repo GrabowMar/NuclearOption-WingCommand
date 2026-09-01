@@ -1846,7 +1846,7 @@ namespace WingCommand
             }
 
             shopTemplateButton.SetText(
-                UiTheme.Truncate(WingLoadoutCatalog.Label(selectedOffer, planned), 34)
+                UiTheme.Truncate(WingLoadoutCatalog.Label(planned), 34)
                        .ToUpperInvariant());
             shopTemplateButton.SetEnabled(true);
             shopTemplateButton.SetLatched(planned.IsTemplate);
@@ -3163,7 +3163,7 @@ namespace WingCommand
                 (focus.IsPanicking ? "   (DEFENSIVE)" : "");
 
             string loadout = focus.LoadoutKnown
-                ? "LOADOUT " + WingLoadoutCatalog.Label(definition, focus.Loadout) +
+                ? "LOADOUT " + WingLoadoutCatalog.Label(focus.Loadout) +
                   " - fitted at requisition"
                 : "LOADOUT as found - assigned mission aircraft keep their own fit";
 

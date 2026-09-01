@@ -96,7 +96,7 @@ namespace WingCommand
             catch (Exception e)
             {
                 Plugin.Logger.LogWarning(
-                    "[Shop] could not build the " + WingLoadoutCatalog.Label(choice.Preset) +
+                    "[Shop] could not build the " + WingLoadoutCatalog.Label(choice) +
                     " loadout; using the standard fit: " + e.Message);
                 return null;
             }
@@ -194,7 +194,7 @@ namespace WingCommand
 
             Plugin.Logger.LogInfo(
                 "[Shop] " + definition.unitName + " ordered from a hangar at " + airbase.name +
-                " with the " + WingLoadoutCatalog.Label(definition, transaction.Loadout) + " fit" +
+                " with the " + WingLoadoutCatalog.Label(transaction.Loadout) + " fit" +
                 (result.DelayedSpawn ? " (waiting on hangar doors)" : ""));
             return true;
         }
