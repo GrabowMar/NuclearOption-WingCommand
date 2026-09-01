@@ -2,8 +2,13 @@
 
 **Target:** `0.9.x` tactical beta, followed by a release candidate  
 **Current baseline:** WingCommand `0.8.3`, Nuclear Option `0.34.2`  
-**Status:** implementation plan  
+**Status:** **shipped as of `0.9.4.x`. Historical design record — not a work list.**  
 **Release posture:** preserve the working flight/AI core; replace the command and logistics experience around it
+
+> **Read the code, not this file, for what the mod does now.** This is the reasoning behind
+> decisions that have already been made and shipped. It is kept because the *why* is not
+> recoverable from the source, but names and structures in it have moved since. Where the
+> two disagree, the source wins.
 
 ## 1. Outcome
 

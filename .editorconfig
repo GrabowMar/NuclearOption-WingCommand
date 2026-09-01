@@ -1,0 +1,19 @@
+root = true
+
+[*.cs]
+
+# Unused private members are reported as build warnings, not editor suggestions.
+#
+# This is the repo's dead-code tripwire. Three rounds of cleanup have each found members
+# that nothing called — a preset subsystem stranded by a UI rework, a state flag whose only
+# writer had been deleted, two drawing wrappers shadowed by the ones in WingUi. Grep is not
+# reliable at finding them: `Rule` and `Grey` both survived a careful manual sweep because
+# other files use those names for other things, and a whole-word search cannot tell the
+# difference. The compiler can.
+#
+# The build is kept at zero warnings so that any warning is a real one. Unity calls Awake /
+# Update / OnGUI / OnDisable by reflection and Harmony calls Prefix / Postfix by reflection,
+# and IDE0051 can see neither; the files holding those entry points disable this rule at the
+# top, with a comment saying why. Nothing else may.
+dotnet_diagnostic.IDE0051.severity = warning
+dotnet_diagnostic.IDE0052.severity = warning

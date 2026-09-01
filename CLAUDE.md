@@ -26,7 +26,7 @@ a pylon-level loadout editor, a squadron shop/economy, and radio chatter.
 | `src/WingCommand/Core/GameAccess.cs` | every reflection accessor into private game members; resolved once at startup |
 | `tests/WingCommand.PureTests/` | xunit, net8.0; `<Compile Include>`s the `Pure/` files directly (no project reference) |
 | `build/` | `package.ps1` (release assets), `copy-to-game.ps1` (deploy), `meta.json`, `nomnom/` manifest |
-| `docs/` | in-flight design plans |
+| `docs/` | **shipped** design history, not a work list — see the banner at the top of each |
 | `.opencode/skills/` | the modding knowledge base (gitignored; also mounted at `.claude/skills/`) |
 
 ## Commands
@@ -67,8 +67,28 @@ pwsh build/package.ps1
 - Types are `internal` by default; only the BepInEx entry point is public.
 - Comments explain *why* — especially which decompiled behaviour forced a workaround.
   Match that density; do not narrate the obvious.
-- Version bumps touch csproj, `Core/Plugin.cs`, and `build/meta.json`; `package.ps1` reads the
-  version back out of the built DLL so the manifest cannot drift.
+- Version bumps touch csproj `<Version>` and `Core/Plugin.cs`. The build **fails** if the two
+  disagree (`CheckPluginVersionMatchesCsproj` in the csproj), and `package.ps1` regenerates
+  `build/meta.json` from the built DLL, so neither can drift silently.
+
+## Guardrails
+
+The build is kept at **zero warnings**, so any warning is a real finding. Two tripwires
+enforce things that were previously only written down:
+
+- **Dead code**: `IDE0051`/`IDE0052` are warnings (see `.editorconfig`). Unused private
+  members and write-only fields fail the build. Three rounds of manual cleanup each missed
+  members that this caught immediately — grep cannot distinguish `WmcScreen.Grey` from
+  `WingUi.Grey`, and the compiler can. The seven files holding Unity or Harmony entry points
+  disable `IDE0051` at the top with a reason, because those are called by reflection;
+  **do not add the pragma anywhere else** — a new one means real dead code.
+- **Untested pure code**: the test project globs `Pure/*.cs` rather than listing files, so a
+  new pure file is compiled and tested the moment it lands, and a file that is *not* pure
+  breaks that build immediately.
+
+Neither tripwire replaces reading the code. `internal` members unused across the whole
+assembly are still invisible to the compiler — that is how a whole preset subsystem stayed
+in the tree after the UI that used it was replaced.
 
 ## Before touching game code
 

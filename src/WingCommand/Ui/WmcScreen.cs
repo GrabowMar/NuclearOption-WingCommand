@@ -120,7 +120,6 @@ namespace WingCommand
         private static TMP_Text shapeLabel;
         private static TMP_Text summaryLabel;
         private static TMP_Text rosterPageLabel;
-        private static TMP_Text commandStatusLabel;
         private static WingButton holdButton;
         private static WingButton escortButton;
         private static WingButton freeButton;
@@ -272,7 +271,6 @@ namespace WingCommand
             shapeLabel = null;
             summaryLabel = null;
             rosterPageLabel = null;
-            commandStatusLabel = null;
             rosterRows.Clear();
             shopRows.Clear();
             shopArea = null;
@@ -803,7 +801,6 @@ namespace WingCommand
             label.overflowMode = TextOverflowModes.Truncate;
 
             statusLabels[(int)page] = label;
-            if (page == Page.Tactical) commandStatusLabel = label;
         }
 
         /// <summary>
@@ -1054,8 +1051,6 @@ namespace WingCommand
         private static Image[] Outline(RectTransform parent, Rect rect, Color color) =>
             WingUi.Outline(parent, rect, color);
 
-        private static Image Rule(RectTransform parent, Rect rect) => WingUi.Rule(parent, rect);
-
         private static Image Rule(RectTransform parent, Rect rect, Color color) =>
             WingUi.Rule(parent, rect, color);
 
@@ -1135,8 +1130,6 @@ namespace WingCommand
                 // ---------------------------------------------------------------------- colours
 
         private static Color Green() => WingUi.Green;
-
-        private static Color Grey() => WingUi.Grey;
 
         private static Color Accent() => WingUi.Green;
 

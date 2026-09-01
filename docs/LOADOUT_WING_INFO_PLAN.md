@@ -2,8 +2,19 @@
 
 **Target:** `0.9.x`, after the tactical layer overhaul
 **Baseline:** WingCommand `0.9.0`, Nuclear Option `0.34.2`
-**Status:** implemented, partly superseded — see
-[the pylon editor note](#12-superseded-the-pylon-editor)
+**Status:** **shipped, and §5's central idea has since been deleted outright.** Historical
+design record — not a work list.
+
+> **The role presets described throughout this document no longer exist.** §5 built the
+> LOADOUT tab around five of them; §12 then recorded that the tab became a per-pylon
+> template editor and said the presets survived as *seed* buttons. Both are now out of
+> date — the seed buttons went in `5a862e3`, and the preset machinery behind them
+> (`WingLoadoutPreset`, `PresetsFor`, `CanFit`, `Select`, `SelectCargo`, the `CargoOption`
+> projection) was removed in full once it was found to be unreachable. `WingLoadoutChoice`
+> is now a template id and nothing else.
+>
+> Read `src/WingCommand/Economy/WingLoadout.cs` for what exists. This file is kept for the
+> reasoning that is not recoverable from the source; where the two disagree, the source wins.
 **Release posture:** additive. The formation controller, defensive manoeuvres, target
 deconfliction, takeover and economy invariants are not touched.
 
@@ -387,8 +398,11 @@ Every rule the editor needs is the game's, so none of it is this mod's invention
 - One template = airframe + name + one store `jsonKey` per hardpoint set. Empty is legal.
 - Symmetric pairs are drawn and edited as one row; the mirror is written with its partner.
 - A pylon the current fit rules out is drawn greyed and says why, on the game's own answer.
-- The role presets survive as **seed** buttons, alongside the airframe's factory loadouts,
-  filling every pylon at once so the editor never starts from a stripped aircraft.
+- ~~The role presets survive as **seed** buttons, alongside the airframe's factory loadouts,
+  filling every pylon at once so the editor never starts from a stripped aircraft.~~
+  **No longer true.** The seed buttons were removed in `5a862e3`, which left the preset
+  machinery with no caller; it was deleted in full afterwards. The editor starts from the
+  airframe's own fit.
 - The "IN THE AIR" list is gone. It reported something the player cannot change from here,
   and the WING tab already says what each wingman is carrying.
 

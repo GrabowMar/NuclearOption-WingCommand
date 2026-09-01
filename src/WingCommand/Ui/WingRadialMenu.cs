@@ -3,6 +3,10 @@ using System.Collections.Generic;
 using HarmonyLib;
 using UnityEngine;
 
+// Harmony invokes patch Prefix/Postfix methods by reflection.
+// IDE0051 cannot see a reflective call, so it is disabled for this file only.
+#pragma warning disable IDE0051
+
 namespace WingCommand
 {
     /// <summary>

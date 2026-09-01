@@ -2,6 +2,10 @@ using System;
 using UnityEngine;
 using UnityEngine.EventSystems;
 
+// Unity invokes OnDisable by reflection.
+// IDE0051 cannot see a reflective call, so it is disabled for this file only.
+#pragma warning disable IDE0051
+
 namespace WingCommand
 {
     /// <summary>
