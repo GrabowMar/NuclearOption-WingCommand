@@ -6,14 +6,14 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <Compile Include="../../src/WingCommand/PureLogic.cs" Link="PureLogic.cs" />
-    <Compile Include="../../src/WingCommand/FormationShapes.cs" Link="FormationShapes.cs" />
-    <Compile Include="../../src/WingCommand/WingWeaponPreference.cs" Link="WingWeaponPreference.cs" />
-    <Compile Include="../../src/WingCommand/ManeuverCatalog.cs" Link="ManeuverCatalog.cs" />
-    <Compile Include="../../src/WingCommand/WingBrain.cs" Link="WingBrain.cs" />
-    <Compile Include="../../src/WingCommand/ChatterLogic.cs" Link="ChatterLogic.cs" />
-    <Compile Include="../../src/WingCommand/LoadoutTemplateCodec.cs" Link="LoadoutTemplateCodec.cs" />
-    <Compile Include="../../src/WingCommand/UiPalette.cs" Link="UiPalette.cs" />
+    <Compile Include="../../src/WingCommand/Pure/PureLogic.cs" Link="PureLogic.cs" />
+    <Compile Include="../../src/WingCommand/Pure/FormationShapes.cs" Link="FormationShapes.cs" />
+    <Compile Include="../../src/WingCommand/Pure/WingWeaponPreference.cs" Link="WingWeaponPreference.cs" />
+    <Compile Include="../../src/WingCommand/Pure/ManeuverCatalog.cs" Link="ManeuverCatalog.cs" />
+    <Compile Include="../../src/WingCommand/Pure/WingBrain.cs" Link="WingBrain.cs" />
+    <Compile Include="../../src/WingCommand/Pure/ChatterLogic.cs" Link="ChatterLogic.cs" />
+    <Compile Include="../../src/WingCommand/Pure/LoadoutTemplateCodec.cs" Link="LoadoutTemplateCodec.cs" />
+    <Compile Include="../../src/WingCommand/Pure/UiPalette.cs" Link="UiPalette.cs" />
     <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.12.0" />
     <PackageReference Include="xunit" Version="2.9.2" />
     <PackageReference Include="xunit.runner.visualstudio" Version="2.8.2">
