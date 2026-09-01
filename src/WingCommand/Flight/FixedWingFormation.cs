@@ -268,7 +268,7 @@ namespace WingCommand
             float commandAngle = Steer(aircraft, leader, slotPos, toSlot, distance,
                                        leaderVel, drift, aggression, damping, spacing,
                                        outOfPosition, leaderState.Track, leaderTurnRate,
-                                       throttle, report);
+                                       throttle, report, rejoin.Holding);
 
             MatchLeaderBank(aircraft, leader, controls, outOfPosition, commandAngle);
         }
@@ -411,14 +411,16 @@ namespace WingCommand
                                    Vector3 toSlot, float distance, Vector3 leaderVel,
                                    Vector3 drift, float aggression, float damping,
                                    float spacing, float outOfPosition, Vector3 smoothedLeaderDir,
-                                   float leaderTurnRate, ThrottleState throttle, bool report)
+                                   float leaderTurnRate, ThrottleState throttle, bool report,
+                                   bool holding)
         {
             Aim aim = AimFor(aircraft, leader, slotPos, toSlot, distance, leaderVel, drift,
                              aggression, damping, spacing, outOfPosition, smoothedLeaderDir,
-                             leaderTurnRate);
+                             leaderTurnRate, holding);
 
             float bankAllowed =
-                BankAuthority(aircraft, leader, aim.Point, outOfPosition, out float commandAngle);
+                BankAuthority(aircraft, leader, aim.Point, outOfPosition, holding,
+                              out float commandAngle);
 
             if (report)
                 Report(aircraft, leader, distance, aim.Correction, aim.MaxCorrection,
@@ -447,7 +449,8 @@ namespace WingCommand
                                   Vector3 toSlot, float distance, Vector3 leaderVel,
                                   Vector3 drift, float aggression, float damping,
                                   float spacing, float outOfPosition,
-                                  Vector3 smoothedLeaderDir, float leaderTurnRate)
+                                  Vector3 smoothedLeaderDir, float leaderTurnRate,
+                                  bool holding)
         {
             // AutoAim is a pursuit controller: it rotates the aircraft's velocity toward the
             // destination and banks to chase it, so the distance to that destination sets the
@@ -489,6 +492,14 @@ namespace WingCommand
             }
 
             float lookAhead = Mathf.Max(aircraft.speed * LookAheadSeconds, MinLookAhead);
+
+            // A staggered rejoin holds a wingman at the leader's track until its turn comes,
+            // and the throttle already refuses to close. Chasing the slot from here is what
+            // paired a full-bank pursuit with the hold's speed-match throttle and flew a
+            // wingman knife-edge into the ground: fly straight along the leader's track, and
+            // let the boost that follows the hold do the actual intercept.
+            if (holding)
+                return new Aim(aircraft.GlobalPosition() + baseDir * lookAhead, 0f, 0f, lookAhead);
 
             // Only cross-track error steers. The along-track part is throttle's job, and
             // feeding it in here pushed the aim point forwards and backwards along the
@@ -576,7 +587,7 @@ namespace WingCommand
         /// <summary>How much bank the autopilot may use, and the command angle it came from.</summary>
         private static float BankAuthority(Aircraft aircraft, Aircraft leader,
                                            GlobalPosition aimPoint, float outOfPosition,
-                                           out float commandAngle)
+                                           bool holding, out float commandAngle)
         {
             // --- Bank authority, from actual turn demand ---
             //
@@ -622,9 +633,11 @@ namespace WingCommand
             // product of velocity and command collapsing to zero — barrel-roll it. The roll
             // then bled the speed that would have closed the gap, which is why a
             // barrel-rolling wingman also fell behind and stayed there.
-            float maxBank = Mathf.Lerp(WingTuning.StationBank,
-                                       WingTuning.PursuitBank,
-                                       outOfPosition);
+            float maxBank = holding
+                ? WingTuning.RejoinHoldBank
+                : Mathf.Lerp(WingTuning.StationBank,
+                             WingTuning.PursuitBank,
+                             outOfPosition);
 
             // The settled ceiling exists to stop the roll axis going chaotic in level
             // flight, but it must never clip a genuine turn: a leader banked hard needs a

@@ -65,8 +65,15 @@ namespace WingCommand
         private float lateralTurnScale = 1f;
         private float trailTurnScale = 1f;
 
-        /// <summary>Seconds of leader motion fed into the slot position, so the slot is where the leader will be, not where it was.</summary>
-        private const float SlotPredictionSeconds = 1f;
+        /// <summary>
+        /// Seconds of the leader's vertical motion fed into the slot position, so a climb or
+        /// dive is led rather than trailed. The horizontal along-track component is deliberately
+        /// not led: at cruise speed a second of lead is several hundred metres, which parked the
+        /// slots ahead of the leader — the leader is the front of the formation, always. The
+        /// along-track lag a fast leader would otherwise open is the throttle's job to close
+        /// (see <see cref="FixedWingFormation.Throttle"/> and its speed lead), not the slot's.
+        /// </summary>
+        private const float SlotVerticalLeadSeconds = 1f;
         private const float ShapeTransitionSeconds = 1.6f;
         private const float TurnGeometrySeconds = 0.7f;
         private RotaryFormation.Mode lastRotaryMode = (RotaryFormation.Mode)(-1);
@@ -531,19 +538,16 @@ namespace WingCommand
             // far as the closest one, which is what the sway looked like.
             offset = FormationSolver.WorldOffset(track, smoothedSlotLocal);
 
-            // Anchor the slot to where the leader is going, not where it is: a fast leader
-            // drags an un-predicted slot behind it and the wingman spends the whole flight
-            // chasing a moving target it can never sit on. Predicting the leader's own motion
-            // removes that lag so station-keeping converges instead of perpetually trailing.
-            //
-            // The prediction runs along the filtered track rather than the instantaneous
-            // velocity: a whole second of prediction magnifies every degree of stick wobble
-            // into lateral slot motion. Only the vertical component stays raw, so a climb or
-            // a dive is still led honestly.
+            // The slot hangs off the leader's current position plus its formation offset, so
+            // it is always behind the leader — the leader is the front of the formation. Only
+            // the leader's vertical motion is led: without it a climbing or diving leader drags
+            // every slot up or down behind it and the wingmen perpetually trail the altitude.
+            // The along-track lag a fast leader would otherwise open is closed by the throttle's
+            // own speed lead (FixedWingFormation.Throttle), not by moving the slot forward.
             Vector3 leaderVel = leader.rb != null ? leader.rb.velocity : Vector3.zero;
-            Vector3 predictedMotion = track * leader.speed + Vector3.up * leaderVel.y;
+            Vector3 predictedMotion = Vector3.up * leaderVel.y;
             GlobalPosition slotPos = leader.GlobalPosition()
-                                     + predictedMotion * SlotPredictionSeconds
+                                     + predictedMotion * SlotVerticalLeadSeconds
                                      + offset;
 
             // Separation keeps wingmen out of each other during a rejoin, and path-cut

@@ -161,22 +161,35 @@ namespace WingCommand
                 > maxRange * maxRange)
                 return false;
 
-            WeaponStation station = DesignatedStationFor(aircraft, target, massed);
-            if (station == null) return false;
-            if (!ShotIsValid(aircraft, station, target)) return false;
-
-            // Explicit attack orders may deliberately mass some fire, but still respect the
-            // wing-wide cap. This keeps a four-ship from launching four missiles at a target
-            // that only needed one or two. Splash 'Em is the one order that does not.
-            if (!massed)
+            // Splash 'Em walks every effective store at the target, interleaved. A measured
+            // Attack order still massed some fire but respects the wing-wide cap, so a
+            // four-ship does not spend four missiles on a target that needed one or two.
+            if (massed)
             {
-                int capacity = RequiredAttackers(station, target);
-                if (!TacticalCoordinator.TryClaim(
-                        target, aircraft, capacity,
-                        Mathf.Max(FireInterval(aircraft) * 1.5f, 3f)))
-                    return false;
+                WeaponStation station = MassedStationFor(aircraft, target, current);
+                if (station == null) return false;
+                FireStation(aircraft, pilot, target, wm, station);
+                return true;
             }
 
+            WeaponStation chosen = DesignatedStationFor(aircraft, target);
+            if (chosen == null) return false;
+            if (!ShotIsValid(aircraft, chosen, target)) return false;
+
+            int capacity = RequiredAttackers(chosen, target);
+            if (!TacticalCoordinator.TryClaim(
+                    target, aircraft, capacity,
+                    Mathf.Max(FireInterval(aircraft) * 1.5f, 3f)))
+                return false;
+
+            FireStation(aircraft, pilot, target, wm, chosen);
+            return true;
+        }
+
+        /// <summary>The shared select-and-fire sequence used by every designated shot.</summary>
+        private static void FireStation(Aircraft aircraft, Pilot pilot, Unit target,
+                                        WeaponManager wm, WeaponStation station)
+        {
             wm.currentWeaponStation = station;
             wm.ClearTargetList();
             wm.AddTargetList(target);
@@ -185,36 +198,97 @@ namespace WingCommand
             pilot.SetPrimaryTarget(target);
             pilot.Fire();
             WingKillCredit.NoteShot(aircraft, target);
-            return true;
         }
 
         /// <summary>
-        /// The station to use against a designated unit.
-        ///
-        /// A massed attack ignores the player's weapon preference. The preference exists to
-        /// husband particular stores, and an order to expend everything on one target has
-        /// already answered that question the other way.
+        /// The station a Splash 'Em run fires next: the most effective ready store that can
+        /// actually take the shot right now, rotated past the one just fired so a volley
+        /// interleaves missiles, rockets and gun instead of emptying one store before the
+        /// next is touched. The store just fired is only reused when nothing else can fire.
         /// </summary>
-        private static WeaponStation DesignatedStationFor(Aircraft aircraft, Unit target, bool massed)
+        private static WeaponStation MassedStationFor(Aircraft aircraft, Unit target,
+                                                      WeaponStation justFired)
         {
             bool isAir = target.definition != null && target.definition.typeIdentity.air > 0.5f;
             TargetClass targetClass = isAir ? TargetClass.Air : TargetClass.Surface;
 
-            return massed
-                ? BestStationFor(aircraft, targetClass, WingWeaponPreference.Auto)
-                : BestStationFor(aircraft, targetClass);
+            WeaponStation pick = BestMassedStation(aircraft, target, targetClass, justFired);
+            return pick ?? BestMassedStation(aircraft, target, targetClass, null);
         }
 
         /// <summary>
-        /// Whether this aircraft still carries anything worth using on a target.
+        /// Highest-effectiveness ready station that can hit <paramref name="target"/> now,
+        /// optionally skipping <paramref name="exclude"/> to rotate the loadout. Unlike
+        /// <see cref="BestStationFor"/>, this enforces <see cref="ShotIsValid"/> inline so a
+        /// rotated-to store that is out of its own envelope is passed over rather than fired
+        /// at, and it applies no weapon preference — Splash 'Em expends what is there.
+        /// </summary>
+        private static WeaponStation BestMassedStation(Aircraft aircraft, Unit target,
+                                                       TargetClass targetClass,
+                                                       WeaponStation exclude)
+        {
+            WeaponStation best = null;
+            float bestScore = 0f;
+
+            foreach (WeaponStation station in aircraft.weaponStations)
+            {
+                if (station == null || station.Cargo || station.WeaponInfo == null) continue;
+                if (station.Ammo <= 0 || !station.Ready()) continue;
+                if (station == exclude) continue;
+                if (!ShotIsValid(aircraft, station, target)) continue;
+
+                RoleIdentity role = station.WeaponInfo.effectiveness;
+                float value = targetClass == TargetClass.Air ? role.antiAir : role.antiSurface;
+                if (value <= 0f) continue;
+
+                if (value > bestScore)
+                {
+                    bestScore = value;
+                    best = station;
+                }
+            }
+
+            return best;
+        }
+
+        /// <summary>
+        /// The station a measured Attack order uses against a designated unit. The player's
+        /// weapon preference still weighs in here; Splash 'Em, which expends everything, is
+        /// served by <see cref="MassedStationFor"/> instead.
+        /// </summary>
+        private static WeaponStation DesignatedStationFor(Aircraft aircraft, Unit target)
+        {
+            bool isAir = target.definition != null && target.definition.typeIdentity.air > 0.5f;
+            TargetClass targetClass = isAir ? TargetClass.Air : TargetClass.Surface;
+            return BestStationFor(aircraft, targetClass);
+        }
+
+        /// <summary>
+        /// Whether this aircraft still carries anything effective against a target.
         ///
-        /// Read by the Splash 'Em run to know when it has genuinely finished, rather
-        /// than circling a survivor with nothing left that can touch it.
+        /// Read by the Splash 'Em run to know when it has genuinely finished, rather than
+        /// circling a survivor with nothing left that can touch it. It ignores a station's
+        /// cooldown and range: those only pause a shot for a moment, and the run must wait
+        /// for them rather than read them as "out of ammunition" and go home early.
         /// </summary>
         public static bool CanStillEngage(Aircraft aircraft, Unit target)
         {
             if (aircraft == null || target == null || target.disabled) return false;
-            return DesignatedStationFor(aircraft, target, massed: true) != null;
+
+            bool isAir = target.definition != null && target.definition.typeIdentity.air > 0.5f;
+            TargetClass targetClass = isAir ? TargetClass.Air : TargetClass.Surface;
+
+            foreach (WeaponStation station in aircraft.weaponStations)
+            {
+                if (station == null || station.Cargo || station.WeaponInfo == null) continue;
+                if (station.Ammo <= 0) continue;
+
+                RoleIdentity role = station.WeaponInfo.effectiveness;
+                float value = targetClass == TargetClass.Air ? role.antiAir : role.antiSurface;
+                if (value > 0f) return true;
+            }
+
+            return false;
         }
 
         /// <summary>

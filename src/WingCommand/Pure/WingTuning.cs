@@ -45,6 +45,15 @@ namespace WingCommand
         /// </summary>
         public const float PursuitBank = 88f;
 
+        /// <summary>
+        /// Bank authority, degrees, while a staggered rejoin is holding a wingman at the
+        /// leader's track. Low on purpose: the hold exists to wait for a turn, not to chase
+        /// the slot, and the pre-fix behaviour granted full pursuit bank here — pairing a
+        /// knife-edge turn with the hold's speed-match throttle and dropping a wingman into
+        /// the ground. Enough to align with the leader's track, never enough to dive out of it.
+        /// </summary>
+        public const float RejoinHoldBank = 45f;
+
         /// <summary>Throttle change per m/s of speed error.</summary>
         public const float ThrottleGain = 0.12f;
 
