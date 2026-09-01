@@ -1,4 +1,5 @@
 using System;
+using System.Reflection;
 using System.Collections.Generic;
 using HarmonyLib;
 using UnityEngine;
@@ -79,10 +80,10 @@ namespace WingCommand
         /// </summary>
         internal static bool EnsureRootInjected(RadialMenuMain menu, bool openingRoot = false)
         {
-            if (menu == null || inSubmenu) return false;
+            if (menu == null || inSubmenu) { Trace(openingRoot, "menu null or in submenu"); return false; }
 
             RadialMenuAction[] current = GameAccess.GetActionsMain(menu);
-            if (current == null) return false;
+            if (current == null) { Trace(openingRoot, "actionsMain is null"); return false; }
 
             // BOTE uses the same swap-and-rebuild technique for its own submenus, so
             // SetupMain also fires for wheels that are not the main one. OpenMenu is the
@@ -91,11 +92,20 @@ namespace WingCommand
             if (openingRoot && baselineWheel == null)
                 baselineWheel = current;
             else if (baselineWheel == null || !SharesAnyEntry(current, baselineWheel))
+            {
+                Trace(openingRoot, "not the root wheel (baseline " +
+                                   (baselineWheel == null ? "unset" : "set") + ", " +
+                                   current.Length + " entries)");
                 return false;
+            }
 
             BuildMenus(menu);
 
-            if (Array.IndexOf(current, rootEntry) >= 0) return false;
+            if (Array.IndexOf(current, rootEntry) >= 0)
+            {
+                Trace(openingRoot, "already injected (" + current.Length + " entries)");
+                return false;
+            }
 
             var grown = new RadialMenuAction[current.Length + 1];
             current.CopyTo(grown, 0);
@@ -103,7 +113,22 @@ namespace WingCommand
 
             GameAccess.SetActionsMain(menu, grown);
             baselineWheel = grown;
+            Trace(openingRoot, "INJECTED, wheel now " + grown.Length + " entries, aircraft=" +
+                               (GameAccess.GetMenuAircraft(menu) == null ? "null" : "set"));
             return true;
+        }
+
+        /// <summary>
+        /// Diagnostic breadcrumb for the injection path. Rate-limited to one line per
+        /// distinct message: the callers run on every wheel open and every rebuild, and an
+        /// unthrottled log here buries everything else in BepInEx's output.
+        /// </summary>
+        private static readonly HashSet<string> traced = new HashSet<string>();
+
+        private static void Trace(bool openingRoot, string what)
+        {
+            string line = "[Radial] " + (openingRoot ? "root" : "rebuild") + ": " + what;
+            if (traced.Add(line)) Plugin.Logger.LogInfo(line);
         }
 
         private static bool SharesAnyEntry(RadialMenuAction[] a, RadialMenuAction[] b)
@@ -385,6 +410,66 @@ namespace WingCommand
     [HarmonyPatch(typeof(RadialMenuMain))]
     internal static class WingRadialMenuPatches
     {
+        private static bool reportedInactive;
+
+        /// <summary>
+        /// Say once why the native wheel is being left alone. Silence here was the whole
+        /// problem: the patches attached and then declined to do anything, which looks
+        /// exactly like the patches never running.
+        /// </summary>
+        private static void ReportInactive(string where)
+        {
+            if (reportedInactive) return;
+            reportedInactive = true;
+            Plugin.Logger.LogWarning(
+                "[Radial] " + where + ": the game's wheel is being left alone because the " +
+                "reflection it needs did not resolve" +
+                (GameAccess.UnavailableReason == null
+                    ? "" : " (" + GameAccess.UnavailableReason + ")") +
+                ". Bind Keys/WingMenu to open the mod's own wheel instead.");
+        }
+
+        /// <summary>
+        /// Put the slice into <c>actionsMain</c> the moment the wheel object exists, which
+        /// is how BOTE does it and is the earliest point that can work.
+        ///
+        /// <c>RadialMenuMain</c> does not declare Awake — it inherits the one on
+        /// <c>SceneSingleton&lt;RadialMenuMain&gt;</c> — so the target is resolved by hand
+        /// rather than by attribute.
+        ///
+        /// Deliberately no <c>SetupMain()</c> call here: at Awake the menu's cached aircraft
+        /// is still null, and the stock entries dereference it in AllowedOnAircraft. The
+        /// array is simply seeded, and the game's own first OpenMenu builds the wheel from
+        /// it. That also makes this the robust path — nothing has to observe an event, the
+        /// entry is just *there* before anything reads the array.
+        /// </summary>
+        [HarmonyPatch]
+        internal static class AwakePatch
+        {
+            private static MethodBase TargetMethod() =>
+                AccessTools.Method(typeof(SceneSingleton<RadialMenuMain>), "Awake");
+
+            [HarmonyPostfix]
+            private static void Postfix(SceneSingleton<RadialMenuMain> __instance)
+            {
+                // Mono shares one compiled body across every reference-type instantiation of
+                // a generic, so patching the closed SceneSingleton<RadialMenuMain>.Awake also
+                // runs for every other SceneSingleton<T> in the game. Claim only our own.
+                if (!(__instance is RadialMenuMain menu)) return;
+
+                if (!WingCommandManager.NativeRadialActive) { ReportInactive("Awake"); return; }
+
+                try
+                {
+                    WingRadialMenu.EnsureRootInjected(menu, openingRoot: true);
+                }
+                catch (Exception e)
+                {
+                    Plugin.Logger.LogError("Failed to seed the wing menu entry at Awake: " + e);
+                }
+            }
+        }
+
         /// <summary>
         /// Re-add the "Wing Command" slice before every wheel rebuild. The game rebuilds
         /// whenever the player's aircraft changes, which would otherwise drop it.
@@ -393,7 +478,7 @@ namespace WingCommand
         [HarmonyPrefix]
         private static void SetupMain_Prefix(RadialMenuMain __instance)
         {
-            if (!WingCommandManager.NativeRadialActive) return;
+            if (!WingCommandManager.NativeRadialActive) { ReportInactive("SetupMain"); return; }
 
             try
             {
@@ -415,7 +500,7 @@ namespace WingCommand
         [HarmonyPostfix]
         private static void OpenMenu_Postfix(RadialMenuMain __instance)
         {
-            if (!WingCommandManager.NativeRadialActive) return;
+            if (!WingCommandManager.NativeRadialActive) { ReportInactive("OpenMenu"); return; }
 
             try
             {

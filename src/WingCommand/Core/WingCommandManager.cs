@@ -238,17 +238,19 @@ namespace WingCommand
         }
 
         /// <summary>
-        /// The native wheel is used when every private member it depends on resolved and the
-        /// player has not bound a key of their own. Otherwise the standalone wheel takes over.
+        /// The native wheel is used whenever every private member it depends on resolved.
+        /// Nothing else gates it.
         ///
-        /// One control, not two. A separate UseNativeRadial boolean was the manual half of a
-        /// decision already made automatically: GameAccess.Available detects an unusable
-        /// wheel by itself, and the key no-ops while unbound. Binding a key is now the whole
-        /// opt-out, and it also keeps our entry out of the game's own wheel - which is the
-        /// only reason anyone had to turn the native integration off.
+        /// It used to also require the standalone wheel's key to be unbound, on the theory
+        /// that binding a key was a deliberate opt-out. That coupling made a keybind
+        /// silently delete a whole feature: a key left bound in an existing config removed
+        /// the Wing Command slice from the game's wheel with no message anywhere, and the
+        /// only visible symptom was a stock-looking wheel — indistinguishable from the
+        /// integration being broken. A key that opens our own wheel and a slice on the
+        /// game's wheel are not mutually exclusive, so they are no longer wired to each
+        /// other; the key is now purely an *additional* way in.
         /// </summary>
-        internal static bool NativeRadialActive =>
-            GameAccess.Available && Plugin.Settings.RadialKey.Value == KeyCode.None;
+        internal static bool NativeRadialActive => GameAccess.Available;
 
         private static bool InPlayableState()
         {
@@ -259,19 +261,18 @@ namespace WingCommand
         // ------------------------------------------------------------------ input
 
         /// <summary>
-        /// Standalone fallback wheel, used only when the native integration is switched
-        /// off or the game's radial singleton is absent.
+        /// The mod's own wheel, opened by the optional key. Independent of the slice on the
+        /// game's wheel: binding a key adds a second way in rather than turning the first
+        /// one off, so an unbound key is now the only thing this checks.
         /// </summary>
         private void HandleRadialInput()
         {
-            if (NativeRadialActive && SceneSingleton<RadialMenuMain>.i != null)
+            KeyCode key = Plugin.Settings.RadialKey.Value;
+            if (key == KeyCode.None)
             {
                 if (radialOpen) CloseRadial(apply: false);
                 return;
             }
-
-            KeyCode key = Plugin.Settings.RadialKey.Value;
-            if (key == KeyCode.None) return;
 
             if (Input.GetKeyDown(key) && Wing.Leader != null)
             {

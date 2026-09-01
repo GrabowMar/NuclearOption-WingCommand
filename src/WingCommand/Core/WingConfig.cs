@@ -230,14 +230,13 @@ namespace WingCommand
 
         private void BindKeys(ConfigFile c)
         {
-            // Binding this is also how you opt out of the native wheel - see
-            // WingCommandManager.NativeRadialActive. It replaced a separate UseNativeRadial
-            // boolean that asked the same question a second time.
+            // Purely additive. This used to double as the opt-out from the game's own wheel,
+            // which meant a key left bound in a config silently deleted the Wing Command
+            // slice with no message anywhere - see WingCommandManager.NativeRadialActive.
             RadialKey = c.Bind("Keys", "WingMenu", KeyCode.None,
-                "Hold to open the standalone wing wheel. Leave unbound and Wing Command adds " +
-                "itself to the game's own radial menu instead, which is the default. Binding " +
-                "a key here uses that key and leaves the game's wheel untouched - set it if " +
-                "the native entry is unavailable, or if you would rather not have it there.");
+                "Optional: hold this to open Wing Command's own wheel. The Wing Command slice " +
+                "is added to the game's radial menu either way, so leave it unbound unless you " +
+                "want a second key that goes straight to the wing commands.");
             QuickRejoinKey = c.Bind("Keys", "QuickRejoin", KeyCode.None,
                 Advanced("Optional hotkey: order the whole wing to rejoin formation."));
             QuickEngageKey = c.Bind("Keys", "QuickEngage", KeyCode.None,
