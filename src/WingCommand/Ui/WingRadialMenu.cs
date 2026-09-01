@@ -13,9 +13,9 @@ namespace WingCommand
     /// Nested wing menu built on the game's own radial wheel.
     ///
     /// A single "Wing Command" slice is appended to the stock main wheel. Selecting it
-    /// swaps the wheel contents for the commander submenu; selecting "Formation" from
-    /// there swaps again for the shape picker. Each leaf action restores the stock wheel
-    /// once it has run, and a timeout restores it if the player wanders off.
+    /// opens a small category page, keeping every command page readable instead of putting
+    /// an unrelated ring of actions on one wheel. Each leaf action restores the stock
+    /// wheel once it has run, and a timeout restores it if the player wanders off.
     ///
     /// This is the same technique BOTE uses: replace <c>RadialMenuMain.actionsMain</c> and
     /// call <c>SetupMain()</c> to rebuild. Using the native wheel also means selection runs
@@ -29,12 +29,16 @@ namespace WingCommand
 
         private static WingMenuAction rootEntry;
         private static WingMenuAction[] commanderMenu;
+        private static WingMenuAction[] combatMenu;
+        private static WingMenuAction[] flightMenu;
         private static WingMenuAction[] taskingMenu;
         private static WingMenuAction[] formationMenu;
         private static WingMenuAction[] maneuverMenu;
+        private static WingMenuAction[] combatManeuverMenu;
+        private static WingMenuAction[] aerobaticMenu;
         private static WingMenuAction[] roeMenu;
 
-        /// <summary>The stock wheel contents, captured the first time we swap away.</summary>
+        /// <summary>The current root wheel contents, captured when its mod entry is selected.</summary>
         private static RadialMenuAction[] stockActions;
 
         /// <summary>The main wheel as first observed, used to tell it from foreign submenus.</summary>
@@ -73,26 +77,25 @@ namespace WingCommand
         /// Ensure the "Wing Command" slice is present in the stock wheel. Called from a
         /// prefix on <c>SetupMain</c> so it survives every rebuild the game does.
         /// </summary>
-        internal static void EnsureRootInjected(RadialMenuMain menu)
+        internal static bool EnsureRootInjected(RadialMenuMain menu, bool openingRoot = false)
         {
-            if (menu == null || inSubmenu) return;
+            if (menu == null || inSubmenu) return false;
 
             RadialMenuAction[] current = GameAccess.GetActionsMain(menu);
-            if (current == null) return;
+            if (current == null) return false;
+
+            // BOTE uses the same swap-and-rebuild technique for its own submenus, so
+            // SetupMain also fires for wheels that are not the main one. OpenMenu is the
+            // reliable root boundary; SetupMain alone is not, and using its first call as
+            // the baseline could accidentally capture another mod's submenu.
+            if (openingRoot && baselineWheel == null)
+                baselineWheel = current;
+            else if (baselineWheel == null || !SharesAnyEntry(current, baselineWheel))
+                return false;
 
             BuildMenus(menu);
 
-            // BOTE uses the same swap-and-rebuild technique for its own submenus, so
-            // SetupMain also fires for wheels that are not the main one. The main wheel
-            // always retains the entries seen on first sight (mods append to it rather
-            // than replace it), whereas a foreign submenu shares none of them. Without
-            // this check, "Wing Command" would appear inside other mods' submenus.
-            if (baselineWheel == null)
-                baselineWheel = current;
-            else if (!SharesAnyEntry(current, baselineWheel))
-                return;
-
-            if (Array.IndexOf(current, rootEntry) >= 0) return;
+            if (Array.IndexOf(current, rootEntry) >= 0) return false;
 
             var grown = new RadialMenuAction[current.Length + 1];
             current.CopyTo(grown, 0);
@@ -100,6 +103,7 @@ namespace WingCommand
 
             GameAccess.SetActionsMain(menu, grown);
             baselineWheel = grown;
+            return true;
         }
 
         private static bool SharesAnyEntry(RadialMenuAction[] a, RadialMenuAction[] b)
@@ -125,36 +129,71 @@ namespace WingCommand
 
             rootEntry = WingMenuAction.Create(RootLabel, _ => ShowCommanderMenu());
 
-            // Six combat shortcuts. Deliberate management (recruitment, release and the
-            // full shape picker) belongs on WMC, where cost and scope can be inspected.
+            // Keep the first page categorical and every following page small enough to
+            // scan at a glance. Deliberate management (recruitment, release and purchase)
+            // remains on WMC, where cost and scope can be inspected.
             var commander = new List<WingMenuAction>
             {
-                Leaf("Form Up", WingAction.Rejoin, "rejoin"),
+                Icon(WingMenuAction.Create("Combat", _ => ShowCombatMenu()), "attack"),
+                Icon(WingMenuAction.Create("Flight & Tasking", _ => ShowFlightMenu()), "tasking"),
+                Icon(WingMenuAction.Create("Formation", _ => ShowFormationMenu()), "formation"),
+                Icon(WingMenuAction.Create("Rules Of Engagement", _ => ShowRoeMenu()), "posture"),
+                Icon(WingMenuAction.Create("Manoeuvres", _ => ShowManeuverMenu(),
+                                           _ => WingBrain.Manoeuvres), "maneuver"),
+                Back(RestoreStockWheel),
+            };
+
+            var combat = new List<WingMenuAction>
+            {
                 Leaf("Attack My Target", WingAction.AttackMyTarget, "attack"),
                 Leaf("Engage", WingAction.Engage, "engage"),
+                Leaf("Splash 'Em", WingAction.FireForEffect, "attack"),
                 Leaf("Disengage", WingAction.FallBack, "fallback"),
-                Icon(WingMenuAction.Create("Rules Of Engagement", _ => ShowRoeMenu()), "posture"),
-                Icon(WingMenuAction.Create("Tasking", _ => ShowTaskingMenu()), "tasking"),
+                Back(ShowCommanderMenu),
+            };
+
+            var flight = new List<WingMenuAction>
+            {
+                Leaf("Form Up", WingAction.Rejoin, "rejoin"),
+                Leaf("Hold Position", WingAction.OrbitHere, "orbit"),
+                Leaf("Return To Base", WingAction.ReturnToBase, "rtb"),
+                Icon(WingMenuAction.Create("Special Tasking", _ => ShowTaskingMenu()), "tasking"),
+                Back(ShowCommanderMenu),
             };
 
             var tasking = new List<WingMenuAction>
             {
-                Leaf("Splash 'Em", WingAction.FireForEffect, "attack"),
                 Leaf("Jam Target", WingAction.JamMyTarget, "jam", () => WingBrain.Jamming),
-                Leaf("Hold Position", WingAction.OrbitHere, "orbit"),
                 Leaf("Deliver Cargo", WingAction.DeliverCargo, "cargo"),
                 Leaf("Land Here", WingAction.LandHere, "land"),
-                Leaf("Return To Base", WingAction.ReturnToBase, "rtb"),
-                Icon(WingMenuAction.Create("Manoeuvres", _ => ShowManeuverMenu(),
-                                           _ => WingBrain.Manoeuvres), "maneuver"),
-                Icon(WingMenuAction.Create("Formation", _ => ShowFormationMenu()), "formation"),
+                Back(ShowFlightMenu),
+            };
+
+            var maneuvers = new List<WingMenuAction>
+            {
+                Icon(WingMenuAction.Create("Combat Manoeuvres", _ => ShowCombatManeuverMenu()),
+                     "maneuver"),
+                Icon(WingMenuAction.Create("Aerobatics", _ => ShowAerobaticMenu()), "maneuver"),
                 Back(ShowCommanderMenu),
             };
 
-            var maneuvers = new List<WingMenuAction>();
-            foreach (ManeuverKind maneuver in ManeuverCatalog.All)
-                maneuvers.Add(ManeuverLeaf(maneuver));
-            maneuvers.Add(Back(ShowTaskingMenu));
+            var combatManeuvers = new List<WingMenuAction>
+            {
+                ManeuverLeaf(ManeuverKind.BreakLeft),
+                ManeuverLeaf(ManeuverKind.BreakRight),
+                ManeuverLeaf(ManeuverKind.SplitS),
+                ManeuverLeaf(ManeuverKind.Immelmann),
+                Back(ShowManeuverMenu),
+            };
+
+            var aerobatics = new List<WingMenuAction>
+            {
+                ManeuverLeaf(ManeuverKind.BarrelRoll),
+                ManeuverLeaf(ManeuverKind.AileronRoll),
+                ManeuverLeaf(ManeuverKind.Loop),
+                ManeuverLeaf(ManeuverKind.WingWaggle),
+                Back(ShowManeuverMenu),
+            };
 
             var roes = new List<WingMenuAction>
             {
@@ -176,21 +215,29 @@ namespace WingCommand
                 });
                 formations.Add(Icon(entry, "shape_" + captured));
             }
-            formations.Add(Back(ShowTaskingMenu));
+            formations.Add(Back(ShowCommanderMenu));
 
             commanderMenu = commander.ToArray();
+            combatMenu = combat.ToArray();
+            flightMenu = flight.ToArray();
             taskingMenu = tasking.ToArray();
             formationMenu = formations.ToArray();
             maneuverMenu = maneuvers.ToArray();
+            combatManeuverMenu = combatManeuvers.ToArray();
+            aerobaticMenu = aerobatics.ToArray();
             roeMenu = roes.ToArray();
 
             // Take the wedge background and colours from a stock entry so the slices match
             // the game's styling, then overwrite the icon with our own drawn glyph.
             ApplyAppearance(rootEntry, template(0), "root");
             ApplyAll(commanderMenu, template);
+            ApplyAll(combatMenu, template);
+            ApplyAll(flightMenu, template);
             ApplyAll(taskingMenu, template);
             ApplyAll(formationMenu, template);
             ApplyAll(maneuverMenu, template);
+            ApplyAll(combatManeuverMenu, template);
+            ApplyAll(aerobaticMenu, template);
             ApplyAll(roeMenu, template);
         }
 
@@ -274,11 +321,19 @@ namespace WingCommand
 
         private static void ShowCommanderMenu() => Swap(commanderMenu, submenu: true);
 
+        private static void ShowCombatMenu() => Swap(combatMenu, submenu: true);
+
+        private static void ShowFlightMenu() => Swap(flightMenu, submenu: true);
+
         private static void ShowTaskingMenu() => Swap(taskingMenu, submenu: true);
 
         private static void ShowFormationMenu() => Swap(formationMenu, submenu: true);
 
         private static void ShowManeuverMenu() => Swap(maneuverMenu, submenu: true);
+
+        private static void ShowCombatManeuverMenu() => Swap(combatManeuverMenu, submenu: true);
+
+        private static void ShowAerobaticMenu() => Swap(aerobaticMenu, submenu: true);
 
         private static void ShowRoeMenu() => Swap(roeMenu, submenu: true);
 
@@ -286,6 +341,7 @@ namespace WingCommand
         {
             if (!inSubmenu || stockActions == null) return;
             Swap(stockActions, submenu: false);
+            stockActions = null;
         }
 
         private static void Swap(RadialMenuAction[] actions, bool submenu)
@@ -298,7 +354,7 @@ namespace WingCommand
             if (GameAccess.GetMenuAircraft(menu) == null) return;
 
             if (stockActions == null && !submenu) return;
-            if (stockActions == null) stockActions = GameAccess.GetActionsMain(menu);
+            if (submenu && !inSubmenu) stockActions = GameAccess.GetActionsMain(menu);
 
             GameAccess.SetActionsMain(menu, (RadialMenuAction[])actions.Clone());
             inSubmenu = submenu;
@@ -346,6 +402,29 @@ namespace WingCommand
             catch (Exception e)
             {
                 Plugin.Logger.LogError("Failed to inject wing menu entry: " + e);
+            }
+        }
+
+        /// <summary>
+        /// The game only calls SetupMain from OpenMenu when the local aircraft reference
+        /// changed. In scenes that pre-populate the reference, patching SetupMain alone
+        /// never gets an opportunity to append the mod entry. Checking after every open
+        /// supplies that missing lifecycle edge and rebuilds only when injection occurred.
+        /// </summary>
+        [HarmonyPatch(nameof(RadialMenuMain.OpenMenu))]
+        [HarmonyPostfix]
+        private static void OpenMenu_Postfix(RadialMenuMain __instance)
+        {
+            if (!WingCommandManager.NativeRadialActive) return;
+
+            try
+            {
+                if (WingRadialMenu.EnsureRootInjected(__instance, openingRoot: true))
+                    GameAccess.SetupMain(__instance);
+            }
+            catch (Exception e)
+            {
+                Plugin.Logger.LogError("Failed to inject wing menu entry while opening: " + e);
             }
         }
 

@@ -4,7 +4,7 @@
     <TargetFramework>netstandard2.1</TargetFramework>
     <AssemblyName>WingCommand</AssemblyName>
     <RootNamespace>WingCommand</RootNamespace>
-    <Version>0.9.5.0</Version>
+    <Version>0.9.5.1</Version>
     <LangVersion>latest</LangVersion>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
     <DebugType>portable</DebugType>

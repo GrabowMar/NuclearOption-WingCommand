@@ -132,27 +132,40 @@ Your muscle-memory radial menu now has a **Wing Command** entry:
 
 ```text
 Wing Command
-├─ Form Up
-├─ Attack My Target
-├─ Engage
-├─ Disengage
+├─ Combat
+│  ├─ Attack My Target
+│  ├─ Engage
+│  ├─ Splash 'Em
+│  └─ Disengage
+├─ Flight & Tasking
+│  ├─ Form Up
+│  ├─ Hold Position
+│  ├─ Return To Base
+│  └─ Special Tasking
+│     ├─ Jam Target
+│     ├─ Deliver Cargo
+│     └─ Land Here
+├─ Formation
+│  ├─ Echelon Right
+│  ├─ Line Abreast
+│  ├─ Trail
+│  ├─ Combat Spread
+│  ├─ Finger Four
+│  └─ Vic
 ├─ Rules Of Engagement
 │  ├─ Defend
 │  ├─ Escort
 │  └─ Free
-└─ Tasking
-   ├─ Splash 'Em
-   ├─ Hold Position
-   ├─ Deliver Cargo
-   ├─ Land Here
-   ├─ Return To Base
-   └─ Formation
-      ├─ Echelon Right
-      ├─ Line Abreast
-      ├─ Trail
-      ├─ Combat Spread
-      ├─ Finger Four
-      └─ Vic
+└─ Manoeuvres
+   ├─ Combat Manoeuvres
+   │  ├─ Break Left / Right
+   │  ├─ Split-S
+   │  └─ Immelmann
+   └─ Aerobatics
+      ├─ Barrel Roll
+      ├─ Aileron Roll
+      ├─ Loop
+      └─ Wing Waggle
 ```
 
 Radial orders always hit the *entire* wing at once — great for split-second calls in a furball. Recruitment, release, and requisition are deliberately absent. The fallback radial and direct Form Up/Engage hotkeys remain available as advanced settings, unbound by default.
