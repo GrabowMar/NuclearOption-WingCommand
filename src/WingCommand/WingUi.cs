@@ -122,13 +122,13 @@ namespace WingCommand
         /// 4.5:1 floor exists for. Deepening the panel did part of the work; this is the
         /// rest of it.
         /// </summary>
-        public static Color Dim => new Color(0.64f, 0.68f, 0.70f);
+        public static Color Dim => Unity(UiPalette.Dim);
 
         /// <summary>Text and edges of a control that is present but currently inert.</summary>
-        public static Color Disabled => new Color(0.42f, 0.45f, 0.46f, 0.75f);
+        public static Color Disabled => Unity(UiPalette.Disabled);
 
         /// <summary>A frame that should recede behind its contents.</summary>
-        public static Color FrameColor => new Color(0.52f, 0.55f, 0.56f, 0.55f);
+        public static Color FrameColor => Unity(UiPalette.Frame);
 
         /// <summary>
         /// Section headings, one rank below the panel title.
@@ -154,8 +154,8 @@ namespace WingCommand
         /// of it; deepening the fill also buys back the contrast the small grey text needs.
         /// </summary>
         private static Color PanelBackground => Unity(UiPalette.PanelGround);
-        private static Color PanelEdge => new Color(0.30f, 0.34f, 0.36f, 1f);
-        private static Color PanelShadow => new Color(0.06f, 0.07f, 0.08f, 1f);
+        private static Color PanelEdge => Unity(UiPalette.PanelEdge);
+        private static Color PanelShadow => Unity(UiPalette.PanelShadow);
 
         /// <summary>The interior of a framed box: a hole punched in the panel, not a block.</summary>
         public static Color CardFill => new Color(0f, 0f, 0f, UiPalette.RowRestShade);

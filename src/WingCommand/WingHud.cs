@@ -24,10 +24,13 @@ namespace WingCommand
         private static GUIStyle sliceHotStyle;
         private static GUIStyle toastStyle;
 
-        private static readonly Color Panel = new Color(0.04f, 0.06f, 0.05f, 0.78f);
-        private static readonly Color Accent = new Color(0.45f, 0.95f, 0.55f);
-        private static readonly Color Hot = new Color(0.10f, 0.35f, 0.16f, 0.95f);
-        private static readonly Color Cold = new Color(0.05f, 0.09f, 0.07f, 0.85f);
+        // Read through UiPalette rather than restated here. The accent in particular was a
+        // hand-copied duplicate of UiTheme.Friendly's fallback, so the HUD kept the stock
+        // green even in a mission whose theme had moved off it.
+        private static Color Panel => WingUi.Unity(UiPalette.HudPanel);
+        private static Color Accent => UiTheme.Friendly;
+        private static Color Hot => WingUi.Unity(UiPalette.HudSliceHot);
+        private static Color Cold => WingUi.Unity(UiPalette.HudSliceCold);
 
         private static void EnsureStyles()
         {
@@ -40,7 +43,7 @@ namespace WingCommand
                 fontSize = 12,
             };
             sliceStyle.normal.background = Solid(Cold);
-            sliceStyle.normal.textColor = new Color(0.75f, 0.85f, 0.78f);
+            sliceStyle.normal.textColor = WingUi.Unity(UiPalette.HudSliceText);
 
             sliceHotStyle = new GUIStyle(sliceStyle);
             sliceHotStyle.normal.background = Solid(Hot);

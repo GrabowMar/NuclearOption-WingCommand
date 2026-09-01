@@ -124,6 +124,35 @@ namespace WingCommand
         /// </summary>
         public static readonly Rgba PanelGround = new Rgba(0.028f, 0.045f, 0.062f, 0.945f);
 
+        /// <summary>Secondary text: hint lines, column headers, table cells.</summary>
+        public static readonly Rgba Dim = new Rgba(0.64f, 0.68f, 0.70f);
+
+        /// <summary>Text and edges of a control that is present but currently inert.</summary>
+        public static readonly Rgba Disabled = new Rgba(0.42f, 0.45f, 0.46f, 0.75f);
+
+        /// <summary>A frame that should recede behind its contents.</summary>
+        public static readonly Rgba Frame = new Rgba(0.52f, 0.55f, 0.56f, 0.55f);
+
+        public static readonly Rgba PanelEdge = new Rgba(0.30f, 0.34f, 0.36f, 1f);
+        public static readonly Rgba PanelShadow = new Rgba(0.06f, 0.07f, 0.08f, 1f);
+
+        // The in-cockpit HUD's own surfaces. It draws in IMGUI rather than uGUI and cannot
+        // reach WingUi's widgets, but there is no reason for it to hold a second, private
+        // idea of what the mod's colours are — which is how its accent came to be a
+        // hand-copied duplicate of UiTheme.Friendly's fallback.
+
+        /// <summary>The toast and radial ground.</summary>
+        public static readonly Rgba HudPanel = new Rgba(0.04f, 0.06f, 0.05f, 0.78f);
+
+        /// <summary>A radial slice under the pointer.</summary>
+        public static readonly Rgba HudSliceHot = new Rgba(0.10f, 0.35f, 0.16f, 0.95f);
+
+        /// <summary>A radial slice at rest.</summary>
+        public static readonly Rgba HudSliceCold = new Rgba(0.05f, 0.09f, 0.07f, 0.85f);
+
+        /// <summary>Label on a resting radial slice.</summary>
+        public static readonly Rgba HudSliceText = new Rgba(0.75f, 0.85f, 0.78f);
+
         // Fill washes, as (scale towards black, alpha). Together they set how far a filled
         // state moves off the resting ground. Selection has to clear the resting fill by
         // enough to be seen without lighting the button so brightly that the label on top of
