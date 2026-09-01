@@ -307,15 +307,24 @@ namespace WingCommand
             Vector3 track = TrackLeader(leader);
             float turnRate = LeaderTurnRate;
 
-            FormationShape shape = Plugin.Settings.Shape.Value;
+            FormationShape shape = WingFormation.Shape;
 
             // Helicopters fly slower and much closer together than jets, so the same
             // spacing that reads as tight for a fighter formation looks scattered for them.
-            float spacing = Plugin.Settings.SlotSpacing.Value;
+            float spacing = WingFormation.SlotSpacing;
             if (WingRegistry.IsRotary(aircraft))
                 spacing *= WingTuning.RotarySpacingScale;
 
-            spacing *= ThreatSpacingScale(leader);
+            // Rules of engagement set the resting spread — Defend pulls in, Free opens out —
+            // and the reactive threat widen is layered on as the larger of the two, never
+            // multiplied in: a Free wing already flying a spread should not scatter further
+            // still the moment a missile is called, and a Defend wing must still be allowed
+            // to open up when it is actually being shot at. ThreatSpacingScale is called
+            // unconditionally regardless, because it also latches leaderMissileThreat for
+            // the combat-spread reaction.
+            float roeScale = RoeRules.SpacingScale(RoeRules.Current);
+            float threatScale = ThreatSpacingScale(leader);
+            spacing *= threatScale > 1.001f ? Mathf.Max(roeScale, threatScale) : roeScale;
 
             EaseSlotLocal(shape, spacing, turnRate);
 

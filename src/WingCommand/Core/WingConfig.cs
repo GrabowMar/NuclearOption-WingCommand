@@ -44,11 +44,6 @@ namespace WingCommand
         // --- AI ---
         public ConfigEntry<WingMode> Mode { get; private set; }
 
-        // --- Formation ---
-        public ConfigEntry<FormationShape> Shape { get; private set; }
-        public ConfigEntry<float> SlotSpacing { get; private set; }
-        public ConfigEntry<int> MaxWingSize { get; private set; }
-
         // --- Engagement ---
         public ConfigEntry<WingRoe> DefaultRoe { get; private set; }
         public ConfigEntry<bool> AutoReturnOnEmpty { get; private set; }
@@ -146,7 +141,6 @@ namespace WingCommand
             // the player. Keys removed since the last release stay in existing files as
             // orphaned lines, which BepInEx ignores and rewrites away on the next save.
             BindMode(c);
-            BindFormation(c);
             BindEngagement(c);
             BindComms(c);
             BindPilots(c);
@@ -170,20 +164,6 @@ namespace WingCommand
                     "opportunity-scanning passes turned off. Applies at the start of a mission.",
                     null,
                     new ConfigurationManagerAttributes { Order = 100 }));
-        }
-
-        private void BindFormation(ConfigFile c)
-        {
-            Shape = c.Bind("Formation", "Shape", FormationShape.EchelonRight,
-                "Formation geometry used when wingmen hold station.");
-            SlotSpacing = c.Bind("Formation", "SlotSpacing", 120f,
-                new ConfigDescription(
-                    "Lateral and longitudinal spacing between slots, in metres. Helicopters " +
-                    "fly a fraction of this, and the wing widens it by itself under threat.",
-                    new AcceptableValueRange<float>(40f, 600f)));
-            MaxWingSize = c.Bind("Formation", "MaxWingSize", 3,
-                new ConfigDescription("Maximum number of wingmen.",
-                    new AcceptableValueRange<int>(1, 8)));
         }
 
         private void BindEngagement(ConfigFile c)
@@ -346,7 +326,7 @@ namespace WingCommand
                     }));
             DisableWingSizeLimit = c.Bind("Debug", "DisableWingSizeLimit", false,
                 new ConfigDescription(
-                    "DEBUG CHEAT: Ignore MaxWingSize when assigning or requisitioning aircraft. " +
+                    "DEBUG CHEAT: Ignore the wing size limit when assigning or requisitioning aircraft. " +
                     "Formation geometry, HUD layout, performance and mission scripting are not " +
                     "supported for an unlimited wing and may break.",
                     null,

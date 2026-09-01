@@ -1018,7 +1018,7 @@ namespace WingCommand
 
         private static void CycleShape(int direction)
         {
-            Plugin.Settings.Shape.Value = FormationShapes.CycleCore(Plugin.Settings.Shape.Value, direction);
+            WingFormation.Shape = FormationShapes.CycleCore(WingFormation.Shape, direction);
         }
 
         // The widgets themselves live in WingUi, which is also where the aircraft-recovery

@@ -469,13 +469,13 @@ namespace WingCommand
         /// </summary>
         public static bool HasRoom(int occupied) =>
             Plugin.Settings.CheatNoWingLimit ||
-            occupied + WingShop.PendingWingSlots < Plugin.Settings.MaxWingSize.Value;
+            occupied + WingShop.PendingWingSlots < WingFormation.MaxWingSize;
 
         /// <summary>Text used beside the live count when the unsafe bypass is enabled.</summary>
         public static string WingLimitLabel =>
             Plugin.Settings.CheatNoWingLimit
                 ? "NO LIMIT"
-                : Plugin.Settings.MaxWingSize.Value.ToString();
+                : WingFormation.MaxWingSize.ToString();
 
         public bool CanRecruit(Aircraft candidate, out string reason)
         {
@@ -654,12 +654,12 @@ namespace WingCommand
             // members retain high slot numbers after losses.
             int max = Plugin.Settings.CheatNoWingLimit
                 ? members.Count + 1
-                : Plugin.Settings.MaxWingSize.Value;
+                : WingFormation.MaxWingSize;
 
             if (Leader == null || joining == null)
                 return members.Count + 1;
 
-            float spacing = Plugin.Settings.SlotSpacing.Value;
+            float spacing = WingFormation.SlotSpacing;
             if (IsRotary(joining)) spacing *= WingTuning.RotarySpacingScale;
 
             Vector3 from = joining.transform.position;
@@ -674,7 +674,7 @@ namespace WingCommand
                 if (SlotTaken(slot)) continue;
 
                 Vector3 slotPos = leaderPos + FormationSolver.SlotOffset(
-                    leaderForward, slot, Plugin.Settings.Shape.Value,
+                    leaderForward, slot, WingFormation.Shape,
                     spacing, WingTuning.SlotStack);
 
                 float d = (slotPos - from).sqrMagnitude;

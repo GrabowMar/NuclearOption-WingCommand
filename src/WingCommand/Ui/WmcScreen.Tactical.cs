@@ -305,7 +305,7 @@ namespace WingCommand
             WingCommandManager manager = WingCommandManager.Instance;
 
             if (shapeLabel != null)
-                shapeLabel.text = FormationShapes.Pretty(Plugin.Settings.Shape.Value);
+                shapeLabel.text = FormationShapes.Pretty(WingFormation.Shape);
 
             if (summaryLabel != null)
                 summaryLabel.text = "COMMAND: " + (manager?.Selection.Summary(wing) ?? "ALL") +

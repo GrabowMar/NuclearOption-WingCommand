@@ -51,11 +51,21 @@ namespace WingCommand
         /// <summary>Shortest baseline, for aircraft slow enough that seconds alone is not enough.</summary>
         private const float MinLookAhead = 800f;
 
-        /// <summary>Slot radius, as a fraction of spacing, inside which position is not chased at all.</summary>
-        private const float SlotZoneInner = 0.12f;
+        /// <summary>
+        /// Slot radius, as a fraction of spacing, inside which position is not chased at
+        /// all. Tightened from 0.12: the wing sits visibly closer to the exact slot before
+        /// the proportional term lets go, and the always-live damping term still keeps that
+        /// from turning into a hunt.
+        /// </summary>
+        private const float SlotZoneInner = 0.085f;
 
-        /// <summary>Radius at which position correction reaches full authority.</summary>
-        private const float SlotZoneOuter = 0.5f;
+        /// <summary>
+        /// Radius at which position correction reaches full authority. Pulled in from 0.5
+        /// alongside <see cref="SlotZoneInner"/> so the correction ramps up over a shorter
+        /// band and the formation holds a tighter margin; the damping ratio the lateral
+        /// gains were chosen for still has headroom at this width.
+        /// </summary>
+        private const float SlotZoneOuter = 0.35f;
 
         /// <summary>
         /// Bank authority when nothing is being asked of the roll axis. Small on purpose:

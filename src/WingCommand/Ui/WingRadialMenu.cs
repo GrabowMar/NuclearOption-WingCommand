@@ -170,7 +170,7 @@ namespace WingCommand
                 FormationShape captured = shape;
                 WingMenuAction entry = WingMenuAction.Create(FormationShapes.Pretty(captured), _ =>
                 {
-                    Plugin.Settings.Shape.Value = captured;
+                    WingFormation.Shape = captured;
                     Mgr?.Toast("Formation: " + FormationShapes.Pretty(captured));
                     RestoreStockWheel();
                 });

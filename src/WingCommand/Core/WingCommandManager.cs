@@ -401,8 +401,8 @@ namespace WingCommand
 
                 case WingAction.CycleShape:
                 {
-                    FormationShape next = FormationShapes.CycleCore(Plugin.Settings.Shape.Value, 1);
-                    Plugin.Settings.Shape.Value = next;
+                    FormationShape next = FormationShapes.CycleCore(WingFormation.Shape, 1);
+                    WingFormation.Shape = next;
                     Toast("Formation: " + FormationShapes.Pretty(next));
                     break;
                 }

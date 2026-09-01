@@ -349,7 +349,7 @@ namespace WingCommand
         private static void RefreshStatusPanel(WingRegistry wing)
         {
             statusTitle.text = "WING " + wing.Count + "  ·  " +
-                               FormationShapes.Pretty(Plugin.Settings.Shape.Value).ToUpperInvariant() +
+                               FormationShapes.Pretty(WingFormation.Shape).ToUpperInvariant() +
                                "  ·  " + wing.Roe.ToString().ToUpperInvariant();
 
             while (statusRows.Count < wing.Count)

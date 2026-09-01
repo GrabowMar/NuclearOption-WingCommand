@@ -136,6 +136,22 @@ namespace WingCommand
         }
 
         /// <summary>
+        /// Slot-spacing multiplier for a rung: Defend/Hold flies a tight parade slot, Free
+        /// opens to a fighting spread, Escort holds the baseline. Applied by
+        /// <see cref="FormationFlyState"/>, which does not let it compound with the reactive
+        /// threat widen.
+        /// </summary>
+        public static float SpacingScale(WingRoe roe)
+        {
+            switch (roe)
+            {
+                case WingRoe.Free:   return WingTuning.RoeSpacingFree;
+                case WingRoe.Escort: return WingTuning.RoeSpacingEscort;
+                default:             return WingTuning.RoeSpacingHold;
+            }
+        }
+
+        /// <summary>
         /// Range cap for a target explicitly designated by the player. ROE must not shorten
         /// an Attack or Splash 'Em order; the selected weapon's own envelope remains
         /// the final authority on whether a shot is valid.
@@ -152,9 +168,9 @@ namespace WingCommand
                 case WingRoe.Escort:
                     return "Holds the slot. Engages aircraft, guarding you first.";
                 case WingRoe.Free:
-                    return "Weapons free from the current task. Engage authorises pursuit.";
+                    return "Flies a loose spread. Weapons free from the current task. Engage authorises pursuit.";
                 default:
-                    return "Holds the slot. Intercepts missiles. Ground fire only when you fire.";
+                    return "Holds a tight slot. Intercepts missiles. Ground fire only when you fire.";
             }
         }
 

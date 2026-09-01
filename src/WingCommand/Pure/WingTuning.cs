@@ -25,9 +25,10 @@ namespace WingCommand
         /// Largest heading correction, in degrees, a wingman commands while holding station -
         /// the real limit on how fast it can close a lateral error. The settings this replaced
         /// (a 1200 m look-ahead over a 220 m maximum correction) worked out to 10.4 degrees,
-        /// which is why station-keeping used to feel sluggish.
+        /// which is why station-keeping used to feel sluggish. Nudged from 25 to 27 to give a
+        /// wingman the authority to hold the tighter slot zone.
         /// </summary>
-        public const float CommandAngle = 25f;
+        public const float CommandAngle = 27f;
 
         /// <summary>
         /// Bank authority, degrees, once settled in the slot. The game scales this down again
@@ -47,8 +48,12 @@ namespace WingCommand
         /// <summary>Throttle change per m/s of speed error.</summary>
         public const float ThrottleGain = 0.12f;
 
-        /// <summary>Metres from the slot at which a wingman switches from rejoining to holding.</summary>
-        public const float CaptureDistance = 500f;
+        /// <summary>
+        /// Metres from the slot at which a wingman switches from rejoining to holding.
+        /// Pulled in from 500 so the precise station-keeping law owns a larger share of the
+        /// approach and the wing settles onto the slot sooner.
+        /// </summary>
+        public const float CaptureDistance = 375f;
 
         /// <summary>Seconds of rejoin boost per slot index, so a wing does not converge as one mass.</summary>
         public const float RejoinStagger = 1.2f;
@@ -59,6 +64,18 @@ namespace WingCommand
         /// controller disengages the term past a hard bank limit and near the ground.
         /// </summary>
         public const float BankMatchBlend = 0.35f;
+
+        /// <summary>
+        /// Slot-spacing multipliers by rules of engagement. Defend/Hold (0.7) pulls the wing
+        /// into a tight parade slot the leader keeps in sight and is hard to lose; Free (1.5)
+        /// opens it toward combat-spread width for room to react and turn; Escort holds the
+        /// unscaled baseline. <see cref="FormationFlyState"/> takes the larger of this and
+        /// the reactive threat widen rather than multiplying the two, so selecting Free does
+        /// not also compound a missile-warning widen on top of it.
+        /// </summary>
+        public const float RoeSpacingHold = 0.7f;
+        public const float RoeSpacingEscort = 1f;
+        public const float RoeSpacingFree = 1.5f;
 
         // ------------------------------------------------------------------ rotary
         //

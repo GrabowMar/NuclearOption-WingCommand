@@ -48,8 +48,8 @@ namespace WingCommand
 
             Vector3 offset = FormationSolver.SlotOffset(
                 forward, slot,
-                Plugin.Settings.Shape.Value,
-                Plugin.Settings.SlotSpacing.Value,
+                WingFormation.Shape,
+                WingFormation.SlotSpacing,
                 WingTuning.SlotStack);
 
             Vector3 position = ClearOfGround(leader.transform.position + offset);
@@ -159,7 +159,7 @@ namespace WingCommand
                 return;
             }
 
-            int want = Plugin.Settings.MaxWingSize.Value - wing.Count;
+            int want = WingFormation.MaxWingSize - wing.Count;
             if (want <= 0)
             {
                 Toast("Wing is already full");

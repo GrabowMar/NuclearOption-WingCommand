@@ -48,7 +48,7 @@ namespace WingCommand
                     "These options may break mission balance, UI, formations or the mod itself.");
             }
 
-            if (!FormationSolver.ValidateGeometry(Settings.MaxWingSize.Value, out string geometryProblem))
+            if (!FormationSolver.ValidateGeometry(WingFormation.MaxWingSize, out string geometryProblem))
                 Logger.LogError("Formation geometry validation failed: " + geometryProblem);
 
             // Resolve reflection accessors before patching: the radial patches consult
@@ -84,9 +84,7 @@ namespace WingCommand
             Logger.LogInfo(
                 "Effective settings: " +
                 $"Mode={Settings.Mode.Value} [{WingBrain.Summary()}] " +
-                $"Shape={Settings.Shape.Value} " +
-                $"SlotSpacing={Settings.SlotSpacing.Value} " +
-                $"MaxWingSize={Settings.MaxWingSize.Value} " +
+                $"Shape={WingFormation.Shape} " +
                 $"DefaultRoe={Settings.DefaultRoe.Value} " +
                 $"AutoReturnOnEmpty={Settings.AutoReturnOnEmpty.Value} " +
                 $"RtbReturnsToReserve={Settings.RtbReturnsToReserve.Value} " +
