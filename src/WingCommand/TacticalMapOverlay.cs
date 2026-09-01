@@ -77,7 +77,7 @@ namespace WingCommand
 
             if (Time.unscaledTime >= nextRefresh)
             {
-                nextRefresh = Time.unscaledTime + 0.2f;
+                nextRefresh = Time.unscaledTime + WingBrain.Interval(0.2f);
                 Collect(wing);
                 Sync(map);
             }

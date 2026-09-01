@@ -19,6 +19,25 @@ namespace WingCommand
         Attack,
         FireForEffect,
         MoveToPoint,
+
+        /// <summary>Hold the formation slot, but run the radar jammer against a designated unit.</summary>
+        JamTarget,
+
+        /// <summary>Fly one scripted manoeuvre, then rejoin. Transient: never a resting state.</summary>
+        Maneuver,
+    }
+
+    /// <summary>The scripted manoeuvres a wingman can be told to fly on command.</summary>
+    internal enum ManeuverKind
+    {
+        BreakLeft,
+        BreakRight,
+        SplitS,
+        Immelmann,
+        BarrelRoll,
+        AileronRoll,
+        Loop,
+        WingWaggle,
     }
 
     /// <summary>Standing weapons policy for the wing.</summary>
@@ -61,6 +80,12 @@ namespace WingCommand
 
                 case WingOrder.Engage:
                     return OrderEngagementAuthority.AutonomousCombat;
+
+                case WingOrder.JamTarget:
+                case WingOrder.Maneuver:
+                    // A jamming wingman holds station and defends itself only; a wingman
+                    // mid-manoeuvre has no business picking a fight it cannot fly.
+                    return OrderEngagementAuthority.DefensiveOnly;
 
                 default:
                     return OrderEngagementAuthority.DefensiveOnly;

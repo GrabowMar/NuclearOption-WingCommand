@@ -15,7 +15,7 @@ namespace WingCommand
     /// precisely on a point. Feeding it a descending altitude walks the aircraft down;
     /// there is nothing else to write.
     /// </summary>
-    internal class LandInPlaceState : PilotBaseState
+    internal class LandInPlaceState : WingPilotState
     {
         private enum Phase { Transit, Settle, Descend, Down }
 
@@ -33,8 +33,6 @@ namespace WingCommand
         private const float ArrivalRadius = 90f;
         private const float MaximumSlope = 18f;
 
-        private readonly WingMember member;
-
         private GlobalPosition spot;
         private GlobalPosition requestedSpot;
         private bool hasRequestedSpot;
@@ -42,9 +40,8 @@ namespace WingCommand
         private float hold;
         private Phase phase;
 
-        public LandInPlaceState(WingMember member)
+        public LandInPlaceState(WingMember member) : base(member)
         {
-            this.member = member;
             stateDisplayName = "landing";
         }
 
@@ -62,11 +59,10 @@ namespace WingCommand
 
         public override void EnterState(Pilot pilot)
         {
-            base.pilot = pilot;
-            aircraft = pilot.aircraft;
-            controlInputs = aircraft.GetInputs();
-
-            aircraft.SetFlightAssist(enabled: true);
+            // This state configures its own gear (down, unless it will hover-and-search
+            // first) and keeps whatever hover regime it arrived with - so it binds the
+            // controls directly rather than through BeginFlight.
+            BindControls(pilot);
             aircraft.SetGear(deployed: !hasRequestedSpot);
 
             // Anchor at the ground beneath the aircraft, not at the aircraft itself.
@@ -163,11 +159,9 @@ namespace WingCommand
             // there.
             HoverAssist.Release(aircraft);
 
-            AircraftParameters p = aircraft.GetAircraftParameters();
-            float agl = Mathf.Clamp(Mathf.Max(p.minimumRadarAlt, TransitAltitude), 40f, 1000f);
             aircraft.autopilot.AutoAim(
                 destination: spot + Vector3.up * TransitAltitude,
-                altitudeHold: agl,
+                altitudeHold: AutopilotMath.RotaryAgl(aircraft, TransitAltitude, 40f, 1000f),
                 aimDirection: Vector3.zero,
                 targetVelocity: Vector3.zero,
                 followTerrain: true);

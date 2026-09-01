@@ -149,6 +149,68 @@ namespace WingCommand
                                           WingOrder.FireForEffect);
         }
 
+        /// <summary>
+        /// Put every jam-capable wingman in scope onto one designation: hold the slot,
+        /// run the radar jammer against that unit until it dies or the order is replaced.
+        /// </summary>
+        public WingDispatchResult JamTarget(IReadOnlyList<Unit> targets, bool wholeWing)
+        {
+            List<WingMember> scope = Scope(wholeWing);
+            if (scope.Count == 0)
+                return new WingDispatchResult(0, 0,
+                    wholeWing ? "No wingmen assigned" : "No wingmen selected");
+
+            Unit target = FirstLive(targets);
+            if (target == null)
+                return new WingDispatchResult(0, scope.Count, "No target selected");
+
+            var responders = new List<WingMember>();
+            foreach (WingMember member in scope)
+            {
+                if (!WingOrderCatalog.CanApply(member, WingOrder.JamTarget)) continue;
+                member.Apply(WingDirective.AtTarget(WingOrder.JamTarget, target));
+                responders.Add(member);
+            }
+
+            int applied = responders.Count;
+            int skipped = scope.Count - applied;
+            if (applied == 0)
+                return new WingDispatchResult(0, skipped,
+                    WingOrderCatalog.UnavailableReason(WingOrder.JamTarget));
+
+            string message = ScopePrefix(wholeWing, applied) + ": jamming " + target.unitName;
+            if (skipped > 0) message += " (" + skipped + " without ECM)";
+            return new WingDispatchResult(applied, skipped, message, 1, responders,
+                                          WingOrder.JamTarget);
+        }
+
+        /// <summary>Send the scope through one scripted manoeuvre. Transient; it rejoins after.</summary>
+        public WingDispatchResult Maneuver(ManeuverKind kind, bool wholeWing)
+        {
+            List<WingMember> scope = Scope(wholeWing);
+            if (scope.Count == 0)
+                return new WingDispatchResult(0, 0,
+                    wholeWing ? "No wingmen assigned" : "No wingmen selected");
+
+            var responders = new List<WingMember>();
+            foreach (WingMember member in scope)
+            {
+                if (!WingOrderCatalog.CanApply(member, WingOrder.Maneuver)) continue;
+                member.Apply(WingDirective.RunManeuver(kind));
+                responders.Add(member);
+            }
+
+            int applied = responders.Count;
+            int skipped = scope.Count - applied;
+            if (applied == 0)
+                return new WingDispatchResult(0, skipped,
+                    WingOrderCatalog.UnavailableReason(WingOrder.Maneuver));
+
+            string message = ScopePrefix(wholeWing, applied) + ": " + ManeuverCatalog.Label(kind);
+            return new WingDispatchResult(applied, skipped, message, 0, responders,
+                                          WingOrder.Maneuver);
+        }
+
         private static Unit FirstLive(IReadOnlyList<Unit> targets)
         {
             if (targets == null) return null;

@@ -363,7 +363,7 @@ namespace WingCommand
                 // used effectiveness alone, so equal contacts all resolved to whichever
                 // BattlefieldGrid happened to enumerate first for every wingman.
                 score *= Mathf.Lerp(1f, 0.35f, Mathf.Clamp01(distance / weaponRange));
-                score /= 1f + committed * Plugin.Config2.TargetSaturationPenalty.Value;
+                score /= 1f + committed * WingBrain.TargetSaturationPenalty;
                 score *= ClassBias(preference, isAir);
                 if (score <= bestScore) continue;
 

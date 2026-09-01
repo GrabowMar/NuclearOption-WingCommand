@@ -21,7 +21,7 @@ namespace WingCommand
     /// dispenses continuously while held, so it is switched off at the end of the break
     /// rather than left running, which would empty the aircraft.
     /// </summary>
-    internal class FallBackState : PilotBaseState
+    internal class FallBackState : WingPilotState
     {
         private enum Phase { Break, Egress, Hold }
 
@@ -37,37 +37,20 @@ namespace WingCommand
         /// <summary>Altitude held during the run out, in metres above ground.</summary>
         private const float EgressAltitude = 200f;
 
-        private readonly WingMember member;
-
         private Phase phase;
         private float phaseStarted;
         private Vector3 breakDirection;
         private GlobalPosition rally;
         private bool flaring;
 
-        public FallBackState(WingMember member)
+        public FallBackState(WingMember member) : base(member)
         {
-            this.member = member;
             stateDisplayName = "falling back";
         }
 
         public override void EnterState(Pilot pilot)
         {
-            base.pilot = pilot;
-            aircraft = pilot.aircraft;
-            controlInputs = aircraft.GetInputs();
-
-            aircraft.SetFlightAssist(enabled: true);
-
-            // Nothing here hovers. A wingman arriving from a hover - a cargo let-down, a
-            // rotary slot beside a stopped leader - must have its hovering configuration
-            // taken off it, or a thrust-vectoring airframe keeps its nozzles down and
-            // cannot make the speed this state assumes.
-            HoverAssist.Release(aircraft);
-            if (aircraft.gearState != LandingGear.GearState.LockedRetracted)
-                aircraft.SetGear(deployed: false);
-
-            pilot.flightInfo.HasTakenOff = true;
+            BeginFlight(pilot);
 
             phase = Phase.Break;
             phaseStarted = Time.timeSinceLevelLoad;
@@ -148,7 +131,7 @@ namespace WingCommand
 
             GlobalPosition destination = aircraft.GlobalPosition() + breakDirection * 8000f;
 
-            if (!(aircraft.autopilot is AutopilotPlane))
+            if (WingRegistry.IsRotary(aircraft))
             {
                 RotaryRun(destination);
                 return;
@@ -160,10 +143,9 @@ namespace WingCommand
                 ignoreCollisions: false,
                 runwayAlign: false,
                 effort: 2f,
-                bankAllowed: Mathf.Min(Plugin.Config2.PursuitBankDegrees.Value,
-                                       FixedWingFormation.MaxSafeBank),
+                bankAllowed: AutopilotMath.PursuitBank(),
                 followTerrain: false,
-                altitudeHold: Mathf.Clamp(aircraft.radarAlt, aircraft.maxRadius, 8000f),
+                altitudeHold: AutopilotMath.CruiseHold(aircraft, aircraft.radarAlt),
                 targetVelocity: Vector3.zero);
         }
 
@@ -172,7 +154,7 @@ namespace WingCommand
         {
             controlInputs.throttle = 1f;
 
-            if (!(aircraft.autopilot is AutopilotPlane))
+            if (WingRegistry.IsRotary(aircraft))
             {
                 RotaryRun(rally);
                 return;
@@ -192,12 +174,9 @@ namespace WingCommand
 
         private void RotaryRun(GlobalPosition destination)
         {
-            AircraftParameters p = aircraft.GetAircraftParameters();
-            float agl = Mathf.Clamp(Mathf.Max(p.minimumRadarAlt, EgressAltitude * 0.5f), 25f, 3000f);
-
             aircraft.autopilot.AutoAim(
                 destination: destination,
-                altitudeHold: agl,
+                altitudeHold: AutopilotMath.RotaryAgl(aircraft, EgressAltitude * 0.5f),
                 aimDirection: Vector3.zero,
                 targetVelocity: Vector3.zero,
                 followTerrain: true);

@@ -164,7 +164,7 @@ namespace WingCommand
         private static void Postfix(Unit searcher, float bravery, List<WeaponStation> stationList,
                                     ref CombatAI.TargetSearchResults __result)
         {
-            if (!Plugin.Config2.AiTargetDeconfliction.Value) return;
+            if (!WingBrain.Deconfliction) return;
             if (!(searcher is Aircraft aircraft) || aircraft.Player != null || !aircraft.LocalSim) return;
             if (aircraft.NetworkHQ == null || stationList == null || stationList.Count == 0) return;
 
@@ -207,7 +207,7 @@ namespace WingCommand
                                   + Mathf.Max(tracking.attackers, 0);
                     int excess = Mathf.Max(committed - capacity + 1, 0);
 
-                    float pressure = 1f + excess * Plugin.Config2.TargetSaturationPenalty.Value;
+                    float pressure = 1f + excess * WingBrain.TargetSaturationPenalty;
                     score /= pressure;
                     if (score <= bestScore) continue;
 

@@ -7,18 +7,16 @@ namespace WingCommand
     /// this state only handles the current leg and hands completion back to the member so
     /// Shift-click routes can advance without losing their final ROE behavior.
     /// </summary>
-    internal sealed class WaypointTaskState : PilotBaseState
+    internal sealed class WaypointTaskState : WingPilotState
     {
         private const float ArrivalRadius = 140f;
         private const float FixedCruiseAltitude = 700f;
         private const float RotaryCruiseAltitude = 180f;
 
-        private readonly WingMember member;
         private GlobalPosition targetPoint;
 
-        public WaypointTaskState(WingMember member)
+        public WaypointTaskState(WingMember member) : base(member)
         {
-            this.member = member;
             stateDisplayName = "moving to waypoint";
         }
 
@@ -29,21 +27,7 @@ namespace WingCommand
 
         public override void EnterState(Pilot pilot)
         {
-            base.pilot = pilot;
-            aircraft = pilot.aircraft;
-            controlInputs = aircraft.GetInputs();
-
-            aircraft.SetFlightAssist(enabled: true);
-
-            // Nothing here hovers. A wingman arriving from a hover - a cargo let-down, a
-            // rotary slot beside a stopped leader - must have its hovering configuration
-            // taken off it, or a thrust-vectoring airframe keeps its nozzles down and
-            // cannot make the speed this state assumes.
-            HoverAssist.Release(aircraft);
-            if (aircraft.gearState != LandingGear.GearState.LockedRetracted)
-                aircraft.SetGear(deployed: false);
-
-            pilot.flightInfo.HasTakenOff = true;
+            BeginFlight(pilot);
         }
 
         public override void LeaveState()
@@ -67,7 +51,7 @@ namespace WingCommand
                 return;
             }
 
-            if (aircraft.autopilot is AutopilotPlane)
+            if (!WingRegistry.IsRotary(aircraft))
             {
                 controlInputs.throttle = 1f;
                 aircraft.autopilot.AutoAim(
@@ -76,19 +60,16 @@ namespace WingCommand
                     ignoreCollisions: false,
                     runwayAlign: false,
                     effort: 1.8f,
-                    bankAllowed: Mathf.Min(Plugin.Config2.PursuitBankDegrees.Value,
-                                           FixedWingFormation.MaxSafeBank),
+                    bankAllowed: AutopilotMath.PursuitBank(),
                     followTerrain: true,
-                    altitudeHold: Mathf.Clamp(FixedCruiseAltitude, aircraft.maxRadius, 8000f),
+                    altitudeHold: AutopilotMath.CruiseHold(aircraft, FixedCruiseAltitude),
                     targetVelocity: Vector3.zero);
                 return;
             }
 
-            AircraftParameters p = aircraft.GetAircraftParameters();
-            float agl = Mathf.Clamp(Mathf.Max(p.minimumRadarAlt, RotaryCruiseAltitude), 25f, 3000f);
             aircraft.autopilot.AutoAim(
                 destination: targetPoint + Vector3.up * RotaryCruiseAltitude,
-                altitudeHold: agl,
+                altitudeHold: AutopilotMath.RotaryAgl(aircraft, RotaryCruiseAltitude),
                 aimDirection: Vector3.zero,
                 targetVelocity: Vector3.zero,
                 followTerrain: true);

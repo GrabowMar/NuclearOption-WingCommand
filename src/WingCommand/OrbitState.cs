@@ -10,9 +10,8 @@ namespace WingCommand
     /// anchor is captured when the order is given, not tracked live — that is the whole
     /// point of the order: the wing stays over somewhere while the player goes elsewhere.
     /// </summary>
-    internal class OrbitState : PilotBaseState
+    internal class OrbitState : WingPilotState
     {
-        private readonly WingMember member;
         private GlobalPosition anchor;
         private float radius;
         private float lastEngageCheck;
@@ -20,9 +19,8 @@ namespace WingCommand
 
         private const float EngageInterval = 0.35f;
 
-        public OrbitState(WingMember member)
+        public OrbitState(WingMember member) : base(member)
         {
-            this.member = member;
             stateDisplayName = "orbiting";
         }
 
@@ -35,20 +33,7 @@ namespace WingCommand
 
         public override void EnterState(Pilot pilot)
         {
-            base.pilot = pilot;
-            aircraft = pilot.aircraft;
-            controlInputs = aircraft.GetInputs();
-
-            aircraft.SetFlightAssist(enabled: true);
-
-            // An orbit is flown, not hovered. Anything arriving here from a hover has to
-            // have that configuration taken off it before it is asked to fly a circle.
-            HoverAssist.Release(aircraft);
-
-            if (aircraft.gearState != LandingGear.GearState.LockedRetracted)
-                aircraft.SetGear(deployed: false);
-
-            pilot.flightInfo.HasTakenOff = true;
+            BeginFlight(pilot);
 
             if (radius <= 0f) radius = Plugin.Config2.OrbitRadius.Value;
             lastEngageCheck = 0f;
@@ -81,13 +66,19 @@ namespace WingCommand
         /// <summary>Apply the standing ROE while holding instead of orbiting inertly.</summary>
         private void RunEngagement()
         {
-            if (Time.timeSinceLevelLoad - lastEngageCheck < EngageInterval) return;
+            if (Time.timeSinceLevelLoad - lastEngageCheck < WingBrain.Interval(EngageInterval))
+                return;
             lastEngageCheck = Time.timeSinceLevelLoad;
 
             WingRoe roe = RoeRules.Current;
             WingWeapons.Allow allow = RoeRules.WeaponsFree(roe, aircraft);
             float range = RoeRules.EngageRange(roe);
             bool fired = false;
+
+            // Performance mode: a holding wingman defends itself but does not run the
+            // all-aircraft opportunity/priority-target scans. Matches FormationFlyState.
+            if (!WingBrain.OpportunityFire && allow != WingWeapons.Allow.MissilesOnly)
+                return;
 
             if (allow == WingWeapons.Allow.MissilesOnly)
             {

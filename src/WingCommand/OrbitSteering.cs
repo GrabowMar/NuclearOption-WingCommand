@@ -37,7 +37,7 @@ namespace WingCommand
         {
             if (aircraft == null) return;
 
-            bool rotary = !(aircraft.autopilot is AutopilotPlane);
+            bool rotary = WingRegistry.IsRotary(aircraft);
 
             // Where the aircraft sits around the ring right now.
             Vector3 fromAnchor = aircraft.GlobalPosition() - anchor;
@@ -56,12 +56,9 @@ namespace WingCommand
 
             if (rotary)
             {
-                AircraftParameters p = aircraft.GetAircraftParameters();
-                float agl = Mathf.Clamp(Mathf.Max(p.minimumRadarAlt, RotaryAltitude), 25f, 3000f);
-
                 aircraft.autopilot.AutoAim(
                     destination: target,
-                    altitudeHold: agl,
+                    altitudeHold: AutopilotMath.RotaryAgl(aircraft, RotaryAltitude),
                     aimDirection: Vector3.zero,
                     targetVelocity: Vector3.zero,
                     followTerrain: true);
@@ -69,8 +66,7 @@ namespace WingCommand
             }
 
             // Cruise power. Orbiting is a holding pattern, not a race.
-            AircraftParameters fp = aircraft.GetAircraftParameters();
-            controls.throttle = Mathf.Clamp01(fp.cruiseThrottle);
+            controls.throttle = Mathf.Clamp01(aircraft.GetAircraftParameters().cruiseThrottle);
 
             aircraft.autopilot.AutoAim(
                 destination: target,
@@ -80,7 +76,7 @@ namespace WingCommand
                 effort: 2f,
                 bankAllowed: FixedWingFormation.MaxSafeBank,
                 followTerrain: false,
-                altitudeHold: Mathf.Clamp(altitude, aircraft.maxRadius, 8000f),
+                altitudeHold: AutopilotMath.CruiseHold(aircraft, altitude),
                 targetVelocity: Vector3.zero);
         }
     }

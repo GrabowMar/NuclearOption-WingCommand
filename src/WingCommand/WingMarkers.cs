@@ -55,7 +55,7 @@ namespace WingCommand
         public static void Tick(WingRegistry wing)
         {
             if (Time.unscaledTime < nextPoll) return;
-            nextPoll = Time.unscaledTime + TargetPollInterval;
+            nextPoll = Time.unscaledTime + WingBrain.Interval(TargetPollInterval);
 
             CollectTargets(wing);
 

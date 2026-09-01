@@ -126,6 +126,9 @@ namespace WingCommand
         private static WingButton freeButton;
         private static WingButton cargoButton;
         private static WingButton landButton;
+        private static WingButton jamButton;
+        private static WingButton breakLeftButton;
+        private static WingButton breakRightButton;
         private static readonly WingButton[] preferenceButtons =
             new WingButton[WingWeaponPreferences.All.Length];
 
@@ -303,7 +306,7 @@ namespace WingCommand
             // pure garbage for numbers a reader cannot follow that fast.
             if (Time.unscaledTime >= nextRefresh)
             {
-                nextRefresh = Time.unscaledTime + 0.2f;
+                nextRefresh = Time.unscaledTime + WingBrain.Interval(0.2f);
                 Refresh(wing);
             }
         }
@@ -358,6 +361,9 @@ namespace WingCommand
             freeButton = null;
             cargoButton = null;
             landButton = null;
+            jamButton = null;
+            breakLeftButton = null;
+            breakRightButton = null;
 
             for (int i = 0; i < preferenceButtons.Length; i++) preferenceButtons[i] = null;
 
@@ -974,6 +980,22 @@ namespace WingCommand
                          .WithTooltip(OrderHint.LandHere);
             y -= RowHeight + Gap;
 
+            // Jam the locked target, plus the two defensive breaks. The full manoeuvre set
+            // (Split-S, Immelmann, rolls, Loop) lives on the radial Tasking > Manoeuvres
+            // wheel, where a submenu costs nothing; here it would be a fourth grid of eight.
+            // Kept as fields so the per-refresh pass can grey them out - both are off in
+            // Performance mode.
+            jamButton = GridButton(parent, "Jam", Pad, y, w,
+                                   () => Order(WingAction.JamMyTarget))
+                        .WithTooltip(OrderHint.Jam);
+            breakLeftButton = GridButton(parent, "Break L", Pad + w + Gap, y, w,
+                                         () => Maneuver(ManeuverKind.BreakLeft))
+                              .WithTooltip(OrderHint.Maneuver);
+            breakRightButton = GridButton(parent, "Break R", Pad + (w + Gap) * 2f, y, w,
+                                          () => Maneuver(ManeuverKind.BreakRight))
+                               .WithTooltip(OrderHint.Maneuver);
+            y -= RowHeight + Gap;
+
             return y;
         }
 
@@ -1068,11 +1090,23 @@ namespace WingCommand
                 "Give this airframe back to the faction pool. Press once to arm, again to " +
                 "confirm.";
 
+            public const string Jam =
+                "JAM - the selected wingmen hold their formation slot and run their radar " +
+                "jammer against the target you have locked, until it dies or you order them " +
+                "off. Only wingmen carrying a jammer can take it.";
+
+            public const string Maneuver =
+                "MANOEUVRE - fly it once, then rejoin. A break is a hard level turn to that " +
+                "side; the rolls and vertical manoeuvres are on the radial Manoeuvres wheel.";
+
             public const string Pager = "Show the rest of the list.";
         }
 
         private static void Order(WingAction action) =>
             WingCommandManager.Instance?.Execute(action, wholeWing: false);
+
+        private static void Maneuver(ManeuverKind kind) =>
+            WingCommandManager.Instance?.ExecuteManeuver(kind, wholeWing: false);
 
         /// <summary>
         /// One cell of the order grid. Smaller type than the rest of the page, because a
@@ -1378,13 +1412,21 @@ namespace WingCommand
                 List<WingMember> scope = manager.Commands.Scope(wholeWing: false);
                 bool canCargo = false;
                 bool canLand = false;
+                bool canJam = false;
                 foreach (WingMember member in scope)
                 {
                     canCargo |= WingOrderCatalog.CanApply(member, WingOrder.DeliverCargo);
                     canLand |= WingOrderCatalog.CanApply(member, WingOrder.LandHere);
+                    canJam |= WingOrderCatalog.CanApply(member, WingOrder.JamTarget);
                 }
                 cargoButton?.SetEnabled(canCargo);
                 landButton?.SetEnabled(canLand);
+
+                // Jam and the manoeuvre breaks are both unavailable in Performance mode;
+                // Jam additionally needs a jam-capable wingman in scope.
+                jamButton?.SetEnabled(canJam);
+                breakLeftButton?.SetEnabled(WingBrain.Manoeuvres);
+                breakRightButton?.SetEnabled(WingBrain.Manoeuvres);
             }
 
             // The map has first claim on this line: an armed point order or a pending
@@ -2120,7 +2162,7 @@ namespace WingCommand
                     : Dim();
 
                 error.text = ErrorText(m);
-                error.color = !m.IsPanicking && m.Order == WingOrder.Formation &&
+                error.color = !m.IsPanicking && HoldsFormationSlot(m.Order) &&
                               m.SlotError > 0f && m.SlotError < 250f
                     ? Accent()
                     : Dim();
@@ -2135,12 +2177,16 @@ namespace WingCommand
             private static string ErrorText(WingMember m)
             {
                 if (m.DeliveryPending) return "WAIT";
-                if (m.IsPanicking || m.Order != WingOrder.Formation) return "-";
+                if (m.IsPanicking || !HoldsFormationSlot(m.Order)) return "-";
                 if (m.SlotError <= 0f) return "...";
                 return m.SlotError < 10000f
                     ? m.SlotError.ToString("F0") + " m"
                     : (m.SlotError / 1000f).ToString("F1") + " km";
             }
+
+            /// <summary>Orders flown from the formation slot, so a slot error means something.</summary>
+            private static bool HoldsFormationSlot(WingOrder order) =>
+                order == WingOrder.Formation || order == WingOrder.JamTarget;
         }
 
         // ----------------------------------------------------------------- loadout page

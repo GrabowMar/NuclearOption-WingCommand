@@ -60,6 +60,34 @@ namespace WingCommand
             DefensiveClear,
             Recovered,
             Detached,
+            Jamming,
+            JammingOff,
+            Maneuvering,
+            ManeuverDone,
+        }
+
+        /// <summary>
+        /// Calls a commander needs to hear even in Performance mode. Everything else -
+        /// order acks, engaging/splash/covering colour, holding/orbiting/rejoining status,
+        /// the delivery lifecycle, manoeuvre and jam chatter - is dropped there.
+        /// Losses go through <see cref="ReportLoss"/> and are never gated by this.
+        /// </summary>
+        private static bool Critical(Call call)
+        {
+            switch (call)
+            {
+                case Call.Winchester:
+                case Call.Bingo:
+                case Call.Unable:
+                case Call.Damaged:
+                case Call.Critical:
+                case Call.Panic:
+                case Call.DefensiveClear:
+                case Call.NoDropOff:
+                    return true;
+                default:
+                    return false;
+            }
         }
 
         private const float RepeatCooldown = 12f;
@@ -79,6 +107,9 @@ namespace WingCommand
         public static void Say(WingMember member, Call call, string detail = null)
         {
             if (!Plugin.Config2.RadioChatter.Value || member == null) return;
+
+            // Performance mode keeps only the calls a commander actually needs to hear.
+            if (!WingBrain.RichChatter && !Critical(call)) return;
 
             var key = new SpeechKey(member, call);
             if (lastSpoken.TryGetValue(key, out float last) &&
@@ -100,6 +131,9 @@ namespace WingCommand
         public static void Acknowledge(IReadOnlyList<WingMember> members, WingOrder order)
         {
             if (!Plugin.Config2.RadioChatter.Value || members == null) return;
+
+            // Order acknowledgements are flavour, not information - dropped in Performance mode.
+            if (!WingBrain.RichChatter) return;
 
             var ordered = new List<WingMember>();
             for (int i = 0; i < members.Count; i++)
@@ -124,6 +158,10 @@ namespace WingCommand
                     Random.Range(0, int.MaxValue));
             else if (order == WingOrder.FireForEffect)
                 phrase = ChatterDialogue.Event(Persona(lead), "FireForEffect",
+                    lead.AssignedTarget != null ? lead.AssignedTarget.unitName : null,
+                    Random.Range(0, int.MaxValue));
+            else if (order == WingOrder.JamTarget)
+                phrase = ChatterDialogue.Event(Persona(lead), "Jamming",
                     lead.AssignedTarget != null ? lead.AssignedTarget.unitName : null,
                     Random.Range(0, int.MaxValue));
             else
@@ -174,8 +212,7 @@ namespace WingCommand
         {
             WingChatterHud.Tick();
 
-            if (!Plugin.Config2.RadioChatter.Value || !Plugin.Config2.CrewBanter.Value ||
-                wing == null)
+            if (!Plugin.Config2.RadioChatter.Value || !WingBrain.RichChatter || wing == null)
                 return;
 
             float now = Time.unscaledTime;

@@ -27,6 +27,7 @@ namespace WingCommand
         private static WingMenuAction[] commanderMenu;
         private static WingMenuAction[] taskingMenu;
         private static WingMenuAction[] formationMenu;
+        private static WingMenuAction[] maneuverMenu;
         private static WingMenuAction[] roeMenu;
 
         /// <summary>The stock wheel contents, captured the first time we swap away.</summary>
@@ -135,20 +136,28 @@ namespace WingCommand
             var tasking = new List<WingMenuAction>
             {
                 Leaf("Splash 'Em", WingAction.FireForEffect, "attack"),
+                Leaf("Jam Target", WingAction.JamMyTarget, "jam", () => WingBrain.Jamming),
                 Leaf("Hold Position", WingAction.OrbitHere, "orbit"),
                 Leaf("Deliver Cargo", WingAction.DeliverCargo, "cargo"),
                 Leaf("Land Here", WingAction.LandHere, "land"),
                 Leaf("Return To Base", WingAction.ReturnToBase, "rtb"),
+                Icon(WingMenuAction.Create("Manoeuvres", _ => ShowManeuverMenu(),
+                                           _ => WingBrain.Manoeuvres), "maneuver"),
                 Icon(WingMenuAction.Create("Formation", _ => ShowFormationMenu()), "formation"),
-                Icon(WingMenuAction.Create("Back", _ => ShowCommanderMenu()), "back"),
+                Back(ShowCommanderMenu),
             };
+
+            var maneuvers = new List<WingMenuAction>();
+            foreach (ManeuverKind maneuver in ManeuverCatalog.All)
+                maneuvers.Add(ManeuverLeaf(maneuver));
+            maneuvers.Add(Back(ShowTaskingMenu));
 
             var roes = new List<WingMenuAction>
             {
                 Roe("Defend", WingRoe.Hold),
                 Roe("Escort", WingRoe.Escort),
                 Roe("Free", WingRoe.Free),
-                Icon(WingMenuAction.Create("Back", _ => ShowCommanderMenu()), "back"),
+                Back(ShowCommanderMenu),
             };
 
             var formations = new List<WingMenuAction>();
@@ -163,11 +172,12 @@ namespace WingCommand
                 });
                 formations.Add(Icon(entry, "shape_" + captured));
             }
-            formations.Add(Icon(WingMenuAction.Create("Back", _ => ShowTaskingMenu()), "back"));
+            formations.Add(Back(ShowTaskingMenu));
 
             commanderMenu = commander.ToArray();
             taskingMenu = tasking.ToArray();
             formationMenu = formations.ToArray();
+            maneuverMenu = maneuvers.ToArray();
             roeMenu = roes.ToArray();
 
             // Take the wedge background and colours from a stock entry so the slices match
@@ -176,6 +186,7 @@ namespace WingCommand
             ApplyAll(commanderMenu, template);
             ApplyAll(taskingMenu, template);
             ApplyAll(formationMenu, template);
+            ApplyAll(maneuverMenu, template);
             ApplyAll(roeMenu, template);
         }
 
@@ -191,6 +202,10 @@ namespace WingCommand
             action.IconKey = iconKey;
             return action;
         }
+
+        /// <summary>A "Back" slice that swaps the wheel to another submenu.</summary>
+        private static WingMenuAction Back(Action target) =>
+            Icon(WingMenuAction.Create("Back", _ => target()), "back");
 
         private static void ApplyAppearance(WingMenuAction action, RadialMenuAction template, string iconKey)
         {
@@ -210,15 +225,29 @@ namespace WingCommand
             }
         }
 
-        /// <summary>A leaf action: run the order, then drop back to the stock wheel.</summary>
-        private static WingMenuAction Leaf(string label, WingAction action, string iconKey)
+        /// <summary>
+        /// A leaf action: run the order, then drop back to the stock wheel. An optional
+        /// gate greys the slice out on the native wheel when the order is unavailable
+        /// (e.g. Jam in Performance mode).
+        /// </summary>
+        private static WingMenuAction Leaf(string label, WingAction action, string iconKey,
+                                           Func<bool> available = null)
         {
-            WingMenuAction entry = WingMenuAction.Create(label, _ =>
-            {
-                Mgr?.Execute(action);
-                RestoreStockWheel();
-            });
+            WingMenuAction entry = WingMenuAction.Create(
+                label,
+                _ => { Mgr?.Execute(action); RestoreStockWheel(); },
+                available == null ? (Func<Aircraft, bool>)null : _ => available());
             return Icon(entry, iconKey);
+        }
+
+        /// <summary>A manoeuvre leaf: fly it wing-wide, then drop back to the stock wheel.</summary>
+        private static WingMenuAction ManeuverLeaf(ManeuverKind kind)
+        {
+            WingMenuAction entry = WingMenuAction.Create(
+                ManeuverCatalog.Label(kind),
+                _ => { Mgr?.ExecuteManeuver(kind, wholeWing: true); RestoreStockWheel(); },
+                _ => WingBrain.Manoeuvres);
+            return Icon(entry, "maneuver");
         }
 
         /// <summary>Select a concrete ROE instead of making the player cycle blindly.</summary>
@@ -244,6 +273,8 @@ namespace WingCommand
         private static void ShowTaskingMenu() => Swap(taskingMenu, submenu: true);
 
         private static void ShowFormationMenu() => Swap(formationMenu, submenu: true);
+
+        private static void ShowManeuverMenu() => Swap(maneuverMenu, submenu: true);
 
         private static void ShowRoeMenu() => Swap(roeMenu, submenu: true);
 

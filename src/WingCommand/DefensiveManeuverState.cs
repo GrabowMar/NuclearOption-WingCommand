@@ -1,4 +1,3 @@
-using System;
 using UnityEngine;
 
 namespace WingCommand
@@ -11,57 +10,40 @@ namespace WingCommand
     /// the warning has stayed clear. That distinction is what makes defensive behavior feel
     /// reactive instead of making the AI forget what the player told it to do.
     /// </summary>
-    internal sealed class DefensiveManeuverState : PilotBaseState
+    internal sealed class DefensiveManeuverState : WingPilotState
     {
         private const float MinimumDefenceSeconds = 2f;
+
+        // Missile evasion is safety-critical: this interval is deliberately NOT routed
+        // through WingBrain.Interval, so Performance mode never slows the threat refresh.
         private const float ThreatRefreshSeconds = 0.2f;
-        // RadarJammer stays active for 0.1 seconds after Fire. Pulse below that lifetime,
-        // rather than once per physics tick, to keep continuous coverage at a known cadence.
-        private const float RadarJammerPulseSeconds = 0.075f;
         private const float FixedWingRunDistance = 8000f;
         private const float RotaryRunDistance = 4000f;
 
-        private readonly WingMember member;
+        private readonly RadarJammerPulser jammer = new RadarJammerPulser();
         private Missile threat;
         private string countermeasureType;
         private float enteredAt;
         private float clearSince;
         private float nextThreatRefresh;
         private bool countermeasuresActive;
-        private int radarJammerIndex;
-        private bool radarJammerResolved;
-        private bool radarJammerErrorReported;
-        private float nextRadarJammerPulse;
 
-        public DefensiveManeuverState(WingMember member)
+        public DefensiveManeuverState(WingMember member) : base(member)
         {
-            this.member = member;
             stateDisplayName = "MISSILE - DEFENSIVE";
         }
 
         public override void EnterState(Pilot pilot)
         {
-            base.pilot = pilot;
-            aircraft = pilot.aircraft;
-            controlInputs = aircraft.GetInputs();
-            aircraft.SetFlightAssist(enabled: true);
-
-            // Nothing here hovers, and this is the state that most needs the energy: a
-            // thrust-vectoring wingman still configured for a hover cannot outrun anything.
-            HoverAssist.Release(aircraft);
-
-            if (aircraft.gearState != LandingGear.GearState.LockedRetracted)
-                aircraft.SetGear(deployed: false);
+            // This is the state that most needs the energy, so the hover regime always comes off.
+            BeginFlight(pilot);
 
             enteredAt = Time.timeSinceLevelLoad;
             clearSince = 0f;
             nextThreatRefresh = 0f;
             threat = null;
             countermeasureType = string.Empty;
-            radarJammerIndex = -1;
-            radarJammerResolved = false;
-            radarJammerErrorReported = false;
-            nextRadarJammerPulse = 0f;
+            jammer.Reset();
             RefreshThreat(force: true);
 
             string detail = threat != null ? threat.GetSeekerType() : null;
@@ -182,17 +164,16 @@ namespace WingCommand
             SetCountermeasures(dispense);
 
             // RadarJammer.Fire lasts one tenth of a second. Re-deploy at a fixed cadence
-            // while a SARH/ARH threat is live, temporarily
-            // selecting the jammer and then restoring the chaff station selected above.
-            // When the warning clears, the final pulse expires on its own.
-            if (radar) RunRadarJammer();
+            // while a SARH/ARH threat is live; the pulser temporarily selects the jammer
+            // and restores the chaff station selected above. When the warning clears, the
+            // final pulse expires on its own.
+            if (radar) jammer.Pulse(aircraft);
 
-            float runDistance = aircraft.autopilot is AutopilotPlane
-                ? FixedWingRunDistance
-                : RotaryRunDistance;
+            bool rotary = WingRegistry.IsRotary(aircraft);
+            float runDistance = rotary ? RotaryRunDistance : FixedWingRunDistance;
             GlobalPosition destination = aircraft.GlobalPosition() + direction * runDistance;
 
-            if (aircraft.autopilot is AutopilotPlane)
+            if (!rotary)
             {
                 aircraft.autopilot.AutoAim(
                     destination: destination,
@@ -202,20 +183,16 @@ namespace WingCommand
                     effort: 2f,
                     bankAllowed: FixedWingFormation.MaxSafeBank,
                     followTerrain: radar,
-                    altitudeHold: Mathf.Clamp(
-                        radar ? Mathf.Max(aircraft.maxRadius, 120f) : aircraft.radarAlt,
-                        aircraft.maxRadius, 8000f),
+                    altitudeHold: AutopilotMath.CruiseHold(aircraft,
+                        radar ? Mathf.Max(aircraft.maxRadius, 120f) : aircraft.radarAlt),
                     targetVelocity: Vector3.zero);
             }
             else
             {
-                AircraftParameters parameters = aircraft.GetAircraftParameters();
-                float height = Mathf.Clamp(
-                    Mathf.Max(parameters.minimumRadarAlt, radar ? 50f : aircraft.radarAlt),
-                    25f, 1000f);
                 aircraft.autopilot.AutoAim(
                     destination: destination,
-                    altitudeHold: height,
+                    altitudeHold: AutopilotMath.RotaryAgl(
+                        aircraft, radar ? 50f : aircraft.radarAlt, 25f, 1000f),
                     aimDirection: direction,
                     targetVelocity: Vector3.zero,
                     followTerrain: true);
@@ -229,66 +206,6 @@ namespace WingCommand
 
             aircraft.Countermeasures(active, aircraft.countermeasureManager.activeIndex);
             countermeasuresActive = active;
-        }
-
-        /// <summary>Keep the native ECM countermeasure active during a radar-missile break.</summary>
-        private void RunRadarJammer()
-        {
-            CountermeasureManager manager = aircraft != null
-                ? aircraft.countermeasureManager
-                : null;
-            if (manager == null) return;
-
-            int index = ResolveRadarJammer(manager);
-            if (index < 0 || index > byte.MaxValue) return;
-            if (Time.timeSinceLevelLoad < nextRadarJammerPulse) return;
-            nextRadarJammerPulse = Time.timeSinceLevelLoad + RadarJammerPulseSeconds;
-
-            byte previous = manager.activeIndex;
-            try
-            {
-                manager.activeIndex = (byte)index;
-                manager.DeployCountermeasure(aircraft);
-            }
-            catch (Exception e)
-            {
-                if (!radarJammerErrorReported)
-                {
-                    radarJammerErrorReported = true;
-                    Plugin.Logger.LogWarning(
-                        "[Panic] Could not activate ECM on " + aircraft.unitName + ": " +
-                        e.GetType().Name + " - " + e.Message);
-                }
-            }
-            finally
-            {
-                // The ordinary flare/chaff trigger is still held by SetCountermeasures.
-                // Leaving the jammer selected here would silently turn that trigger into a
-                // second ECM driver and stop the selected expendable from being released.
-                manager.activeIndex = previous;
-            }
-        }
-
-        private int ResolveRadarJammer(CountermeasureManager manager)
-        {
-            if (radarJammerResolved) return radarJammerIndex;
-
-            radarJammerResolved = true;
-            radarJammerIndex = -1;
-
-            if (!CountermeasureAccess.TryFindRadarJammer(manager, out radarJammerIndex,
-                                                         out string reason) &&
-                !string.IsNullOrEmpty(reason))
-            {
-                if (!radarJammerErrorReported)
-                {
-                    radarJammerErrorReported = true;
-                    Plugin.Logger.LogWarning(
-                        "[Panic] Could not inspect ECM on " + aircraft.unitName + ": " + reason);
-                }
-            }
-
-            return radarJammerIndex;
         }
 
         private void StopCountermeasures()

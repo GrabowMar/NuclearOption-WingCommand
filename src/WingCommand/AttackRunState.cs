@@ -16,7 +16,7 @@ namespace WingCommand
     /// An explicit attack order now flies an attack, and the target is honoured wherever the
     /// wingman happens to be.
     /// </summary>
-    internal class AttackRunState : PilotBaseState
+    internal class AttackRunState : WingPilotState
     {
         /// <summary>Height held above a surface target while running in, in metres.</summary>
         private const float AttackAltitude = 900f;
@@ -39,11 +39,8 @@ namespace WingCommand
         /// </summary>
         private bool massed;
 
-        private readonly WingMember member;
-
-        public AttackRunState(WingMember member)
+        public AttackRunState(WingMember member) : base(member)
         {
-            this.member = member;
             stateDisplayName = "attacking";
         }
 
@@ -56,21 +53,7 @@ namespace WingCommand
 
         public override void EnterState(Pilot pilot)
         {
-            base.pilot = pilot;
-            aircraft = pilot.aircraft;
-            controlInputs = aircraft.GetInputs();
-
-            aircraft.SetFlightAssist(enabled: true);
-
-            // Nothing here hovers. A wingman arriving from a hover - a cargo let-down, a
-            // rotary slot beside a stopped leader - must have its hovering configuration
-            // taken off it, or a thrust-vectoring airframe keeps its nozzles down and
-            // cannot make the speed this state assumes.
-            HoverAssist.Release(aircraft);
-            if (aircraft.gearState != LandingGear.GearState.LockedRetracted)
-                aircraft.SetGear(deployed: false);
-
-            pilot.flightInfo.HasTakenOff = true;
+            BeginFlight(pilot);
             lastFiredTime = 0f;
 
             if (Plugin.Config2.VerboseLogging.Value)
@@ -127,7 +110,7 @@ namespace WingCommand
         private void Fly(Unit target)
         {
             GlobalPosition targetPos = target.GlobalPosition();
-            bool rotary = !(aircraft.autopilot is AutopilotPlane);
+            bool rotary = WingRegistry.IsRotary(aircraft);
             float altitude = rotary ? RotaryAttackAltitude : AttackAltitude;
 
             // Aim above a surface target rather than at it. Aiming at the ground drives the
@@ -138,12 +121,9 @@ namespace WingCommand
 
             if (rotary)
             {
-                AircraftParameters p = aircraft.GetAircraftParameters();
-                float agl = Mathf.Clamp(Mathf.Max(p.minimumRadarAlt, altitude), 25f, 3000f);
-
                 aircraft.autopilot.AutoAim(
                     destination: aim,
-                    altitudeHold: agl,
+                    altitudeHold: AutopilotMath.RotaryAgl(aircraft, altitude),
                     aimDirection: Vector3.zero,
                     targetVelocity: target.rb != null ? target.rb.velocity : Vector3.zero,
                     followTerrain: true);
@@ -158,10 +138,9 @@ namespace WingCommand
                 ignoreCollisions: false,
                 runwayAlign: false,
                 effort: 2f,
-                bankAllowed: Mathf.Min(Plugin.Config2.PursuitBankDegrees.Value,
-                                       FixedWingFormation.MaxSafeBank),
+                bankAllowed: AutopilotMath.PursuitBank(),
                 followTerrain: false,
-                altitudeHold: Mathf.Clamp(altitude, aircraft.maxRadius, 8000f),
+                altitudeHold: AutopilotMath.CruiseHold(aircraft, altitude),
                 targetVelocity: target.rb != null ? target.rb.velocity : Vector3.zero);
         }
 

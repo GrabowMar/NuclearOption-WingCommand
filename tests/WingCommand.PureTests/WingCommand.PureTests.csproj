@@ -7,6 +7,8 @@
 
   <ItemGroup>
     <Compile Include="../../src/WingCommand/PureLogic.cs" Link="PureLogic.cs" />
+    <Compile Include="../../src/WingCommand/ManeuverCatalog.cs" Link="ManeuverCatalog.cs" />
+    <Compile Include="../../src/WingCommand/WingBrain.cs" Link="WingBrain.cs" />
     <Compile Include="../../src/WingCommand/ChatterLogic.cs" Link="ChatterLogic.cs" />
     <Compile Include="../../src/WingCommand/LoadoutTemplateCodec.cs" Link="LoadoutTemplateCodec.cs" />
     <Compile Include="../../src/WingCommand/UiPalette.cs" Link="UiPalette.cs" />

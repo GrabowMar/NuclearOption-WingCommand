@@ -50,6 +50,16 @@ namespace WingCommand
         private readonly WaypointTaskState waypointState;
         private readonly AttackRunState attackState;
         private readonly DefensiveManeuverState defensiveState;
+        private readonly ManeuverState maneuverState;
+
+        /// <summary>
+        /// Drives this aircraft's radar jammer while a Jam Target order is standing. Held
+        /// on the member because the order is flown from inside <see cref="FormationFlyState"/>,
+        /// which owns no per-aircraft state of its own.
+        /// </summary>
+        internal RadarJammerPulser Jammer { get; } = new RadarJammerPulser();
+
+        private bool? canJam;
 
         /// <summary>Flying back to the wing while a standing Engage order is still in force.</summary>
         private bool recalled;
@@ -88,6 +98,7 @@ namespace WingCommand
             waypointState = new WaypointTaskState(this);
             attackState = new AttackRunState(this);
             defensiveState = new DefensiveManeuverState(this);
+            maneuverState = new ManeuverState(this);
             joinedAt = Time.timeSinceLevelLoad;
             Directive = WingDirective.Simple(WingOrder.Formation);
             lastIntegrity = Integrity;
@@ -113,6 +124,11 @@ namespace WingCommand
             // taxi/launch state must own it until it is airborne. Dispatcher and automation
             // filters also enforce this; keeping the guard here protects every call site.
             if (deliveryPending) return;
+
+            // A scripted manoeuvre is transient and cannot usefully wait behind a missile
+            // break - by the time the break clears the moment has passed. Drop it rather
+            // than overwriting a real standing order with one that would be discarded.
+            if (directive.Order == WingOrder.Maneuver && IsPanicking) return;
 
             TacticalCoordinator.Release(Aircraft);
 
@@ -236,6 +252,26 @@ namespace WingCommand
                         Pilot.SwitchState(formationState);
                     }
                     break;
+
+                case WingOrder.JamTarget:
+                    // Flown from the formation slot; FormationFlyState runs the jammer each
+                    // tick while the target lives. A missing target here means a stale order
+                    // was re-applied - fall back to plain formation.
+                    if (AssignedTarget != null && !AssignedTarget.disabled)
+                    {
+                        formationState.BoostRejoin(Slot * Plugin.Config2.RejoinStagger.Value);
+                        Pilot.SwitchState(formationState);
+                    }
+                    else
+                    {
+                        Apply(WingOrder.Formation);
+                    }
+                    break;
+
+                case WingOrder.Maneuver:
+                    maneuverState.SetManeuver(directive.Maneuver);
+                    Pilot.SwitchState(maneuverState);
+                    break;
             }
 
             if (Plugin.Config2.VerboseLogging.Value)
@@ -340,6 +376,22 @@ namespace WingCommand
         /// still decides which formation model to fly, which is a different question.
         /// </summary>
         public bool CanLandInPlace => HoverAssist.CanHover(Aircraft);
+
+        /// <summary>
+        /// True when this airframe carries a radar jammer it can be told to run against a
+        /// designated target. Resolved once the aircraft's countermeasure manager exists,
+        /// then cached.
+        /// </summary>
+        public bool CanJam
+        {
+            get
+            {
+                if (canJam.HasValue) return canJam.Value;
+                if (Aircraft == null || Aircraft.countermeasureManager == null) return false;
+                canJam = Jammer.HasJammer(Aircraft);
+                return canJam.Value;
+            }
+        }
 
         /// <summary>
         /// How intact the airframe is, 0-1, from the game's own part hit points. Read by
@@ -577,6 +629,7 @@ namespace WingCommand
                 case WingOrder.DeliverCargo:
                 case WingOrder.FallBack:
                 case WingOrder.MoveToPoint:
+                case WingOrder.Maneuver:
                     return;
             }
 
@@ -592,7 +645,9 @@ namespace WingCommand
                 return;
             }
 
-            if (Ammo <= 0)
+            // A jammer with an empty rack is still doing its job. Only a fuel state sends
+            // it home.
+            if (Ammo <= 0 && Order != WingOrder.JamTarget)
             {
                 WingComms.Say(this, WingComms.Call.Winchester);
                 Apply(WingOrder.ReturnToBase);
@@ -732,8 +787,11 @@ namespace WingCommand
             WingDirective resume = Directive;
             IsPanicking = false;
 
-            if (WingOrderCatalog.IsTargetOrder(resume.Order) &&
-                (resume.Target == null || resume.Target.disabled))
+            // A manoeuvre interrupted by a missile break is not worth re-flying once the
+            // break clears; a target order whose target died has nothing left to prosecute.
+            if (resume.Order == WingOrder.Maneuver ||
+                (WingOrderCatalog.CarriesTarget(resume.Order) &&
+                 (resume.Target == null || resume.Target.disabled)))
             {
                 resume = WingDirective.Simple(WingOrder.Formation);
             }

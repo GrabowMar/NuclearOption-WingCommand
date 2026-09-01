@@ -11,10 +11,8 @@ namespace WingCommand
     /// primitive <see cref="AIPilotCombatModes"/> uses, and owns only throttle and
     /// destination.
     /// </summary>
-    internal class FormationFlyState : PilotBaseState
+    internal class FormationFlyState : WingPilotState
     {
-        private readonly WingMember member;
-
         private const float EngageInterval = 0.5f;
 
         // Avoidance geometry, all expressed as multiples of the slot spacing in use so a
@@ -74,9 +72,29 @@ namespace WingCommand
         private RotaryFormation.Mode lastRotaryMode = (RotaryFormation.Mode)(-1);
         private float lastRotaryReport;
 
-        public FormationFlyState(WingMember member)
+        // --- Smarter-formation state (each behaviour is config-gated) ---
+
+        /// <summary>Signed seconds of consistent leader turn, for the turn-side slot mirror.</summary>
+        private float turnPersist;
+        private const float TurnMirrorRate = 0.05f;   // rad/s that counts as a real turn
+        private const float TurnMirrorHold = 1.5f;    // consistent-turn seconds before the flip
+
+        /// <summary>Eased aft-stagger multiplier while the leader is spiked (combat-spread reaction).</summary>
+        private float combatSpread = 1f;
+        private bool leaderMissileThreat;
+        private const float CombatSpreadBackScale = 1.4f;
+        private const float CombatSpreadEaseSeconds = 2f;
+
+        /// <summary>Cached terrain-floor height for this wingman's slot, in local render Y.</summary>
+        private float terrainFloorY = float.MinValue;
+        private float nextTerrainProbe;
+        private const float TerrainProbeInterval = 0.3f;
+
+        /// <summary>Physics-tick counter for the fidelity geometry stride.</summary>
+        private int geometryTick;
+
+        public FormationFlyState(WingMember member) : base(member)
         {
-            this.member = member;
             stateDisplayName = "Formation";
         }
 
@@ -195,27 +213,18 @@ namespace WingCommand
 
         public override void EnterState(Pilot pilot)
         {
-            base.pilot = pilot;
-            aircraft = pilot.aircraft;
-            controlInputs = aircraft.GetInputs();
+            // RotaryFormation re-selects its own hover regime later if it needs one; a
+            // rejoin is a cruise, so BeginFlight's default hover release is right here.
+            BeginFlight(pilot);
 
-            aircraft.SetFlightAssist(enabled: true);
-
-            // Start out of the hovering configuration whatever the last state left behind.
-            // A rotary or thrust-vectoring wingman that needs it back gets it the moment
-            // RotaryFormation selects its hover regime, and a rejoin is a cruise.
-            HoverAssist.Release(aircraft);
-
-            // Retract the gear whenever it is not already up. A freshly spawned helicopter
-            // can still be Uninitialized here (a frame after spawn), and skipping that case
-            // is what left it sitting with the gear hanging out.
-            if (aircraft.gearState != LandingGear.GearState.LockedRetracted)
-                aircraft.SetGear(deployed: false);
-
-            pilot.flightInfo.HasTakenOff = true;
             slotLocalReady = false;
             lastRotaryMode = (RotaryFormation.Mode)(-1);
             lastRotaryReport = 0f;
+            turnPersist = 0f;
+            combatSpread = 1f;
+            terrainFloorY = float.MinValue;
+            nextTerrainProbe = 0f;
+            geometryTick = 0;
 
             // Start the leader track from scratch. It survives a state exit, so a wingman
             // that broke off to fight and is now rejoining would otherwise differentiate a
@@ -252,6 +261,29 @@ namespace WingCommand
                 return;
             }
 
+            // Jam Target is flown as ordinary formation, plus a jammer held on the
+            // designated unit. When that unit dies the order is complete.
+            if (member.Order == WingOrder.JamTarget)
+            {
+                Unit jamTarget = member.AssignedTarget;
+                if (jamTarget == null || jamTarget.disabled)
+                {
+                    WingComms.Say(member, WingComms.Call.JammingOff);
+                    member.Apply(WingOrder.Formation);
+                    return;
+                }
+                member.Jammer.Pulse(aircraft);
+            }
+
+            // Fidelity throttle: at low settings recompute the slot geometry only every
+            // Nth physics tick and let the autopilot coast on its last command in between.
+            // Phased by slot so the wing does not all recompute on the same frame. The
+            // missile-defence panic path runs from the manager loop, not here, so it is
+            // never strided.
+            int stride = WingBrain.GeometryStride;
+            if (stride > 1 && (++geometryTick + member.Slot) % stride != 0)
+                return;
+
             RunEngagement(leader);
 
             // One filtered leader signal drives every piece of geometry below: the frame the
@@ -281,9 +313,36 @@ namespace WingCommand
             lateralTurnScale = Mathf.Lerp(lateralTurnScale, Mathf.Lerp(1f, 0.72f, turn), geometryBlend);
             trailTurnScale = Mathf.Lerp(trailTurnScale, Mathf.Lerp(1f, 1.12f, turn), geometryBlend);
 
+            int mirrorSign = TurnMirrorSign(turnRate);
+
+            // Step the formation aft when the leader is spiked: a covering trail is harder
+            // to shoot at than a parade slot and leaves room to react. Eased, because a
+            // stepped change moves every slot at once and the autopilot chases the jump.
+            float combatSpreadTarget =
+                WingBrain.SmartFormation && leaderMissileThreat
+                    ? CombatSpreadBackScale : 1f;
+            combatSpread = Mathf.Lerp(combatSpread, combatSpreadTarget,
+                1f - Mathf.Exp(-Time.fixedDeltaTime / CombatSpreadEaseSeconds));
+
             Vector3 desiredSlotLocal = FormationSolver.SlotCoordinates(
                 member.Slot, shape, spacing, Plugin.Config2.SlotStack.Value,
                 lateralTurnScale, trailTurnScale);
+
+            // Turn-side mirroring: a one-sided formation sitting on the inside of a
+            // sustained turn is being commanded to an ever-tighter radius it cannot fly.
+            // Flip it to the outside (echelon right becomes echelon left); the
+            // smoothedSlotLocal lerp below carries the cross-under, and separation plus
+            // path-cut avoidance keep it clear of the leader. Symmetric shapes already
+            // split the turn, so they are left alone.
+            if (WingBrain.SmartFormation && mirrorSign != 0 &&
+                (shape == FormationShape.EchelonRight || shape == FormationShape.EchelonLeft) &&
+                (int)Mathf.Sign(desiredSlotLocal.x) == mirrorSign)
+            {
+                desiredSlotLocal.x = -desiredSlotLocal.x;
+            }
+
+            // z is negative aft, so scaling it preserves the sign and only lengthens the trail.
+            desiredSlotLocal.z *= combatSpread;
 
             if (!slotLocalReady)
             {
@@ -350,6 +409,7 @@ namespace WingCommand
                 1f - Mathf.Exp(-Time.fixedDeltaTime / AvoidanceSmoothing));
 
             slotPos += smoothedAvoidance;
+            slotPos = ApplyTerrainFloor(slotPos);
 
             Vector3 toSlot = slotPos - aircraft.GlobalPosition();
             float distance = toSlot.magnitude;
@@ -412,6 +472,60 @@ namespace WingCommand
         }
 
         /// <summary>
+        /// +1 / -1 once the leader has been turning that way for <see cref="TurnMirrorHold"/>
+        /// seconds without a sign change, 0 otherwise. The persistence decays back toward
+        /// zero when the turn eases, so a brief jink never flips the whole formation.
+        /// </summary>
+        private int TurnMirrorSign(float turnRate)
+        {
+            if (Mathf.Abs(turnRate) > TurnMirrorRate)
+            {
+                // Mathf.Sign returns exact +/-1, so this comparison is safe. A sign flip
+                // means the leader reversed the turn; start counting the new one from zero.
+                if (Mathf.Sign(turnRate) != Mathf.Sign(turnPersist)) turnPersist = 0f;
+                turnPersist += Mathf.Sign(turnRate) * Time.fixedDeltaTime;
+            }
+            else
+            {
+                turnPersist = Mathf.MoveTowards(turnPersist, 0f, Time.fixedDeltaTime);
+            }
+
+            return Mathf.Abs(turnPersist) >= TurnMirrorHold ? (int)Mathf.Sign(turnPersist) : 0;
+        }
+
+        /// <summary>
+        /// Push a slot up so it keeps clearance over rising ground. Slot offsets are
+        /// relative to the leader, so on climbing terrain the low side of a stack can sit
+        /// inside a hillside even while the leader is comfortably clear of it. Probed a few
+        /// times a second, not every physics tick.
+        /// </summary>
+        private GlobalPosition ApplyTerrainFloor(GlobalPosition slotPos)
+        {
+            float clearance = WingBrain.TerrainClearance;
+            if (clearance <= 0f) return slotPos;
+
+            Vector3 local = slotPos.ToLocalPosition();
+
+            if (Time.timeSinceLevelLoad >= nextTerrainProbe)
+            {
+                nextTerrainProbe = Time.timeSinceLevelLoad +
+                                   WingBrain.Interval(TerrainProbeInterval);
+
+                float ground = Datum.LocalSeaY;
+                if (Physics.Raycast(new Vector3(local.x, Datum.LocalSeaY + 3000f, local.z),
+                                    Vector3.down, out RaycastHit hit, 6000f,
+                                    PhysicsLayers.StaticsMask))
+                    ground = Mathf.Max(ground, hit.point.y);
+
+                terrainFloorY = ground + clearance;
+            }
+
+            if (local.y >= terrainFloorY) return slotPos;
+            local.y = terrainFloorY;
+            return local.ToGlobalPosition();
+        }
+
+        /// <summary>
         /// Open the formation up under threat and close it again when clear.
         ///
         /// Real formations widen when they expect to fight — a tight parade formation is
@@ -421,20 +535,24 @@ namespace WingCommand
         /// </summary>
         private float ThreatSpacingScale(Aircraft leader)
         {
-            // One setting now, not a bool plus a scale that could disagree: a value of 1
-            // is the off switch.
-            float scale = Plugin.Config2.ThreatSpacingScale.Value;
+            // Whether the leader is under a missile warning is needed by the combat-spread
+            // reaction regardless of whether the widen behaviour is enabled, so resolve it
+            // unconditionally here rather than inside the widen branch.
+            MissileWarning leaderWarning = leader.GetMissileWarningSystem();
+            leaderMissileThreat = leaderWarning != null && leaderWarning.IsWarning();
+
+            // Driven by the fidelity slider now: the reactive widen is a smart-formation
+            // behaviour, and a scale of 1 is the off switch.
+            float scale = WingBrain.SmartFormation ? WingBrain.ThreatWidenScale : 1f;
             float target = 1f;
 
             if (scale > 1.001f)
             {
-                MissileWarning leaderWarning = leader.GetMissileWarningSystem();
                 MissileWarning ownWarning = aircraft != null
                     ? aircraft.GetMissileWarningSystem()
                     : null;
 
-                bool threatened =
-                    (leaderWarning != null && leaderWarning.IsWarning()) ||
+                bool threatened = leaderMissileThreat ||
                     (ownWarning != null && ownWarning.IsWarning());
 
                 // A visual contact inside the tactical bubble is enough to loosen up even
@@ -459,7 +577,7 @@ namespace WingCommand
             if (leader != nearbyThreatLeader || now >= nextNearbyThreatRefresh)
             {
                 nearbyThreatLeader = leader;
-                nextNearbyThreatRefresh = now + NearbyThreatRefreshSeconds;
+                nextNearbyThreatRefresh = now + WingBrain.Interval(NearbyThreatRefreshSeconds);
                 nearbyThreatPresent = WingWeapons.NearestThreatTo(leader, 8000f) != null;
             }
 
@@ -476,7 +594,8 @@ namespace WingCommand
         /// </summary>
         private void RunEngagement(Aircraft leader)
         {
-            if (Time.timeSinceLevelLoad - lastEngageCheck < EngageInterval) return;
+            if (Time.timeSinceLevelLoad - lastEngageCheck < WingBrain.Interval(EngageInterval))
+                return;
             lastEngageCheck = Time.timeSinceLevelLoad;
 
             OrderEngagementAuthority authority = OrderRoePolicy.Authority(member.Order);
@@ -498,6 +617,13 @@ namespace WingCommand
             float range = orderOwnsWeapons
                 ? RoeRules.ExplicitOrderRange()
                 : RoeRules.EngageRange(roe);
+
+            // Low fidelity: a formation wingman flies the slot and defends only. Explicit
+            // attack/engage orders and inbound-missile interception still run; the
+            // opportunity/priority-target hunt - which does the all-aircraft scans - does not.
+            if (!WingBrain.OpportunityFire && !orderOwnsWeapons &&
+                allow != WingWeapons.Allow.MissilesOnly)
+                return;
 
             // An explicitly assigned target outranks whatever the wingman would pick, and
             // survives until it dies. Missile defence still takes precedence: a missile in

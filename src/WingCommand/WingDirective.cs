@@ -14,14 +14,20 @@ namespace WingCommand
         public readonly Unit Target;
         public readonly GlobalPosition Point;
         public readonly bool HasPoint;
+
+        /// <summary>Which manoeuvre to fly. Only meaningful when <see cref="Order"/> is Maneuver.</summary>
+        public readonly ManeuverKind Maneuver;
+
         public readonly float IssuedAt;
 
-        private WingDirective(WingOrder order, Unit target, GlobalPosition point, bool hasPoint)
+        private WingDirective(WingOrder order, Unit target, GlobalPosition point, bool hasPoint,
+                              ManeuverKind maneuver = ManeuverKind.WingWaggle)
         {
             Order = order;
             Target = target;
             Point = point;
             HasPoint = hasPoint;
+            Maneuver = maneuver;
             IssuedAt = Time.timeSinceLevelLoad;
         }
 
@@ -40,7 +46,11 @@ namespace WingCommand
         public static WingDirective AtPoint(WingOrder order, GlobalPosition point) =>
             new WingDirective(order, null, point, true);
 
+        /// <summary>Fly one scripted manoeuvre. Carries no target or point.</summary>
+        public static WingDirective RunManeuver(ManeuverKind kind) =>
+            new WingDirective(WingOrder.Maneuver, null, default(GlobalPosition), false, kind);
+
         public WingDirective WithoutTarget() =>
-            new WingDirective(Order, null, Point, HasPoint);
+            new WingDirective(Order, null, Point, HasPoint, Maneuver);
     }
 }

@@ -104,6 +104,14 @@ namespace WingCommand
                 return;
             }
 
+            if (resetForNonPlayableState)
+            {
+                // First frame back in a mission: resolve the Smart/Performance mode for
+                // this one. Snapshotting here is what makes a mid-mission change inert
+                // until the next mission.
+                WingBrain.Begin(Plugin.Config2.Mode.Value);
+                Plugin.Logger.LogInfo("[WingBrain] mission start - " + WingBrain.Summary());
+            }
             resetForNonPlayableState = false;
 
             // The player's own aircraft is always the formation leader.
@@ -403,6 +411,10 @@ namespace WingCommand
                     break;
                 }
 
+                case WingAction.JamMyTarget:
+                    Show(Commands.JamTarget(CurrentPlayerTargets(), wholeWing));
+                    break;
+
                 case WingAction.CycleRoe:
                 {
                     // Cycles all three rungs rather than toggling two, so the wheel can
@@ -426,6 +438,12 @@ namespace WingCommand
         internal void IssuePointOrder(WingOrder order, GlobalPosition point)
         {
             Show(Commands.Apply(WingDirective.AtPoint(order, point), wholeWing: false));
+        }
+
+        /// <summary>Send a command scope through one scripted manoeuvre, then rejoin.</summary>
+        internal void ExecuteManeuver(ManeuverKind kind, bool wholeWing)
+        {
+            Show(Commands.Maneuver(kind, wholeWing));
         }
 
         /// <summary>
@@ -685,6 +703,7 @@ namespace WingCommand
         AttackMyTarget,
         CycleRoe,
         Disband,
+        JamMyTarget,
     }
 
     internal struct RadialSlice

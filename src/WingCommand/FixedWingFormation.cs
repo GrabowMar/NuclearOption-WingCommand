@@ -220,8 +220,8 @@ namespace WingCommand
         {
             AircraftParameters p = aircraft.GetAircraftParameters();
             float leaderSpeed = Mathf.Max(leader.speed, 1f);
-            float aggression = Plugin.Config2.Aggression.Value;
-            float damping = Plugin.Config2.Damping.Value;
+            float aggression = WingBrain.Aggression;
+            float damping = WingBrain.Damping;
 
             Vector3 leaderVel = leader.rb.velocity;
             Vector3 drift = aircraft.rb.velocity - leaderVel;
@@ -436,6 +436,23 @@ namespace WingCommand
             float leadTime = Mathf.Clamp(distance / Mathf.Max(aircraft.speed, 50f), 0f, 6f);
             GlobalPosition pursuitAim = slotPos + leaderVel * leadTime;
 
+            // Cut the corner on a rejoin into a turn. The slot's future position lies on
+            // the arc the leader is flying, not on a straight line from where it sits now,
+            // so rotate the slot's offset-from-leader by the heading change the leader will
+            // make over leadTime. A wingman closing from outside the turn then aims where
+            // the slot is going instead of trailing it round. Bounded to half a turn; the
+            // RotateTowards guard below still prevents a behind-the-tail command.
+            if (WingBrain.SmartFormation && outOfPosition > 0.5f &&
+                Mathf.Abs(leaderTurnRate) > 0.02f)
+            {
+                GlobalPosition leaderNow = leader.GlobalPosition();
+                Vector3 offsetFromLeader = pursuitAim - leaderNow;
+                float sweep = Mathf.Clamp(
+                    leaderTurnRate * leadTime * Mathf.Rad2Deg, -180f, 180f);
+                pursuitAim = leaderNow +
+                             Quaternion.AngleAxis(sweep, Vector3.up) * offsetFromLeader;
+            }
+
             // GlobalPosition has no Lerp, but subtracting two of them gives a Vector3.
             GlobalPosition aimPoint = stationAim + (pursuitAim - stationAim) * outOfPosition;
 
@@ -555,7 +572,7 @@ namespace WingCommand
         /// forward axis, is pitch-independent. It is only degenerate pointing straight up or
         /// down, where bank has no meaning anyway.
         /// </summary>
-        private static float BankOf(Aircraft aircraft)
+        internal static float BankOf(Aircraft aircraft)
         {
             Vector3 forward = aircraft.transform.forward;
             Vector3 horizonRight = Vector3.Cross(Vector3.up, forward);

@@ -20,7 +20,7 @@ namespace WingCommand
     /// evidence accepted, and a run that cannot shift its load hands back to the stock
     /// transport behaviour rather than hovering over a field for the rest of the mission.
     /// </summary>
-    internal class CargoRunState : PilotBaseState
+    internal class CargoRunState : WingPilotState
     {
         private enum Phase { Transit, Deliver, Egress }
 
@@ -57,8 +57,6 @@ namespace WingCommand
         /// <summary>Height climbed back to after the load is away.</summary>
         private const float EgressAltitude = 220f;
 
-        private readonly WingMember member;
-
         private GlobalPosition point;
         private Vector3 facing;
         private Phase phase;
@@ -67,9 +65,8 @@ namespace WingCommand
         private readonly CargoProgressTracker cargoProgress = new CargoProgressTracker();
         private bool handedOff;
 
-        public CargoRunState(WingMember member)
+        public CargoRunState(WingMember member) : base(member)
         {
-            this.member = member;
             stateDisplayName = "delivering";
         }
 
@@ -78,15 +75,8 @@ namespace WingCommand
 
         public override void EnterState(Pilot pilot)
         {
-            base.pilot = pilot;
-            aircraft = pilot.aircraft;
-            controlInputs = aircraft.GetInputs();
-
-            aircraft.SetFlightAssist(enabled: true);
-            if (aircraft.gearState != LandingGear.GearState.LockedRetracted)
-                aircraft.SetGear(deployed: false);
-
-            pilot.flightInfo.HasTakenOff = true;
+            // Keep the hover configuration: this state lets a helicopter down onto a point.
+            BeginFlight(pilot, releaseHover: false);
 
             // Ground level under the requested point, so a helicopter's hover height is a
             // height above the ground rather than above sea level. Hover adds its hold to
@@ -123,7 +113,7 @@ namespace WingCommand
         {
             if (aircraft == null || aircraft.disabled || handedOff) return;
 
-            bool rotary = !(aircraft.autopilot is AutopilotPlane);
+            bool rotary = WingRegistry.IsRotary(aircraft);
 
             // The load is away. WingMember.CheckCargoRun owns completing the order - it is
             // the one place that decides a delivery happened - so this only has to fly the
@@ -164,11 +154,9 @@ namespace WingCommand
 
             if (rotary)
             {
-                AircraftParameters p = aircraft.GetAircraftParameters();
-                float agl = Mathf.Clamp(Mathf.Max(p.minimumRadarAlt, TransitAltitude), 40f, 1000f);
                 aircraft.autopilot.AutoAim(
                     destination: point + Vector3.up * TransitAltitude,
-                    altitudeHold: agl,
+                    altitudeHold: AutopilotMath.RotaryAgl(aircraft, TransitAltitude, 40f, 1000f),
                     aimDirection: Vector3.zero,
                     targetVelocity: Vector3.zero,
                     followTerrain: true);

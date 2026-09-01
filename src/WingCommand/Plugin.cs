@@ -17,7 +17,7 @@ namespace WingCommand
     {
         public const string PluginGuid = "com.marci.wingcommand";
         public const string PluginName = "WingCommand";
-        public const string PluginVersion = "0.9.1.1";
+        public const string PluginVersion = "0.9.4.1";
 
         internal static Plugin Instance { get; private set; }
         internal static new ManualLogSource Logger { get; private set; }
@@ -78,10 +78,12 @@ namespace WingCommand
             // its own value forever. Changing a default in code therefore does nothing for
             // anyone who has already run the mod, which silently left tuning changes
             // unapplied and a feature enabled long after it was supposedly turned off.
+            // The Smart/Performance mode is resolved per mission (WingBrain.Begin); this
+            // logs the configured mode and the derived budget for a default mission start.
+            WingBrain.Begin(Config2.Mode.Value);
             Logger.LogInfo(
                 "Effective tuning: " +
-                $"Aggression={Config2.Aggression.Value} " +
-                $"Damping={Config2.Damping.Value} " +
+                $"Mode={Config2.Mode.Value} [{WingBrain.Summary()}] " +
                 $"CommandAngle={Config2.CommandAngle.Value} " +
                 $"StationBankDegrees={Config2.StationBankDegrees.Value} " +
                 $"PursuitBankDegrees={Config2.PursuitBankDegrees.Value} " +
@@ -90,13 +92,16 @@ namespace WingCommand
                 $"BankMatchBlend={Config2.BankMatchBlend.Value} " +
                 $"RotaryPowerSeconds={Config2.RotaryPowerSeconds.Value} " +
                 $"RotarySpacingScale={Config2.RotarySpacingScale.Value} " +
-                $"ThreatWidenScale={Config2.ThreatSpacingScale.Value} " +
-                $"TargetDeconfliction={Config2.AiTargetDeconfliction.Value} " +
                 $"PanicSystem={Config2.PanicSystem.Value} " +
                 $"TakeoverOnDeath={Config2.TakeoverOnDeath.Value} " +
                 $"DefaultRoe={Config2.DefaultRoe.Value} " +
                 $"HoldEngageRange={Config2.HoldEngageRange.Value} " +
-                $"FreeEngageRange={Config2.FreeEngageRange.Value}");
+                $"FreeEngageRange={Config2.FreeEngageRange.Value} " +
+                $"JammingEnabled={Config2.JammingEnabled.Value} " +
+                $"AerobaticsEnabled={Config2.AerobaticsEnabled.Value} " +
+                $"ManeuverEntryFloor={Config2.ManeuverAltitudeFloor.Value} " +
+                $"ManeuverHardFloor={Config2.ManeuverHardFloor.Value} " +
+                $"ManeuverMinSpeedFraction={Config2.ManeuverMinSpeedFraction.Value}");
         }
 
         /// <summary>
@@ -162,7 +167,13 @@ namespace WingCommand
         public readonly ConfigEntry<float> RecruitRange;
         public readonly ConfigEntry<int> MaxWingSize;
         public readonly ConfigEntry<float> RotarySpacingScale;
-        public readonly ConfigEntry<float> ThreatSpacingScale;
+
+        /// <summary>
+        /// The one switch for how clever - and how expensive - the wing is. Smart is the
+        /// full behaviour and the default; Performance is the lean profile for busy
+        /// missions and multiplayer. Snapshotted at mission start into <see cref="WingBrain"/>.
+        /// </summary>
+        public readonly ConfigEntry<WingMode> Mode;
 
         // --- Formation: flying ---
         //
@@ -170,8 +181,6 @@ namespace WingCommand
         // encoded one physical quantity as two numbers that only meant anything as a ratio,
         // so tuning one silently moved the other. Everything here names the thing it
         // controls, in the unit the controller acts in.
-        public readonly ConfigEntry<float> Aggression;
-        public readonly ConfigEntry<float> Damping;
         public readonly ConfigEntry<float> CommandAngle;
         public readonly ConfigEntry<float> StationBankDegrees;
         public readonly ConfigEntry<float> PursuitBankDegrees;
@@ -183,13 +192,18 @@ namespace WingCommand
         // --- Formation: rotary ---
         public readonly ConfigEntry<float> RotaryHoverSpeed;
         public readonly ConfigEntry<float> RotaryPowerSeconds;
+
+        // --- Manoeuvres ---
+        public readonly ConfigEntry<bool> AerobaticsEnabled;
+        public readonly ConfigEntry<float> ManeuverAltitudeFloor;
+        public readonly ConfigEntry<float> ManeuverHardFloor;
+        public readonly ConfigEntry<float> ManeuverMinSpeedFraction;
+
         // --- AI ---
         public readonly ConfigEntry<bool> AiTweakEnabled;
         public readonly ConfigEntry<float> AiSkillScale;
         public readonly ConfigEntry<float> AiBraveryScale;
         public readonly ConfigEntry<bool> MutualSupport;
-        public readonly ConfigEntry<bool> AiTargetDeconfliction;
-        public readonly ConfigEntry<float> TargetSaturationPenalty;
         public readonly ConfigEntry<float> PlayerTargetPenalty;
         public readonly ConfigEntry<bool> PanicSystem;
         public readonly ConfigEntry<float> PanicClearSeconds;
@@ -197,6 +211,7 @@ namespace WingCommand
         // --- Engagement ---
         public readonly ConfigEntry<WingRoe> DefaultRoe;
         public readonly ConfigEntry<bool> MissileDefence;
+        public readonly ConfigEntry<bool> JammingEnabled;
         public readonly ConfigEntry<float> HoldEngageRange;
         public readonly ConfigEntry<float> FreeEngageRange;
         public readonly ConfigEntry<float> LeashRadius;
@@ -215,7 +230,6 @@ namespace WingCommand
         // --- Comms ---
         public readonly ConfigEntry<bool> RadioChatter;
         public readonly ConfigEntry<bool> RadioChatterSound;
-        public readonly ConfigEntry<bool> CrewBanter;
 
         public readonly ConfigEntry<bool> PilotProgression;
         public readonly ConfigEntry<int> XpPerKill;
@@ -310,15 +324,19 @@ namespace WingCommand
                     "changing this moves them all together.",
                     new AcceptableValueRange<float>(0.2f, 1.5f),
                     new ConfigurationManagerAttributes { IsAdvanced = true }));
-            // New key: the old default was 1 (disabled), and BepInEx preserves it forever.
-            // A reactive formation overhaul that stays disabled for every existing install
-            // is not an overhaul, so the safe, eased tactical spread gets its own key.
-            ThreatSpacingScale = c.Bind("Formation", "ReactiveThreatWidenScale", 1.45f,
+
+            // The one switch most players ever touch. Smart is the full behaviour and the
+            // development target; Performance is the lean profile for busy missions and
+            // multiplayer, where the host simulates every AI wingman.
+            Mode = c.Bind("AI", "Mode", WingMode.Smart,
                 new ConfigDescription(
-                    "Spacing multiplier applied while hostile aircraft are close or anyone in " +
-                    "the formation is under missile warning. The change eases in and out; 1 disables it.",
-                    new AcceptableValueRange<float>(1f, 4f),
-                    new ConfigurationManagerAttributes { IsAdvanced = true }));
+                    "Smart is the full behaviour and the default. Performance is a lean " +
+                    "profile for busy missions and multiplayer hosts: coarser formation " +
+                    "updates, no manoeuvre or jam orders, minimal radio, and the expensive " +
+                    "target-coordination and opportunity-scanning passes turned off. " +
+                    "Applies at the start of a mission.",
+                    null,
+                    new ConfigurationManagerAttributes { Order = 100 }));
 
             // ---- Flying ----
             //
@@ -329,18 +347,6 @@ namespace WingCommand
             // either one silently moved a quantity neither of them named. CommandAngle is
             // that quantity, stated directly.
 
-            Aggression = c.Bind("Formation", "Aggression", 1.0f,
-                Advanced(
-                    "Master scale on how hard a wingman corrects its position: steering, " +
-                    "closure and throttle demand together. Raising it tightens station-keeping " +
-                    "at the cost of settling; above about 2 wingmen start to hunt.",
-                    new AcceptableValueRange<float>(0.2f, 3f)));
-            Damping = c.Bind("Formation", "Damping", 1.0f,
-                Advanced(
-                    "Master scale on the rate terms that arrest a correction before it arrives. " +
-                    "This is what stops the slow left-right rocking; lower it only if wingmen " +
-                    "seem sluggish to start moving, and raise it if they overshoot the slot.",
-                    new AcceptableValueRange<float>(0f, 3f)));
             CommandAngle = c.Bind("Formation", "CommandAngle", 25f,
                 Advanced(
                     "Largest heading correction, in degrees, a wingman will command while " +
@@ -420,15 +426,6 @@ namespace WingCommand
             MutualSupport = c.Bind("AI", "MutualSupport", true,
                 Hidden("Retired compatibility key. ROE no longer changes the current flight task; " +
                        "use the Engage order to authorise pursuit."));
-            AiTargetDeconfliction = c.Bind("AI", "TargetDeconfliction", true,
-                Advanced("Coordinate locally simulated AI target choices so several aircraft do not " +
-                         "independently pile onto the same contact while useful alternatives exist."));
-            TargetSaturationPenalty = c.Bind("AI", "TargetSaturationPenalty", 1.5f,
-                new ConfigDescription(
-                    "How strongly each commitment beyond a target's estimated required attacks " +
-                    "pushes another AI toward an unclaimed contact.",
-                    new AcceptableValueRange<float>(0f, 5f),
-                    new ConfigurationManagerAttributes { IsAdvanced = true }));
             PlayerTargetPenalty = c.Bind("AI", "PlayerConcentrationPenalty", 0f,
                 Hidden("Retired compatibility key. Player aircraft receive no special protection.",
                     new AcceptableValueRange<float>(0f, 8f)));
@@ -454,6 +451,10 @@ namespace WingCommand
             MissileDefence = c.Bind("Engagement", "MissileDefence", true,
                 Advanced("Defensive wingmen prioritise shooting down inbound missiles, on themselves or " +
                          "on you, when they carry a weapon capable of it."));
+            JammingEnabled = c.Bind("Engagement", "JammingEnabled", true,
+                "Allow the Jam Target order: a jam-capable wingman holds its formation slot " +
+                "and runs its radar jammer continuously against a designated unit until that " +
+                "unit dies or the order is replaced.");
             HoldEngageRange = c.Bind("Engagement", "HoldEngageRange", 6000f,
                 Advanced(
                     "How far a wingman will shoot from its slot, in metres. Used by Hold and " +
@@ -520,6 +521,27 @@ namespace WingCommand
                     "let it chase until it crashes. Mainly affects slow aircraft recruited " +
                     "into a fast flight.",
                     null,
+                    new ConfigurationManagerAttributes { IsAdvanced = true }));
+
+            AerobaticsEnabled = c.Bind("Manoeuvres", "AerobaticsEnabled", true,
+                "Allow the aerobatic manoeuvres (Split-S, Immelmann, Barrel Roll, Aileron " +
+                "Roll, Loop). The level breaks and the wing waggle are always available.");
+            ManeuverAltitudeFloor = c.Bind("Manoeuvres", "EntryAltitudeFloor", 250f,
+                new ConfigDescription(
+                    "Height above ground, in metres, a wingman must have before it will " +
+                    "start a manoeuvre. Each manoeuvre also has its own minimum on top of this.",
+                    new AcceptableValueRange<float>(60f, 2000f)));
+            ManeuverHardFloor = c.Bind("Manoeuvres", "HardFloor", 120f,
+                new ConfigDescription(
+                    "If a wingman descends through this radar altitude mid-manoeuvre it " +
+                    "abandons it wings-level and rejoins. The last-ditch anti-crash guard.",
+                    new AcceptableValueRange<float>(40f, 1000f),
+                    new ConfigurationManagerAttributes { IsAdvanced = true }));
+            ManeuverMinSpeedFraction = c.Bind("Manoeuvres", "MinEntrySpeedFraction", 0.35f,
+                new ConfigDescription(
+                    "Baseline airspeed, as a fraction of the airframe's maximum, below which " +
+                    "a manoeuvre is refused. Individual manoeuvres raise this for themselves.",
+                    new AcceptableValueRange<float>(0.1f, 0.9f),
                     new ConfigurationManagerAttributes { IsAdvanced = true }));
             // Written by the LOADOUT tab, not by hand, but left visible rather than hidden
             // so a player who has made a mess of their templates can clear the value
@@ -625,10 +647,6 @@ namespace WingCommand
             RadioChatterSound = c.Bind("Comms", "RadioChatterSound", true,
                 "Open each squadron transmission with the game's own radio click - the same " +
                 "sound mission and HQ messages use. Has no effect while RadioChatter is off.");
-
-            CrewBanter = c.Bind("Comms", "CrewBanter", true,
-                "Occasionally let airborne wing pilots exchange rare jokes and rumours. " +
-                "Banter waits for an idle radio. Has no effect while RadioChatter is off.");
 
             UseNativeRadial = c.Bind("UI", "UseNativeRadial", true,
                 Advanced("Add a compact 'Wing Command' entry to the game's own radial menu. This uses " +

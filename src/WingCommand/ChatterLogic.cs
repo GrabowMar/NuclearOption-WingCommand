@@ -203,6 +203,18 @@ namespace WingCommand
                         new[] { "Moving. I'll get there first.", "Copy. Pushing to the point." },
                         new[] { "Understood. En route.", "Copy. Proceeding to the waypoint." },
                         new[] { "Waypoint received. Off I go.", "Copy. Moving." });
+                case "JAMTARGET":
+                    return Pick(persona, seed,
+                        new[] { "Roger. Jammer coming up.", "Copy. Working their radar." },
+                        new[] { "Copy. I'll blind them.", "Jammer up. Let's make them squint." },
+                        new[] { "Understood. Beginning jamming.", "Copy. On the jammer." },
+                        new[] { "Jamming. Electrons deployed.", "Copy. Ruining someone's picture." });
+                case "MANEUVER":
+                    return Pick(persona, seed,
+                        new[] { "Roger. Executing.", "Copy. Manoeuvring now." },
+                        new[] { "Copy. Watch this.", "On it. Hold my drink." },
+                        new[] { "Understood. Beginning the manoeuvre.", "Copy. Executing." },
+                        new[] { "Manoeuvre received. Showtime.", "Copy. Being theatrical." });
                 default:
                     return Pick(persona, seed,
                         new[] { "Roger.", "Copy." },
@@ -284,6 +296,18 @@ namespace WingCommand
                         new[] { wingmen + ", push to the point.", wingmen + ", with me. Let's move." },
                         new[] { wingmen + ", take spacing. En route.", wingmen + ", proceed to the waypoint." },
                         new[] { wingmen + ", another waypoint. Come along.", wingmen + ", sightseeing formation. Move." });
+                case "JAMTARGET":
+                    return Pick(persona, seed,
+                        new[] { wingmen + ", jammers up. Screen the target.", wingmen + ", work their radar." },
+                        new[] { wingmen + ", light the jammers.", wingmen + ", blind them for me." },
+                        new[] { wingmen + ", begin jamming. Hold station.", wingmen + ", jammers on the mark." },
+                        new[] { wingmen + ", deploy the electrons.", wingmen + ", ruin their picture together." });
+                case "MANEUVER":
+                    return Pick(persona, seed,
+                        new[] { wingmen + ", execute the manoeuvre.", wingmen + ", on my mark. Go." },
+                        new[] { wingmen + ", follow me through it.", wingmen + ", try to keep up." },
+                        new[] { wingmen + ", begin the manoeuvre.", wingmen + ", execute together." },
+                        new[] { wingmen + ", airshow formation. Go.", wingmen + ", be theatrical." });
                 default:
                     return Pick(persona, seed,
                         new[] { wingmen + ", copy. Move together.", wingmen + ", acknowledge. Let's move." },
@@ -358,6 +382,17 @@ namespace WingCommand
                                  subject + " missile! Breaking!");
                 case "DEFENSIVECLEAR": return Pick(seed, "Threat clear. Resuming.",
                                                           "Missile defeated. Back on task.");
+                case "JAMMING": return subject == null
+                    ? Pick(seed, "Jammer's up.", "Buzzing their radar.")
+                    : Pick(seed, "Jamming " + subject + ".",
+                                 "On the jammer, working " + subject + ".");
+                case "JAMMINGOFF": return Pick(seed, "Jammer's cold. Rejoining.",
+                                                      "Off the jammer. Back on your wing.");
+                case "MANEUVERING": return subject == null
+                    ? Pick(seed, "Manoeuvring.", "Watch this.")
+                    : Pick(seed, subject + ", now.", "In on the " + subject + ".");
+                case "MANEUVERDONE": return Pick(seed, "Rolling out. Back on your wing.",
+                                                        "Done playing. Rejoining.");
                 case "DAMAGED":
                     return persona == ChatterPersona.Aggressive
                         ? Pick(seed, "I'm hit. Still fighting.", "Took a hit. I'm not done.")

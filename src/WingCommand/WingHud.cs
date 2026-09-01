@@ -517,6 +517,8 @@ namespace WingCommand
                     case WingOrder.LandHere:    return "LAND";
                     case WingOrder.Attack:      return "ATK";
                     case WingOrder.FireForEffect: return "SPLASH";
+                    case WingOrder.JamTarget:   return "JAM";
+                    case WingOrder.Maneuver:    return "MNVR";
                     default:                    return "FORM";
                 }
             }

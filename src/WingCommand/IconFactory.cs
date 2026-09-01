@@ -62,6 +62,8 @@ namespace WingCommand
                 case "wing-badge":  WingBadge(c);           break;
                 case "selection":   SelectionBrackets(c);   break;
                 case "airframe":    Airframe(c);            break;
+                case "jam":         Jam(c);                 break;
+                case "maneuver":    Maneuver(c);            break;
 
                 default:
                     // Shape glyphs are derived from the solver, so any formation added to
@@ -77,6 +79,23 @@ namespace WingCommand
                     }
                     break;
             }
+        }
+
+        /// <summary>Concentric radar rings with a slash through them: jam that contact.</summary>
+        private static void Jam(Canvas c)
+        {
+            c.Ring(48, 48, 14, 5f);
+            c.Ring(48, 48, 26, 5f);
+            c.Disc(48, 48, 4f);
+            c.Segment(22, 74, 74, 22, 8f);
+        }
+
+        /// <summary>A looping arrow: fly a manoeuvre.</summary>
+        private static void Maneuver(Canvas c)
+        {
+            c.Ring(48, 46, 22, 6f);
+            c.Segment(58, 64, 72, 60, 6f);
+            c.Segment(72, 60, 66, 48, 6f);
         }
 
         /// <summary>Two stacked chevrons — the "wing command" mark.</summary>
