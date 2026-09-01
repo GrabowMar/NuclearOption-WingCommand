@@ -53,6 +53,22 @@ namespace WingCommand
         /// <summary>Vertical pitch between stacked list rows.</summary>
         public const float RowPitch = RowHeight + 2f;
 
+        // ---------------------------------------------------------------- button widths
+        //
+        // Three widths, so a control's size says what rank of action it is rather than
+        // being whatever number made a particular row add up. Rows that used a private
+        // literal each — 88 here, 104 there, 130 for the buy button, 30 for a glyph — never
+        // lined their tab-stops up with the row above them.
+
+        /// <summary>A glyph or a three-letter word: the loadout editor's +, COPY, DEL.</summary>
+        public const float ButtonCompact = 44f;
+
+        /// <summary>A standalone action sharing a row with a readout: SELECT ALL, HOLD, RELEASE.</summary>
+        public const float ButtonAction = 104f;
+
+        /// <summary>A page's primary action where it does not span the whole row: REQUISITION.</summary>
+        public const float ButtonPrimary = 132f;
+
         // ---------------------------------------------------------------------- type
 
         /// <summary>
@@ -625,13 +641,18 @@ namespace WingCommand
         /// </summary>
         public static float Heading(RectTransform parent, float y, string text, float width)
         {
-            float labelWidth = 8f * text.Length + 10f;
+            // The label takes the whole width to lay out in; the rule starts after the
+            // text's own measured extent. The width used to be guessed at eight pixels a
+            // character, which drifted with the real MFD font — the rule cut into the last
+            // letter of a short heading and left a gap after a long one.
+            TMP_Text label = Label(parent, text, new Rect(Pad, y, width - Pad * 2f, Space4),
+                                   HeadingColor, FontSmall, FontStyles.Normal,
+                                   TextAlignmentOptions.Left);
+            float labelWidth = Mathf.Ceil(label.GetPreferredValues(text).x);
 
-            Label(parent, text, new Rect(Pad, y, labelWidth, Space4),
-                  HeadingColor, FontSmall, FontStyles.Normal, TextAlignmentOptions.Left);
-
-            float ruleX = Pad + labelWidth + 6f;
-            Rule(parent, new Rect(ruleX, y - Space2, width - Pad - ruleX, 1f), FrameColor);
+            float ruleX = Pad + labelWidth + Space2;
+            Rule(parent, new Rect(ruleX, y - Space2, Mathf.Max(0f, width - Pad - ruleX), 1f),
+                 FrameColor);
 
             return y - Space5;
         }

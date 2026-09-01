@@ -14,6 +14,7 @@ namespace WingCommand
         // --- Wing page ---
         private static readonly List<PickRow> wingRows = new List<PickRow>();
         private static RectTransform wingRosterArea;
+        private static TMP_Text wingEmptyLabel;
         private static TMP_Text pilotIdentityLabel;
         private static TMP_Text pilotRankLabel;
         private static TMP_Text pilotStatsLabel;
@@ -26,6 +27,7 @@ namespace WingCommand
         private static TMP_Text airframeOrderLabel;
         private static TMP_Text airframeLoadoutLabel;
         private static TMP_Text airframeWeaponsLabel;
+        private static Image airframeSilhouette;
 
         // -------------------------------------------------------------------- wing page
 
@@ -42,6 +44,8 @@ namespace WingCommand
             y = ColumnHeaders(parent, y, WingInspectColumns);
 
             wingRosterArea = RosterViewport(parent, "WingRoster", y);
+            wingEmptyLabel = EmptyNote(wingRosterArea,
+                "No wingmen in the flight yet.");
             y -= RowPitch * RosterRowsPerPage + Gap;
 
             wingPager = new RosterPager(parent, y);
@@ -86,22 +90,26 @@ namespace WingCommand
 
             y -= portrait + Space2;
 
-            Label(parent, "BIO", new Rect(Pad, y, 34f, Space4), WingColor(), FontMicro,
-                  FontStyles.Normal, TextAlignmentOptions.Left);
-            pilotBackgroundLabel = Label(parent, "", new Rect(Pad + 38f, y, w - 38f, Space6 + Space3),
+            // A proper section heading, like FLIGHT / PILOT / AIRFRAME, rather than the
+            // bare member-coloured tag it used to be squeezed left of the text.
+            y = Heading(parent, y, "BIO");
+            pilotBackgroundLabel = Label(parent, "", new Rect(Pad, y, w, Space6 + Space3),
                                          Friendly(), FontMicro, FontStyles.Italic,
                                          TextAlignmentOptions.TopLeft);
             pilotBackgroundLabel.enableWordWrapping = true;
             pilotBackgroundLabel.overflowMode = TextOverflowModes.Ellipsis;
-            y -= Space6 + Space4;
+            y -= Space6 + Space3 + Space1;
 
             y = Heading(parent, y, "AIRFRAME");
 
             // A quiet aircraft silhouette turns the empty lower card into an airframe
-            // dossier without competing with the live numbers drawn over it.
+            // dossier without competing with the live numbers drawn over it. Kept in a
+            // field so the refresh can hide it when no wingman is selected and reassert its
+            // alpha — it has been seen drawn at full strength on the empty page.
             Color ghost = WingColor();
             ghost.a = 0.075f;
-            AddSprite(parent, "AirframeSilhouette", IconFactory.Get("airframe"),
+            airframeSilhouette = AddSprite(parent, "AirframeSilhouette",
+                      IconFactory.Get("airframe"),
                       new Rect(PanelWidth - Pad - 132f, y - 8f, 128f, 128f), ghost);
 
             airframeTypeLabel = Label(parent, "", new Rect(Pad, y, w, LineHeight), Friendly(),
@@ -128,6 +136,10 @@ namespace WingCommand
             SyncPickRows(wingRows, wingRosterArea);
             int first = wingPager != null ? wingPager.Refresh(wing) : 0;
 
+            bool empty = wing.Count == 0;
+            if (wingEmptyLabel != null && wingEmptyLabel.gameObject.activeSelf != empty)
+                wingEmptyLabel.gameObject.SetActive(empty);
+
             for (int i = 0; i < wingRows.Count; i++)
             {
                 int index = first + i;
@@ -144,9 +156,15 @@ namespace WingCommand
             WingMember focus = focusMember;
             if (focus == null)
             {
-                SetWingDetail("NO WINGMEN ASSIGNED", "", "", "", 0f, "", "", "", "", "", "");
+                SetWingDetail("NO WINGMAN SELECTED", "", "", "", 0f,
+                    "Pick a wingman from the flight list above, or requisition aircraft " +
+                    "on the SUPPLY tab.",
+                    "", "", "", "", "");
+                SetSilhouetteAlpha(0f);
                 return;
             }
+
+            SetSilhouetteAlpha(0.075f);
 
             WingPilot crew = focus.Crew;
             string identity = crew != null
@@ -232,6 +250,15 @@ namespace WingCommand
                 airframeTypeLabel.text = type + "   (NOT LOCALLY SIMULATED)";
         }
 
+        /// <summary>Keep the ghost airframe faint, or hide it entirely on the empty page.</summary>
+        private static void SetSilhouetteAlpha(float alpha)
+        {
+            if (airframeSilhouette == null) return;
+            Color c = WingColor();
+            c.a = alpha;
+            airframeSilhouette.color = c;
+        }
+
         private static void SetWingDetail(string identity, string rank, string stats,
                                           string persona, float progress, string background,
                                           string type, string state, string order, string loadout,
@@ -254,7 +281,7 @@ namespace WingCommand
 
             if (pilotXpBar != null)
                 pilotXpBar.rectTransform.sizeDelta =
-                    new Vector2(Mathf.Max(1f, pilotXpBarWidth * Mathf.Clamp01(progress)), 3f);
+                    new Vector2(Mathf.Max(0f, pilotXpBarWidth * Mathf.Clamp01(progress)), 3f);
         }
 
         /// <summary>A compact live inventory, grouped by the weapon definition on each station.</summary>

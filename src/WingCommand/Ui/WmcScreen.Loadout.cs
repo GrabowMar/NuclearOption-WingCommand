@@ -55,10 +55,11 @@ namespace WingCommand
         private static int pylonPage;
 
         /// <summary>
-        /// Pylons drawn at once. Four rather than the roster's three: this list is the point
-        /// of the page, and most airframes fit in one or two pages of four.
+        /// Pylons drawn at once. Six: this list is the point of the page and the Loadout
+        /// tab has the height to spare — every tab shares one frame sized to the tallest,
+        /// and this was not it — so most airframes now fit on a single page with no paging.
         /// </summary>
-        private const int PylonRowsPerPage = 4;
+        private const int PylonRowsPerPage = 6;
 
         // ----------------------------------------------------------------- loadout page
 
@@ -95,9 +96,9 @@ namespace WingCommand
             float inner = PanelWidth - Pad - left;
 
             // The selector, then the three things that can be done to the list it selects
-            // from. Square buttons: at this width a word would have to be abbreviated past
-            // the point of being read, and the status strip explains each on hover.
-            const float actionWidth = 30f;
+            // from: new, copy, delete. "C" and "X" were guesses at what a single glyph
+            // meant; a three-letter word is not.
+            const float actionWidth = WingUi.ButtonCompact;
             const float actionBlock = (actionWidth + Gap) * 3f;
 
             Gutter(parent, y, "TEMPLATE");
@@ -112,15 +113,15 @@ namespace WingCommand
             templateNewButton = WingUi.Button(parent, "+", new Rect(actionX, y, actionWidth, RowHeight),
                                               FontBody, UiButtonStyle.Default, NewTemplate)
                                      .WithTooltip(LoadoutHint.New);
-            templateCopyButton = WingUi.Button(parent, "C",
+            templateCopyButton = WingUi.Button(parent, "COPY",
                                                new Rect(actionX + actionWidth + Gap, y,
                                                         actionWidth, RowHeight),
-                                               FontBody, UiButtonStyle.Default, CopyTemplate)
+                                               FontSmall, UiButtonStyle.Default, CopyTemplate)
                                       .WithTooltip(LoadoutHint.Copy);
-            templateDeleteButton = WingUi.Button(parent, "X",
+            templateDeleteButton = WingUi.Button(parent, "DEL",
                                                  new Rect(actionX + (actionWidth + Gap) * 2f, y,
                                                           actionWidth, RowHeight),
-                                                 FontBody, UiButtonStyle.Danger, DeleteTemplate)
+                                                 FontSmall, UiButtonStyle.Danger, DeleteTemplate)
                                         .WithTooltip(LoadoutHint.Delete);
             y -= RowHeight + Gap;
 
@@ -185,8 +186,10 @@ namespace WingCommand
 
         private static readonly Column[] PylonColumns =
         {
-            new Column("PYLON", 8f, 150f),
-            new Column("STORE", 162f, PanelWidth - Pad * 2f - 162f - Space3, rightAligned: true),
+            new Column("PYLON", Space2, 140f),
+            // Left-aligned, not right: a long store name ellipsised from the right keeps its
+            // start ("12.7mm Machine Gun…") instead of losing it ("…Machine Gun (100)").
+            new Column("STORE", 152f, PanelWidth - Pad * 2f - 152f - Space2),
         };
 
         /// <summary>A fixed-height area that roster rows are laid out inside.</summary>
@@ -605,12 +608,12 @@ namespace WingCommand
             }
 
             string role = air <= 0f && surface <= 0f ? "unarmed"
-                : air > surface * 1.5f ? "air to air"
-                : surface > air * 1.5f ? "air to ground"
+                : air > surface * 1.5f ? "air-to-air"
+                : surface > air * 1.5f ? "air-to-ground"
                 : "multirole";
 
             templateSummaryLabel.text =
-                fitted + " of " + count + " pylons  ·  " + Mathf.RoundToInt(mass) + " kg  ·  " +
+                fitted + " of " + count + " pylons  ·  " + Grouped(mass) + " kg  ·  " +
                 role;
             templateSummaryLabel.color = fitted == 0 ? Warning() : Dim();
         }
@@ -717,9 +720,7 @@ namespace WingCommand
 
             // Says where the template is actually used, because nothing on this page applies
             // it: a player who builds one and never opens SUPPLY has changed nothing.
-            loadoutStatusLabel.text =
-                "Saved. Choose it on SUPPLY to fly the next " +
-                UiTheme.Truncate(selectedOffer.unitName, 14) + " with it.";
+            loadoutStatusLabel.text = "Saved — choose it on the SUPPLY tab to fly it.";
             loadoutStatusLabel.color = Friendly();
         }
 
@@ -802,10 +803,10 @@ namespace WingCommand
                 fill.raycastTarget = false;
                 Outline(rt, new Rect(0f, 0f, width, RowHeight), FrameColor());
 
-                name = Label(rt, "", new Rect(Space2, 0f, 150f, RowHeight), Friendly(), FontSmall,
+                name = Label(rt, "", new Rect(Space2, 0f, 140f, RowHeight), Friendly(), FontSmall,
                              FontStyles.Normal, TextAlignmentOptions.Left);
-                store = Label(rt, "", new Rect(162f, 0f, width - 162f - Space2, RowHeight),
-                              Dim(), FontSmall, FontStyles.Normal, TextAlignmentOptions.Right);
+                store = Label(rt, "", new Rect(152f, 0f, width - 152f - Space2, RowHeight),
+                              Dim(), FontSmall, FontStyles.Normal, TextAlignmentOptions.Left);
 
                 hit = HitButton(rt, new Rect(0f, 0f, width, RowHeight), null);
                 go.SetActive(false);
@@ -824,7 +825,7 @@ namespace WingCommand
 
                 if (blocked)
                 {
-                    store.text = "BLOCKED";
+                    store.text = "— BLOCKED —";
                     store.color = Warning();
                     name.color = Dim();
 
