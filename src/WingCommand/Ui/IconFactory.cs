@@ -59,7 +59,6 @@ namespace WingCommand
                 case "land":        LandHere(c);            break;
                 case "buy":         Buy(c);                 break;
                 case "back":        Back(c);                break;
-                case "wing-badge":  WingBadge(c);           break;
                 case "selection":   SelectionBrackets(c);   break;
                 case "airframe":    Airframe(c);            break;
                 case "jam":         Jam(c);                 break;
@@ -109,18 +108,6 @@ namespace WingCommand
         }
 
         /// <summary>
-        /// One shallow caret above the game's aircraft silhouette. It is enough to make
-        /// wing membership recognisable by shape, while staying inside the base game's
-        /// sparse line-symbol language and leaving type, heading and selection readable.
-        /// </summary>
-        private static void WingBadge(Canvas c)
-        {
-            const float t = 3.5f;
-            c.Segment(31, 78, 48, 86, t);
-            c.Segment(48, 86, 65, 78, t);
-        }
-
-        /// <summary>
         /// A broad top-down aircraft silhouette. WMC uses this at very low opacity behind
         /// the airframe dossier, where an outline would turn into visual noise beneath the
         /// readouts.
@@ -133,13 +120,13 @@ namespace WingCommand
         /// <summary>
         /// Four corner brackets round the icon: "this one is under command".
         ///
-        /// The command selection used to be drawn with <see cref="WingBadge"/> at 134% and
-        /// a brighter tint — the same caret as the membership mark, only slightly larger.
-        /// Two marks that differ by a third of their size and nothing else are one mark as
-        /// far as the eye is concerned, so on a busy map there was no reading which of four
-        /// wingmen the next order was going to. Corner brackets are a different shape
-        /// entirely, and they are the shape every military display already uses for
-        /// designation, so it needs no learning.
+        /// The command selection used to be drawn with a caret at 134% and a brighter tint —
+        /// the same shape as the membership mark, only slightly larger. Two marks that differ
+        /// by a third of their size and nothing else are one mark as far as the eye is
+        /// concerned, so on a busy map there was no reading which of four wingmen the next
+        /// order was going to. Corner brackets are a different shape entirely, and they are
+        /// the shape every military display already uses for designation, so it needs no
+        /// learning.
         /// </summary>
         private static void SelectionBrackets(Canvas c)
         {

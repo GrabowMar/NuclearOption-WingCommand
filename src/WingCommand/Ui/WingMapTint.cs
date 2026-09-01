@@ -59,7 +59,6 @@ namespace WingCommand
                 if (!(__instance is UnitMapIcon unitIcon) || unitIcon.iconImage == null) return;
 
                 WingMarkers.Role role = WingMarkers.RoleOf(unitIcon.unit);
-                WingMarkerBadge.Apply(unitIcon.iconImage, role);
                 bool commandSelected = false;
                 if (role == WingMarkers.Role.Member &&
                     WmcScreen.TacticalCommandModeActive && unitIcon.unit is Aircraft aircraft)

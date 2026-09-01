@@ -99,16 +99,11 @@ namespace WingCommand
 
             // A selected target is drawn in the theme's selected colour and gets the
             // bracket sprite. That is the player's own designation and outranks ours.
-            if (marker.selected)
-            {
-                WingMarkerBadge.Clear(marker.image);
-                return;
-            }
+            if (marker.selected) return;
 
             WingMarkers.Role role = WingMarkers.RoleOf(marker.unit);
             if (role == WingMarkers.Role.None)
             {
-                WingMarkerBadge.Clear(marker.image);
                 Restore(marker);
                 return;
             }
@@ -117,7 +112,6 @@ namespace WingCommand
             // stale-track dimming and jamming, none of which are ours to override.
             Color tint = WingMarkers.ColorFor(role);
             marker.image.color = new Color(tint.r, tint.g, tint.b, marker.image.color.a);
-            WingMarkerBadge.Apply(marker.image, role);
         }
 
         private static void Restore(HUDUnitMarker marker)
@@ -142,14 +136,9 @@ namespace WingCommand
             {
                 if (Plugin.Settings.Highlight.Value == HighlightMode.Off) return;
                 if (__instance.image == null) return;
-                if (__instance.selected)
-                {
-                    WingMarkerBadge.Clear(__instance.image);
-                    return;
-                }
+                if (__instance.selected) return;
 
                 WingMarkers.Role role = WingMarkers.RoleOf(__instance.unit);
-                WingMarkerBadge.Apply(__instance.image, role);
                 if (role == WingMarkers.Role.None) return;
 
                 Color tint = WingMarkers.ColorFor(role);
