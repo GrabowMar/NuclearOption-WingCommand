@@ -547,7 +547,7 @@ namespace WingCommand
                 float fuel = m.Fuel;
                 int ammo = m.Ammo;
                 reserves.text = Mathf.RoundToInt(fuel * 100f) + "%  " + ammo;
-                reserves.color = fuel <= Plugin.Settings.BingoFuel.Value || ammo <= 0
+                reserves.color = fuel <= WingTuning.BingoFuel || ammo <= 0
                     ? new Color(1f, 0.55f, 0.2f)
                     : Dim();
 

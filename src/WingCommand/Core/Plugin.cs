@@ -21,7 +21,7 @@ namespace WingCommand
     {
         public const string PluginGuid = "com.marci.wingcommand";
         public const string PluginName = "WingCommand";
-        public const string PluginVersion = "0.9.4.1";
+        public const string PluginVersion = "0.9.5.0";
 
         internal static Plugin Instance { get; private set; }
         internal static new ManualLogSource Logger { get; private set; }
@@ -35,24 +35,16 @@ namespace WingCommand
             Logger = base.Logger;
             Settings = new WingConfig(Config);
 
-            if (Settings.AiTweakEnabled.Value ||
-                !Mathf.Approximately(Settings.AiSkillScale.Value, 1f) ||
-                !Mathf.Approximately(Settings.AiBraveryScale.Value, 1f))
-            {
-                Logger.LogWarning(
-                    "Legacy global AI skill/bravery settings are ignored in this release.");
-            }
-            if (Settings.PlayerTargetPenalty.Value > 0f)
-            {
-                Logger.LogWarning(
-                    "Legacy player concentration protection is ignored in this release.");
-            }
-            if (Settings.FreePlanePurchases.Value || Settings.DisableWingSizeLimit.Value)
+            // The retired keys these warnings described are no longer bound at all, so an
+            // old configuration file simply carries dead lines that BepInEx drops on its
+            // next save. Warning about a setting the player can no longer see was worse
+            // than silence: it named keys that had already stopped existing.
+            if (Settings.CheatFreePurchases || Settings.CheatNoWingLimit)
             {
                 Logger.LogWarning(
                     "Unsafe Debug cheats are enabled: " +
-                    $"FreePlanePurchases={Settings.FreePlanePurchases.Value}, " +
-                    $"DisableWingSizeLimit={Settings.DisableWingSizeLimit.Value}. " +
+                    $"FreePlanePurchases={Settings.CheatFreePurchases}, " +
+                    $"DisableWingSizeLimit={Settings.CheatNoWingLimit}. " +
                     "These options may break mission balance, UI, formations or the mod itself.");
             }
 
@@ -84,28 +76,25 @@ namespace WingCommand
             // unapplied and a feature enabled long after it was supposedly turned off.
             // The Smart/Performance mode is resolved per mission (WingBrain.Begin); this
             // logs the configured mode and the derived budget for a default mission start.
+            //
+            // Only settings a player can actually have changed. The tuned numbers are
+            // constants in WingTuning now, so logging them told a bug report nothing it
+            // could not read off the version, and buried the lines that do vary.
             WingBrain.Begin(Settings.Mode.Value);
             Logger.LogInfo(
-                "Effective tuning: " +
+                "Effective settings: " +
                 $"Mode={Settings.Mode.Value} [{WingBrain.Summary()}] " +
-                $"CommandAngle={Settings.CommandAngle.Value} " +
-                $"StationBankDegrees={Settings.StationBankDegrees.Value} " +
-                $"PursuitBankDegrees={Settings.PursuitBankDegrees.Value} " +
-                $"ThrottleGain={Settings.ThrottleGain.Value} " +
-                $"CaptureDistance={Settings.CaptureDistance.Value} " +
-                $"BankMatchBlend={Settings.BankMatchBlend.Value} " +
-                $"RotaryPowerSeconds={Settings.RotaryPowerSeconds.Value} " +
-                $"RotarySpacingScale={Settings.RotarySpacingScale.Value} " +
-                $"PanicSystem={Settings.PanicSystem.Value} " +
-                $"TakeoverOnDeath={Settings.TakeoverOnDeath.Value} " +
+                $"Shape={Settings.Shape.Value} " +
+                $"SlotSpacing={Settings.SlotSpacing.Value} " +
+                $"MaxWingSize={Settings.MaxWingSize.Value} " +
                 $"DefaultRoe={Settings.DefaultRoe.Value} " +
-                $"HoldEngageRange={Settings.HoldEngageRange.Value} " +
-                $"FreeEngageRange={Settings.FreeEngageRange.Value} " +
-                $"JammingEnabled={Settings.JammingEnabled.Value} " +
-                $"AerobaticsEnabled={Settings.AerobaticsEnabled.Value} " +
-                $"ManeuverEntryFloor={Settings.ManeuverAltitudeFloor.Value} " +
-                $"ManeuverHardFloor={Settings.ManeuverHardFloor.Value} " +
-                $"ManeuverMinSpeedFraction={Settings.ManeuverMinSpeedFraction.Value}");
+                $"AutoReturnOnEmpty={Settings.AutoReturnOnEmpty.Value} " +
+                $"RtbReturnsToReserve={Settings.RtbReturnsToReserve.Value} " +
+                $"TakeoverOnDeath={Settings.TakeoverOnDeath.Value} " +
+                $"Radio={Settings.Radio.Value} " +
+                $"PilotProgression={Settings.PilotProgression.Value} " +
+                $"Shop={Settings.ShopEnabled.Value} " +
+                $"Highlight={Settings.Highlight.Value}");
         }
 
         /// <summary>

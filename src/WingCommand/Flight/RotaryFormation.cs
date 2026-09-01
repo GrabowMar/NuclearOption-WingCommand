@@ -93,7 +93,7 @@ namespace WingCommand
             // reached the slot. Hover is an excellent position hold but a poor long-range
             // rejoin command: selecting it merely because the leader stopped left aircraft
             // hanging hundreds of metres away instead of closing into formation.
-            float hoverSpeed = Plugin.Settings.RotaryHoverSpeed.Value;
+            float hoverSpeed = WingTuning.RotaryHoverSpeed;
             bool wasHovering = previous == Mode.Hover;
             bool onStation = flat < spacing * StationSpacings;
 
@@ -146,7 +146,7 @@ namespace WingCommand
             // Twenty seconds of travel makes the autopilot's two collective terms cancel, so
             // it rests at hover power and can hold the commanded speed; a larger gap (via
             // vDes) automatically asks for more power.
-            float sustain = Mathf.Max(vDesMag, leader.speed) * Plugin.Settings.RotaryPowerSeconds.Value;
+            float sustain = Mathf.Max(vDesMag, leader.speed) * WingTuning.RotaryPowerSeconds;
             float powerDistance = Mathf.Max(MinPowerDistance, sustain);
 
             GlobalPosition destination = aircraft.GlobalPosition() + moveDir * powerDistance;

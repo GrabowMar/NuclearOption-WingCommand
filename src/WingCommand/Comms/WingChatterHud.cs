@@ -71,7 +71,7 @@ namespace WingCommand
 
         public static void Tick()
         {
-            if (!Plugin.Settings.RadioChatter.Value)
+            if (Plugin.Settings.Radio.Value == ChatterLevel.Off)
             {
                 queue.Clear();
                 current = null;

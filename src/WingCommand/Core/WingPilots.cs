@@ -215,7 +215,7 @@ namespace WingCommand
             if (pilot == null) return;
 
             pilot.Kills++;
-            Award(aircraft, Plugin.Settings.XpPerKill.Value, "kill");
+            Award(aircraft, WingTuning.XpPerKill, "kill");
 
             if (victim != null)
                 WingComms.Say(WingCommandManager.Instance?.Wing?.Find(aircraft),
@@ -229,12 +229,12 @@ namespace WingCommand
             if (pilot == null) return;
 
             pilot.Sorties++;
-            Award(aircraft, Plugin.Settings.XpPerSortie.Value, "sortie");
+            Award(aircraft, WingTuning.XpPerSortie, "sortie");
         }
 
         /// <summary>Credit surviving a missile that was actually shot at this aircraft.</summary>
         public static void NoteSurvivedEngagement(Aircraft aircraft) =>
-            Award(aircraft, Plugin.Settings.XpPerEngagement.Value, "survived engagement");
+            Award(aircraft, WingTuning.XpPerEngagement, "survived engagement");
 
         // ------------------------------------------------------------------ rank maths
 
@@ -244,7 +244,7 @@ namespace WingCommand
         /// </summary>
         public static int XpForRank(WingRank rank)
         {
-            int step = Mathf.Max(1, Plugin.Settings.XpPerRank.Value);
+            int step = Mathf.Max(1, WingTuning.XpPerRank);
             int r = (int)rank;
             return step * r * (r + 1) / 2;
         }
@@ -290,7 +290,7 @@ namespace WingCommand
             WingPilot pilot = Of(aircraft);
             if (pilot == null) return 0f;
 
-            float perRank = Mathf.Clamp01(Plugin.Settings.RankEffect.Value) * 0.06f;
+            float perRank = Mathf.Clamp01(WingTuning.RankEffect) * 0.06f;
             return (int)pilot.Rank * perRank;
         }
 

@@ -229,7 +229,7 @@ namespace WingCommand
             // How far out of position, as a fraction of the capture distance. One number
             // drives steering, bank authority and the throttle boost, so they can no longer
             // disagree about whether this wingman is settled.
-            float capture = Mathf.Max(Plugin.Settings.CaptureDistance.Value, 1f);
+            float capture = Mathf.Max(WingTuning.CaptureDistance, 1f);
             float outOfPosition = Mathf.SmoothStep(0f, 1f, Mathf.Clamp01(distance / capture));
 
             ThrottleState throttle = Throttle(aircraft, leader, controls, p, slot, toSlot, distance, capture, spacing,
@@ -309,7 +309,7 @@ namespace WingCommand
             // drops, and that memory is exactly what carried a wingman through the slot.
             float speedError = desiredSpeed - aircraft.speed;
             float throttle = Mathf.Clamp01(desiredSpeed / Mathf.Max(p.maxSpeed, 1f))
-                           + speedError * Plugin.Settings.ThrottleGain.Value;
+                           + speedError * WingTuning.ThrottleGain;
 
             // Player acceleration is the feed-forward term the speed loop cannot see.
             // When the leader selects military/max power, its speed has not risen yet, so
@@ -478,7 +478,7 @@ namespace WingCommand
             // exactly that many degrees of command. One configured angle, applied honestly,
             // and at cruise it allows roughly 2.5 times the correction the old fixed 220 m
             // clamp did.
-            float maxAngle = Mathf.Clamp(Plugin.Settings.CommandAngle.Value, 1f, 80f);
+            float maxAngle = Mathf.Clamp(WingTuning.CommandAngle, 1f, 80f);
             float maxCorrection = lookAhead * Mathf.Tan(maxAngle * Mathf.Deg2Rad);
             correction = Vector3.ClampMagnitude(correction, maxCorrection);
 
@@ -579,8 +579,8 @@ namespace WingCommand
             // product of velocity and command collapsing to zero — barrel-roll it. The roll
             // then bled the speed that would have closed the gap, which is why a
             // barrel-rolling wingman also fell behind and stayed there.
-            float maxBank = Mathf.Lerp(Plugin.Settings.StationBankDegrees.Value,
-                                       Plugin.Settings.PursuitBankDegrees.Value,
+            float maxBank = Mathf.Lerp(WingTuning.StationBank,
+                                       WingTuning.PursuitBank,
                                        outOfPosition);
 
             // The settled ceiling exists to stop the roll axis going chaotic in level
@@ -641,7 +641,7 @@ namespace WingCommand
                                             ControlInputs controls, float outOfPosition,
                                             float commandAngle)
         {
-            float blend = Plugin.Settings.BankMatchBlend.Value;
+            float blend = WingTuning.BankMatchBlend;
             if (blend <= 0.001f || outOfPosition > 0.5f) return;
 
             float myBank = BankOf(aircraft);

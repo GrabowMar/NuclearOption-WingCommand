@@ -151,7 +151,7 @@ namespace WingCommand
             switch (directive.Order)
             {
                 case WingOrder.Formation:
-                    formationState.BoostRejoin(Slot * Plugin.Settings.RejoinStagger.Value);
+                    formationState.BoostRejoin(Slot * WingTuning.RejoinStagger);
                     Pilot.SwitchState(formationState);
                     break;
 
@@ -212,7 +212,7 @@ namespace WingCommand
                     ? leader.GlobalPosition()
                     : Aircraft.GlobalPosition();
 
-            orbitState.SetAnchor(anchor, Plugin.Settings.OrbitRadius.Value);
+            orbitState.SetAnchor(anchor, WingTuning.OrbitRadius);
             Pilot.SwitchState(orbitState);
         }
 
@@ -302,7 +302,7 @@ namespace WingCommand
         {
             if (AssignedTarget != null && !AssignedTarget.disabled)
             {
-                formationState.BoostRejoin(Slot * Plugin.Settings.RejoinStagger.Value);
+                formationState.BoostRejoin(Slot * WingTuning.RejoinStagger);
                 Pilot.SwitchState(formationState);
             }
             else
@@ -667,7 +667,7 @@ namespace WingCommand
             // straight home the moment it joined.
             if (Time.timeSinceLevelLoad - joinedAt < 10f) return;
 
-            if (Fuel <= Plugin.Settings.BingoFuel.Value)
+            if (Fuel <= WingTuning.BingoFuel)
             {
                 WingComms.Say(this, WingComms.Call.Bingo);
                 Apply(WingOrder.ReturnToBase);
@@ -704,7 +704,7 @@ namespace WingCommand
             Aircraft leader = Leader;
             if (leader == null) return;
 
-            float leash = Plugin.Settings.LeashRadius.Value;
+            float leash = WingTuning.LeashRadius;
             float distanceSq = FastMath.SquareDistance(Aircraft.GlobalPosition(), leader.GlobalPosition());
 
             if (!recalled)
@@ -756,7 +756,7 @@ namespace WingCommand
         /// <summary>Enter the temporary defensive interrupt when this aircraft is warned.</summary>
         public void CheckThreats()
         {
-            if (!IsCommandable || IsPanicking || !Plugin.Settings.PanicSystem.Value) return;
+            if (!IsCommandable || IsPanicking) return;
             if (Aircraft.radarAlt < 5f) return;
 
             MissileWarning warning = Aircraft.GetMissileWarningSystem();

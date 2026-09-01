@@ -184,7 +184,7 @@ namespace WingCommand
 
         private bool ReachedStandoff()
         {
-            float standoff = Plugin.Settings.FallBackStandoff.Value;
+            float standoff = WingTuning.FallBackStandoff;
 
             // Either far enough from the threat, or close enough to the rally point that
             // there is nothing left to run towards.
@@ -231,7 +231,7 @@ namespace WingCommand
         private GlobalPosition ChooseRally(Vector3 away)
         {
             FactionHQ hq = aircraft.NetworkHQ;
-            float standoff = Plugin.Settings.FallBackStandoff.Value;
+            float standoff = WingTuning.FallBackStandoff;
 
             if (hq != null)
             {

@@ -1,4 +1,5 @@
 using System;
+using System.Linq;
 using Xunit;
 
 namespace WingCommand.Tests
@@ -28,15 +29,23 @@ namespace WingCommand.Tests
 
         // The whole reason this file exists: three copies of a shape switch went stale and
         // five new shapes displayed as run-together enum names in every menu that offered
-        // them. A name that is just the enum spelling is the bug, so assert against it.
+        // them. The bug is specifically a *multi-word* enum shown unsplit — Trail and Vic
+        // are one word and are supposed to render as themselves, which is what the first
+        // version of this test got wrong. So the assertion is on the CamelCase names only.
         [Fact]
-        public void EveryShapeHasASpacedDisplayName()
+        public void EveryMultiWordShapeHasASpacedDisplayName()
         {
             foreach (FormationShape shape in FormationShapes.All)
             {
+                string name = shape.ToString();
                 string pretty = FormationShapes.Pretty(shape);
+
                 Assert.False(string.IsNullOrWhiteSpace(pretty));
-                Assert.NotEqual(shape.ToString(), pretty);
+
+                // An interior capital means the enum spelling runs two words together.
+                bool multiWord = name.Skip(1).Any(char.IsUpper);
+                if (multiWord) Assert.Contains(" ", pretty);
+                Assert.Equal(name, pretty.Replace(" ", string.Empty));
             }
         }
 

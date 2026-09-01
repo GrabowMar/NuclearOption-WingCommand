@@ -88,7 +88,7 @@ namespace WingCommand
         private static void CollectTargets(WingRegistry wing)
         {
             scratch.Clear();
-            if (wing == null || !Plugin.Settings.HighlightWingTargets.Value) return;
+            if (wing == null || Plugin.Settings.Highlight.Value != HighlightMode.WingAndTargets) return;
 
             IReadOnlyList<WingMember> members = wing.Members;
             for (int i = 0; i < members.Count; i++)
@@ -149,8 +149,7 @@ namespace WingCommand
 
             // Membership wins: a wingman that is also somebody's target is still a wingman.
             if (unit is Aircraft aircraft && mgr.Wing.Contains(aircraft))
-                return Plugin.Settings.HighlightWingOnMap.Value ||
-                       Plugin.Settings.HighlightWingOnHud.Value
+                return Plugin.Settings.Highlight.Value != HighlightMode.Off
                     ? Role.Member
                     : Role.None;
 

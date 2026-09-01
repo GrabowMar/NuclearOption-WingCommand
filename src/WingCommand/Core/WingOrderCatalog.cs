@@ -75,7 +75,7 @@ namespace WingCommand
             if (order == WingOrder.DeliverCargo) return member.CanDeliverCargo;
             if (order == WingOrder.LandHere) return member.CanLandInPlace;
             if (order == WingOrder.JamTarget)
-                return WingBrain.Jamming && Plugin.Settings.JammingEnabled.Value && member.CanJam;
+                return WingBrain.Jamming && member.CanJam;
             if (order == WingOrder.Maneuver) return WingBrain.Manoeuvres;
             return true;
         }
