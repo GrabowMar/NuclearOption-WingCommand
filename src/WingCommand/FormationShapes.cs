@@ -2,6 +2,21 @@ using System;
 
 namespace WingCommand
 {
+    /// <summary>The formation geometries a wing can be told to fly.</summary>
+    internal enum FormationShape
+    {
+        EchelonRight,
+        EchelonLeft,
+        LineAbreast,
+        Trail,
+        CombatSpread,
+        FingerFour,
+        Vic,
+        Diamond,
+        Ladder,
+        Wall,
+    }
+
     /// <summary>
     /// One place that knows about the <see cref="FormationShape"/> enum: its values, how
     /// to name a shape for a human, and how to step through them.

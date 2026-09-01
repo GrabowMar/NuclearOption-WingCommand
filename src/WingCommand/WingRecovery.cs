@@ -52,7 +52,7 @@ namespace WingCommand
         {
             if (wing == null) return;
 
-            if (!Plugin.Config2.RtbReturnsToReserve.Value)
+            if (!Plugin.Settings.RtbReturnsToReserve.Value)
             {
                 // Recovery is switched off, so nothing is credited or despawned. Released
                 // aircraft still have to stop being tracked once they are down, or the

@@ -73,7 +73,7 @@ namespace WingCommand
             // tick does the rejoin instead - the same pattern AttackRunState uses.
             if (ManeuverCatalog.BreakDirection(kind) == 0 &&
                 kind != ManeuverKind.WingWaggle &&
-                !Plugin.Config2.AerobaticsEnabled.Value)
+                !Plugin.Settings.AerobaticsEnabled.Value)
             {
                 Abort("aerobatics are disabled in config");
                 return;
@@ -84,7 +84,7 @@ namespace WingCommand
                 return;
             }
 
-            float floor = Mathf.Max(Plugin.Config2.ManeuverAltitudeFloor.Value,
+            float floor = Mathf.Max(Plugin.Settings.ManeuverAltitudeFloor.Value,
                                     ManeuverCatalog.MinEntryAltitudeAgl(kind));
             if (aircraft.radarAlt < floor)
             {
@@ -92,7 +92,7 @@ namespace WingCommand
                 return;
             }
             float minSpeedFraction = Mathf.Max(
-                Plugin.Config2.ManeuverMinSpeedFraction.Value,
+                Plugin.Settings.ManeuverMinSpeedFraction.Value,
                 ManeuverCatalog.MinEntrySpeedFraction(kind));
             if (fixedWing && aircraft.speed < parameters.maxSpeed * minSpeedFraction)
             {
@@ -101,7 +101,7 @@ namespace WingCommand
             }
 
             WingComms.Say(member, WingComms.Call.Maneuvering, ManeuverCatalog.Label(kind));
-            if (Plugin.Config2.VerboseLogging.Value)
+            if (Plugin.Settings.VerboseLogging.Value)
                 Plugin.Logger.LogInfo(
                     $"[Maneuver] {aircraft.unitName} -> {kind} " +
                     $"(alt {aircraft.radarAlt:F0} m, speed {aircraft.speed:F0} m/s)");
@@ -126,7 +126,7 @@ namespace WingCommand
             }
 
             // Hard floor and timeout apply in every phase of every manoeuvre.
-            if (aircraft.radarAlt < Plugin.Config2.ManeuverHardFloor.Value)
+            if (aircraft.radarAlt < Plugin.Settings.ManeuverHardFloor.Value)
             {
                 RecoverWingsLevel();
                 Finish(unable: true, "reached the hard deck");
@@ -363,7 +363,7 @@ namespace WingCommand
             // (a clean finish versus an early recovery) is only useful in the log.
             WingComms.Say(member, WingComms.Call.ManeuverDone);
 
-            if (Plugin.Config2.VerboseLogging.Value)
+            if (Plugin.Settings.VerboseLogging.Value)
                 Plugin.Logger.LogInfo(
                     $"[Maneuver] {(aircraft != null ? aircraft.unitName : "?")} {kind} " +
                     (unable ? "unable" : "done") + " (" + reason + ")");

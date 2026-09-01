@@ -35,7 +35,7 @@ namespace WingCommand
             }
             catch (Exception e)
             {
-                if (Plugin.Config2.VerboseLogging.Value)
+                if (Plugin.Settings.VerboseLogging.Value)
                     Plugin.Logger.LogWarning("Map icon refresh failed: " + e.Message);
             }
         }
@@ -55,7 +55,7 @@ namespace WingCommand
             [HarmonyPostfix]
             private static void Postfix(MapIcon __instance)
             {
-                if (!Plugin.Config2.HighlightWingOnMap.Value) return;
+                if (!Plugin.Settings.HighlightWingOnMap.Value) return;
                 if (!(__instance is UnitMapIcon unitIcon) || unitIcon.iconImage == null) return;
 
                 WingMarkers.Role role = WingMarkers.RoleOf(unitIcon.unit);

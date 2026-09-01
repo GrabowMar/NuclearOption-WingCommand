@@ -48,9 +48,9 @@ namespace WingCommand
 
             Vector3 offset = FormationSolver.SlotOffset(
                 forward, slot,
-                Plugin.Config2.Shape.Value,
-                Plugin.Config2.SlotSpacing.Value,
-                Plugin.Config2.SlotStack.Value);
+                Plugin.Settings.Shape.Value,
+                Plugin.Settings.SlotSpacing.Value,
+                Plugin.Settings.SlotStack.Value);
 
             Vector3 position = ClearOfGround(leader.transform.position + offset);
 
@@ -159,7 +159,7 @@ namespace WingCommand
                 return;
             }
 
-            int want = Plugin.Config2.MaxWingSize.Value - wing.Count;
+            int want = Plugin.Settings.MaxWingSize.Value - wing.Count;
             if (want <= 0)
             {
                 Toast("Wing is already full");
@@ -225,7 +225,7 @@ namespace WingCommand
         {
             why = null;
 
-            if (!Plugin.Config2.EnableDebugActions.Value)
+            if (!Plugin.Settings.EnableDebugActions.Value)
             {
                 why = "Debug actions are disabled in config";
                 return false;
@@ -258,7 +258,7 @@ namespace WingCommand
         private static void Toast(string message)
         {
             WingCommandManager.Instance?.DebugToast(message);
-            if (Plugin.Config2.VerboseLogging.Value)
+            if (Plugin.Settings.VerboseLogging.Value)
                 Plugin.Logger.LogInfo("[Debug] " + message);
         }
     }

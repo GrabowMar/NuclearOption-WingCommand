@@ -89,7 +89,7 @@ namespace WingCommand
             if (facing.sqrMagnitude < 0.0001f) facing = Vector3.forward;
             facing.Normalize();
 
-            if (Plugin.Config2.VerboseLogging.Value)
+            if (Plugin.Settings.VerboseLogging.Value)
                 Plugin.Logger.LogInfo(
                     $"[Wing] {aircraft.unitName} landing ({phase}) from {hold:F0} m");
         }
@@ -120,7 +120,7 @@ namespace WingCommand
                 phase = Phase.Down;
                 WingComms.Say(member, WingComms.Call.Down);
 
-                if (Plugin.Config2.VerboseLogging.Value)
+                if (Plugin.Settings.VerboseLogging.Value)
                     Plugin.Logger.LogInfo($"[Wing] {aircraft.unitName} is down");
 
                 return;

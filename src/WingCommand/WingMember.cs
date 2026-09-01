@@ -143,7 +143,7 @@ namespace WingCommand
             // intent. Self-preservation continues until clear, then resumes this exact order.
             if (IsPanicking)
             {
-                if (Plugin.Config2.VerboseLogging.Value)
+                if (Plugin.Settings.VerboseLogging.Value)
                     Plugin.Logger.LogInfo($"[Panic] {Name} queued {directive.Order} while defensive");
                 return;
             }
@@ -151,7 +151,7 @@ namespace WingCommand
             switch (directive.Order)
             {
                 case WingOrder.Formation:
-                    formationState.BoostRejoin(Slot * Plugin.Config2.RejoinStagger.Value);
+                    formationState.BoostRejoin(Slot * Plugin.Settings.RejoinStagger.Value);
                     Pilot.SwitchState(formationState);
                     break;
 
@@ -176,7 +176,7 @@ namespace WingCommand
                             ? leader.GlobalPosition()
                             : Aircraft.GlobalPosition();
 
-                    orbitState.SetAnchor(anchor, Plugin.Config2.OrbitRadius.Value);
+                    orbitState.SetAnchor(anchor, Plugin.Settings.OrbitRadius.Value);
                     Pilot.SwitchState(orbitState);
                     break;
                 }
@@ -258,7 +258,7 @@ namespace WingCommand
                     // was re-applied - fall back to plain formation.
                     if (AssignedTarget != null && !AssignedTarget.disabled)
                     {
-                        formationState.BoostRejoin(Slot * Plugin.Config2.RejoinStagger.Value);
+                        formationState.BoostRejoin(Slot * Plugin.Settings.RejoinStagger.Value);
                         Pilot.SwitchState(formationState);
                     }
                     else
@@ -273,7 +273,7 @@ namespace WingCommand
                     break;
             }
 
-            if (Plugin.Config2.VerboseLogging.Value)
+            if (Plugin.Settings.VerboseLogging.Value)
                 Plugin.Logger.LogInfo($"[Wing] {Name} -> {directive.Order}");
         }
 
@@ -457,7 +457,7 @@ namespace WingCommand
                 return;
             }
 
-            if (Plugin.Config2.VerboseLogging.Value)
+            if (Plugin.Settings.VerboseLogging.Value)
                 Plugin.Logger.LogInfo($"[Wing] {Name} releasing to combat AI: {reason}");
 
             Directive = WingDirective.Simple(WingOrder.Engage);
@@ -487,7 +487,7 @@ namespace WingCommand
                 return;
             }
 
-            if (Plugin.Config2.VerboseLogging.Value)
+            if (Plugin.Settings.VerboseLogging.Value)
                 Plugin.Logger.LogInfo($"[Wing] {Name} released and sent home: {reason}");
 
             TacticalCoordinator.Release(Aircraft);
@@ -610,7 +610,7 @@ namespace WingCommand
         /// </summary>
         public void CheckReserves()
         {
-            if (!IsCommandable || !Plugin.Config2.AutoReturnOnEmpty.Value) return;
+            if (!IsCommandable || !Plugin.Settings.AutoReturnOnEmpty.Value) return;
             if (IsPanicking) return;
 
             // Orders that are already going somewhere deliberate are not interrupted by a
@@ -633,7 +633,7 @@ namespace WingCommand
             // straight home the moment it joined.
             if (Time.timeSinceLevelLoad - joinedAt < 10f) return;
 
-            if (Fuel <= Plugin.Config2.BingoFuel.Value)
+            if (Fuel <= Plugin.Settings.BingoFuel.Value)
             {
                 WingComms.Say(this, WingComms.Call.Bingo);
                 Apply(WingOrder.ReturnToBase);
@@ -670,14 +670,14 @@ namespace WingCommand
             Aircraft leader = Leader;
             if (leader == null) return;
 
-            float leash = Plugin.Config2.LeashRadius.Value;
+            float leash = Plugin.Settings.LeashRadius.Value;
             float distanceSq = FastMath.SquareDistance(Aircraft.GlobalPosition(), leader.GlobalPosition());
 
             if (!recalled)
             {
                 if (distanceSq < leash * leash) return;
 
-                if (Plugin.Config2.VerboseLogging.Value)
+                if (Plugin.Settings.VerboseLogging.Value)
                     Plugin.Logger.LogInfo($"[Wing] {Name} past leash - rejoining");
 
                 WingComms.Say(this, WingComms.Call.Rejoining);
@@ -722,7 +722,7 @@ namespace WingCommand
         /// <summary>Enter the temporary defensive interrupt when this aircraft is warned.</summary>
         public void CheckThreats()
         {
-            if (!IsCommandable || IsPanicking || !Plugin.Config2.PanicSystem.Value) return;
+            if (!IsCommandable || IsPanicking || !Plugin.Settings.PanicSystem.Value) return;
             if (Aircraft.radarAlt < 5f) return;
 
             MissileWarning warning = Aircraft.GetMissileWarningSystem();
@@ -754,7 +754,7 @@ namespace WingCommand
                 resume = WingDirective.Simple(WingOrder.Formation);
             }
 
-            if (Plugin.Config2.VerboseLogging.Value)
+            if (Plugin.Settings.VerboseLogging.Value)
                 Plugin.Logger.LogInfo($"[Panic] {Name} clear -> {resume.Order}");
 
             WingPilotRoster.NoteSurvivedEngagement(Aircraft);

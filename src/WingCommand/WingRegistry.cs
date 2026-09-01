@@ -391,7 +391,7 @@ namespace WingCommand
                 if (m.Alive) continue;
                 if (WingRecovery.IsPending(m)) continue;
 
-                if (Plugin.Config2.VerboseLogging.Value)
+                if (Plugin.Settings.VerboseLogging.Value)
                     Plugin.Logger.LogInfo("[Wing] lost " + m.Name + ": " + LostReason(m));
 
                 WingComms.ReportLoss(m, members);
@@ -468,14 +468,14 @@ namespace WingCommand
         /// option appear to work only some of the time.
         /// </summary>
         public static bool HasRoom(int occupied) =>
-            Plugin.Config2.DisableWingSizeLimit.Value ||
-            occupied + WingShop.PendingWingSlots < Plugin.Config2.MaxWingSize.Value;
+            Plugin.Settings.DisableWingSizeLimit.Value ||
+            occupied + WingShop.PendingWingSlots < Plugin.Settings.MaxWingSize.Value;
 
         /// <summary>Text used beside the live count when the unsafe bypass is enabled.</summary>
         public static string WingLimitLabel =>
-            Plugin.Config2.DisableWingSizeLimit.Value
+            Plugin.Settings.DisableWingSizeLimit.Value
                 ? "NO LIMIT"
-                : Plugin.Config2.MaxWingSize.Value.ToString();
+                : Plugin.Settings.MaxWingSize.Value.ToString();
 
         public bool CanRecruit(Aircraft candidate, out string reason)
         {
@@ -559,7 +559,7 @@ namespace WingCommand
         /// </summary>
         private void WarnIfTooSlow(Aircraft recruit)
         {
-            if (!Plugin.Config2.KeepUpReports.Value || Leader == null) return;
+            if (!Plugin.Settings.KeepUpReports.Value || Leader == null) return;
 
             float mine = recruit.GetAircraftParameters().maxSpeed;
             float leader = Leader.GetAircraftParameters().maxSpeed;
@@ -652,15 +652,15 @@ namespace WingCommand
             // Unlimited cannot be represented as a loop bound. Count + 1 is sufficient:
             // among that many 1-based slots there must be a free one, even when surviving
             // members retain high slot numbers after losses.
-            int max = Plugin.Config2.DisableWingSizeLimit.Value
+            int max = Plugin.Settings.DisableWingSizeLimit.Value
                 ? members.Count + 1
-                : Plugin.Config2.MaxWingSize.Value;
+                : Plugin.Settings.MaxWingSize.Value;
 
             if (Leader == null || joining == null)
                 return members.Count + 1;
 
-            float spacing = Plugin.Config2.SlotSpacing.Value;
-            if (IsRotary(joining)) spacing *= Plugin.Config2.RotarySpacingScale.Value;
+            float spacing = Plugin.Settings.SlotSpacing.Value;
+            if (IsRotary(joining)) spacing *= Plugin.Settings.RotarySpacingScale.Value;
 
             Vector3 from = joining.transform.position;
             Vector3 leaderPos = Leader.transform.position;
@@ -674,8 +674,8 @@ namespace WingCommand
                 if (SlotTaken(slot)) continue;
 
                 Vector3 slotPos = leaderPos + FormationSolver.SlotOffset(
-                    leaderForward, slot, Plugin.Config2.Shape.Value,
-                    spacing, Plugin.Config2.SlotStack.Value);
+                    leaderForward, slot, Plugin.Settings.Shape.Value,
+                    spacing, Plugin.Settings.SlotStack.Value);
 
                 float d = (slotPos - from).sqrMagnitude;
                 if (d < bestDistance)

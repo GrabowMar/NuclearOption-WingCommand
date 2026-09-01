@@ -96,7 +96,7 @@ namespace WingCommand
 
             WingComms.Say(member, WingComms.Call.Delivering);
 
-            if (Plugin.Config2.VerboseLogging.Value)
+            if (Plugin.Settings.VerboseLogging.Value)
                 Plugin.Logger.LogInfo(
                     $"[Cargo] {aircraft.unitName} running {cargoProgress.LastAmount} load(s) to the drop point");
         }
@@ -170,7 +170,7 @@ namespace WingCommand
                 ignoreCollisions: false,
                 runwayAlign: false,
                 effort: 1f,
-                bankAllowed: Mathf.Min(Plugin.Config2.StationBankDegrees.Value,
+                bankAllowed: Mathf.Min(Plugin.Settings.StationBankDegrees.Value,
                                        FixedWingFormation.MaxSafeBank),
                 followTerrain: true,
                 altitudeHold: Mathf.Max(DropRunAltitude, aircraft.maxRadius),

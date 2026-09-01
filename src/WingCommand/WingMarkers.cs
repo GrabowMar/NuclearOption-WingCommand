@@ -88,7 +88,7 @@ namespace WingCommand
         private static void CollectTargets(WingRegistry wing)
         {
             scratch.Clear();
-            if (wing == null || !Plugin.Config2.HighlightWingTargets.Value) return;
+            if (wing == null || !Plugin.Settings.HighlightWingTargets.Value) return;
 
             IReadOnlyList<WingMember> members = wing.Members;
             for (int i = 0; i < members.Count; i++)
@@ -149,8 +149,8 @@ namespace WingCommand
 
             // Membership wins: a wingman that is also somebody's target is still a wingman.
             if (unit is Aircraft aircraft && mgr.Wing.Contains(aircraft))
-                return Plugin.Config2.HighlightWingOnMap.Value ||
-                       Plugin.Config2.HighlightWingOnHud.Value
+                return Plugin.Settings.HighlightWingOnMap.Value ||
+                       Plugin.Settings.HighlightWingOnHud.Value
                     ? Role.Member
                     : Role.None;
 
@@ -183,7 +183,7 @@ namespace WingCommand
         {
             get
             {
-                Parse(Plugin.Config2.WingIconColor.Value, ref memberFrom, ref memberColor,
+                Parse(Plugin.Settings.WingIconColor.Value, ref memberFrom, ref memberColor,
                       new Color(0.22f, 1f, 0.40f), "WingMemberColor");
                 return memberColor;
             }
@@ -194,7 +194,7 @@ namespace WingCommand
         {
             get
             {
-                Parse(Plugin.Config2.WingTargetColor.Value, ref targetFrom, ref targetColor,
+                Parse(Plugin.Settings.WingTargetColor.Value, ref targetFrom, ref targetColor,
                       new Color(1f, 0.69f, 0.13f), "WingTargetColor");
                 return targetColor;
             }

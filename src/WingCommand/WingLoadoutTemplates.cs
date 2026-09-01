@@ -59,7 +59,7 @@ namespace WingCommand
             try
             {
                 records.Clear();
-                records.AddRange(LoadoutTemplateCodec.Decode(Plugin.Config2.LoadoutTemplates.Value));
+                records.AddRange(LoadoutTemplateCodec.Decode(Plugin.Settings.LoadoutTemplates.Value));
             }
             catch (Exception e)
             {
@@ -76,7 +76,7 @@ namespace WingCommand
         {
             try
             {
-                Plugin.Config2.LoadoutTemplates.Value = LoadoutTemplateCodec.Encode(records);
+                Plugin.Settings.LoadoutTemplates.Value = LoadoutTemplateCodec.Encode(records);
             }
             catch (Exception e)
             {

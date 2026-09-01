@@ -56,7 +56,7 @@ namespace WingCommand
             BeginFlight(pilot);
             lastFiredTime = 0f;
 
-            if (Plugin.Config2.VerboseLogging.Value)
+            if (Plugin.Settings.VerboseLogging.Value)
             {
                 Unit target = member.AssignedTarget;
                 Plugin.Logger.LogInfo(

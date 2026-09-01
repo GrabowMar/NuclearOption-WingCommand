@@ -35,11 +35,11 @@ namespace WingCommand
         {
             BeginFlight(pilot);
 
-            if (radius <= 0f) radius = Plugin.Config2.OrbitRadius.Value;
+            if (radius <= 0f) radius = Plugin.Settings.OrbitRadius.Value;
             lastEngageCheck = 0f;
             lastFiredTime = 0f;
 
-            if (Plugin.Config2.VerboseLogging.Value)
+            if (Plugin.Settings.VerboseLogging.Value)
                 Plugin.Logger.LogInfo($"[Wing] {aircraft.unitName} orbiting at {radius:F0} m");
         }
 

@@ -66,7 +66,7 @@ namespace WingCommand
 
             StartFlares();
 
-            if (Plugin.Config2.VerboseLogging.Value)
+            if (Plugin.Settings.VerboseLogging.Value)
             {
                 Plugin.Logger.LogInfo(
                     $"[Wing] {aircraft.unitName} falling back, breaking {fan:F0} deg off the threat axis");
@@ -184,7 +184,7 @@ namespace WingCommand
 
         private bool ReachedStandoff()
         {
-            float standoff = Plugin.Config2.FallBackStandoff.Value;
+            float standoff = Plugin.Settings.FallBackStandoff.Value;
 
             // Either far enough from the threat, or close enough to the rally point that
             // there is nothing left to run towards.
@@ -231,7 +231,7 @@ namespace WingCommand
         private GlobalPosition ChooseRally(Vector3 away)
         {
             FactionHQ hq = aircraft.NetworkHQ;
-            float standoff = Plugin.Config2.FallBackStandoff.Value;
+            float standoff = Plugin.Settings.FallBackStandoff.Value;
 
             if (hq != null)
             {

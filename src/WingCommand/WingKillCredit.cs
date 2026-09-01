@@ -42,7 +42,7 @@ namespace WingCommand
         /// <summary>Remember that this aircraft has just fired on this target.</summary>
         public static void NoteShot(Aircraft shooter, Unit target)
         {
-            if (!Plugin.Config2.PilotProgression.Value) return;
+            if (!Plugin.Settings.PilotProgression.Value) return;
             if (shooter == null || target == null || target is Missile) return;
 
             float expires = Time.timeSinceLevelLoad + CreditWindow;

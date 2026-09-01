@@ -347,7 +347,7 @@ namespace WingCommand
                 card.Meta.text = "FUEL " + fuel + "%     STORES " + member.Ammo +
                                  "     RANGE " + UnitConverter.DistanceReading(range);
 
-                bool low = member.Fuel <= Plugin.Config2.BingoFuel.Value;
+                bool low = member.Fuel <= Plugin.Settings.BingoFuel.Value;
                 RectTransform fill = card.FuelFill.rectTransform;
                 float trackWidth = card.FuelTrack.rectTransform.sizeDelta.x;
                 fill.sizeDelta = new Vector2(trackWidth * Mathf.Clamp01(member.Fuel),
@@ -473,7 +473,7 @@ namespace WingCommand
 
         private static bool CanOffer(WingRegistry registry)
         {
-            if (!Plugin.Config2.TakeoverOnDeath.Value || registry == null ||
+            if (!Plugin.Settings.TakeoverOnDeath.Value || registry == null ||
                 NetworkSceneSingleton<Spawner>.i == null)
                 return false;
 

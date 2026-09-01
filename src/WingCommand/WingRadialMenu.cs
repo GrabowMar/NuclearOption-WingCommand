@@ -166,7 +166,7 @@ namespace WingCommand
                 FormationShape captured = shape;
                 WingMenuAction entry = WingMenuAction.Create(FormationShapes.Pretty(captured), _ =>
                 {
-                    Plugin.Config2.Shape.Value = captured;
+                    Plugin.Settings.Shape.Value = captured;
                     Mgr?.Toast("Formation: " + FormationShapes.Pretty(captured));
                     RestoreStockWheel();
                 });
@@ -333,7 +333,7 @@ namespace WingCommand
         [HarmonyPrefix]
         private static void SetupMain_Prefix(RadialMenuMain __instance)
         {
-            if (!Plugin.Config2.UseNativeRadial.Value || !GameAccess.Available) return;
+            if (!Plugin.Settings.UseNativeRadial.Value || !GameAccess.Available) return;
 
             try
             {

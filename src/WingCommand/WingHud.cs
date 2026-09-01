@@ -107,7 +107,7 @@ namespace WingCommand
         {
             CombatHUD hud = SceneSingleton<CombatHUD>.i;
             DynamicMap map = SceneSingleton<DynamicMap>.i;
-            bool visible = Plugin.Config2.ShowHud.Value && wing.Count > 0 &&
+            bool visible = Plugin.Settings.ShowHud.Value && wing.Count > 0 &&
                            !DynamicMap.mapMaximized && hud != null && hud.isActiveAndEnabled &&
                            map != null && map.gameObject.activeInHierarchy;
             if (!visible)
@@ -346,7 +346,7 @@ namespace WingCommand
         private static void RefreshStatusPanel(WingRegistry wing)
         {
             statusTitle.text = "WING " + wing.Count + "  ·  " +
-                               FormationShapes.Pretty(Plugin.Config2.Shape.Value).ToUpperInvariant() +
+                               FormationShapes.Pretty(Plugin.Settings.Shape.Value).ToUpperInvariant() +
                                "  ·  " + wing.Roe.ToString().ToUpperInvariant();
 
             while (statusRows.Count < wing.Count)
@@ -452,12 +452,12 @@ namespace WingCommand
                     : 0f;
                 state.text = StateText(member);
                 distance.text = UnitConverter.DistanceReading(range);
-                float proximity = 1f - Mathf.Clamp01(range / Plugin.Config2.LeashRadius.Value);
+                float proximity = 1f - Mathf.Clamp01(range / Plugin.Settings.LeashRadius.Value);
                 rangeCue.rectTransform.sizeDelta = new Vector2(
                     Mathf.Lerp(3f, cueWidth, proximity), 2f);
 
                 bool damaged = IsDamaged(aircraft);
-                bool lowStores = member.Fuel <= Plugin.Config2.BingoFuel.Value || member.Ammo <= 0;
+                bool lowStores = member.Fuel <= Plugin.Settings.BingoFuel.Value || member.Ammo <= 0;
                 // Colours come from the game's theme, so the strip follows a theme change the
                 // way the rest of the HUD does.
                 Color color = !member.Alive || damaged || member.IsPanicking

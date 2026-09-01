@@ -105,7 +105,7 @@ namespace WingCommand
 
         public static void Say(WingMember member, Call call, string detail = null)
         {
-            if (!Plugin.Config2.RadioChatter.Value || member == null) return;
+            if (!Plugin.Settings.RadioChatter.Value || member == null) return;
 
             // Performance mode keeps only the calls a commander actually needs to hear.
             if (!WingBrain.RichChatter && !Critical(call)) return;
@@ -129,7 +129,7 @@ namespace WingCommand
         /// </summary>
         public static void Acknowledge(IReadOnlyList<WingMember> members, WingOrder order)
         {
-            if (!Plugin.Config2.RadioChatter.Value || members == null) return;
+            if (!Plugin.Settings.RadioChatter.Value || members == null) return;
 
             // Order acknowledgements are flavour, not information - dropped in Performance mode.
             if (!WingBrain.RichChatter) return;
@@ -173,7 +173,7 @@ namespace WingCommand
         /// <summary>Have a surviving pilot call a loss; the dead pilot never reports itself.</summary>
         public static void ReportLoss(WingMember lost, IReadOnlyList<WingMember> flight)
         {
-            if (!Plugin.Config2.RadioChatter.Value || lost == null) return;
+            if (!Plugin.Settings.RadioChatter.Value || lost == null) return;
 
             WingMember reporter = null;
             if (flight != null)
@@ -211,7 +211,7 @@ namespace WingCommand
         {
             WingChatterHud.Tick();
 
-            if (!Plugin.Config2.RadioChatter.Value || !WingBrain.RichChatter || wing == null)
+            if (!Plugin.Settings.RadioChatter.Value || !WingBrain.RichChatter || wing == null)
                 return;
 
             float now = Time.unscaledTime;

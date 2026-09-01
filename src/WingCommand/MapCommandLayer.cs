@@ -193,7 +193,7 @@ namespace WingCommand
         /// </summary>
         internal static bool ShouldConsumeNativeRightClick()
         {
-            if (!Plugin.Config2.MapCommandEnabled.Value || !DynamicMap.mapMaximized ||
+            if (!Plugin.Settings.MapCommandEnabled.Value || !DynamicMap.mapMaximized ||
                 !WmcScreen.TacticalCommandModeActive || !Input.GetMouseButtonDown(1))
                 return false;
 
@@ -337,7 +337,7 @@ namespace WingCommand
         [HarmonyPrefix]
         private static bool Prefix(UnitMapIcon __instance, MapIcon.ClickSource clickSource)
         {
-            if (!Plugin.Config2.MapCommandEnabled.Value || !DynamicMap.mapMaximized ||
+            if (!Plugin.Settings.MapCommandEnabled.Value || !DynamicMap.mapMaximized ||
                 !WmcScreen.TacticalCommandModeActive)
                 return true;
 

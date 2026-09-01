@@ -170,7 +170,7 @@ namespace WingCommand
         private static void CollectLegs(WingRegistry wing)
         {
             legs.Clear();
-            if (wing == null || !Plugin.Config2.MapCommandEnabled.Value) return;
+            if (wing == null || !Plugin.Settings.MapCommandEnabled.Value) return;
 
             WingCommandManager manager = WingCommandManager.Instance;
 

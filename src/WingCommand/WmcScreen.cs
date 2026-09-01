@@ -265,7 +265,7 @@ namespace WingCommand
         /// </summary>
         public static void Tick(WingRegistry wing)
         {
-            if (gaveUp || !GameAccess.MfdAvailable || !Plugin.Config2.UseMfdPanel.Value) return;
+            if (gaveUp || !GameAccess.MfdAvailable || !Plugin.Settings.UseMfdPanel.Value) return;
 
             if (screen == null)
             {
@@ -1384,7 +1384,7 @@ namespace WingCommand
             WingCommandManager manager = WingCommandManager.Instance;
 
             if (shapeLabel != null)
-                shapeLabel.text = FormationShapes.Pretty(Plugin.Config2.Shape.Value);
+                shapeLabel.text = FormationShapes.Pretty(Plugin.Settings.Shape.Value);
 
             if (summaryLabel != null)
                 summaryLabel.text = "COMMAND: " + (manager?.Selection.Summary(wing) ?? "ALL") +
@@ -1546,7 +1546,7 @@ namespace WingCommand
         /// </summary>
         private static float AddShop(RectTransform parent, float y)
         {
-            if (!Plugin.Config2.ShopEnabled.Value) return y;
+            if (!Plugin.Settings.ShopEnabled.Value) return y;
 
             // Its own popup rather than the Loadout page's: each is parented to the page it
             // covers, so a list left open on one tab cannot draw over another.
@@ -1675,7 +1675,7 @@ namespace WingCommand
         /// <summary>Rebind the shop rows and the allocation header.</summary>
         private static void RefreshShop()
         {
-            if (!Plugin.Config2.ShopEnabled.Value || shopRows.Count == 0) return;
+            if (!Plugin.Settings.ShopEnabled.Value || shopRows.Count == 0) return;
 
             IReadOnlyList<WingShop.Offer> offers = WingShop.Catalogue();
 
@@ -1907,7 +1907,7 @@ namespace WingCommand
 
             WingShop.SquadronState squadron = WingShop.Squadron();
             string text = "SQUADRON " + squadron.Active + " / " + squadron.Limit;
-            if (Plugin.Config2.DisableWingSizeLimit.Value)
+            if (Plugin.Settings.DisableWingSizeLimit.Value)
                 text += "  ·  WING NO LIMIT DOES NOT BYPASS THIS CAP";
 
             if (!squadron.AtCapacity)
@@ -2150,7 +2150,7 @@ namespace WingCommand
                 float fuel = m.Fuel;
                 int ammo = m.Ammo;
                 reserves.text = Mathf.RoundToInt(fuel * 100f) + "%  " + ammo;
-                reserves.color = fuel <= Plugin.Config2.BingoFuel.Value || ammo <= 0
+                reserves.color = fuel <= Plugin.Settings.BingoFuel.Value || ammo <= 0
                     ? new Color(1f, 0.55f, 0.2f)
                     : Dim();
 
@@ -3173,7 +3173,7 @@ namespace WingCommand
 
             if (airframeStateLabel != null)
             {
-                bool poor = fuel <= Plugin.Config2.BingoFuel.Value ||
+                bool poor = fuel <= Plugin.Settings.BingoFuel.Value ||
                             ammo <= 0 || integrity < 0.75f;
                 airframeStateLabel.color = poor ? Warning() : Friendly();
             }
@@ -3388,7 +3388,7 @@ namespace WingCommand
 
         private static void CycleShape(int direction)
         {
-            Plugin.Config2.Shape.Value = FormationShapes.CycleCore(Plugin.Config2.Shape.Value, direction);
+            Plugin.Settings.Shape.Value = FormationShapes.CycleCore(Plugin.Settings.Shape.Value, direction);
         }
 
         // The widgets themselves live in WingUi, which is also where the aircraft-recovery

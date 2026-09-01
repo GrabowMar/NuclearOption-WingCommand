@@ -317,21 +317,21 @@ namespace WingCommand
         /// returned safely to the wing reserve has already been paid for.
         /// </summary>
         public static float CurrentPriceOf(AircraftDefinition definition) =>
-            Plugin.Config2.FreePlanePurchases.Value ||
+            Plugin.Settings.FreePlanePurchases.Value ||
             WingSupplyReserve.OwnedOf(definition) > 0
                 ? 0f
                 : PriceOf(definition) * (WouldExceedLimit ? ExceedLimitMultiplier : 1f);
 
         /// <summary>The multiplier charged for an airframe bought past the squadron cap.</summary>
         public static float ExceedLimitMultiplier =>
-            Mathf.Max(1f, Plugin.Config2.ExceedLimitCostMultiplier.Value);
+            Mathf.Max(1f, Plugin.Settings.ExceedLimitCostMultiplier.Value);
 
         /// <summary>Rank required before the cap may be exceeded at all.</summary>
-        public static int ExceedLimitRank => Plugin.Config2.ExceedLimitRank.Value;
+        public static int ExceedLimitRank => Plugin.Settings.ExceedLimitRank.Value;
 
         /// <summary>How many over-cap airframes the player may have in the air at once.</summary>
         public static int ExceedLimitAllowance =>
-            Mathf.Clamp(Plugin.Config2.ExceedLimitAllowance.Value, 1, 3);
+            Mathf.Clamp(Plugin.Settings.ExceedLimitAllowance.Value, 1, 3);
 
         // Full-price requisitions remain the player's airframes while they survive. This is
         // deliberately separate from WingRecruitment's paid-assignment set: paying 25% to
@@ -474,7 +474,7 @@ namespace WingCommand
                 listedDefinitions.Add(definition);
             }
 
-            if (Plugin.Config2.IncludeUndeclaredAircraft.Value)
+            if (Plugin.Settings.IncludeUndeclaredAircraft.Value)
                 AddUndeclared(hq, rank, listedDefinitions);
 
             catalogue.Sort((a, b) => a.BasePrice.CompareTo(b.BasePrice));
@@ -537,7 +537,7 @@ namespace WingCommand
 
         private static int UndeclaredRemaining(AircraftDefinition definition)
         {
-            int allowance = Mathf.RoundToInt(Plugin.Config2.UndeclaredStock.Value);
+            int allowance = Mathf.RoundToInt(Plugin.Settings.UndeclaredStock.Value);
             return allowance - (undeclaredBought.TryGetValue(definition, out int used) ? used : 0);
         }
 
@@ -560,7 +560,7 @@ namespace WingCommand
                 new PurchaseQuote(false, why, price, stock, overLimit, loadout,
                                   player, hq, source, declared);
 
-            if (!Plugin.Config2.ShopEnabled.Value) return Denied("The shop is disabled in config");
+            if (!Plugin.Settings.ShopEnabled.Value) return Denied("The shop is disabled in config");
             if (definition == null) return Denied("No aircraft selected");
 
             WingRegistry wing = WingCommandManager.Instance?.Wing;
@@ -599,7 +599,7 @@ namespace WingCommand
                 return Denied(capReason);
 
             bool alreadyOwned = source == WingSupplyReserve.Source.Owned;
-            bool debugFree = Plugin.Config2.FreePlanePurchases.Value;
+            bool debugFree = Plugin.Settings.FreePlanePurchases.Value;
             price = alreadyOwned || debugFree ? 0f : PriceOf(definition) * multiplier;
             if (player.Allocation < price)
                 return Denied("Need " + Mathf.RoundToInt(price) + ", have " +
@@ -639,7 +639,7 @@ namespace WingCommand
 
             paid = quote.Price;
             bool alreadyOwned = quote.Source == WingSupplyReserve.Source.Owned;
-            bool debugFree = Plugin.Config2.FreePlanePurchases.Value;
+            bool debugFree = Plugin.Settings.FreePlanePurchases.Value;
 
             Plugin.Logger.LogInfo(
                 $"[Shop] requisitioned {definition.unitName} for {quote.Price:F0}" +

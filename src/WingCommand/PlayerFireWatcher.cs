@@ -50,13 +50,13 @@ namespace WingCommand
             RoleIdentity role = station.WeaponInfo.effectiveness;
             if (role.antiSurface <= role.antiAir) return;
 
-            windowUntil = Time.timeSinceLevelLoad + Plugin.Config2.MirrorWindowSeconds.Value;
+            windowUntil = Time.timeSinceLevelLoad + Plugin.Settings.MirrorWindowSeconds.Value;
 
-            if (Plugin.Config2.VerboseLogging.Value)
+            if (Plugin.Settings.VerboseLogging.Value)
             {
                 Plugin.Logger.LogInfo(
                     "[Wing] player attacking ground - wing weapons free for " +
-                    Plugin.Config2.MirrorWindowSeconds.Value + "s");
+                    Plugin.Settings.MirrorWindowSeconds.Value + "s");
             }
         }
     }

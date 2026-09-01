@@ -189,7 +189,7 @@ namespace WingCommand
             }
             catch (Exception e)
             {
-                if (Plugin.Config2.VerboseLogging.Value)
+                if (Plugin.Settings.VerboseLogging.Value)
                     Plugin.Logger.LogWarning("Landing destination read failed: " + e.Message);
             }
 

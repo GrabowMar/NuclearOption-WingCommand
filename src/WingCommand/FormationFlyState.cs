@@ -141,7 +141,7 @@ namespace WingCommand
         /// </summary>
         private bool DueToReport()
         {
-            if (!Plugin.Config2.VerboseLogging.Value) return false;
+            if (!Plugin.Settings.VerboseLogging.Value) return false;
             if (Time.timeSinceLevelLoad - lastReport < 5f) return false;
 
             lastReport = Time.timeSinceLevelLoad;
@@ -232,7 +232,7 @@ namespace WingCommand
             smoothedLeaderDir = Vector3.zero;
             leaderTurnRate = 0f;
 
-            if (Plugin.Config2.VerboseLogging.Value)
+            if (Plugin.Settings.VerboseLogging.Value)
                 Plugin.Logger.LogInfo($"[Formation] {aircraft.unitName} entering slot {member.Slot}");
         }
 
@@ -294,13 +294,13 @@ namespace WingCommand
             Vector3 track = TrackLeader(leader);
             float turnRate = LeaderTurnRate;
 
-            FormationShape shape = Plugin.Config2.Shape.Value;
+            FormationShape shape = Plugin.Settings.Shape.Value;
 
             // Helicopters fly slower and much closer together than jets, so the same
             // spacing that reads as tight for a fighter formation looks scattered for them.
-            float spacing = Plugin.Config2.SlotSpacing.Value;
+            float spacing = Plugin.Settings.SlotSpacing.Value;
             if (WingRegistry.IsRotary(aircraft))
-                spacing *= Plugin.Config2.RotarySpacingScale.Value;
+                spacing *= Plugin.Settings.RotarySpacingScale.Value;
 
             spacing *= ThreatSpacingScale(leader);
 
@@ -325,7 +325,7 @@ namespace WingCommand
                 1f - Mathf.Exp(-Time.fixedDeltaTime / CombatSpreadEaseSeconds));
 
             Vector3 desiredSlotLocal = FormationSolver.SlotCoordinates(
-                member.Slot, shape, spacing, Plugin.Config2.SlotStack.Value,
+                member.Slot, shape, spacing, Plugin.Settings.SlotStack.Value,
                 lateralTurnScale, trailTurnScale);
 
             // Turn-side mirroring: a one-sided formation sitting on the inside of a
@@ -455,7 +455,7 @@ namespace WingCommand
             // hysteresis during normal gameplay.
             lastRotaryMode = mode;
 
-            if (!Plugin.Config2.VerboseLogging.Value) return;
+            if (!Plugin.Settings.VerboseLogging.Value) return;
 
             bool due = Time.timeSinceLevelLoad - lastRotaryReport > 5f;
             if (!changed && !due) return;
@@ -688,7 +688,7 @@ namespace WingCommand
         /// </summary>
         private void CheckAbleToKeepUp(Aircraft leader, float distance)
         {
-            if (!Plugin.Config2.KeepUpReports.Value) return;
+            if (!Plugin.Settings.KeepUpReports.Value) return;
 
             // Only a genuine performance gap counts as "unable". This check was written for
             // a helicopter recruited into a jet flight, but it fired on wingmen in the

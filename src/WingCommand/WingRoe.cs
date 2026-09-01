@@ -44,7 +44,7 @@ namespace WingCommand
             // Missile defence is immediate self-preservation and therefore precedes both
             // incidental ROE fire and explicit target selection. It does not replace the
             // standing directive; the defensive state resumes that exact directive.
-            if (Plugin.Config2.MissileDefence.Value &&
+            if (Plugin.Settings.MissileDefence.Value &&
                 WingWeapons.HasMissileDefence(aircraft) &&
                 MissileDefenceProtectee(aircraft) != null)
             {
@@ -132,8 +132,8 @@ namespace WingCommand
             // Hold and Escort share a range because neither manoeuvres to engage, so for
             // both of them it is purely a weapons-range limit.
             return roe == WingRoe.Free
-                ? Plugin.Config2.FreeEngageRange.Value
-                : Plugin.Config2.HoldEngageRange.Value;
+                ? Plugin.Settings.FreeEngageRange.Value
+                : Plugin.Settings.HoldEngageRange.Value;
         }
 
         /// <summary>
@@ -142,8 +142,8 @@ namespace WingCommand
         /// the final authority on whether a shot is valid.
         /// </summary>
         public static float ExplicitOrderRange() =>
-            UnityEngine.Mathf.Max(Plugin.Config2.HoldEngageRange.Value,
-                                  Plugin.Config2.FreeEngageRange.Value);
+            UnityEngine.Mathf.Max(Plugin.Settings.HoldEngageRange.Value,
+                                  Plugin.Settings.FreeEngageRange.Value);
 
         /// <summary>The one-line hint shown under the selector.</summary>
         public static string Hint(WingRoe roe)

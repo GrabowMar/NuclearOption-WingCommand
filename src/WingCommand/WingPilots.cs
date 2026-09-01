@@ -191,7 +191,7 @@ namespace WingCommand
         /// <summary>Credit a pilot, if the aircraft has one and the system is enabled.</summary>
         public static void Award(Aircraft aircraft, int xp, string reason)
         {
-            if (xp <= 0 || !Plugin.Config2.PilotProgression.Value) return;
+            if (xp <= 0 || !Plugin.Settings.PilotProgression.Value) return;
 
             WingPilot pilot = Of(aircraft);
             if (pilot == null) return;
@@ -199,7 +199,7 @@ namespace WingCommand
             WingRank before = pilot.Rank;
             pilot.Xp += xp;
 
-            if (Plugin.Config2.VerboseLogging.Value)
+            if (Plugin.Settings.VerboseLogging.Value)
                 Plugin.Logger.LogInfo(
                     "[Pilot] " + pilot.Callsign + " +" + xp + " XP (" + reason + ")");
 
@@ -215,7 +215,7 @@ namespace WingCommand
             if (pilot == null) return;
 
             pilot.Kills++;
-            Award(aircraft, Plugin.Config2.XpPerKill.Value, "kill");
+            Award(aircraft, Plugin.Settings.XpPerKill.Value, "kill");
 
             if (victim != null)
                 WingComms.Say(WingCommandManager.Instance?.Wing?.Find(aircraft),
@@ -229,12 +229,12 @@ namespace WingCommand
             if (pilot == null) return;
 
             pilot.Sorties++;
-            Award(aircraft, Plugin.Config2.XpPerSortie.Value, "sortie");
+            Award(aircraft, Plugin.Settings.XpPerSortie.Value, "sortie");
         }
 
         /// <summary>Credit surviving a missile that was actually shot at this aircraft.</summary>
         public static void NoteSurvivedEngagement(Aircraft aircraft) =>
-            Award(aircraft, Plugin.Config2.XpPerEngagement.Value, "survived engagement");
+            Award(aircraft, Plugin.Settings.XpPerEngagement.Value, "survived engagement");
 
         // ------------------------------------------------------------------ rank maths
 
@@ -244,7 +244,7 @@ namespace WingCommand
         /// </summary>
         public static int XpForRank(WingRank rank)
         {
-            int step = Mathf.Max(1, Plugin.Config2.XpPerRank.Value);
+            int step = Mathf.Max(1, Plugin.Settings.XpPerRank.Value);
             int r = (int)rank;
             return step * r * (r + 1) / 2;
         }
@@ -285,12 +285,12 @@ namespace WingCommand
         /// </summary>
         public static float SkillBonus(Aircraft aircraft)
         {
-            if (!Plugin.Config2.PilotProgression.Value) return 0f;
+            if (!Plugin.Settings.PilotProgression.Value) return 0f;
 
             WingPilot pilot = Of(aircraft);
             if (pilot == null) return 0f;
 
-            float perRank = Mathf.Clamp01(Plugin.Config2.RankEffect.Value) * 0.06f;
+            float perRank = Mathf.Clamp01(Plugin.Settings.RankEffect.Value) * 0.06f;
             return (int)pilot.Rank * perRank;
         }
 

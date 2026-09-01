@@ -49,7 +49,7 @@ namespace WingCommand
             string detail = threat != null ? threat.GetSeekerType() : null;
             WingComms.Say(member, WingComms.Call.Panic, detail);
 
-            if (Plugin.Config2.VerboseLogging.Value)
+            if (Plugin.Settings.VerboseLogging.Value)
             {
                 Plugin.Logger.LogInfo(
                     $"[Panic] {aircraft.unitName} defensive against " +
@@ -80,7 +80,7 @@ namespace WingCommand
                 StopCountermeasures();
 
                 if (Time.timeSinceLevelLoad - enteredAt >= MinimumDefenceSeconds &&
-                    Time.timeSinceLevelLoad - clearSince >= Plugin.Config2.PanicClearSeconds.Value)
+                    Time.timeSinceLevelLoad - clearSince >= Plugin.Settings.PanicClearSeconds.Value)
                 {
                     WingComms.Say(member, WingComms.Call.DefensiveClear);
                     member.ResumeAfterPanic();

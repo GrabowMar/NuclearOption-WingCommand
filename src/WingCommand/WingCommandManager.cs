@@ -68,7 +68,7 @@ namespace WingCommand
             Instance = this;
             Commands = new WingDirectiveDispatcher(Wing, Selection);
             mapLayer = new MapCommandLayer(Wing);
-            Wing.Roe = Plugin.Config2.DefaultRoe.Value;
+            Wing.Roe = Plugin.Settings.DefaultRoe.Value;
         }
 
         private void Update()
@@ -109,7 +109,7 @@ namespace WingCommand
                 // First frame back in a mission: resolve the Smart/Performance mode for
                 // this one. Snapshotting here is what makes a mid-mission change inert
                 // until the next mission.
-                WingBrain.Begin(Plugin.Config2.Mode.Value);
+                WingBrain.Begin(Plugin.Settings.Mode.Value);
                 Plugin.Logger.LogInfo("[WingBrain] mission start - " + WingBrain.Summary());
             }
             resetForNonPlayableState = false;
@@ -136,7 +136,7 @@ namespace WingCommand
             HandleRadialInput();
             HandleHotkeys();
 
-            if (Plugin.Config2.MapCommandEnabled.Value)
+            if (Plugin.Settings.MapCommandEnabled.Value)
                 mapLayer.Update();
 
             WingKillCredit.Tick();
@@ -238,7 +238,7 @@ namespace WingCommand
         /// it depends on resolved. Otherwise the standalone fallback wheel takes over.
         /// </summary>
         internal static bool NativeRadialActive =>
-            Plugin.Config2.UseNativeRadial.Value && GameAccess.Available;
+            Plugin.Settings.UseNativeRadial.Value && GameAccess.Available;
 
         private static bool InPlayableState()
         {
@@ -260,7 +260,7 @@ namespace WingCommand
                 return;
             }
 
-            KeyCode key = Plugin.Config2.RadialKey.Value;
+            KeyCode key = Plugin.Settings.RadialKey.Value;
             if (key == KeyCode.None) return;
 
             if (Input.GetKeyDown(key) && Wing.Leader != null)
@@ -306,12 +306,12 @@ namespace WingCommand
         {
             if (Wing.Count == 0) return;
 
-            if (Plugin.Config2.QuickRejoinKey.Value != KeyCode.None &&
-                Input.GetKeyDown(Plugin.Config2.QuickRejoinKey.Value))
+            if (Plugin.Settings.QuickRejoinKey.Value != KeyCode.None &&
+                Input.GetKeyDown(Plugin.Settings.QuickRejoinKey.Value))
                 Execute(WingAction.Rejoin);
 
-            if (Plugin.Config2.QuickEngageKey.Value != KeyCode.None &&
-                Input.GetKeyDown(Plugin.Config2.QuickEngageKey.Value))
+            if (Plugin.Settings.QuickEngageKey.Value != KeyCode.None &&
+                Input.GetKeyDown(Plugin.Settings.QuickEngageKey.Value))
                 Execute(WingAction.Engage);
         }
 
@@ -391,8 +391,8 @@ namespace WingCommand
 
                 case WingAction.CycleShape:
                 {
-                    FormationShape next = FormationShapes.CycleCore(Plugin.Config2.Shape.Value, 1);
-                    Plugin.Config2.Shape.Value = next;
+                    FormationShape next = FormationShapes.CycleCore(Plugin.Settings.Shape.Value, 1);
+                    Plugin.Settings.Shape.Value = next;
                     Toast("Formation: " + FormationShapes.Pretty(next));
                     break;
                 }
@@ -640,14 +640,14 @@ namespace WingCommand
         internal void Toast(string message)
         {
             if (string.IsNullOrWhiteSpace(message)) return;
-            if (Plugin.Config2.VerboseLogging.Value)
+            if (Plugin.Settings.VerboseLogging.Value)
                 Plugin.Logger.LogInfo("[Wing] " + message);
         }
 
         /// <summary>The only mod messages intentionally allowed into the old game feed.</summary>
         internal void DebugToast(string message)
         {
-            if (!Plugin.Config2.EnableDebugActions.Value || string.IsNullOrWhiteSpace(message))
+            if (!Plugin.Settings.EnableDebugActions.Value || string.IsNullOrWhiteSpace(message))
                 return;
             if (message == lastToast && Time.unscaledTime - lastToastAt < 1.25f) return;
             lastToast = message;

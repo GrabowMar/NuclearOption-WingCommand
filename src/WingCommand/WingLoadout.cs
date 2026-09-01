@@ -770,7 +770,7 @@ namespace WingCommand
                 return;
             }
 
-            if (Plugin.Config2.VerboseLogging.Value)
+            if (Plugin.Settings.VerboseLogging.Value)
                 Plugin.Logger.LogWarning("[Loadout] " + reason);
         }
 

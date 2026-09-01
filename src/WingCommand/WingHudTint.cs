@@ -41,7 +41,7 @@ namespace WingCommand
         /// <summary>Re-apply, or clear, the tint on one unit's HUD marker.</summary>
         public static void Refresh(Unit unit)
         {
-            if (unit == null || !Plugin.Config2.HighlightWingOnHud.Value) return;
+            if (unit == null || !Plugin.Settings.HighlightWingOnHud.Value) return;
 
             try
             {
@@ -53,7 +53,7 @@ namespace WingCommand
             }
             catch (Exception e)
             {
-                if (Plugin.Config2.VerboseLogging.Value)
+                if (Plugin.Settings.VerboseLogging.Value)
                     Plugin.Logger.LogWarning("HUD marker refresh failed: " + e.Message);
             }
         }
@@ -68,7 +68,7 @@ namespace WingCommand
         /// </summary>
         public static void Reassert(WingRegistry wing)
         {
-            if (!Plugin.Config2.HighlightWingOnHud.Value) return;
+            if (!Plugin.Settings.HighlightWingOnHud.Value) return;
 
             CombatHUD hud = SceneSingleton<CombatHUD>.i;
             if (hud == null) return;
@@ -136,7 +136,7 @@ namespace WingCommand
             [HarmonyPostfix]
             private static void Postfix(HUDUnitMarker __instance)
             {
-                if (!Plugin.Config2.HighlightWingOnHud.Value) return;
+                if (!Plugin.Settings.HighlightWingOnHud.Value) return;
                 if (__instance.image == null) return;
                 if (__instance.selected)
                 {

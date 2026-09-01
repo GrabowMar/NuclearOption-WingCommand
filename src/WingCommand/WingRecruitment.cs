@@ -21,7 +21,7 @@ namespace WingCommand
             if (aircraft == null || aircraft.definition == null) return 0f;
             if (paidAircraft.Contains(aircraft.persistentID)) return 0f;
 
-            return aircraft.definition.value * Plugin.Config2.RecruitmentCostRate.Value;
+            return aircraft.definition.value * Plugin.Settings.RecruitmentCostRate.Value;
         }
 
         public static bool TryRecruit(WingRegistry wing, Aircraft aircraft,
