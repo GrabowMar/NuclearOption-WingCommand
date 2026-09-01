@@ -241,6 +241,15 @@ namespace WingCommand
         /// <summary>Fuel fraction at which a wingman calls bingo and heads home.</summary>
         public const float BingoFuel = 0.15f;
 
+        /// <summary>
+        /// Fuel fraction a requisition launches with when full tanks are switched off.
+        ///
+        /// Half tanks rather than a token amount: enough to fly the mission a wingman is
+        /// being bought for, while still being light enough to matter for a rotary or a
+        /// short-field launch — which is the only reason to ask for less than full.
+        /// </summary>
+        public const float PartialFuelLevel = 0.5f;
+
         // ------------------------------------------------------------------ jamming
 
         /// <summary>

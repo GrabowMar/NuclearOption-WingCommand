@@ -191,6 +191,30 @@ namespace WingCommand
         /// </summary>
         public static bool ExceedLimit { get; set; }
 
+        /// <summary>
+        /// Whether a requisition launches with full tanks.
+        ///
+        /// On by default, which is the airframe's own default fuel state and the launch the
+        /// player gets today. Switching it off is a deliberate handicap — half tanks for a
+        /// lighter, more agile wingman that will call bingo sooner — so it is the choice
+        /// that has to be made, not the one that has to be undone.
+        /// </summary>
+        public static bool FullFuel { get; set; } = true;
+
+        /// <summary>
+        /// The fuel level a requisition of this airframe launches with.
+        ///
+        /// Full tanks means the airframe's own default rather than a hard 1.0: some
+        /// definitions ship deliberately short, and overriding that would be handing the
+        /// player more fuel than the game ever launches that aircraft with.
+        /// </summary>
+        public static float SpawnFuelFor(AircraftDefinition definition)
+        {
+            AircraftParameters p = definition != null ? definition.aircraftParameters : null;
+            float full = p != null ? p.DefaultFuelLevel : 1f;
+            return FullFuel ? full : Mathf.Min(full, WingTuning.PartialFuelLevel);
+        }
+
         /// <summary>Forget what was bought, and the over-limit choice, when a mission ends.</summary>
         public static void Reset()
         {
@@ -203,6 +227,7 @@ namespace WingCommand
             overLimitAircraft.Clear();
             capacityReservations.Reset();
             ExceedLimit = false;
+            FullFuel = true;
             squadronCachedAt = float.MinValue;
             rotaryCache.Clear();
             autopilotCache.Clear();

@@ -279,6 +279,15 @@ namespace WingCommand
                                       Dim(), FontMicro, FontStyles.Normal, TextAlignmentOptions.Left);
             y -= LineHeight + Space1;
 
+            // How full the tanks are when it launches. A checkbox rather than a latch
+            // styled like OVER LIMIT: this one starts switched on, and a lit toggle that is
+            // lit by default reads as a warning rather than as a setting.
+            fullFuelButton = WingUi.Button(parent, "",
+                                           new Rect(Pad, y, PanelWidth - Pad * 2f, RowHeight),
+                                           FontSmall, UiButtonStyle.Quiet, ToggleFullFuel)
+                              .WithTooltip(OrderHint.FullFuel);
+            y -= RowHeight + Space1;
+
             // REQUISITION is the reason this page exists and is drawn as such; the
             // over-limit permission beside it is a modifier on that purchase and reads a
             // rank quieter until it is switched on, at which point it latches lit.
@@ -325,6 +334,21 @@ namespace WingCommand
                 ? "Over-limit requisition allowed at " +
                   WingShop.ExceedLimitMultiplier.ToString("0.##") + "x list price"
                 : "Over-limit requisition disallowed");
+        }
+
+        /// <summary>
+        /// Choose whether the next requisition launches with full tanks or half.
+        ///
+        /// It applies to the launch, not to the price, so it can be flipped between
+        /// purchases and affects only the ones made after it.
+        /// </summary>
+        private static void ToggleFullFuel()
+        {
+            WingShop.FullFuel = !WingShop.FullFuel;
+            WingCommandManager.Instance?.Toast(WingShop.FullFuel
+                ? "Requisitions launch with full fuel"
+                : "Requisitions launch with " +
+                  Mathf.RoundToInt(WingTuning.PartialFuelLevel * 100f) + "% fuel");
         }
 
         private static void RequisitionSelected()
@@ -410,6 +434,17 @@ namespace WingCommand
                 exceedLimitButton.SetText(
                     "OVER LIMIT  x" + WingShop.ExceedLimitMultiplier.ToString("0.##"));
                 exceedLimitButton.SetLatched(WingShop.ExceedLimit);
+            }
+
+            if (fullFuelButton != null)
+            {
+                // The box states the choice; the trailing clause states what the other
+                // state would cost, so the consequence is readable without toggling it.
+                fullFuelButton.SetText(WingShop.FullFuel
+                    ? "[X]  SPAWN WITH FULL FUEL"
+                    : "[ ]  SPAWN WITH FULL FUEL  -  launching at " +
+                      Mathf.RoundToInt(WingTuning.PartialFuelLevel * 100f) + "%");
+                fullFuelButton.SetLatched(WingShop.FullFuel);
             }
 
             if (offerDetailLabel != null)

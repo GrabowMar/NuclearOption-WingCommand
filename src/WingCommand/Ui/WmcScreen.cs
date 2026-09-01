@@ -169,6 +169,7 @@ namespace WingCommand
         private static float shopTemplateRowX;
         private static float shopTemplateRowWidth;
         private static WingButton exceedLimitButton;
+        private static WingButton fullFuelButton;
         private static WingButton requisitionButton;
         private static AircraftDefinition selectedOffer;
         private static int shopPage;
@@ -284,6 +285,7 @@ namespace WingCommand
             offerDetailLabel = null;
             offerLoadoutLabel = null;
             exceedLimitButton = null;
+            fullFuelButton = null;
             requisitionButton = null;
             selectedOffer = null;
             shopPage = 0;

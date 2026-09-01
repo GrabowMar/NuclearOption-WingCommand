@@ -143,7 +143,7 @@ namespace WingCommand
             if (airbase == null) return false;
 
             AircraftParameters p = definition.aircraftParameters;
-            float fuel = p != null ? p.DefaultFuelLevel : 1f;
+            float fuel = WingShop.SpawnFuelFor(definition);
             LiveryKey livery = p != null && hq.faction != null
                 ? new LiveryKey(p.GetRandomLiveryForFaction(hq.faction))
                 : leader.NetworkLiveryKey;
@@ -426,7 +426,7 @@ namespace WingCommand
             // The airframe's own standard loadout and livery, which is what "default
             // equipment" means and what the faction's own AI aircraft launch with.
             AircraftParameters p = definition.aircraftParameters;
-            float fuel = p != null ? p.DefaultFuelLevel : 1f;
+            float fuel = WingShop.SpawnFuelFor(definition);
 
             LiveryKey livery = leader.NetworkLiveryKey;
             if (p != null && hq != null && hq.faction != null)
