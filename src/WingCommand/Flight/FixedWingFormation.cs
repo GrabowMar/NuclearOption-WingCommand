@@ -207,31 +207,50 @@ namespace WingCommand
             public readonly float DesiredSpeed;
             public readonly float Throttle;
 
-            public ThrottleState(float gap, float closing, float desiredSpeed, float throttle)
+            /// <summary>The leader's measured acceleration, m/s². The ramp the speed loop is tracking.</summary>
+            public readonly float LeaderAccel;
+
+            /// <summary>Lever travel copied from the leader this tick. Zero when it is settled.</summary>
+            public readonly float Anticipation;
+
+            public ThrottleState(float gap, float closing, float desiredSpeed, float throttle,
+                                 float leaderAccel, float anticipation)
             {
                 Gap = gap;
                 Closing = closing;
                 DesiredSpeed = desiredSpeed;
                 Throttle = throttle;
+                LeaderAccel = leaderAccel;
+                Anticipation = anticipation;
             }
         }
 
-        /// <param name="leaderTurnRate">
-        /// The leader's filtered heading rate in rad/s, positive to the right, supplied by
-        /// <see cref="FormationFlyState"/>. It is not read from the rigidbody here: the
-        /// world-y component of the angular velocity picks up roll rate at any nose-up
-        /// attitude, and that leak was the formation's left-right sway.
+        /// <param name="leaderState">
+        /// The leader's filtered motion, supplied by <see cref="FormationFlyState"/>. The
+        /// heading rate in it is not read from the rigidbody: the world-y component of the
+        /// angular velocity picks up roll rate at any nose-up attitude, and that leak was the
+        /// formation's left-right sway.
         /// </param>
         public static void Fly(Aircraft aircraft, Aircraft leader, ControlInputs controls,
                                int slot, GlobalPosition slotPos, Vector3 toSlot,
-                               float distance, float spacing, Rejoin rejoin, Vector3 smoothedLeaderDir,
-                               float leaderTurnRate, bool report, FormationShape shape,
+                               float distance, float spacing, Rejoin rejoin,
+                               LeaderState leaderState, bool report, FormationShape shape,
                                float lateralScale)
         {
             AircraftParameters p = aircraft.GetAircraftParameters();
-            float leaderSpeed = Mathf.Max(leader.speed, 1f);
+            float leaderTurnRate = leaderState.TurnRate;
             float aggression = WingBrain.Aggression;
             float damping = WingBrain.Damping;
+
+            // The speed to hold station on is the leader's speed *when we get there*, not
+            // the one it has now. Formating on the current speed is a proportional
+            // controller fed a ramp: through the whole of an acceleration the wingman sits a
+            // fixed amount slow, so it drops back until the position term makes up the
+            // difference and then holds that gap until the leader stops accelerating. The
+            // lead is the wingman's own thrust-response time, so it arrives at the leader's
+            // new speed with it rather than starting to chase it then.
+            float leaderSpeed = Mathf.Max(
+                leaderState.PredictedSpeed(leader.speed, WingTuning.SpeedLeadSeconds), 1f);
 
             Vector3 leaderVel = leader.rb.velocity;
             Vector3 drift = aircraft.rb.velocity - leaderVel;
@@ -244,11 +263,11 @@ namespace WingCommand
 
             ThrottleState throttle = Throttle(aircraft, leader, controls, p, slot, toSlot, distance, capture, spacing,
                                               leaderSpeed, drift, aggression, damping, rejoin, outOfPosition,
-                                              shape, lateralScale, leaderTurnRate);
+                                              shape, lateralScale, leaderState);
 
             float commandAngle = Steer(aircraft, leader, slotPos, toSlot, distance,
                                        leaderVel, drift, aggression, damping, spacing,
-                                       outOfPosition, smoothedLeaderDir, leaderTurnRate,
+                                       outOfPosition, leaderState.Track, leaderTurnRate,
                                        throttle, report);
 
             MatchLeaderBank(aircraft, leader, controls, outOfPosition, commandAngle);
@@ -262,8 +281,10 @@ namespace WingCommand
                                                float leaderSpeed, Vector3 drift,
                                                float aggression, float damping, Rejoin rejoin,
                                                float outOfPosition, FormationShape shape,
-                                               float lateralScale, float leaderTurnRate)
+                                               float lateralScale, LeaderState leaderState)
         {
+            float leaderTurnRate = leaderState.TurnRate;
+
             // --- Turn compensation: fly concentric arcs, not a swinging offset. ---
             // When the leader turns at heading rate w, every slot orbits the same centre, so
             // a wingman at signed lateral offset d must fly at v_leader + w*d — the outside
@@ -321,22 +342,33 @@ namespace WingCommand
             float throttle = Mathf.Clamp01(desiredSpeed / Mathf.Max(p.maxSpeed, 1f))
                            + speedError * WingTuning.ThrottleGain;
 
-            // Player acceleration is the feed-forward term the speed loop cannot see.
-            // When the leader selects military/max power, its speed has not risen yet, so
-            // a controller driven only by speed waits until a gap already exists. Match the
-            // leader's power while behind, and use full power once a max-power leader has
-            // opened a meaningful gap. Closing-rate gating keeps this from carrying the
-            // wingman through the slot after it has already caught up.
-            ControlInputs leaderInputs = leader.GetInputs();
-            float leaderThrottle = leaderInputs != null ? leaderInputs.throttle : 0f;
-            if (gap > 0f && closing < MaxClosure * 0.25f)
-            {
-                throttle = Mathf.Max(throttle, leaderThrottle);
+            // --- Anticipation: fly the lever, not just the speed. ---
+            //
+            // Everything above this line is driven by speed, and speed is the last thing to
+            // move when a player works the throttle: the lever goes first, the engine spools,
+            // and only then does a speed difference exist for a controller to notice. By that
+            // point the wingman is already out of position and is correcting rather than
+            // keeping station.
+            //
+            // ThrottleAnticipation is the difference between where the leader's lever is and
+            // where it would be to hold the speed the leader currently has - that is, the
+            // part of the player's throttle input that has not been flown yet. Copying it
+            // puts the wingman's hand on the throttle at the same moment as the player's.
+            //
+            // The term is zero whenever the leader is settled, so it adds nothing to steady
+            // formation flight and needs no gating to stay out of the way. It is also signed,
+            // which is the half the old anticipation could not do: that one was a
+            // Mathf.Max against the leader's lever, so it could add power for a leader
+            // accelerating away but had no answer at all for one pulling power back - and a
+            // wingman that keeps its throttle up through the player's deceleration is exactly
+            // the one that slides out in front.
+            float anticipation = leaderState.ThrottleKnown
+                ? WingTuning.AnticipationGain * ThrustModel.ThrottleAnticipation(
+                      leaderState.Throttle, leader.speed,
+                      Mathf.Max(leader.GetAircraftParameters().maxSpeed, 1f))
+                : 0f;
 
-                float maxPowerGap = Mathf.Max(15f, spacing * 0.15f);
-                if (leaderThrottle >= 0.95f && gap >= maxPowerGap)
-                    throttle = 1f;
-            }
+            throttle += anticipation;
 
             // Full throttle only when genuinely out of position, and never once close in.
             //
@@ -351,7 +383,8 @@ namespace WingCommand
 
             controls.throttle = Mathf.Clamp01(throttle);
 
-            return new ThrottleState(gap, closing, desiredSpeed, controls.throttle);
+            return new ThrottleState(gap, closing, desiredSpeed, controls.throttle,
+                                     leaderState.SpeedRate, anticipation);
         }
 
         // -------------------------------------------------------------------- steering
@@ -754,6 +787,7 @@ namespace WingCommand
                 $"[Formation] {aircraft.unitName}: error {distance:F0} m, " +
                 $"gap {throttle.Gap:F0} m, closing {throttle.Closing:F0} m/s, " +
                 $"speed {aircraft.speed:F0} -> {throttle.DesiredSpeed:F0} m/s, thr {throttle.Throttle:F2}, " +
+                $"leader accel {throttle.LeaderAccel:F1} m/s2, anticip {throttle.Anticipation:+0.00;-0.00; 0.00}, " +
                 $"correction {correction:F0}/{maxCorrection:F0} m{(saturated ? " (SATURATED)" : "")}, " +
                 $"baseline {lookAhead:F0} m, " +
                 $"bank {BankOf(aircraft):F0} vs leader {BankOf(leader):F0} deg, " +

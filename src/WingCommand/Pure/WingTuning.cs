@@ -48,6 +48,63 @@ namespace WingCommand
         /// <summary>Throttle change per m/s of speed error.</summary>
         public const float ThrottleGain = 0.12f;
 
+        // --------------------------------------------------------- leader prediction
+        //
+        // Two feed-forwards, and they answer different questions. The lever says what the
+        // leader has just been *asked* to do and says it immediately; the measured rate
+        // says what it is *actually* doing and says it a second later but is never wrong.
+        // Neither alone is enough: matching only the lever ignores a leader accelerating
+        // down a dive, and matching only the rate is what put the wingman a fixed distance
+        // behind for the whole of every acceleration.
+
+        /// <summary>
+        /// Seconds of the leader's measured acceleration fed into the speed demand: roughly
+        /// the wingman's own thrust-response lag, so it arrives at the leader's new speed
+        /// with the leader rather than starting to chase it then.
+        ///
+        /// Longer is not better, and the reason is that this term cannot tell a sustained
+        /// acceleration from a jittery one. Simulating the closed loop against a firewall,
+        /// a chop, repeated throttle jabs, a slow ramp and a bang-bang AI leader - each over
+        /// two different drag models - a lead of 1.5 s is the best value that exists for the
+        /// sustained cases and one of the worst for the jittery ones, because there it is
+        /// projecting noise. Three quarters of a second is the value that is good at the
+        /// first without being bad at the second, and the optimum is broad rather than sharp.
+        /// </summary>
+        public const float SpeedLeadSeconds = 0.75f;
+
+        /// <summary>
+        /// Largest leader acceleration treated as real, m/s². Roughly 2.5 g, well above what
+        /// any airframe here sustains in level flight, so a genuine acceleration is never
+        /// clipped. It exists only to stop a respawn, a collision or a dropped frame - the
+        /// rate is differentiated from a velocity - being projected forward as a speed demand.
+        /// </summary>
+        public const float MaxCredibleAccel = 25f;
+
+        /// <summary>
+        /// How much of the leader's uncommanded lever travel the wingman copies.
+        ///
+        /// A fifth, not all of it, and the reason is worth stating because the obvious
+        /// argument says otherwise: <see cref="ThrustModel.ThrottleAnticipation"/> is zero
+        /// whenever the leader is settled, so copying it outright looks free. It is not,
+        /// because it is not independent of <see cref="SpeedLeadSeconds"/> - the lever and
+        /// the acceleration are the same speed change seen through two channels, one early
+        /// and one accurate, and adding both in full counts it twice. Simulated, full gain
+        /// alongside the acceleration lead is worse than either term alone. This is the
+        /// share that buys the head start the lever offers without re-commanding what the
+        /// acceleration term has already asked for.
+        /// </summary>
+        public const float AnticipationGain = 0.2f;
+
+        /// <summary>
+        /// Seconds of smoothing on the leader's throttle before it is read as intent. Long
+        /// enough to ignore an AI leader's bang-bang throttle, short enough that a player
+        /// moving the lever is still answered far sooner than the acceleration path could.
+        /// </summary>
+        public const float LeaderThrottleSmoothing = 0.15f;
+
+        /// <summary>Seconds of smoothing on the differentiated leader speed.</summary>
+        public const float SpeedRateSmoothing = 0.3f;
+
         /// <summary>
         /// Metres from the slot at which a wingman switches from rejoining to holding.
         /// Pulled in from 500 so the precise station-keeping law owns a larger share of the
@@ -89,6 +146,25 @@ namespace WingCommand
 
         /// <summary>Leader speed, m/s, below which helicopters hold their slot as a point in space.</summary>
         public const float RotaryHoverSpeed = 25f;
+
+        /// <summary>
+        /// Seconds of the leader's measured acceleration fed into a helicopter's commanded
+        /// velocity. Longer than the fixed-wing <see cref="SpeedLeadSeconds"/> because the
+        /// lag being covered is longer: a helicopter accelerates by tilting its whole rotor
+        /// disc, and <c>AutopilotHelo</c> rebuilds its steering waypoint only once a second
+        /// on top of that.
+        ///
+        /// It is only a third longer rather than the several-fold the lag alone would argue
+        /// for, because unlike the fixed-wing figure this one has not been simulated - the
+        /// helicopter's plant is the game's own collective law, which the loop here does not
+        /// model - so it sits at the conservative end of the range the fixed-wing sweep
+        /// found safe.
+        ///
+        /// The throttle anticipation has no rotary counterpart: a helicopter's lever
+        /// commands lift, not speed, so its position says nothing about where the leader's
+        /// speed is going and there is nothing honest to read from it.
+        /// </summary>
+        public const float RotarySpeedLeadSeconds = 1f;
 
         /// <summary>
         /// Seconds of travel used as the helicopter's destination distance. A power setting,

@@ -113,6 +113,25 @@ namespace WingCommand
         /// <summary>Filtered rate of change of the leader's heading, in rad/s, positive to the right.</summary>
         private float leaderTurnRate;
 
+        /// <summary>Filtered rate of change of the leader's speed, m/s². The acceleration feed-forward.</summary>
+        private float leaderSpeedRate;
+
+        /// <summary>Leader speed last sample, for differentiating the above.</summary>
+        private float lastLeaderSpeed;
+
+        /// <summary>Smoothed leader lever position, and whether it could be read at all.</summary>
+        private float leaderThrottle;
+        private bool leaderThrottleKnown;
+
+        /// <summary>
+        /// When the geometry last ran, so every filter below can use the time that actually
+        /// elapsed. It is not <c>Time.fixedDeltaTime</c>: Performance mode recomputes the
+        /// geometry only every third physics tick, so a filter assuming a full-rate tick was
+        /// differentiating over a third of the real interval and reporting three times the
+        /// leader's true turn rate for it.
+        /// </summary>
+        private float lastGeometryTime;
+
         /// <summary>
         /// Seconds of smoothing. Long enough to reject stick noise, short enough not to lag a
         /// turn. Tightened to half a second: the track still filters the leader's every
@@ -164,21 +183,23 @@ namespace WingCommand
         /// hundred metres sideways, changing sign on every roll reversal. That is the slow
         /// left-right sway. A differentiated heading cannot see roll at all.
         /// </summary>
-        private Vector3 TrackLeader(Aircraft leader)
+        private LeaderState TrackLeader(Aircraft leader, float dt)
         {
             Vector3 instant = leader.rb != null && leader.rb.velocity.sqrMagnitude > 1f
                 ? leader.rb.velocity.normalized
                 : leader.transform.forward;
+
+            ReadLeaderThrottle(leader, dt);
 
             if (smoothedLeaderDir.sqrMagnitude < 0.5f)
             {
                 smoothedLeaderDir = instant;
                 flatLeaderTrack = Flatten(instant);
                 leaderTurnRate = 0f;
-                return flatLeaderTrack;
+                leaderSpeedRate = 0f;
+                lastLeaderSpeed = leader.speed;
+                return State();
             }
-
-            float dt = Mathf.Max(Time.fixedDeltaTime, 0.0001f);
 
             smoothedLeaderDir = Vector3.Slerp(
                 smoothedLeaderDir, instant,
@@ -197,7 +218,58 @@ namespace WingCommand
             leaderTurnRate = Mathf.Lerp(
                 leaderTurnRate, measured, 1f - Mathf.Exp(-dt / TurnRateSmoothing));
 
-            return flat;
+            // The leader's acceleration, differentiated from its speed for the same reason
+            // the turn rate is differentiated from the track rather than read off the
+            // rigidbody: it is the quantity the throttle law actually needs, and deriving it
+            // from anything else lets it disagree with the speed it is added to. Smoothed,
+            // because a raw frame-to-frame speed delta is mostly noise, and clamped where it
+            // is consumed so a respawn cannot be projected forward as a speed demand.
+            float rate = (leader.speed - lastLeaderSpeed) / dt;
+            lastLeaderSpeed = leader.speed;
+
+            leaderSpeedRate = Mathf.Lerp(
+                leaderSpeedRate,
+                Mathf.Clamp(rate, -WingTuning.MaxCredibleAccel, WingTuning.MaxCredibleAccel),
+                1f - Mathf.Exp(-dt / WingTuning.SpeedRateSmoothing));
+
+            return State();
+        }
+
+        /// <summary>Bundle this tick's filtered leader signals for the flight models.</summary>
+        private LeaderState State() =>
+            new LeaderState(smoothedLeaderDir, flatLeaderTrack, LeaderTurnRate,
+                            leaderSpeedRate, leaderThrottle, leaderThrottleKnown);
+
+        /// <summary>
+        /// Smooth the leader's lever position. This is the anticipation's whole input, and
+        /// the reason it is worth having: the lever moves on the frame the player moves it,
+        /// while the acceleration it causes takes a second or more to become measurable.
+        ///
+        /// The smoothing is short on purpose — it exists to stop an AI leader's bang-bang
+        /// throttle chattering the whole wing's power, not to slow down a player's hand.
+        /// </summary>
+        private void ReadLeaderThrottle(Aircraft leader, float dt)
+        {
+            ControlInputs inputs = leader.GetInputs();
+            if (inputs == null)
+            {
+                // Deliberately not "throttle zero": see LeaderState.ThrottleKnown.
+                leaderThrottleKnown = false;
+                return;
+            }
+
+            float lever = Mathf.Clamp01(inputs.throttle);
+
+            if (!leaderThrottleKnown)
+            {
+                leaderThrottle = lever;
+                leaderThrottleKnown = true;
+                return;
+            }
+
+            leaderThrottle = Mathf.Lerp(
+                leaderThrottle, lever,
+                1f - Mathf.Exp(-dt / WingTuning.LeaderThrottleSmoothing));
         }
 
         /// <summary>The turn rate the geometry acts on: filtered, and zero inside the noise band.</summary>
@@ -228,9 +300,15 @@ namespace WingCommand
 
             // Start the leader track from scratch. It survives a state exit, so a wingman
             // that broke off to fight and is now rejoining would otherwise differentiate a
-            // heading minutes out of date and read it as one enormous turn.
+            // heading minutes out of date and read it as one enormous turn. The speed rate
+            // and the throttle are differentiated and filtered the same way and go stale the
+            // same way, so they reset with it.
             smoothedLeaderDir = Vector3.zero;
             leaderTurnRate = 0f;
+            leaderSpeedRate = 0f;
+            lastLeaderSpeed = 0f;
+            leaderThrottleKnown = false;
+            lastGeometryTime = 0f;
 
             if (Plugin.Settings.VerboseLogging.Value)
                 Plugin.Logger.LogInfo($"[Formation] {aircraft.unitName} entering slot {member.Slot}");
@@ -299,13 +377,26 @@ namespace WingCommand
 
             RunEngagement(leader);
 
+            // The time that actually elapsed since the geometry last ran, which under the
+            // Performance stride is several physics ticks rather than one. Every filter and
+            // differentiator below is written in seconds, so they all need this and not
+            // Time.fixedDeltaTime. Clamped because the first tick after a state entry, a
+            // pause or a scene hitch has no meaningful interval to offer.
+            float now = Time.timeSinceLevelLoad;
+            float dt = lastGeometryTime > 0f
+                ? Mathf.Clamp(now - lastGeometryTime, 0.0001f, 0.5f)
+                : Mathf.Max(Time.fixedDeltaTime, 0.0001f);
+            lastGeometryTime = now;
+
             // One filtered leader signal drives every piece of geometry below: the frame the
-            // slots hang off, the prediction that anchors them, the turn compensation and the
-            // steering feed-forward. Those were derived separately from the nose direction,
-            // the world-y angular velocity and the raw velocity vector, and could therefore
-            // disagree with one another about which way the leader was actually going.
-            Vector3 track = TrackLeader(leader);
-            float turnRate = LeaderTurnRate;
+            // slots hang off, the prediction that anchors them, the turn compensation, the
+            // steering feed-forward and now the speed law. Those were derived separately from
+            // the nose direction, the world-y angular velocity and the raw velocity vector,
+            // and could therefore disagree with one another about which way the leader was
+            // actually going.
+            LeaderState leaderState = TrackLeader(leader, dt);
+            Vector3 track = leaderState.FlatTrack;
+            float turnRate = leaderState.TurnRate;
 
             FormationShape shape = WingFormation.Shape;
 
@@ -323,12 +414,12 @@ namespace WingCommand
             // unconditionally regardless, because it also latches leaderMissileThreat for
             // the combat-spread reaction.
             float roeScale = RoeRules.SpacingScale(RoeRules.Current);
-            float threatScale = ThreatSpacingScale(leader);
+            float threatScale = ThreatSpacingScale(leader, dt);
             spacing *= threatScale > 1.001f ? Mathf.Max(roeScale, threatScale) : roeScale;
 
-            EaseSlotLocal(shape, spacing, turnRate);
+            EaseSlotLocal(shape, spacing, turnRate, dt);
 
-            GlobalPosition slotPos = SlotPosition(leader, track, spacing, out Vector3 offset);
+            GlobalPosition slotPos = SlotPosition(leader, track, spacing, dt, out Vector3 offset);
 
             Vector3 toSlot = slotPos - aircraft.GlobalPosition();
             float distance = toSlot.magnitude;
@@ -347,13 +438,13 @@ namespace WingCommand
                     aircraft, leader, controlInputs, member.Slot,
                     slotPos, toSlot, distance, spacing,
                     new FixedWingFormation.Rejoin(rejoinHoldUntil, rejoinBoostUntil),
-                    smoothedLeaderDir, turnRate, DueToReport(), shape, lateralTurnScale);
+                    leaderState, DueToReport(), shape, lateralTurnScale);
             }
             else
             {
                 RotaryFormation.Mode mode = RotaryFormation.Fly(
                     aircraft, leader, slotPos, toSlot, distance, offset.y, spacing,
-                    lastRotaryMode, out float horizontalError);
+                    lastRotaryMode, leaderState, out float horizontalError);
 
                 ReportRotaryMode(mode, distance, horizontalError);
             }
@@ -367,18 +458,18 @@ namespace WingCommand
         /// relative to the leader, and all of them ease so the autopilot is never handed
         /// a discontinuity to chase.
         /// </summary>
-        private void EaseSlotLocal(FormationShape shape, float spacing, float turnRate)
+        private void EaseSlotLocal(FormationShape shape, float spacing, float turnRate, float dt)
         {
             // Fluid formation geometry: a hard turn compresses the line abreast component
             // and opens the trail component slightly. That reduces the impossible speed
             // difference between inside and outside slots while keeping the formation
             // recognisable instead of letting it dissolve into individual chases.
             float turn = Mathf.Clamp01(Mathf.Abs(turnRate) / 0.18f);
-            float geometryBlend = 1f - Mathf.Exp(-Time.fixedDeltaTime / TurnGeometrySeconds);
+            float geometryBlend = 1f - Mathf.Exp(-dt / TurnGeometrySeconds);
             lateralTurnScale = Mathf.Lerp(lateralTurnScale, Mathf.Lerp(1f, 0.72f, turn), geometryBlend);
             trailTurnScale = Mathf.Lerp(trailTurnScale, Mathf.Lerp(1f, 1.12f, turn), geometryBlend);
 
-            int mirrorSign = TurnMirrorSign(turnRate);
+            int mirrorSign = TurnMirrorSign(turnRate, dt);
 
             // Step the formation aft when the leader is spiked: a covering trail is harder
             // to shoot at than a parade slot and leaves room to react. Eased, because a
@@ -387,7 +478,7 @@ namespace WingCommand
                 WingBrain.SmartFormation && leaderMissileThreat
                     ? CombatSpreadBackScale : 1f;
             combatSpread = Mathf.Lerp(combatSpread, combatSpreadTarget,
-                1f - Mathf.Exp(-Time.fixedDeltaTime / CombatSpreadEaseSeconds));
+                1f - Mathf.Exp(-dt / CombatSpreadEaseSeconds));
 
             Vector3 desiredSlotLocal = FormationSolver.SlotCoordinates(
                 member.Slot, shape, spacing, WingTuning.SlotStack,
@@ -421,7 +512,7 @@ namespace WingCommand
                 // immediately instead of lagging behind in world space.
                 smoothedSlotLocal = Vector3.Lerp(
                     smoothedSlotLocal, desiredSlotLocal,
-                    1f - Mathf.Exp(-Time.fixedDeltaTime / ShapeTransitionSeconds));
+                    1f - Mathf.Exp(-dt / ShapeTransitionSeconds));
             }
         }
 
@@ -431,7 +522,7 @@ namespace WingCommand
         /// avoidance and the terrain floor.
         /// </summary>
         private GlobalPosition SlotPosition(Aircraft leader, Vector3 track, float spacing,
-                                            out Vector3 offset)
+                                            float dt, out Vector3 offset)
         {
             // The frame the slots hang off is the leader's *track*, not its nose. Sideslip and
             // yaw wobble swing the nose several degrees either side of the flight path, and
@@ -480,7 +571,7 @@ namespace WingCommand
             // the target something an aircraft can actually track.
             smoothedAvoidance = Vector3.Lerp(
                 smoothedAvoidance, avoidance,
-                1f - Mathf.Exp(-Time.fixedDeltaTime / AvoidanceSmoothing));
+                1f - Mathf.Exp(-dt / AvoidanceSmoothing));
 
             slotPos += smoothedAvoidance;
             slotPos = ApplyTerrainFloor(slotPos);
@@ -525,18 +616,18 @@ namespace WingCommand
         /// seconds without a sign change, 0 otherwise. The persistence decays back toward
         /// zero when the turn eases, so a brief jink never flips the whole formation.
         /// </summary>
-        private int TurnMirrorSign(float turnRate)
+        private int TurnMirrorSign(float turnRate, float dt)
         {
             if (Mathf.Abs(turnRate) > TurnMirrorRate)
             {
                 // Mathf.Sign returns exact +/-1, so this comparison is safe. A sign flip
                 // means the leader reversed the turn; start counting the new one from zero.
                 if (Mathf.Sign(turnRate) != Mathf.Sign(turnPersist)) turnPersist = 0f;
-                turnPersist += Mathf.Sign(turnRate) * Time.fixedDeltaTime;
+                turnPersist += Mathf.Sign(turnRate) * dt;
             }
             else
             {
-                turnPersist = Mathf.MoveTowards(turnPersist, 0f, Time.fixedDeltaTime);
+                turnPersist = Mathf.MoveTowards(turnPersist, 0f, dt);
             }
 
             return Mathf.Abs(turnPersist) >= TurnMirrorHold ? (int)Mathf.Sign(turnPersist) : 0;
@@ -582,7 +673,7 @@ namespace WingCommand
         /// because a sudden change in spacing moves every slot at once and the autopilot
         /// would chase the jump.
         /// </summary>
-        private float ThreatSpacingScale(Aircraft leader)
+        private float ThreatSpacingScale(Aircraft leader, float dt)
         {
             // Whether the leader is under a missile warning is needed by the combat-spread
             // reaction regardless of whether the widen behaviour is enabled, so resolve it
@@ -615,7 +706,7 @@ namespace WingCommand
 
             threatSpacing = Mathf.Lerp(
                 threatSpacing <= 0f ? 1f : threatSpacing, target,
-                1f - Mathf.Exp(-Time.fixedDeltaTime / 2f));
+                1f - Mathf.Exp(-dt / 2f));
 
             return threatSpacing;
         }

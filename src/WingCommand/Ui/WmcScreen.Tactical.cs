@@ -128,13 +128,12 @@ namespace WingCommand
 
 
         /// <summary>
-        /// The nine scoped orders, in three columns.
+        /// The scoped orders, grouped by what the player is trying to accomplish.
         ///
-        /// Two columns became three when Splash 'Em made the set nine. A fifth row of
-        /// pairs would have cost this page more height than the two new tabs left it, where
-        /// a three-by-three grid holds all nine in three rows and hands 34 pixels back. It
-        /// reads better as well: rejoin and the two target orders, then the autonomous and
-        /// positional ones, then the three that end a sortie.
+        /// Target work comes first, autonomous combat follows, and point orders stay
+        /// together. Return To Base is separated at the foot because it ends the sortie;
+        /// its quiet full-width treatment makes that separation readable without turning
+        /// it into the page's primary action.
         /// </summary>
         private static float AddActions(RectTransform parent, float y)
         {
@@ -146,14 +145,18 @@ namespace WingCommand
                 "Attack", OrderHint.Attack, () => Order(WingAction.AttackMyTarget),
                 "Splash 'Em", OrderHint.FireForEffect, () => Order(WingAction.FireForEffect));
 
-            y = Triple(parent, y, w,
-                "Engage", OrderHint.Engage, () => Order(WingAction.Engage),
-                "Disengage", OrderHint.Disengage, () => Order(WingAction.FallBack),
-                "Hold Here", OrderHint.HoldHere,
-                () => WingCommandManager.Instance?.ArmPointOrder(WingOrder.OrbitHere));
+            GridButton(parent, "Engage", Pad, y, w,
+                       () => Order(WingAction.Engage)).WithTooltip(OrderHint.Engage);
+            GridButton(parent, "Disengage", Pad + w + Gap, y, w,
+                       () => Order(WingAction.FallBack)).WithTooltip(OrderHint.Disengage);
+            jamButton = GridButton(parent, "Jam Target", Pad + (w + Gap) * 2f, y, w,
+                                   () => Order(WingAction.JamMyTarget))
+                        .WithTooltip(OrderHint.Jam);
+            y -= RowHeight + Gap;
 
-            GridButton(parent, "Return To Base", Pad, y, w,
-                       () => Order(WingAction.ReturnToBase)).WithTooltip(OrderHint.ReturnToBase);
+            GridButton(parent, "Hold Here", Pad, y, w,
+                       () => WingCommandManager.Instance?.ArmPointOrder(WingOrder.OrbitHere))
+                .WithTooltip(OrderHint.HoldHere);
 
             // Deliver Cargo arms a drop point, and says on the status line that pressing it
             // again falls back to the stock supply route.
@@ -165,20 +168,11 @@ namespace WingCommand
                          .WithTooltip(OrderHint.LandHere);
             y -= RowHeight + Gap;
 
-            // Jam the locked target, plus the two defensive breaks. The full manoeuvre set
-            // (Split-S, Immelmann, rolls, Loop) lives on the radial Tasking > Manoeuvres
-            // wheel, where a submenu costs nothing; here it would be a fourth grid of eight.
-            // Kept as fields so the per-refresh pass can grey them out - both are off in
-            // Performance mode.
-            jamButton = GridButton(parent, "Jam", Pad, y, w,
-                                   () => Order(WingAction.JamMyTarget))
-                        .WithTooltip(OrderHint.Jam);
-            breakLeftButton = GridButton(parent, "Break L", Pad + w + Gap, y, w,
-                                         () => Maneuver(ManeuverKind.BreakLeft))
-                              .WithTooltip(OrderHint.Maneuver);
-            breakRightButton = GridButton(parent, "Break R", Pad + (w + Gap) * 2f, y, w,
-                                          () => Maneuver(ManeuverKind.BreakRight))
-                               .WithTooltip(OrderHint.Maneuver);
+            WingUi.Button(parent, "RETURN TO BASE",
+                          new Rect(Pad, y, PanelWidth - Pad * 2f, RowHeight),
+                          FontSmall, UiButtonStyle.Quiet,
+                          () => Order(WingAction.ReturnToBase))
+                .WithTooltip(OrderHint.ReturnToBase);
             y -= RowHeight + Gap;
 
             return y;
@@ -280,19 +274,11 @@ namespace WingCommand
                 "jammer against the target you have locked, until it dies or you order them " +
                 "off. Only wingmen carrying a jammer can take it.";
 
-            public const string Maneuver =
-                "MANOEUVRE - fly it once, then rejoin. A break is a hard level turn to that " +
-                "side; the rolls and vertical manoeuvres are on the radial Manoeuvres wheel.";
-
             public const string Pager = "Show the rest of the list.";
         }
 
         private static void Order(WingAction action) =>
             WingCommandManager.Instance?.Execute(action, wholeWing: false);
-
-        private static void Maneuver(ManeuverKind kind) =>
-            WingCommandManager.Instance?.ExecuteManeuver(kind, wholeWing: false);
-
 
         private static void TurnRosterPage(int direction)
         {
@@ -336,11 +322,9 @@ namespace WingCommand
                 cargoButton?.SetEnabled(canCargo);
                 landButton?.SetEnabled(canLand);
 
-                // Jam and the manoeuvre breaks are both unavailable in Performance mode;
-                // Jam additionally needs a jam-capable wingman in scope.
+                // Jam needs a jam-capable wingman in scope. The manoeuvre controls live on
+                // the radial wheel, keeping this page focused on persistent orders.
                 jamButton?.SetEnabled(canJam);
-                breakLeftButton?.SetEnabled(WingBrain.Manoeuvres);
-                breakRightButton?.SetEnabled(WingBrain.Manoeuvres);
             }
 
             // The map has first claim on this line: an armed point order or a pending

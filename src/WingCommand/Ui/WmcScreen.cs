@@ -126,8 +126,6 @@ namespace WingCommand
         private static WingButton cargoButton;
         private static WingButton landButton;
         private static WingButton jamButton;
-        private static WingButton breakLeftButton;
-        private static WingButton breakRightButton;
         private static readonly WingButton[] preferenceButtons =
             new WingButton[WingWeaponPreferences.All.Length];
 
@@ -296,8 +294,6 @@ namespace WingCommand
             cargoButton = null;
             landButton = null;
             jamButton = null;
-            breakLeftButton = null;
-            breakRightButton = null;
 
             for (int i = 0; i < preferenceButtons.Length; i++) preferenceButtons[i] = null;
 

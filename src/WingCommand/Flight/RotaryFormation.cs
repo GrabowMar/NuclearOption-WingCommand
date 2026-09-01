@@ -70,7 +70,7 @@ namespace WingCommand
         /// </summary>
         public static Mode Fly(Aircraft aircraft, Aircraft leader, GlobalPosition slotPos,
                                Vector3 toSlot, float distance, float slotStack, float spacing,
-                               Mode previous, out float horizontalError)
+                               Mode previous, LeaderState leaderState, out float horizontalError)
         {
             Vector3 heading = leader.transform.forward;
             heading.y = 0f;
@@ -119,7 +119,7 @@ namespace WingCommand
             HoverAssist.Release(aircraft);
 
             Cruise(aircraft, leader, toSlotFlat, flat, slotDir, heading, leaderVel,
-                   leaderVelFlat, spacing, slotStack, onStation);
+                   leaderVelFlat, spacing, slotStack, onStation, leaderState);
             return Mode.Cruise;
         }
 
@@ -130,14 +130,26 @@ namespace WingCommand
         private static void Cruise(Aircraft aircraft, Aircraft leader, Vector3 toSlotFlat,
                                    float flat, Vector3 slotDir, Vector3 heading,
                                    Vector3 leaderVel, Vector3 leaderVelFlat,
-                                   float spacing, float slotStack, bool onStation)
+                                   float spacing, float slotStack, bool onStation,
+                                   LeaderState leaderState)
         {
             // --- The commanded velocity. ---
             // Match the leader, and add a correction proportional to the gap. On station the
             // correction is nil and this is just the leader's velocity; off station it points
             // back at the slot, so the helicopter crabes home — sideways and backwards
             // included, because that is what a helicopter does.
-            Vector3 vDes = leaderVelFlat + toSlotFlat * FollowGain;
+            //
+            // The velocity matched is the leader's *predicted* one. Matching the velocity it
+            // has right now is a position loop fed a ramp, and it fails the way every such
+            // loop does: while the leader accelerates the wingman is commanded a speed that
+            // is always the old one, so it falls back until the gap term makes up the
+            // shortfall and then holds that gap for the rest of the acceleration. The lead is
+            // longer than the fixed-wing one because a helicopter has more lag to cover — it
+            // accelerates by tilting the whole rotor disc, and AutopilotHelo rebuilds its
+            // steering waypoint only once a second on top of that.
+            Vector3 vDes = leaderVelFlat
+                         + leaderState.FlatAcceleration * WingTuning.RotarySpeedLeadSeconds
+                         + toSlotFlat * FollowGain;
 
             float vDesMag = vDes.magnitude;
             Vector3 moveDir = vDesMag > 1f ? vDes / vDesMag : slotDir;
