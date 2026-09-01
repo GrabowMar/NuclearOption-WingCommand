@@ -24,31 +24,12 @@ namespace WingCommand
         /// <summary>Rotary aircraft attack from much lower.</summary>
         private const float RotaryAttackAltitude = 220f;
 
-        /// <summary>
-        /// Seconds between firing attempts while expending. Short enough to read as a
-        /// salvo, long enough that a station's own salvo finishes before the next attempt.
-        /// </summary>
-        private const float MassedFireInterval = 0.8f;
-
         /// <summary>Seconds between firing attempts, matching the formation path.</summary>
         private float lastFiredTime;
-
-        /// <summary>
-        /// True while flying a Splash 'Em run rather than a measured attack. The flying
-        /// is identical - the difference is entirely in how hard the weapons are worked.
-        /// </summary>
-        private bool massed;
 
         public AttackRunState(WingMember member) : base(member)
         {
             stateDisplayName = "attacking";
-        }
-
-        /// <summary>Choose between a measured attack and an expending one. Call before entering.</summary>
-        public void SetMassed(bool value)
-        {
-            massed = value;
-            stateDisplayName = value ? "splash 'em" : "attacking";
         }
 
         public override void EnterState(Pilot pilot)
@@ -61,8 +42,7 @@ namespace WingCommand
                 Unit target = member.AssignedTarget;
                 Plugin.Logger.LogInfo(
                     $"[Attack] {aircraft.unitName} running in on " +
-                    (target != null ? target.unitName : "(no target)") +
-                    (massed ? " (splash 'em)" : ""));
+                    (target != null ? target.unitName : "(no target)"));
             }
         }
 
@@ -85,19 +65,6 @@ namespace WingCommand
             if (target == null || target.disabled)
             {
                 if (target != null) WingComms.Say(member, WingComms.Call.Splash, target.unitName);
-                member.ClearAssignedTarget();
-                member.Apply(WingOrder.Formation);
-                return;
-            }
-
-            // An expending run ends when there is nothing left aboard that could hurt this
-            // target. A measured attack does not need the check - it keeps its station in
-            // reserve and the bingo/Winchester pass sends it home - but Splash 'Em is
-            // meant to run itself dry, and without this it would then circle a survivor it
-            // could no longer touch.
-            if (massed && !WingWeapons.CanStillEngage(aircraft, target))
-            {
-                WingComms.Say(member, WingComms.Call.Expended);
                 member.ClearAssignedTarget();
                 member.Apply(WingOrder.Formation);
                 return;
@@ -146,21 +113,16 @@ namespace WingCommand
 
         private void Shoot(Unit target)
         {
-            float interval = massed ? MassedFireInterval : WingWeapons.FireInterval(aircraft);
+            float interval = WingWeapons.FireInterval(aircraft);
             if (Time.timeSinceLevelLoad - lastFiredTime < interval) return;
 
             // The same weapon selection and validity checks the formation path uses, so an
             // attack run cannot dump the loadout at a target it has no business shooting.
-            // Splash 'Em keeps those checks and drops only the wing-wide concurrency
-            // cap and the long cooldown between launches.
             // A designated target is an explicit weapons authorization. The ROE still owns
             // incidental fire elsewhere, but cannot shorten or veto this order.
             float range = RoeRules.ExplicitOrderRange();
 
-            bool fired = massed
-                ? WingWeapons.EngageMassed(aircraft, pilot, target, range)
-                : WingWeapons.EngageSpecific(aircraft, pilot, target, range);
-
+            bool fired = WingWeapons.EngageSpecific(aircraft, pilot, target, range);
             if (fired) lastFiredTime = Time.timeSinceLevelLoad;
         }
     }

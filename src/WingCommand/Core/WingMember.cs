@@ -184,8 +184,11 @@ namespace WingCommand
                     break;
 
                 case WingOrder.Attack:
-                case WingOrder.FireForEffect:
                     EnterAttack(directive);
+                    break;
+
+                case WingOrder.FireForEffect:
+                    EnterSplash();
                     break;
 
                 case WingOrder.JamTarget:
@@ -284,7 +287,6 @@ namespace WingCommand
         {
             if (AssignedTarget != null && !AssignedTarget.disabled)
             {
-                attackState.SetMassed(directive.Order == WingOrder.FireForEffect);
                 Pilot.SwitchState(attackState);
             }
             else
@@ -299,6 +301,26 @@ namespace WingCommand
         /// back to plain formation.
         /// </summary>
         private void EnterJam()
+        {
+            if (AssignedTarget != null && !AssignedTarget.disabled)
+            {
+                formationState.BoostRejoin(Slot * WingTuning.RejoinStagger);
+                Pilot.SwitchState(formationState);
+            }
+            else
+            {
+                Apply(WingOrder.Formation);
+            }
+        }
+
+        /// <summary>
+        /// Splash 'Em is flown from the formation slot, the same as Jam Target: the wingman
+        /// holds station and works every effective store into the designated target from
+        /// where it is, instead of breaking off into an attack run. FormationFlyState owns
+        /// the shooting (see RunSplash) and returns to plain formation when the target dies
+        /// or the aircraft is dry.
+        /// </summary>
+        private void EnterSplash()
         {
             if (AssignedTarget != null && !AssignedTarget.disabled)
             {
@@ -736,7 +758,6 @@ namespace WingCommand
                 AssignedTarget != null && !AssignedTarget.disabled)
             {
                 WingComms.Say(this, WingComms.Call.Engaging, AssignedTarget.unitName);
-                attackState.SetMassed(Order == WingOrder.FireForEffect);
                 Pilot.SwitchState(attackState);
                 return;
             }

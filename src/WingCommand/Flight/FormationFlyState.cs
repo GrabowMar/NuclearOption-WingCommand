@@ -15,6 +15,9 @@ namespace WingCommand
     {
         private const float EngageInterval = 0.5f;
 
+        /// <summary>Seconds between massed shots while expending on a Splash 'Em target from the slot.</summary>
+        private const float SplashFireInterval = 0.8f;
+
         // Avoidance geometry, all expressed as multiples of the slot spacing in use so a
         // change to spacing moves them together. These were config entries; none of them
         // ever needed tuning independently, and leaving them free is how one of them came
@@ -382,7 +385,10 @@ namespace WingCommand
             if (stride > 1 && (++geometryTick + member.Slot) % stride != 0)
                 return;
 
-            RunEngagement(leader);
+            if (member.Order == WingOrder.FireForEffect)
+                RunSplash();
+            else
+                RunEngagement(leader);
 
             // The time that actually elapsed since the geometry last ran, which under the
             // Performance stride is several physics ticks rather than one. Every filter and
@@ -816,6 +822,42 @@ namespace WingCommand
                 lastFiredTime = Time.timeSinceLevelLoad;
                 if (coveringLeader) WingComms.Say(member, WingComms.Call.Covering);
             }
+        }
+
+        /// <summary>
+        /// Splash 'Em flown from the slot: hold station and work every effective store into
+        /// the designated target until it dies or the aircraft has nothing left that can
+        /// hurt it, then return to plain formation. ROE is ignored — an explicit designation
+        /// is weapons authorization — and the massed cadence is the short one the attack run
+        /// used, so the loadout goes out as a sustained volley rather than paced shots.
+        /// </summary>
+        private void RunSplash()
+        {
+            if (Time.timeSinceLevelLoad - lastEngageCheck < WingBrain.Interval(EngageInterval))
+                return;
+            lastEngageCheck = Time.timeSinceLevelLoad;
+
+            Unit target = member.AssignedTarget;
+            if (target == null || target.disabled)
+            {
+                if (target != null) WingComms.Say(member, WingComms.Call.Splash, target.unitName);
+                member.ClearAssignedTarget();
+                member.Apply(WingOrder.Formation);
+                return;
+            }
+
+            if (!WingWeapons.CanStillEngage(aircraft, target))
+            {
+                WingComms.Say(member, WingComms.Call.Expended);
+                member.ClearAssignedTarget();
+                member.Apply(WingOrder.Formation);
+                return;
+            }
+
+            if (Time.timeSinceLevelLoad - lastFiredTime < SplashFireInterval) return;
+
+            if (WingWeapons.EngageMassed(aircraft, pilot, target, RoeRules.ExplicitOrderRange()))
+                lastFiredTime = Time.timeSinceLevelLoad;
         }
 
         /// <summary>

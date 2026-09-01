@@ -58,16 +58,19 @@ namespace WingCommand
             NeedsPoint(order) || order == WingOrder.DeliverCargo;
 
         /// <summary>
-        /// True when the order prosecutes a designated unit with weapons. Drives the
-        /// leash and the attack-resume path, so Jam Target is deliberately excluded: it
-        /// carries a target but is flown as station-keeping, not pursuit.
+        /// True when the order sends a wingman out in pursuit of a designated unit. Drives
+        /// the leash and the attack-resume path. Jam Target and Splash 'Em are deliberately
+        /// excluded: both carry a target but are flown as station-keeping from the slot, not
+        /// as a chase.
         /// </summary>
         public static bool IsTargetOrder(WingOrder order) =>
-            order == WingOrder.Attack || order == WingOrder.FireForEffect;
+            order == WingOrder.Attack;
 
         /// <summary>True when the directive holds a designated unit at all, weapons or not.</summary>
         public static bool CarriesTarget(WingOrder order) =>
-            IsTargetOrder(order) || order == WingOrder.JamTarget;
+            IsTargetOrder(order) ||
+            order == WingOrder.FireForEffect ||
+            order == WingOrder.JamTarget;
 
         public static bool CanApply(WingMember member, WingOrder order)
         {

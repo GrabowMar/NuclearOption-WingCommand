@@ -201,7 +201,7 @@ Map moves are temporary routes. At the final point every wingman returns to form
 |---|---|
 | **Form Up** | Close on assigned slots and hold station on you |
 | **Attack My Target** | Jump the target you're locked on. Radial sends everyone; scoped WMC attacks distribute contacts and may hold surplus wingmen back as cover |
-| **Splash 'Em** | Every selected wingman expends on one target until it's dead or they're dry |
+| **Splash 'Em** | Every selected wingman pours fire into one target from the slot until it's dead or they're dry |
 | **Engage** | Hunt on their own within the configured leash, come back if they stray too far |
 | **Disengage** | Break on separated headings, use countermeasures, egress, then form up again |
 | **Hold Here** | Set up a CAP around a point while still applying ROE |
@@ -260,7 +260,7 @@ Set it per selection on **WMC → Tactical**; it shows in the roster and the com
 
 **Attack** is measured. It spreads designations across the wing, caps how many aircraft are useful against one contact, holds surplus wingmen back as cover, and leaves several seconds between launches so nobody empties themselves on a truck.
 
-**Splash 'Em** is the other thing. Every selected wingman goes after the same designated target and keeps shooting — no concurrency cap, no long cooldown — working down through missiles, then rockets, then guns as each runs dry, until the target is dead or there's nothing left aboard that could hurt it. Then they call `expended` and rejoin.
+**Splash 'Em** is the other thing. Every selected wingman stays in its slot and pours fire into the same designated target — no concurrency cap, no long cooldown — interleaving missiles, rockets and gun so the whole loadout goes out as a sustained volley, until the target is dead or there's nothing left aboard that could hurt it. Then they call `expended` and return to plain formation.
 
 What it does *not* drop is weapon/target matching: a station still has to be effective against that kind of target and the shot still has to be inside the weapon's own envelope, so this expends a loadout on something worth expending it on rather than throwing air-to-air missiles at a tank. Bingo fuel and Winchester still send a wingman home.
 
