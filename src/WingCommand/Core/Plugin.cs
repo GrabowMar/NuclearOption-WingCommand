@@ -39,12 +39,12 @@ namespace WingCommand
             // old configuration file simply carries dead lines that BepInEx drops on its
             // next save. Warning about a setting the player can no longer see was worse
             // than silence: it named keys that had already stopped existing.
-            if (Settings.FreePlanePurchases.Value || Settings.DisableWingSizeLimit.Value)
+            if (Settings.CheatFreePurchases || Settings.CheatNoWingLimit)
             {
                 Logger.LogWarning(
                     "Unsafe Debug cheats are enabled: " +
-                    $"FreePlanePurchases={Settings.FreePlanePurchases.Value}, " +
-                    $"DisableWingSizeLimit={Settings.DisableWingSizeLimit.Value}. " +
+                    $"FreePlanePurchases={Settings.CheatFreePurchases}, " +
+                    $"DisableWingSizeLimit={Settings.CheatNoWingLimit}. " +
                     "These options may break mission balance, UI, formations or the mod itself.");
             }
 

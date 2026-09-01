@@ -337,7 +337,7 @@ namespace WingCommand
         [HarmonyPrefix]
         private static void SetupMain_Prefix(RadialMenuMain __instance)
         {
-            if (!Plugin.Settings.UseNativeRadial.Value || !GameAccess.Available) return;
+            if (!WingCommandManager.NativeRadialActive) return;
 
             try
             {

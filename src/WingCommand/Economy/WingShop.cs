@@ -122,9 +122,6 @@ namespace WingCommand
             internal void NoteFactionStockDebit() =>
                 rollback.Add(() => Hq?.AddSupplyUnit(Definition, 1));
 
-            internal void NoteUndeclaredStockDebit() =>
-                rollback.Add(() => DecrementUndeclared(Definition));
-
             internal void ReserveCapacity()
             {
                 capacityReservations.Reserve(OverLimit);
@@ -202,7 +199,6 @@ namespace WingCommand
                 transaction.Rollback("mission reset");
             activeTransactions.Clear();
             listedDefinitions.Clear();
-            undeclaredBought.Clear();
             purchasedAircraft.Clear();
             overLimitAircraft.Clear();
             capacityReservations.Reset();
@@ -317,7 +313,7 @@ namespace WingCommand
         /// returned safely to the wing reserve has already been paid for.
         /// </summary>
         public static float CurrentPriceOf(AircraftDefinition definition) =>
-            Plugin.Settings.FreePlanePurchases.Value ||
+            Plugin.Settings.CheatFreePurchases ||
             WingSupplyReserve.OwnedOf(definition) > 0
                 ? 0f
                 : PriceOf(definition) * (WouldExceedLimit ? ExceedLimitMultiplier : 1f);
@@ -423,19 +419,19 @@ namespace WingCommand
         /// <summary>
         /// What can be bought right now.
         ///
-        /// Two sources, because one is not enough. The faction's <c>AircraftSupply</c> is
-        /// populated from the mission's declared stock, so anything the mission author did
-        /// not list — every workshop and modded airframe, and any stock type the mission
-        /// simply did not stock — has no entry and would never appear. Those are taken from
-        /// <c>Encyclopedia.i.aircraft</c> instead, which is the registry the game itself
-        /// spawns from and which modded aircraft register into.
+        /// Two sources: the faction's <c>AircraftSupply</c>, which is populated from the
+        /// mission's declared stock, and the wing reserve, which holds airframes you already
+        /// own — bought, or recovered from a completed sortie. A held airframe stays
+        /// selectable even when it was the faction's last one.
         ///
-        /// Undeclared types get their own small allowance rather than drawing on faction
-        /// stock, tracked here: writing a supply entry for an airframe the faction was never
-        /// given would be inventing stock on the mission's behalf.
+        /// There is deliberately no third source. Offering everything in
+        /// <c>Encyclopedia.i.aircraft</c> from an invented allowance let a mission be flown
+        /// with airframes its author never put on the map, and writing a supply entry for an
+        /// airframe the faction was never given is inventing stock on the mission's behalf.
+        /// If the mission did not stock it and you do not already hold one, it is not for sale.
         ///
-        /// Both sources are then filtered the same way — mission restrictions, player rank,
-        /// and whether the airframe could join this formation at all.
+        /// Both sources are filtered the same way — mission restrictions, player rank, and
+        /// whether the airframe could join this formation at all.
         /// </summary>
         public static IReadOnlyList<Offer> Catalogue()
         {
@@ -461,8 +457,8 @@ namespace WingCommand
             }
 
             // A held airframe remains selectable even when it was the faction's final one.
-            // Recovered undeclared aircraft also live only in the wing reserve, not in the
-            // mission's supply dictionary.
+            // A recovered airframe of a type the mission never stocked lives only here, not
+            // in the mission's supply dictionary, so this is the only place it can be offered.
             foreach (AircraftDefinition definition in WingSupplyReserve.Definitions)
             {
                 if (definition == null || listedDefinitions.Contains(definition)) continue;
@@ -474,37 +470,8 @@ namespace WingCommand
                 listedDefinitions.Add(definition);
             }
 
-            if (Plugin.Settings.IncludeUndeclaredAircraft.Value)
-                AddUndeclared(hq, rank, listedDefinitions);
-
             catalogue.Sort((a, b) => a.BasePrice.CompareTo(b.BasePrice));
             return catalogue;
-        }
-
-        /// <summary>Airframes the mission never stocked, offered from our own allowance.</summary>
-        private static void AddUndeclared(FactionHQ hq, int rank,
-                                          HashSet<AircraftDefinition> listed)
-        {
-            Encyclopedia encyclopedia = Encyclopedia.i;
-            if (encyclopedia == null || encyclopedia.aircraft == null) return;
-
-            List<AircraftDefinition> all = encyclopedia.aircraft;
-            for (int i = 0; i < all.Count; i++)
-            {
-                AircraftDefinition definition = all[i];
-                if (definition == null) continue;
-                if (listed.Contains(definition)) continue;
-
-                // Anything the faction actually stocks was handled above, at its real count.
-                if (hq.AircraftSupply.ContainsKey(definition)) continue;
-                if (!Sellable(definition, hq, rank)) continue;
-
-                int left = UndeclaredRemaining(definition);
-                if (left <= 0) continue;
-
-                catalogue.Add(new Offer(definition, definition.unitName, definition.value, left));
-                listed.Add(definition);
-            }
         }
 
         /// <summary>Restrictions, rank and airframe class - the gates both sources share.</summary>
@@ -527,18 +494,6 @@ namespace WingCommand
                 definition.aircraftParameters.rankRequired > rank) return false;
 
             return true;
-        }
-
-        // How many of each undeclared airframe have been bought this mission. Kept here
-        // rather than in the faction's supply dictionary, which describes what the mission
-        // handed the faction and is not ours to invent entries in.
-        private static readonly Dictionary<AircraftDefinition, int> undeclaredBought =
-            new Dictionary<AircraftDefinition, int>();
-
-        private static int UndeclaredRemaining(AircraftDefinition definition)
-        {
-            return WingTuning.UndeclaredStock
-                   - (undeclaredBought.TryGetValue(definition, out int used) ? used : 0);
         }
 
 
@@ -586,7 +541,11 @@ namespace WingCommand
 
             declared = hq.AircraftSupply.ContainsKey(definition);
             source = WingSupplyReserve.NextSource(definition);
-            int factionStock = declared ? hq.GetUnitSupply(definition) : UndeclaredRemaining(definition);
+
+            // An airframe the mission never stocked has no faction stock to draw on. It can
+            // still be bought back out of the wing reserve if you already hold one, which is
+            // the only way an undeclared type reaches the shop at all.
+            int factionStock = declared ? hq.GetUnitSupply(definition) : 0;
             stock = factionStock + WingSupplyReserve.CountOf(definition);
             if (stock <= 0) return Denied(definition.unitName + ": none left in stock");
 
@@ -599,7 +558,7 @@ namespace WingCommand
                 return Denied(capReason);
 
             bool alreadyOwned = source == WingSupplyReserve.Source.Owned;
-            bool debugFree = Plugin.Settings.FreePlanePurchases.Value;
+            bool debugFree = Plugin.Settings.CheatFreePurchases;
             price = alreadyOwned || debugFree ? 0f : PriceOf(definition) * multiplier;
             if (player.Allocation < price)
                 return Denied("Need " + Mathf.RoundToInt(price) + ", have " +
@@ -639,7 +598,7 @@ namespace WingCommand
 
             paid = quote.Price;
             bool alreadyOwned = quote.Source == WingSupplyReserve.Source.Owned;
-            bool debugFree = Plugin.Settings.FreePlanePurchases.Value;
+            bool debugFree = Plugin.Settings.CheatFreePurchases;
 
             Plugin.Logger.LogInfo(
                 $"[Shop] requisitioned {definition.unitName} for {quote.Price:F0}" +
@@ -695,15 +654,11 @@ namespace WingCommand
                 }
                 else
                 {
-                    if (UndeclaredRemaining(definition) <= 0)
-                    {
-                        reason = definition.unitName + ": none left in stock";
-                        transaction.Rollback(reason);
-                        return false;
-                    }
-                    undeclaredBought[definition] =
-                        (undeclaredBought.TryGetValue(definition, out int used) ? used : 0) + 1;
-                    transaction.NoteUndeclaredStockDebit();
+                    // Not in the faction's stock and not in our reserve: there is nothing to
+                    // debit. Quote() denies this case already; this is the belt to its braces.
+                    reason = definition.unitName + ": none left in stock";
+                    transaction.Rollback(reason);
+                    return false;
                 }
 
                 if (quote.Price > 0f)
@@ -730,18 +685,11 @@ namespace WingCommand
             }
         }
 
-        private static void DecrementUndeclared(AircraftDefinition definition)
-        {
-            if (definition == null || !undeclaredBought.TryGetValue(definition, out int used)) return;
-            if (used <= 1) undeclaredBought.Remove(definition);
-            else undeclaredBought[definition] = used - 1;
-        }
-
         private static int Available(AircraftDefinition definition, FactionHQ hq)
         {
             int ordinary = hq != null && hq.AircraftSupply.ContainsKey(definition)
                 ? hq.GetUnitSupply(definition)
-                : UndeclaredRemaining(definition);
+                : 0;
             return ordinary + WingSupplyReserve.CountOf(definition);
         }
 

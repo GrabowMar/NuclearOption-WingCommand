@@ -238,11 +238,17 @@ namespace WingCommand
         }
 
         /// <summary>
-        /// The native wheel is used when the player asked for it and every private member
-        /// it depends on resolved. Otherwise the standalone fallback wheel takes over.
+        /// The native wheel is used when every private member it depends on resolved and the
+        /// player has not bound a key of their own. Otherwise the standalone wheel takes over.
+        ///
+        /// One control, not two. A separate UseNativeRadial boolean was the manual half of a
+        /// decision already made automatically: GameAccess.Available detects an unusable
+        /// wheel by itself, and the key no-ops while unbound. Binding a key is now the whole
+        /// opt-out, and it also keeps our entry out of the game's own wheel - which is the
+        /// only reason anyone had to turn the native integration off.
         /// </summary>
         internal static bool NativeRadialActive =>
-            Plugin.Settings.UseNativeRadial.Value && GameAccess.Available;
+            GameAccess.Available && Plugin.Settings.RadialKey.Value == KeyCode.None;
 
         private static bool InPlayableState()
         {

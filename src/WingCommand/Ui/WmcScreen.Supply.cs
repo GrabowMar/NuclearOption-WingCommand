@@ -577,7 +577,7 @@ namespace WingCommand
 
             WingShop.SquadronState squadron = WingShop.Squadron();
             string text = "SQUADRON " + squadron.Active + " / " + squadron.Limit;
-            if (Plugin.Settings.DisableWingSizeLimit.Value)
+            if (Plugin.Settings.CheatNoWingLimit)
                 text += "  ·  WING NO LIMIT DOES NOT BYPASS THIS CAP";
 
             if (!squadron.AtCapacity)

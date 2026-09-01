@@ -173,9 +173,6 @@ namespace WingCommand
         /// </summary>
         public const int ExceedLimitAllowance = 3;
 
-        /// <summary>How many of each undeclared airframe may be bought per mission.</summary>
-        public const int UndeclaredStock = 3;
-
         // ------------------------------------------------------------------ pilots
         //
         // Ordinary numbers rather than a formula: the whole curve is one triangular step, so

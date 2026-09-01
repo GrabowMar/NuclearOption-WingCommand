@@ -468,12 +468,12 @@ namespace WingCommand
         /// option appear to work only some of the time.
         /// </summary>
         public static bool HasRoom(int occupied) =>
-            Plugin.Settings.DisableWingSizeLimit.Value ||
+            Plugin.Settings.CheatNoWingLimit ||
             occupied + WingShop.PendingWingSlots < Plugin.Settings.MaxWingSize.Value;
 
         /// <summary>Text used beside the live count when the unsafe bypass is enabled.</summary>
         public static string WingLimitLabel =>
-            Plugin.Settings.DisableWingSizeLimit.Value
+            Plugin.Settings.CheatNoWingLimit
                 ? "NO LIMIT"
                 : Plugin.Settings.MaxWingSize.Value.ToString();
 
@@ -652,7 +652,7 @@ namespace WingCommand
             // Unlimited cannot be represented as a loop bound. Count + 1 is sufficient:
             // among that many 1-based slots there must be a free one, even when surviving
             // members retain high slot numbers after losses.
-            int max = Plugin.Settings.DisableWingSizeLimit.Value
+            int max = Plugin.Settings.CheatNoWingLimit
                 ? members.Count + 1
                 : Plugin.Settings.MaxWingSize.Value;
 

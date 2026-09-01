@@ -63,7 +63,6 @@ namespace WingCommand
 
         // --- Shop ---
         public ConfigEntry<bool> ShopEnabled { get; private set; }
-        public ConfigEntry<bool> IncludeUndeclaredAircraft { get; private set; }
 
         // --- Loadout ---
         public ConfigEntry<string> LoadoutTemplates { get; private set; }
@@ -72,7 +71,6 @@ namespace WingCommand
         public ConfigEntry<bool> ShowHud { get; private set; }
         public ConfigEntry<bool> UseMfdPanel { get; private set; }
         public ConfigEntry<bool> MapCommandEnabled { get; private set; }
-        public ConfigEntry<bool> UseNativeRadial { get; private set; }
         public ConfigEntry<HighlightMode> Highlight { get; private set; }
         public ConfigEntry<string> WingIconColor { get; private set; }
         public ConfigEntry<string> WingTargetColor { get; private set; }
@@ -90,6 +88,52 @@ namespace WingCommand
         public ConfigEntry<bool> FreePlanePurchases { get; private set; }
         public ConfigEntry<bool> DisableWingSizeLimit { get; private set; }
         public ConfigEntry<bool> VerboseLogging { get; private set; }
+
+        // The cheats read through these, never through their own entry. EnableDebugActions
+        // says "allow the development-only actions below", and used to gate only the spawn
+        // button: free purchases and the wing-size bypass took effect on their own, so the
+        // master switch was wrong about its own section. Reading the pair here rather than
+        // ANDing at each of the seven call sites is what keeps it that way.
+        public bool CheatFreePurchases => EnableDebugActions.Value && FreePlanePurchases.Value;
+        public bool CheatNoWingLimit => EnableDebugActions.Value && DisableWingSizeLimit.Value;
+
+        private const string HexHelp = "Six-digit hex, with or without the leading #.";
+
+        /// <summary>
+        /// Rejects a malformed colour at bind time rather than letting it fail silently.
+        /// A typo used to reach <c>ColorUtility.TryParseHtmlString</c>, fail, and leave the
+        /// icon whatever the fallback was, with nothing anywhere to say why - so the setting
+        /// looked as though it did not work. BepInEx reverts an unacceptable value to the
+        /// default and says so in the log, which is the whole fix.
+        /// </summary>
+        private sealed class HexColourValue : AcceptableValueBase
+        {
+            public HexColourValue() : base(typeof(string)) { }
+
+            private static bool IsSixDigitHex(string value)
+            {
+                if (string.IsNullOrEmpty(value)) return false;
+                string digits = value[0] == '#' ? value.Substring(1) : value;
+                if (digits.Length != 6) return false;
+
+                foreach (char c in digits)
+                {
+                    bool hex = (c >= '0' && c <= '9')
+                               || (c >= 'a' && c <= 'f')
+                               || (c >= 'A' && c <= 'F');
+                    if (!hex) return false;
+                }
+                return true;
+            }
+
+            public override object Clamp(object value) => IsValid(value) ? value : "#FFFFFF";
+
+            public override bool IsValid(object value) => IsSixDigitHex(value as string);
+
+            public override string ToDescriptionString() => "# Expects " + HexHelp;
+        }
+
+        private static readonly HexColourValue HexColour = new HexColourValue();
 
         private static ConfigDescription Advanced(string text, AcceptableValueBase values = null) =>
             new ConfigDescription(text, values,
@@ -190,11 +234,6 @@ namespace WingCommand
                 "Allow buying wingmen. Aircraft are priced from the same value the player's " +
                 "own aircraft menu uses, paid for out of your allocation, and drawn from " +
                 "your faction's stock - so a purchase competes with the mission's own AI.");
-            IncludeUndeclaredAircraft = c.Bind("Shop", "IncludeUndeclaredAircraft", false,
-                Advanced("Compatibility option: also offer airframes the mission did not " +
-                         "stock, using a separate per-mission allowance. Off in the release " +
-                         "profile, because it lets a mission be flown with aircraft its " +
-                         "author never put on the map."));
         }
 
         private void BindLoadout(ConfigFile c)
@@ -211,9 +250,14 @@ namespace WingCommand
 
         private void BindKeys(ConfigFile c)
         {
-            RadialKey = c.Bind("Keys", "FallbackRadialMenu", KeyCode.None,
-                Advanced("Hold to open the standalone fallback radial. Only needed if the native " +
-                         "wheel integration is turned off or unavailable; leave unbound otherwise."));
+            // Binding this is also how you opt out of the native wheel - see
+            // WingCommandManager.NativeRadialActive. It replaced a separate UseNativeRadial
+            // boolean that asked the same question a second time.
+            RadialKey = c.Bind("Keys", "WingMenu", KeyCode.None,
+                "Hold to open the standalone wing wheel. Leave unbound and Wing Command adds " +
+                "itself to the game's own radial menu instead, which is the default. Binding " +
+                "a key here uses that key and leaves the game's wheel untouched - set it if " +
+                "the native entry is unavailable, or if you would rather not have it there.");
             QuickRejoinKey = c.Bind("Keys", "QuickRejoin", KeyCode.None,
                 Advanced("Optional hotkey: order the whole wing to rejoin formation."));
             QuickEngageKey = c.Bind("Keys", "QuickEngage", KeyCode.None,
@@ -237,13 +281,10 @@ namespace WingCommand
                 "and markers on both the map and the in-cockpit HUD; WingAndTargets also " +
                 "marks the units they are engaging.");
             WingIconColor = c.Bind("UI", "WingMemberColor", "#39FF65",
-                Advanced("Hex colour for wingmen across the roster, tactical map and HUD."));
+                Advanced("Hex colour for wingmen across the roster, tactical map and HUD. " +
+                         HexHelp, HexColour));
             WingTargetColor = c.Bind("UI", "WingTargetColor", "#FFB020",
-                Advanced("Hex colour for units your wing is engaging."));
-
-            UseNativeRadial = c.Bind("UI", "UseNativeRadial", true,
-                Advanced("Add a compact 'Wing Command' entry to the game's own radial menu. This uses " +
-                         "the game's Rewired look-axis input while the cursor is captured."));
+                Advanced("Hex colour for units your wing is engaging. " + HexHelp, HexColour));
         }
 
         private void BindDebug(ConfigFile c)
