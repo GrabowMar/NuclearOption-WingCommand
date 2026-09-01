@@ -78,8 +78,12 @@ pwsh build/package.ps1
 - **Don't add a switch that `Mode` already gates.** Jamming and aerobatics each had their own
   toggle *and* a `WingBrain` gate, so there were two ways to turn one thing off.
 - Version bumps touch csproj `<Version>` and `Core/Plugin.cs`. The build **fails** if the two
-  disagree (`CheckPluginVersionMatchesCsproj` in the csproj), and `package.ps1` regenerates
-  `build/meta.json` from the built DLL, so neither can drift silently.
+  disagree (`CheckPluginVersionMatchesCsproj` in the csproj), so those two cannot drift.
+  **`build/meta.json` can.** `package.ps1` regenerates a *staged* meta.json inside the
+  release zip and never writes `build/meta.json` — which is the one `copy-to-game.ps1`
+  deploys. Update its `version` and `hash` by hand when you bump, or the game folder keeps
+  advertising the previous release. This was wrong here until 0.9.5.0, and the file had
+  fallen a version behind.
 
 ## Guardrails
 
