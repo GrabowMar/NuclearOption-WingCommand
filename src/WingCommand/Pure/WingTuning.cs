@@ -148,6 +148,20 @@ namespace WingCommand
         /// <summary>Fuel fraction at which a wingman calls bingo and heads home.</summary>
         public const float BingoFuel = 0.15f;
 
+        // ------------------------------------------------------------------ jamming
+
+        /// <summary>
+        /// jamAmount sent to the designated target's own <c>Unit.Jam</c> on every pulse.
+        ///
+        /// The native call is <c>jamAmount / radar.jamTolerance</c> against a tolerance the mod
+        /// can never read, and the result decays continuously in <c>Radar.Update</c>. The stock
+        /// JammingPod weapon re-sends every 0.2 s at a range- and power-scaled amount; this
+        /// pulses faster (alongside the self-protection ECM, on the same cadence) and generous
+        /// enough to clear any tolerance outright, so the target stays saturated rather than
+        /// merely nudged.
+        /// </summary>
+        public const float JamTargetAmount = 2f;
+
         // ------------------------------------------------------------------ economy
 
         /// <summary>

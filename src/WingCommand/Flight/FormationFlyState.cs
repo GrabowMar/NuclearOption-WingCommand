@@ -272,7 +272,20 @@ namespace WingCommand
                     member.Apply(WingOrder.Formation);
                     return;
                 }
-                member.Jammer.Pulse(aircraft);
+
+                // The pulse above only ever protects this aircraft: RadarJammer.Fire calls
+                // Aircraft.AddECMIntensity on itself, nothing about jamTarget. Actually denying
+                // that unit's own radar needs Unit.Jam - the call the stock JammingPod weapon
+                // makes against whatever it is aimed at - which raises jamAccumulation on every
+                // Radar attached to jamTarget until Radar.IsJammed blinds it. That decays
+                // continuously in Radar.Update, so it rides the same pulse cadence to stay
+                // saturated. Host-only: Unit.Jam broadcasts a ClientRpc.
+                if (member.Jammer.Pulse(aircraft) && aircraft.IsServer)
+                    jamTarget.Jam(new Unit.JamEventArgs
+                    {
+                        jammingUnit = aircraft,
+                        jamAmount = WingTuning.JamTargetAmount
+                    });
             }
 
             // Fidelity throttle: at low settings recompute the slot geometry only every

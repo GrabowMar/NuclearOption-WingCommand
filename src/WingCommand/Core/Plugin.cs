@@ -20,7 +20,7 @@ namespace WingCommand
     public class Plugin : BaseUnityPlugin
     {
         public const string PluginGuid = "com.marci.wingcommand";
-        public const string PluginName = "WingCommand";
+        public const string PluginName = "Wing Command";
         public const string PluginVersion = "0.9.5.0";
 
         internal static Plugin Instance { get; private set; }

@@ -108,6 +108,9 @@ namespace WingCommand
         {
             public WingShop.PurchaseTransaction Transaction;
             public Airbase Origin;
+            public Loadout Loadout;
+            public LiveryKey Livery;
+            public float Fuel;
             public Hangar Hangar;
             public float RequestedAt;
             public float ExpiresAt;
@@ -118,6 +121,17 @@ namespace WingCommand
         private static readonly List<PendingDelivery> pending = new List<PendingDelivery>();
         private static FactionHQ watched;
 
+        /// <summary>
+        /// Order a hangar delivery from the nearest field that stocks this airframe, and queue
+        /// it there if that field's hangar is momentarily busy rather than defecting to a
+        /// farther one.
+        ///
+        /// Selection used to require a hangar free to launch *right now*: buy a second aircraft
+        /// while the first's hangar was still mid-door-cycle and the nearest field no longer
+        /// qualified at all, so the order jumped to whichever field, however far, happened to
+        /// have an idle hangar that instant. A field worth flying from is worth queuing for; a
+        /// field only reachable because its hangar is idle this frame is not.
+        /// </summary>
         private static bool TryHangarDelivery(WingShop.PurchaseTransaction transaction,
                                               Aircraft leader, FactionHQ hq, Loadout loadout)
         {
@@ -125,9 +139,7 @@ namespace WingCommand
 
             AircraftDefinition definition = transaction.Definition;
 
-            // The nearest airbase is not necessarily one that can produce this airframe — a
-            // hangar stocks specific types — so take the closest field that can.
-            Airbase airbase = NearestHangarFor(definition, hq, leader.transform.position);
+            Airbase airbase = NearestStockedAirbase(definition, hq, leader.transform.position);
             if (airbase == null) return false;
 
             AircraftParameters p = definition.aircraftParameters;
@@ -144,14 +156,37 @@ namespace WingCommand
             {
                 Transaction = transaction,
                 Origin = airbase,
+                Loadout = loadout,
+                Livery = livery,
+                Fuel = fuel,
                 RequestedAt = Time.unscaledTime,
                 ExpiresAt = Time.unscaledTime + HangarDeliveryTimeout,
-                Starting = true,
             };
 
             Watch(hq);
             pending.Add(order);
+            AttemptNativeSpawn(order);
 
+            Plugin.Logger.LogInfo(order.Hangar != null
+                ? "[Shop] " + definition.unitName + " ordered from a hangar at " + airbase.name +
+                  " with the " + WingLoadoutCatalog.Label(transaction.Loadout) + " fit"
+                : "[Shop] " + definition.unitName + " queued for a hangar at " + airbase.name +
+                  " — every hangar there is busy");
+            return true;
+        }
+
+        /// <summary>
+        /// One attempt to hand this order to its target airbase. The order stays in
+        /// <see cref="pending"/> either way: a claimed hangar waits on its door sequence via
+        /// <see cref="OnUnitRegistered"/>, a refused one waits here for <see cref="Tick"/> to
+        /// retry once a hangar there frees up.
+        /// </summary>
+        private static void AttemptNativeSpawn(PendingDelivery order)
+        {
+            FactionHQ hq = order.Transaction.Hq;
+            AircraftDefinition definition = order.Transaction.Definition;
+
+            order.Starting = true;
             Airbase.TrySpawnResult result;
             int stockBeforeNative = hq.GetUnitSupply(definition);
             try
@@ -160,11 +195,12 @@ namespace WingCommand
                 // which is what the faction's aircraft launch with. A requisition with a
                 // preset hands the field the fit the player asked for instead; the hangar
                 // arms it on the ramp exactly as it arms the faction's own aircraft.
-                result = airbase.TrySpawnAircraft(null, definition, livery, loadout, fuel);
+                result = order.Origin.TrySpawnAircraft(null, definition, order.Livery,
+                                                       order.Loadout, order.Fuel);
             }
             catch (Exception e)
             {
-                Plugin.Logger.LogWarning("[Shop] hangar delivery threw, falling back: " + e.Message);
+                Plugin.Logger.LogWarning("[Shop] hangar delivery threw, will retry: " + e.Message);
                 result = default(Airbase.TrySpawnResult);
             }
             finally
@@ -178,37 +214,30 @@ namespace WingCommand
                 order.Starting = false;
             }
 
+            if (!result.Allowed) return;
+
             order.Hangar = result.Hangar;
+            // A hangar has now actually taken the order; give it its own door-sequence budget
+            // rather than whatever was left of the time this order spent queued.
+            order.ExpiresAt = Time.unscaledTime + HangarDeliveryTimeout;
 
             // An immediate hangar spawn registers inside TrySpawnAircraft, before it returns
             // the native Hangar identifier. Re-evaluate only after that identifier is known.
             for (int i = 0; i < order.EarlyCandidates.Count; i++)
                 TryClaim(order.EarlyCandidates[i]);
-
-            if (!result.Allowed)
-            {
-                pending.Remove(order);
-                if (pending.Count == 0) Watch(null);
-                return false;
-            }
-
-            Plugin.Logger.LogInfo(
-                "[Shop] " + definition.unitName + " ordered from a hangar at " + airbase.name +
-                " with the " + WingLoadoutCatalog.Label(transaction.Loadout) + " fit" +
-                (result.DelayedSpawn ? " (waiting on hangar doors)" : ""));
-            return true;
         }
 
-        /// <summary>The closest friendly field with a hangar that stocks this airframe.</summary>
-        private static Airbase NearestHangarFor(AircraftDefinition definition, FactionHQ hq,
-                                                Vector3 from)
+        /// <summary>The closest friendly field that stocks this airframe in some hangar, whether or not that hangar is free to launch it this instant.</summary>
+        private static Airbase NearestStockedAirbase(AircraftDefinition definition, FactionHQ hq,
+                                                     Vector3 from)
         {
             Airbase best = null;
             float bestSq = float.MaxValue;
 
             foreach (Airbase airbase in hq.GetAirbases())
             {
-                if (airbase == null || !airbase.CanSpawnAircraft(definition)) continue;
+                if (airbase == null || airbase.disabled) continue;
+                if (!airbase.GetAvailableAircraft().Contains(definition)) continue;
 
                 float sq = (airbase.transform.position - from).sqrMagnitude;
                 if (sq >= bestSq) continue;
@@ -298,26 +327,66 @@ namespace WingCommand
                    1000f * 1000f;
         }
 
-        /// <summary>Write off orders the field never produced, so nothing waits for ever.</summary>
+        /// <summary>
+        /// Advance every open order: retry a queued one against its target airbase, and write
+        /// off ones that can never arrive, so nothing waits forever.
+        ///
+        /// Oldest-first, since <see cref="pending"/> is append-order: when a hangar frees up,
+        /// whichever purchase queued for it first gets it, the same way a real flight line
+        /// works through a backlog rather than serving whoever asks last.
+        /// </summary>
         public static void Tick()
         {
             for (int i = pending.Count - 1; i >= 0; i--)
             {
-                if (Time.unscaledTime < pending[i].ExpiresAt) continue;
+                PendingDelivery order = pending[i];
+                if (order.Hangar != null || order.Starting) continue;
+
+                // Still queued for its target airbase. Keep waiting as long as that airbase
+                // remains capable of ever producing this airframe — the entire point of
+                // queuing is to hold out for the near field rather than defect to a far one —
+                // but give up the instant it genuinely cannot (captured, hangar destroyed),
+                // rather than sitting out the full timeout for an order that can never land.
+                if (!order.Origin.disabled &&
+                    order.Origin.GetAvailableAircraft().Contains(order.Transaction.Definition))
+                    continue;
+
+                Plugin.Logger.LogWarning(
+                    "[Shop] " + order.Transaction.Definition.unitName + " - " +
+                    order.Origin.name + " can no longer produce it");
+                FailDelivery(order, "airbase can no longer produce this aircraft");
+            }
+
+            // FIFO retry pass, oldest queued order first.
+            for (int i = 0; i < pending.Count; i++)
+            {
+                PendingDelivery order = pending[i];
+                if (order.Hangar == null && !order.Starting) AttemptNativeSpawn(order);
+            }
+
+            for (int i = pending.Count - 1; i >= 0; i--)
+            {
+                PendingDelivery order = pending[i];
+                if (order.Hangar == null || Time.unscaledTime < order.ExpiresAt) continue;
 
                 Plugin.Logger.LogWarning(
                     "[Shop] hangar delivery of " +
-                    pending[i].Transaction.Definition.unitName + " never arrived");
-                bool restored = pending[i].Transaction.Rollback("hangar delivery timed out");
-                WingCommandManager.Instance?.Toast(
-                    pending[i].Transaction.Definition.unitName +
-                    (restored
-                        ? " delivery failed - funds and stock restored"
-                        : " delivery failed - refund is retrying"));
-                pending.RemoveAt(i);
+                    order.Transaction.Definition.unitName + " never arrived");
+                FailDelivery(order, "hangar delivery timed out");
             }
 
             if (pending.Count == 0 && watched != null) Watch(null);
+        }
+
+        private static void FailDelivery(PendingDelivery order, string reason)
+        {
+            bool restored = order.Transaction.Rollback(reason);
+            WingCommandManager.Instance?.Toast(
+                order.Transaction.Definition.unitName +
+                (restored
+                    ? " delivery failed - funds and stock restored"
+                    : " delivery failed - refund is retrying"));
+            pending.Remove(order);
         }
 
         public static void Reset()

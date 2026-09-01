@@ -1,6 +1,6 @@
 {
   "id": "WingCommand",
-  "displayName": "WingCommand",
+  "displayName": "Wing Command",
   "description": "Tactical AI wing command for Nuclear Option. Select individual wingmen on the map, issue scoped Form Up, Attack, Engage, Disengage, Hold, RTB, Cargo and Land orders, route selected wingmen with right-click and queue points with Shift, and manage confirmed paid assignments, faction-stock requisitions and optional native per-type reserves from focused Tactical and Supply WMC tabs. Six core formations with a dedicated radial formation dial, compact whole-wing combat commands, persistent map task markers, defensive reactions and pilot-loss takeover. Host or single-player only.",
   "tags": ["QoL", "Utility", "AI"],
   "authors": ["GrabowMar"],
