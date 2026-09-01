@@ -304,6 +304,49 @@ namespace WingCommand
 
             spacing *= ThreatSpacingScale(leader);
 
+            EaseSlotLocal(shape, spacing, turnRate);
+
+            GlobalPosition slotPos = SlotPosition(leader, track, spacing, out Vector3 offset);
+
+            Vector3 toSlot = slotPos - aircraft.GlobalPosition();
+            float distance = toSlot.magnitude;
+
+            member.SlotError = distance;
+            CheckAbleToKeepUp(leader, distance);
+
+            // Two flight models, chosen by autopilot type, each in its own file. They are
+            // separate because AutopilotPlane and AutopilotHelo override different AutoAim
+            // overloads and answer to completely different commands — calling the wrong one
+            // produces no control input at all. Everything above this point (slot geometry,
+            // avoidance, diagnostics) is shared; everything below is not.
+            if (aircraft.autopilot is AutopilotPlane)
+            {
+                FixedWingFormation.Fly(
+                    aircraft, leader, controlInputs, member.Slot,
+                    slotPos, toSlot, distance, spacing,
+                    new FixedWingFormation.Rejoin(rejoinHoldUntil, rejoinBoostUntil),
+                    smoothedLeaderDir, turnRate, DueToReport(), shape, lateralTurnScale);
+            }
+            else
+            {
+                RotaryFormation.Mode mode = RotaryFormation.Fly(
+                    aircraft, leader, slotPos, toSlot, distance, offset.y, spacing,
+                    lastRotaryMode, out float horizontalError);
+
+                ReportRotaryMode(mode, distance, horizontalError);
+            }
+        }
+
+        /// <summary>
+        /// Settle this frame's slot in leader-local space.
+        ///
+        /// Everything here is a shape change rather than a position: turn compression,
+        /// the threat step-back and the turn-side mirror all move where the slot sits
+        /// relative to the leader, and all of them ease so the autopilot is never handed
+        /// a discontinuity to chase.
+        /// </summary>
+        private void EaseSlotLocal(FormationShape shape, float spacing, float turnRate)
+        {
             // Fluid formation geometry: a hard turn compresses the line abreast component
             // and opens the trail component slightly. That reduces the impossible speed
             // difference between inside and outside slots while keeping the formation
@@ -358,13 +401,22 @@ namespace WingCommand
                     smoothedSlotLocal, desiredSlotLocal,
                     1f - Mathf.Exp(-Time.fixedDeltaTime / ShapeTransitionSeconds));
             }
+        }
 
+        /// <summary>
+        /// Turn the settled leader-local slot into a world position: rotate it onto the
+        /// leader's track, lead the leader's motion, then apply separation, path-cut
+        /// avoidance and the terrain floor.
+        /// </summary>
+        private GlobalPosition SlotPosition(Aircraft leader, Vector3 track, float spacing,
+                                            out Vector3 offset)
+        {
             // The frame the slots hang off is the leader's *track*, not its nose. Sideslip and
             // yaw wobble swing the nose several degrees either side of the flight path, and
             // rotating the whole formation by that moves every slot laterally in proportion
             // to how far out it sits — so the outermost wingman travelled several times as
             // far as the closest one, which is what the sway looked like.
-            Vector3 offset = FormationSolver.WorldOffset(track, smoothedSlotLocal);
+            offset = FormationSolver.WorldOffset(track, smoothedSlotLocal);
 
             // Anchor the slot to where the leader is going, not where it is: a fast leader
             // drags an un-predicted slot behind it and the wingman spends the whole flight
@@ -411,34 +463,9 @@ namespace WingCommand
             slotPos += smoothedAvoidance;
             slotPos = ApplyTerrainFloor(slotPos);
 
-            Vector3 toSlot = slotPos - aircraft.GlobalPosition();
-            float distance = toSlot.magnitude;
-
-            member.SlotError = distance;
-            CheckAbleToKeepUp(leader, distance);
-
-            // Two flight models, chosen by autopilot type, each in its own file. They are
-            // separate because AutopilotPlane and AutopilotHelo override different AutoAim
-            // overloads and answer to completely different commands — calling the wrong one
-            // produces no control input at all. Everything above this point (slot geometry,
-            // avoidance, diagnostics) is shared; everything below is not.
-            if (aircraft.autopilot is AutopilotPlane)
-            {
-                FixedWingFormation.Fly(
-                    aircraft, leader, controlInputs, member.Slot,
-                    slotPos, toSlot, distance, spacing,
-                    new FixedWingFormation.Rejoin(rejoinHoldUntil, rejoinBoostUntil),
-                    smoothedLeaderDir, turnRate, DueToReport(), shape, lateralTurnScale);
-            }
-            else
-            {
-                RotaryFormation.Mode mode = RotaryFormation.Fly(
-                    aircraft, leader, slotPos, toSlot, distance, offset.y, spacing,
-                    lastRotaryMode, out float horizontalError);
-
-                ReportRotaryMode(mode, distance, horizontalError);
-            }
+            return slotPos;
         }
+
         /// <summary>
         /// Log rotary regime changes and periodic slot error.
         ///

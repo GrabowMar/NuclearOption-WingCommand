@@ -168,103 +168,28 @@ namespace WingCommand
                     break;
 
                 case WingOrder.OrbitHere:
-                {
-                    Aircraft leader = Leader;
-                    GlobalPosition anchor = directive.HasPoint
-                        ? directive.Point
-                        : leader != null
-                            ? leader.GlobalPosition()
-                            : Aircraft.GlobalPosition();
-
-                    orbitState.SetAnchor(anchor, Plugin.Settings.OrbitRadius.Value);
-                    Pilot.SwitchState(orbitState);
+                    EnterOrbit(directive);
                     break;
-                }
 
                 case WingOrder.DeliverCargo:
-                {
-                    // Two routes, and the difference is whether the player named a place.
-                    //
-                    // With a drop point, CargoRunState flies there and releases — the same
-                    // shape as Hold and Land, and available to any airframe carrying a load
-                    // rather than only to helicopters.
-                    //
-                    // Without one, the stock transport state configures itself in EnterState
-                    // — nearest airbase, nearest known ground enemy, landing zone search — so
-                    // it remains a complete supply-run behaviour for the cost of a state
-                    // switch, and is what the order has always done.
-                    //
-                    // Neither reports back on its own. CheckCargoRun watches the cargo
-                    // station itself, which is the only ground truth available, and either
-                    // calls the delivery or gives the airframe back.
-                    cargoProgress.Reset(CargoAmmo, Time.timeSinceLevelLoad);
-
-                    if (directive.HasPoint)
-                    {
-                        cargoRunState.SetDestination(directive.Point);
-                        Pilot.SwitchState(cargoRunState);
-                        break;
-                    }
-
-                    if (Pilot.AIHeloTransportState != null)
-                    {
-                        Pilot.SwitchState(Pilot.AIHeloTransportState);
-                        break;
-                    }
-
-                    // A fixed-wing transport has no stock supply route to fall back on, so
-                    // say which half of the order is missing rather than silently doing
-                    // nothing with a load aboard.
-                    WingCommandManager.Instance?.Toast(
-                        Name + " needs a drop point - it has no standard supply route");
-                    Apply(WingOrder.Formation);
+                    EnterCargoRun(directive);
                     break;
-                }
 
                 case WingOrder.LandHere:
-                    if (directive.HasPoint) landState.SetDestination(directive.Point);
-                    else landState.ClearDestination();
-                    Pilot.SwitchState(landState);
+                    EnterLanding(directive);
                     break;
 
                 case WingOrder.MoveToPoint:
-                    if (!directive.HasPoint)
-                    {
-                        Apply(WingOrder.Formation);
-                        break;
-                    }
-                    waypointState.SetDestination(directive.Point);
-                    Pilot.SwitchState(waypointState);
+                    EnterWaypoint(directive);
                     break;
 
                 case WingOrder.Attack:
                 case WingOrder.FireForEffect:
-                    // Reached only if something re-applies a standing attack order.
-                    // AttackTarget is the normal entry point and sets the target first.
-                    if (AssignedTarget != null && !AssignedTarget.disabled)
-                    {
-                        attackState.SetMassed(directive.Order == WingOrder.FireForEffect);
-                        Pilot.SwitchState(attackState);
-                    }
-                    else
-                    {
-                        Pilot.SwitchState(formationState);
-                    }
+                    EnterAttack(directive);
                     break;
 
                 case WingOrder.JamTarget:
-                    // Flown from the formation slot; FormationFlyState runs the jammer each
-                    // tick while the target lives. A missing target here means a stale order
-                    // was re-applied - fall back to plain formation.
-                    if (AssignedTarget != null && !AssignedTarget.disabled)
-                    {
-                        formationState.BoostRejoin(Slot * Plugin.Settings.RejoinStagger.Value);
-                        Pilot.SwitchState(formationState);
-                    }
-                    else
-                    {
-                        Apply(WingOrder.Formation);
-                    }
+                    EnterJam();
                     break;
 
                 case WingOrder.Maneuver:
@@ -275,6 +200,115 @@ namespace WingCommand
 
             if (Plugin.Settings.VerboseLogging.Value)
                 Plugin.Logger.LogInfo($"[Wing] {Name} -> {directive.Order}");
+        }
+
+        /// <summary>Hold over the named point, or over the leader when none was given.</summary>
+        private void EnterOrbit(WingDirective directive)
+        {
+            Aircraft leader = Leader;
+            GlobalPosition anchor = directive.HasPoint
+                ? directive.Point
+                : leader != null
+                    ? leader.GlobalPosition()
+                    : Aircraft.GlobalPosition();
+
+            orbitState.SetAnchor(anchor, Plugin.Settings.OrbitRadius.Value);
+            Pilot.SwitchState(orbitState);
+        }
+
+        /// <summary>
+        /// Two routes, and the difference is whether the player named a place.
+        ///
+        /// With a drop point, CargoRunState flies there and releases — the same shape as
+        /// Hold and Land, and available to any airframe carrying a load rather than only to
+        /// helicopters.
+        ///
+        /// Without one, the stock transport state configures itself in EnterState — nearest
+        /// airbase, nearest known ground enemy, landing zone search — so it remains a
+        /// complete supply-run behaviour for the cost of a state switch, and is what the
+        /// order has always done.
+        ///
+        /// Neither reports back on its own. CheckCargoRun watches the cargo station itself,
+        /// which is the only ground truth available, and either calls the delivery or gives
+        /// the airframe back.
+        /// </summary>
+        private void EnterCargoRun(WingDirective directive)
+        {
+            cargoProgress.Reset(CargoAmmo, Time.timeSinceLevelLoad);
+
+            if (directive.HasPoint)
+            {
+                cargoRunState.SetDestination(directive.Point);
+                Pilot.SwitchState(cargoRunState);
+                return;
+            }
+
+            if (Pilot.AIHeloTransportState != null)
+            {
+                Pilot.SwitchState(Pilot.AIHeloTransportState);
+                return;
+            }
+
+            // A fixed-wing transport has no stock supply route to fall back on, so say which
+            // half of the order is missing rather than silently doing nothing with a load
+            // aboard.
+            WingCommandManager.Instance?.Toast(
+                Name + " needs a drop point - it has no standard supply route");
+            Apply(WingOrder.Formation);
+        }
+
+        private void EnterLanding(WingDirective directive)
+        {
+            if (directive.HasPoint) landState.SetDestination(directive.Point);
+            else landState.ClearDestination();
+            Pilot.SwitchState(landState);
+        }
+
+        private void EnterWaypoint(WingDirective directive)
+        {
+            if (!directive.HasPoint)
+            {
+                Apply(WingOrder.Formation);
+                return;
+            }
+
+            waypointState.SetDestination(directive.Point);
+            Pilot.SwitchState(waypointState);
+        }
+
+        /// <summary>
+        /// Reached only if something re-applies a standing attack order. AttackTarget is the
+        /// normal entry point and sets the target first.
+        /// </summary>
+        private void EnterAttack(WingDirective directive)
+        {
+            if (AssignedTarget != null && !AssignedTarget.disabled)
+            {
+                attackState.SetMassed(directive.Order == WingOrder.FireForEffect);
+                Pilot.SwitchState(attackState);
+            }
+            else
+            {
+                Pilot.SwitchState(formationState);
+            }
+        }
+
+        /// <summary>
+        /// Flown from the formation slot; FormationFlyState runs the jammer each tick while
+        /// the target lives. A missing target here means a stale order was re-applied — fall
+        /// back to plain formation.
+        /// </summary>
+        private void EnterJam()
+        {
+            if (AssignedTarget != null && !AssignedTarget.disabled)
+            {
+                formationState.BoostRejoin(Slot * Plugin.Settings.RejoinStagger.Value);
+                Pilot.SwitchState(formationState);
+            }
+            else
+            {
+                Apply(WingOrder.Formation);
+            }
         }
 
         /// <summary>Release the stock launch state once a pending delivery is airborne.</summary>

@@ -346,11 +346,65 @@ namespace WingCommand
 
         // -------------------------------------------------------------------- steering
 
+        /// <summary>Where the aim point ended up, plus the figures the flight log reports.</summary>
+        private readonly struct Aim
+        {
+            public readonly GlobalPosition Point;
+            public readonly float Correction;
+            public readonly float MaxCorrection;
+            public readonly float LookAhead;
+
+            public Aim(GlobalPosition point, float correction, float maxCorrection,
+                       float lookAhead)
+            {
+                Point = point;
+                Correction = correction;
+                MaxCorrection = maxCorrection;
+                LookAhead = lookAhead;
+            }
+        }
+
         private static float Steer(Aircraft aircraft, Aircraft leader, GlobalPosition slotPos,
                                    Vector3 toSlot, float distance, Vector3 leaderVel,
                                    Vector3 drift, float aggression, float damping,
                                    float spacing, float outOfPosition, Vector3 smoothedLeaderDir,
                                    float leaderTurnRate, ThrottleState throttle, bool report)
+        {
+            Aim aim = AimFor(aircraft, leader, slotPos, toSlot, distance, leaderVel, drift,
+                             aggression, damping, spacing, outOfPosition, smoothedLeaderDir,
+                             leaderTurnRate);
+
+            float bankAllowed =
+                BankAuthority(aircraft, leader, aim.Point, outOfPosition, out float commandAngle);
+
+            if (report)
+                Report(aircraft, leader, distance, aim.Correction, aim.MaxCorrection,
+                       aim.LookAhead, commandAngle, bankAllowed, throttle);
+            aircraft.autopilot.AutoAim(
+                destination: aim.Point,
+                aimVelocity: true,
+                ignoreCollisions: false,
+                runwayAlign: false,
+                effort: FullAuthority,
+                bankAllowed: bankAllowed,
+                followTerrain: false,
+                // Lead the leader's climb and dive the same way the slot position is led, so
+                // a settled wingman follows the player's vertical motion instead of chasing
+                // the altitude it already left behind.
+                altitudeHold: Mathf.Clamp(
+                    leader.radarAlt + leaderVel.y * AltitudeLeadSeconds,
+                    aircraft.maxRadius, 8000f),
+                targetVelocity: leaderVel);
+
+            return commandAngle;
+        }
+
+        /// <summary>The point the autopilot is told to fly at, and how it was arrived at.</summary>
+        private static Aim AimFor(Aircraft aircraft, Aircraft leader, GlobalPosition slotPos,
+                                  Vector3 toSlot, float distance, Vector3 leaderVel,
+                                  Vector3 drift, float aggression, float damping,
+                                  float spacing, float outOfPosition,
+                                  Vector3 smoothedLeaderDir, float leaderTurnRate)
         {
             // AutoAim is a pursuit controller: it rotates the aircraft's velocity toward the
             // destination and banks to chase it, so the distance to that destination sets the
@@ -473,6 +527,14 @@ namespace WingCommand
                          + safeDirection * Mathf.Max(requested.magnitude, lookAhead);
             }
 
+            return new Aim(aimPoint, correction.magnitude, maxCorrection, lookAhead);
+        }
+
+        /// <summary>How much bank the autopilot may use, and the command angle it came from.</summary>
+        private static float BankAuthority(Aircraft aircraft, Aircraft leader,
+                                           GlobalPosition aimPoint, float outOfPosition,
+                                           out float commandAngle)
+        {
             // --- Bank authority, from actual turn demand ---
             //
             // This is the fix for the roll axis spinning while the formation sat three
@@ -502,7 +564,7 @@ namespace WingCommand
             Vector3 aimDir = aimPoint - aircraft.GlobalPosition();
             Vector3 velocityDir = aircraft.rb.velocity;
 
-            float commandAngle = (aimDir.sqrMagnitude > 1f && velocityDir.sqrMagnitude > 1f)
+            commandAngle = (aimDir.sqrMagnitude > 1f && velocityDir.sqrMagnitude > 1f)
                 ? Vector3.Angle(velocityDir, aimDir)
                 : 0f;
 
@@ -531,26 +593,7 @@ namespace WingCommand
 
             float bankAllowed = Mathf.Clamp(turnDemand, LevelBank, maxBank);
 
-            if (report)
-                Report(aircraft, leader, distance, correction.magnitude, maxCorrection, lookAhead,
-                       commandAngle, bankAllowed, throttle);
-            aircraft.autopilot.AutoAim(
-                destination: aimPoint,
-                aimVelocity: true,
-                ignoreCollisions: false,
-                runwayAlign: false,
-                effort: FullAuthority,
-                bankAllowed: bankAllowed,
-                followTerrain: false,
-                // Lead the leader's climb and dive the same way the slot position is led, so
-                // a settled wingman follows the player's vertical motion instead of chasing
-                // the altitude it already left behind.
-                altitudeHold: Mathf.Clamp(
-                    leader.radarAlt + leaderVel.y * AltitudeLeadSeconds,
-                    aircraft.maxRadius, 8000f),
-                targetVelocity: leaderVel);
-
-            return commandAngle;
+            return bankAllowed;
         }
 
         // ---------------------------------------------------------------- bank match
