@@ -170,7 +170,7 @@ namespace WingCommand
                 ignoreCollisions: false,
                 runwayAlign: false,
                 effort: 1f,
-                bankAllowed: Mathf.Min(Plugin.Settings.StationBankDegrees.Value,
+                bankAllowed: Mathf.Min(WingTuning.StationBank,
                                        FixedWingFormation.MaxSafeBank),
                 followTerrain: true,
                 altitudeHold: Mathf.Max(DropRunAltitude, aircraft.maxRadius),

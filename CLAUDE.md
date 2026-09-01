@@ -23,6 +23,7 @@ a pylon-level loadout editor, a squadron shop/economy, and radio chatter.
 | `src/WingCommand/Comms/` | radio chatter and its HUD |
 | `src/WingCommand/Core/Plugin.cs` | entry point: `harmony.PatchAll`, persistent manager GameObject |
 | `src/WingCommand/Core/WingConfig.cs` | every BepInEx binding, one `Bind*` method per section |
+| `src/WingCommand/Pure/WingTuning.cs` | every tuned number that is **not** a setting — see below |
 | `src/WingCommand/Core/GameAccess.cs` | every reflection accessor into private game members; resolved once at startup |
 | `tests/WingCommand.PureTests/` | xunit, net8.0; `<Compile Include>`s the `Pure/` files directly (no project reference) |
 | `build/` | `package.ps1` (release assets), `copy-to-game.ps1` (deploy), `meta.json`, `nomnom/` manifest |
@@ -67,6 +68,15 @@ pwsh build/package.ps1
 - Types are `internal` by default; only the BepInEx entry point is public.
 - Comments explain *why* — especially which decompiled behaviour forced a workaround.
   Match that density; do not narrate the obvious.
+- **A new number is a constant in `Pure/WingTuning.cs` until someone asks for it.** A setting
+  has to survive one question: *could a player know what to set it to?* Bank authorities,
+  engagement ranges, XP awards and the helicopter power constant could not — they are derived
+  from the game's own arithmetic or from flight testing, and fifty-three of them made the
+  dozen real preferences impossible to find. `WingConfig` holds preferences; `WingTuning`
+  holds numbers, each with the reasoning that fixed it. Anything that varies by Smart vs
+  Performance belongs in `WingBrain` instead of either.
+- **Don't add a switch that `Mode` already gates.** Jamming and aerobatics each had their own
+  toggle *and* a `WingBrain` gate, so there were two ways to turn one thing off.
 - Version bumps touch csproj `<Version>` and `Core/Plugin.cs`. The build **fails** if the two
   disagree (`CheckPluginVersionMatchesCsproj` in the csproj), and `package.ps1` regenerates
   `build/meta.json` from the built DLL, so neither can drift silently.

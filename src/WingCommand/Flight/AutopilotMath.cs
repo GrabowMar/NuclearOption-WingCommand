@@ -30,6 +30,6 @@ namespace WingCommand
 
         /// <summary>Bank authority for a pursuing turn, capped below inversion.</summary>
         public static float PursuitBank() =>
-            Mathf.Min(Plugin.Settings.PursuitBankDegrees.Value, FixedWingFormation.MaxSafeBank);
+            Mathf.Min(WingTuning.PursuitBank, FixedWingFormation.MaxSafeBank);
     }
 }

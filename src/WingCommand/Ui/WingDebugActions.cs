@@ -50,7 +50,7 @@ namespace WingCommand
                 forward, slot,
                 Plugin.Settings.Shape.Value,
                 Plugin.Settings.SlotSpacing.Value,
-                Plugin.Settings.SlotStack.Value);
+                WingTuning.SlotStack);
 
             Vector3 position = ClearOfGround(leader.transform.position + offset);
 

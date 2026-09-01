@@ -300,7 +300,7 @@ namespace WingCommand
             // spacing that reads as tight for a fighter formation looks scattered for them.
             float spacing = Plugin.Settings.SlotSpacing.Value;
             if (WingRegistry.IsRotary(aircraft))
-                spacing *= Plugin.Settings.RotarySpacingScale.Value;
+                spacing *= WingTuning.RotarySpacingScale;
 
             spacing *= ThreatSpacingScale(leader);
 
@@ -368,7 +368,7 @@ namespace WingCommand
                 1f - Mathf.Exp(-Time.fixedDeltaTime / CombatSpreadEaseSeconds));
 
             Vector3 desiredSlotLocal = FormationSolver.SlotCoordinates(
-                member.Slot, shape, spacing, Plugin.Settings.SlotStack.Value,
+                member.Slot, shape, spacing, WingTuning.SlotStack,
                 lateralTurnScale, trailTurnScale);
 
             // Turn-side mirroring: a one-sided formation sitting on the inside of a
@@ -715,8 +715,6 @@ namespace WingCommand
         /// </summary>
         private void CheckAbleToKeepUp(Aircraft leader, float distance)
         {
-            if (!Plugin.Settings.KeepUpReports.Value) return;
-
             // Only a genuine performance gap counts as "unable". This check was written for
             // a helicopter recruited into a jet flight, but it fired on wingmen in the
             // *same airframe* as the leader that were simply a long way back and closing —

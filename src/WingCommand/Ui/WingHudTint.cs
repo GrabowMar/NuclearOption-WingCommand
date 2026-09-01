@@ -45,7 +45,7 @@ namespace WingCommand
         /// <summary>Re-apply, or clear, the tint on one unit's HUD marker.</summary>
         public static void Refresh(Unit unit)
         {
-            if (unit == null || !Plugin.Settings.HighlightWingOnHud.Value) return;
+            if (unit == null || Plugin.Settings.Highlight.Value == HighlightMode.Off) return;
 
             try
             {
@@ -72,7 +72,7 @@ namespace WingCommand
         /// </summary>
         public static void Reassert(WingRegistry wing)
         {
-            if (!Plugin.Settings.HighlightWingOnHud.Value) return;
+            if (Plugin.Settings.Highlight.Value == HighlightMode.Off) return;
 
             CombatHUD hud = SceneSingleton<CombatHUD>.i;
             if (hud == null) return;
@@ -140,7 +140,7 @@ namespace WingCommand
             [HarmonyPostfix]
             private static void Postfix(HUDUnitMarker __instance)
             {
-                if (!Plugin.Settings.HighlightWingOnHud.Value) return;
+                if (Plugin.Settings.Highlight.Value == HighlightMode.Off) return;
                 if (__instance.image == null) return;
                 if (__instance.selected)
                 {

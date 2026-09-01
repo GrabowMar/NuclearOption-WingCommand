@@ -559,7 +559,7 @@ namespace WingCommand
         /// </summary>
         private void WarnIfTooSlow(Aircraft recruit)
         {
-            if (!Plugin.Settings.KeepUpReports.Value || Leader == null) return;
+            if (Leader == null) return;
 
             float mine = recruit.GetAircraftParameters().maxSpeed;
             float leader = Leader.GetAircraftParameters().maxSpeed;
@@ -660,7 +660,7 @@ namespace WingCommand
                 return members.Count + 1;
 
             float spacing = Plugin.Settings.SlotSpacing.Value;
-            if (IsRotary(joining)) spacing *= Plugin.Settings.RotarySpacingScale.Value;
+            if (IsRotary(joining)) spacing *= WingTuning.RotarySpacingScale;
 
             Vector3 from = joining.transform.position;
             Vector3 leaderPos = Leader.transform.position;
@@ -675,7 +675,7 @@ namespace WingCommand
 
                 Vector3 slotPos = leaderPos + FormationSolver.SlotOffset(
                     leaderForward, slot, Plugin.Settings.Shape.Value,
-                    spacing, Plugin.Settings.SlotStack.Value);
+                    spacing, WingTuning.SlotStack);
 
                 float d = (slotPos - from).sqrMagnitude;
                 if (d < bestDistance)

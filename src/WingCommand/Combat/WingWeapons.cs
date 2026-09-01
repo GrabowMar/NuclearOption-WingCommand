@@ -22,7 +22,7 @@ namespace WingCommand
         /// so every firing path — formation, orbit and attack run — inherits it.
         /// </summary>
         public static float FireInterval(Aircraft aircraft) =>
-            Plugin.Settings.FireInterval.Value * WingPilotRoster.ReactionScale(aircraft);
+            WingTuning.FireInterval * WingPilotRoster.ReactionScale(aircraft);
 
         /// <summary>
         /// The weapon preference standing for this aircraft, or Auto when it is not a
@@ -434,7 +434,7 @@ namespace WingCommand
             if (target is Missile) return 1;
 
             int estimated = Mathf.CeilToInt(station.WeaponInfo.CalcAttacksNeeded(target));
-            return Mathf.Clamp(estimated, 1, Plugin.Settings.MaxWingmenPerTarget.Value);
+            return Mathf.Clamp(estimated, 1, WingTuning.MaxWingmenPerTarget);
         }
 
         /// <summary>Estimated useful concurrent shooters from a particular aircraft.</summary>

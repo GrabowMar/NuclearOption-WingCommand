@@ -39,7 +39,7 @@ namespace WingCommand
         /// <summary>Open a transmission with the game's own radio click.</summary>
         public static void Transmission()
         {
-            if (unavailable || !Plugin.Settings.RadioChatterSound.Value) return;
+            if (unavailable || Plugin.Settings.Radio.Value != ChatterLevel.TextAndTone) return;
             if (Time.unscaledTime - lastPlayed < MinimumGap) return;
 
             try

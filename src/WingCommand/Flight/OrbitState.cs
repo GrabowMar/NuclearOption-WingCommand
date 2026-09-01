@@ -35,7 +35,7 @@ namespace WingCommand
         {
             BeginFlight(pilot);
 
-            if (radius <= 0f) radius = Plugin.Settings.OrbitRadius.Value;
+            if (radius <= 0f) radius = WingTuning.OrbitRadius;
             lastEngageCheck = 0f;
             lastFiredTime = 0f;
 

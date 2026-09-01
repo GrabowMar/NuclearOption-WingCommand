@@ -221,7 +221,7 @@ namespace WingCommand
 
             if (airframeStateLabel != null)
             {
-                bool poor = fuel <= Plugin.Settings.BingoFuel.Value ||
+                bool poor = fuel <= WingTuning.BingoFuel ||
                             ammo <= 0 || integrity < 0.75f;
                 airframeStateLabel.color = poor ? Warning() : Friendly();
             }

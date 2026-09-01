@@ -324,14 +324,14 @@ namespace WingCommand
 
         /// <summary>The multiplier charged for an airframe bought past the squadron cap.</summary>
         public static float ExceedLimitMultiplier =>
-            Mathf.Max(1f, Plugin.Settings.ExceedLimitCostMultiplier.Value);
+            Mathf.Max(1f, WingTuning.ExceedLimitCostMultiplier);
 
         /// <summary>Rank required before the cap may be exceeded at all.</summary>
-        public static int ExceedLimitRank => Plugin.Settings.ExceedLimitRank.Value;
+        public static int ExceedLimitRank => WingTuning.ExceedLimitRank;
 
         /// <summary>How many over-cap airframes the player may have in the air at once.</summary>
         public static int ExceedLimitAllowance =>
-            Mathf.Clamp(Plugin.Settings.ExceedLimitAllowance.Value, 1, 3);
+            Mathf.Clamp(WingTuning.ExceedLimitAllowance, 1, 3);
 
         // Full-price requisitions remain the player's airframes while they survive. This is
         // deliberately separate from WingRecruitment's paid-assignment set: paying 25% to
@@ -537,8 +537,8 @@ namespace WingCommand
 
         private static int UndeclaredRemaining(AircraftDefinition definition)
         {
-            int allowance = Mathf.RoundToInt(Plugin.Settings.UndeclaredStock.Value);
-            return allowance - (undeclaredBought.TryGetValue(definition, out int used) ? used : 0);
+            return WingTuning.UndeclaredStock
+                   - (undeclaredBought.TryGetValue(definition, out int used) ? used : 0);
         }
 
 

@@ -80,7 +80,7 @@ namespace WingCommand
                 StopCountermeasures();
 
                 if (Time.timeSinceLevelLoad - enteredAt >= MinimumDefenceSeconds &&
-                    Time.timeSinceLevelLoad - clearSince >= Plugin.Settings.PanicClearSeconds.Value)
+                    Time.timeSinceLevelLoad - clearSince >= WingTuning.PanicClearSeconds)
                 {
                     WingComms.Say(member, WingComms.Call.DefensiveClear);
                     member.ResumeAfterPanic();

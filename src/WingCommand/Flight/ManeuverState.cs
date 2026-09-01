@@ -73,9 +73,9 @@ namespace WingCommand
             // tick does the rejoin instead - the same pattern AttackRunState uses.
             if (ManeuverCatalog.BreakDirection(kind) == 0 &&
                 kind != ManeuverKind.WingWaggle &&
-                !Plugin.Settings.AerobaticsEnabled.Value)
+                !WingBrain.Manoeuvres)
             {
-                Abort("aerobatics are disabled in config");
+                Abort("aerobatics are off in Performance mode");
                 return;
             }
             if (!fixedWing && !ManeuverCatalog.RotaryCapable(kind))
@@ -84,7 +84,7 @@ namespace WingCommand
                 return;
             }
 
-            float floor = Mathf.Max(Plugin.Settings.ManeuverAltitudeFloor.Value,
+            float floor = Mathf.Max(WingTuning.ManeuverEntryFloor,
                                     ManeuverCatalog.MinEntryAltitudeAgl(kind));
             if (aircraft.radarAlt < floor)
             {
@@ -92,7 +92,7 @@ namespace WingCommand
                 return;
             }
             float minSpeedFraction = Mathf.Max(
-                Plugin.Settings.ManeuverMinSpeedFraction.Value,
+                WingTuning.ManeuverMinSpeedFraction,
                 ManeuverCatalog.MinEntrySpeedFraction(kind));
             if (fixedWing && aircraft.speed < parameters.maxSpeed * minSpeedFraction)
             {
@@ -126,7 +126,7 @@ namespace WingCommand
             }
 
             // Hard floor and timeout apply in every phase of every manoeuvre.
-            if (aircraft.radarAlt < Plugin.Settings.ManeuverHardFloor.Value)
+            if (aircraft.radarAlt < WingTuning.ManeuverHardFloor)
             {
                 RecoverWingsLevel();
                 Finish(unable: true, "reached the hard deck");

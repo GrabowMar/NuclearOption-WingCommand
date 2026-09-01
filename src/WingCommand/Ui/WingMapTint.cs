@@ -55,7 +55,7 @@ namespace WingCommand
             [HarmonyPostfix]
             private static void Postfix(MapIcon __instance)
             {
-                if (!Plugin.Settings.HighlightWingOnMap.Value) return;
+                if (Plugin.Settings.Highlight.Value == HighlightMode.Off) return;
                 if (!(__instance is UnitMapIcon unitIcon) || unitIcon.iconImage == null) return;
 
                 WingMarkers.Role role = WingMarkers.RoleOf(unitIcon.unit);
