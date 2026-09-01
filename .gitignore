@@ -17,3 +17,6 @@ dist/
 
 # Local AI agent skills (kept in-tree for portability, not published)
 .opencode/
+
+# Junctions mirroring the gitignored .opencode skills into Claude Code
+.claude/skills/

@@ -101,6 +101,41 @@ namespace WingCommand.Tests
             Assert.NotEqual("Copy.", line);
         }
 
+        [Theory]
+        [InlineData("Jamming")]
+        [InlineData("JammingOff")]
+        [InlineData("Maneuvering")]
+        [InlineData("ManeuverDone")]
+        public void JammingAndManoeuvreEventsHaveSpokenLines(string eventName)
+        {
+            string line = ChatterDialogue.Event(
+                ChatterPersona.Professional, eventName, null, 0);
+
+            Assert.False(string.IsNullOrWhiteSpace(line));
+            Assert.NotEqual("Copy.", line);
+        }
+
+        [Fact]
+        public void JammingEventNamesTheTarget()
+        {
+            string line = ChatterDialogue.Event(
+                ChatterPersona.Professional, "Jamming", "SAM-3", 0);
+
+            Assert.Contains("SAM-3", line);
+        }
+
+        [Theory]
+        [InlineData("JamTarget", "jam")]
+        [InlineData("Maneuver", "manoeuvre")]
+        public void GroupAcknowledgementsDescribeTheNewOrders(string order, string expected)
+        {
+            string line = ChatterDialogue.GroupAcknowledge(
+                ChatterPersona.Professional, order, "Three", 0);
+
+            Assert.Contains("Three", line);
+            Assert.Contains(expected, line.ToLowerInvariant());
+        }
+
         [Fact]
         public void AmbientDialogueIncludesAllTeasersVerbatim()
         {

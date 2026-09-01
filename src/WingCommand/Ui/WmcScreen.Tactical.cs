@@ -1,0 +1,583 @@
+using System;
+using System.Collections.Generic;
+using NuclearOption.SavedMission;
+using NuclearOption.UIStyleSystem;
+using TMPro;
+using UnityEngine;
+using UnityEngine.EventSystems;
+using UnityEngine.UI;
+namespace WingCommand
+{
+    /// <summary>The WMC panel's TACTICAL tab: rules of engagement, weapon preference, the order grid, and the flight roster.</summary>
+    internal static partial class WmcScreen
+    {
+        /// <summary>
+        /// The three standing choices that shape a fight, in one labelled block: what a
+        /// wingman may shoot, which of its own weapons it reaches for, and where it sits.
+        ///
+        /// Grouped under one heading with a left gutter rather than given a heading each.
+        /// Three headings and a hint line cost sixty pixels of a panel that now shares its
+        /// bezel with four tabs, and they were labelling three rows that all answer the
+        /// same question — how does this flight fight. The per-choice explanations moved to
+        /// the status line at the foot of the page, where only the one being changed is
+        /// shown and it has the width to be a sentence.
+        /// </summary>
+        private static float AddEngagementSection(RectTransform parent, float y)
+        {
+            y = Heading(parent, y, "ENGAGEMENT");
+
+            float left = Pad + GutterWidth;
+            float w = PanelWidth - Pad - left;
+
+            // Rules of engagement: three rungs, so three buttons. They are an escalation
+            // rather than a toggle — each answers "the leader is being shot at" differently,
+            // which is the whole reason there are three of them. Wing-wide.
+            Gutter(parent, y, "ROE");
+            float roeWidth = (w - Gap * 2f) / 3f;
+            // Each rung explains itself from the same source the status line already used
+            // for the standing hint, so the hovered description and the resting one cannot
+            // drift apart.
+            holdButton = Button(parent, "DEFEND", new Rect(left, y, roeWidth, RowHeight),
+                                () => SetRoe(WingRoe.Hold))
+                         .WithTooltip("DEFEND - " + RoeRules.Hint(WingRoe.Hold));
+            escortButton = Button(parent, "ESCORT",
+                                  new Rect(left + roeWidth + Gap, y, roeWidth, RowHeight),
+                                  () => SetRoe(WingRoe.Escort))
+                           .WithTooltip("ESCORT - " + RoeRules.Hint(WingRoe.Escort));
+            freeButton = Button(parent, "FREE",
+                                new Rect(left + (roeWidth + Gap) * 2f, y, roeWidth, RowHeight),
+                                () => SetRoe(WingRoe.Free))
+                         .WithTooltip("FREE - " + RoeRules.Hint(WingRoe.Free));
+            y -= RowHeight + Gap;
+
+            // Weapon preference. Unlike the two rows around it this one is scoped to the
+            // current selection, which is what makes a mixed flight possible: two wingmen
+            // holding their missiles for aircraft while the third works the ground.
+            Gutter(parent, y, "WEAPON");
+            float preferenceWidth = (w - Gap * (preferenceButtons.Length - 1)) / preferenceButtons.Length;
+            for (int i = 0; i < preferenceButtons.Length; i++)
+            {
+                WingWeaponPreference preference = WingWeaponPreferences.All[i];
+                preferenceButtons[i] = WingUi.Button(
+                    parent, WingWeaponPreferences.Label(preference),
+                    new Rect(left + (preferenceWidth + Gap) * i, y, preferenceWidth, RowHeight),
+                    FontSmall,
+                    () => WingCommandManager.Instance?.SetWeaponPreference(preference))
+                    .WithTooltip(WingWeaponPreferences.Label(preference) + " - " +
+                                 WingWeaponPreferences.Hint(preference) +
+                                 " Applies to the selected wingmen only.");
+            }
+            y -= RowHeight + Gap;
+
+            Gutter(parent, y, "FORM");
+            Stepper(parent, left, y, w, out shapeLabel, () => CycleShape(-1), () => CycleShape(1),
+                    OrderHint.Form);
+
+            return y - (RowHeight + Gap);
+        }
+
+
+        private static void SetRoe(WingRoe roe)
+        {
+            WingRegistry wing = Wing();
+            if (wing == null) return;
+
+            wing.Roe = roe;
+            WingCommandManager.Instance?.Toast("ROE: " + roe.ToString().ToUpperInvariant());
+        }
+
+        private static float AddSummary(RectTransform parent, float y)
+        {
+            // SELECT ALL is what this row is for — the label beside it only reports. It is
+            // drawn as the row's primary action so it can be found without being read.
+            const float actionWidth = 88f;
+            summaryLabel = Label(parent, "",
+                                 new Rect(Pad, y, PanelWidth - Pad * 2f - actionWidth - Space2,
+                                          RowHeight),
+                                 Friendly(), FontBody, FontStyles.Normal, TextAlignmentOptions.Left);
+            WingUi.Button(parent, "SELECT ALL",
+                          new Rect(PanelWidth - Pad - actionWidth, y, actionWidth, RowHeight),
+                          FontSmall, UiButtonStyle.Primary,
+                          () => WingCommandManager.Instance?.SelectAllMembers())
+                .WithTooltip(OrderHint.SelectAll);
+            return y - RowHeight - Gap;
+        }
+
+        private static float AddRosterArea(RectTransform parent, float y)
+        {
+            y = Heading(parent, y, "FLIGHT");
+
+            // Column headers, so the numbers in each row are readable without guessing.
+            float w = PanelWidth - Pad * 2f;
+            y = ColumnHeaders(parent, y, RosterColumns);
+
+            float h = RowPitch * RosterRowsPerPage;
+
+            var area = new GameObject("Roster", typeof(RectTransform));
+            rosterArea = area.GetComponent<RectTransform>();
+            rosterArea.SetParent(parent, worldPositionStays: false);
+            Place(rosterArea, new Rect(Pad, y, w, h));
+
+            y -= h + Gap;
+
+            rosterPrevButton = Pager(parent, y, "<", () => TurnRosterPage(-1));
+            rosterPageLabel = PagerLabel(parent, y);
+            rosterNextButton = Pager(parent, y, ">", () => TurnRosterPage(1));
+            return y - RowHeight - Gap;
+        }
+
+
+        /// <summary>
+        /// The nine scoped orders, in three columns.
+        ///
+        /// Two columns became three when Splash 'Em made the set nine. A fifth row of
+        /// pairs would have cost this page more height than the two new tabs left it, where
+        /// a three-by-three grid holds all nine in three rows and hands 34 pixels back. It
+        /// reads better as well: rejoin and the two target orders, then the autonomous and
+        /// positional ones, then the three that end a sortie.
+        /// </summary>
+        private static float AddActions(RectTransform parent, float y)
+        {
+            y = Heading(parent, y, "ORDERS - SELECTED SCOPE");
+            float w = (PanelWidth - Pad * 2f - Gap * 2f) / 3f;
+
+            y = Triple(parent, y, w,
+                "Form Up", OrderHint.Rejoin, () => Order(WingAction.Rejoin),
+                "Attack", OrderHint.Attack, () => Order(WingAction.AttackMyTarget),
+                "Splash 'Em", OrderHint.FireForEffect, () => Order(WingAction.FireForEffect));
+
+            y = Triple(parent, y, w,
+                "Engage", OrderHint.Engage, () => Order(WingAction.Engage),
+                "Disengage", OrderHint.Disengage, () => Order(WingAction.FallBack),
+                "Hold Here", OrderHint.HoldHere,
+                () => WingCommandManager.Instance?.ArmPointOrder(WingOrder.OrbitHere));
+
+            GridButton(parent, "Return To Base", Pad, y, w,
+                       () => Order(WingAction.ReturnToBase)).WithTooltip(OrderHint.ReturnToBase);
+
+            // Deliver Cargo arms a drop point, and says on the status line that pressing it
+            // again falls back to the stock supply route.
+            cargoButton = GridButton(parent, "Deliver Cargo", Pad + w + Gap, y, w,
+                                     () => WingCommandManager.Instance?.RequestCargoRun())
+                          .WithTooltip(OrderHint.DeliverCargo);
+            landButton = GridButton(parent, "Land Here", Pad + (w + Gap) * 2f, y, w,
+                                    () => WingCommandManager.Instance?.ArmPointOrder(WingOrder.LandHere))
+                         .WithTooltip(OrderHint.LandHere);
+            y -= RowHeight + Gap;
+
+            // Jam the locked target, plus the two defensive breaks. The full manoeuvre set
+            // (Split-S, Immelmann, rolls, Loop) lives on the radial Tasking > Manoeuvres
+            // wheel, where a submenu costs nothing; here it would be a fourth grid of eight.
+            // Kept as fields so the per-refresh pass can grey them out - both are off in
+            // Performance mode.
+            jamButton = GridButton(parent, "Jam", Pad, y, w,
+                                   () => Order(WingAction.JamMyTarget))
+                        .WithTooltip(OrderHint.Jam);
+            breakLeftButton = GridButton(parent, "Break L", Pad + w + Gap, y, w,
+                                         () => Maneuver(ManeuverKind.BreakLeft))
+                              .WithTooltip(OrderHint.Maneuver);
+            breakRightButton = GridButton(parent, "Break R", Pad + (w + Gap) * 2f, y, w,
+                                          () => Maneuver(ManeuverKind.BreakRight))
+                               .WithTooltip(OrderHint.Maneuver);
+            y -= RowHeight + Gap;
+
+            return y;
+        }
+
+        /// <summary>
+        /// What each control does, in the two lines the status strip has room for.
+        ///
+        /// Kept together rather than written at each call site: these are the panel's
+        /// documentation, they have to stay consistent in voice and length, and several of
+        /// them are the only place a distinction is ever explained — Attack versus Fire For
+        /// Effect, or Disengage versus Return To Base, are not differences a four-word
+        /// button label can carry.
+        /// </summary>
+        private static class OrderHint
+        {
+            public const string Rejoin =
+                "FORM UP - break off and return to formation on the leader. Cancels any " +
+                "attack, hold or route the selected wingmen are flying.";
+
+            public const string Attack =
+                "ATTACK - send the selection after the target you have locked. Targets are " +
+                "shared out across the scope so several wingmen do not chase one contact.";
+
+            public const string FireForEffect =
+                "SPLASH 'EM - empty everything that will bear on your locked target. " +
+                "Expends ordnance freely; use it to finish something, not to open on it.";
+
+            public const string Engage =
+                "ENGAGE - hunt independently within the rules of engagement. The wingman " +
+                "picks its own targets and does not come back until told to.";
+
+            public const string Disengage =
+                "DISENGAGE - break contact and run for the nearest friendly base or ship, " +
+                "defending itself on the way. Not a landing order.";
+
+            public const string HoldHere =
+                "HOLD HERE - then click the map. The selection orbits that point and " +
+                "defends itself, but starts nothing.";
+
+            public const string ReturnToBase =
+                "RETURN TO BASE - fly home and land. The airframe and its fit go back into " +
+                "the wing reserve, ready to be requisitioned again.";
+
+            public const string DeliverCargo =
+                "DELIVER CARGO - then click a drop point, or press again to use the stock " +
+                "supply route. Only wingmen actually carrying a load can take this.";
+
+            public const string LandHere =
+                "LAND HERE - then click the map. Puts a rotary wingman on the ground at " +
+                "that spot rather than routing it to an airbase.";
+
+            public const string SelectAll =
+                "Put every wingman in the command scope, so the next order goes to the " +
+                "whole flight.";
+
+            public const string Release =
+                "Discharge this wingman from the wing for good. It flies home, gives its " +
+                "airframe back and stops using a squadron slot. Press once to arm, again " +
+                "to confirm.";
+
+            public const string Roe =
+                "Rules of engagement, wing-wide: how far a wingman may go on its own " +
+                "initiative before it needs telling.";
+
+            public const string Weapon =
+                "Which weapons the selected wingmen reach for first. Scoped, so a mixed " +
+                "flight can split between the air and the ground.";
+
+            public const string Form =
+                "The formation shape wingmen fly when they are formed up on the leader.";
+
+            public const string Requisition =
+                "Buy the selected airframe. It launches from a friendly base with the fit " +
+                "chosen on LOADOUT and flies out to join the wing.";
+
+            public const string Fit =
+                "What the next one of these launches with: its standard fit, or one of the " +
+                "templates you have built for it on LOADOUT.";
+
+            public const string OverLimit =
+                "Permission to requisition past the mission's AI aircraft cap, at a " +
+                "surcharge. Changes nothing while the squadron still has room.";
+
+            public const string AssignSelected =
+                "Conscript the friendly AI aircraft selected on the map into your wing. " +
+                "Press twice to confirm the fee.";
+
+            public const string ReserveHold =
+                "Take this airframe out of the faction pool and keep it for the wing, so " +
+                "the AI cannot spend it.";
+
+            public const string ReserveRelease =
+                "Give this airframe back to the faction pool. Press once to arm, again to " +
+                "confirm.";
+
+            public const string Jam =
+                "JAM - the selected wingmen hold their formation slot and run their radar " +
+                "jammer against the target you have locked, until it dies or you order them " +
+                "off. Only wingmen carrying a jammer can take it.";
+
+            public const string Maneuver =
+                "MANOEUVRE - fly it once, then rejoin. A break is a hard level turn to that " +
+                "side; the rolls and vertical manoeuvres are on the radial Manoeuvres wheel.";
+
+            public const string Pager = "Show the rest of the list.";
+        }
+
+        private static void Order(WingAction action) =>
+            WingCommandManager.Instance?.Execute(action, wholeWing: false);
+
+        private static void Maneuver(ManeuverKind kind) =>
+            WingCommandManager.Instance?.ExecuteManeuver(kind, wholeWing: false);
+
+
+        private static void TurnRosterPage(int direction)
+        {
+            rosterPage = Mathf.Max(0, rosterPage + direction);
+        }
+
+
+        private static void RefreshTactical(WingRegistry wing)
+        {
+            WingCommandManager manager = WingCommandManager.Instance;
+
+            if (shapeLabel != null)
+                shapeLabel.text = FormationShapes.Pretty(Plugin.Settings.Shape.Value);
+
+            if (summaryLabel != null)
+                summaryLabel.text = "COMMAND: " + (manager?.Selection.Summary(wing) ?? "ALL") +
+                                    "   ·   WING " + wing.Count + "/" + WingRegistry.WingLimitLabel;
+
+            holdButton?.SetLatched(wing.Roe == WingRoe.Hold);
+            escortButton?.SetLatched(wing.Roe == WingRoe.Escort);
+            freeButton?.SetLatched(wing.Roe == WingRoe.Free);
+
+            // A scope whose members disagree lights nothing, rather than lighting the first
+            // one's choice and inviting the player to believe the whole scope shares it.
+            WingWeaponPreference? shared = manager?.ScopeWeaponPreference();
+            for (int i = 0; i < preferenceButtons.Length; i++)
+                preferenceButtons[i]?.SetLatched(shared == WingWeaponPreferences.All[i]);
+
+            if (manager != null)
+            {
+                List<WingMember> scope = manager.Commands.Scope(wholeWing: false);
+                bool canCargo = false;
+                bool canLand = false;
+                bool canJam = false;
+                foreach (WingMember member in scope)
+                {
+                    canCargo |= WingOrderCatalog.CanApply(member, WingOrder.DeliverCargo);
+                    canLand |= WingOrderCatalog.CanApply(member, WingOrder.LandHere);
+                    canJam |= WingOrderCatalog.CanApply(member, WingOrder.JamTarget);
+                }
+                cargoButton?.SetEnabled(canCargo);
+                landButton?.SetEnabled(canLand);
+
+                // Jam and the manoeuvre breaks are both unavailable in Performance mode;
+                // Jam additionally needs a jam-capable wingman in scope.
+                jamButton?.SetEnabled(canJam);
+                breakLeftButton?.SetEnabled(WingBrain.Manoeuvres);
+                breakRightButton?.SetEnabled(WingBrain.Manoeuvres);
+            }
+
+            // The map has first claim on this line: an armed point order or a pending
+            // assignment fee is a live instruction, and the engagement hints are not. A
+            // hovered control outranks both, because it is the one the player is asking
+            // about right now — RefreshStatusStrip resolves that.
+            RefreshStatusStrip(Page.Tactical,
+                manager != null && manager.MapStatusIsNotice
+                    ? manager.MapStatus
+                    : EngagementHint(wing, shared));
+
+            RefreshRoster(wing);
+        }
+
+        /// <summary>
+        /// What the two engagement rows currently mean, in one sentence.
+        ///
+        /// The rules of engagement line is the important half and comes first; the weapon
+        /// preference is only mentioned when it is doing something, so an ordinary AUTO
+        /// flight reads exactly as it did before this control existed.
+        /// </summary>
+        private static string EngagementHint(WingRegistry wing, WingWeaponPreference? shared)
+        {
+            string hint = RoeRules.Hint(wing.Roe);
+
+            if (shared == null) return hint + "  ·  Weapon preference varies across the selection.";
+            if (shared.Value == WingWeaponPreference.Auto) return hint;
+
+            return hint + "  ·  " + WingWeaponPreferences.Hint(shared.Value);
+        }
+
+        private static void RefreshRoster(WingRegistry wing)
+        {
+            int pages = Mathf.Max(1, Mathf.CeilToInt(wing.Count / (float)RosterRowsPerPage));
+            rosterPage = Mathf.Clamp(rosterPage, 0, pages - 1);
+            if (rosterPageLabel != null)
+                rosterPageLabel.text = "flight page " + (rosterPage + 1) + " of " + pages;
+
+            rosterPrevButton?.SetEnabled(rosterPage > 0);
+            rosterNextButton?.SetEnabled(rosterPage < pages - 1);
+
+            SyncRosterRows(RosterRowsPerPage);
+            int first = rosterPage * RosterRowsPerPage;
+
+            for (int i = 0; i < rosterRows.Count; i++)
+            {
+                int index = first + i;
+                if (index < wing.Count) rosterRows[i].Bind(wing.Members[index]);
+                else rosterRows[i].Hide();
+            }
+        }
+
+        /// <summary>Keep the inspection focus on an aircraft that still exists.</summary>
+        private static void PruneFocus(WingRegistry wing)
+        {
+            if (focusMember != null && wing.Contains(focusMember)) return;
+
+            focusMember = wing.Count > 0 ? wing.Members[0] : null;
+        }
+
+
+        private static void SyncRosterRows(int needed)
+        {
+            while (rosterRows.Count < needed && rosterArea != null)
+            {
+                int index = rosterRows.Count;
+                rosterRows.Add(new RosterRow(rosterArea, index));
+            }
+        }
+
+
+        /// <summary>One line of the roster: slot, name, order, slot error, release button.</summary>
+        private sealed class RosterRow
+        {
+            private readonly GameObject go;
+            private readonly TMP_Text slot, name, order, preference, error, reserves;
+            private readonly Image selectionRule;
+            private readonly Image fill;
+            private readonly WingButton hit;
+            private readonly WingButton release;
+            private WingMember bound;
+
+            /// <summary>
+            /// Which wingman, if any, has had its REL pressed once and is waiting to have it
+            /// pressed again.
+            ///
+            /// Static, so arming one row disarms every other: two rows both offering to
+            /// discharge a wingman on the next click is worse than none.
+            /// </summary>
+            private static readonly Confirmation memberRelease = new Confirmation();
+
+            /// <summary>Drop the armed wingman when the mission ends, with everything else.</summary>
+            public static void Disarm() => memberRelease.Clear();
+
+            public RosterRow(RectTransform parent, int index)
+            {
+                float width = parent.rect.width;
+                float y = -index * RowPitch;
+
+                go = new GameObject("Row" + index, typeof(RectTransform));
+                var rt = go.GetComponent<RectTransform>();
+                rt.SetParent(parent, worldPositionStays: false);
+                Place(rt, new Rect(0f, y, width, RowHeight));
+
+                fill = Panel(rt, new Rect(0f, 0f, width, RowHeight), MemberFrameColor());
+                selectionRule = Rule(rt, new Rect(0f, 0f, 3f, RowHeight), WingColor());
+
+                const float releaseWidth = 42f;
+                hit = HitButton(rt, new Rect(0f, 0f, width - releaseWidth - Space2, RowHeight), () =>
+                {
+                    if (bound == null) return;
+                    bool toggle = Input.GetKey(KeyCode.LeftShift) || Input.GetKey(KeyCode.RightShift);
+                    WingCommandManager.Instance?.SelectMember(bound, toggle);
+                });
+
+                slot  = Label(rt, "", new Rect(6f, 0f, 18f, RowHeight), Dim(), FontBody,
+                              FontStyles.Normal, TextAlignmentOptions.Left);
+                name  = Label(rt, "", new Rect(26f, 0f, 100f, RowHeight), WingColor(), FontBody,
+                              FontStyles.Normal, TextAlignmentOptions.Left);
+                order = Label(rt, "", new Rect(128f, 0f, 58f, RowHeight), Dim(), FontBody,
+                              FontStyles.Normal, TextAlignmentOptions.Left);
+                preference = Label(rt, "", new Rect(188f, 0f, 30f, RowHeight), Dim(), FontMicro,
+                              FontStyles.Normal, TextAlignmentOptions.Left);
+                error = Label(rt, "", new Rect(220f, 0f, 52f, RowHeight), Dim(), FontBody,
+                              FontStyles.Normal, TextAlignmentOptions.Right);
+                reserves = Label(rt, "", new Rect(276f, 0f, 70f, RowHeight), Dim(), FontSmall,
+                              FontStyles.Normal, TextAlignmentOptions.Right);
+
+                // REL discharges a wingman for good, and it sat one row-width from the row
+                // you click to select one, in the same green as the orders. It is now drawn
+                // as the destructive control it is, and it asks twice — the same
+                // press-again-to-confirm the Supply page already uses for its assignment
+                // fee, so the panel only has the one idiom for "this one is going to cost
+                // you something".
+                release = WingUi.Button(rt, "REL",
+                                        new Rect(width - releaseWidth - 6f, -1f, releaseWidth,
+                                                 RowHeight - 2f),
+                                        FontSmall, UiButtonStyle.Danger, ConfirmRelease)
+                                .WithTooltip(OrderHint.Release);
+            }
+
+            /// <summary>Arm on the first press, discharge on the second.</summary>
+            private void ConfirmRelease()
+            {
+                if (bound == null) return;
+
+                if (memberRelease.IsArmedFor(bound))
+                {
+                    WingMember going = bound;
+                    memberRelease.Clear();
+                    WingCommandManager.Instance?.RemoveMember(going);
+                    return;
+                }
+
+                memberRelease.Arm(bound);
+                WingCommandManager.Instance?.Toast(
+                    "Press REL again to release " + bound.Name + " from the wing");
+            }
+
+            public void Bind(WingMember m)
+            {
+                bool memberChanged = bound != m;
+                bound = m;
+                if (!go.activeSelf) go.SetActive(true);
+
+                bool selected = WingCommandManager.Instance?.Selection.Contains(m) ?? true;
+
+                bool armed = memberRelease.IsArmedFor(m);
+                release?.SetLatched(armed);
+                release?.SetText(armed ? "SURE?" : "REL");
+
+                // Just the slot number. The filled/hollow circles this used to draw are not
+                // in the MFD font, so every row rendered the same tofu box and the marker
+                // said nothing — while the lit edge and the green callsign beside it were
+                // already showing selection perfectly well.
+                if (memberChanged)
+                {
+                    slot.text = m.Slot.ToString();
+                    name.text = UiTheme.Truncate(m.Name, 16);
+                }
+                slot.color = selected ? Green() : Dim();
+                name.color = selected ? Green() : WingColor();
+                selectionRule.color = selected ? Green() : MemberFrameColor();
+
+                // Selection is the row's resting state; the pointer only adds to it. Until
+                // now nothing at all happened when the mouse crossed a row, so a roster that
+                // is the panel's main control surface looked exactly like a readout.
+                hit?.SetRowHighlight(fill,
+                                     selected ? WingUi.CardFillSelected : WingUi.CardFill,
+                                     WingUi.CardFillHover);
+                order.text = ShortOrder(m);
+
+                // The weapon preference gets its own narrow column rather than being
+                // appended to the state text. Sharing that cell would have truncated the
+                // order — which is the more important of the two — the moment anything but
+                // AUTO was selected.
+                preference.text = WingWeaponPreferences.ShortLabel(m.WeaponPreference);
+                preference.color = m.WeaponPreference == WingWeaponPreference.Auto
+                    ? Dim()
+                    : Accent();
+
+                // Fuel and stores are aggregate queries over every tank/station. Sample
+                // each once so binding one row does not walk both collections twice.
+                float fuel = m.Fuel;
+                int ammo = m.Ammo;
+                reserves.text = Mathf.RoundToInt(fuel * 100f) + "%  " + ammo;
+                reserves.color = fuel <= Plugin.Settings.BingoFuel.Value || ammo <= 0
+                    ? new Color(1f, 0.55f, 0.2f)
+                    : Dim();
+
+                error.text = ErrorText(m);
+                error.color = !m.IsPanicking && HoldsFormationSlot(m.Order) &&
+                              m.SlotError > 0f && m.SlotError < 250f
+                    ? Accent()
+                    : Dim();
+            }
+
+            public void Hide()
+            {
+                bound = null;
+                if (go.activeSelf) go.SetActive(false);
+            }
+
+            private static string ErrorText(WingMember m)
+            {
+                if (m.DeliveryPending) return "WAIT";
+                if (m.IsPanicking || !HoldsFormationSlot(m.Order)) return "-";
+                if (m.SlotError <= 0f) return "...";
+                return m.SlotError < 10000f
+                    ? m.SlotError.ToString("F0") + " m"
+                    : (m.SlotError / 1000f).ToString("F1") + " km";
+            }
+
+            /// <summary>Orders flown from the formation slot, so a slot error means something.</summary>
+            private static bool HoldsFormationSlot(WingOrder order) =>
+                order == WingOrder.Formation || order == WingOrder.JamTarget;
+        }
+
+    }
+}

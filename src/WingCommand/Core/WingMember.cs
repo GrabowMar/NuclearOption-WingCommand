@@ -1,0 +1,823 @@
+using System.Collections.Generic;
+using UnityEngine;
+
+namespace WingCommand
+{
+    /// <summary>One AI aircraft under the player's command, plus the slot it holds.</summary>
+    internal class WingMember
+    {
+        public readonly Aircraft Aircraft;
+        public readonly Pilot Pilot;
+        public int Slot;
+
+        /// <summary>Distance to the assigned slot, in metres. Diagnostic only.</summary>
+        public float SlotError;
+
+        public WingDirective Directive { get; private set; }
+        public WingOrder Order => Directive.Order;
+
+        /// <summary>
+        /// Which of its own weapons this wingman reaches for first.
+        ///
+        /// Held per member rather than per wing because the useful case is a mixed flight:
+        /// two aircraft holding the missiles for the fighters while the third works the
+        /// ground with rockets. Read by <see cref="WingWeapons"/> on every station choice.
+        /// </summary>
+        public WingWeaponPreference WeaponPreference { get; set; } = WingWeaponPreference.Auto;
+
+        /// <summary>What this airframe is carrying, as far as this mod configured it.</summary>
+        public WingLoadoutChoice Loadout => WingLoadoutBook.AboardOf(Aircraft);
+
+        /// <summary>
+        /// False for an aircraft this mod did not fit — an active mission aircraft the
+        /// player assigned arrives with whatever the mission gave it, and the panel says so
+        /// rather than claiming it is carrying the standard fit.
+        /// </summary>
+        public bool LoadoutKnown => WingLoadoutBook.IsKnown(Aircraft);
+
+        /// <summary>
+        /// The person flying it, or null before one has been assigned. Distinct from
+        /// <see cref="Pilot"/>, which is the game's pilot state machine rather than a
+        /// squadron record.
+        /// </summary>
+        public WingPilot Crew => WingPilotRoster.Of(Aircraft);
+
+        private readonly FormationFlyState formationState;
+        private readonly FallBackState fallBackState;
+        private readonly OrbitState orbitState;
+        private readonly LandInPlaceState landState;
+        private readonly CargoRunState cargoRunState;
+        private readonly WaypointTaskState waypointState;
+        private readonly AttackRunState attackState;
+        private readonly DefensiveManeuverState defensiveState;
+        private readonly ManeuverState maneuverState;
+
+        /// <summary>
+        /// Drives this aircraft's radar jammer while a Jam Target order is standing. Held
+        /// on the member because the order is flown from inside <see cref="FormationFlyState"/>,
+        /// which owns no per-aircraft state of its own.
+        /// </summary>
+        internal RadarJammerPulser Jammer { get; } = new RadarJammerPulser();
+
+        private bool? canJam;
+
+        /// <summary>Flying back to the wing while a standing Engage order is still in force.</summary>
+        private bool recalled;
+        private readonly float joinedAt;
+        private WingRegistry owner;
+        private readonly List<GlobalPosition> waypointQueue = new List<GlobalPosition>();
+        private bool deliveryPending;
+
+        private readonly CargoProgressTracker cargoProgress = new CargoProgressTracker();
+        private float lastIntegrity;
+        private bool damageReported;
+        private bool criticalDamageReported;
+
+        /// <summary>True while a hangar delivery is still taxiing or waiting to launch.</summary>
+        public bool DeliveryPending => deliveryPending;
+
+        /// <summary>Whether the airframe has cleared the delivery launch threshold.</summary>
+        public bool IsAirborne => Aircraft != null && Aircraft.radarAlt >= 25f;
+
+        /// <summary>True when player commands may be applied to this member.</summary>
+        public bool IsCommandable => Alive && !deliveryPending;
+
+        public WingMember(WingRegistry owner, Aircraft aircraft, Pilot pilot, int slot,
+                          bool deliveryPending = false)
+        {
+            this.owner = owner;
+            Aircraft = aircraft;
+            Pilot = pilot;
+            Slot = slot;
+            this.deliveryPending = deliveryPending;
+            formationState = new FormationFlyState(this);
+            fallBackState = new FallBackState(this);
+            orbitState = new OrbitState(this);
+            landState = new LandInPlaceState(this);
+            cargoRunState = new CargoRunState(this);
+            waypointState = new WaypointTaskState(this);
+            attackState = new AttackRunState(this);
+            defensiveState = new DefensiveManeuverState(this);
+            maneuverState = new ManeuverState(this);
+            joinedAt = Time.timeSinceLevelLoad;
+            Directive = WingDirective.Simple(WingOrder.Formation);
+            lastIntegrity = Integrity;
+        }
+
+        public Aircraft Leader => owner?.Leader;
+
+        /// <summary>The rest of the wing, for separation steering.</summary>
+        public System.Collections.Generic.IReadOnlyList<WingMember> Siblings =>
+            owner != null ? owner.Members : null;
+
+        public bool Alive =>
+            Aircraft != null && !Aircraft.disabled &&
+            Pilot != null && !Pilot.dead && !Pilot.ejected;
+
+        public string Name => Aircraft != null ? Aircraft.unitName : "(gone)";
+
+        public void Apply(WingOrder order) => Apply(WingDirective.Simple(order));
+
+        public void Apply(WingDirective directive)
+        {
+            // A hangar-delivered aircraft belongs to the roster immediately, but the stock
+            // taxi/launch state must own it until it is airborne. Dispatcher and automation
+            // filters also enforce this; keeping the guard here protects every call site.
+            if (deliveryPending) return;
+
+            // A scripted manoeuvre is transient and cannot usefully wait behind a missile
+            // break - by the time the break clears the moment has passed. Drop it rather
+            // than overwriting a real standing order with one that would be discarded.
+            if (directive.Order == WingOrder.Maneuver && IsPanicking) return;
+
+            TacticalCoordinator.Release(Aircraft);
+
+            if (directive.Order != WingOrder.MoveToPoint)
+                waypointQueue.Clear();
+
+            Directive = directive;
+            TacticalMapOverlay.Invalidate();
+            recalled = false;
+
+            // A player order received during a missile break is queued as the standing
+            // intent. Self-preservation continues until clear, then resumes this exact order.
+            if (IsPanicking)
+            {
+                if (Plugin.Settings.VerboseLogging.Value)
+                    Plugin.Logger.LogInfo($"[Panic] {Name} queued {directive.Order} while defensive");
+                return;
+            }
+
+            switch (directive.Order)
+            {
+                case WingOrder.Formation:
+                    formationState.BoostRejoin(Slot * Plugin.Settings.RejoinStagger.Value);
+                    Pilot.SwitchState(formationState);
+                    break;
+
+                case WingOrder.Engage:
+                    SwitchToCombat();
+                    break;
+
+                case WingOrder.ReturnToBase:
+                    SwitchToLanding();
+                    break;
+
+                case WingOrder.FallBack:
+                    Pilot.SwitchState(fallBackState);
+                    break;
+
+                case WingOrder.OrbitHere:
+                    EnterOrbit(directive);
+                    break;
+
+                case WingOrder.DeliverCargo:
+                    EnterCargoRun(directive);
+                    break;
+
+                case WingOrder.LandHere:
+                    EnterLanding(directive);
+                    break;
+
+                case WingOrder.MoveToPoint:
+                    EnterWaypoint(directive);
+                    break;
+
+                case WingOrder.Attack:
+                case WingOrder.FireForEffect:
+                    EnterAttack(directive);
+                    break;
+
+                case WingOrder.JamTarget:
+                    EnterJam();
+                    break;
+
+                case WingOrder.Maneuver:
+                    maneuverState.SetManeuver(directive.Maneuver);
+                    Pilot.SwitchState(maneuverState);
+                    break;
+            }
+
+            if (Plugin.Settings.VerboseLogging.Value)
+                Plugin.Logger.LogInfo($"[Wing] {Name} -> {directive.Order}");
+        }
+
+        /// <summary>Hold over the named point, or over the leader when none was given.</summary>
+        private void EnterOrbit(WingDirective directive)
+        {
+            Aircraft leader = Leader;
+            GlobalPosition anchor = directive.HasPoint
+                ? directive.Point
+                : leader != null
+                    ? leader.GlobalPosition()
+                    : Aircraft.GlobalPosition();
+
+            orbitState.SetAnchor(anchor, Plugin.Settings.OrbitRadius.Value);
+            Pilot.SwitchState(orbitState);
+        }
+
+        /// <summary>
+        /// Two routes, and the difference is whether the player named a place.
+        ///
+        /// With a drop point, CargoRunState flies there and releases — the same shape as
+        /// Hold and Land, and available to any airframe carrying a load rather than only to
+        /// helicopters.
+        ///
+        /// Without one, the stock transport state configures itself in EnterState — nearest
+        /// airbase, nearest known ground enemy, landing zone search — so it remains a
+        /// complete supply-run behaviour for the cost of a state switch, and is what the
+        /// order has always done.
+        ///
+        /// Neither reports back on its own. CheckCargoRun watches the cargo station itself,
+        /// which is the only ground truth available, and either calls the delivery or gives
+        /// the airframe back.
+        /// </summary>
+        private void EnterCargoRun(WingDirective directive)
+        {
+            cargoProgress.Reset(CargoAmmo, Time.timeSinceLevelLoad);
+
+            if (directive.HasPoint)
+            {
+                cargoRunState.SetDestination(directive.Point);
+                Pilot.SwitchState(cargoRunState);
+                return;
+            }
+
+            if (Pilot.AIHeloTransportState != null)
+            {
+                Pilot.SwitchState(Pilot.AIHeloTransportState);
+                return;
+            }
+
+            // A fixed-wing transport has no stock supply route to fall back on, so say which
+            // half of the order is missing rather than silently doing nothing with a load
+            // aboard.
+            WingCommandManager.Instance?.Toast(
+                Name + " needs a drop point - it has no standard supply route");
+            Apply(WingOrder.Formation);
+        }
+
+        private void EnterLanding(WingDirective directive)
+        {
+            if (directive.HasPoint) landState.SetDestination(directive.Point);
+            else landState.ClearDestination();
+            Pilot.SwitchState(landState);
+        }
+
+        private void EnterWaypoint(WingDirective directive)
+        {
+            if (!directive.HasPoint)
+            {
+                Apply(WingOrder.Formation);
+                return;
+            }
+
+            waypointState.SetDestination(directive.Point);
+            Pilot.SwitchState(waypointState);
+        }
+
+        /// <summary>
+        /// Reached only if something re-applies a standing attack order. AttackTarget is the
+        /// normal entry point and sets the target first.
+        /// </summary>
+        private void EnterAttack(WingDirective directive)
+        {
+            if (AssignedTarget != null && !AssignedTarget.disabled)
+            {
+                attackState.SetMassed(directive.Order == WingOrder.FireForEffect);
+                Pilot.SwitchState(attackState);
+            }
+            else
+            {
+                Pilot.SwitchState(formationState);
+            }
+        }
+
+        /// <summary>
+        /// Flown from the formation slot; FormationFlyState runs the jammer each tick while
+        /// the target lives. A missing target here means a stale order was re-applied — fall
+        /// back to plain formation.
+        /// </summary>
+        private void EnterJam()
+        {
+            if (AssignedTarget != null && !AssignedTarget.disabled)
+            {
+                formationState.BoostRejoin(Slot * Plugin.Settings.RejoinStagger.Value);
+                Pilot.SwitchState(formationState);
+            }
+            else
+            {
+                Apply(WingOrder.Formation);
+            }
+        }
+
+        /// <summary>Release the stock launch state once a pending delivery is airborne.</summary>
+        internal bool ActivateWhenAirborne()
+        {
+            if (!deliveryPending || !IsAirborne) return false;
+
+            deliveryPending = false;
+            Apply(WingOrder.Formation);
+            return true;
+        }
+
+        /// <summary>
+        /// True when this aircraft can be told to run cargo.
+        ///
+        /// A loaded cargo station and nothing else. It used to require the stock helicopter
+        /// transport state as well, which quietly made the order rotary-only — but nothing
+        /// about a cargo station is rotary-specific, and a fixed-wing transport with a load
+        /// aboard can fly it to a drop point perfectly well. The stock state is only needed
+        /// for the point-less route, and is checked where that route is taken.
+        /// </summary>
+        public bool CanDeliverCargo
+        {
+            get
+            {
+                if (Aircraft == null || Aircraft.weaponStations == null) return false;
+
+                foreach (WeaponStation s in Aircraft.weaponStations)
+                {
+                    if (s != null && s.Cargo && s.Ammo > 0) return true;
+                }
+                return false;
+            }
+        }
+
+        /// <summary>Cargo remaining across every cargo station.</summary>
+        public int CargoAmmo
+        {
+            get
+            {
+                if (Aircraft == null || Aircraft.weaponStations == null) return 0;
+
+                int total = 0;
+                foreach (WeaponStation s in Aircraft.weaponStations)
+                {
+                    if (s != null && s.Cargo) total += s.Ammo;
+                }
+                return total;
+            }
+        }
+
+        /// <summary>How long a supply run may go unfulfilled before it is abandoned.</summary>
+        private const float CargoRunTimeout = 300f;
+
+        /// <summary>
+        /// Follow a supply run to its end.
+        ///
+        /// A drop is visible as the cargo station's own ammunition falling, which is the
+        /// same field <see cref="CanDeliverCargo"/> gates on — so this confirms a real
+        /// delivery rather than trusting that entering the stock transport state implies
+        /// one. An empty transport rejoins; one that has been out for five minutes with its
+        /// cargo still aboard has not found anywhere to put it and is given back rather
+        /// than left circling for the rest of the mission.
+        /// </summary>
+        public void CheckCargoRun()
+        {
+            if (Order != WingOrder.DeliverCargo || !IsCommandable || IsPanicking) return;
+
+            int remaining = CargoAmmo;
+
+            if (cargoProgress.Observe(remaining, Time.timeSinceLevelLoad))
+            {
+                WingComms.Say(this, WingComms.Call.Delivered);
+            }
+
+            if (remaining <= 0)
+            {
+                if (cargoProgress.MadeProgress) WingPilotRoster.NoteSortie(Aircraft);
+                Apply(WingOrder.Formation);
+                return;
+            }
+
+            if (!cargoProgress.IsStalled(Time.timeSinceLevelLoad, CargoRunTimeout)) return;
+
+            WingComms.Say(this, WingComms.Call.NoDropOff);
+            WingCommandManager.Instance?.Toast(
+                Name + " found nowhere to deliver its cargo - rejoining");
+            Apply(WingOrder.Formation);
+        }
+
+        /// <summary>
+        /// True when this aircraft can set down where it is.
+        ///
+        /// Asked of the hover controller rather than the autopilot type. The two disagree
+        /// on exactly the aircraft this order exists for: a thrust-vectoring jet flies an
+        /// <c>AutopilotPlane</c>, so it failed the rotary test, but it hovers and lands
+        /// vertically as readily as any helicopter. <see cref="WingRegistry.IsRotary"/>
+        /// still decides which formation model to fly, which is a different question.
+        /// </summary>
+        public bool CanLandInPlace => HoverAssist.CanHover(Aircraft);
+
+        /// <summary>
+        /// True when this airframe carries a radar jammer it can be told to run against a
+        /// designated target. Resolved once the aircraft's countermeasure manager exists,
+        /// then cached.
+        /// </summary>
+        public bool CanJam
+        {
+            get
+            {
+                if (canJam.HasValue) return canJam.Value;
+                if (Aircraft == null || Aircraft.countermeasureManager == null) return false;
+                canJam = Jammer.HasJammer(Aircraft);
+                return canJam.Value;
+            }
+        }
+
+        /// <summary>
+        /// How intact the airframe is, 0-1, from the game's own part hit points. Read by
+        /// the Wing tab; a detached part counts as fully lost rather than merely damaged.
+        /// </summary>
+        public float Integrity
+        {
+            get
+            {
+                if (Aircraft == null || Aircraft.partLookup == null) return 0f;
+
+                int counted = 0;
+                float total = 0f;
+
+                foreach (UnitPart part in Aircraft.partLookup)
+                {
+                    if (part == null) continue;
+                    counted++;
+                    total += part.IsDetached() ? 0f : Mathf.Clamp01(part.hitPoints / 100f);
+                }
+
+                return counted > 0 ? total / counted : 1f;
+            }
+        }
+
+        /// <summary>
+        /// Report meaningful damage transitions, not every hit-point tick. A heavy first hit
+        /// goes straight to the critical call instead of queuing both lines back-to-back.
+        /// </summary>
+        public void CheckDamage()
+        {
+            // partLookup is populated asynchronously. Integrity deliberately reads zero
+            // while it is absent for the roster UI, but treating that temporary zero as
+            // combat damage would make a freshly spawned aircraft report itself critical.
+            if (!Alive || Aircraft.partLookup == null) return;
+
+            float current = Integrity;
+            if (!criticalDamageReported && current <= 0.35f)
+            {
+                criticalDamageReported = true;
+                damageReported = true;
+                WingComms.Say(this, WingComms.Call.Critical);
+            }
+            else if (!damageReported && current <= 0.72f && lastIntegrity > 0.72f)
+            {
+                damageReported = true;
+                WingComms.Say(this, WingComms.Call.Damaged);
+            }
+
+            lastIntegrity = current;
+        }
+        /// <summary>
+        /// Give control back to the stock combat AI. Used both for an explicit Engage
+        /// order and for automatic breaks (leader lost, mutual support).
+        /// </summary>
+        public void ReleaseToCombat(string reason)
+        {
+            if (deliveryPending)
+            {
+                // The aircraft is still under the airbase's taxi/launch AI. Removing it from
+                // the player's roster must not switch that parked pilot into combat flight.
+                deliveryPending = false;
+                TacticalCoordinator.Release(Aircraft);
+                return;
+            }
+
+            if (Plugin.Settings.VerboseLogging.Value)
+                Plugin.Logger.LogInfo($"[Wing] {Name} releasing to combat AI: {reason}");
+
+            Directive = WingDirective.Simple(WingOrder.Engage);
+            IsPanicking = false;
+            SwitchToCombat();
+        }
+
+        /// <summary>
+        /// Dismiss this aircraft: send it home rather than back to the stock combat AI.
+        ///
+        /// The right ending for a release the player asked for. Handing a released wingman
+        /// to the combat AI left it fighting on the player's behalf without being theirs to
+        /// command, and holding a squadron slot indefinitely; flying it home ends the sortie
+        /// properly, returns the airframe to stock and gives the capacity back.
+        ///
+        /// Automatic breaks still use <see cref="ReleaseToCombat"/> — a wingman that loses
+        /// its leader mid-fight should keep fighting, not run for the runway.
+        /// </summary>
+        public void SendHome(string reason)
+        {
+            if (deliveryPending)
+            {
+                // Still under the airbase's own taxi/launch AI, and not airborne to be sent
+                // anywhere. Hand it back untouched.
+                deliveryPending = false;
+                TacticalCoordinator.Release(Aircraft);
+                return;
+            }
+
+            if (Plugin.Settings.VerboseLogging.Value)
+                Plugin.Logger.LogInfo($"[Wing] {Name} released and sent home: {reason}");
+
+            TacticalCoordinator.Release(Aircraft);
+            Directive = WingDirective.Simple(WingOrder.ReturnToBase);
+            IsPanicking = false;
+
+            // The pilot flew a sortie and is going home from it, exactly as one ordered to
+            // Return To Base does. Credited here because the settlement that normally
+            // credits it runs long after this pilot has left the seat.
+            WingPilotRoster.NoteSortie(Aircraft);
+
+            // Registered before the state switch, so that an aircraft already sitting on a
+            // runway - settled by the very next recovery pass - is tracked rather than
+            // settled as an aircraft nobody released.
+            WingDeparture.Begin(this);
+            WingComms.Say(this, WingComms.Call.Detached);
+            SwitchToLanding();
+        }
+
+
+        /// <summary>A target the player has explicitly assigned, or null.</summary>
+        public Unit AssignedTarget => Directive.Target;
+
+        /// <summary>True while a missile warning temporarily owns the flight controls.</summary>
+        public bool IsPanicking { get; private set; }
+
+        /// <summary>Fuel remaining, 0-1.</summary>
+        public float Fuel => Aircraft != null ? Aircraft.GetFuelLevel() : 0f;
+
+        /// <summary>Rounds/missiles remaining across all stations.</summary>
+        public int Ammo
+        {
+            get
+            {
+                if (Aircraft == null || Aircraft.weaponStations == null) return 0;
+
+                int total = 0;
+                foreach (WeaponStation s in Aircraft.weaponStations)
+                {
+                    if (s != null && !s.Cargo) total += s.Ammo;
+                }
+                return total;
+            }
+        }
+
+        /// <summary>
+        /// Order this member onto a specific target.
+        ///
+        /// An order to attack now flies an attack. It used to set AssignedTarget and hope,
+        /// which only worked while the wingman happened to be holding station: AssignedTarget
+        /// is read by FormationFlyState, so under an Engage order - where the stock combat AI
+        /// is flying - it was ignored entirely. The Pilot.SetPrimaryTarget call that looked
+        /// like it bridged the gap was dead code; AIPilotCombatModes never reads it.
+        /// </summary>
+        public void AttackTarget(Unit target, bool report = true)
+        {
+            if (target == null || !IsCommandable) return;
+            Apply(WingDirective.Attack(target));
+            if (report && !IsPanicking)
+                WingComms.Say(this, WingComms.Call.Engaging, target.unitName);
+        }
+        /// <summary>
+        /// Order this member to expend on a target.
+        ///
+        /// Deliberately separate from <see cref="AttackTarget"/> rather than a parameter on
+        /// it: the two orders read differently on the roster, on the map and on the radio,
+        /// and a player who asked for one should never be shown the other.
+        /// </summary>
+        public void FireForEffect(Unit target, bool report = true)
+        {
+            if (target == null || !IsCommandable) return;
+            Apply(WingDirective.AtTarget(WingOrder.FireForEffect, target));
+            if (report && !IsPanicking)
+                WingComms.Say(this, WingComms.Call.FireForEffect, target.unitName);
+        }
+
+        public void ClearAssignedTarget() => Directive = Directive.WithoutTarget();
+
+        /// <summary>Issue a tactical-map move, replacing or appending to this member's route.</summary>
+        public void IssueWaypoint(GlobalPosition point, bool append)
+        {
+            if (!IsCommandable) return;
+            if (!append) waypointQueue.Clear();
+            waypointQueue.Add(point);
+
+            Apply(WingDirective.AtPoint(WingOrder.MoveToPoint, waypointQueue[0]));
+        }
+
+        public int WaypointCount => waypointQueue.Count;
+
+        /// <summary>
+        /// The route this member is flying, current leg first. Read by the tactical map to
+        /// draw the queue; the list is the live queue, so callers must not hold on to it
+        /// across a <see cref="CompleteWaypoint"/>.
+        /// </summary>
+        public IReadOnlyList<GlobalPosition> Route => waypointQueue;
+
+        /// <summary>Advance a route, then resolve the wing's ROE at its final endpoint.</summary>
+        internal void CompleteWaypoint()
+        {
+            if (waypointQueue.Count > 0) waypointQueue.RemoveAt(0);
+
+            if (waypointQueue.Count > 0)
+            {
+                GlobalPosition next = waypointQueue[0];
+                Directive = WingDirective.AtPoint(WingOrder.MoveToPoint, next);
+                waypointState.SetDestination(next);
+                if (!IsPanicking) Pilot.SwitchState(waypointState);
+                return;
+            }
+
+            // A map move is temporary. Completion returns to formation for every ROE;
+            // weapons-free permission is not permission to invent an Engage order.
+            Apply(WingOrder.Formation);
+        }
+
+        /// <summary>
+        /// Send the member home when it can no longer contribute. A wingman with no
+        /// weapons or no fuel is just a liability holding station.
+        /// </summary>
+        public void CheckReserves()
+        {
+            if (!IsCommandable || !Plugin.Settings.AutoReturnOnEmpty.Value) return;
+            if (IsPanicking) return;
+
+            // Orders that are already going somewhere deliberate are not interrupted by a
+            // bingo call. A wingman on the deck does not need telling to land, and one
+            // mid-cargo-run or mid-retreat has a better reason to be where it is than its
+            // fuel state.
+            switch (Order)
+            {
+                case WingOrder.ReturnToBase:
+                case WingOrder.LandHere:
+                case WingOrder.DeliverCargo:
+                case WingOrder.FallBack:
+                case WingOrder.MoveToPoint:
+                case WingOrder.Maneuver:
+                    return;
+            }
+
+            // A freshly spawned aircraft can be sampled before its weapon stations have
+            // finished initialising, which reads as zero ammunition and would send it
+            // straight home the moment it joined.
+            if (Time.timeSinceLevelLoad - joinedAt < 10f) return;
+
+            if (Fuel <= Plugin.Settings.BingoFuel.Value)
+            {
+                WingComms.Say(this, WingComms.Call.Bingo);
+                Apply(WingOrder.ReturnToBase);
+                return;
+            }
+
+            // A jammer with an empty rack is still doing its job. Only a fuel state sends
+            // it home.
+            if (Ammo <= 0 && Order != WingOrder.JamTarget)
+            {
+                WingComms.Say(this, WingComms.Call.Winchester);
+                Apply(WingOrder.ReturnToBase);
+            }
+        }
+
+        /// <summary>
+        /// Keep a hunting wingman on a tether.
+        ///
+        /// Engage used to be a one-way handoff to the stock combat AI: the wingman stayed on
+        /// the roster but flew off and never came back, which made it indistinguishable from
+        /// Disband except in the paperwork. It is now a standing order to hunt *within*
+        /// LeashRadius of the leader.
+        ///
+        /// The two thresholds are deliberate. Recalling at the leash and releasing again at
+        /// half of it gives the hysteresis that stops a wingman flip-flopping between
+        /// hunting and rejoining every frame it sits on the boundary — with a single
+        /// threshold that is exactly what would happen.
+        /// </summary>
+        public void CheckLeash()
+        {
+            if (!IsCommandable || IsPanicking) return;
+            if (Order != WingOrder.Engage && !WingOrderCatalog.IsTargetOrder(Order)) return;
+
+            Aircraft leader = Leader;
+            if (leader == null) return;
+
+            float leash = Plugin.Settings.LeashRadius.Value;
+            float distanceSq = FastMath.SquareDistance(Aircraft.GlobalPosition(), leader.GlobalPosition());
+
+            if (!recalled)
+            {
+                if (distanceSq < leash * leash) return;
+
+                if (Plugin.Settings.VerboseLogging.Value)
+                    Plugin.Logger.LogInfo($"[Wing] {Name} past leash - rejoining");
+
+                WingComms.Say(this, WingComms.Call.Rejoining);
+
+                recalled = true;
+                formationState.BoostRejoin(0f);
+                Pilot.SwitchState(formationState);
+                return;
+            }
+
+            // Recalled and on the way back: turn loose again once genuinely close, not the
+            // instant the leash is nominally satisfied.
+            float release = leash * 0.5f;
+            if (distanceSq > release * release) return;
+
+            recalled = false;
+
+            // Resume whatever the standing order actually was. An attack order goes back to
+            // its target rather than to free hunting, which is the difference between "go
+            // and get that" and "go and find something".
+            if (WingOrderCatalog.IsTargetOrder(Order) &&
+                AssignedTarget != null && !AssignedTarget.disabled)
+            {
+                WingComms.Say(this, WingComms.Call.Engaging, AssignedTarget.unitName);
+                attackState.SetMassed(Order == WingOrder.FireForEffect);
+                Pilot.SwitchState(attackState);
+                return;
+            }
+
+            if (WingOrderCatalog.IsTargetOrder(Order))
+            {
+                // Target died while we were on our way back.
+                ClearAssignedTarget();
+                Apply(WingOrder.Formation);
+                return;
+            }
+
+            WingComms.Say(this, WingComms.Call.Engaging);
+            SwitchToCombat();
+        }
+
+        /// <summary>Enter the temporary defensive interrupt when this aircraft is warned.</summary>
+        public void CheckThreats()
+        {
+            if (!IsCommandable || IsPanicking || !Plugin.Settings.PanicSystem.Value) return;
+            if (Aircraft.radarAlt < 5f) return;
+
+            MissileWarning warning = Aircraft.GetMissileWarningSystem();
+            if (warning == null || !warning.IsWarning()) return;
+
+            IsPanicking = true;
+            TacticalCoordinator.Release(Aircraft);
+            Pilot.SwitchState(defensiveState);
+        }
+
+        /// <summary>
+        /// Called by <see cref="DefensiveManeuverState"/> after the warning stays clear.
+        /// The standing order may have changed while defensive, so resolve it at this exact
+        /// moment instead of caching a stale pilot state at panic entry.
+        /// </summary>
+        public void ResumeAfterPanic()
+        {
+            if (!IsPanicking) return;
+
+            WingDirective resume = Directive;
+            IsPanicking = false;
+
+            // A manoeuvre interrupted by a missile break is not worth re-flying once the
+            // break clears; a target order whose target died has nothing left to prosecute.
+            if (resume.Order == WingOrder.Maneuver ||
+                (WingOrderCatalog.CarriesTarget(resume.Order) &&
+                 (resume.Target == null || resume.Target.disabled)))
+            {
+                resume = WingDirective.Simple(WingOrder.Formation);
+            }
+
+            if (Plugin.Settings.VerboseLogging.Value)
+                Plugin.Logger.LogInfo($"[Panic] {Name} clear -> {resume.Order}");
+
+            WingPilotRoster.NoteSurvivedEngagement(Aircraft);
+            Apply(resume);
+        }
+
+        private void SwitchToCombat()
+        {
+            if (Pilot == null) return;
+
+            if (Pilot.AICombatState != null)
+                Pilot.SwitchState(Pilot.AICombatState);
+            else if (Pilot.AIHeloCombatState != null)
+                Pilot.SwitchState(Pilot.AIHeloCombatState);
+            else
+                Plugin.Logger.LogWarning($"[Wing] {Name} has no combat state to return to.");
+        }
+
+        private void SwitchToLanding()
+        {
+            if (Pilot == null) return;
+
+            if (Pilot.AILandingState != null)
+                Pilot.SwitchState(Pilot.AILandingState);
+            else if (Pilot.AIHeloLandingState != null)
+                Pilot.SwitchState(Pilot.AIHeloLandingState);
+            else
+                SwitchToCombat();
+        }
+    }
+
+}

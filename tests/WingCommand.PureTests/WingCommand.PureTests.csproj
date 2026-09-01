@@ -6,10 +6,12 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <Compile Include="../../src/WingCommand/PureLogic.cs" Link="PureLogic.cs" />
-    <Compile Include="../../src/WingCommand/ChatterLogic.cs" Link="ChatterLogic.cs" />
-    <Compile Include="../../src/WingCommand/LoadoutTemplateCodec.cs" Link="LoadoutTemplateCodec.cs" />
-    <Compile Include="../../src/WingCommand/UiPalette.cs" Link="UiPalette.cs" />
+    <!-- Globbed, not listed. Pure/ is by definition the engine-free code, so it is by
+         definition what this project compiles; enumerating the files here meant a new pure
+         file could be added and silently go untested. If a file in Pure/ does not compile
+         against net8.0 it is not pure, and this project failing to build is the correct
+         and immediate answer. -->
+    <Compile Include="../../src/WingCommand/Pure/*.cs" LinkBase="Pure" />
     <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.12.0" />
     <PackageReference Include="xunit" Version="2.9.2" />
     <PackageReference Include="xunit.runner.visualstudio" Version="2.8.2">

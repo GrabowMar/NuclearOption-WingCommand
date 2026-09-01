@@ -21,11 +21,16 @@ namespace WingCommand
     {
         // The stock theme colours the panel inherits, with the fallbacks UiTheme uses when
         // ThemeManager is not up yet — the values the palette is actually tuned against.
+        // These two come from the live game theme, so they stay stated here.
         private static Rgba Accent => new Rgba(0.30f, 1f, 0.35f);
         private static Rgba Alert => new Rgba(1f, 0.18f, 0.12f);
-        private static Rgba Dim => new Rgba(0.64f, 0.68f, 0.70f);
-        private static Rgba Disabled => new Rgba(0.42f, 0.45f, 0.46f, 0.75f);
-        private static Rgba Frame => new Rgba(0.52f, 0.55f, 0.56f, 0.55f);
+
+        // These three are the mod's own, and are read from UiPalette rather than copied.
+        // They used to be restated here, which meant the contrast floors below were asserted
+        // against this file's idea of the colour rather than the one the panel draws with.
+        private static Rgba Dim => UiPalette.Dim;
+        private static Rgba Disabled => UiPalette.Disabled;
+        private static Rgba Frame => UiPalette.Frame;
 
         private static UiPaletteInputs Inputs => new UiPaletteInputs
         {
@@ -284,6 +289,53 @@ namespace WingCommand
             Assert.True(drift <= 1.6f,
                 $"the ground shifts {drift:F2}:1 between a dark and a bright map tile; the " +
                 "panel is too transparent to have a predictable palette");
+        }
+
+        // ----------------------------------------------------------------- HUD surfaces
+
+        /// <summary>
+        /// The in-cockpit HUD draws in IMGUI and cannot reach the panel's widgets, so its
+        /// grounds live in the palette rather than in a private block of its own. They are
+        /// held to the same floor: the radial and the toast are read at a glance, over
+        /// whatever the cockpit happens to be pointing at.
+        /// </summary>
+        [Fact]
+        public void Hud_slice_text_is_readable_on_both_slice_states()
+        {
+            var grounds = new (string Name, Rgba Ground)[]
+            {
+                ("resting slice", UiPalette.HudSliceCold),
+                ("hovered slice", UiPalette.HudSliceHot),
+                ("toast", UiPalette.HudPanel),
+            };
+
+            foreach ((string name, Rgba ground) in grounds)
+            {
+                // Over black: the HUD has no panel behind it, so a translucent ground
+                // composites against the darkest thing the cockpit can show.
+                Rgba flattened = ground.Over(new Rgba(0f, 0f, 0f));
+
+                float rest = Rgba.Contrast(UiPalette.HudSliceText, flattened);
+                float hot = Rgba.Contrast(Rgba.White, flattened);
+
+                Assert.True(System.Math.Max(rest, hot) >= 4.5f,
+                    $"neither HUD label colour clears 4.5:1 on the {name} " +
+                    $"(rest {rest:F2}:1, hot {hot:F2}:1)");
+            }
+        }
+
+        /// <summary>A hovered slice has to be visibly hotter than a resting one.</summary>
+        [Fact]
+        public void Hovered_hud_slice_separates_from_a_resting_one()
+        {
+            Rgba black = new Rgba(0f, 0f, 0f);
+            Rgba rest = UiPalette.HudSliceCold.Over(black);
+            Rgba hot = UiPalette.HudSliceHot.Over(black);
+
+            float separation = Rgba.Contrast(hot, rest);
+            Assert.True(separation >= 1.5f,
+                $"the hovered radial slice measures {separation:F2}:1 against a resting one, " +
+                "which is not enough to show which order the pointer is on");
         }
 
         // ------------------------------------------------------------------ helpers
