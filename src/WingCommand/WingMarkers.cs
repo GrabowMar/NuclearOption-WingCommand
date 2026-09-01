@@ -120,7 +120,7 @@ namespace WingCommand
             Unit assigned = member.AssignedTarget;
             if (assigned != null && !assigned.disabled) return assigned;
 
-            if (member.Order != WingOrder.Engage && !member.OnLeash) return null;
+            if (member.Order != WingOrder.Engage) return null;
 
             Aircraft aircraft = member.Aircraft;
             if (aircraft == null || aircraft.weaponManager == null) return null;

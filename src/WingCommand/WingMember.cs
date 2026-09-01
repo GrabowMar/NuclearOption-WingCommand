@@ -138,7 +138,6 @@ namespace WingCommand
             Directive = directive;
             TacticalMapOverlay.Invalidate();
             recalled = false;
-            OnLeash = false;
 
             // A player order received during a missile break is queued as the standing
             // intent. Self-preservation continues until clear, then resumes this exact order.
@@ -462,7 +461,6 @@ namespace WingCommand
                 Plugin.Logger.LogInfo($"[Wing] {Name} releasing to combat AI: {reason}");
 
             Directive = WingDirective.Simple(WingOrder.Engage);
-            OnLeash = false;
             IsPanicking = false;
             SwitchToCombat();
         }
@@ -494,7 +492,6 @@ namespace WingCommand
 
             TacticalCoordinator.Release(Aircraft);
             Directive = WingDirective.Simple(WingOrder.ReturnToBase);
-            OnLeash = false;
             IsPanicking = false;
 
             // The pilot flew a sortie and is going home from it, exactly as one ordered to
@@ -510,8 +507,6 @@ namespace WingCommand
             SwitchToLanding();
         }
 
-        /// <summary>True while this member is off the wing on a leashed engagement.</summary>
-        public bool OnLeash { get; private set; }
 
         /// <summary>A target the player has explicitly assigned, or null.</summary>
         public Unit AssignedTarget => Directive.Target;
@@ -655,26 +650,6 @@ namespace WingCommand
         }
 
         /// <summary>
-        /// Break formation to fight, but stay tethered. Unlike a plain Engage order this
-        /// is temporary: <see cref="CheckLeash"/> pulls the member back once the fight
-        /// takes it too far from the leader. Follows the Falcon BMS model, where an attack
-        /// order means acquire, fire, then rejoin — not leave for good.
-        /// </summary>
-        public void BreakToEngage(string reason)
-        {
-            if (!IsCommandable || IsPanicking || OnLeash || Order != WingOrder.Formation) return;
-
-            if (Plugin.Config2.VerboseLogging.Value)
-                Plugin.Logger.LogInfo($"[Wing] {Name} breaking to engage: {reason}");
-
-            OnLeash = true;
-            // This is a temporary state interruption, not a new player directive. Keeping
-            // the directive intact is what lets an explicit Form Up order survive it.
-            WingComms.Say(this, WingComms.Call.Breaking);
-            SwitchToCombat();
-        }
-
-        /// <summary>
         /// Keep a hunting wingman on a tether.
         ///
         /// Engage used to be a one-way handoff to the stock combat AI: the wingman stayed on
@@ -686,23 +661,14 @@ namespace WingCommand
         /// half of it gives the hysteresis that stops a wingman flip-flopping between
         /// hunting and rejoining every frame it sits on the boundary — with a single
         /// threshold that is exactly what would happen.
-        ///
-        /// <see cref="OnLeash"/> separates the two callers: an automatic mutual-support
-        /// break is temporary and reverts to Formation once it has rejoined, while a
-        /// standing Engage order resumes hunting and keeps its order.
         /// </summary>
         public void CheckLeash()
         {
             if (!IsCommandable || IsPanicking) return;
-            if (Order != WingOrder.Engage && !WingOrderCatalog.IsTargetOrder(Order) &&
-                !OnLeash) return;
+            if (Order != WingOrder.Engage && !WingOrderCatalog.IsTargetOrder(Order)) return;
 
             Aircraft leader = Leader;
-            if (leader == null)
-            {
-                OnLeash = false;
-                return;
-            }
+            if (leader == null) return;
 
             float leash = Plugin.Config2.LeashRadius.Value;
             float distanceSq = FastMath.SquareDistance(Aircraft.GlobalPosition(), leader.GlobalPosition());
@@ -715,14 +681,6 @@ namespace WingCommand
                     Plugin.Logger.LogInfo($"[Wing] {Name} past leash - rejoining");
 
                 WingComms.Say(this, WingComms.Call.Rejoining);
-
-                // An automatic break is over the moment it rejoins; a standing order is not.
-                if (OnLeash)
-                {
-                    OnLeash = false;
-                    Apply(WingOrder.Formation);
-                    return;
-                }
 
                 recalled = true;
                 formationState.BoostRejoin(0f);

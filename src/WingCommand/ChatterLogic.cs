@@ -355,9 +355,6 @@ namespace WingCommand
                 // A released wingman signs off exactly as one ordered home does: it is
                 // the same thing happening to it, arrived at from the other direction.
                 case "DETACHED": return Acknowledge(persona, "RETURNTOBASE", seed);
-                case "BREAKING": return subject == null
-                    ? Pick(seed, "Breaking!", "Breaking off!")
-                    : Pick(seed, "Breaking " + subject + "!", "Defensive, " + subject + "!");
                 case "FALLINGBACK": return Pick(seed, "Breaking off. Falling back.",
                                                        "Disengaging and opening the distance.");
                 case "HOLDING": return Pick(seed, "Holding at standoff.", "Holding position.");

@@ -902,14 +902,7 @@ namespace WingCommand
             new Column("FUEL  AMMO", 276f, 70f, rightAligned: true),
         };
 
-        /// <summary>The two-column header the Loadout and Wing tabs' pick lists share.</summary>
-        private static readonly Column[] InspectColumns =
-        {
-            new Column("CALLSIGN", 26f, 120f),
-            new Column("CARRYING", 160f, PanelWidth - Pad * 2f - 160f - Space3,
-                       rightAligned: true),
-        };
-
+        /// <summary>The two-column header the Wing tab's pick list uses.</summary>
         private static readonly Column[] WingInspectColumns =
         {
             new Column("CALLSIGN", 26f, 120f),

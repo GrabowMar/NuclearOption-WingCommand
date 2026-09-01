@@ -442,8 +442,6 @@ namespace WingCommand
                 root.SetActive(false);
             }
 
-            public bool IsOpen => root != null && root.activeSelf;
-
             /// <summary>Close whatever list is open, wherever it is.</summary>
             public static void CloseAny() => open?.Close();
 

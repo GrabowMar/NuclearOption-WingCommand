@@ -668,11 +668,6 @@ namespace WingCommand
             toastUntil = Time.unscaledTime + 3f;
         }
 
-        internal static string SlotName(int slot)
-        {
-            return "wingman " + (slot + 1);
-        }
-
         // --------------------------------------------------------------------- UI
 
         private void OnGUI()

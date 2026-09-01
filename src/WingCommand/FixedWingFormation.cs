@@ -556,7 +556,6 @@ namespace WingCommand
         // ---------------------------------------------------------------- bank match
 
         /// <summary>
-        /// <summary>
         /// True bank angle, in degrees, independent of pitch.
         ///
         /// The obvious formula — the signed angle between world up and the aircraft's up
