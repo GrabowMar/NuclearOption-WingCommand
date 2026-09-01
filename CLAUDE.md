@@ -77,13 +77,21 @@ pwsh build/package.ps1
   Performance belongs in `WingBrain` instead of either.
 - **Don't add a switch that `Mode` already gates.** Jamming and aerobatics each had their own
   toggle *and* a `WingBrain` gate, so there were two ways to turn one thing off.
-- Version bumps touch csproj `<Version>` and `Core/Plugin.cs`. The build **fails** if the two
-  disagree (`CheckPluginVersionMatchesCsproj` in the csproj), so those two cannot drift.
-  **`build/meta.json` can.** `package.ps1` regenerates a *staged* meta.json inside the
-  release zip and never writes `build/meta.json` — which is the one `copy-to-game.ps1`
-  deploys. Update its `version` and `hash` by hand when you bump, or the game folder keeps
-  advertising the previous release. This was wrong here until 0.9.5.0, and the file had
-  fallen a version behind.
+- Version bumps touch csproj `<Version>`, `Core/Plugin.cs` **and** `build/meta.json`. The
+  build **fails** if any of the three disagree (`CheckPluginVersionMatchesCsproj` and
+  `CheckMetaVersionMatchesCsproj` in the csproj), so none of them can drift. This used to be
+  a note here saying to update `build/meta.json` by hand, which is precisely what did not
+  happen — the game folder spent a release advertising the previous version.
+- **Never hand-write a hash.** A hash describes one exact binary and builds are not
+  deterministic: the assembly MVID changes on every rebuild, so a hash typed into a file is
+  wrong the next time anyone builds. `copy-to-game.ps1` derives the deployed `meta.json`
+  from the DLL it is deploying, and `package.ps1` prints the release hashes ready to paste
+  into `build/nomnom/WingCommand.json`. `build/meta.json` therefore holds `"hash": null` —
+  deployment fills it in, and a number typed there could only ever be wrong.
+- **Version numbers only ever go up, and only to a number nothing has shipped as.** Check
+  `git tag` before choosing one: the tree once carried 0.9.5.x while the newest published
+  tag was v0.9.1.2, so four versions' worth of numbering described releases that never
+  existed and the next real release had nowhere to go.
 
 ## Guardrails
 

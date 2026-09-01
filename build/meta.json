@@ -1,14 +1,13 @@
 {
-  "id": "com.marci.wingcommand",
+  "id": "WingCommand",
   "artifact": {
     "fileName": "WingCommand.dll",
-    "version": "0.9.5.1",
-    "category": "release",
+    "version": "0.9.2",
+    "category": "Release",
     "type": "plugin",
     "gameVersion": "0.34.2",
     "downloadUrl": null,
-    "downloadURL": null,
-    "hash": "sha256:167fe062d87a6f4ef4a20fd475c10ce5925cf0051efb8f2b4eff47b679707d1b",
+    "hash": null,
     "extends": null,
     "dependencies": [],
     "incompatibilities": []

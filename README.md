@@ -3,7 +3,7 @@
 # ✈ WING COMMAND
 ### Tactical AI Wing Control for Nuclear Option
 
-[![Release](https://img.shields.io/badge/release-0.9.1.1-blue?style=for-the-badge)](https://github.com/GrabowMar/NuclearOption-WingCommand/releases)
+[![Release](https://img.shields.io/badge/release-0.9.1.2-blue?style=for-the-badge)](https://github.com/GrabowMar/NuclearOption-WingCommand/releases)
 [![Game Version](https://img.shields.io/badge/Nuclear%20Option-0.34.2-orange?style=for-the-badge)](https://store.steampowered.com/app/2247020/Nuclear_Option/)
 [![BepInEx](https://img.shields.io/badge/BepInEx-5.4.23.3%2B-lightgrey?style=for-the-badge)](https://github.com/BepInEx/BepInEx/releases)
 [![License](https://img.shields.io/badge/license-MIT-green?style=for-the-badge)](LICENSE)
@@ -97,7 +97,7 @@ The easy way. [NOMM](https://github.com/Combat787/NOMM) handles BepInEx and keep
 
    ```text
    Harmony patched ... method(s)
-   WingCommand 0.9.1.1 loaded.
+   WingCommand 0.9.1.2 loaded.
    ```
 
    No line like that? Head to [Troubleshooting](#-troubleshooting).
@@ -105,7 +105,7 @@ The easy way. [NOMM](https://github.com/Combat787/NOMM) handles BepInEx and keep
 > [!WARNING]
 > Only keep the DLL in the organized `plugins/WingCommand/` folder. A stray copy directly in `plugins/` can trick BepInEx into loading the wrong build.
 
-The optional `WingCommand-0.9.1.1.zip` mirrors the game directory and can instead be extracted at the Nuclear Option root.
+The optional `WingCommand-0.9.1.2.zip` mirrors the game directory and can instead be extracted at the Nuclear Option root.
 
 ### Changing settings
 
@@ -570,7 +570,7 @@ This produces:
 
 ```text
 dist/WingCommand.dll
-dist/WingCommand-0.9.1.1.zip
+dist/WingCommand-0.9.1.2.zip
 ```
 
 Attach **`WingCommand.dll` first** to a GitHub release. NOMM installs the bare plugin DLL; the ZIP is provided for manual installation. The package script reads the version directly from the built assembly and prints SHA-256 hashes for both assets.

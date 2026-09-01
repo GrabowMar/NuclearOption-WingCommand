@@ -2,7 +2,7 @@
 
 **Target:** `0.9.x` tactical beta, followed by a release candidate  
 **Current baseline:** WingCommand `0.8.3`, Nuclear Option `0.34.2`  
-**Status:** **shipped as of `0.9.4.x`. Historical design record — not a work list.**  
+**Status:** **shipped, and part of the upcoming `0.9.2` release. Historical design record — not a work list.**  
 **Release posture:** preserve the working flight/AI core; replace the command and logistics experience around it
 
 > **Read the code, not this file, for what the mod does now.** This is the reasoning behind
