@@ -257,6 +257,10 @@ namespace WingCommand
                 "Permission to requisition past the mission's AI aircraft cap, at a " +
                 "surcharge. Changes nothing while the squadron still has room.";
 
+            public const string FullFuel =
+                "Requisitions launch with full tanks. Switch it off to launch them at " +
+                "half fuel instead - lighter and more agile, but they call bingo sooner.";
+
             public const string AssignSelected =
                 "Conscript the friendly AI aircraft selected on the map into your wing. " +
                 "Press twice to confirm the fee.";
