@@ -92,9 +92,12 @@ namespace WingCommand
         /// A formation slot is defined relative to a leader, so without one there is nothing
         /// to fly. This used to be <c>WingRegistry.HoldForTakeover</c>, which walked the wing
         /// applying an <c>OrbitHere</c> order to every member — overwriting each player-issued
-        /// directive with no record of what it had been, so the only way back was
-        /// <c>OrderAll(Formation)</c> flattening the lot. Exactly the mechanism the deck hold
+        /// directive with no record of what it had been, so the only way back was a blanket
+        /// re-order to Formation that flattened the lot. Exactly the mechanism the deck hold
         /// was rewritten to remove, one file away and untouched by that rewrite.
+        ///
+        /// Because the directive survives, taking a new seat needs no re-order at all: naming
+        /// a leader stops this scoring and every member resumes what it was already doing.
         ///
         /// Safety rather than Cohesion: an aircraft with nowhere to form on is a hazard to
         /// itself, and the question outranks any argument about where the slot should be.

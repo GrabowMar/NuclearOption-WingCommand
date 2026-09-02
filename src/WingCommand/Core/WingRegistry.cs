@@ -75,7 +75,13 @@ namespace WingCommand
 
             Leader = newLeader;
             WingMarkers.Repaint(member.Aircraft);
-            OrderAll(WingOrder.Formation);
+
+            // No blanket re-order. The rest of the wing has been holding overhead on the
+            // LeaderLost reflex with its orders intact; naming a leader stops that reflex
+            // scoring and each member resumes what the player actually told it to do. Doing
+            // otherwise here would flatten the orders the takeover path was just changed to
+            // preserve, on the one route where the player is most likely to have left
+            // something running.
             return true;
         }
 
@@ -591,14 +597,6 @@ namespace WingCommand
 
             // Icons must be repainted after the roster empties, or they keep the tint.
             foreach (Aircraft a in released) WingMarkers.Repaint(a);
-        }
-
-        public void OrderAll(WingOrder order)
-        {
-            foreach (WingMember m in members)
-            {
-                if (m.IsCommandable) m.Apply(order);
-            }
         }
 
         /// <summary>

@@ -34,9 +34,6 @@ namespace WingCommand
             this.checkInterval = checkInterval;
         }
 
-        /// <summary>When this slot last actually fired. Read by callers that pace on it.</summary>
-        public float LastFired => lastFired;
-
         /// <summary>
         /// Consider taking a shot. Returns true when one was taken, so a caller can log or
         /// pace against it.
@@ -127,11 +124,5 @@ namespace WingCommand
             if (coveringLeader) WingComms.Say(member, WingComms.Call.Covering);
             return true;
         }
-
-        /// <summary>Let a caller that fired through another path share the cadence.</summary>
-        public void NoteFired() => lastFired = Time.timeSinceLevelLoad;
-
-        /// <summary>Seconds since this slot last fired.</summary>
-        public float SinceFired => Time.timeSinceLevelLoad - lastFired;
     }
 }
