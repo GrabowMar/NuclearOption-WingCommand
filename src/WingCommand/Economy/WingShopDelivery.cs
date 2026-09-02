@@ -144,20 +144,27 @@ namespace WingCommand
 
             AircraftParameters p = definition.aircraftParameters;
             float fuel = WingShop.SpawnFuelFor(definition);
-            LiveryKey livery = p != null && hq.faction != null
-                ? new LiveryKey(p.GetRandomLiveryForFaction(hq.faction))
-                : leader.NetworkLiveryKey;
 
-            // Watch before spawning: a hangar with its doors already open spawns immediately,
-            // and subscribing afterwards would miss it. The order is held by reference rather
-            // than by index for the same reason — by the time the call returns, the capture
-            // may already have claimed and removed it.
+            LiveryKey? livery = null;
+            int liveryIdx = WingLoadoutTemplates.GetLiveryIndex(definition);
+            List<WingLoadoutTemplates.LiveryOption> options = WingLoadoutTemplates.GetLiveries(definition, hq.faction);
+            if (liveryIdx > 0 && liveryIdx < options.Count)
+            {
+                livery = options[liveryIdx].Key;
+            }
+
+            LiveryKey finalLivery = livery.HasValue
+                ? livery.Value
+                : (p != null && hq.faction != null
+                    ? new LiveryKey(p.GetRandomLiveryForFaction(hq.faction))
+                    : leader.NetworkLiveryKey);
+
             var order = new PendingDelivery
             {
                 Transaction = transaction,
                 Origin = airbase,
                 Loadout = loadout,
-                Livery = livery,
+                Livery = finalLivery,
                 Fuel = fuel,
                 RequestedAt = Time.unscaledTime,
                 ExpiresAt = Time.unscaledTime + HangarDeliveryTimeout,
@@ -306,6 +313,7 @@ namespace WingCommand
             if (pending.Count == 0) Watch(null);
 
             if (!match.Transaction.Commit(aircraft)) return;
+            try { aircraft.SetLiveryKey(match.Livery); } catch { }
             WingCommandManager.Instance?.QueueRecruit(aircraft);
             Plugin.Logger.LogInfo("[Shop] " + aircraft.unitName +
                                   " registered from " + match.Origin.name +
@@ -428,24 +436,28 @@ namespace WingCommand
             AircraftParameters p = definition.aircraftParameters;
             float fuel = WingShop.SpawnFuelFor(definition);
 
-            LiveryKey livery = leader.NetworkLiveryKey;
-            if (p != null && hq != null && hq.faction != null)
-                livery = new LiveryKey(p.GetRandomLiveryForFaction(hq.faction));
+            LiveryKey? livery = null;
+            int liveryIdx = WingLoadoutTemplates.GetLiveryIndex(definition);
+            List<WingLoadoutTemplates.LiveryOption> options = WingLoadoutTemplates.GetLiveries(definition, hq != null ? hq.faction : null);
+            if (liveryIdx > 0 && liveryIdx < options.Count)
+            {
+                livery = options[liveryIdx].Key;
+            }
+
+            LiveryKey finalLivery = livery.HasValue
+                ? livery.Value
+                : (p != null && hq != null && hq.faction != null
+                    ? new LiveryKey(p.GetRandomLiveryForFaction(hq.faction))
+                    : leader.NetworkLiveryKey);
 
             try
             {
                 return spawner.SpawnAircraft(
                     player: null,
                     prefab: prefab,
-                    // Null unless the player requisitioned a preset. Aircraft initialisation
-                    // substitutes the airframe's own standard loadout when this is null,
-                    // whereas handing over an existing object shares one mutable loadout
-                    // between aircraft - which once left a whole spawned wing with no
-                    // ammunition and sent all of them straight home Winchester. Every
-                    // requisition therefore gets a freshly built container of its own.
                     loadout: loadout,
                     fuelLevel: fuel,
-                    livery: livery,
+                    livery: finalLivery,
                     globalPosition: position.ToGlobalPosition(),
                     rotation: rotation,
                     startingVel: velocity,

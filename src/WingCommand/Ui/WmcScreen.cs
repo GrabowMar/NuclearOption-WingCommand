@@ -78,6 +78,7 @@ namespace WingCommand
         /// available. A larger configured wing still pages.
         /// </summary>
         private const int RosterRowsPerPage = 3;
+        private const int SquadronRowsPerPage = 9;
 
         private enum Page
         {
@@ -132,13 +133,15 @@ namespace WingCommand
 
 
         /// <summary>
-        /// The wingman the Loadout and Wing tabs are inspecting.
+        /// The pilot the Wing tab is inspecting.
         ///
-        /// Deliberately separate from the command selection: those two pages are about one
-        /// aircraft at a time, and borrowing the command scope for them would mean opening
-        /// the Wing tab silently changed who the next order went to.
+        /// Pilot-centric rather than aircraft-centric now that the Wing tab lists the whole
+        /// squadron, including people who are not currently flying. The airframe dossier on
+        /// that page is whatever the inspected pilot is flying, if anything. Separate from
+        /// the command selection the Tactical page uses, so inspecting a pilot never changes
+        /// who the next order goes to.
         /// </summary>
-        private static WingMember focusMember;
+        private static WingPilot inspectPilot;
 
         /// <summary>
         /// Which page of the flight the Loadout and Wing tabs are showing.
@@ -149,13 +152,18 @@ namespace WingCommand
         /// </summary>
         private static int inspectPage;
 
-        private static RosterPager wingPager;
-
         private static readonly List<RosterRow> rosterRows = new List<RosterRow>();
-        private static readonly List<ShopRow> shopRows = new List<ShopRow>();
-        private static RectTransform shopArea;
+        private static readonly List<ShopAirframeTile> shopTiles = new List<ShopAirframeTile>();
         private static TMP_Text supplyFundsLabel;
         private static TMP_Text supplySquadronLabel;
+        private static Image supplyPilotPortrait;
+        private static Image supplyPilotRail;
+        private static TMP_Text supplyPilotCountLabel;
+        private static TMP_Text supplyPilotNameLabel;
+        private static TMP_Text supplyPilotRankLabel;
+        private static TMP_Text supplyPilotStatusLabel;
+        private static WingButton supplyPilotPrev;
+        private static WingButton supplyPilotNext;
         private static TMP_Text shopPageLabel;
         private static WingButton shopPrevButton;
         private static WingButton shopNextButton;
@@ -175,14 +183,6 @@ namespace WingCommand
         private static AircraftDefinition selectedOffer;
         private static int shopPage;
         private static int rosterPage;
-
-        /// <summary>
-        /// Rows built for the shop. Four rather than six: the panel is sized to its content,
-        /// and a page padded out with empty slots leaves a hole in the middle of the layout
-        /// whenever the faction stocks fewer types than that.
-        /// </summary>
-        private const int ShopRows = 4;
-
         private static string lastTooltip;
         private static float nextAttempt;
         private static float nextRefresh;
@@ -271,12 +271,27 @@ namespace WingCommand
             rosterNextButton = null;
             shapeLabel = null;
             summaryLabel = null;
+            doctrineTitleLabel = null;
+            doctrineProfileLabel = null;
+            doctrineRulesLabel = null;
+            doctrineWeaponsLabel = null;
+            formationButtons = null;
+            formationWingmenDots.Clear();
+            formationVectorLines.Clear();
             rosterPageLabel = null;
             rosterRows.Clear();
-            shopRows.Clear();
-            shopArea = null;
+            shopTiles.Clear();
+            liveryLabel = null;
             supplyFundsLabel = null;
             supplySquadronLabel = null;
+            supplyPilotPortrait = null;
+            supplyPilotRail = null;
+            supplyPilotCountLabel = null;
+            supplyPilotNameLabel = null;
+            supplyPilotRankLabel = null;
+            supplyPilotStatusLabel = null;
+            supplyPilotPrev = null;
+            supplyPilotNext = null;
             shopPageLabel = null;
             shopPrevButton = null;
             shopNextButton = null;
@@ -302,7 +317,10 @@ namespace WingCommand
             for (int i = 0; i < preferenceButtons.Length; i++) preferenceButtons[i] = null;
 
             pylonRows.Clear();
-            loadoutAirframeLabel = null;
+            airframeTiles.Clear();
+            airframePrevButton = null;
+            airframeNextButton = null;
+            airframePageLabel = null;
             loadoutStatusLabel = null;
             templateLabel = null;
             templateNameField = null;
@@ -320,29 +338,34 @@ namespace WingCommand
             shopTemplateButton = null;
             editingTemplateId = null;
             pylonPage = 0;
-            wingPager = null;
             inspectPage = 0;
 
             // The rename field may have been focused when the mission ended, and a field
             // destroyed while focused never fires the deselect that gives the keyboard back.
             WingKeyboardGuard.ForceRelease();
 
-            wingRows.Clear();
-            wingRosterArea = null;
-            wingEmptyLabel = null;
+            pilotRows.Clear();
+            pilotRosterArea = null;
+            pilotEmptyLabel = null;
+            pilotPager = null;
             pilotIdentityLabel = null;
             pilotRankLabel = null;
             pilotStatsLabel = null;
             pilotPersonaLabel = null;
             pilotXpBar = null;
             pilotBackgroundLabel = null;
+            pilotPortrait = null;
+            pilotCardRail = null;
+            pilotKiaOverlay = null;
+            pilotSkillIcons.Clear();
+            airframeCardRail = null;
             airframeTypeLabel = null;
             airframeStateLabel = null;
             airframeOrderLabel = null;
             airframeLoadoutLabel = null;
             airframeWeaponsLabel = null;
             airframeSilhouette = null;
-            focusMember = null;
+            inspectPilot = null;
 
             lastTooltip = null;
             gaveUp = false;
@@ -512,9 +535,9 @@ namespace WingCommand
             RectTransform supplyRoot = pageRoots[(int)Page.Supply];
             float supplyY = y;
             supplyY = AddSupplyStatus(supplyRoot, supplyY);
+            supplyY = AddPilotSelection(supplyRoot, supplyY);
             supplyY = AddShop(supplyRoot, supplyY);
             supplyY = AddAssignment(supplyRoot, supplyY);
-            supplyY = AddReserve(supplyRoot, supplyY);
 
             float loadoutY = AddLoadoutPage(pageRoots[(int)Page.Loadout], y);
             float wingY = AddWingPage(pageRoots[(int)Page.Wing], y);
@@ -543,7 +566,7 @@ namespace WingCommand
             MFDScreen s = root.AddComponent<MFDScreen>();
             s.shortName = "WMC";
             s.displayPanel = content;
-            s.aircraftOnly = true;
+            s.aircraftOnly = false;
             s.label = FindLabel(bezelButton);
             s.highlight = FindHighlight(bezelButton, template);
 
@@ -728,11 +751,11 @@ namespace WingCommand
             new Column("AMMO", 280f, 40f, rightAligned: true),
         };
 
-        /// <summary>The two-column header the Wing tab's pick list uses.</summary>
-        private static readonly Column[] WingInspectColumns =
+        /// <summary>The two-column header over the Wing tab's squadron list.</summary>
+        private static readonly Column[] PilotColumns =
         {
-            new Column("CALLSIGN", 26f, 120f),
-            new Column("STATE", 160f, PanelWidth - Pad * 2f - 160f - Space3, rightAligned: true),
+            new Column("CALLSIGN", 30f, 88f),
+            new Column("STATUS", PanelWidth - Pad * 2f - 18f - 84f, 84f, rightAligned: true),
         };
 
         private static float ColumnHeaders(RectTransform parent, float y, Column[] columns)
@@ -831,10 +854,7 @@ namespace WingCommand
         }
 
         /// <summary>
-        /// A centred line for a list area with nothing to list.
-        ///
-        /// An empty roster used to be column headers over blank rows, which reads as a table
-        /// still loading rather than as a flight with nobody in it. Built inactive and shown
+        /// A note displayed across the whole of an empty list area. Switched on and off
         /// by the refresh when the list it belongs to is empty.
         /// </summary>
         private static TMP_Text EmptyNote(RectTransform area, string text)
@@ -842,7 +862,7 @@ namespace WingCommand
             TMP_Text label = Label(area, text,
                                    new Rect(Space4, 0f, area.rect.width - Space4 * 2f,
                                             area.rect.height),
-                                   Dim(), FontMicro, FontStyles.Italic,
+                                   Dim(), FontSmall, FontStyles.Normal,
                                    TextAlignmentOptions.Center);
             label.enableWordWrapping = true;
             label.gameObject.SetActive(false);
@@ -884,6 +904,7 @@ namespace WingCommand
             switch (page)
             {
                 case Page.Supply:
+                    RefreshSupplyPilot();
                     RefreshSupplyStatus();
                     RefreshShop();
                     // Refreshed after the catalogue, because selecting or exhausting a shop
@@ -914,19 +935,19 @@ namespace WingCommand
             member != null && member.Aircraft != null ? member.Aircraft.definition : null;
 
         /// <summary>
-        /// The <c>&lt;</c> page <c>&gt;</c> strip under an inspection roster.
+        /// The <c>&lt;</c> page <c>&gt;</c> strip under the squadron list.
         ///
-        /// MaxWingSize goes to eight, and a page built for three rows would otherwise hide
-        /// the rest of a large wing with nothing on screen to say so. Both arrows go dead on
-        /// a single page rather than looking available and doing nothing.
+        /// A roster of pilots is larger than the three rows a page shows, so without this
+        /// the rest of the squadron would be hidden with nothing on screen to say so. Both
+        /// arrows go dead on a single page rather than looking available and doing nothing.
         /// </summary>
-        private sealed class RosterPager
+        private sealed class PilotPager
         {
             private readonly WingButton prev;
             private readonly WingButton next;
             private readonly TMP_Text label;
 
-            public RosterPager(RectTransform parent, float y)
+            public PilotPager(RectTransform parent, float y)
             {
                 prev = Pager(parent, y, "<", () => Turn(-1));
                 label = PagerLabel(parent, y);
@@ -936,109 +957,109 @@ namespace WingCommand
             private static void Turn(int direction) =>
                 inspectPage = Mathf.Max(0, inspectPage + direction);
 
-            /// <summary>Clamp against the live roster and return the first visible index.</summary>
-            public int Refresh(WingRegistry wing)
+            /// <summary>Clamp against the live list and return the first visible index.</summary>
+            public int Refresh(int count)
             {
-                int pages = Mathf.Max(1, Mathf.CeilToInt(wing.Count / (float)RosterRowsPerPage));
+                int pages = Mathf.Max(1, Mathf.CeilToInt(count / (float)SquadronRowsPerPage));
                 inspectPage = Mathf.Clamp(inspectPage, 0, pages - 1);
 
                 // Nothing to page through reads better as a blank strip than as
-                // "flight page 1 of 1"; a single page keeps the count but drops the arrows.
+                // "page 1 of 1"; a single page keeps the count but drops the arrows.
                 if (label != null)
-                    label.text = wing.Count == 0
+                    label.text = count == 0
                         ? ""
                         : pages == 1
-                            ? wing.Count + (wing.Count == 1 ? " wingman" : " wingmen")
-                            : "flight page " + (inspectPage + 1) + " of " + pages;
+                            ? count + (count == 1 ? " pilot" : " pilots")
+                            : "squadron page " + (inspectPage + 1) + " of " + pages;
 
                 prev?.SetEnabled(inspectPage > 0);
                 next?.SetEnabled(inspectPage < pages - 1);
 
-                return inspectPage * RosterRowsPerPage;
+                return inspectPage * SquadronRowsPerPage;
             }
         }
 
-        private static void SyncPickRows(List<PickRow> rows, RectTransform area)
+        private static void SyncPilotRows(List<PilotRow> rows, RectTransform area)
         {
             if (area == null) return;
-            while (rows.Count < RosterRowsPerPage) rows.Add(new PickRow(area, rows.Count));
+            while (rows.Count < SquadronRowsPerPage) rows.Add(new PilotRow(area, rows.Count));
         }
 
         /// <summary>
-        /// Inspect one wingman on the Wing tab.
+        /// One row of the squadron list.
         ///
-        /// It used to also move the requisition selection onto that wingman's airframe,
-        /// because the Loadout tab listed the flight and clicking a VT-7 there meant "set up
-        /// the next VT-7". That page no longer lists anyone, so the side effect had nothing
-        /// left to be convenient for.
+        /// Unlike the Tactical page's <see cref="RosterRow"/> this lists people, not
+        /// aircraft, and its state signal is a colour rail rather than a second column: rank
+        /// drives the left badge and right rail, and a lost pilot's whole row washes red with
+        /// a KIA mark so the widow of a five-strong squadron is unmissable. Clicking a row
+        /// inspects it; selecting a lost pilot only shows their record.
         /// </summary>
-        private static void Focus(WingMember member) => focusMember = member;
-
-        /// <summary>
-        /// A compact selectable roster line, shared by the Loadout and Wing tabs.
-        ///
-        /// Deliberately not the Tactical page's <see cref="RosterRow"/>: that row carries
-        /// five live columns and a release button, and clicking it changes the command
-        /// scope. These two pages need one column of detail and a selection that means
-        /// "show me this one".
-        /// </summary>
-        private sealed class PickRow
+        private sealed class PilotRow
         {
             private readonly GameObject go;
-            private readonly TMP_Text slot, name, detail;
-            private readonly Image selectionRule;
             private readonly Image fill;
+            private readonly Image selectionRule;
+            private readonly Image rankRail;
+            private readonly Image kiaOverlay;
+            private readonly TMP_Text slot, name, detail;
             private readonly WingButton hit;
-            private WingMember bound;
 
-            public PickRow(RectTransform parent, int index)
+            public PilotRow(RectTransform parent, int index)
             {
                 float width = parent.rect.width;
                 float y = -index * RowPitch;
 
-                go = new GameObject("Pick" + index, typeof(RectTransform));
+                go = new GameObject("PilotRow" + index, typeof(RectTransform));
                 var rt = go.GetComponent<RectTransform>();
                 rt.SetParent(parent, worldPositionStays: false);
                 Place(rt, new Rect(0f, y, width, RowHeight));
 
                 fill = Panel(rt, new Rect(0f, 0f, width, RowHeight), MemberFrameColor());
                 selectionRule = Rule(rt, new Rect(0f, 0f, 3f, RowHeight), WingColor());
+                rankRail = Rule(rt, new Rect(width - 6f, 0f, 3f, RowHeight), Dim());
 
-                hit = HitButton(rt, new Rect(0f, 0f, width, RowHeight), () =>
-                {
-                    if (bound != null) Focus(bound);
-                });
+                // A red wash that sits over the fill (so it reads as a mark) but under the
+                // labels (so the record stays readable). Shown only for lost pilots.
+                kiaOverlay = Rule(rt, new Rect(0f, 0f, width, RowHeight),
+                                  new Color(Alert().r, Alert().g, Alert().b, 0.24f));
+                kiaOverlay.gameObject.SetActive(false);
 
-                slot = Label(rt, "", new Rect(6f, 0f, 18f, RowHeight), Dim(), FontBody,
+                hit = HitButton(rt, new Rect(0f, 0f, width, RowHeight), null);
+
+                slot = Label(rt, "", new Rect(6f, 0f, 20f, RowHeight), Dim(), FontBody,
+                             FontStyles.Bold, TextAlignmentOptions.Left);
+                name = Label(rt, "", new Rect(30f, 0f, 118f, RowHeight), WingColor(), FontBody,
                              FontStyles.Normal, TextAlignmentOptions.Left);
-                name = Label(rt, "", new Rect(26f, 0f, 120f, RowHeight), WingColor(), FontBody,
-                             FontStyles.Normal, TextAlignmentOptions.Left);
-                detail = Label(rt, "", new Rect(150f, 0f, width - 150f - Space3, RowHeight), Dim(),
+                detail = Label(rt, "", new Rect(152f, 0f, width - 152f - 18f, RowHeight), Dim(),
                                FontSmall, FontStyles.Normal, TextAlignmentOptions.Right);
 
                 go.SetActive(false);
             }
 
-            public void Bind(WingMember member, string detailText)
+            public void Bind(WingPilot pilot, bool selected, Action onPick)
             {
-                bound = member;
                 if (!go.activeSelf) go.SetActive(true);
 
-                bool selected = focusMember == member;
-                slot.text = member.Slot.ToString();
-                slot.color = selected ? Green() : Dim();
-                name.text = UiTheme.Truncate(member.Name, 18);
-                name.color = selected ? Green() : WingColor();
+                bool kia = pilot.Lost;
                 selectionRule.color = selected ? Green() : MemberFrameColor();
-                hit?.SetRowHighlight(fill,
+                rankRail.color = kia ? Alert() : RankColor(pilot.Rank);
+                hit.SetAction(onPick);
+                hit.SetRowHighlight(fill,
                                      selected ? WingUi.CardFillSelected : WingUi.CardFill,
                                      WingUi.CardFillHover);
-                detail.text = detailText;
+
+                slot.text = kia ? "†" : RankBadgeText(pilot.Rank);
+                slot.color = kia ? Alert() : RankColor(pilot.Rank);
+                name.text = UiTheme.Truncate(pilot.Callsign, 12);
+                name.color = kia ? Alert() : selected ? Green() : Friendly();
+                detail.text = kia ? "KIA" : WingPilotRoster.RankName(pilot.Rank);
+                detail.color = kia ? Alert() : Dim();
+
+                kiaOverlay.gameObject.SetActive(kia);
             }
 
             public void Hide()
             {
-                bound = null;
                 if (go.activeSelf) go.SetActive(false);
             }
         }
@@ -1167,6 +1188,8 @@ namespace WingCommand
 
         private static Color Warning() => WingUi.Warning;
 
+        private static Color Alert() => WingUi.Alert;
+
         private static Color Friendly() => WingUi.Friendly;
 
         private static Color WingColor() => WingMarkers.MemberColor;
@@ -1176,6 +1199,73 @@ namespace WingCommand
         private static Color RowColor() => WingUi.Grey;
         private static Color MemberFrameColor() => WingColor().WithAlpha(0.58f);
         private static Color FrameColor() => WingUi.FrameColor;
+
+        /// <summary>
+        /// A rank's accent: the greener and more senior the pilot, the warmer and brighter
+        /// the marker gets. Veterans and aces use the two accents the stock HUD already has a
+        /// place for rather than inventing a new colour family, so the panel stays on the
+        /// game's palette.
+        /// </summary>
+        private static Color RankColor(WingRank rank)
+        {
+            switch (rank)
+            {
+                case WingRank.Wingman: return Friendly();
+                case WingRank.Veteran: return new Color(0.32f, 0.85f, 1f);
+                case WingRank.Ace:     return new Color(1f, 0.68f, 0.25f);
+                case WingRank.Legend:  return Color.white;
+                default:               return Dim();
+            }
+        }
+
+        /// <summary>The one-letter mark put in a pilot's rank slot.</summary>
+        private static string RankBadgeText(WingRank rank)
+        {
+            switch (rank)
+            {
+                case WingRank.Wingman: return "W";
+                case WingRank.Veteran: return "V";
+                case WingRank.Ace:     return "A";
+                case WingRank.Legend:  return "L";
+                default:               return "R";
+            }
+        }
+
+        /// <summary>
+        /// A small filled tag with a letter on it, in the stock badge idiom.
+        ///
+        /// Used for a pilot's rank marker on the dossier and a KIA stencil on the portrait,
+        /// where a letter on a coloured square reads at a glance where a whole word would
+        /// not fit.
+        /// </summary>
+        private static TMP_Text Badge(RectTransform parent, Rect rect, string text,
+                                      Color fill, Color fg)
+        {
+            var go = new GameObject("Badge", typeof(RectTransform), typeof(Image));
+            var rt = go.GetComponent<RectTransform>();
+            rt.SetParent(parent, worldPositionStays: false);
+            Place(rt, rect);
+
+            Image image = go.GetComponent<Image>();
+            image.color = fill;
+            image.raycastTarget = false;
+
+            TMP_Text label = Label(rt, text, new Rect(0f, 0f, rect.width, rect.height),
+                                   fg, FontMicro, FontStyles.Bold, TextAlignmentOptions.Center);
+            return label;
+        }
+
+        /// <summary>The wingman flying this pilot, or null when they are on the ground.</summary>
+        private static WingMember FlyingMember(WingRegistry wing, WingPilot pilot)
+        {
+            if (wing == null || pilot == null) return null;
+            for (int i = 0; i < wing.Count; i++)
+            {
+                WingMember member = wing.Members[i];
+                if (member.Crew == pilot) return member;
+            }
+            return null;
+        }
 
         // ----------------------------------------------------------------------- text
 

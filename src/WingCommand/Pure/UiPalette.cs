@@ -136,6 +136,19 @@ namespace WingCommand
         public static readonly Rgba PanelEdge = new Rgba(0.30f, 0.34f, 0.36f, 1f);
         public static readonly Rgba PanelShadow = new Rgba(0.06f, 0.07f, 0.08f, 1f);
 
+        // 3-layer design tokens (Surfaces, Borders, Rails, Typography)
+        public static readonly Rgba SurfaceCard = new Rgba(0.071f, 0.098f, 0.133f, 0.88f);
+        public static readonly Rgba SurfaceCardHover = new Rgba(0.094f, 0.133f, 0.188f, 0.95f);
+        public static readonly Rgba SurfaceElevated = new Rgba(0.118f, 0.161f, 0.231f, 0.95f);
+        public static readonly Rgba BorderSubtle = new Rgba(0.137f, 0.196f, 0.271f, 0.65f);
+        public static readonly Rgba RailEmerald = new Rgba(0.000f, 1.000f, 0.400f);
+        public static readonly Rgba RailAmber = new Rgba(0.961f, 0.620f, 0.043f);
+        public static readonly Rgba RailCyan = new Rgba(0.024f, 0.714f, 0.831f);
+        public static readonly Rgba RailRed = new Rgba(0.937f, 0.267f, 0.267f);
+        public static readonly Rgba TextPrimary = Rgba.White;
+        public static readonly Rgba TextSecondary = new Rgba(0.580f, 0.639f, 0.722f);
+        public static readonly Rgba TextMuted = Dim;
+
         // The in-cockpit HUD's own surfaces. It draws in IMGUI rather than uGUI and cannot
         // reach WingUi's widgets, but there is no reason for it to hold a second, private
         // idea of what the mod's colours are — which is how its accent came to be a

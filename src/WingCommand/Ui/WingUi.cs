@@ -189,6 +189,18 @@ namespace WingCommand
             Unity(UiPalette.Wash(Rgba(Green), UiPalette.RowSelectedScale,
                                  UiPalette.RowSelectedAlpha));
 
+        // 3-layer design tokens
+        public static Color SurfaceCard => Unity(UiPalette.SurfaceCard);
+        public static Color SurfaceCardHover => Unity(UiPalette.SurfaceCardHover);
+        public static Color SurfaceElevated => Unity(UiPalette.SurfaceElevated);
+        public static Color BorderSubtle => Unity(UiPalette.BorderSubtle);
+        public static Color RailEmerald => Unity(UiPalette.RailEmerald);
+        public static Color RailAmber => Unity(UiPalette.RailAmber);
+        public static Color RailCyan => Unity(UiPalette.RailCyan);
+        public static Color RailRed => Unity(UiPalette.RailRed);
+        public static Color TextPrimary => Unity(UiPalette.TextPrimary);
+        public static Color TextSecondary => Unity(UiPalette.TextSecondary);
+
         // ---------------------------------------------------------------------- widgets
 
         public static TMP_Text Label(RectTransform parent, string text, Rect rect,
@@ -374,6 +386,7 @@ namespace WingCommand
             field.textViewport = viewport;
             field.textComponent = text;
             field.placeholder = placeholder;
+            field.navigation = new Navigation { mode = Navigation.Mode.None };
             field.lineType = TMP_InputField.LineType.SingleLine;
             field.characterLimit = characterLimit;
             field.richText = false;
@@ -966,6 +979,12 @@ namespace WingCommand
         {
             if (eventData.button != PointerEventData.InputButton.Left) return;
             if (!interactable) return;
+
+            // Clear EventSystem selection so joystick / gamepad directional steering never navigates the GUI
+            if (EventSystem.current != null && EventSystem.current.currentSelectedGameObject == gameObject)
+            {
+                EventSystem.current.SetSelectedGameObject(null);
+            }
 
             try { onClick?.Invoke(); }
             catch (Exception e) { Plugin.Logger.LogError("Wing UI button failed: " + e); }

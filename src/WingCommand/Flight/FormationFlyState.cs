@@ -129,6 +129,9 @@ namespace WingCommand
         /// <summary>Filtered rate of change of the leader's speed, m/s². The acceleration feed-forward.</summary>
         private float leaderSpeedRate;
 
+        /// <summary>Filtered vertical speed of the leader, m/s. The slot's height feed-forward.</summary>
+        private float leaderClimbRate;
+
         /// <summary>Leader speed last sample, for differentiating the above.</summary>
         private float lastLeaderSpeed;
 
@@ -164,6 +167,14 @@ namespace WingCommand
 
         /// <summary>Fastest heading rate treated as real, in rad/s. Well above any flyable turn.</summary>
         private const float MaxCredibleTurnRate = 1.5f;
+
+        /// <summary>
+        /// Fastest leader vertical speed treated as real, m/s. Above any sustained climb or
+        /// dive in the game, so a genuine manoeuvre is never clipped. Like
+        /// <see cref="MaxCredibleTurnRate"/> it exists only so that a respawn, a collision or
+        /// a dropped frame cannot be read off the rigidbody and projected into the slot.
+        /// </summary>
+        private const float MaxCredibleClimbRate = 250f;
 
         /// <summary>
         /// One report every five seconds, per wingman. The timer lives here rather than in
@@ -210,6 +221,7 @@ namespace WingCommand
                 flatLeaderTrack = Flatten(instant);
                 leaderTurnRate = 0f;
                 leaderSpeedRate = 0f;
+                leaderClimbRate = leader.rb != null ? leader.rb.velocity.y : 0f;
                 lastLeaderSpeed = leader.speed;
                 return State();
             }
@@ -245,13 +257,26 @@ namespace WingCommand
                 Mathf.Clamp(rate, -WingTuning.MaxCredibleAccel, WingTuning.MaxCredibleAccel),
                 1f - Mathf.Exp(-dt / WingTuning.SpeedRateSmoothing));
 
+            // The leader's vertical speed, filtered like every other signal here and for the
+            // same reason. It is fed forward into the slot's height over a full second, so
+            // read raw off the rigidbody it hands the wingman a destination that moves up and
+            // down with the leader's every pitch twitch - the vertical twin of the roll-rate
+            // leak that used to be the formation's left-right sway. Nothing else in this
+            // struct was allowed to reach the geometry unfiltered; this was the omission.
+            float climb = leader.rb != null ? leader.rb.velocity.y : 0f;
+            leaderClimbRate = Mathf.Lerp(
+                leaderClimbRate,
+                Mathf.Clamp(climb, -MaxCredibleClimbRate, MaxCredibleClimbRate),
+                1f - Mathf.Exp(-dt / WingTuning.SpeedRateSmoothing));
+
             return State();
         }
 
         /// <summary>Bundle this tick's filtered leader signals for the flight models.</summary>
         private LeaderState State() =>
             new LeaderState(smoothedLeaderDir, flatLeaderTrack, LeaderTurnRate,
-                            leaderSpeedRate, leaderThrottle, leaderThrottleKnown);
+                            leaderSpeedRate, leaderClimbRate, leaderThrottle,
+                            leaderThrottleKnown);
 
         /// <summary>
         /// Smooth the leader's lever position. This is the anticipation's whole input, and
@@ -319,6 +344,7 @@ namespace WingCommand
             smoothedLeaderDir = Vector3.zero;
             leaderTurnRate = 0f;
             leaderSpeedRate = 0f;
+            leaderClimbRate = 0f;
             lastLeaderSpeed = 0f;
             leaderThrottleKnown = false;
             lastGeometryTime = 0f;
@@ -437,7 +463,8 @@ namespace WingCommand
 
             EaseSlotLocal(shape, spacing, turnRate, dt);
 
-            GlobalPosition slotPos = SlotPosition(leader, track, spacing, dt, out Vector3 offset);
+            GlobalPosition slotPos = SlotPosition(leader, leaderState, track, spacing, dt,
+                                                  out Vector3 offset);
 
             Vector3 toSlot = slotPos - aircraft.GlobalPosition();
             float distance = toSlot.magnitude;
@@ -539,7 +566,8 @@ namespace WingCommand
         /// leader's track, lead the leader's motion, then apply separation, path-cut
         /// avoidance and the terrain floor.
         /// </summary>
-        private GlobalPosition SlotPosition(Aircraft leader, Vector3 track, float spacing,
+        private GlobalPosition SlotPosition(Aircraft leader, LeaderState leaderState,
+                                            Vector3 track, float spacing,
                                             float dt, out Vector3 offset)
         {
             // The frame the slots hang off is the leader's *track*, not its nose. Sideslip and
@@ -555,8 +583,13 @@ namespace WingCommand
             // every slot up or down behind it and the wingmen perpetually trail the altitude.
             // The along-track lag a fast leader would otherwise open is closed by the throttle's
             // own speed lead (FixedWingFormation.Throttle), not by moving the slot forward.
-            Vector3 leaderVel = leader.rb != null ? leader.rb.velocity : Vector3.zero;
-            Vector3 predictedMotion = Vector3.up * leaderVel.y;
+            //
+            // The climb rate is the *filtered* one. Read straight off the rigidbody it was the
+            // one leader signal reaching the geometry raw, and a full second of gain on an
+            // unfiltered vertical velocity moves this destination up and down with every pitch
+            // twitch of the leader — the vertical twin of the roll-rate leak that TrackLeader's
+            // whole comment block exists to explain.
+            Vector3 predictedMotion = Vector3.up * leaderState.ClimbRate;
             GlobalPosition slotPos = leader.GlobalPosition()
                                      + predictedMotion * SlotVerticalLeadSeconds
                                      + offset;

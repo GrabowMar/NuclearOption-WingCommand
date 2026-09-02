@@ -28,6 +28,14 @@ namespace WingCommand
         /// <summary>Filtered rate of change of the leader's speed, m/s². Signed.</summary>
         public readonly float SpeedRate;
 
+        /// <summary>
+        /// Filtered vertical speed, m/s, positive climbing. Filtered for the same reason
+        /// the turn rate is: it is fed forward into the slot's height over a full second,
+        /// so a raw rigidbody read puts every twitch of the leader's pitch straight into
+        /// the destination the wingman is chasing.
+        /// </summary>
+        public readonly float ClimbRate;
+
         /// <summary>Smoothed lever position, 0-1. Meaningless unless <see cref="ThrottleKnown"/>.</summary>
         public readonly float Throttle;
 
@@ -40,12 +48,13 @@ namespace WingCommand
         public readonly bool ThrottleKnown;
 
         public LeaderState(Vector3 track, Vector3 flatTrack, float turnRate, float speedRate,
-                           float throttle, bool throttleKnown)
+                           float climbRate, float throttle, bool throttleKnown)
         {
             Track = track;
             FlatTrack = flatTrack;
             TurnRate = turnRate;
             SpeedRate = speedRate;
+            ClimbRate = climbRate;
             Throttle = throttle;
             ThrottleKnown = throttleKnown;
         }

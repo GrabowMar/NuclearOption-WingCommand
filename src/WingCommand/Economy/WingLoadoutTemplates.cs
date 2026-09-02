@@ -42,6 +42,77 @@ namespace WingCommand
         /// <summary>How many templates one airframe may have, so the popup never pages.</summary>
         public const int MaxPerAirframe = 8;
 
+        private static readonly Dictionary<string, int> airframeLiveryIndices =
+            new Dictionary<string, int>();
+
+        public sealed class LiveryOption
+        {
+            public readonly LiveryKey? Key;
+            public readonly string Name;
+
+            public LiveryOption(LiveryKey? key, string name)
+            {
+                Key = key;
+                Name = name;
+            }
+        }
+
+        public static int GetLiveryIndex(AircraftDefinition definition)
+        {
+            if (definition == null) return 0;
+            string key = KeyOf(definition);
+            if (key != null && airframeLiveryIndices.TryGetValue(key, out int idx)) return idx;
+            return 0;
+        }
+
+        public static void SetLiveryIndex(AircraftDefinition definition, int index)
+        {
+            if (definition == null) return;
+            string key = KeyOf(definition);
+            if (key != null) airframeLiveryIndices[key] = Math.Max(0, index);
+        }
+
+        public static List<LiveryOption> GetLiveries(AircraftDefinition definition, Faction faction = null)
+        {
+            var list = new List<LiveryOption>();
+            list.Add(new LiveryOption(null, "STANDARD (FACTION)"));
+
+            if (definition == null || definition.aircraftParameters == null) return list;
+
+            try
+            {
+                var nativeList = new List<(LiveryKey key, string label)>();
+                LoadoutSelector.GetLiveryOptions(nativeList, definition, faction != null ? faction.factionName : null, true);
+                if (nativeList != null && nativeList.Count > 0)
+                {
+                    for (int i = 0; i < nativeList.Count; i++)
+                    {
+                        var item = nativeList[i];
+                        string label = !string.IsNullOrEmpty(item.label) ? item.label : ("LIVERY " + (i + 1));
+                        list.Add(new LiveryOption(item.key, label));
+                    }
+                    return list;
+                }
+            }
+            catch
+            {
+                // Fall back to aircraftParameters.liveries
+            }
+
+            AircraftParameters p = definition.aircraftParameters;
+            if (p.liveries != null)
+            {
+                for (int i = 0; i < p.liveries.Count; i++)
+                {
+                    AircraftParameters.Livery l = p.liveries[i];
+                    string name = l != null && !string.IsNullOrEmpty(l.name) ? l.name : ("LIVERY " + (i + 1));
+                    list.Add(new LiveryOption(new LiveryKey(i), name));
+                }
+            }
+
+            return list;
+        }
+
         // ------------------------------------------------------------------- lifecycle
 
         /// <summary>

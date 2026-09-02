@@ -68,6 +68,24 @@ namespace WingCommand
         private const float SlotZoneOuter = 0.35f;
 
         /// <summary>
+        /// The same two radii for the vertical axis, as a fraction of
+        /// <see cref="WingTuning.SlotStack"/> rather than of lateral spacing.
+        ///
+        /// They have to be separate, and the arithmetic says why. The lateral radii are
+        /// fractions of a 120 m slot spacing, so the deadband is around ten metres - while
+        /// a slot's whole vertical stagger is <c>StackStep * SlotStack</c>, which for every
+        /// shape but Ladder is under seven metres, and is exactly zero for the first rank.
+        /// Measured against the lateral band, the entire vertical channel therefore lived
+        /// inside the deadband: the proportional term never woke up for a vertical error,
+        /// the only live term was drift damping, and a pure rate damper has no opinion about
+        /// where it is - so altitude relative to the slot wandered until the *combined* 3D
+        /// error crossed ten metres, got yanked back, and went quiet again. That limit cycle
+        /// is what "the wingmen constantly fly up and down" was.
+        /// </summary>
+        private const float VerticalZoneInner = 0.1f;
+        private const float VerticalZoneOuter = 0.5f;
+
+        /// <summary>
         /// Bank authority when nothing is being asked of the roll axis. Small on purpose:
         /// it is what forces the aircraft back to wings level when the autopilot's own
         /// desired-bank term is undefined.
@@ -175,9 +193,6 @@ namespace WingCommand
         /// <summary>Hard ceiling on the roll bias, as a fraction of full stick.</summary>
         private const float MaxBankTrim = 0.4f;
 
-        /// <summary>Seconds of leader vertical speed fed into the altitude hold, matching the slot prediction.</summary>
-        private const float AltitudeLeadSeconds = 1f;
-
         private static bool loggedInterlock;
 
         /// <summary>
@@ -268,7 +283,8 @@ namespace WingCommand
             float commandAngle = Steer(aircraft, leader, slotPos, toSlot, distance,
                                        leaderVel, drift, aggression, damping, spacing,
                                        outOfPosition, leaderState.Track, leaderTurnRate,
-                                       throttle, report, rejoin.Holding);
+                                       leaderState.ClimbRate, throttle, report,
+                                       rejoin.Holding);
 
             MatchLeaderBank(aircraft, leader, controls, outOfPosition, commandAngle);
         }
@@ -397,13 +413,21 @@ namespace WingCommand
             public readonly float MaxCorrection;
             public readonly float LookAhead;
 
+            /// <summary>Metres to the slot on the vertical axis, positive when the slot is above.</summary>
+            public readonly float VerticalError;
+
+            /// <summary>Signed metres of the correction spent on the vertical axis.</summary>
+            public readonly float VerticalCorrection;
+
             public Aim(GlobalPosition point, float correction, float maxCorrection,
-                       float lookAhead)
+                       float lookAhead, float verticalError, float verticalCorrection)
             {
                 Point = point;
                 Correction = correction;
                 MaxCorrection = maxCorrection;
                 LookAhead = lookAhead;
+                VerticalError = verticalError;
+                VerticalCorrection = verticalCorrection;
             }
         }
 
@@ -411,8 +435,8 @@ namespace WingCommand
                                    Vector3 toSlot, float distance, Vector3 leaderVel,
                                    Vector3 drift, float aggression, float damping,
                                    float spacing, float outOfPosition, Vector3 smoothedLeaderDir,
-                                   float leaderTurnRate, ThrottleState throttle, bool report,
-                                   bool holding)
+                                   float leaderTurnRate, float leaderClimb,
+                                   ThrottleState throttle, bool report, bool holding)
         {
             Aim aim = AimFor(aircraft, leader, slotPos, toSlot, distance, leaderVel, drift,
                              aggression, damping, spacing, outOfPosition, smoothedLeaderDir,
@@ -423,8 +447,8 @@ namespace WingCommand
                               out float commandAngle);
 
             if (report)
-                Report(aircraft, leader, distance, aim.Correction, aim.MaxCorrection,
-                       aim.LookAhead, commandAngle, bankAllowed, throttle);
+                Report(aircraft, leader, distance, aim, commandAngle, bankAllowed,
+                       leaderClimb, throttle);
             aircraft.autopilot.AutoAim(
                 destination: aim.Point,
                 aimVelocity: true,
@@ -433,12 +457,17 @@ namespace WingCommand
                 effort: FullAuthority,
                 bankAllowed: bankAllowed,
                 followTerrain: false,
-                // Lead the leader's climb and dive the same way the slot position is led, so
-                // a settled wingman follows the player's vertical motion instead of chasing
-                // the altitude it already left behind.
-                altitudeHold: Mathf.Clamp(
-                    leader.radarAlt + leaderVel.y * AltitudeLeadSeconds,
-                    aircraft.maxRadius, 8000f),
+                // Inert, and deliberately so. AutopilotPlane.AutoAim reads altitudeHold only
+                // inside its `if (followTerrain)` branch - decompiled and confirmed against
+                // the installed assembly - so with followTerrain false the argument has no
+                // effect whatsoever. What stood here was a clamped leader.radarAlt plus a
+                // vertical lead, which did nothing but read like a working altitude hold and
+                // invite the vertical axis to be diagnosed in the wrong place. The whole
+                // vertical command is the destination's own height; there is no second one.
+                //
+                // This is the plane overload only. RotaryFormation passes followTerrain true,
+                // where altitudeHold is live and must describe the slot's height above ground.
+                altitudeHold: 0f,
                 targetVelocity: leaderVel);
 
             return commandAngle;
@@ -499,7 +528,8 @@ namespace WingCommand
             // wingman knife-edge into the ground: fly straight along the leader's track, and
             // let the boost that follows the hold do the actual intercept.
             if (holding)
-                return new Aim(aircraft.GlobalPosition() + baseDir * lookAhead, 0f, 0f, lookAhead);
+                return new Aim(aircraft.GlobalPosition() + baseDir * lookAhead, 0f, 0f,
+                               lookAhead, toSlot.y, 0f);
 
             // Only cross-track error steers. The along-track part is throttle's job, and
             // feeding it in here pushed the aim point forwards and backwards along the
@@ -521,20 +551,52 @@ namespace WingCommand
             // caring about a few metres of position. Killing damping in the zone as well
             // would let a wingman drift out unopposed and be yanked back, which is the same
             // limit cycle wearing a different hat.
+            //
+            // The two axes are sized and limited separately, and they have to be.
+            //
+            // One isotropic zone and one ClampMagnitude over the whole 3D error treats a
+            // metre up the same as a metre sideways, and the two axes are nothing like the
+            // same size: see VerticalZoneInner for why that switched the vertical
+            // proportional term off entirely. The clamp had the matching fault - being
+            // isotropic, a lateral rejoin that saturated it (every "(SATURATED)" line in the
+            // log) scaled the vertical term down with it, so the axis with the least
+            // authority lost what it had precisely when the wingman was most out of place.
+            //
+            // Splitting them changes the *geometry* of the zone, not the loop gains:
+            // PositionGain and DriftDamping are the values chosen for a damping ratio near
+            // 0.8 and are used unchanged on both axes. The vertical loop simply stops being
+            // switched off. It stays comfortably overdamped, because vertical errors are
+            // metres while the drift that damps them is metres per second.
+            float maxAngle = Mathf.Clamp(WingTuning.CommandAngle, 1f, 80f);
+            float maxCorrection = lookAhead * Mathf.Tan(maxAngle * Mathf.Deg2Rad);
+
+            Vector3 acrossFlat = new Vector3(across.x, 0f, across.z);
+            Vector3 acrossDriftFlat = new Vector3(acrossDrift.x, 0f, acrossDrift.z);
+
             float inner = spacing * SlotZoneInner;
             float outer = spacing * SlotZoneOuter;
-            float ramp = Mathf.SmoothStep(0f, 1f, Mathf.InverseLerp(inner, outer, across.magnitude));
+            float ramp = Mathf.SmoothStep(0f, 1f, Mathf.InverseLerp(inner, outer, acrossFlat.magnitude));
 
-            Vector3 correction = (across * PositionGain * aggression * ramp)
-                                 - (acrossDrift * DriftDamping * damping);
+            Vector3 flatCorrection = (acrossFlat * PositionGain * aggression * ramp)
+                                     - (acrossDriftFlat * DriftDamping * damping);
             // CommandAngle is the quantity being limited, and it is limited where it is
             // produced: over a baseline this long, a correction of baseline*tan(angle) is
             // exactly that many degrees of command. One configured angle, applied honestly,
             // and at cruise it allows roughly 2.5 times the correction the old fixed 220 m
             // clamp did.
-            float maxAngle = Mathf.Clamp(WingTuning.CommandAngle, 1f, 80f);
-            float maxCorrection = lookAhead * Mathf.Tan(maxAngle * Mathf.Deg2Rad);
-            correction = Vector3.ClampMagnitude(correction, maxCorrection);
+            flatCorrection = Vector3.ClampMagnitude(flatCorrection, maxCorrection);
+
+            float verticalInner = WingTuning.SlotStack * VerticalZoneInner;
+            float verticalOuter = WingTuning.SlotStack * VerticalZoneOuter;
+            float verticalRamp = Mathf.SmoothStep(
+                0f, 1f, Mathf.InverseLerp(verticalInner, verticalOuter, Mathf.Abs(across.y)));
+
+            float verticalCorrection = Mathf.Clamp(
+                (across.y * PositionGain * aggression * verticalRamp)
+                - (acrossDrift.y * DriftDamping * damping),
+                -maxCorrection, maxCorrection);
+
+            Vector3 correction = flatCorrection + Vector3.up * verticalCorrection;
 
             GlobalPosition stationAim = aircraft.GlobalPosition() + baseDir * lookAhead + correction;
 
@@ -581,7 +643,8 @@ namespace WingCommand
                          + safeDirection * Mathf.Max(requested.magnitude, lookAhead);
             }
 
-            return new Aim(aimPoint, correction.magnitude, maxCorrection, lookAhead);
+            return new Aim(aimPoint, correction.magnitude, maxCorrection, lookAhead,
+                           toSlot.y, verticalCorrection);
         }
 
         /// <summary>How much bank the autopilot may use, and the command angle it came from.</summary>
@@ -783,10 +846,22 @@ namespace WingCommand
         /// correct any harder no matter how far out it is.
         /// </summary>
         private static void Report(Aircraft aircraft, Aircraft leader, float distance,
-                                   float correction, float maxCorrection, float lookAhead,
-                                   float commandAngle, float bankAllowed, ThrottleState throttle)
+                                   Aim aim, float commandAngle, float bankAllowed,
+                                   float leaderClimb, ThrottleState throttle)
         {
+            float correction = aim.Correction;
+            float maxCorrection = aim.MaxCorrection;
+            float lookAhead = aim.LookAhead;
             bool saturated = correction >= maxCorrection * 0.99f;
+
+            // The vertical axis, reported separately from everything above it. It has to be
+            // separate: `error` and `correction` are 3D magnitudes with the vertical folded
+            // into them, so a wingman porpoising against its slot looked identical in the log
+            // to one sitting still, and the axis had to be diagnosed from arithmetic instead
+            // of from evidence. Own and leader climb rates are both here because a wingman
+            // climbing at 10 m/s behind a leader climbing at 10 m/s is a formation climbing,
+            // while the same number with the leader level is the wobble.
+            float ownClimb = aircraft.rb != null ? aircraft.rb.velocity.y : 0f;
 
             // Bank is reported against the leader, and with its rate, because a wingman
             // banked 40 degrees behind a leader banked 40 degrees is a formation turning,
@@ -805,7 +880,11 @@ namespace WingCommand
                 $"baseline {lookAhead:F0} m, " +
                 $"bank {BankOf(aircraft):F0} vs leader {BankOf(leader):F0} deg, " +
                 $"roll rate {rollRate:F0} deg/s, " +
-                $"cmd {commandAngle:F1} deg, bank allowed {bankAllowed:F0} deg");
+                $"cmd {commandAngle:F1} deg, bank allowed {bankAllowed:F0} deg, " +
+                $"vert err {aim.VerticalError:+0;-0; 0} m, " +
+                $"vert corr {aim.VerticalCorrection:+0;-0; 0} m, " +
+                $"climb {ownClimb:+0.0;-0.0; 0.0} vs leader {leaderClimb:+0.0;-0.0; 0.0} m/s, " +
+                $"radar alt {aircraft.radarAlt:F0} m");
         }
 
         /// <summary>

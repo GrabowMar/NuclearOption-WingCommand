@@ -68,12 +68,7 @@ namespace WingCommand
                                  " Applies to the selected wingmen only.");
             }
             y -= RowHeight + Gap;
-
-            Gutter(parent, y, "FORM");
-            Stepper(parent, left, y, w, out shapeLabel, () => CycleShape(-1), () => CycleShape(1),
-                    OrderHint.Form);
-
-            return y - (RowHeight + Gap);
+            return y;
         }
 
 
@@ -88,19 +83,21 @@ namespace WingCommand
 
         private static float AddSummary(RectTransform parent, float y)
         {
-            // SELECT ALL is what this row is for — the label beside it only reports. It is
-            // drawn as the row's primary action so it can be found without being read.
+            float w = PanelWidth - Pad * 2f;
+            Panel(parent, new Rect(Pad, y, w, RowHeight), WingUi.BorderSubtle).color = WingUi.SurfaceCard;
+            Rule(parent, new Rect(Pad, y, 3f, RowHeight), Friendly());
+
             const float actionWidth = WingUi.ButtonAction;
             summaryLabel = Label(parent, "",
-                                 new Rect(Pad, y, PanelWidth - Pad * 2f - actionWidth - Space2,
+                                 new Rect(Pad + Space3, y, w - actionWidth - Space4,
                                           RowHeight),
-                                 Friendly(), FontBody, FontStyles.Normal, TextAlignmentOptions.Left);
+                                 Friendly(), FontSmall, FontStyles.Bold, TextAlignmentOptions.MidlineLeft);
             WingUi.Button(parent, "SELECT ALL",
-                          new Rect(PanelWidth - Pad - actionWidth, y, actionWidth, RowHeight),
-                          FontSmall, UiButtonStyle.Primary,
+                          new Rect(PanelWidth - Pad - actionWidth - Space1, y - 2f, actionWidth, RowHeight - 4f),
+                          FontMicro, UiButtonStyle.Primary,
                           () => WingCommandManager.Instance?.SelectAllMembers())
                 .WithTooltip(OrderHint.SelectAll);
-            return y - RowHeight - Gap;
+            return y - RowHeight - Space2;
         }
 
         private static float AddRosterArea(RectTransform parent, float y)
@@ -182,7 +179,150 @@ namespace WingCommand
                 .WithTooltip(OrderHint.ReturnToBase);
             y -= RowHeight + Gap;
 
+            y = AddFormationAndDoctrine(parent, y);
+
             return y;
+        }
+
+        private static TMP_Text doctrineTitleLabel;
+        private static TMP_Text doctrineProfileLabel;
+        private static TMP_Text doctrineRulesLabel;
+        private static TMP_Text doctrineWeaponsLabel;
+        private static WingButton[] formationButtons;
+        private static float formationRadarCenterY;
+        private static readonly List<RectTransform> formationWingmenDots = new List<RectTransform>();
+        private static readonly List<Image> formationVectorLines = new List<Image>();
+
+        private static string ShortFormationName(FormationShape shape)
+        {
+            switch (shape)
+            {
+                case FormationShape.EchelonRight: return "ECH R";
+                case FormationShape.EchelonLeft:  return "ECH L";
+                case FormationShape.LineAbreast:  return "ABREAST";
+                case FormationShape.Trail:        return "TRAIL";
+                case FormationShape.CombatSpread: return "SPREAD";
+                case FormationShape.FingerFour:   return "FINGER 4";
+                case FormationShape.Vic:          return "VIC";
+                case FormationShape.Diamond:      return "DIAMOND";
+                case FormationShape.Ladder:       return "LADDER";
+                case FormationShape.Wall:         return "WALL";
+                default: return shape.ToString().ToUpperInvariant();
+            }
+        }
+
+        private static float AddFormationAndDoctrine(RectTransform parent, float y)
+        {
+            y = Heading(parent, y, "FORMATION & COMBAT DOCTRINE");
+
+            float w = PanelWidth - Pad * 2f;
+            const float radarW = 108f;
+            const float boxH = 104f;
+
+            // --- Left: Formation Radar Visualizer ---
+            Panel(parent, new Rect(Pad, y, radarW, boxH), WingUi.CardFill);
+            Outline(parent, new Rect(Pad, y, radarW, boxH), FrameColor());
+            Rule(parent, new Rect(Pad, y, 3f, boxH), Friendly());
+
+            // Crosshairs
+            Rule(parent, new Rect(Pad + radarW * 0.5f, y - 6f, 1f, boxH - 28f), new Color(0.2f, 0.45f, 0.4f, 0.3f));
+            Rule(parent, new Rect(Pad + 6f, y - (boxH - 20f) * 0.5f, radarW - 12f, 1f), new Color(0.2f, 0.45f, 0.4f, 0.3f));
+
+            float radarCenterX = Pad + radarW * 0.5f;
+            formationRadarCenterY = y - 22f;
+
+            // Leader indicator at center
+            Label(parent, "▲", new Rect(radarCenterX - 10f, formationRadarCenterY - 6f, 20f, 16f),
+                  Green(), FontSmall, FontStyles.Bold, TextAlignmentOptions.Center);
+            Label(parent, "LDR", new Rect(radarCenterX - 15f, formationRadarCenterY + 10f, 30f, 10f),
+                  Green(), 9f, FontStyles.Bold, TextAlignmentOptions.Center);
+
+            // 3 Wingmen indicators and connecting lines
+            formationWingmenDots.Clear();
+            formationVectorLines.Clear();
+
+            for (int i = 0; i < 3; i++)
+            {
+                var line = Rule(parent, new Rect(radarCenterX, formationRadarCenterY, 1f, 1f),
+                                new Color(0.25f, 0.55f, 0.5f, 0.4f));
+                formationVectorLines.Add(line);
+
+                var dotGo = new GameObject("WingmanDot_" + i, typeof(RectTransform));
+                var rt = dotGo.GetComponent<RectTransform>();
+                rt.SetParent(parent, worldPositionStays: false);
+                Label(rt, "▲", new Rect(0f, 0f, 16f, 16f), Friendly(), FontMicro, FontStyles.Normal, TextAlignmentOptions.Center);
+                Place(rt, new Rect(radarCenterX, formationRadarCenterY, 16f, 16f));
+                formationWingmenDots.Add(rt);
+            }
+
+            // --- Right: AI Combat Doctrine Telemetry ---
+            float docX = Pad + radarW + Gap;
+            float docW = w - radarW - Gap;
+
+            Panel(parent, new Rect(docX, y, docW, boxH), WingUi.CardFill);
+            Outline(parent, new Rect(docX, y, docW, boxH), FrameColor());
+            Rule(parent, new Rect(docX, y, 3f, boxH), Green());
+
+            float lineY = y - 4f;
+            doctrineTitleLabel = Label(parent, "COMBAT DOCTRINE",
+                new Rect(docX + Space2, lineY, docW - Space3, 16f),
+                Green(), FontSmall, FontStyles.Bold, TextAlignmentOptions.Left);
+            lineY -= 18f;
+
+            doctrineProfileLabel = Label(parent, "",
+                new Rect(docX + Space2, lineY, docW - Space3, 24f),
+                Friendly(), FontMicro, FontStyles.Normal, TextAlignmentOptions.Left);
+            doctrineProfileLabel.enableWordWrapping = true;
+            lineY -= 26f;
+
+            doctrineRulesLabel = Label(parent, "",
+                new Rect(docX + Space2, lineY, docW - Space3, 24f),
+                Accent(), FontMicro, FontStyles.Normal, TextAlignmentOptions.Left);
+            doctrineRulesLabel.enableWordWrapping = true;
+            lineY -= 26f;
+
+            doctrineWeaponsLabel = Label(parent, "",
+                new Rect(docX + Space2, lineY, docW - Space3, 24f),
+                Dim(), FontMicro, FontStyles.Normal, TextAlignmentOptions.Left);
+            doctrineWeaponsLabel.enableWordWrapping = true;
+
+            y -= boxH + Space2;
+
+            // --- Grid of all available formations (small buttons under formation preview) ---
+            const int cols = 5;
+            const float btnH = 22f;
+            float btnW = (w - (cols - 1) * Gap) / cols;
+            formationButtons = new WingButton[FormationShapes.All.Length];
+
+            for (int i = 0; i < FormationShapes.All.Length; i++)
+            {
+                FormationShape shape = FormationShapes.All[i];
+                int col = i % cols;
+                int row = i / cols;
+                float bx = Pad + col * (btnW + Gap);
+                float by = y - row * (btnH + Gap);
+
+                formationButtons[i] = WingUi.Button(
+                    parent, ShortFormationName(shape),
+                    new Rect(bx, by, btnW, btnH),
+                    FontMicro, UiButtonStyle.Default,
+                    () => SetFormationShape(shape))
+                    .WithTooltip(FormationShapes.Pretty(shape) + " formation geometry");
+            }
+
+            int rows = Mathf.CeilToInt(FormationShapes.All.Length / (float)cols);
+            return y - (rows * btnH + (rows - 1) * Gap + Space2);
+        }
+
+        private static void SetFormationShape(FormationShape shape)
+        {
+            WingFormation.Shape = shape;
+            WingCommandManager manager = WingCommandManager.Instance;
+            if (manager != null)
+            {
+                WingRegistry wing = manager.Wing;
+                if (wing != null) RefreshTactical(wing);
+            }
         }
 
         /// <summary>
@@ -306,7 +446,8 @@ namespace WingCommand
 
             if (summaryLabel != null)
                 summaryLabel.text = "COMMAND: " + (manager?.Selection.Summary(wing) ?? "ALL") +
-                                    "   ·   WING " + wing.Count + "/" + WingRegistry.WingLimitLabel;
+                                    "   ·   WING " + wing.Count + "/" + WingRegistry.WingLimitLabel +
+                                    "  (YOUR FLIGHT)";
 
             holdButton?.SetLatched(wing.Roe == WingRoe.Hold);
             escortButton?.SetLatched(wing.Roe == WingRoe.Escort);
@@ -348,6 +489,106 @@ namespace WingCommand
                     : EngagementHint(wing, shared));
 
             RefreshRoster(wing);
+            UpdateFormationAndDoctrine(wing, shared);
+        }
+
+        private static void UpdateFormationAndDoctrine(WingRegistry wing, WingWeaponPreference? shared)
+        {
+            FormationShape shape = WingFormation.Shape;
+
+            if (formationButtons != null)
+            {
+                for (int i = 0; i < formationButtons.Length; i++)
+                {
+                    if (formationButtons[i] != null && i < FormationShapes.All.Length)
+                    {
+                        formationButtons[i].SetLatched(FormationShapes.All[i] == shape);
+                    }
+                }
+            }
+
+            const float radarW = 108f;
+            float radarCenterX = Pad + radarW * 0.5f;
+
+            for (int i = 0; i < formationWingmenDots.Count; i++)
+            {
+                Vector3 coord = FormationSolver.SlotCoordinates(i + 1, shape, 1f, 1f);
+                float px = radarCenterX + Mathf.Clamp(coord.x * 16f, -44f, 44f);
+                float py = formationRadarCenterY + Mathf.Clamp(coord.z * 16f, -48f, 12f);
+
+                RectTransform dot = formationWingmenDots[i];
+                if (dot != null)
+                {
+                    Place(dot, new Rect(px - 8f, py + 8f, 16f, 16f));
+                    bool inWing = wing != null && i < wing.Count;
+                    dot.gameObject.SetActive(true);
+                    var lbl = dot.GetComponentInChildren<TMP_Text>();
+                    if (lbl != null) lbl.color = inWing ? Green() : new Color(0.4f, 0.6f, 0.55f, 0.45f);
+                }
+
+                if (i < formationVectorLines.Count && formationVectorLines[i] != null)
+                {
+                    Image line = formationVectorLines[i];
+                    float dx = px - radarCenterX;
+                    float dy = py - formationRadarCenterY;
+                    float dist = Mathf.Sqrt(dx * dx + dy * dy);
+                    float angle = Mathf.Atan2(dy, dx) * Mathf.Rad2Deg;
+
+                    RectTransform lineRt = line.rectTransform;
+                    lineRt.sizeDelta = new Vector2(dist, 1f);
+                    lineRt.anchoredPosition = new Vector2(radarCenterX, formationRadarCenterY);
+                    lineRt.localRotation = Quaternion.Euler(0f, 0f, angle);
+                    bool inWing = wing != null && i < wing.Count;
+                    line.color = inWing ? new Color(0.2f, 0.65f, 0.45f, 0.45f) : new Color(0.2f, 0.35f, 0.3f, 0.2f);
+                }
+            }
+
+            string roeName = wing != null ? wing.Roe.ToString().ToUpperInvariant() : "DEFEND";
+            string wepName = shared.HasValue ? shared.Value.ToString().ToUpperInvariant() : "AUTO";
+            string shapeName = FormationShapes.Pretty(shape).ToUpperInvariant();
+
+            if (doctrineTitleLabel != null)
+                doctrineTitleLabel.text = $"DOCTRINE: {roeName} · {wepName} · {shapeName}";
+
+            if (doctrineProfileLabel != null)
+            {
+                switch (shape)
+                {
+                    case FormationShape.EchelonRight:
+                    case FormationShape.EchelonLeft:
+                        doctrineProfileLabel.text = "FLIGHT: Staggered visual echelon. Clear tail coverage & wide firing arcs.";
+                        break;
+                    case FormationShape.Trail:
+                    case FormationShape.Ladder:
+                        doctrineProfileLabel.text = "FLIGHT: In-line follow. Optimal terrain masking through ravines & canyons.";
+                        break;
+                    case FormationShape.Vic:
+                        doctrineProfileLabel.text = "FLIGHT: Wedge V-sweep. Maximizes forward radar & overlapping missile fields.";
+                        break;
+                    case FormationShape.LineAbreast:
+                    case FormationShape.Wall:
+                        doctrineProfileLabel.text = "FLIGHT: Line abreast. Wide optical sweep for ground recon & bomb passes.";
+                        break;
+                    case FormationShape.Diamond:
+                    case FormationShape.FingerFour:
+                    default:
+                        doctrineProfileLabel.text = "FLIGHT: Standard tactical element. Balanced 360° defensive awareness.";
+                        break;
+                }
+            }
+
+            if (doctrineRulesLabel != null)
+            {
+                WingRoe roe = wing != null ? wing.Roe : WingRoe.Hold;
+                doctrineRulesLabel.text = "RULES: " + RoeRules.Hint(roe);
+            }
+
+            if (doctrineWeaponsLabel != null)
+            {
+                doctrineWeaponsLabel.text = shared.HasValue
+                    ? "WEAPONS: " + WingWeaponPreferences.Hint(shared.Value)
+                    : "WEAPONS: Mixed preference across selected flight members.";
+            }
         }
 
         /// <summary>
@@ -396,12 +637,20 @@ namespace WingCommand
             }
         }
 
-        /// <summary>Keep the inspection focus on an aircraft that still exists.</summary>
+        /// <summary>Keep the inspection focus on a pilot who is still on the roster.</summary>
         private static void PruneFocus(WingRegistry wing)
         {
-            if (focusMember != null && wing.Contains(focusMember)) return;
+            _ = wing;
 
-            focusMember = wing.Count > 0 ? wing.Members[0] : null;
+            if (WingPilotRoster.Contains(inspectPilot)) return;
+
+            // When the roster changes out from under the selection, fall back to the pilot
+            // the player picked for the next flight, then to the most senior available.
+            inspectPilot = WingPilotRoster.Selected;
+            if (inspectPilot != null && WingPilotRoster.Contains(inspectPilot)) return;
+
+            List<WingPilot> roster = WingPilotRoster.DisplayRoster();
+            inspectPilot = roster.Count > 0 ? roster[0] : null;
         }
 
 
