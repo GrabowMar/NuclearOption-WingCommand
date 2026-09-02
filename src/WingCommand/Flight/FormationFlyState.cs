@@ -349,15 +349,20 @@ namespace WingCommand
                 return;
             }
 
+            // What this wingman is working from the slot, asked once. It used to be inferred
+            // from the standing order in two separate places, which is how one state came to
+            // be running three behaviours with no way to name which.
+            SlotTask task = member.SlotTask;
+
             // Jam Target is flown as ordinary formation, plus a jammer held on the
             // designated unit. When that unit dies the order is complete.
             if (member.Order == WingOrder.JamTarget)
             {
                 Unit jamTarget = member.AssignedTarget;
-                if (jamTarget == null || jamTarget.disabled)
+                if (task != SlotTask.Jam)
                 {
                     WingComms.Say(member, WingComms.Call.JammingOff);
-                    member.Apply(WingOrder.Formation);
+                    member.Complete(WingOrder.Formation);
                     return;
                 }
 
@@ -385,7 +390,7 @@ namespace WingCommand
             if (stride > 1 && (++geometryTick + member.Slot) % stride != 0)
                 return;
 
-            if (member.Order == WingOrder.FireForEffect)
+            if (task == SlotTask.Splash)
                 RunSplash();
             else
                 RunEngagement(leader);
@@ -748,7 +753,10 @@ namespace WingCommand
                 return;
             lastEngageCheck = Time.timeSinceLevelLoad;
 
-            OrderEngagementAuthority authority = OrderRoePolicy.Authority(member.Order);
+            // What the wingman is doing, not what it was told to do. A recalled wingman is
+            // flying its slot even though its order still reads Engage, and asking the order
+            // was how it came to be granted autonomous-combat weapons from the slot.
+            OrderEngagementAuthority authority = member.EngagementAuthority;
             if (authority == OrderEngagementAuthority.DefensiveOnly) return;
 
             // A weapon that passes its own checks would otherwise be fired on every tick,
@@ -827,9 +835,15 @@ namespace WingCommand
         /// <summary>
         /// Splash 'Em flown from the slot: hold station and work every effective store into
         /// the designated target until it dies or the aircraft has nothing left that can
-        /// hurt it, then return to plain formation. ROE is ignored — an explicit designation
-        /// is weapons authorization — and the massed cadence is the short one the attack run
-        /// used, so the loadout goes out as a sustained volley rather than paced shots.
+        /// hurt it. ROE is ignored — an explicit designation is weapons authorization — and
+        /// the massed cadence is the short one the attack run used, so the loadout goes out
+        /// as a sustained volley rather than paced shots.
+        ///
+        /// Finishing does not rejoin anything. The wingman never left its slot, so the order
+        /// simply retires: the arbiter resolves back to the standing task, which is this same
+        /// state, and no switch happens at all. It used to re-enter formation with a rejoin
+        /// boost, which produced a visible surge every time a target died under an aircraft
+        /// that had been holding station the whole time.
         /// </summary>
         private void RunSplash()
         {
@@ -841,16 +855,14 @@ namespace WingCommand
             if (target == null || target.disabled)
             {
                 if (target != null) WingComms.Say(member, WingComms.Call.Splash, target.unitName);
-                member.ClearAssignedTarget();
-                member.Apply(WingOrder.Formation);
+                FinishSplash();
                 return;
             }
 
             if (!WingWeapons.CanStillEngage(aircraft, target))
             {
                 WingComms.Say(member, WingComms.Call.Expended);
-                member.ClearAssignedTarget();
-                member.Apply(WingOrder.Formation);
+                FinishSplash();
                 return;
             }
 
@@ -858,6 +870,18 @@ namespace WingCommand
 
             if (WingWeapons.EngageMassed(aircraft, pilot, target, RoeRules.ExplicitOrderRange()))
                 lastFiredTime = Time.timeSinceLevelLoad;
+        }
+
+        /// <summary>
+        /// Retire a finished Splash 'Em without moving the aircraft. The directive falls
+        /// back to Formation, which resolves to the state already running — so the wingman
+        /// keeps flying the slot it is in, and the only thing that changes is that it stops
+        /// shooting.
+        /// </summary>
+        private void FinishSplash()
+        {
+            member.ClearAssignedTarget();
+            member.Complete(WingOrder.Formation);
         }
 
         /// <summary>

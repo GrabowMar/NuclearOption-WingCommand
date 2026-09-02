@@ -12,8 +12,6 @@ namespace WingCommand
     /// </summary>
     internal sealed class DefensiveManeuverState : WingPilotState
     {
-        private const float MinimumDefenceSeconds = 2f;
-
         // Missile evasion is safety-critical: this interval is deliberately NOT routed
         // through WingBrain.Interval, so Performance mode never slows the threat refresh.
         private const float ThreatRefreshSeconds = 0.2f;
@@ -23,8 +21,6 @@ namespace WingCommand
         private readonly RadarJammerPulser jammer = new RadarJammerPulser();
         private Missile threat;
         private string countermeasureType;
-        private float enteredAt;
-        private float clearSince;
         private float nextThreatRefresh;
         private bool countermeasuresActive;
 
@@ -38,8 +34,6 @@ namespace WingCommand
             // This is the state that most needs the energy, so the hover regime always comes off.
             BeginFlight(pilot);
 
-            enteredAt = Time.timeSinceLevelLoad;
-            clearSince = 0f;
             nextThreatRefresh = 0f;
             threat = null;
             countermeasureType = string.Empty;
@@ -57,9 +51,19 @@ namespace WingCommand
             }
         }
 
+        /// <summary>
+        /// The break is over — the arbiter has given the aircraft to something else.
+        ///
+        /// This state no longer decides when that happens. It used to run its own clear
+        /// timer and call back into the member to resume, which made it both a behaviour and
+        /// half of the precedence system; the missile-break reflex owns the timing now and
+        /// this only has to tidy up after itself.
+        /// </summary>
         public override void LeaveState()
         {
             StopCountermeasures();
+            WingComms.Say(member, WingComms.Call.DefensiveClear);
+            member.RetireStaleOrder();
         }
 
         public override void UpdateState(Pilot pilot)
@@ -74,21 +78,16 @@ namespace WingCommand
             MissileWarning warning = aircraft.GetMissileWarningSystem();
             bool warned = warning != null && warning.IsWarning();
 
+            // Nothing to run from this instant. Stop dispensing, but keep flying the last
+            // commanded break: the reflex holds this state for a couple of seconds after the
+            // warning drops, precisely so a missile that is briefly lost and re-acquired
+            // does not get the controls handed back mid-turn.
             if (!warned || threat == null || threat.disabled)
             {
-                if (clearSince <= 0f) clearSince = Time.timeSinceLevelLoad;
                 StopCountermeasures();
-
-                if (Time.timeSinceLevelLoad - enteredAt >= MinimumDefenceSeconds &&
-                    Time.timeSinceLevelLoad - clearSince >= WingTuning.PanicClearSeconds)
-                {
-                    WingComms.Say(member, WingComms.Call.DefensiveClear);
-                    member.ResumeAfterPanic();
-                }
                 return;
             }
 
-            clearSince = 0f;
             FlyDefensive();
         }
 

@@ -209,6 +209,29 @@ namespace WingCommand
         public const float PanicClearSeconds = 2.5f;
 
         /// <summary>
+        /// Seconds a missile break keeps the controls no matter what its own score does.
+        /// A break that released the instant the warning blinked would hand the aircraft
+        /// back mid-turn, wings knife-edge, pointed at the missile it just beamed.
+        /// </summary>
+        public const float PanicMinimumSeconds = 2f;
+
+        /// <summary>
+        /// Radar altitude below which a missile break is refused. An aircraft this low is
+        /// landing or already crashing, and a hard break is the worse of the two outcomes.
+        /// </summary>
+        public const float PanicFloorAlt = 5f;
+
+        /// <summary>
+        /// Fraction of <see cref="LeashRadius"/> a recalled wingman must get back inside
+        /// before it is turned loose again.
+        ///
+        /// This is the hysteresis, and it needs to be well under 1: with a single threshold
+        /// a wingman sitting on the boundary flips between hunting and rejoining every
+        /// frame, which is exactly what it used to do.
+        /// </summary>
+        public const float LeashReleaseFraction = 0.5f;
+
+        /// <summary>
         /// Weapons range, metres, for a wingman shooting from its slot. Hold and Escort both
         /// use it; neither manoeuvres to engage, so for both it is purely a range limit.
         /// </summary>

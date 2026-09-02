@@ -114,6 +114,10 @@ namespace WingCommand
                 // this one. Snapshotting here is what makes a mid-mission change inert
                 // until the next mission.
                 WingBrain.Begin(Plugin.Settings.Mode.Value);
+
+                // A reflex disabled by a fault in the last mission gets another chance in
+                // this one; a genuinely broken one faults again immediately at no real cost.
+                WingAi.ResetFaults();
                 Plugin.Logger.LogInfo("[WingBrain] mission start - " + WingBrain.Summary());
             }
             resetForNonPlayableState = false;
@@ -129,9 +133,11 @@ namespace WingCommand
             Wing.Prune();
             Selection.Prune(Wing);
             WingTakeover.Tick();
-            Wing.CheckThreats();
-            Wing.CheckLeashes();
+            // Housekeeping first - it can retire an order - then one arbitration pass that
+            // decides what every member actually flies. These used to be three separate
+            // passes whose order was the priority system.
             Wing.CheckReserves();
+            Wing.Tick();
             PlayerFireWatcher.Track(local);
 
             if (NativeRadialActive)
