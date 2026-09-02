@@ -77,7 +77,10 @@ namespace WingCommand
         internal static float SafeScore(IWingReflex reflex, in WingSituation situation,
                                         bool incumbent)
         {
-            if (faulted.Contains(reflex.Id)) return 0f;
+            // The Count test is not redundant with Contains: this runs once per reflex per
+            // member per resolve, and the set is empty in every mission where nothing has
+            // gone wrong, which is all of them.
+            if (faulted.Count > 0 && faulted.Contains(reflex.Id)) return 0f;
 
             try
             {

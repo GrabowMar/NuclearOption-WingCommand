@@ -346,7 +346,7 @@ namespace WingCommand
                 leaderDistance: leaderDistance,
                 leashRadius: WingTuning.LeashRadius,
                 radarAlt: Aircraft.radarAlt,
-                fuel: Fuel,
+                fuel: sampledFuel,
                 ammo: sampledAmmo,
                 integrity: sampledIntegrity,
                 secondsInBehaviour: now - behaviourEnteredAt);
@@ -354,14 +354,20 @@ namespace WingCommand
 
         private int sampledAmmo = 1;
         private float sampledIntegrity = 1f;
+        private float sampledFuel = 1f;
         private float nextSlowSample;
 
         /// <summary>
-        /// Ammunition and airframe condition both walk every station or part, which is far
-        /// too much work to repeat at frame rate for quantities that change slowly. No
-        /// built-in reflex reads them; they are sampled anyway because a third-party one
-        /// reasonably might, and an extension point that only offers the cheap fields is a
-        /// worse extension point.
+        /// The three expensive fields of the situation, refreshed on a slow timer.
+        ///
+        /// Each of them walks a collection: ammunition every weapon station, condition every
+        /// airframe part, and fuel every tank twice over — <c>Aircraft.GetFuelLevel</c> sums
+        /// capacity and level across the lot on every call. None of the three moves fast
+        /// enough to be worth that per member per frame.
+        ///
+        /// No built-in reflex reads any of them. They are sampled anyway because a
+        /// third-party one reasonably might, and an extension point that offers only the
+        /// cheap fields is a worse extension point.
         /// </summary>
         private void RefreshSlowSamples(float now)
         {
@@ -370,6 +376,7 @@ namespace WingCommand
 
             sampledAmmo = Ammo;
             sampledIntegrity = Integrity;
+            sampledFuel = Fuel;
         }
 
         /// <summary>True when a missile is airborne and this aircraft is its target.</summary>

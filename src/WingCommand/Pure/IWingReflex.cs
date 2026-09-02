@@ -64,9 +64,15 @@ namespace WingCommand
         float MinimumSeconds { get; }
 
         /// <summary>
-        /// True for a reflex the Performance profile drops entirely. Declared here rather
-        /// than switched at the call site, so the mode gate stays one question asked in one
-        /// place instead of a second toggle per behaviour.
+        /// True for a reflex the Performance profile drops entirely.
+        ///
+        /// Dropping a reflex changes what the wingman does, and that is fine — Performance
+        /// is a deliberately worse wingman, not a cheaper route to the same one. Use it for
+        /// behaviour that is a luxury on a multiplayer host, and not for anything the
+        /// aircraft needs in order to survive.
+        ///
+        /// Declared here rather than switched at the call site, so the mode stays one
+        /// question asked in one place instead of a toggle per behaviour.
         /// </summary>
         bool RequiresSmartMode { get; }
 

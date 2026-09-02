@@ -91,7 +91,12 @@ namespace WingCommand
         public void CheckReserves()
         {
             if (Time.timeSinceLevelLoad < nextReserveCheck) return;
-            nextReserveCheck = Time.timeSinceLevelLoad + 1f;
+
+            // Scaled by the mode. This is the one throttle in the mod actually worth having:
+            // the pass below walks every weapon station and every airframe part for every
+            // member, and none of the quantities it reads - fuel, ammunition, damage, cargo
+            // - moves fast enough to notice the difference on a busy host.
+            nextReserveCheck = Time.timeSinceLevelLoad + WingBrain.Interval(1f);
 
             for (int i = 0; i < members.Count; i++)
             {

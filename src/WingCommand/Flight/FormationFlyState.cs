@@ -684,10 +684,15 @@ namespace WingCommand
         private float ThreatSpacingScale(Aircraft leader, float dt)
         {
             // Whether the leader is under a missile warning is needed by the combat-spread
-            // reaction regardless of whether the widen behaviour is enabled, so resolve it
-            // unconditionally here rather than inside the widen branch.
-            MissileWarning leaderWarning = leader.GetMissileWarningSystem();
-            leaderMissileThreat = leaderWarning != null && leaderWarning.IsWarning();
+            // reaction as well as by the widen below, so it is resolved once here rather
+            // than inside either branch - but both readers are smart-formation behaviours,
+            // so in Performance this was an engine call per member per geometry tick whose
+            // answer nothing went on to read.
+            if (WingBrain.SmartFormation)
+            {
+                MissileWarning leaderWarning = leader.GetMissileWarningSystem();
+                leaderMissileThreat = leaderWarning != null && leaderWarning.IsWarning();
+            }
 
             // Driven by the fidelity slider now: the reactive widen is a smart-formation
             // behaviour, and a scale of 1 is the off switch.
