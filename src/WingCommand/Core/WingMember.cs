@@ -248,9 +248,16 @@ namespace WingCommand
             nextResolve = now + (WingBrain.Full ? 0f : WingBrain.Interval(0.25f));
             resolvePending = false;
 
+            // With verbose logging on, ask for the whole ladder rather than just the winner.
+            // A behaviour system whose decisions cannot be inspected is one that gets
+            // debugged by guessing, and this one is meant to be extended.
+            List<WingReflexTrace> trace = Plugin.Settings.VerboseLogging.Value
+                ? traceBuffer ??= new List<WingReflexTrace>()
+                : null;
+
             WingSituation situation = Sample(warned, now);
             WingResolution next = WingArbiter.Resolve(
-                in situation, resolution.ReflexId, WingBrain.Full, WingAi.Reflexes);
+                in situation, resolution.ReflexId, WingBrain.Full, WingAi.Reflexes, trace);
 
             bool behaviourChanged = !next.SameAs(in resolution);
             bool taskNeedsReentry = next.BehaviourId == WingBehaviours.Task &&
@@ -264,8 +271,35 @@ namespace WingCommand
 
             EnterBehaviour(next.BehaviourId);
 
-            if (Plugin.Settings.VerboseLogging.Value && behaviourChanged)
-                Plugin.Logger.LogInfo($"[Wing] {Name} {next}");
+            if (trace != null && behaviourChanged)
+                Plugin.Logger.LogInfo($"[Wing] {Name} {next}  |  {Ladder(trace)}");
+        }
+
+        private List<WingReflexTrace> traceBuffer;
+
+        /// <summary>
+        /// The whole ladder on one line: who scored what, and who won. Reads as
+        /// <c>survival:missile-break=0.90* safety:deck-hold=0.00 task:standing-task=1.00</c>.
+        /// </summary>
+        private static string Ladder(List<WingReflexTrace> trace)
+        {
+            var sb = new System.Text.StringBuilder();
+            for (int i = 0; i < trace.Count; i++)
+            {
+                WingReflexTrace t = trace[i];
+                if (i > 0) sb.Append(' ');
+                sb.Append(t.Band).Append(':').Append(Short(t.Id))
+                  .Append('=').Append(t.Score.ToString("0.00"));
+                if (t.Won) sb.Append('*');
+            }
+            return sb.ToString();
+        }
+
+        /// <summary>Drop the owning plugin's prefix; the log line already says whose wing it is.</summary>
+        private static string Short(string id)
+        {
+            int dot = id.LastIndexOf('.');
+            return dot >= 0 && dot < id.Length - 1 ? id.Substring(dot + 1) : id;
         }
 
         private WingSituation Sample(bool warned, float now)
