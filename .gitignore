@@ -18,5 +18,11 @@ dist/
 # Local AI agent skills (kept in-tree for portability, not published)
 .opencode/
 
-# Junctions mirroring the gitignored .opencode skills into Claude Code
+# Skills were mirrored here by NTFS junctions until the repo was renamed, which
+# left them pointing at a path that no longer exists and silently unloadable. They
+# are copied into ~/.claude/skills by `nomod skills` now; the rule stays so a
+# re-created local copy is never committed.
 .claude/skills/
+
+# nomodkit's local session archives and caches
+.nomodkit/

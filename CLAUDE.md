@@ -26,32 +26,52 @@ a pylon-level loadout editor, a squadron shop/economy, and radio chatter.
 | `src/WingCommand/Pure/WingTuning.cs` | every tuned number that is **not** a setting — see below |
 | `src/WingCommand/Core/GameAccess.cs` | every reflection accessor into private game members; resolved once at startup |
 | `tests/WingCommand.PureTests/` | xunit, net8.0; `<Compile Include>`s the `Pure/` files directly (no project reference) |
-| `build/` | `package.ps1` (release assets), `copy-to-game.ps1` (deploy), `meta.json`, `nomnom/` manifest |
+| `build/` | `meta.json` (id, category, target game version), `nomnom/` manifest |
 | `docs/` | **shipped** design history, not a work list — see the banner at the top of each |
-| `.opencode/skills/` | the modding knowledge base (gitignored; also mounted at `.claude/skills/`) |
+| `.opencode/skills/` | the modding knowledge base (gitignored; the copy Claude loads is installed at `~/.claude/skills/`) |
 
 ## Commands
 
-Build the plugin (needs the .NET 8 SDK plus a local game install at the `GameDir` path in the csproj):
+Build, test, deploy and release all go through **nomodkit** (`C:\Users\marci\dev\nomodkit`),
+which replaced `build/copy-to-game.ps1` and `build/package.ps1`. It also exposes the same
+operations as MCP tools, so Claude can run them and get structured results.
+
+```bash
+nomod build --mod wingcommand
+```
+
+```bash
+nomod test --mod wingcommand
+```
+
+Check every Harmony patch and `AccessTools` string against the installed game assembly
+**before** deploying. This catches the two failures that are silent at runtime — a target
+that no longer exists, and a patch class missing its class-level `[HarmonyPatch]`:
+
+```bash
+nomod asm verify --mod wingcommand
+```
+
+Deploy, then package a release:
+
+```bash
+nomod deploy --mod wingcommand
+```
+
+```bash
+nomod package --mod wingcommand
+```
+
+The raw .NET commands still work if nomodkit is unavailable — building needs the .NET 8
+SDK plus a local game install at the `GameDir` path in the csproj, and the tests are the
+only part CI runs and the only part that works without the game installed:
 
 ```bash
 dotnet build src/WingCommand/WingCommand.csproj -c Release
 ```
 
-Run the tests — this is the only part CI runs, and the only part that works without the game installed:
-
 ```bash
 dotnet test tests/WingCommand.PureTests/WingCommand.PureTests.csproj -c Release
-```
-
-Deploy to the game, then package a release:
-
-```bash
-pwsh build/copy-to-game.ps1
-```
-
-```bash
-pwsh build/package.ps1
 ```
 
 ## Conventions
@@ -84,8 +104,8 @@ pwsh build/package.ps1
   happen — the game folder spent a release advertising the previous version.
 - **Never hand-write a hash.** A hash describes one exact binary and builds are not
   deterministic: the assembly MVID changes on every rebuild, so a hash typed into a file is
-  wrong the next time anyone builds. `copy-to-game.ps1` derives the deployed `meta.json`
-  from the DLL it is deploying, and `package.ps1` prints the release hashes ready to paste
+  wrong the next time anyone builds. `nomod deploy` derives the deployed `meta.json`
+  from the DLL it is deploying, and `nomod package` prints the release hashes ready to paste
   into `build/nomnom/WingCommand.json`. `build/meta.json` therefore holds `"hash": null` —
   deployment fills it in, and a number typed there could only ever be wrong.
 - **Version numbers only ever go up, and only to a number nothing has shipped as.** Check
@@ -114,19 +134,25 @@ in the tree after the UI that used it was replaced.
 
 ## Before touching game code
 
-Read the skills in `.claude/skills/` first — they are decompile-derived and cover the traps
-that fail silently:
+Read the skills first — they are decompile-derived and cover the traps that fail silently.
+They are installed at `~/.claude/skills/` (source of truth: `.opencode/skills/` here, and
+the nomodkit repo, which installs them with `nomod skills --confirm`):
 
 - `nuclear-option-modding` — Autopilot (`AutoAim` overloads, `effort`/`bankAllowed`), the
   `Pilot` state machine, combat AI, economy, Harmony/BepInEx gotchas, UI hooks.
 - `nuclear-option-general-modding` — game directory anatomy, mod types, NOMM/NOMNOM packaging.
+- `nuclear-option-modkit` — the nomodkit tooling and the debugging workflows.
 
 Two that bite hardest: a Harmony patch class without a **class-level** `[HarmonyPatch]` is
 skipped in total silence, and AI pilot states only tick where the aircraft is simulated —
 gate on `aircraft.LocalSim`, and gate world-state writes on `leader.IsServer`.
 
+`nomod asm verify --mod wingcommand` now catches the first of those mechanically, along
+with a patch target or `AccessTools` string that a game update renamed. Run it before
+deploying; it does not need the game running.
+
 ## Don't
 
 - Commit `dist/` or `bin/`/`obj/` (gitignored).
 - Commandeer a human-controlled aircraft (`aircraft.Player != null`).
-- Hand-edit `build/nomnom/WingCommand.json` version fields; regenerate via `package.ps1`.
+- Hand-edit `build/nomnom/WingCommand.json` version fields; regenerate via `nomod package`.

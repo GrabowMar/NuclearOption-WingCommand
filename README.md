@@ -562,8 +562,8 @@ src/WingCommand/bin/Release/netstandard2.1/WingCommand.dll
 
 Create release assets:
 
-```powershell
-pwsh build/package.ps1
+```bash
+nomod package --mod wingcommand
 ```
 
 This produces:
