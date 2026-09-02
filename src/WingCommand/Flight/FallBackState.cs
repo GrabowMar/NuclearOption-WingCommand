@@ -104,7 +104,7 @@ namespace WingCommand
 
                 case Phase.Hold:
                     // Advance switches state immediately; this is only a defensive guard.
-                    member.Apply(WingOrder.Formation);
+                    member.Complete(WingOrder.Formation);
                     break;
             }
         }
@@ -118,7 +118,7 @@ namespace WingCommand
             {
                 StopFlares();
                 WingComms.Say(member, WingComms.Call.Rejoining);
-                member.Apply(WingOrder.Formation);
+                member.Complete(WingOrder.Formation);
             }
         }
 
@@ -248,12 +248,31 @@ namespace WingCommand
 
         // -------------------------------------------------------------------- flares
 
+        /// <summary>Station holding flares, resolved on entry. -1 when this airframe has none.</summary>
+        private int flareIndex = -1;
+
+        /// <summary>
+        /// Cover the break with flares.
+        ///
+        /// Names the flare station rather than reusing <c>activeIndex</c>. Whatever was
+        /// selected last is not necessarily an expendable at all — an ECM-equipped aircraft
+        /// can easily be sitting on its jammer — so this used to hold the dispense trigger on
+        /// a jammer for three seconds and put nothing in the air.
+        /// </summary>
         private void StartFlares()
         {
             if (aircraft == null || aircraft.countermeasureManager == null) return;
-            if (aircraft.countermeasureTrigger) { flaring = true; return; }
 
-            aircraft.Countermeasures(active: true, aircraft.countermeasureManager.activeIndex);
+            if (!CountermeasureAccess.TryFindExpendable(
+                    aircraft.countermeasureManager, "IR", out flareIndex, out _))
+            {
+                flareIndex = -1;
+                return;
+            }
+
+            if (flareIndex > byte.MaxValue) { flareIndex = -1; return; }
+
+            aircraft.Countermeasures(active: true, (byte)flareIndex);
             flaring = true;
         }
 
@@ -261,8 +280,8 @@ namespace WingCommand
         {
             if (!flaring || aircraft == null || aircraft.countermeasureManager == null) return;
 
-            if (aircraft.countermeasureTrigger)
-                aircraft.Countermeasures(active: false, aircraft.countermeasureManager.activeIndex);
+            if (aircraft.countermeasureTrigger && flareIndex >= 0)
+                aircraft.Countermeasures(active: false, (byte)flareIndex);
 
             flaring = false;
         }

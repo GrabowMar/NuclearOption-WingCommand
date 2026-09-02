@@ -66,7 +66,7 @@ namespace WingCommand
             {
                 if (target != null) WingComms.Say(member, WingComms.Call.Splash, target.unitName);
                 member.ClearAssignedTarget();
-                member.Apply(WingOrder.Formation);
+                member.Complete(WingOrder.Formation);
                 return;
             }
 

@@ -6,8 +6,12 @@ namespace WingCommand
     /// <summary>
     /// What a wingman has been told to do. Movement/task authority is deliberately separate
     /// from the standing rules of engagement below.
+    ///
+    /// Public, unlike almost everything else here, because <see cref="WingSituation"/> hands
+    /// it to third-party reflexes — a reflex that recalls a wingman only when it is actually
+    /// hunting has to be able to ask which order is standing.
     /// </summary>
-    internal enum WingOrder
+    public enum WingOrder
     {
         Formation,
         Engage,
@@ -40,8 +44,11 @@ namespace WingCommand
         WingWaggle,
     }
 
-    /// <summary>Standing weapons policy for the wing.</summary>
-    internal enum WingRoe
+    /// <summary>
+    /// Standing weapons policy for the wing. Public for the same reason as
+    /// <see cref="WingOrder"/>: it is part of the situation a reflex scores against.
+    /// </summary>
+    public enum WingRoe
     {
         Hold,
         Escort,
@@ -61,6 +68,42 @@ namespace WingCommand
 
         /// <summary>The order hands flying and fighting to the combat AI.</summary>
         AutonomousCombat,
+    }
+
+    /// <summary>
+    /// Facts about an order that more than one system needs to agree on.
+    ///
+    /// <see cref="SendsWingmanHunting"/> lived in two places that disagreed: the leash
+    /// reflex leashed Engage and Attack, while <c>WingOrderCatalog.IsTargetOrder</c> — whose
+    /// doc still described the leash it no longer drove — answered Attack alone. Neither was
+    /// obviously wrong from where it sat, which is the usual way two definitions of one idea
+    /// survive next to each other.
+    /// </summary>
+    internal static class WingOrderRules
+    {
+        /// <summary>
+        /// True when the order sends a wingman away from the formation to prosecute
+        /// something, and therefore needs a tether.
+        ///
+        /// Jam Target and Splash 'Em are excluded deliberately: both carry a designated
+        /// target, but both are flown from the slot, so neither can overshoot a leash in the
+        /// first place.
+        /// </summary>
+        public static bool SendsWingmanHunting(WingOrder order) =>
+            order == WingOrder.Engage || order == WingOrder.Attack;
+
+        /// <summary>
+        /// True when the directive holds a designated unit at all, weapons or not.
+        ///
+        /// Deliberately next to <see cref="SendsWingmanHunting"/>, because the two are easy
+        /// to mistake for one another and the difference matters: Splash 'Em and Jam Target
+        /// both carry a target and are answered yes here, but are flown from the slot and
+        /// are answered no there.
+        /// </summary>
+        public static bool CarriesTarget(WingOrder order) =>
+            order == WingOrder.Attack ||
+            order == WingOrder.FireForEffect ||
+            order == WingOrder.JamTarget;
     }
 
     /// <summary>Pure precedence table shared by runtime code and tests.</summary>
@@ -89,6 +132,38 @@ namespace WingCommand
 
                 default:
                     return OrderEngagementAuthority.DefensiveOnly;
+            }
+        }
+
+        /// <summary>
+        /// Weapons authority for what a wingman is <i>actually doing</i>, which is not always
+        /// what it was told to do.
+        ///
+        /// This is the fix for the oldest conflict in the system. A wingman recalled from
+        /// past its leash flies formation while its standing order still reads Engage, and
+        /// asking the order alone therefore granted it autonomous-combat authority — weapons
+        /// free, air and ground, at explicit-order range — from inside the formation slot,
+        /// with the standing rules of engagement bypassed completely. A behaviour that is
+        /// not the standing task answers for itself.
+        /// </summary>
+        public static OrderEngagementAuthority AuthorityFor(string behaviourId, WingOrder order)
+        {
+            switch (behaviourId)
+            {
+                // Rejoining and holding overhead are both station-keeping, whatever the
+                // order underneath them says. The standing ROE governs, as it does for any
+                // other wingman flying its slot.
+                case WingBehaviours.Rejoin:
+                case WingBehaviours.DeckHold:
+                    return OrderEngagementAuthority.StandingRoe;
+
+                // Running from a missile, or not ours to fly at all.
+                case WingBehaviours.MissileBreak:
+                case WingBehaviours.Held:
+                    return OrderEngagementAuthority.DefensiveOnly;
+
+                default:
+                    return Authority(order);
             }
         }
     }

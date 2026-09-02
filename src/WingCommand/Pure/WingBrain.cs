@@ -2,12 +2,27 @@ namespace WingCommand
 {
     /// <summary>
     /// Smart is the full behaviour and CPU/network cost - the default and the development
-    /// target. Performance is a lean profile for busy missions and, above all, for
-    /// multiplayer: the host simulates every AI wingman, so Performance coarsens the
-    /// formation update (fewer synced control-input changes per wingman), drops the
-    /// Harmony target-deconfliction pass, stops the all-aircraft opportunity scans,
-    /// removes the manoeuvre and jam orders (both spray per-tick networked side effects)
-    /// and cuts radio chatter to the essential.
+    /// target.
+    ///
+    /// Performance is a deliberately worse wingman that costs almost nothing. That is the
+    /// whole feature, and it is aimed squarely at multiplayer: the host simulates every AI
+    /// wingman for every player, so a squadron each has to be affordable before it can be
+    /// good. It coarsens the formation update (fewer synced control-input changes per
+    /// wingman), drops the Harmony target-deconfliction pass, stops the all-aircraft
+    /// opportunity scans, removes the manoeuvre and jam orders (both spray per-tick
+    /// networked side effects), reconsiders each wingman's behaviour less often, and cuts
+    /// radio chatter to the essential.
+    ///
+    /// <b>Performance is allowed to change what a wingman decides</b>, not merely how often
+    /// it decides. Fewer opportunity shots, later reactions, a looser slot and a slower
+    /// interception are all expected. Only two things are exempt, and both are about the
+    /// squadron surviving long enough to be worth commanding: the missile-warning read that
+    /// lets a threat bypass the arbitration stride the instant it appears, and the evasion
+    /// itself in <see cref="DefensiveManeuverState"/>.
+    ///
+    /// The corollary is a rule about this file rather than about the game: the mode is one
+    /// coarse lever, not a throttle per call site. A gate that costs more code than it saves
+    /// cycles does not belong here.
     /// </summary>
     internal enum WingMode
     {
@@ -49,9 +64,9 @@ namespace WingCommand
         public static float IntervalScale => performance ? 2.5f : 1f;
 
         /// <summary>
-        /// A base interval in seconds, stretched for the current mode. For non-critical
-        /// periodic work only - missile evasion, the takeover prompt and the radio
-        /// anti-spam gaps are deliberately left on their own fixed timers.
+        /// A base interval in seconds, stretched for the current mode. Missile evasion, the
+        /// takeover prompt and the radio anti-spam gaps are deliberately left on their own
+        /// fixed timers.
         /// </summary>
         public static float Interval(float seconds) => seconds * IntervalScale;
 

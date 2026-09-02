@@ -17,10 +17,17 @@ namespace WingCommand
         // rather than once per physics tick, for continuous coverage at a known cadence.
         private const float PulseSeconds = 0.075f;
 
+        /// <summary>
+        /// How long a resolved station index is trusted. The list is renumbered whenever a
+        /// countermeasure registers, and there is no event to hang this off.
+        /// </summary>
+        private const float ResolveSeconds = 5f;
+
         private int index = -1;
         private bool resolved;
         private bool errorReported;
         private float nextPulse;
+        private float nextResolve;
 
         /// <summary>True once a RadarJammer station has been found on this aircraft.</summary>
         public bool HasJammer(Aircraft aircraft)
@@ -75,14 +82,29 @@ namespace WingCommand
             nextPulse = 0f;
         }
 
+        /// <summary>
+        /// Find the jammer station, and keep finding it.
+        ///
+        /// The resolution used to latch for the life of the aircraft, which is wrong because
+        /// the index is not stable: <c>CountermeasureManager.RegisterCountermeasure</c>
+        /// re-sorts the whole station list by display name every time a countermeasure
+        /// registers. A mid-mission rearm or refit that adds a station can therefore renumber
+        /// every index behind us, and the next pulse fires whatever now sits at the
+        /// remembered slot — dumping expendables instead of running ECM, at the one moment
+        /// the ECM was needed.
+        ///
+        /// Re-resolving on a slow cadence costs one walk of a list a few entries long, which
+        /// is nothing next to being wrong about it.
+        /// </summary>
         private void Resolve(Aircraft aircraft)
         {
-            if (resolved) return;
-
             CountermeasureManager manager = aircraft != null ? aircraft.countermeasureManager : null;
             if (manager == null) return;   // not latched: the manager may not exist yet
 
+            if (resolved && Time.timeSinceLevelLoad < nextResolve) return;
+
             resolved = true;
+            nextResolve = Time.timeSinceLevelLoad + ResolveSeconds;
             index = -1;
 
             if (!CountermeasureAccess.TryFindRadarJammer(manager, out index, out string reason) &&

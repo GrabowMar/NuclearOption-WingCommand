@@ -40,31 +40,23 @@ namespace WingCommand
 
             // The deck hold describes one leader's situation. Carrying it across a change of
             // seat would leave the wing orbiting for an aircraft that is no longer theirs.
-            heldOnDeck.Clear();
-            leaderOnDeck = false;
+            LeaderOnDeck = false;
 
             if (leader == null)
             {
-                if (previous != null && WingTakeover.Begin(this, previous))
-                    HoldForTakeover();
-                else
+                // Nothing is ordered here any more. With no leader the LeaderLost reflex
+                // holds every member overhead on its own, and — the point of the change —
+                // each one keeps the order the player actually gave it, so when a new seat
+                // is taken the wing resumes rather than being flattened to Formation.
+                if (previous == null || !WingTakeover.Begin(this, previous))
                     DisbandAll("leader gone");
             }
             else if (previous == null && members.Count > 0)
             {
                 // Covers a normal game respawn while the takeover prompt is open: the old
-                // wing follows the newly spawned aircraft and the prompt closes.
+                // wing follows the newly spawned aircraft and the prompt closes. The reflex
+                // stops scoring the moment a leader exists, so no order is needed.
                 WingTakeover.LeaderRestored(leader);
-                OrderAll(WingOrder.Formation);
-            }
-        }
-
-        /// <summary>Keep candidates safely airborne while the player chooses a new seat.</summary>
-        private void HoldForTakeover()
-        {
-            foreach (WingMember member in members)
-            {
-                if (member.Alive) member.Apply(WingOrder.OrbitHere);
             }
         }
 
@@ -99,7 +91,12 @@ namespace WingCommand
         public void CheckReserves()
         {
             if (Time.timeSinceLevelLoad < nextReserveCheck) return;
-            nextReserveCheck = Time.timeSinceLevelLoad + 1f;
+
+            // Scaled by the mode. This is the one throttle in the mod actually worth having:
+            // the pass below walks every weapon station and every airframe part for every
+            // member, and none of the quantities it reads - fuel, ammunition, damage, cargo
+            // - moves fast enough to notice the difference on a busy host.
+            nextReserveCheck = Time.timeSinceLevelLoad + WingBrain.Interval(1f);
 
             for (int i = 0; i < members.Count; i++)
             {
@@ -119,10 +116,15 @@ namespace WingCommand
         /// <summary>Radar altitude the leader must regain before the wing rejoins.</summary>
         private const float AirborneAltitude = 40f;
 
-        /// <summary>Members holding overhead because the leader is on the ground.</summary>
-        private readonly HashSet<WingMember> heldOnDeck = new HashSet<WingMember>();
-
-        private bool leaderOnDeck;
+        /// <summary>
+        /// True while the leader is on the runway rather than merely low.
+        ///
+        /// Just a flag now. It used to come with a set of the members that had been moved
+        /// overhead and a rewrite of each one's standing directive, because there was no way
+        /// to make a wingman do something temporarily without overwriting what it had been
+        /// told to do. The deck-hold reflex reads this and the directive is left alone.
+        /// </summary>
+        public bool LeaderOnDeck { get; private set; }
 
         /// <summary>
         /// Whether the leader is on the ground rather than merely low.
@@ -139,7 +141,7 @@ namespace WingCommand
             Aircraft leader = Leader;
             if (leader == null || leader.disabled) return false;
 
-            if (leaderOnDeck) return leader.radarAlt < AirborneAltitude;
+            if (LeaderOnDeck) return leader.radarAlt < AirborneAltitude;
             return leader.gearDeployed && leader.radarAlt < DeckAltitude;
         }
 
@@ -151,52 +153,20 @@ namespace WingCommand
         /// wing of aircraft diving into the ground the moment the player touches down. They
         /// orbit the field instead until the leader is airborne again, then rejoin.
         ///
-        /// Only members actually trying to hold formation are moved, and only they are
-        /// given back: an explicit order — an attack, a hold somewhere else, an RTB — is the
-        /// player's, and outlives their landing.
+        /// Only members actually trying to hold formation are moved: an explicit order — an
+        /// attack, a hold somewhere else, an RTB — is the player's, and outlives their
+        /// landing. That rule now lives in the deck-hold reflex; this only decides whether
+        /// the leader is on the deck at all, and says so once.
         /// </summary>
         public void CheckLeaderOnDeck()
         {
             bool onDeck = LeaderIsOnDeck();
+            if (onDeck == LeaderOnDeck) return;
 
-            if (!onDeck)
-            {
-                if (!leaderOnDeck) return;
-                leaderOnDeck = false;
+            LeaderOnDeck = onDeck;
+            if (!onDeck) return;
 
-                foreach (WingMember member in heldOnDeck)
-                {
-                    if (member == null || !members.Contains(member)) continue;
-                    if (!member.IsCommandable || member.Order != WingOrder.OrbitHere) continue;
-                    member.Apply(WingOrder.Formation);
-                }
-
-                heldOnDeck.Clear();
-                return;
-            }
-
-            // Runs on every pass, not only on the transition: a wingman that finishes an
-            // attack while the player is still on the ground rejoins into a formation order
-            // of its own accord, and would fly the same slot into the same runway.
-            GlobalPosition overhead = Leader.GlobalPosition();
-            bool announced = leaderOnDeck;
-            leaderOnDeck = true;
-
-            foreach (WingMember member in members)
-            {
-                if (member == null || !member.IsCommandable) continue;
-                if (member.Order != WingOrder.Formation) continue;
-
-                member.Apply(WingDirective.AtPoint(WingOrder.OrbitHere, overhead));
-                heldOnDeck.Add(member);
-
-                if (!announced)
-                {
-                    announced = true;
-                    WingCommandManager.Instance?.Toast(
-                        "Leader on the deck - wing holding overhead");
-                }
-            }
+            WingCommandManager.Instance?.Toast("Leader on the deck - wing holding overhead");
         }
 
         /// <summary>
@@ -207,8 +177,7 @@ namespace WingCommand
         public void Clear()
         {
             members.Clear();
-            heldOnDeck.Clear();
-            leaderOnDeck = false;
+            LeaderOnDeck = false;
             Leader = null;
         }
 
@@ -370,16 +339,17 @@ namespace WingCommand
             free.RemoveAt(best);
             return member;
         }
-        /// <summary>Pull back any member that has strayed past the leash while engaging.</summary>
-        public void CheckLeashes()
+        /// <summary>
+        /// Resolve every member's behaviour for this frame.
+        ///
+        /// One pass replaces the three that used to run here in a load-bearing order —
+        /// threats, then leashes, then reserves — where "which behaviour wins" was decided
+        /// by which check happened to run last. Precedence is now a property of the reflex
+        /// ladder rather than of this loop.
+        /// </summary>
+        public void Tick()
         {
-            for (int i = 0; i < members.Count; i++) members[i].CheckLeash();
-        }
-
-        /// <summary>Let missile self-preservation interrupt any standing wing order.</summary>
-        public void CheckThreats()
-        {
-            for (int i = 0; i < members.Count; i++) members[i].CheckThreats();
+            for (int i = 0; i < members.Count; i++) members[i].Tick();
         }
 
         /// <summary>Drop members that died, ejected, or despawned.</summary>
@@ -588,7 +558,6 @@ namespace WingCommand
             member.SendHome(reason);
             WingPilotRoster.Retire(member, survived: true);
             members.Remove(member);
-            heldOnDeck.Remove(member);
             WingMarkers.Repaint(released);
         }
 

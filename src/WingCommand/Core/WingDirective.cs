@@ -52,5 +52,30 @@ namespace WingCommand
 
         public WingDirective WithoutTarget() =>
             new WingDirective(Order, null, Point, HasPoint, Maneuver);
+
+        /// <summary>
+        /// Whether this asks for the same thing as another directive. <see cref="IssuedAt"/>
+        /// is deliberately excluded — it records when the order was given, not what it was.
+        ///
+        /// Exists so re-issuing an order a wingman is already carrying out is free. The wing
+        /// re-applies Formation to every member on several paths (a partial attack order, a
+        /// leader restored after a takeover), and without this each one re-enters the
+        /// formation state: leader filters reset, and the rejoin boost fires. Ordering an
+        /// attack to half a four-ship made the other half surge and re-settle for no reason.
+        /// </summary>
+        public bool SameIntentAs(in WingDirective other) =>
+            Order == other.Order &&
+            ReferenceEquals(Target, other.Target) &&
+            HasPoint == other.HasPoint &&
+            Maneuver == other.Maneuver &&
+            (!HasPoint || SamePoint(Point, other.Point));
+
+        /// <summary>
+        /// Map points are compared with a tolerance rather than exactly: a click a metre
+        /// from the last one is the same instruction, and a float comparison on a world
+        /// coordinate would say otherwise.
+        /// </summary>
+        private static bool SamePoint(GlobalPosition a, GlobalPosition b) =>
+            FastMath.SquareDistance(a, b) < WingTuning.SamePointMetres * WingTuning.SamePointMetres;
     }
 }

@@ -57,6 +57,14 @@ namespace WingCommand
             WingHudTint.Initialise();
             CountermeasureAccess.Initialise();
 
+            // The behaviour ladder. Registered before anything can tick, and through the
+            // same public call another plugin would use - a reflex of ours has no privileged
+            // route in, which is the only way the public one stays working.
+            WingAi.FaultReporter = (id, e) => Logger.LogError(
+                $"[Wing] reflex '{id}' threw and has been disabled for this mission: " +
+                $"{e.GetType().Name} - {e.Message}");
+            WingReflexes.RegisterDefaults();
+
             harmony = new Harmony(PluginGuid);
             harmony.PatchAll(typeof(Plugin).Assembly);
             ReportPatches();

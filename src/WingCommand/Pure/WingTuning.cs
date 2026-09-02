@@ -205,8 +205,68 @@ namespace WingCommand
 
         // ------------------------------------------------------------------ engagement
 
+        /// <summary>
+        /// Reactive spacing multiplier while the widen behaviour is active. Lived in
+        /// WingBrain, which gates the behaviour but has no business holding its number.
+        /// </summary>
+        public const float ThreatWidenScale = 1.45f;
+
+        /// <summary>Saturation penalty per extra committed attacker on one target.</summary>
+        public const float TargetSaturationPenalty = 1.5f;
+
         /// <summary>Seconds a missile warning must stay clear before a defensive wingman resumes its order.</summary>
         public const float PanicClearSeconds = 2.5f;
+
+        /// <summary>
+        /// Seconds a missile break keeps the controls no matter what its own score does.
+        /// A break that released the instant the warning blinked would hand the aircraft
+        /// back mid-turn, wings knife-edge, pointed at the missile it just beamed.
+        /// </summary>
+        public const float PanicMinimumSeconds = 2f;
+
+        /// <summary>
+        /// Radar altitude below which a missile break is refused. An aircraft this low is
+        /// landing or already crashing, and a hard break is the worse of the two outcomes.
+        /// </summary>
+        public const float PanicFloorAlt = 5f;
+
+        /// <summary>
+        /// Metres inside which two map points count as the same instruction. Re-issuing an
+        /// order to a point a metre from the last one should not restart the task.
+        /// </summary>
+        public const float SamePointMetres = 5f;
+
+        /// <summary>
+        /// Predicted seconds to impact inside which a radar missile gets chaff.
+        ///
+        /// Was eight, which an ARH detected at thirty kilometres does not reach until the
+        /// notch is already committed — so the chaff went out after the part of the
+        /// engagement it was supposed to help with. The ejector rate-limits itself, so a
+        /// wider window paces the load rather than dumping it.
+        /// </summary>
+        public const float ChaffWindowSeconds = 12f;
+
+        /// <summary>
+        /// Bank authority granted while running from a missile.
+        ///
+        /// Deliberately short of <see cref="FixedWingFormation.MaxSafeBank"/>. A beam or
+        /// notch settles with the commanded direction parallel to the velocity vector by
+        /// construction, which is the degenerate case for the autopilot's roll solver — the
+        /// cross product collapses and the signed angle it derives from it is noise. The
+        /// bank allowance is the only thing that bounds the resulting flailing, so granting
+        /// it 88 degrees granted it nothing.
+        /// </summary>
+        public const float DefensiveBankAllowed = 70f;
+
+        /// <summary>
+        /// Fraction of <see cref="LeashRadius"/> a recalled wingman must get back inside
+        /// before it is turned loose again.
+        ///
+        /// This is the hysteresis, and it needs to be well under 1: with a single threshold
+        /// a wingman sitting on the boundary flips between hunting and rejoining every
+        /// frame, which is exactly what it used to do.
+        /// </summary>
+        public const float LeashReleaseFraction = 0.5f;
 
         /// <summary>
         /// Weapons range, metres, for a wingman shooting from its slot. Hold and Escort both
