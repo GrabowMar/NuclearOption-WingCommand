@@ -393,7 +393,8 @@ namespace WingCommand
 
         /// <summary>
         /// Put the resolved behaviour on the aircraft. The only caller of
-        /// <c>Pilot.SwitchState</c> for a commandable wingman, which is what makes the
+        /// <c>Pilot.SwitchState</c> (through <see cref="SwitchTo"/>) for a commandable
+        /// wingman, which is what makes the
         /// behaviour graph describable at all.
         /// </summary>
         private void EnterBehaviour(string behaviourId)
@@ -406,7 +407,7 @@ namespace WingCommand
 
                 case WingBehaviours.MissileBreak:
                     TacticalCoordinator.Release(Aircraft);
-                    Pilot.SwitchState(defensiveState);
+                    SwitchTo(defensiveState);
                     return;
 
                 case WingBehaviours.DeckHold:
@@ -414,9 +415,12 @@ namespace WingCommand
                     return;
 
                 case WingBehaviours.Rejoin:
+                    // Unconditional, unlike the Formation task above: this behaviour exists
+                    // precisely because the wingman is a long way out, so it wants the boost
+                    // whether or not it was already nominally holding a slot.
                     WingComms.Say(this, WingComms.Call.Rejoining);
+                    SwitchTo(formationState);
                     formationState.BoostRejoin(0f);
-                    Pilot.SwitchState(formationState);
                     return;
 
                 case WingBehaviours.Task:
@@ -470,8 +474,12 @@ namespace WingCommand
                 ? leader.GlobalPosition()
                 : Aircraft.GlobalPosition();
 
-            orbitState.SetAnchor(anchor, WingTuning.OrbitRadius);
-            Pilot.SwitchState(orbitState);
+            // Tracking, not captured: this behaviour is entered once, and a leader that
+            // lands at one end of a runway then taxis to a hangar would otherwise leave the
+            // wing circling the touchdown point. With no leader at all there is nothing to
+            // track, so the aircraft holds where it is.
+            orbitState.SetAnchor(anchor, WingTuning.OrbitRadius, trackLeader: leader != null);
+            SwitchTo(orbitState);
         }
 
         /// <summary>Fly the standing order. The old Apply switch, unchanged in substance.</summary>
@@ -480,8 +488,11 @@ namespace WingCommand
             switch (Directive.Order)
             {
                 case WingOrder.Formation:
-                    formationState.BoostRejoin(Slot * WingTuning.RejoinStagger);
-                    Pilot.SwitchState(formationState);
+                    // Boost only on a genuine arrival. Retiring a Splash 'Em or a Jam order
+                    // lands here on an aircraft that is already flying its slot, and it has
+                    // nothing to hurry back to.
+                    if (SwitchTo(formationState))
+                        formationState.BoostRejoin(Slot * WingTuning.RejoinStagger);
                     break;
 
                 case WingOrder.Engage:
@@ -493,7 +504,7 @@ namespace WingCommand
                     break;
 
                 case WingOrder.FallBack:
-                    Pilot.SwitchState(fallBackState);
+                    SwitchTo(fallBackState);
                     break;
 
                 case WingOrder.OrbitHere:
@@ -526,7 +537,7 @@ namespace WingCommand
 
                 case WingOrder.Maneuver:
                     maneuverState.SetManeuver(Directive.Maneuver);
-                    Pilot.SwitchState(maneuverState);
+                    SwitchTo(maneuverState);
                     break;
             }
         }
@@ -558,7 +569,7 @@ namespace WingCommand
                     : Aircraft.GlobalPosition();
 
             orbitState.SetAnchor(anchor, WingTuning.OrbitRadius);
-            Pilot.SwitchState(orbitState);
+            SwitchTo(orbitState);
         }
 
         /// <summary>
@@ -584,13 +595,13 @@ namespace WingCommand
             if (directive.HasPoint)
             {
                 cargoRunState.SetDestination(directive.Point);
-                Pilot.SwitchState(cargoRunState);
+                SwitchTo(cargoRunState);
                 return;
             }
 
             if (Pilot.AIHeloTransportState != null)
             {
-                Pilot.SwitchState(Pilot.AIHeloTransportState);
+                SwitchTo(Pilot.AIHeloTransportState);
                 return;
             }
 
@@ -610,7 +621,7 @@ namespace WingCommand
         {
             if (directive.HasPoint) landState.SetDestination(directive.Point);
             else landState.ClearDestination();
-            Pilot.SwitchState(landState);
+            SwitchTo(landState);
         }
 
         private void EnterWaypoint(WingDirective directive)
@@ -623,7 +634,7 @@ namespace WingCommand
             }
 
             waypointState.SetDestination(directive.Point);
-            Pilot.SwitchState(waypointState);
+            SwitchTo(waypointState);
         }
 
         /// <summary>
@@ -634,7 +645,7 @@ namespace WingCommand
         {
             if (AssignedTarget != null && !AssignedTarget.disabled)
             {
-                Pilot.SwitchState(attackState);
+                SwitchTo(attackState);
             }
             else
             {
@@ -658,7 +669,7 @@ namespace WingCommand
         {
             if (AssignedTarget != null && !AssignedTarget.disabled)
             {
-                Pilot.SwitchState(formationState);
+                SwitchTo(formationState);
             }
             else
             {
@@ -852,8 +863,15 @@ namespace WingCommand
             lastIntegrity = current;
         }
         /// <summary>
-        /// Give control back to the stock combat AI. Used both for an explicit Engage
-        /// order and for automatic breaks (leader lost, mutual support).
+        /// Give the airframe back to the stock combat AI, permanently.
+        ///
+        /// <b>Teardown only</b>, and the one caller is <c>DisbandAll</c>. It overwrites the
+        /// standing directive with Engage and switches state without asking the arbiter,
+        /// which is correct for a member leaving the roster and destructive for one that is
+        /// staying — <see cref="FormationFlyState"/> used to call it when the leader died,
+        /// and because FixedUpdate runs before Update it destroyed the player's orders on
+        /// the very tick they were shot down, before the LeaderLost reflex could preserve
+        /// anything. Do not add a caller that expects the member to keep flying for us.
         /// </summary>
         public void ReleaseToCombat(string reason)
         {
@@ -1105,14 +1123,42 @@ namespace WingCommand
             if (stale) Complete(WingOrder.Formation);
         }
 
+        /// <summary>The pilot state we last put this aircraft into.</summary>
+        private PilotBaseState enteredState;
+
+        /// <summary>
+        /// Switch, unless the aircraft is already flying this exact state. Returns true when
+        /// a switch actually happened.
+        ///
+        /// The guard matters because a behaviour can be re-entered without changing: the
+        /// arbiter re-runs the standing task whenever the directive underneath it changes,
+        /// and several orders are flown by the same state. Finishing a Splash 'Em retires
+        /// the order to Formation, which is flown by the state already running — and
+        /// re-entering it ran <c>EnterState</c> again, resetting the whole leader filter
+        /// bank and arming an eight-second wide-open-throttle rejoin boost on an aircraft
+        /// that had never left its slot. That surge is exactly what the Splash 'Em work set
+        /// out to remove, and it survived two attempts at removing it.
+        ///
+        /// Tracking our own last switch is sufficient because nothing else switches a
+        /// commandable wingman; the two greps in the plan hold that line.
+        /// </summary>
+        private bool SwitchTo(PilotBaseState state)
+        {
+            if (state == null || ReferenceEquals(state, enteredState)) return false;
+
+            enteredState = state;
+            Pilot.SwitchState(state);
+            return true;
+        }
+
         private void SwitchToCombat()
         {
             if (Pilot == null) return;
 
             if (Pilot.AICombatState != null)
-                Pilot.SwitchState(Pilot.AICombatState);
+                SwitchTo(Pilot.AICombatState);
             else if (Pilot.AIHeloCombatState != null)
-                Pilot.SwitchState(Pilot.AIHeloCombatState);
+                SwitchTo(Pilot.AIHeloCombatState);
             else
                 Plugin.Logger.LogWarning($"[Wing] {Name} has no combat state to return to.");
         }
@@ -1122,9 +1168,9 @@ namespace WingCommand
             if (Pilot == null) return;
 
             if (Pilot.AILandingState != null)
-                Pilot.SwitchState(Pilot.AILandingState);
+                SwitchTo(Pilot.AILandingState);
             else if (Pilot.AIHeloLandingState != null)
-                Pilot.SwitchState(Pilot.AIHeloLandingState);
+                SwitchTo(Pilot.AIHeloLandingState);
             else
                 SwitchToCombat();
         }

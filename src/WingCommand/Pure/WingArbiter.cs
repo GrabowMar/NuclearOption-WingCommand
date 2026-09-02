@@ -37,15 +37,13 @@ namespace WingCommand
         public readonly string Id;
         public readonly WingReflexBand Band;
         public readonly float Score;
-        public readonly bool Sticky;
         public readonly bool Won;
 
-        public WingReflexTrace(string id, WingReflexBand band, float score, bool sticky, bool won)
+        public WingReflexTrace(string id, WingReflexBand band, float score, bool won)
         {
             Id = id;
             Band = band;
             Score = score;
-            Sticky = sticky;
             Won = won;
         }
     }
@@ -63,10 +61,11 @@ namespace WingCommand
     /// answer never depends on registration order.</item>
     /// </list>
     ///
-    /// Everything that used to be a bespoke boolean lives here instead. Hysteresis is one
-    /// stickiness bonus applied to the incumbent <i>within its own band</i> — which is why a
-    /// break still preempts a recall instantly while a recall no longer flip-flops on the
-    /// leash boundary. Minimum holds are one rule rather than three timers.
+    /// Everything that used to be a bespoke boolean lives here instead. Hysteresis is
+    /// declared by each reflex rather than applied from outside: a reflex is told whether it
+    /// is the one in control and widens its own release threshold, which is how a stateless
+    /// reflex expresses "recall at the leash, release at half of it" — and why a break still
+    /// preempts a recall instantly. Minimum holds are one rule rather than three timers.
     /// </summary>
     internal static class WingArbiter
     {
@@ -118,7 +117,7 @@ namespace WingCommand
                 // mechanisms would be two ways to tune one behaviour.
                 float score = WingAi.SafeScore(reflex, in situation, sticky);
 
-                trace?.Add(new WingReflexTrace(reflex.Id, reflex.Band, score, sticky, won: false));
+                trace?.Add(new WingReflexTrace(reflex.Id, reflex.Band, score, won: false));
 
                 if (score <= 0f) continue;
                 if (winner != null && reflex.Band > winningBand) continue;
@@ -167,7 +166,7 @@ namespace WingCommand
             {
                 if (!string.Equals(trace[i].Id, id, StringComparison.Ordinal)) continue;
                 WingReflexTrace t = trace[i];
-                trace[i] = new WingReflexTrace(t.Id, t.Band, t.Score, t.Sticky, won: true);
+                trace[i] = new WingReflexTrace(t.Id, t.Band, t.Score, won: true);
                 return;
             }
         }

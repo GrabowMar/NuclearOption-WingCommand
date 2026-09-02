@@ -37,12 +37,6 @@ namespace WingCommand
     /// </summary>
     internal static class WingBrain
     {
-        /// <summary>Reactive spacing multiplier while the widen behaviour is active.</summary>
-        public const float ThreatWidenScale = 1.45f;
-
-        /// <summary>Saturation penalty per extra committed attacker on one target.</summary>
-        public const float TargetSaturationPenalty = 1.5f;
-
         private static bool performance;
 
         public static WingMode Mode { get; private set; } = WingMode.Smart;

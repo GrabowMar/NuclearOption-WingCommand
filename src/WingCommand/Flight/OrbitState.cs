@@ -29,11 +29,23 @@ namespace WingCommand
             stateDisplayName = "orbiting";
         }
 
+        /// <summary>
+        /// True while the anchor should track the leader rather than stay where it was set.
+        ///
+        /// The Hold order captures a point and keeps it — that is the order. A deck hold is
+        /// a different thing wearing the same state: the wing is orbiting *the leader*, who
+        /// is on the ground and may well taxi a kilometre to a hangar. The behaviour is
+        /// entered once, so without this the wing would circle the touchdown point while the
+        /// leader parked somewhere else.
+        /// </summary>
+        private bool followLeader;
+
         /// <summary>Set the point to hold over. Call before switching to this state.</summary>
-        public void SetAnchor(GlobalPosition point, float orbitRadius)
+        public void SetAnchor(GlobalPosition point, float orbitRadius, bool trackLeader = false)
         {
             anchor = point;
             radius = Mathf.Max(orbitRadius, 200f);
+            followLeader = trackLeader;
         }
 
         public override void EnterState(Pilot pilot)
@@ -57,6 +69,12 @@ namespace WingCommand
         public override void FixedUpdateState(Pilot pilot)
         {
             if (aircraft == null || aircraft.disabled) return;
+
+            if (followLeader)
+            {
+                Aircraft leader = member.Leader;
+                if (leader != null && !leader.disabled) anchor = leader.GlobalPosition();
+            }
 
             // Spread the wing around the ring by slot, so three aircraft holding the same
             // point do not end up flying the same arc nose to tail.

@@ -27,7 +27,7 @@ namespace WingCommand
     /// <summary>
     /// One reason a wingman might do something other than its standing order.
     ///
-    /// <b>This is the modding surface.</b> The mod's own five reflexes are registered
+    /// <b>This is the modding surface.</b> The mod's own six reflexes are registered
     /// through the same public call a third-party plugin uses — if the core did not eat its
     /// own cooking here, the public path would rot the first time an internal shortcut was
     /// more convenient.

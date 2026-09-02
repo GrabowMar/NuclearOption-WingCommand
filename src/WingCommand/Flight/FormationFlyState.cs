@@ -345,12 +345,19 @@ namespace WingCommand
 
             Aircraft leader = Leader;
 
-            // Leader gone, or we are no longer flyable: hand back to the stock AI.
+            // No leader to hold a slot on, or we are no longer flyable. Stop flying and wait
+            // for the next arbitration pass — the LeaderLost reflex owns this case and will
+            // put the aircraft into a holding orbit.
+            //
+            // This used to call ReleaseToCombat, which is a teardown: it overwrites the
+            // standing directive with Engage and hands the aircraft to the stock combat AI.
+            // That is right for a member leaving the roster and wrong for one whose leader
+            // just died — and because FixedUpdate runs before Update, it beat the arbiter to
+            // the punch on the very tick the player was killed. The order the wing was given
+            // was destroyed before anything could preserve it, and on respawn the whole wing
+            // resolved to Engage and flew off under stock AI while still on the roster.
             if (leader == null || leader.disabled || aircraft == null || aircraft.disabled)
-            {
-                member.ReleaseToCombat("leader lost");
                 return;
-            }
 
             // What this wingman is working from the slot, asked once. It used to be inferred
             // from the standing order in two separate places, which is how one state came to
