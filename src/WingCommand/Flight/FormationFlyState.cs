@@ -150,10 +150,10 @@ namespace WingCommand
 
         /// <summary>
         /// Seconds of smoothing. Long enough to reject stick noise, short enough not to lag a
-        /// turn. Tightened to half a second: the track still filters the leader's every
+        /// turn. Tightened to a third of a second: the track still filters the leader's every
         /// twitch, but a genuine manoeuvre is now followed rather than trailed.
         /// </summary>
-        private const float LeaderTrackSmoothing = 0.5f;
+        private const float LeaderTrackSmoothing = 0.35f;
 
         /// <summary>Seconds of smoothing on the differentiated heading rate.</summary>
         private const float TurnRateSmoothing = 0.35f;

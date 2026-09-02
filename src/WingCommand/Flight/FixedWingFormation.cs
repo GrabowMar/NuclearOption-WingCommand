@@ -127,7 +127,7 @@ namespace WingCommand
         /// does, instead of waiting for the smoothing to catch up. It is the "cheat" that
         /// makes the formation read as glued to the player rather than chasing a memory.
         /// </summary>
-        private const float TurnLeadSeconds = 0.6f;
+        private const float TurnLeadSeconds = 0.85f;
 
         /// <summary>
         /// Correction gain on slot error, before <c>Aggression</c> scales it.
@@ -160,7 +160,7 @@ namespace WingCommand
         private const float GapGain = 0.35f;
 
         /// <summary>Hard ceiling on the closing speed demand, in m/s.</summary>
-        private const float MaxClosure = 60f;
+        private const float MaxClosure = 90f;
 
         /// <summary>
         /// Deceleration a wingman can rely on at idle, in m/s². Closes the loop on the
@@ -169,7 +169,7 @@ namespace WingCommand
         /// shed. Without this term the demand was proportional to the gap, which is
         /// exactly the profile that arrives hot and starts the catch/fall cycle.
         /// </summary>
-        private const float MaxDecel = 3f;
+        private const float MaxDecel = 4.5f;
 
         /// <summary>
         /// Bank beyond which the bank match disengages. The failure this guards against is
