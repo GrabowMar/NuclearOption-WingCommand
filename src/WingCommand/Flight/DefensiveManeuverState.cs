@@ -56,16 +56,17 @@ namespace WingCommand
         /// <summary>
         /// The break is over — the arbiter has given the aircraft to something else.
         ///
-        /// This state no longer decides when that happens. It used to run its own clear
-        /// timer and call back into the member to resume, which made it both a behaviour and
-        /// half of the precedence system; the missile-break reflex owns the timing now and
-        /// this only has to tidy up after itself.
+        /// This state no longer decides when that happens, and no longer announces it. It
+        /// used to run its own clear timer and call back into the member to resume, which
+        /// made it both a behaviour and half of the precedence system. The reflex owns the
+        /// timing, and <see cref="WingMember"/> owns the all-clear call and the retirement of
+        /// a stale order — it can tell a real release from a teardown, and this cannot.
+        ///
+        /// So all that is left is putting the countermeasures away.
         /// </summary>
         public override void LeaveState()
         {
             StopCountermeasures();
-            WingComms.Say(member, WingComms.Call.DefensiveClear);
-            member.RetireStaleOrder();
         }
 
         public override void UpdateState(Pilot pilot)

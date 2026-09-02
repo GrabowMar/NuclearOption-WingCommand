@@ -222,6 +222,12 @@ namespace WingCommand
         public const float PanicFloorAlt = 5f;
 
         /// <summary>
+        /// Metres inside which two map points count as the same instruction. Re-issuing an
+        /// order to a point a metre from the last one should not restart the task.
+        /// </summary>
+        public const float SamePointMetres = 5f;
+
+        /// <summary>
         /// Predicted seconds to impact inside which a radar missile gets chaff.
         ///
         /// Was eight, which an ARH detected at thirty kilometres does not reach until the

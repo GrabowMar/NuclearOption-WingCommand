@@ -4,7 +4,7 @@ namespace WingCommand
 {
     /// <summary>
     /// Flies one scripted manoeuvre and then rejoins. Transient: it is never a resting
-    /// state, and every path out of it ends in <c>member.Apply(WingOrder.Formation)</c>.
+    /// state, and every path out of it ends in <c>member.Complete(WingOrder.Formation)</c>.
     ///
     /// Two implementation styles live here. The level breaks and the wing waggle steer
     /// through <c>AutoAim</c>, the same primitive the formation controller uses. The
@@ -368,7 +368,7 @@ namespace WingCommand
                     $"[Maneuver] {(aircraft != null ? aircraft.unitName : "?")} {kind} " +
                     (unable ? "unable" : "done") + " (" + reason + ")");
 
-            member.Apply(WingOrder.Formation);
+            member.Complete(WingOrder.Formation);
         }
 
         private void Abort(string reason)

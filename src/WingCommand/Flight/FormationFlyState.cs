@@ -47,6 +47,9 @@ namespace WingCommand
         /// <summary>How long it must keep losing ground before a wingman gives up.</summary>
         private const float UnableSeconds = 20f;
 
+        /// <summary>Shooting from the slot. Shared with OrbitState; this state only flies.</summary>
+        private readonly SlotEngagement engagement = new SlotEngagement(EngageInterval);
+
         private float lastEngageCheck;
         private float lastFiredTime;
         private float rejoinBoostUntil;
@@ -354,31 +357,15 @@ namespace WingCommand
             // be running three behaviours with no way to name which.
             SlotTask task = member.SlotTask;
 
-            // Jam Target is flown as ordinary formation, plus a jammer held on the
-            // designated unit. When that unit dies the order is complete.
-            if (member.Order == WingOrder.JamTarget)
+            // A jam order whose target has died is finished. Asked of the order rather than
+            // the task because that is exactly the difference being tested: the order still
+            // says JamTarget, and SlotTask has already stopped saying Jam because the unit
+            // is gone.
+            if (member.Order == WingOrder.JamTarget && task != SlotTask.Jam)
             {
-                Unit jamTarget = member.AssignedTarget;
-                if (task != SlotTask.Jam)
-                {
-                    WingComms.Say(member, WingComms.Call.JammingOff);
-                    member.Complete(WingOrder.Formation);
-                    return;
-                }
-
-                // The pulse above only ever protects this aircraft: RadarJammer.Fire calls
-                // Aircraft.AddECMIntensity on itself, nothing about jamTarget. Actually denying
-                // that unit's own radar needs Unit.Jam - the call the stock JammingPod weapon
-                // makes against whatever it is aimed at - which raises jamAccumulation on every
-                // Radar attached to jamTarget until Radar.IsJammed blinds it. That decays
-                // continuously in Radar.Update, so it rides the same pulse cadence to stay
-                // saturated. Host-only: Unit.Jam broadcasts a ClientRpc.
-                if (member.Jammer.Pulse(aircraft) && aircraft.IsServer)
-                    jamTarget.Jam(new Unit.JamEventArgs
-                    {
-                        jammingUnit = aircraft,
-                        jamAmount = WingTuning.JamTargetAmount
-                    });
+                WingComms.Say(member, WingComms.Call.JammingOff);
+                member.Complete(WingOrder.Formation);
+                return;
             }
 
             // Fidelity throttle: at low settings recompute the slot geometry only every
@@ -390,10 +377,16 @@ namespace WingCommand
             if (stride > 1 && (++geometryTick + member.Slot) % stride != 0)
                 return;
 
+            // Behind the stride, deliberately. Unit.Jam broadcasts a ClientRpc, so running
+            // it ahead of the stride made the one behaviour with a per-tick networked side
+            // effect the one behaviour Performance mode could not thin out - on a host
+            // simulating a squadron per player, which is the case the mode exists for.
+            if (task == SlotTask.Jam) RunJam();
+
             if (task == SlotTask.Splash)
                 RunSplash();
             else
-                RunEngagement(leader);
+                engagement.Run(member, aircraft, pilot, leader);
 
             // The time that actually elapsed since the geometry last ran, which under the
             // Performance stride is several physics ticks rather than one. Every filter and
@@ -739,98 +732,6 @@ namespace WingCommand
             return nearbyThreatPresent;
         }
 
-        /// <summary>
-        /// Apply the wing's rules of engagement from inside the slot.
-        ///
-        /// Nothing here touches attitude or throttle, so a Defensive wingman can shoot
-        /// without ever compromising station-keeping. Free wingmen may additionally look
-        /// for a target worth breaking formation for; Escort is restricted to air targets
-        /// while Hold stays defensive.
-        /// </summary>
-        private void RunEngagement(Aircraft leader)
-        {
-            if (Time.timeSinceLevelLoad - lastEngageCheck < WingBrain.Interval(EngageInterval))
-                return;
-            lastEngageCheck = Time.timeSinceLevelLoad;
-
-            // What the wingman is doing, not what it was told to do. A recalled wingman is
-            // flying its slot even though its order still reads Engage, and asking the order
-            // was how it came to be granted autonomous-combat weapons from the slot.
-            OrderEngagementAuthority authority = member.EngagementAuthority;
-            if (authority == OrderEngagementAuthority.DefensiveOnly) return;
-
-            // A weapon that passes its own checks would otherwise be fired on every tick,
-            // emptying the aircraft in seconds. The stock AI leaves five seconds between
-            // launches; this is the same idea, exposed so it can be tuned.
-            bool mayFire = Time.timeSinceLevelLoad - lastFiredTime >= WingWeapons.FireInterval(aircraft);
-
-            WingRoe roe = RoeRules.Current;
-
-            WingWeapons.Allow allow = authority == OrderEngagementAuthority.AutonomousCombat
-                ? WingWeapons.Allow.AirAndGround
-                : RoeRules.WeaponsFree(roe, aircraft);
-            bool explicitTargetOrder = authority == OrderEngagementAuthority.ExplicitTarget;
-            bool orderOwnsWeapons = explicitTargetOrder ||
-                                     authority == OrderEngagementAuthority.AutonomousCombat;
-            float range = orderOwnsWeapons
-                ? RoeRules.ExplicitOrderRange()
-                : RoeRules.EngageRange(roe);
-
-            // Low fidelity: a formation wingman flies the slot and defends only. Explicit
-            // attack/engage orders and inbound-missile interception still run; the
-            // opportunity/priority-target hunt - which does the all-aircraft scans - does not.
-            if (!WingBrain.OpportunityFire && !orderOwnsWeapons &&
-                allow != WingWeapons.Allow.MissilesOnly)
-                return;
-
-            // An explicitly assigned target outranks whatever the wingman would pick, and
-            // survives until it dies. Missile defence still takes precedence: a missile in
-            // the air is more urgent than any order.
-            Unit assigned = member.AssignedTarget;
-            if (assigned != null && assigned.disabled)
-            {
-                WingComms.Say(member, WingComms.Call.Splash, assigned.unitName);
-                member.ClearAssignedTarget();
-                assigned = null;
-            }
-
-            // Escort: with no explicit order standing, shoot at what is hunting the leader
-            // rather than at whatever is nearest to us. This is the entire difference
-            // between Escort and Hold - station-keeping and fire gating are untouched, only
-            // the choice of target changes.
-            bool coveringLeader = false;
-            if (assigned == null)
-            {
-                assigned = RoeRules.PriorityTarget(roe, aircraft, leader, range);
-                coveringLeader = assigned != null;
-            }
-
-            bool fired;
-            if (assigned != null && allow != WingWeapons.Allow.MissilesOnly)
-            {
-                fired = mayFire && WingWeapons.EngageSpecific(aircraft, pilot, assigned, range);
-            }
-            else if (allow == WingWeapons.Allow.MissilesOnly)
-            {
-                // Missile defence is time-critical and uses its own short interval.
-                fired = Time.timeSinceLevelLoad - lastFiredTime >= 1f &&
-                        WingWeapons.Engage(aircraft, pilot, allow, range);
-                if (fired) WingComms.Say(member, WingComms.Call.Defending);
-            }
-            else
-            {
-                fired = mayFire &&
-                        (authority == OrderEngagementAuthority.AutonomousCombat ||
-                         RoeRules.MayChooseOpportunityTarget(roe)) &&
-                        WingWeapons.Engage(aircraft, pilot, allow, range);
-            }
-
-            if (fired)
-            {
-                lastFiredTime = Time.timeSinceLevelLoad;
-                if (coveringLeader) WingComms.Say(member, WingComms.Call.Covering);
-            }
-        }
 
         /// <summary>
         /// Splash 'Em flown from the slot: hold station and work every effective store into
@@ -870,6 +771,31 @@ namespace WingCommand
 
             if (WingWeapons.EngageMassed(aircraft, pilot, target, RoeRules.ExplicitOrderRange()))
                 lastFiredTime = Time.timeSinceLevelLoad;
+        }
+
+        /// <summary>
+        /// <summary>
+        /// Hold the jammer on the designated unit while flying the slot.
+        ///
+        /// The pulse only ever protects this aircraft: RadarJammer.Fire calls
+        /// Aircraft.AddECMIntensity on itself, nothing about the target. Actually denying
+        /// that unit's own radar needs Unit.Jam - the call the stock JammingPod weapon makes
+        /// against whatever it is aimed at - which raises jamAccumulation on every Radar
+        /// attached to the target until Radar.IsJammed blinds it. That decays continuously
+        /// in Radar.Update, so it rides the same pulse cadence to stay saturated. Host-only:
+        /// Unit.Jam broadcasts a ClientRpc.
+        /// </summary>
+        private void RunJam()
+        {
+            Unit jamTarget = member.AssignedTarget;
+            if (jamTarget == null) return;
+
+            if (member.Jammer.Pulse(aircraft) && aircraft.IsServer)
+                jamTarget.Jam(new Unit.JamEventArgs
+                {
+                    jammingUnit = aircraft,
+                    jamAmount = WingTuning.JamTargetAmount
+                });
         }
 
         /// <summary>
@@ -941,7 +867,7 @@ namespace WingCommand
                 $"({distance:F0} m out, max speed {mine:F0} vs leader {theirs:F0}) - returning to base");
 
             WingComms.Say(member, WingComms.Call.Unable);
-            member.Apply(WingOrder.ReturnToBase);
+            member.Complete(WingOrder.ReturnToBase);
         }
 
         /// <summary>

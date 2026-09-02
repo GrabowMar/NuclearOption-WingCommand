@@ -14,10 +14,15 @@ namespace WingCommand
     {
         private GlobalPosition anchor;
         private float radius;
-        private float lastEngageCheck;
-        private float lastFiredTime;
-
         private const float EngageInterval = 0.35f;
+
+        /// <summary>
+        /// Shooting while holding. The same routine the formation slot uses - this state
+        /// used to carry its own copy, which had drifted into asking the standing rules of
+        /// engagement directly instead of asking what the wingman was actually doing, and
+        /// so was the one shooting state a defensive behaviour could not silence.
+        /// </summary>
+        private readonly SlotEngagement engagement = new SlotEngagement(EngageInterval);
 
         public OrbitState(WingMember member) : base(member)
         {
@@ -36,8 +41,6 @@ namespace WingCommand
             BeginFlight(pilot);
 
             if (radius <= 0f) radius = WingTuning.OrbitRadius;
-            lastEngageCheck = 0f;
-            lastFiredTime = 0f;
 
             if (Plugin.Settings.VerboseLogging.Value)
                 Plugin.Logger.LogInfo($"[Wing] {aircraft.unitName} orbiting at {radius:F0} m");
@@ -60,45 +63,10 @@ namespace WingCommand
             float phase = member.Slot * 120f;
 
             OrbitSteering.Fly(aircraft, controlInputs, anchor, radius, phase);
-            RunEngagement();
-        }
 
-        /// <summary>Apply the standing ROE while holding instead of orbiting inertly.</summary>
-        private void RunEngagement()
-        {
-            if (Time.timeSinceLevelLoad - lastEngageCheck < WingBrain.Interval(EngageInterval))
-                return;
-            lastEngageCheck = Time.timeSinceLevelLoad;
-
-            WingRoe roe = RoeRules.Current;
-            WingWeapons.Allow allow = RoeRules.WeaponsFree(roe, aircraft);
-            float range = RoeRules.EngageRange(roe);
-            bool fired = false;
-
-            // Performance mode: a holding wingman defends itself but does not run the
-            // all-aircraft opportunity/priority-target scans. Matches FormationFlyState.
-            if (!WingBrain.OpportunityFire && allow != WingWeapons.Allow.MissilesOnly)
-                return;
-
-            if (allow == WingWeapons.Allow.MissilesOnly)
-            {
-                if (Time.timeSinceLevelLoad - lastFiredTime >= 1f)
-                    fired = WingWeapons.Engage(aircraft, pilot, allow, range);
-                if (fired) WingComms.Say(member, WingComms.Call.Defending);
-            }
-            else if (Time.timeSinceLevelLoad - lastFiredTime >= WingWeapons.FireInterval(aircraft))
-            {
-                Unit target = null;
-                Aircraft leader = member.Leader;
-                target = RoeRules.PriorityTarget(roe, aircraft, leader, range);
-
-                fired = target != null
-                    ? WingWeapons.EngageSpecific(aircraft, pilot, target, range)
-                    : RoeRules.MayChooseOpportunityTarget(roe) &&
-                      WingWeapons.Engage(aircraft, pilot, allow, range);
-            }
-
-            if (fired) lastFiredTime = Time.timeSinceLevelLoad;
+            // Nothing here touches attitude or throttle, so holding the ring and shooting
+            // from it never compete.
+            engagement.Run(member, aircraft, pilot, member.Leader);
         }
     }
 }

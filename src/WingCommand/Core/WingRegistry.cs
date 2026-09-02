@@ -44,26 +44,19 @@ namespace WingCommand
 
             if (leader == null)
             {
-                if (previous != null && WingTakeover.Begin(this, previous))
-                    HoldForTakeover();
-                else
+                // Nothing is ordered here any more. With no leader the LeaderLost reflex
+                // holds every member overhead on its own, and — the point of the change —
+                // each one keeps the order the player actually gave it, so when a new seat
+                // is taken the wing resumes rather than being flattened to Formation.
+                if (previous == null || !WingTakeover.Begin(this, previous))
                     DisbandAll("leader gone");
             }
             else if (previous == null && members.Count > 0)
             {
                 // Covers a normal game respawn while the takeover prompt is open: the old
-                // wing follows the newly spawned aircraft and the prompt closes.
+                // wing follows the newly spawned aircraft and the prompt closes. The reflex
+                // stops scoring the moment a leader exists, so no order is needed.
                 WingTakeover.LeaderRestored(leader);
-                OrderAll(WingOrder.Formation);
-            }
-        }
-
-        /// <summary>Keep candidates safely airborne while the player chooses a new seat.</summary>
-        private void HoldForTakeover()
-        {
-            foreach (WingMember member in members)
-            {
-                if (member.Alive) member.Apply(WingOrder.OrbitHere);
             }
         }
 

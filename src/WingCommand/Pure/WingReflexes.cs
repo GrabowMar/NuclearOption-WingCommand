@@ -19,6 +19,7 @@ namespace WingCommand
             // took a shortcut here the public path would be the untested one.
             WingAi.Register(new DeliveryHold());
             WingAi.Register(new MissileBreak());
+            WingAi.Register(new LeaderLost());
             WingAi.Register(new DeckHold());
             WingAi.Register(new LeashRecall());
             WingAi.Register(new StandingTask());
@@ -73,6 +74,47 @@ namespace WingCommand
                 return incumbent && s.SecondsSinceMissileWarning < WingTuning.PanicClearSeconds
                     ? 0.9f
                     : 0f;
+            }
+        }
+
+        /// <summary>
+        /// There is no leader — the player was shot down and is choosing a new seat.
+        ///
+        /// A formation slot is defined relative to a leader, so without one there is nothing
+        /// to fly. This used to be <c>WingRegistry.HoldForTakeover</c>, which walked the wing
+        /// applying an <c>OrbitHere</c> order to every member — overwriting each player-issued
+        /// directive with no record of what it had been, so the only way back was
+        /// <c>OrderAll(Formation)</c> flattening the lot. Exactly the mechanism the deck hold
+        /// was rewritten to remove, one file away and untouched by that rewrite.
+        ///
+        /// Safety rather than Cohesion: an aircraft with nowhere to form on is a hazard to
+        /// itself, and the question outranks any argument about where the slot should be.
+        /// </summary>
+        private sealed class LeaderLost : IWingReflex
+        {
+            public string Id => "wingcommand.leader-lost";
+            public WingReflexBand Band => WingReflexBand.Safety;
+            public string BehaviourId => WingBehaviours.DeckHold;
+            public float MinimumSeconds => 0f;
+            public bool RequiresSmartMode => false;
+
+            public float Score(in WingSituation s, bool incumbent)
+            {
+                if (s.LeaderPresent) return 0f;
+
+                // An order that goes somewhere definite of its own accord does not need a
+                // leader to carry out, and the player gave it before they lost the seat.
+                switch (s.Order)
+                {
+                    case WingOrder.ReturnToBase:
+                    case WingOrder.LandHere:
+                    case WingOrder.DeliverCargo:
+                    case WingOrder.MoveToPoint:
+                    case WingOrder.OrbitHere:
+                        return 0f;
+                    default:
+                        return 1f;
+                }
             }
         }
 

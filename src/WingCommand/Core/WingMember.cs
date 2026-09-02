@@ -202,8 +202,16 @@ namespace WingCommand
         /// <summary>Finish the current task and fall back to holding the slot.</summary>
         internal void Complete(WingOrder order) => Complete(WingDirective.Simple(order));
 
+        /// <summary>
+        /// Record a new standing intent, and do nothing at all if it is the intent already
+        /// standing. The serial is what tells <see cref="Resolve"/> to re-enter the Task
+        /// behaviour, so bumping it for an identical order is what made a re-issued Form Up
+        /// restart the formation state and fire the rejoin boost.
+        /// </summary>
         private void SetDirective(WingDirective directive)
         {
+            if (Directive.SameIntentAs(in directive)) return;
+
             Directive = directive;
             directiveSerial++;
             TacticalMapOverlay.Invalidate();
@@ -264,6 +272,18 @@ namespace WingCommand
                                     enteredSerial != directiveSerial;
 
             if (!behaviourChanged && !taskNeedsReentry) return;
+
+            // Coming out of a missile break. Handled here rather than in the defensive
+            // state's LeaveState for two reasons: LeaveState ran one step too late, after
+            // EnterTask had already read the stale directive and entered it, so an
+            // interrupted manoeuvre was started for a tick - radio call and all - before
+            // being pulled back; and LeaveState also fires on teardown, so a wingman being
+            // released or sent home announced itself clear of a missile on the way out.
+            if (behaviourChanged && resolution.BehaviourId == WingBehaviours.MissileBreak)
+            {
+                WingComms.Say(this, WingComms.Call.DefensiveClear);
+                RetireStaleOrder();
+            }
 
             if (behaviourChanged) behaviourEnteredAt = now;
             resolution = next;
@@ -374,8 +394,7 @@ namespace WingCommand
             switch (behaviourId)
             {
                 case WingBehaviours.Held:
-                    // The stock taxi/launch AI owns this airframe. Touching the controls is
-                    // the whole thing we must not do.
+                    EnterHeld();
                     return;
 
                 case WingBehaviours.MissileBreak:
@@ -410,9 +429,32 @@ namespace WingCommand
         }
 
         /// <summary>
-        /// Orbit overhead while the leader is on the runway. The standing directive is left
-        /// alone - it used to be overwritten with an OrbitHere order, which is why the panel
-        /// showed an order the player had never given.
+        /// Give the airframe back to whatever the game would be flying.
+        ///
+        /// The contract for <see cref="WingBehaviours.Held"/> is "hands off entirely", and
+        /// this used to implement it by returning without doing anything — correct only
+        /// because the one reflex producing it is the delivery lockout, whose aircraft was
+        /// still under the stock taxi AI and had never been taken over in the first place.
+        /// Any other reflex resolving to Held got the mod's own formation or attack state
+        /// still flying the aircraft while the log said it had been released; a third-party
+        /// one, which the catalog explicitly invites, would have hit exactly that.
+        ///
+        /// A delivery still on the apron is left strictly alone — switching a parked pilot
+        /// into a combat state is the one thing worse than not handing off.
+        /// </summary>
+        private void EnterHeld()
+        {
+            if (deliveryPending) return;
+
+            TacticalCoordinator.Release(Aircraft);
+            SwitchToCombat();
+        }
+
+        /// <summary>
+        /// Orbit overhead while the leader is on the runway, or while there is no leader to
+        /// form on at all. The standing directive is left alone - it used to be overwritten
+        /// with an OrbitHere order, which is why the panel showed an order the player had
+        /// never given.
         /// </summary>
         private void EnterDeckHold()
         {
@@ -550,7 +592,11 @@ namespace WingCommand
             // aboard.
             WingCommandManager.Instance?.Toast(
                 Name + " needs a drop point - it has no standard supply route");
-            Apply(WingOrder.Formation);
+
+            // Complete, not Apply: this runs inside EnterTask, which runs inside
+            // EnterBehaviour, which runs inside Resolve. Apply would re-enter Resolve from
+            // the middle of itself.
+            Complete(WingOrder.Formation);
         }
 
         private void EnterLanding(WingDirective directive)
@@ -564,7 +610,8 @@ namespace WingCommand
         {
             if (!directive.HasPoint)
             {
-                Apply(WingOrder.Formation);
+                // See EnterCargoRun: Apply here would recurse into Resolve.
+                Complete(WingOrder.Formation);
                 return;
             }
 
@@ -937,7 +984,13 @@ namespace WingCommand
                 WingComms.Say(this, WingComms.Call.FireForEffect, target.unitName);
         }
 
-        public void ClearAssignedTarget() => Directive = Directive.WithoutTarget();
+        /// <summary>
+        /// Drop the designated unit, keeping the order. Goes through <see cref="SetDirective"/>
+        /// so the serial bumps and the map is invalidated — assigning <c>Directive</c>
+        /// directly left the tactical map drawing an attack line to a dead unit, and left a
+        /// Task behaviour unaware that its payload had changed.
+        /// </summary>
+        public void ClearAssignedTarget() => SetDirective(Directive.WithoutTarget());
 
         /// <summary>Issue a tactical-map move, replacing or appending to this member's route.</summary>
         public void IssueWaypoint(GlobalPosition point, bool append)

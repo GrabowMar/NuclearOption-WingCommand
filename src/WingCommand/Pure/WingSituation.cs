@@ -67,6 +67,18 @@ namespace WingCommand
         /// </summary>
         public readonly float SecondsInBehaviour;
 
+        /// <summary>
+        /// A benign situation: airborne, leader present, nothing shooting at us.
+        ///
+        /// Explicit, and not merely a consequence of the optional parameters below. A
+        /// constructor whose arguments are all optional is <b>not</b> a parameterless one:
+        /// <c>new WingSituation()</c> zero-initialises the struct and skips every default,
+        /// which quietly produced a wingman with no leader, no fuel and no altitude. That is
+        /// the opposite of benign, and it is exactly the shape a test writes when it means
+        /// "nothing interesting is happening".
+        /// </summary>
+        public WingSituation() : this(order: WingOrder.Formation) { }
+
         public WingSituation(
             WingOrder order = WingOrder.Formation,
             WingRoe roe = WingRoe.Hold,

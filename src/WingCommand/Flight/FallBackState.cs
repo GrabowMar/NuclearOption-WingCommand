@@ -104,7 +104,7 @@ namespace WingCommand
 
                 case Phase.Hold:
                     // Advance switches state immediately; this is only a defensive guard.
-                    member.Apply(WingOrder.Formation);
+                    member.Complete(WingOrder.Formation);
                     break;
             }
         }
@@ -118,7 +118,7 @@ namespace WingCommand
             {
                 StopFlares();
                 WingComms.Say(member, WingComms.Call.Rejoining);
-                member.Apply(WingOrder.Formation);
+                member.Complete(WingOrder.Formation);
             }
         }
 

@@ -63,7 +63,6 @@ namespace WingCommand
         private float hold;
         private float lastRelease;
         private readonly CargoProgressTracker cargoProgress = new CargoProgressTracker();
-        private bool handedOff;
 
         public CargoRunState(WingMember member) : base(member)
         {
@@ -92,7 +91,6 @@ namespace WingCommand
             hold = Mathf.Max(TransitAltitude, aircraft.radarAlt);
             lastRelease = 0f;
             cargoProgress.Reset(member.CargoAmmo, Time.timeSinceLevelLoad);
-            handedOff = false;
 
             WingComms.Say(member, WingComms.Call.Delivering);
 
@@ -111,7 +109,12 @@ namespace WingCommand
 
         public override void FixedUpdateState(Pilot pilot)
         {
-            if (aircraft == null || aircraft.disabled || handedOff) return;
+            if (aircraft == null || aircraft.disabled) return;
+
+            // The drop point is gone - CheckStalled gave it up and the arbiter is about to
+            // hand this aircraft to the stock supply route on the next pass. Nothing left
+            // here to fly, and repeating the stall report while we wait is just noise.
+            if (!member.Directive.HasPoint) return;
 
             bool rotary = WingRegistry.IsRotary(aircraft);
 
@@ -219,8 +222,6 @@ namespace WingCommand
             cargoProgress.Observe(member.CargoAmmo, Time.timeSinceLevelLoad);
             if (!cargoProgress.IsStalled(Time.timeSinceLevelLoad, DeliverTimeout)) return;
 
-            handedOff = true;
-
             if (pilot.AIHeloTransportState != null)
             {
                 WingCommandManager.Instance?.Toast(
@@ -229,14 +230,24 @@ namespace WingCommand
                 Plugin.Logger.LogWarning(
                     "[Cargo] " + aircraft.unitName + " released nothing at the drop point; " +
                     "handing over to the stock transport state");
-                pilot.SwitchState(pilot.AIHeloTransportState);
+
+                // Give up the drop point rather than switching state here. A cargo order
+                // without one is already defined as "go and find somewhere", and
+                // WingMember.EnterCargoRun already routes it to the stock transport state -
+                // so the hand-off travels the normal path and the arbiter knows about it.
+                //
+                // Switching directly was the last unarbitrated SwitchState in the mod: the
+                // resolution still read "flying the standing task" for the rest of the
+                // sortie, and a later missile break resolved back to a cargo run that
+                // restarted the drop route which had just failed.
+                member.Complete(WingDirective.Simple(WingOrder.DeliverCargo));
                 return;
             }
 
             WingComms.Say(member, WingComms.Call.NoDropOff);
             WingCommandManager.Instance?.Toast(
                 member.Name + " could not release its cargo at that point");
-            member.Apply(WingOrder.Formation);
+            member.Complete(WingOrder.Formation);
         }
 
         // --------------------------------------------------------------------- egress

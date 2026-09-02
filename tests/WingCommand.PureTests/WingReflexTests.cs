@@ -158,11 +158,45 @@ namespace WingCommand.PureTests
             Assert.Equal(WingBehaviours.Task, Behaviour(s));
         }
 
+        // ------------------------------------------------------------------ leader gone
+
         [Fact]
-        public void TheDeckHoldNeedsALeaderToHoldOver()
+        public void WithNoLeaderTheWingHoldsOverheadRatherThanFlyingASlotOnNobody()
         {
+            WingSituation s = new WingSituation(leaderPresent: false);
+            Assert.Equal("wingcommand.leader-lost", ReflexOf(s));
+            Assert.Equal(WingBehaviours.DeckHold, Behaviour(s));
+        }
+
+        [Fact]
+        public void TheDeckHoldDefersToTheLeaderLostReflexWhenThereIsNoLeaderAtAll()
+        {
+            // Both want the same behaviour; the point is which reason is recorded, and that
+            // "on the runway" cannot be the answer when there is no runway and no leader.
             WingSituation s = new WingSituation(leaderOnDeck: true, leaderPresent: false);
+            Assert.Equal("wingcommand.leader-lost", ReflexOf(s));
+        }
+
+        [Theory]
+        [InlineData(WingOrder.ReturnToBase)]
+        [InlineData(WingOrder.LandHere)]
+        [InlineData(WingOrder.MoveToPoint)]
+        [InlineData(WingOrder.DeliverCargo)]
+        [InlineData(WingOrder.OrbitHere)]
+        public void AnOrderThatNeedsNoLeaderIsFlownWithoutOne(WingOrder order)
+        {
+            // The player gave these before they lost the seat, and none of them is defined
+            // relative to a leader. Holding overhead instead would strand a wingman that was
+            // already on its way home.
+            WingSituation s = new WingSituation(order: order, leaderPresent: false);
             Assert.Equal(WingBehaviours.Task, Behaviour(s));
+        }
+
+        [Fact]
+        public void AMissileStillOutranksHavingNoLeader()
+        {
+            WingSituation s = new WingSituation(leaderPresent: false, missileWarned: true);
+            Assert.Equal(WingBehaviours.MissileBreak, Behaviour(s));
         }
 
         // -------------------------------------------------------------------- the leash
