@@ -70,6 +70,42 @@ namespace WingCommand
         AutonomousCombat,
     }
 
+    /// <summary>
+    /// Facts about an order that more than one system needs to agree on.
+    ///
+    /// <see cref="SendsWingmanHunting"/> lived in two places that disagreed: the leash
+    /// reflex leashed Engage and Attack, while <c>WingOrderCatalog.IsTargetOrder</c> — whose
+    /// doc still described the leash it no longer drove — answered Attack alone. Neither was
+    /// obviously wrong from where it sat, which is the usual way two definitions of one idea
+    /// survive next to each other.
+    /// </summary>
+    internal static class WingOrderRules
+    {
+        /// <summary>
+        /// True when the order sends a wingman away from the formation to prosecute
+        /// something, and therefore needs a tether.
+        ///
+        /// Jam Target and Splash 'Em are excluded deliberately: both carry a designated
+        /// target, but both are flown from the slot, so neither can overshoot a leash in the
+        /// first place.
+        /// </summary>
+        public static bool SendsWingmanHunting(WingOrder order) =>
+            order == WingOrder.Engage || order == WingOrder.Attack;
+
+        /// <summary>
+        /// True when the directive holds a designated unit at all, weapons or not.
+        ///
+        /// Deliberately next to <see cref="SendsWingmanHunting"/>, because the two are easy
+        /// to mistake for one another and the difference matters: Splash 'Em and Jam Target
+        /// both carry a target and are answered yes here, but are flown from the slot and
+        /// are answered no there.
+        /// </summary>
+        public static bool CarriesTarget(WingOrder order) =>
+            order == WingOrder.Attack ||
+            order == WingOrder.FireForEffect ||
+            order == WingOrder.JamTarget;
+    }
+
     /// <summary>Pure precedence table shared by runtime code and tests.</summary>
     internal static class OrderRoePolicy
     {

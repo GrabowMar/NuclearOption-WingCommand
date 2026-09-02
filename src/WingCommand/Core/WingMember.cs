@@ -674,13 +674,13 @@ namespace WingCommand
         /// from the constructor.
         /// </summary>
         internal PilotBaseState CachedBehaviour(string behaviourId,
-                                                Func<WingMember, PilotBaseState> factory)
+                                                Func<Aircraft, PilotBaseState> factory)
         {
             extraBehaviours ??= new Dictionary<string, PilotBaseState>(StringComparer.Ordinal);
 
             if (!extraBehaviours.TryGetValue(behaviourId, out PilotBaseState state))
             {
-                state = factory(this);
+                state = factory(Aircraft);
                 extraBehaviours[behaviourId] = state;
             }
             return state;
@@ -1099,7 +1099,7 @@ namespace WingCommand
             WingPilotRoster.NoteSurvivedEngagement(Aircraft);
 
             bool stale = Directive.Order == WingOrder.Maneuver ||
-                         (WingOrderCatalog.CarriesTarget(Directive.Order) &&
+                         (WingOrderRules.CarriesTarget(Directive.Order) &&
                           (Directive.Target == null || Directive.Target.disabled));
 
             if (stale) Complete(WingOrder.Formation);

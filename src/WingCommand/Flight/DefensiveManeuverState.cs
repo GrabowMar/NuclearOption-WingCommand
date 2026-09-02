@@ -6,9 +6,10 @@ namespace WingCommand
     /// Temporary self-preservation interrupt for a wingman under missile attack.
     ///
     /// This state does not replace the standing order. Formation, attack, orbit, cargo and
-    /// RTB are merely paused, then resumed by <see cref="WingMember.ResumeAfterPanic"/> once
-    /// the warning has stayed clear. That distinction is what makes defensive behavior feel
-    /// reactive instead of making the AI forget what the player told it to do.
+    /// RTB are merely paused: the missile-break reflex outscores everything while a missile
+    /// is airborne, and the arbiter resolves straight back to the standing directive once it
+    /// stops. That distinction is what makes defensive behaviour feel reactive instead of
+    /// making the AI forget what the player told it to do.
     /// </summary>
     internal sealed class DefensiveManeuverState : WingPilotState
     {

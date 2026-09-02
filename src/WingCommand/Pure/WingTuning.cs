@@ -205,6 +205,15 @@ namespace WingCommand
 
         // ------------------------------------------------------------------ engagement
 
+        /// <summary>
+        /// Reactive spacing multiplier while the widen behaviour is active. Lived in
+        /// WingBrain, which gates the behaviour but has no business holding its number.
+        /// </summary>
+        public const float ThreatWidenScale = 1.45f;
+
+        /// <summary>Saturation penalty per extra committed attacker on one target.</summary>
+        public const float TargetSaturationPenalty = 1.5f;
+
         /// <summary>Seconds a missile warning must stay clear before a defensive wingman resumes its order.</summary>
         public const float PanicClearSeconds = 2.5f;
 

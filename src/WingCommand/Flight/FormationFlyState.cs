@@ -696,7 +696,7 @@ namespace WingCommand
 
             // Driven by the fidelity slider now: the reactive widen is a smart-formation
             // behaviour, and a scale of 1 is the off switch.
-            float scale = WingBrain.SmartFormation ? WingBrain.ThreatWidenScale : 1f;
+            float scale = WingBrain.SmartFormation ? WingTuning.ThreatWidenScale : 1f;
             float target = 1f;
 
             if (scale > 1.001f)

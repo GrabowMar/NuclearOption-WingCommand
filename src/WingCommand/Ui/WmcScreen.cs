@@ -1199,8 +1199,10 @@ namespace WingCommand
         /// </summary>
         private static string ShortOrder(WingMember m)
         {
-            if (m.DeliveryPending) return "DEPT";
-            if (m.IsPanicking) return "DEFENSIVE";
+            // What it is actually doing outranks what it was told to do. Null means it is
+            // flying the order, so fall through to naming that.
+            string behaviour = WingBehaviourLabels.Label(m.Behaviour.BehaviourId);
+            if (behaviour != null) return behaviour;
 
             // Splash 'Em keeps its own name rather than borrowing the target's. The
             // column is too narrow for both, and which of the two target orders a wingman

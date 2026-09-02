@@ -16,17 +16,22 @@ namespace WingCommand
     /// new reflex almost always needs to ship the behaviour it selects too, and without a
     /// seam here that reflex could only ever pick from behaviours we happened to think of.
     /// </summary>
-    internal static class WingBehaviourCatalog
+    public static class WingBehaviourCatalog
     {
-        private static readonly Dictionary<string, Func<WingMember, PilotBaseState>> factories =
-            new Dictionary<string, Func<WingMember, PilotBaseState>>(StringComparer.Ordinal);
+        private static readonly Dictionary<string, Func<Aircraft, PilotBaseState>> factories =
+            new Dictionary<string, Func<Aircraft, PilotBaseState>>(StringComparer.Ordinal);
 
         /// <summary>
-        /// Register a behaviour. The factory is called once per wingman, the first time that
-        /// wingman flies the behaviour, and the state is cached from then on - the same
-        /// lifetime the built-in states get.
+        /// Register a behaviour. The factory is handed the aircraft and called once per
+        /// wingman, the first time that wingman flies the behaviour; the state is cached
+        /// from then on, the same lifetime the built-in states get.
+        ///
+        /// It takes an <c>Aircraft</c> rather than the mod's own wingman record, which stays
+        /// internal. A behaviour is a way of flying an aeroplane and the aeroplane is what it
+        /// needs; deciding *when* to fly it belongs to a reflex, and a reflex is handed the
+        /// whole situation.
         /// </summary>
-        public static void Register(string behaviourId, Func<WingMember, PilotBaseState> factory)
+        public static void Register(string behaviourId, Func<Aircraft, PilotBaseState> factory)
         {
             if (string.IsNullOrEmpty(behaviourId))
                 throw new ArgumentException("A behaviour needs an id.", nameof(behaviourId));
@@ -43,10 +48,10 @@ namespace WingCommand
         /// under that id, which lets the caller fall back to the standing order rather than
         /// leaving the aircraft flying whatever it was before.
         /// </summary>
-        public static bool TryEnter(WingMember member, string behaviourId)
+        internal static bool TryEnter(WingMember member, string behaviourId)
         {
             if (member == null || string.IsNullOrEmpty(behaviourId)) return false;
-            if (!factories.TryGetValue(behaviourId, out Func<WingMember, PilotBaseState> factory))
+            if (!factories.TryGetValue(behaviourId, out Func<Aircraft, PilotBaseState> factory))
                 return false;
 
             try
@@ -69,6 +74,7 @@ namespace WingCommand
             }
         }
 
-        internal static void Clear() => factories.Clear();
+        /// <summary>Drop every registration. Called at mission start.</summary>
+        public static void Clear() => factories.Clear();
     }
 }

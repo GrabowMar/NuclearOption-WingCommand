@@ -207,7 +207,7 @@ namespace WingCommand
                                   + Mathf.Max(tracking.attackers, 0);
                     int excess = Mathf.Max(committed - capacity + 1, 0);
 
-                    float pressure = 1f + excess * WingBrain.TargetSaturationPenalty;
+                    float pressure = 1f + excess * WingTuning.TargetSaturationPenalty;
                     score /= pressure;
                     if (score <= bestScore) continue;
 

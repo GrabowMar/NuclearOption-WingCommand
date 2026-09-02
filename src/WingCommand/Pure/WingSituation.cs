@@ -113,19 +113,5 @@ namespace WingCommand
             SecondsInBehaviour = secondsInBehaviour;
         }
 
-        /// <summary>
-        /// How far past the leash this wingman is, as a fraction of the leash itself: 0 at
-        /// the boundary, 1 at twice the leash. The shape the cohesion reflex scores on, kept
-        /// here so a third-party reflex measuring the same thing gets the same number.
-        /// </summary>
-        public float LeashOvershoot
-        {
-            get
-            {
-                if (!LeaderPresent || LeashRadius <= 0f || LeaderDistance < 0f) return 0f;
-                float over = (LeaderDistance - LeashRadius) / LeashRadius;
-                return over < 0f ? 0f : over > 1f ? 1f : over;
-            }
-        }
     }
 }

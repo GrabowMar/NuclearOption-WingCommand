@@ -117,7 +117,11 @@ namespace WingCommand
 
                 // A reflex disabled by a fault in the last mission gets another chance in
                 // this one; a genuinely broken one faults again immediately at no real cost.
+                // Behaviour factories are dropped outright: they close over nothing that
+                // survives a mission, and leaving them registered leaked a previous
+                // mission's states into this one.
                 WingAi.ResetFaults();
+                WingBehaviourCatalog.Clear();
                 Plugin.Logger.LogInfo("[WingBrain] mission start - " + WingBrain.Summary());
             }
             resetForNonPlayableState = false;

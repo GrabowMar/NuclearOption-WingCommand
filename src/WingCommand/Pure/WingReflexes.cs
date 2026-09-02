@@ -30,7 +30,13 @@ namespace WingCommand
         ///
         /// Scores above the missile break, which is not a tie-break accident: this aircraft
         /// is not ours to fly yet, and commandeering a parked one to make it dodge would
-        /// drive it off the apron. Replaces the <c>deliveryPending</c> lockout.
+        /// drive it off the apron.
+        ///
+        /// It does <b>not</b> replace the <c>deliveryPending</c> lockout, which is still
+        /// enforced in <c>Apply</c>, <c>Complete</c>, <c>IsCommandable</c> and the dispatcher
+        /// — and should be. This reflex stops the arbiter flying the aircraft; those stop it
+        /// being given orders in the first place, which is a different question with a worse
+        /// failure mode.
         /// </summary>
         private sealed class DeliveryHold : IWingReflex
         {
@@ -47,8 +53,11 @@ namespace WingCommand
         /// <summary>
         /// A missile is in the air and this aircraft is the one it is chasing.
         ///
-        /// Replaces <c>IsPanicking</c> — a boolean four other checks had to remember to
-        /// guard on, where forgetting one silently disabled missile defence. As a Survival
+        /// <c>IsPanicking</c> used to be a stored boolean that four unrelated checks had to
+        /// remember to guard on, where forgetting one silently disabled missile defence. It
+        /// still exists and callers still branch on it, but it is <i>derived</i> from this
+        /// reflex winning rather than set by hand, so it can no longer disagree with what
+        /// the aircraft is doing. As a Survival
         /// reflex it cannot be outranked by anything a future release or another plugin
         /// adds, because bands are compared before scores.
         /// </summary>
@@ -166,7 +175,7 @@ namespace WingCommand
             public float Score(in WingSituation s, bool incumbent)
             {
                 if (!s.LeaderPresent || s.LeashRadius <= 0f || s.LeaderDistance < 0f) return 0f;
-                if (!Leashed(s.Order)) return 0f;
+                if (!WingOrderRules.SendsWingmanHunting(s.Order)) return 0f;
 
                 // Two thresholds, declared rather than tracked: grab control at the leash,
                 // give it back only well inside. Asking whether we are the incumbent is what
@@ -182,14 +191,6 @@ namespace WingCommand
                 float over = (s.LeaderDistance - threshold) / s.LeashRadius;
                 return over < 0.02f ? 0.02f : over > 1f ? 1f : over;
             }
-
-            /// <summary>
-            /// Orders that send a wingman out hunting, and therefore need a tether. Splash
-            /// 'Em and Jam are excluded deliberately: both carry a target but are flown from
-            /// the slot, so they can never overshoot in the first place.
-            /// </summary>
-            private static bool Leashed(WingOrder order) =>
-                order == WingOrder.Engage || order == WingOrder.Attack;
         }
 
         /// <summary>

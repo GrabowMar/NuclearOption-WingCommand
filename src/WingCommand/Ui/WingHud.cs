@@ -507,8 +507,10 @@ namespace WingCommand
 
             private static string OrderCode(WingMember member)
             {
-                if (member.DeliveryPending) return "DEPT";
-                if (member.IsPanicking) return "DEF";
+                // What it is actually doing outranks what it was told to do. Null means it
+                // is flying the order, so the order is what to name.
+                string behaviour = WingBehaviourLabels.ShortCode(member.Behaviour.BehaviourId);
+                if (behaviour != null) return behaviour;
 
                 switch (member.Order)
                 {
