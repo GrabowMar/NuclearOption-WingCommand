@@ -20,7 +20,9 @@ namespace WingCommand
 
         private readonly RadarJammerPulser jammer = new RadarJammerPulser();
         private Missile threat;
-        private string countermeasureType;
+
+        /// <summary>Station holding the expendable that answers this threat, or -1.</summary>
+        private int expendableIndex = -1;
         private float nextThreatRefresh;
         private bool countermeasuresActive;
 
@@ -36,7 +38,7 @@ namespace WingCommand
 
             nextThreatRefresh = 0f;
             threat = null;
-            countermeasureType = string.Empty;
+            expendableIndex = -1;
             jammer.Reset();
             RefreshThreat(force: true);
 
@@ -107,9 +109,24 @@ namespace WingCommand
 
             StopCountermeasures();
             threat = nearest;
-            countermeasureType = aircraft.countermeasureManager != null
-                ? aircraft.countermeasureManager.ChooseCountermeasure(threat)
-                : string.Empty;
+            expendableIndex = -1;
+
+            // Resolve the dispenser ourselves rather than asking ChooseCountermeasure.
+            // ChaffEjector and RadarJammer declare the same { "ARH", "SARH" } threat types,
+            // and the game picks the first match from a list sorted by display name - so on
+            // an aircraft carrying both, whether a radar missile gets chaff or a held
+            // trigger on the jammer came down to alphabetical order. See
+            // CountermeasureAccess.TryFindExpendable.
+            if (aircraft.countermeasureManager == null) return;
+
+            if (!CountermeasureAccess.TryFindExpendable(
+                    aircraft.countermeasureManager, threat.GetSeekerType(),
+                    out expendableIndex, out string reason) &&
+                !string.IsNullOrEmpty(reason))
+            {
+                Plugin.Logger.LogWarning(
+                    "[CM] Could not resolve a dispenser on " + aircraft.unitName + ": " + reason);
+            }
         }
 
         private void FlyDefensive()
@@ -155,11 +172,16 @@ namespace WingCommand
 
             controlInputs.throttle = infrared ? 0.15f : 1f;
 
-            // Dispense continuously only inside the useful window. ChooseCountermeasure has
-            // already selected flare/chaff for the seeker; an empty type means this airframe
-            // has no matching station and avoids an invalid activeIndex.
-            bool dispense = !string.IsNullOrEmpty(countermeasureType) &&
-                            (infrared || impactTime < 8f);
+            // Dispense only inside the useful window. The ejectors rate-limit themselves
+            // (ChaffEjector.Fire refuses inside its own ejectionInterval), so holding the
+            // trigger across the window paces the load rather than dumping it.
+            //
+            // The radar window was eight seconds of predicted time-to-impact, computed as
+            // range over closing rate. An ARH detected at thirty kilometres sits far outside
+            // that for most of its flight and only starts getting chaff once the notch is
+            // already committed, which is the wrong half of the engagement.
+            bool dispense = expendableIndex >= 0 &&
+                            (infrared || impactTime < WingTuning.ChaffWindowSeconds);
             SetCountermeasures(dispense);
 
             // RadarJammer.Fire lasts one tenth of a second. Re-deploy at a fixed cadence
@@ -180,7 +202,7 @@ namespace WingCommand
                     ignoreCollisions: false,
                     runwayAlign: false,
                     effort: 2f,
-                    bankAllowed: FixedWingFormation.MaxSafeBank,
+                    bankAllowed: WingTuning.DefensiveBankAllowed,
                     followTerrain: radar,
                     altitudeHold: AutopilotMath.CruiseHold(aircraft,
                         radar ? Mathf.Max(aircraft.maxRadius, 120f) : aircraft.radarAlt),
@@ -198,12 +220,19 @@ namespace WingCommand
             }
         }
 
+        /// <summary>
+        /// Hold or release the dispense trigger on the station we resolved, naming the index
+        /// explicitly rather than reusing whatever <c>activeIndex</c> happens to be. The
+        /// jammer pulser borrows that field and restores it, so reading it here was reading
+        /// a value another system owns.
+        /// </summary>
         private void SetCountermeasures(bool active)
         {
             if (aircraft == null || aircraft.countermeasureManager == null) return;
             if (active == countermeasuresActive) return;
+            if (active && (expendableIndex < 0 || expendableIndex > byte.MaxValue)) return;
 
-            aircraft.Countermeasures(active, aircraft.countermeasureManager.activeIndex);
+            aircraft.Countermeasures(active, (byte)Mathf.Max(expendableIndex, 0));
             countermeasuresActive = active;
         }
 
@@ -213,7 +242,7 @@ namespace WingCommand
                 return;
 
             if (aircraft.countermeasureTrigger)
-                aircraft.Countermeasures(false, aircraft.countermeasureManager.activeIndex);
+                aircraft.Countermeasures(false, (byte)Mathf.Max(expendableIndex, 0));
             countermeasuresActive = false;
         }
     }

@@ -222,6 +222,28 @@ namespace WingCommand
         public const float PanicFloorAlt = 5f;
 
         /// <summary>
+        /// Predicted seconds to impact inside which a radar missile gets chaff.
+        ///
+        /// Was eight, which an ARH detected at thirty kilometres does not reach until the
+        /// notch is already committed — so the chaff went out after the part of the
+        /// engagement it was supposed to help with. The ejector rate-limits itself, so a
+        /// wider window paces the load rather than dumping it.
+        /// </summary>
+        public const float ChaffWindowSeconds = 12f;
+
+        /// <summary>
+        /// Bank authority granted while running from a missile.
+        ///
+        /// Deliberately short of <see cref="FixedWingFormation.MaxSafeBank"/>. A beam or
+        /// notch settles with the commanded direction parallel to the velocity vector by
+        /// construction, which is the degenerate case for the autopilot's roll solver — the
+        /// cross product collapses and the signed angle it derives from it is noise. The
+        /// bank allowance is the only thing that bounds the resulting flailing, so granting
+        /// it 88 degrees granted it nothing.
+        /// </summary>
+        public const float DefensiveBankAllowed = 70f;
+
+        /// <summary>
         /// Fraction of <see cref="LeashRadius"/> a recalled wingman must get back inside
         /// before it is turned loose again.
         ///
