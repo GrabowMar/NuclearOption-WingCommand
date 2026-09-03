@@ -24,8 +24,15 @@ namespace WingCommand
     /// </summary>
     public static class WingHost
     {
-        /// <summary>Bumped when the shape of <see cref="WingHostProfile"/> changes incompatibly.</summary>
-        public const int ApiVersion = 1;
+        /// <summary>
+        /// Bumped when the shape of <see cref="WingHostProfile"/> changes incompatibly.
+        ///
+        /// A property rather than a const, and that is the entire point of it: a const is
+        /// baked into the calling assembly at compile time, so a plugin checking one would
+        /// be comparing its own build-time copy against itself and could never detect a
+        /// mismatch. This is read from the Wing Command that is actually loaded.
+        /// </summary>
+        public static int ApiVersion => 1;
 
         private static WingHostProfile current;
         private static int revision;
