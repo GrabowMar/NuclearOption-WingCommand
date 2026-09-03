@@ -123,9 +123,16 @@ namespace WingCommand
         /// the hangar and is under its own control", and a hull that is alive already is -
         /// waiting for it to reach 25 metres would leave a delivered ship permanently
         /// pending and therefore permanently uncommandable.
+        ///
+        /// Rotary aircraft use a higher threshold. 25 m is still inside ground effect for
+        /// a helicopter that has just left the apron; if the player is hovering for an air
+        /// assault at that moment the arbiter immediately resolves to deck-hold orbit, which
+        /// a helicopter doing 4-6 m/s cannot sustain. 80 m is enough free air that the
+        /// stock launch AI has already accelerated it into normal cruise.
         /// </summary>
         public bool IsAirborne => Aircraft != null &&
-                                  (Aircraft.radarAlt >= 25f || (IsSurface && Alive));
+                                  (IsSurface && Alive ||
+                                   Aircraft.radarAlt >= (WingRegistry.IsRotary(Aircraft) ? 80f : 25f));
 
         /// <summary>True when player commands may be applied to this member.</summary>
         public bool IsCommandable => Alive && !deliveryPending;

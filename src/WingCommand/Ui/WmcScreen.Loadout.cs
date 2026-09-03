@@ -955,7 +955,7 @@ namespace WingCommand
                               : def.mapIcon != null ? def.mapIcon
                               : IconFactory.Get("airframe");
                 icon.sprite = sprite;
-                icon.color = selected ? Color.white : new Color(0.65f, 0.82f, 0.78f, 0.75f);
+                icon.color = selected ? Color.white : Dim();
 
                 string codeStr = !string.IsNullOrEmpty(def.code) ? def.code : def.unitName;
                 code.text = UiTheme.Truncate(codeStr, 7);

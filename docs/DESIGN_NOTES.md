@@ -96,6 +96,15 @@ Decisions that cost an argument. Kept so they are not made again the other way.
 - **Active controls use the stock accent colour; only unavailable ones dim.** Every
   disabled control puts its reason on the status line. The map outranks hints there.
 
+## Boscali Summer coexistence
+
+No compile-time or BepInEx hard dependency. Shared `NOAvionics` protocol (source-linked
+into both plugins) claims the WMC bezel by name, and an exclusive map picker stops a
+Boscali support arm from sharing a right-click with a wing waypoint. Roster persistent-IDs
+are published on a presence board so Boscali doctrine cannot retask wingmen. This mod
+stays complete when Boscali is absent. Maintenance rules:
+`C:\Users\marci\dev\nomodkit\shared\avionics\README.md`.
+
 ## Not in scope (and why the seams exist)
 
 Multiple player flights / squadron hierarchy · patrol polygons or an RTS mission planner ·

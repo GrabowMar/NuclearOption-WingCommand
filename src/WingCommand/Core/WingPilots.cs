@@ -56,9 +56,6 @@ namespace WingCommand
         public bool Lost;
 
         public WingRank Rank => WingPilotRoster.RankFor(Xp);
-
-        /// <summary>XP still needed for the next rank, or zero at the top.</summary>
-        public int ToNextRank => WingPilotRoster.ToNextRank(Xp);
     }
 
     /// <summary>
@@ -330,13 +327,6 @@ namespace WingCommand
                 if (xp >= XpForRank(rank)) best = rank;
             }
             return best;
-        }
-
-        public static int ToNextRank(int xp)
-        {
-            WingRank rank = RankFor(xp);
-            if (rank >= TopRank) return 0;
-            return Mathf.Max(0, XpForRank(rank + 1) - xp);
         }
 
         public static string RankName(WingRank rank)

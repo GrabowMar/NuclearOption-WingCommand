@@ -294,48 +294,17 @@ namespace WingCommand
         // ----------------------------------------------------------------- HUD surfaces
 
         /// <summary>
-        /// The in-cockpit HUD draws in IMGUI and cannot reach the panel's widgets, so its
-        /// grounds live in the palette rather than in a private block of its own. They are
-        /// held to the same floor: the radial and the toast are read at a glance, over
-        /// whatever the cockpit happens to be pointing at.
+        /// The toast draws in IMGUI and cannot reach the panel's widgets, so its ground
+        /// lives in the palette rather than in a private block of its own. Held to the
+        /// same floor: it is read at a glance over whatever the cockpit is pointing at.
         /// </summary>
         [Fact]
-        public void Hud_slice_text_is_readable_on_both_slice_states()
+        public void Toast_text_is_readable_on_the_hud_panel()
         {
-            var grounds = new (string Name, Rgba Ground)[]
-            {
-                ("resting slice", UiPalette.HudSliceCold),
-                ("hovered slice", UiPalette.HudSliceHot),
-                ("toast", UiPalette.HudPanel),
-            };
-
-            foreach ((string name, Rgba ground) in grounds)
-            {
-                // Over black: the HUD has no panel behind it, so a translucent ground
-                // composites against the darkest thing the cockpit can show.
-                Rgba flattened = ground.Over(new Rgba(0f, 0f, 0f));
-
-                float rest = Rgba.Contrast(UiPalette.HudSliceText, flattened);
-                float hot = Rgba.Contrast(Rgba.White, flattened);
-
-                Assert.True(System.Math.Max(rest, hot) >= 4.5f,
-                    $"neither HUD label colour clears 4.5:1 on the {name} " +
-                    $"(rest {rest:F2}:1, hot {hot:F2}:1)");
-            }
-        }
-
-        /// <summary>A hovered slice has to be visibly hotter than a resting one.</summary>
-        [Fact]
-        public void Hovered_hud_slice_separates_from_a_resting_one()
-        {
-            Rgba black = new Rgba(0f, 0f, 0f);
-            Rgba rest = UiPalette.HudSliceCold.Over(black);
-            Rgba hot = UiPalette.HudSliceHot.Over(black);
-
-            float separation = Rgba.Contrast(hot, rest);
-            Assert.True(separation >= 1.5f,
-                $"the hovered radial slice measures {separation:F2}:1 against a resting one, " +
-                "which is not enough to show which order the pointer is on");
+            Rgba flattened = UiPalette.HudPanel.Over(new Rgba(0f, 0f, 0f));
+            float contrast = Rgba.Contrast(Rgba.White, flattened);
+            Assert.True(contrast >= 4.5f,
+                $"toast text measures {contrast:F2}:1 on the HUD panel ground");
         }
 
         // ------------------------------------------------------------------ helpers

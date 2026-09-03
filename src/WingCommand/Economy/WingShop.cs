@@ -441,11 +441,6 @@ namespace WingCommand
         /// Transfer ownership information from a recovered world aircraft into the reserve.
         /// Also release any over-cap slot immediately rather than waiting for registry prune.
         /// </summary>
-        public static bool TakePurchased(Aircraft aircraft)
-        {
-            return aircraft != null && TakePurchased(aircraft.persistentID);
-        }
-
         internal static bool TakePurchased(PersistentID id)
         {
             overLimitAircraft.Remove(id);

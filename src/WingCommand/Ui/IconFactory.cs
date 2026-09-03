@@ -41,15 +41,12 @@ namespace WingCommand
             switch (key)
             {
                 case "root":        Chevrons(c);            break;
-                case "recruit":     Recruit(c);             break;
                 case "rejoin":      Rejoin(c);              break;
                 case "engage":      Engage(c);              break;
                 case "rtb":         ReturnToBase(c);        break;
                 case "formation":   ShapeGlyph(c, FormationShape.EchelonRight); break;
-                case "orders":      Orders(c);              break;
                 case "attack":      AttackTarget(c);        break;
                 case "posture":     Posture(c);             break;
-                case "disband":     Disband(c);             break;
                 case "fallback":    FallBack(c);            break;
                 case "cover":       Cover(c);               break;
                 case "orbit":       Orbit(c);               break;
@@ -57,7 +54,6 @@ namespace WingCommand
                 case "tasking":     Tasking(c);             break;
                 case "cargo":       Cargo(c);               break;
                 case "land":        LandHere(c);            break;
-                case "buy":         Buy(c);                 break;
                 case "back":        Back(c);                break;
                 case "selection":   SelectionBrackets(c);   break;
                 case "airframe":    Airframe(c);            break;
@@ -149,14 +145,6 @@ namespace WingCommand
             c.Segment(hi, hi, hi, hi - arm, t);
         }
 
-        /// <summary>One aircraft plus a "+" — bring another into the wing.</summary>
-        private static void Recruit(Canvas c)
-        {
-            Delta(c, 38, 44, 20, 0f);
-            c.Segment(68, 58, 68, 82, 7f);
-            c.Segment(56, 70, 80, 70, 7f);
-        }
-
         /// <summary>Two aircraft converging on a point.</summary>
         private static void Rejoin(Canvas c)
         {
@@ -188,19 +176,6 @@ namespace WingCommand
             c.Segment(74, 56, 72, 64, 6f);
         }
 
-        /// <summary>A signal flag on a mast: orders to the flight.</summary>
-        private static void Orders(Canvas c)
-        {
-            c.Segment(30, 18, 30, 80, 7f);
-            var flag = new[]
-            {
-                new Vector2(34f, 78f), new Vector2(76f, 66f),
-                new Vector2(34f, 54f),
-            };
-            c.Polygon(flag);
-            c.Segment(30, 44, 62, 38, 5f);
-        }
-
         /// <summary>Two aircraft converging on a marked target.</summary>
         private static void AttackTarget(Canvas c)
         {
@@ -221,12 +196,6 @@ namespace WingCommand
             c.Segment(30, 40, 48, 22, 7f);
             c.Segment(66, 40, 48, 22, 7f);
             c.Disc(48, 52, 8f);
-        }
-
-        private static void Disband(Canvas c)
-        {
-            c.Segment(24, 24, 72, 72, 9f);
-            c.Segment(24, 72, 72, 24, 9f);
         }
 
         /// <summary>Fall back: an aircraft turning away, with countermeasures trailing.</summary>
@@ -306,18 +275,6 @@ namespace WingCommand
             c.Segment(48, 62, 40, 54, 5f);
             c.Segment(48, 62, 56, 54, 5f);
             c.Segment(22, 74, 74, 74, 5f);
-        }
-
-        /// <summary>Buy: an aircraft with a price tag.</summary>
-        private static void Buy(Canvas c)
-        {
-            Delta(c, 38, 34, 14, 0f);
-            c.Segment(58, 56, 78, 56, 5f);
-            c.Segment(58, 56, 58, 76, 5f);
-            c.Segment(58, 76, 78, 76, 5f);
-            c.Segment(78, 56, 78, 76, 5f);
-            c.Segment(64, 62, 72, 70, 4f);
-            c.Segment(64, 70, 72, 62, 4f);
         }
 
         private static void Back(Canvas c)

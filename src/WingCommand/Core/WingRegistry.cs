@@ -270,31 +270,10 @@ namespace WingCommand
             Leader = null;
         }
 
-        /// <summary>Put a useful number of wingmen onto one target.</summary>
-        public int AttackTarget(Unit target)
-        {
-            if (target == null) return 0;
-
-            int ordered = 0;
-            foreach (WingMember m in members)
-            {
-                if (!m.IsCommandable) continue;
-                int capacity = WingWeapons.RecommendedAttackers(m.Aircraft, target);
-                if (ordered >= capacity)
-                {
-                    m.Apply(WingOrder.Formation);
-                    continue;
-                }
-                m.AttackTarget(target);
-                ordered++;
-            }
-            return ordered;
-        }
-
         /// <summary>
-        /// Distribute several designated targets across the wing.
+        /// Distribute designated targets across an explicit command scope.
         ///
-        /// One target means the whole wing goes for it — massed fire on a single
+        /// One target means the whole scope goes for it — massed fire on a single
         /// designation is the point of that order. Several targets are spread instead, so
         /// four wingmen with four targets designated prosecute four contacts rather than
         /// queueing up behind the first one.
@@ -304,15 +283,6 @@ namespace WingCommand
         /// target, which keeps wingmen from crossing the formation to reach something a
         /// neighbour was already beside.
         /// </summary>
-        /// <param name="targets">Designated targets, most important first.</param>
-        /// <param name="covered">Number of distinct targets that got at least one shooter.</param>
-        /// <returns>Number of members given an order.</returns>
-        public int AttackTargets(IReadOnlyList<Unit> targets, out int covered)
-        {
-            return AttackTargets(members, targets, out covered, forceAll: false);
-        }
-
-        /// <summary>Distribute designated targets across an explicit command scope.</summary>
         public int AttackTargets(IReadOnlyList<WingMember> candidates,
                                  IReadOnlyList<Unit> targets, out int covered,
                                  bool forceAll = false,

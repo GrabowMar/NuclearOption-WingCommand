@@ -30,13 +30,9 @@ namespace WingCommand
 
         private static WingMenuAction rootEntry;
         private static WingMenuAction[] commanderMenu;
-        private static WingMenuAction[] combatMenu;
-        private static WingMenuAction[] flightMenu;
-        private static WingMenuAction[] taskingMenu;
+        private static WingMenuAction[] secondaryMenu;
         private static WingMenuAction[] formationMenu;
-        private static WingMenuAction[] maneuverMenu;
         private static WingMenuAction[] combatManeuverMenu;
-        private static WingMenuAction[] aerobaticMenu;
         private static WingMenuAction[] roeMenu;
 
         /// <summary>The current root wheel contents, captured when its mod entry is selected.</summary>
@@ -164,61 +160,33 @@ namespace WingCommand
             if (rootEntry == null)
                 rootEntry = WingMenuAction.Create(RootLabel, _ => ShowCommanderMenu());
 
-            // Keep the first page categorical and every following page small enough to
-            // scan at a glance. Deliberate management (recruitment, release and purchase)
-            // remains on WMC, where cost and scope can be inspected.
+            // Direct tactical whole-wing orders on first open, with a 6th slice leading
+            // to secondary formations and posture configurations.
             var commander = new List<WingMenuAction>
             {
-                Icon(WingMenuAction.Create("Combat", _ => ShowCombatMenu()), "attack"),
-                Icon(WingMenuAction.Create("Flight & Tasking", _ => ShowFlightMenu()), "tasking"),
-                Icon(WingMenuAction.Create("Formation", _ => ShowFormationMenu()), "formation"),
-                Icon(WingMenuAction.Create("Rules Of Engagement", _ => ShowRoeMenu()), "posture"),
-                Icon(WingMenuAction.Create("Manoeuvres", _ => ShowManeuverMenu(),
-                                           _ => WingBrain.Manoeuvres), "maneuver"),
-                Back(RestoreStockWheel),
-            };
-
-            var combat = new List<WingMenuAction>
-            {
+                Leaf(WingOrderCatalog.Label(WingOrder.Formation), WingAction.Rejoin, "rejoin",
+                     () => WingOrderCatalog.IsOfferable(WingOrder.Formation)),
                 Leaf(WingOrderCatalog.Label(WingOrder.Attack), WingAction.AttackMyTarget, "attack",
                      () => WingOrderCatalog.IsOfferable(WingOrder.Attack)),
                 Leaf(WingOrderCatalog.Label(WingOrder.Engage), WingAction.Engage, "engage",
                      () => WingOrderCatalog.IsOfferable(WingOrder.Engage)),
-                Leaf(WingOrderCatalog.Label(WingOrder.FireForEffect), WingAction.FireForEffect, "attack",
-                     () => WingOrderCatalog.IsOfferable(WingOrder.FireForEffect)),
                 Leaf(WingOrderCatalog.Label(WingOrder.FallBack), WingAction.FallBack, "fallback",
                      () => WingOrderCatalog.IsOfferable(WingOrder.FallBack)),
-                Back(ShowCommanderMenu),
-            };
-
-            var flight = new List<WingMenuAction>
-            {
-                Leaf(WingOrderCatalog.Label(WingOrder.Formation), WingAction.Rejoin, "rejoin",
-                     () => WingOrderCatalog.IsOfferable(WingOrder.Formation)),
-                Leaf(WingOrderCatalog.Label(WingOrder.OrbitHere), WingAction.OrbitHere, "orbit",
-                     () => WingOrderCatalog.IsOfferable(WingOrder.OrbitHere)),
                 Leaf(WingOrderCatalog.Label(WingOrder.ReturnToBase), WingAction.ReturnToBase, "rtb",
                      () => WingOrderCatalog.IsOfferable(WingOrder.ReturnToBase)),
-                Icon(WingMenuAction.Create("Special Tasking", _ => ShowTaskingMenu()), "tasking"),
-                Back(ShowCommanderMenu),
+                Icon(WingMenuAction.Create("More Orders", _ => ShowSecondaryMenu()), "tasking"),
             };
 
-            var tasking = new List<WingMenuAction>
+            var secondary = new List<WingMenuAction>
             {
+                Icon(WingMenuAction.Create("Rules Of Engagement", _ => ShowRoeMenu()), "posture"),
+                Icon(WingMenuAction.Create("Formation", _ => ShowFormationMenu()), "formation"),
+                Leaf(WingOrderCatalog.Label(WingOrder.OrbitHere), WingAction.OrbitHere, "orbit",
+                     () => WingOrderCatalog.IsOfferable(WingOrder.OrbitHere)),
                 Leaf(WingOrderCatalog.Label(WingOrder.JamTarget), WingAction.JamMyTarget, "jam",
                      () => WingBrain.Jamming && WingOrderCatalog.IsOfferable(WingOrder.JamTarget)),
-                Leaf(WingOrderCatalog.Label(WingOrder.DeliverCargo), WingAction.DeliverCargo, "cargo",
-                     () => WingOrderCatalog.IsOfferable(WingOrder.DeliverCargo)),
-                Leaf(WingOrderCatalog.Label(WingOrder.LandHere), WingAction.LandHere, "land",
-                     () => WingOrderCatalog.IsOfferable(WingOrder.LandHere)),
-                Back(ShowFlightMenu),
-            };
-
-            var maneuvers = new List<WingMenuAction>
-            {
-                Icon(WingMenuAction.Create("Combat Manoeuvres", _ => ShowCombatManeuverMenu()),
-                     "maneuver"),
-                Icon(WingMenuAction.Create("Aerobatics", _ => ShowAerobaticMenu()), "maneuver"),
+                Icon(WingMenuAction.Create("Manoeuvres", _ => ShowCombatManeuverMenu(),
+                                           _ => WingBrain.Manoeuvres), "maneuver"),
                 Back(ShowCommanderMenu),
             };
 
@@ -228,16 +196,7 @@ namespace WingCommand
                 ManeuverLeaf(ManeuverKind.BreakRight),
                 ManeuverLeaf(ManeuverKind.SplitS),
                 ManeuverLeaf(ManeuverKind.Immelmann),
-                Back(ShowManeuverMenu),
-            };
-
-            var aerobatics = new List<WingMenuAction>
-            {
-                ManeuverLeaf(ManeuverKind.BarrelRoll),
-                ManeuverLeaf(ManeuverKind.AileronRoll),
-                ManeuverLeaf(ManeuverKind.Loop),
-                ManeuverLeaf(ManeuverKind.WingWaggle),
-                Back(ShowManeuverMenu),
+                Back(ShowSecondaryMenu),
             };
 
             var roes = new List<WingMenuAction>
@@ -245,7 +204,7 @@ namespace WingCommand
                 Roe("Hold", WingRoe.Hold),
                 Roe("Tight", WingRoe.Tight),
                 Roe("Free", WingRoe.Free),
-                Back(ShowCommanderMenu),
+                Back(ShowSecondaryMenu),
             };
 
             var formations = new List<WingMenuAction>();
@@ -260,29 +219,21 @@ namespace WingCommand
                 });
                 formations.Add(Icon(entry, "shape_" + captured));
             }
-            formations.Add(Back(ShowCommanderMenu));
+            formations.Add(Back(ShowSecondaryMenu));
 
             commanderMenu = commander.ToArray();
-            combatMenu = combat.ToArray();
-            flightMenu = flight.ToArray();
-            taskingMenu = tasking.ToArray();
+            secondaryMenu = secondary.ToArray();
             formationMenu = formations.ToArray();
-            maneuverMenu = maneuvers.ToArray();
             combatManeuverMenu = combatManeuvers.ToArray();
-            aerobaticMenu = aerobatics.ToArray();
             roeMenu = roes.ToArray();
 
             // Take the wedge background and colours from a stock entry so the slices match
             // the game's styling, then overwrite the icon with our own drawn glyph.
             ApplyAppearance(rootEntry, template(0), "root");
             ApplyAll(commanderMenu, template);
-            ApplyAll(combatMenu, template);
-            ApplyAll(flightMenu, template);
-            ApplyAll(taskingMenu, template);
+            ApplyAll(secondaryMenu, template);
             ApplyAll(formationMenu, template);
-            ApplyAll(maneuverMenu, template);
             ApplyAll(combatManeuverMenu, template);
-            ApplyAll(aerobaticMenu, template);
             ApplyAll(roeMenu, template);
         }
 
@@ -366,19 +317,11 @@ namespace WingCommand
 
         private static void ShowCommanderMenu() => Swap(commanderMenu, submenu: true);
 
-        private static void ShowCombatMenu() => Swap(combatMenu, submenu: true);
-
-        private static void ShowFlightMenu() => Swap(flightMenu, submenu: true);
-
-        private static void ShowTaskingMenu() => Swap(taskingMenu, submenu: true);
+        private static void ShowSecondaryMenu() => Swap(secondaryMenu, submenu: true);
 
         private static void ShowFormationMenu() => Swap(formationMenu, submenu: true);
 
-        private static void ShowManeuverMenu() => Swap(maneuverMenu, submenu: true);
-
         private static void ShowCombatManeuverMenu() => Swap(combatManeuverMenu, submenu: true);
-
-        private static void ShowAerobaticMenu() => Swap(aerobaticMenu, submenu: true);
 
         private static void ShowRoeMenu() => Swap(roeMenu, submenu: true);
 

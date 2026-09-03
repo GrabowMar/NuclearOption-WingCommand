@@ -12,6 +12,7 @@
          against net8.0 it is not pure, and this project failing to build is the correct
          and immediate answer. -->
     <Compile Include="../../src/WingCommand/Pure/*.cs" LinkBase="Pure" />
+    <Compile Include="../../../nomodkit/shared/avionics/*.cs" LinkBase="Avionics" />
     <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.12.0" />
     <PackageReference Include="xunit" Version="2.9.2" />
     <PackageReference Include="xunit.runner.visualstudio" Version="2.8.2">

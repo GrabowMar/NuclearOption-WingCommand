@@ -70,12 +70,10 @@ namespace WingCommand
             const float portraitGap = Space3;
 
             // --- Left Column: Tall Portrait Photo Card ---
-            Panel(parent, new Rect(Pad, y, portraitW, portraitH), WingUi.CardFill);
-            Outline(parent, new Rect(Pad, y, portraitW, portraitH), FrameColor());
+            var (_, pRail) = WingUi.TacticalCard(parent, new Rect(Pad, y, portraitW, portraitH), RankColor(WingRank.Rookie));
+            pilotCardRail = pRail;
             pilotPortrait = AddSprite(parent, "PilotPortrait", PilotPortrait.Sprite,
                        new Rect(Pad + 3f, y - 3f, portraitW - 6f, portraitH - 6f), Color.white);
-
-            pilotCardRail = Rule(parent, new Rect(Pad, y, 3f, portraitH), RankColor(WingRank.Rookie));
 
             // A subtle red wash over the portrait for a lost pilot (no face-covering badge)
             var kiaOverlayGo = new GameObject("PilotKiaOverlay", typeof(RectTransform), typeof(Image));
@@ -100,7 +98,7 @@ namespace WingCommand
             detailY -= LineHeight;
 
             Rule(parent, new Rect(dossierX, detailY, dossierW, 3f), FrameColor());
-            pilotXpBar = Rule(parent, new Rect(dossierX, detailY, dossierW, 3f), Accent());
+            pilotXpBar = Rule(parent, new Rect(dossierX, detailY, dossierW, 3f), Green());
             pilotXpBarWidth = dossierW;
             detailY -= Space3;
 

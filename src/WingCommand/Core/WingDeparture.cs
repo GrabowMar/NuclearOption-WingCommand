@@ -90,9 +90,6 @@ namespace WingCommand
             return false;
         }
 
-        /// <summary>How many released aircraft are still on their way home.</summary>
-        public static int Count => outbound.Count;
-
         public static void Reset() => outbound.Clear();
     }
 }

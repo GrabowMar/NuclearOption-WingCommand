@@ -191,17 +191,28 @@ namespace WingCommand
 
         // 3-layer design tokens
         public static Color SurfaceCard => Unity(UiPalette.SurfaceCard);
-        public static Color SurfaceCardHover => Unity(UiPalette.SurfaceCardHover);
-        public static Color SurfaceElevated => Unity(UiPalette.SurfaceElevated);
         public static Color BorderSubtle => Unity(UiPalette.BorderSubtle);
         public static Color RailEmerald => Unity(UiPalette.RailEmerald);
-        public static Color RailAmber => Unity(UiPalette.RailAmber);
         public static Color RailCyan => Unity(UiPalette.RailCyan);
-        public static Color RailRed => Unity(UiPalette.RailRed);
         public static Color TextPrimary => Unity(UiPalette.TextPrimary);
-        public static Color TextSecondary => Unity(UiPalette.TextSecondary);
 
         // ---------------------------------------------------------------------- widgets
+
+        /// <summary>A framed card with an optional 3px status rail on the left edge.</summary>
+        public static (Image CardFill, Image Rail) TacticalCard(
+            RectTransform parent, Rect rect, Color railColor, bool hasRail = true)
+        {
+            Image bg = Panel(parent, rect, BorderSubtle);
+            bg.color = SurfaceCard;
+
+            Image rail = null;
+            if (hasRail)
+            {
+                rail = Rule(parent, new Rect(rect.x, rect.y, 3f, rect.height), railColor);
+            }
+
+            return (bg, rail);
+        }
 
         public static TMP_Text Label(RectTransform parent, string text, Rect rect,
                                      Color color, float size, FontStyles style,
@@ -259,8 +270,6 @@ namespace WingCommand
             };
         }
 
-        public static Image Rule(RectTransform parent, Rect rect) => Rule(parent, rect, Green);
-
         public static Image Rule(RectTransform parent, Rect rect, Color color)
         {
             var go = new GameObject("Rule", typeof(RectTransform), typeof(Image));
@@ -284,10 +293,6 @@ namespace WingCommand
         public static WingButton Button(RectTransform parent, string text, Rect rect,
                                         float fontSize, Action onClick) =>
             Button(parent, text, rect, fontSize, UiButtonStyle.Default, onClick);
-
-        public static WingButton Button(RectTransform parent, string text, Rect rect,
-                                        UiButtonStyle style, Action onClick) =>
-            Button(parent, text, rect, FontBody, style, onClick);
 
         public static WingButton Button(RectTransform parent, string text, Rect rect,
                                         float fontSize, UiButtonStyle style, Action onClick)

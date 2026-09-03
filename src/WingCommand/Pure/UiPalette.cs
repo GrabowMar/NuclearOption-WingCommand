@@ -62,7 +62,6 @@ namespace WingCommand
         }
 
         public static Rgba White => new Rgba(1f, 1f, 1f);
-        public static Rgba Clear => new Rgba(0f, 0f, 0f, 0f);
         public static Rgba Shade(float alpha) => new Rgba(0f, 0f, 0f, alpha);
     }
 
@@ -122,49 +121,34 @@ namespace WingCommand
         /// The panel ground, as composited over a dark map. Everything else is measured
         /// against this, so it lives here rather than in the Unity-side drawing code.
         /// </summary>
-        public static readonly Rgba PanelGround = new Rgba(0.028f, 0.045f, 0.062f, 0.945f);
+        public static readonly Rgba PanelGround = new Rgba(0.022f, 0.040f, 0.032f, 0.950f);
 
         /// <summary>Secondary text: hint lines, column headers, table cells.</summary>
-        public static readonly Rgba Dim = new Rgba(0.64f, 0.68f, 0.70f);
+        public static readonly Rgba Dim = new Rgba(0.62f, 0.72f, 0.67f);
 
         /// <summary>Text and edges of a control that is present but currently inert.</summary>
-        public static readonly Rgba Disabled = new Rgba(0.42f, 0.45f, 0.46f, 0.75f);
+        public static readonly Rgba Disabled = new Rgba(0.34f, 0.44f, 0.40f, 0.75f);
 
         /// <summary>A frame that should recede behind its contents.</summary>
-        public static readonly Rgba Frame = new Rgba(0.52f, 0.55f, 0.56f, 0.55f);
+        public static readonly Rgba Frame = new Rgba(0.22f, 0.44f, 0.35f, 0.55f);
 
-        public static readonly Rgba PanelEdge = new Rgba(0.30f, 0.34f, 0.36f, 1f);
-        public static readonly Rgba PanelShadow = new Rgba(0.06f, 0.07f, 0.08f, 1f);
+        public static readonly Rgba PanelEdge = new Rgba(0.18f, 0.55f, 0.38f, 1f);
+        public static readonly Rgba PanelShadow = new Rgba(0.02f, 0.05f, 0.03f, 1f);
 
         // 3-layer design tokens (Surfaces, Borders, Rails, Typography)
-        public static readonly Rgba SurfaceCard = new Rgba(0.071f, 0.098f, 0.133f, 0.88f);
-        public static readonly Rgba SurfaceCardHover = new Rgba(0.094f, 0.133f, 0.188f, 0.95f);
-        public static readonly Rgba SurfaceElevated = new Rgba(0.118f, 0.161f, 0.231f, 0.95f);
-        public static readonly Rgba BorderSubtle = new Rgba(0.137f, 0.196f, 0.271f, 0.65f);
-        public static readonly Rgba RailEmerald = new Rgba(0.000f, 1.000f, 0.400f);
-        public static readonly Rgba RailAmber = new Rgba(0.961f, 0.620f, 0.043f);
-        public static readonly Rgba RailCyan = new Rgba(0.024f, 0.714f, 0.831f);
-        public static readonly Rgba RailRed = new Rgba(0.937f, 0.267f, 0.267f);
-        public static readonly Rgba TextPrimary = Rgba.White;
-        public static readonly Rgba TextSecondary = new Rgba(0.580f, 0.639f, 0.722f);
-        public static readonly Rgba TextMuted = Dim;
+        public static readonly Rgba SurfaceCard = new Rgba(0.038f, 0.080f, 0.060f, 0.88f);
+        public static readonly Rgba BorderSubtle = new Rgba(0.18f, 0.65f, 0.42f, 0.30f);
+        public static readonly Rgba RailEmerald = new Rgba(0.000f, 1.000f, 0.616f);
+        public static readonly Rgba RailCyan = new Rgba(0.000f, 0.898f, 1.000f);
+        public static readonly Rgba TextPrimary = new Rgba(0.92f, 1.00f, 0.96f);
 
         // The in-cockpit HUD's own surfaces. It draws in IMGUI rather than uGUI and cannot
         // reach WingUi's widgets, but there is no reason for it to hold a second, private
         // idea of what the mod's colours are — which is how its accent came to be a
         // hand-copied duplicate of UiTheme.Friendly's fallback.
 
-        /// <summary>The toast and radial ground.</summary>
+        /// <summary>The toast ground.</summary>
         public static readonly Rgba HudPanel = new Rgba(0.04f, 0.06f, 0.05f, 0.78f);
-
-        /// <summary>A radial slice under the pointer.</summary>
-        public static readonly Rgba HudSliceHot = new Rgba(0.10f, 0.35f, 0.16f, 0.95f);
-
-        /// <summary>A radial slice at rest.</summary>
-        public static readonly Rgba HudSliceCold = new Rgba(0.05f, 0.09f, 0.07f, 0.85f);
-
-        /// <summary>Label on a resting radial slice.</summary>
-        public static readonly Rgba HudSliceText = new Rgba(0.75f, 0.85f, 0.78f);
 
         // Fill washes, as (scale towards black, alpha). Together they set how far a filled
         // state moves off the resting ground. Selection has to clear the resting fill by

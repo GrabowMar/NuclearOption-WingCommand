@@ -1,6 +1,7 @@
 using BepInEx;
 using BepInEx.Configuration;
 using BepInEx.Logging;
+using System;
 using System.Collections.Generic;
 using System.Reflection;
 using HarmonyLib;
@@ -66,7 +67,21 @@ namespace WingCommand
             WingReflexes.RegisterDefaults();
 
             harmony = new Harmony(PluginGuid);
-            harmony.PatchAll(typeof(Plugin).Assembly);
+            Type[] patchTypes =
+            {
+                typeof(AiCombatTweak),
+                typeof(AiTargetDeconflictionPatch),
+                typeof(WingMapWaypointPatch),
+                typeof(WingMapSelectionPatch),
+                typeof(WingMapTint.MapIconColorPatch),
+                typeof(WingHudTint.UpdateColorPatch),
+                typeof(WingRadialMenuPatches),
+                typeof(WingRadialMenuPatches.AwakePatch),
+                typeof(WingMenuActionPatches),
+                typeof(WingTakeoverPatches),
+            };
+            for (int i = 0; i < patchTypes.Length; i++)
+                harmony.PatchAll(patchTypes[i]);
             ReportPatches();
 
             var go = new GameObject("WingCommandManager");

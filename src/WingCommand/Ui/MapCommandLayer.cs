@@ -1,5 +1,6 @@
 using System.Collections.Generic;
 using HarmonyLib;
+using NOAvionics;
 using UnityEngine;
 using UnityEngine.EventSystems;
 
@@ -36,13 +37,23 @@ namespace WingCommand
         public bool HasNotice => pointArmed ||
             (pendingRecruit.Count > 0 && Time.unscaledTime <= recruitConfirmationUntil);
 
-        public string Status => pointArmed
-            ? WingOrderCatalog.Label(armedOrder).ToUpperInvariant() + " ARMED - CLICK MAP" +
-              (armedOrder == WingOrder.DeliverCargo ? ", OR PRESS AGAIN FOR THE STANDARD ROUTE" : "")
-            : pendingRecruit.Count > 0 && Time.unscaledTime <= recruitConfirmationUntil
-                ? "CONFIRM ASSIGNMENT: " + pendingRecruit.Count + " AIRCRAFT · " +
-                  Mathf.RoundToInt(pendingRecruitCost) + " FUNDS"
-                : "Select a row or wing icon; right-click moves; Shift queues points.";
+        public string Status
+        {
+            get
+            {
+                if (pointArmed)
+                    return WingOrderCatalog.Label(armedOrder).ToUpperInvariant() + " ARMED - CLICK MAP" +
+                           (armedOrder == WingOrder.DeliverCargo
+                               ? ", OR PRESS AGAIN FOR THE STANDARD ROUTE"
+                               : "");
+                if (MapPicker.IsBusy && !MapPicker.IsOwner(MapPicker.WingPoint))
+                    return MapPicker.Prompt ?? "MAP BUSY";
+                if (pendingRecruit.Count > 0 && Time.unscaledTime <= recruitConfirmationUntil)
+                    return "CONFIRM ASSIGNMENT: " + pendingRecruit.Count + " AIRCRAFT · " +
+                           Mathf.RoundToInt(pendingRecruitCost) + " FUNDS";
+                return "Select a row or wing icon; right-click moves; Shift queues points.";
+            }
+        }
 
         public MapCommandLayer(WingRegistry wing)
         {
@@ -64,6 +75,13 @@ namespace WingCommand
         public void ArmPointOrder(WingOrder order)
         {
             if (!WingOrderCatalog.TakesPoint(order)) return;
+            string prompt = WingOrderCatalog.Label(order).ToUpperInvariant() + " ARMED · CLICK MAP";
+            if (!MapPicker.TryArm(MapPicker.WingPoint, MapPicker.GestureLeft, prompt))
+            {
+                Toast(MapPicker.Prompt ?? "Map is busy");
+                return;
+            }
+
             pointArmed = true;
             armedOrder = order;
             armedFrame = Time.frameCount;
@@ -74,11 +92,13 @@ namespace WingCommand
         {
             if (!pointArmed) return;
             pointArmed = false;
+            MapPicker.Disarm(MapPicker.WingPoint);
             if (notify) Toast("Point order cancelled");
         }
 
         public void Reset()
         {
+            MapPicker.Disarm(MapPicker.WingPoint);
             pointArmed = false;
             recruited.Clear();
             pendingRecruit.Clear();
@@ -109,6 +129,7 @@ namespace WingCommand
 
             WingOrder order = armedOrder;
             pointArmed = false;
+            MapPicker.Disarm(MapPicker.WingPoint);
             WingCommandManager.Instance?.IssuePointOrder(order, point);
         }
 
@@ -116,6 +137,7 @@ namespace WingCommand
         {
             if (pointArmed || !WmcScreen.TacticalCommandModeActive ||
                 !Input.GetMouseButtonDown(1)) return;
+            if (MapPicker.IsBusy && !MapPicker.IsOwner(MapPicker.WingPoint)) return;
 
             WingCommandManager manager = WingCommandManager.Instance;
             if (manager == null || !manager.Selection.IsExplicit) return;
@@ -199,6 +221,8 @@ namespace WingCommand
         {
             if (!Plugin.Settings.MapCommandEnabled.Value || !DynamicMap.mapMaximized ||
                 !WmcScreen.TacticalCommandModeActive || !Input.GetMouseButtonDown(1))
+                return false;
+            if (MapPicker.IsBusy && !MapPicker.IsOwner(MapPicker.WingPoint))
                 return false;
 
             WingCommandManager manager = WingCommandManager.Instance;

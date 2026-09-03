@@ -86,12 +86,11 @@ namespace WingCommand
             const float w = PanelWidth - Pad * 2f;
             const float stepperW = 76f;
 
-            Panel(parent, new Rect(Pad, y, portrait, portrait), WingUi.CardFill);
-            Outline(parent, new Rect(Pad, y, portrait, portrait), FrameColor());
+            var (_, sRail) = WingUi.TacticalCard(parent, new Rect(Pad, y, portrait, portrait), RankColor(WingRank.Rookie));
+            supplyPilotRail = sRail;
             supplyPilotPortrait = AddSprite(parent, "SupplyPilotPortrait", PilotPortrait.Sprite,
                                             new Rect(Pad + 3f, y - 3f, portrait - 6f, portrait - 6f),
                                             Color.white);
-            supplyPilotRail = Rule(parent, new Rect(Pad, y, 3f, portrait), RankColor(WingRank.Rookie));
 
             float dossierX = Pad + portrait + Space3;
             float dossierW = w - portrait - Space3 - stepperW - Gap;
@@ -252,36 +251,6 @@ namespace WingCommand
                 ? definition.unitName + (wasOwned ? " ownership released" : " released") +
                   " to faction stock"
                 : reason);
-        }
-
-        /// <summary>
-        /// Press once to arm, press again to confirm — the panel's one idiom for a control
-        /// that cannot be taken back.
-        ///
-        /// Held per control rather than globally, so arming the roster's REL does not also
-        /// arm the reserve's RELEASE. The subject is carried alongside the timer because
-        /// what was armed matters as much as when: selecting a different airframe between
-        /// the two presses has to disarm, or the confirmation belongs to something the
-        /// player is no longer looking at.
-        /// </summary>
-        private sealed class Confirmation
-        {
-            private const float ArmSeconds = 3f;
-
-            private object subject;
-            private float until;
-
-            public bool IsArmedFor(object candidate) =>
-                candidate != null && ReferenceEquals(subject, candidate) &&
-                Time.unscaledTime <= until;
-
-            public void Arm(object candidate)
-            {
-                subject = candidate;
-                until = Time.unscaledTime + ArmSeconds;
-            }
-
-            public void Clear() => subject = null;
         }
 
         private static readonly Confirmation reserveRelease = new Confirmation();
@@ -835,7 +804,7 @@ namespace WingCommand
                              FontMicro, FontStyles.Bold, TextAlignmentOptions.Left);
                 code.overflowMode = TextOverflowModes.Ellipsis;
 
-                priceStock = Label(rt, "", new Rect(textLeft, -18f, textWidth, 14f), Accent(),
+                priceStock = Label(rt, "", new Rect(textLeft, -18f, textWidth, 14f), Green(),
                                    9f, FontStyles.Normal, TextAlignmentOptions.Left);
                 priceStock.overflowMode = TextOverflowModes.Ellipsis;
 
@@ -860,14 +829,14 @@ namespace WingCommand
                               : offer.Definition.mapIcon != null ? offer.Definition.mapIcon
                               : IconFactory.Get("airframe");
                 icon.sprite = sprite;
-                icon.color = selected ? Color.white : new Color(0.65f, 0.82f, 0.78f, 0.75f);
+                icon.color = selected ? Color.white : Dim();
 
                 string codeStr = !string.IsNullOrEmpty(offer.Definition.code) ? offer.Definition.code : offer.Name;
                 code.text = UiTheme.Truncate(codeStr, 7);
                 code.color = selected ? Green() : (affordable ? Friendly() : Dim());
 
                 priceStock.text = Grouped(cost) + " · " + offer.Stock + "x";
-                priceStock.color = affordable ? Accent() : Warning();
+                priceStock.color = affordable ? Green() : Warning();
 
                 fill.color = selected ? WingUi.CardFillSelected : WingUi.CardFill;
                 Color frameColor = selected ? Green() : FrameColor();

@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using NOAvionics;
 using NuclearOption.SavedMission;
 using NuclearOption.UIStyleSystem;
 using TMPro;
@@ -119,7 +120,6 @@ namespace WingCommand
         private static TMP_Text rosterEmptyLabel;
         private static WingButton rosterPrevButton;
         private static WingButton rosterNextButton;
-        private static TMP_Text shapeLabel;
         private static TMP_Text summaryLabel;
         private static TMP_Text rosterPageLabel;
         private static WingButton holdButton;
@@ -249,6 +249,7 @@ namespace WingCommand
         /// <summary>Forget the screen when the mission ends; a new one is built next time.</summary>
         public static void Reset()
         {
+            BezelRegistry.Release(BezelRegistry.Wmc);
             screen = null;
             page = Page.Tactical;
             panelRect = null;
@@ -269,7 +270,6 @@ namespace WingCommand
             rosterEmptyLabel = null;
             rosterPrevButton = null;
             rosterNextButton = null;
-            shapeLabel = null;
             summaryLabel = null;
             doctrineTitleLabel = null;
             doctrineProfileLabel = null;
@@ -378,60 +378,28 @@ namespace WingCommand
                 VirtualMFD mfd = UnityEngine.Object.FindObjectOfType<VirtualMFD>();
                 if (mfd == null) return;
 
-                List<Button> buttons = GameAccess.GetLeftButtons(mfd);
-                List<MFDScreen> screens = GameAccess.GetLeftScreens(mfd);
-                bool left = true;
-
-                if (!TryClaimSlot(buttons, screens, out int slot))
+                if (!MfdBezel.TryClaim(BezelRegistry.Wmc, preferLeft: true, mfd,
+                    out List<Button> buttons, out List<MFDScreen> screens, out int slot, out bool left))
                 {
-                    // Fall back to the right column if the left one is fully configured.
-                    buttons = GameAccess.GetRightButtons(mfd);
-                    screens = GameAccess.GetRightScreens(mfd);
-                    left = false;
-
-                    if (!TryClaimSlot(buttons, screens, out slot))
-                    {
-                        Fail("no free bezel button on either column");
-                        return;
-                    }
+                    Fail("no free bezel button on either column");
+                    return;
                 }
 
-                MFDScreen template = FindTemplate(screens) ??
-                                     FindTemplate(GameAccess.GetLeftScreens(mfd)) ??
-                                     FindTemplate(GameAccess.GetRightScreens(mfd));
-                if (template == null) return;
+                MFDScreen template = MfdBezel.FindTemplate(screens) ?? MfdBezel.FindTemplate(mfd);
+                if (template == null)
+                {
+                    BezelRegistry.Release(BezelRegistry.Wmc);
+                    return;
+                }
 
                 screen = Build(template, buttons[slot]);
-                if (screen == null) return;
-
-                // Free slots are null entries in the list, not indices past its end.
-                while (screens.Count <= slot) screens.Add(null);
-                screens[slot] = screen;
-
-                mfd.SetupButtons();
-
-                // SetupButtons only ever disables buttons — it never re-enables one it
-                // turned off on the first pass, so the newly claimed button needs it back.
-                Button bezel = buttons[slot];
-                bezel.enabled = true;
-                bezel.interactable = true;
-
-                // An unused bezel button may have no handler wired in the scene at all.
-                // If this one is bare, route it to the same method the configured ones use.
-                if (bezel.onClick.GetPersistentEventCount() == 0)
+                if (screen == null)
                 {
-                    VirtualMFD owner = mfd;
-                    bool onLeft = left;
-                    bezel.onClick.AddListener(() =>
-                    {
-                        if (onLeft) owner.PressLeftButton(bezel);
-                        else owner.PressRightButton(bezel);
-                    });
+                    BezelRegistry.Release(BezelRegistry.Wmc);
+                    return;
                 }
 
-                // The game only shows bezel buttons while the map is up; match that.
-                screen.CloseScreen(Screen.width * (left ? Vector3.left : Vector3.right));
-
+                MfdBezel.Bind(mfd, buttons, screens, slot, left, screen);
                 Plugin.Logger.LogInfo("WMC screen installed on " + (left ? "left" : "right") +
                                       " bezel slot " + (slot + 1) + ".");
             }
@@ -449,37 +417,6 @@ namespace WingCommand
             Plugin.Logger.LogWarning(
                 "Could not install the WMC MFD screen (" + reason +
                 "). The radial menu and hotkeys still work; there is no fallback panel.");
-        }
-
-        /// <summary>
-        /// Find a bezel button with no screen behind it. The stock lists are the same
-        /// length as the button lists, with unused entries left null — those are the "-"
-        /// buttons the game disables during setup.
-        /// </summary>
-        private static bool TryClaimSlot(List<Button> buttons, List<MFDScreen> screens, out int slot)
-        {
-            slot = -1;
-            if (buttons == null || screens == null) return false;
-
-            for (int i = 0; i < buttons.Count; i++)
-            {
-                if (buttons[i] == null) continue;
-                if (i >= screens.Count || screens[i] == null)
-                {
-                    slot = i;
-                    return true;
-                }
-            }
-            return false;
-        }
-
-        private static MFDScreen FindTemplate(List<MFDScreen> screens)
-        {
-            foreach (MFDScreen s in screens)
-            {
-                if (s != null && s.transform.parent != null) return s;
-            }
-            return null;
         }
 
         // --------------------------------------------------------------------- building
@@ -594,9 +531,12 @@ namespace WingCommand
         /// <summary>Centred green title over a rule, as on BOSCALI / TARGET SELECTION / HUD OPTIONS.</summary>
         private static float AddTitle(RectTransform parent, float y)
         {
-            Label(parent, "WING COMMAND", new Rect(Pad, y, PanelWidth - Pad * 2f, Space6),
-                  Green(), FontTitle, FontStyles.Normal, TextAlignmentOptions.Center);
-            return y - Space6 - Space2;
+            float inner = PanelWidth - Pad * 2f;
+            Label(parent, "WING COMMAND", new Rect(Pad, y, inner, Space5),
+                  Green(), FontTitle, FontStyles.Bold, TextAlignmentOptions.Center);
+            y -= Space5;
+            Rule(parent, new Rect(Pad, y, inner, 1f), WingUi.BorderSubtle);
+            return y - Space2;
         }
 
         /// <summary>
@@ -822,9 +762,9 @@ namespace WingCommand
         {
             float w = PanelWidth - Pad * 2f;
 
-            Panel(parent, new Rect(Pad, y, w, StatusStripHeight), FrameColor());
+            WingUi.TacticalCard(parent, new Rect(Pad, y, w, StatusStripHeight), WingUi.RailEmerald);
             TMP_Text label = Label(parent, "",
-                                   new Rect(Pad + Space2, y, w - Space4, StatusStripHeight),
+                                   new Rect(Pad + Space3, y, w - Space4 - Space2, StatusStripHeight),
                                    Dim(), FontMicro, FontStyles.Normal,
                                    TextAlignmentOptions.Left);
             label.enableWordWrapping = true;
@@ -849,8 +789,8 @@ namespace WingCommand
             string tooltip = WingButton.HoveredTooltip;
             bool hovering = !string.IsNullOrEmpty(tooltip);
 
-            label.text = hovering ? tooltip : fallback;
-            label.color = hovering ? Friendly() : Dim();
+            label.text = hovering ? "> " + tooltip : "> " + fallback;
+            label.color = hovering ? WingUi.TextPrimary : Dim();
         }
 
         /// <summary>
@@ -1064,15 +1004,37 @@ namespace WingCommand
             }
         }
 
-        // ------------------------------------------------------------------ UI helpers
+        /// <summary>
+        /// Press once to arm, press again to confirm — the panel's one idiom for a control
+        /// that cannot be taken back.
+        ///
+        /// Held per control rather than globally, so arming the roster's REL does not also
+        /// arm the reserve's RELEASE. The subject is carried alongside the timer because
+        /// what was armed matters as much as when: selecting a different airframe between
+        /// the two presses has to disarm, or the confirmation belongs to something the
+        /// player is no longer looking at.
+        /// </summary>
+        private sealed class Confirmation
+        {
+            private const float ArmSeconds = 3f;
+
+            private object subject;
+            private float until;
+
+            public bool IsArmedFor(object candidate) =>
+                candidate != null && ReferenceEquals(subject, candidate) &&
+                Time.unscaledTime <= until;
+
+            public void Arm(object candidate)
+            {
+                subject = candidate;
+                until = Time.unscaledTime + ArmSeconds;
+            }
+
+            public void Clear() => subject = null;
+        }
 
         private static WingRegistry Wing() => WingCommandManager.Instance?.Wing;
-
-
-        private static void CycleShape(int direction)
-        {
-            WingFormation.Shape = FormationShapes.CycleCore(WingFormation.Shape, direction);
-        }
 
         // The widgets themselves live in WingUi, which is also where the aircraft-recovery
         // prompt draws from. These are the page's local names for them.
@@ -1180,11 +1142,7 @@ namespace WingCommand
 
         // ------------------------------------------------------------------- styling
 
-                // ---------------------------------------------------------------------- colours
-
         private static Color Green() => WingUi.Green;
-
-        private static Color Accent() => WingUi.Green;
 
         private static Color Warning() => WingUi.Warning;
 
@@ -1229,30 +1187,6 @@ namespace WingCommand
                 case WingRank.Legend:  return "L";
                 default:               return "R";
             }
-        }
-
-        /// <summary>
-        /// A small filled tag with a letter on it, in the stock badge idiom.
-        ///
-        /// Used for a pilot's rank marker on the dossier and a KIA stencil on the portrait,
-        /// where a letter on a coloured square reads at a glance where a whole word would
-        /// not fit.
-        /// </summary>
-        private static TMP_Text Badge(RectTransform parent, Rect rect, string text,
-                                      Color fill, Color fg)
-        {
-            var go = new GameObject("Badge", typeof(RectTransform), typeof(Image));
-            var rt = go.GetComponent<RectTransform>();
-            rt.SetParent(parent, worldPositionStays: false);
-            Place(rt, rect);
-
-            Image image = go.GetComponent<Image>();
-            image.color = fill;
-            image.raycastTarget = false;
-
-            TMP_Text label = Label(rt, text, new Rect(0f, 0f, rect.width, rect.height),
-                                   fg, FontMicro, FontStyles.Bold, TextAlignmentOptions.Center);
-            return label;
         }
 
         /// <summary>The wingman flying this pilot, or null when they are on the ground.</summary>

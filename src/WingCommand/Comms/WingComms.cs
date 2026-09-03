@@ -42,10 +42,7 @@ namespace WingCommand
             Winchester,
             Bingo,
             Rejoining,
-            FallingBack,
-            Holding,
             Covering,
-            Orbiting,
             Delivering,
             Delivered,
             NoDropOff,
@@ -59,7 +56,6 @@ namespace WingCommand
             DefensiveClear,
             Recovered,
             Detached,
-            Jamming,
             JammingOff,
             Maneuvering,
             ManeuverDone,
@@ -67,7 +63,7 @@ namespace WingCommand
 
         /// <summary>
         /// Calls a commander needs to hear even in Performance mode. Everything else -
-        /// order acks, engaging/splash/covering colour, holding/orbiting/rejoining status,
+        /// order acks, engaging/splash/covering colour, rejoining status,
         /// the delivery lifecycle, manoeuvre and jam chatter - is dropped there.
         /// Losses go through <see cref="ReportLoss"/> and are never gated by this.
         /// </summary>

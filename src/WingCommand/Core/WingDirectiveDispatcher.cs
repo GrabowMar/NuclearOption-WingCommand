@@ -5,22 +5,18 @@ namespace WingCommand
     internal readonly struct WingDispatchResult
     {
         public readonly int Applied;
-        public readonly int Skipped;
-        public readonly int CoveredTargets;
         public readonly string Message;
         public readonly IReadOnlyList<WingMember> Responders;
         public readonly WingOrder Order;
 
         public bool Success => Applied > 0;
 
-        public WingDispatchResult(int applied, int skipped, string message, int coveredTargets = 0,
+        public WingDispatchResult(int applied, string message,
                                   IReadOnlyList<WingMember> responders = null,
                                   WingOrder order = WingOrder.Formation)
         {
             Applied = applied;
-            Skipped = skipped;
             Message = message;
-            CoveredTargets = coveredTargets;
             Responders = responders ?? System.Array.Empty<WingMember>();
             Order = order;
         }
@@ -58,11 +54,11 @@ namespace WingCommand
         {
             List<WingMember> scope = Scope(wholeWing);
             if (scope.Count == 0)
-                return new WingDispatchResult(0, 0,
+                return new WingDispatchResult(0,
                     wholeWing ? "No wingmen assigned" : "No wingmen selected");
 
             if (WingOrderCatalog.NeedsPoint(directive.Order) && !directive.HasPoint)
-                return new WingDispatchResult(0, scope.Count, "Select a point on the map");
+                return new WingDispatchResult(0, "Select a point on the map");
 
             var responders = new List<WingMember>();
             foreach (WingMember member in scope)
@@ -75,14 +71,13 @@ namespace WingCommand
             int applied = responders.Count;
             int skipped = scope.Count - applied;
             if (applied == 0)
-                return new WingDispatchResult(0, skipped,
+                return new WingDispatchResult(0,
                     WingOrderCatalog.UnavailableReason(directive.Order));
 
             string message = ScopePrefix(wholeWing, applied) + ": " +
                              WingOrderCatalog.Label(directive.Order);
             if (skipped > 0) message += " (" + skipped + " unable)";
-            return new WingDispatchResult(applied, skipped, message, responders: responders,
-                                          order: directive.Order);
+            return new WingDispatchResult(applied, message, responders, directive.Order);
         }
 
         public WingDispatchResult Attack(IReadOnlyList<Unit> targets, bool wholeWing,
@@ -90,22 +85,21 @@ namespace WingCommand
         {
             List<WingMember> scope = Scope(wholeWing);
             if (scope.Count == 0)
-                return new WingDispatchResult(0, 0,
+                return new WingDispatchResult(0,
                     wholeWing ? "No wingmen assigned" : "No wingmen selected");
             if (targets == null || targets.Count == 0)
-                return new WingDispatchResult(0, scope.Count, "No target selected");
+                return new WingDispatchResult(0, "No target selected");
 
             var responders = new List<WingMember>();
             int applied = wing.AttackTargets(scope, targets, out int covered, forceAll, responders);
             int skipped = scope.Count - applied;
             if (applied == 0)
-                return new WingDispatchResult(0, skipped, "No valid target selected");
+                return new WingDispatchResult(0, "No valid target selected");
 
             string message = ScopePrefix(wholeWing, applied) + ": attack";
             if (targets.Count > 1) message += " " + covered + " target(s)";
             if (skipped > 0) message += " (" + skipped + " covering)";
-            return new WingDispatchResult(applied, skipped, message, covered, responders,
-                                          WingOrder.Attack);
+            return new WingDispatchResult(applied, message, responders, WingOrder.Attack);
         }
 
         /// <summary>
@@ -120,12 +114,12 @@ namespace WingCommand
         {
             List<WingMember> scope = Scope(wholeWing);
             if (scope.Count == 0)
-                return new WingDispatchResult(0, 0,
+                return new WingDispatchResult(0,
                     wholeWing ? "No wingmen assigned" : "No wingmen selected");
 
             Unit target = FirstLive(targets);
             if (target == null)
-                return new WingDispatchResult(0, scope.Count, "No target selected");
+                return new WingDispatchResult(0, "No target selected");
 
             var responders = new List<WingMember>();
             foreach (WingMember member in scope)
@@ -139,14 +133,13 @@ namespace WingCommand
             int applied = responders.Count;
             int skipped = scope.Count - applied;
             if (applied == 0)
-                return new WingDispatchResult(0, skipped,
+                return new WingDispatchResult(0,
                     WingOrderCatalog.UnavailableReason(WingOrder.FireForEffect));
 
             string message = ScopePrefix(wholeWing, applied) + ": splash 'em on " +
                              target.unitName;
             if (skipped > 0) message += " (" + skipped + " unable)";
-            return new WingDispatchResult(applied, skipped, message, 1, responders,
-                                          WingOrder.FireForEffect);
+            return new WingDispatchResult(applied, message, responders, WingOrder.FireForEffect);
         }
 
         /// <summary>
@@ -157,12 +150,12 @@ namespace WingCommand
         {
             List<WingMember> scope = Scope(wholeWing);
             if (scope.Count == 0)
-                return new WingDispatchResult(0, 0,
+                return new WingDispatchResult(0,
                     wholeWing ? "No wingmen assigned" : "No wingmen selected");
 
             Unit target = FirstLive(targets);
             if (target == null)
-                return new WingDispatchResult(0, scope.Count, "No target selected");
+                return new WingDispatchResult(0, "No target selected");
 
             var responders = new List<WingMember>();
             foreach (WingMember member in scope)
@@ -175,13 +168,12 @@ namespace WingCommand
             int applied = responders.Count;
             int skipped = scope.Count - applied;
             if (applied == 0)
-                return new WingDispatchResult(0, skipped,
+                return new WingDispatchResult(0,
                     WingOrderCatalog.UnavailableReason(WingOrder.JamTarget));
 
             string message = ScopePrefix(wholeWing, applied) + ": jamming " + target.unitName;
             if (skipped > 0) message += " (" + skipped + " without ECM)";
-            return new WingDispatchResult(applied, skipped, message, 1, responders,
-                                          WingOrder.JamTarget);
+            return new WingDispatchResult(applied, message, responders, WingOrder.JamTarget);
         }
 
         /// <summary>Send the scope through one scripted manoeuvre. Transient; it rejoins after.</summary>
@@ -189,7 +181,7 @@ namespace WingCommand
         {
             List<WingMember> scope = Scope(wholeWing);
             if (scope.Count == 0)
-                return new WingDispatchResult(0, 0,
+                return new WingDispatchResult(0,
                     wholeWing ? "No wingmen assigned" : "No wingmen selected");
 
             var responders = new List<WingMember>();
@@ -203,12 +195,11 @@ namespace WingCommand
             int applied = responders.Count;
             int skipped = scope.Count - applied;
             if (applied == 0)
-                return new WingDispatchResult(0, skipped,
+                return new WingDispatchResult(0,
                     WingOrderCatalog.UnavailableReason(WingOrder.Maneuver));
 
             string message = ScopePrefix(wholeWing, applied) + ": " + ManeuverCatalog.Label(kind);
-            return new WingDispatchResult(applied, skipped, message, 0, responders,
-                                          WingOrder.Maneuver);
+            return new WingDispatchResult(applied, message, responders, WingOrder.Maneuver);
         }
 
         private static Unit FirstLive(IReadOnlyList<Unit> targets)

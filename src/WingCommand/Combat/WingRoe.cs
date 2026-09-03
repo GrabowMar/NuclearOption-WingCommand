@@ -34,6 +34,8 @@ namespace WingCommand
             }
         }
 
+        public static WingRoe Next(WingRoe roe) => (WingRoe)(((int)roe + 1) % 3);
+
         /// <summary>
         /// The wing's current rules of engagement.
         ///

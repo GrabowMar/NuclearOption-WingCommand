@@ -94,8 +94,6 @@ namespace WingCommand
             return result;
         }
 
-        public int Count(WingRegistry wing) => Snapshot(wing).Count;
-
         public string Summary(WingRegistry wing)
         {
             int total = wing?.Count ?? 0;

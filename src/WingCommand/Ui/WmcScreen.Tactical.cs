@@ -84,8 +84,7 @@ namespace WingCommand
         private static float AddSummary(RectTransform parent, float y)
         {
             float w = PanelWidth - Pad * 2f;
-            Panel(parent, new Rect(Pad, y, w, RowHeight), WingUi.BorderSubtle).color = WingUi.SurfaceCard;
-            Rule(parent, new Rect(Pad, y, 3f, RowHeight), Friendly());
+            WingUi.TacticalCard(parent, new Rect(Pad, y, w, RowHeight), WingUi.RailEmerald);
 
             const float actionWidth = WingUi.ButtonAction;
             summaryLabel = Label(parent, "",
@@ -220,13 +219,12 @@ namespace WingCommand
             const float boxH = 104f;
 
             // --- Left: Formation Radar Visualizer ---
-            Panel(parent, new Rect(Pad, y, radarW, boxH), WingUi.CardFill);
-            Outline(parent, new Rect(Pad, y, radarW, boxH), FrameColor());
-            Rule(parent, new Rect(Pad, y, 3f, boxH), Friendly());
+            WingUi.TacticalCard(parent, new Rect(Pad, y, radarW, boxH), WingUi.RailEmerald);
 
-            // Crosshairs
-            Rule(parent, new Rect(Pad + radarW * 0.5f, y - 6f, 1f, boxH - 28f), new Color(0.2f, 0.45f, 0.4f, 0.3f));
-            Rule(parent, new Rect(Pad + 6f, y - (boxH - 20f) * 0.5f, radarW - 12f, 1f), new Color(0.2f, 0.45f, 0.4f, 0.3f));
+            // Crosshairs with subtle emerald glow
+            Color crosshairCol = new Color(WingUi.RailEmerald.r, WingUi.RailEmerald.g, WingUi.RailEmerald.b, 0.25f);
+            Rule(parent, new Rect(Pad + radarW * 0.5f, y - 6f, 1f, boxH - 28f), crosshairCol);
+            Rule(parent, new Rect(Pad + 6f, y - (boxH - 20f) * 0.5f, radarW - 12f, 1f), crosshairCol);
 
             float radarCenterX = Pad + radarW * 0.5f;
             formationRadarCenterY = y - 22f;
@@ -244,7 +242,7 @@ namespace WingCommand
             for (int i = 0; i < 3; i++)
             {
                 var line = Rule(parent, new Rect(radarCenterX, formationRadarCenterY, 1f, 1f),
-                                new Color(0.25f, 0.55f, 0.5f, 0.4f));
+                                new Color(WingUi.RailEmerald.r, WingUi.RailEmerald.g, WingUi.RailEmerald.b, 0.35f));
                 formationVectorLines.Add(line);
 
                 var dotGo = new GameObject("WingmanDot_" + i, typeof(RectTransform));
@@ -259,9 +257,7 @@ namespace WingCommand
             float docX = Pad + radarW + Gap;
             float docW = w - radarW - Gap;
 
-            Panel(parent, new Rect(docX, y, docW, boxH), WingUi.CardFill);
-            Outline(parent, new Rect(docX, y, docW, boxH), FrameColor());
-            Rule(parent, new Rect(docX, y, 3f, boxH), Green());
+            WingUi.TacticalCard(parent, new Rect(docX, y, docW, boxH), WingUi.RailCyan);
 
             float lineY = y - 4f;
             doctrineTitleLabel = Label(parent, "COMBAT DOCTRINE",
@@ -277,7 +273,7 @@ namespace WingCommand
 
             doctrineRulesLabel = Label(parent, "",
                 new Rect(docX + Space2, lineY, docW - Space3, 24f),
-                Accent(), FontMicro, FontStyles.Normal, TextAlignmentOptions.Left);
+                Green(), FontMicro, FontStyles.Normal, TextAlignmentOptions.Left);
             doctrineRulesLabel.enableWordWrapping = true;
             lineY -= 26f;
 
@@ -441,12 +437,9 @@ namespace WingCommand
         {
             WingCommandManager manager = WingCommandManager.Instance;
 
-            if (shapeLabel != null)
-                shapeLabel.text = FormationShapes.Pretty(WingFormation.Shape);
-
             if (summaryLabel != null)
                 summaryLabel.text = "COMMAND: " + (manager?.Selection.Summary(wing) ?? "ALL") +
-                                    "   ·   WING " + wing.Count + "/" + WingRegistry.WingLimitLabel +
+                                    "   ·   WING " + (wing.Count + WingShopDelivery.PendingCount) + "/" + WingRegistry.WingLimitLabel +
                                     "  (YOUR FLIGHT)";
 
             holdButton?.SetLatched(wing.Roe == WingRoe.Hold);
@@ -510,6 +503,7 @@ namespace WingCommand
             const float radarW = 108f;
             float radarCenterX = Pad + radarW * 0.5f;
 
+            int totalInWing = (wing != null ? wing.Count : 0) + WingShopDelivery.PendingCount;
             for (int i = 0; i < formationWingmenDots.Count; i++)
             {
                 Vector3 coord = FormationSolver.SlotCoordinates(i + 1, shape, 1f, 1f);
@@ -520,7 +514,7 @@ namespace WingCommand
                 if (dot != null)
                 {
                     Place(dot, new Rect(px - 8f, py + 8f, 16f, 16f));
-                    bool inWing = wing != null && i < wing.Count;
+                    bool inWing = i < totalInWing;
                     dot.gameObject.SetActive(true);
                     var lbl = dot.GetComponentInChildren<TMP_Text>();
                     if (lbl != null) lbl.color = inWing ? Green() : new Color(0.4f, 0.6f, 0.55f, 0.45f);
@@ -538,7 +532,7 @@ namespace WingCommand
                     lineRt.sizeDelta = new Vector2(dist, 1f);
                     lineRt.anchoredPosition = new Vector2(radarCenterX, formationRadarCenterY);
                     lineRt.localRotation = Quaternion.Euler(0f, 0f, angle);
-                    bool inWing = wing != null && i < wing.Count;
+                    bool inWing = i < totalInWing;
                     line.color = inWing ? new Color(0.2f, 0.65f, 0.45f, 0.45f) : new Color(0.2f, 0.35f, 0.3f, 0.2f);
                 }
             }
@@ -610,17 +604,19 @@ namespace WingCommand
 
         private static void RefreshRoster(WingRegistry wing)
         {
-            bool empty = wing.Count == 0;
+            int pendingCount = WingShopDelivery.PendingCount;
+            int totalCount = wing.Count + pendingCount;
+            bool empty = totalCount == 0;
             if (rosterEmptyLabel != null && rosterEmptyLabel.gameObject.activeSelf != empty)
                 rosterEmptyLabel.gameObject.SetActive(empty);
 
-            int pages = Mathf.Max(1, Mathf.CeilToInt(wing.Count / (float)RosterRowsPerPage));
+            int pages = Mathf.Max(1, Mathf.CeilToInt(totalCount / (float)RosterRowsPerPage));
             rosterPage = Mathf.Clamp(rosterPage, 0, pages - 1);
             if (rosterPageLabel != null)
                 rosterPageLabel.text = empty
                     ? ""
                     : pages == 1
-                        ? wing.Count + (wing.Count == 1 ? " wingman" : " wingmen")
+                        ? totalCount + (totalCount == 1 ? " wingman" : " wingmen")
                         : "flight page " + (rosterPage + 1) + " of " + pages;
 
             rosterPrevButton?.SetEnabled(rosterPage > 0);
@@ -632,8 +628,18 @@ namespace WingCommand
             for (int i = 0; i < rosterRows.Count; i++)
             {
                 int index = first + i;
-                if (index < wing.Count) rosterRows[i].Bind(wing.Members[index]);
-                else rosterRows[i].Hide();
+                if (index < wing.Count)
+                {
+                    rosterRows[i].Bind(wing.Members[index]);
+                }
+                else if (index < totalCount)
+                {
+                    rosterRows[i].BindPending(WingShopDelivery.GetPending(index - wing.Count), index + 1);
+                }
+                else
+                {
+                    rosterRows[i].Hide();
+                }
             }
         }
 
@@ -675,6 +681,7 @@ namespace WingCommand
             private readonly WingButton lead;
             private readonly WingButton release;
             private WingMember bound;
+            private WingShopDelivery.PendingDelivery boundPending;
 
             /// <summary>
             /// Which wingman, if any, has had its REL pressed once and is waiting to have it
@@ -684,9 +691,14 @@ namespace WingCommand
             /// discharge a wingman on the next click is worse than none.
             /// </summary>
             private static readonly Confirmation memberRelease = new Confirmation();
+            private static readonly Confirmation pendingRelease = new Confirmation();
 
             /// <summary>Drop the armed wingman when the mission ends, with everything else.</summary>
-            public static void Disarm() => memberRelease.Clear();
+            public static void Disarm()
+            {
+                memberRelease.Clear();
+                pendingRelease.Clear();
+            }
 
             public RosterRow(RectTransform parent, int index)
             {
@@ -704,9 +716,16 @@ namespace WingCommand
                 const float releaseWidth = WingUi.ButtonCompact;
                 hit = HitButton(rt, new Rect(0f, 0f, width - releaseWidth - Space2, RowHeight), () =>
                 {
-                    if (bound == null) return;
-                    bool toggle = Input.GetKey(KeyCode.LeftShift) || Input.GetKey(KeyCode.RightShift);
-                    WingCommandManager.Instance?.SelectMember(bound, toggle);
+                    if (bound != null)
+                    {
+                        bool toggle = Input.GetKey(KeyCode.LeftShift) || Input.GetKey(KeyCode.RightShift);
+                        WingCommandManager.Instance?.SelectMember(bound, toggle);
+                    }
+                    else if (boundPending != null)
+                    {
+                        WingCommandManager.Instance?.Toast(
+                            boundPending.AirframeName + " is preparing for departure - cannot be ordered until airborne");
+                    }
                 });
 
                 // Cells sit under the four columns in RosterColumns — CALLSIGN, STATE,
@@ -755,25 +774,43 @@ namespace WingCommand
             /// <summary>Arm on the first press, discharge on the second.</summary>
             private void ConfirmRelease()
             {
-                if (bound == null) return;
-
-                if (memberRelease.IsArmedFor(bound))
+                if (bound != null)
                 {
-                    WingMember going = bound;
-                    memberRelease.Clear();
-                    WingCommandManager.Instance?.RemoveMember(going);
+                    if (memberRelease.IsArmedFor(bound))
+                    {
+                        WingMember going = bound;
+                        memberRelease.Clear();
+                        WingCommandManager.Instance?.RemoveMember(going);
+                        return;
+                    }
+
+                    memberRelease.Arm(bound);
+                    WingCommandManager.Instance?.Toast(
+                        "Press REL again to release " + bound.Name + " from the wing");
                     return;
                 }
 
-                memberRelease.Arm(bound);
-                WingCommandManager.Instance?.Toast(
-                    "Press REL again to release " + bound.Name + " from the wing");
+                if (boundPending != null)
+                {
+                    if (pendingRelease.IsArmedFor(boundPending))
+                    {
+                        WingShopDelivery.PendingDelivery going = boundPending;
+                        pendingRelease.Clear();
+                        WingShopDelivery.CancelPending(going);
+                        return;
+                    }
+
+                    pendingRelease.Arm(boundPending);
+                    WingCommandManager.Instance?.Toast(
+                        "Press REL again to cancel requisition of " + boundPending.AirframeName);
+                }
             }
 
             public void Bind(WingMember m)
             {
-                bool memberChanged = bound != m;
+                bool memberChanged = bound != m || boundPending != null;
                 bound = m;
+                boundPending = null;
                 if (!go.activeSelf) go.SetActive(true);
 
                 bool selected = WingCommandManager.Instance?.Selection.Contains(m) ?? true;
@@ -818,9 +855,42 @@ namespace WingCommand
                 ammo.color = ammoCount <= 0 ? low : Dim();
             }
 
+            public void BindPending(WingShopDelivery.PendingDelivery p, int slotNumber)
+            {
+                bool pendingChanged = boundPending != p || bound != null;
+                bound = null;
+                boundPending = p;
+                if (!go.activeSelf) go.SetActive(true);
+
+                bool armed = pendingRelease.IsArmedFor(p);
+                release?.SetLatched(armed);
+                release?.SetText(armed ? "SURE?" : "REL");
+
+                lead?.SetLatched(false);
+
+                if (pendingChanged)
+                {
+                    slot.text = slotNumber.ToString();
+                    name.text = UiTheme.Truncate(p.AirframeName, 16);
+                }
+                slot.color = Dim();
+                name.color = WingColor();
+                selectionRule.color = MemberFrameColor();
+
+                hit?.SetRowHighlight(fill, WingUi.CardFill, WingUi.CardFillHover);
+                order.text = "DEPT";
+
+                float fuelFraction = p.Fuel;
+                fuel.text = Mathf.RoundToInt(fuelFraction * 100f) + "%";
+                fuel.color = Dim();
+                ammo.text = "-";
+                ammo.color = Dim();
+            }
+
             public void Hide()
             {
                 bound = null;
+                boundPending = null;
                 if (go.activeSelf) go.SetActive(false);
             }
         }

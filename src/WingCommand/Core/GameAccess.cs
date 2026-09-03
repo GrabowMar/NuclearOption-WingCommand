@@ -59,6 +59,13 @@ namespace WingCommand
         /// <summary>True when a landing aircraft's destination can be read.</summary>
         public static bool LandingDestinationAvailable { get; private set; }
 
+        // The hangar's spawned prefab is private. Delivery claims it immediately after
+        // TrySpawnAircraft rather than waiting for the unit-registry walk.
+        private static AccessTools.FieldRef<Hangar, GameObject> hangarSpawnedObjectRef;
+
+        /// <summary>True when a hangar's spawned object can be read.</summary>
+        public static bool HangarSpawnAvailable { get; private set; }
+
         public static void Initialise()
         {
             try
@@ -110,6 +117,19 @@ namespace WingCommand
                     Plugin.Logger.LogWarning(
                         "Landing destination unreadable (" + landing.Message +
                         "). RTB will not be drawn on the map.");
+                }
+
+                try
+                {
+                    hangarSpawnedObjectRef = Field<Hangar, GameObject>("spawnedObject");
+                    HangarSpawnAvailable = true;
+                }
+                catch (Exception hangar)
+                {
+                    HangarSpawnAvailable = false;
+                    Plugin.Logger.LogWarning(
+                        "Hangar spawn unreadable (" + hangar.Message +
+                        "). Hangar deliveries will wait for the unit registry.");
                 }
             }
             catch (Exception e)
@@ -194,6 +214,13 @@ namespace WingCommand
             }
 
             return false;
+        }
+
+        public static GameObject GetHangarSpawnedObject(Hangar hangar)
+        {
+            if (!HangarSpawnAvailable || hangar == null) return null;
+            try { return hangarSpawnedObjectRef(hangar); }
+            catch { return null; }
         }
 
         // ---------------------------------------------------------- RadialMenuAction

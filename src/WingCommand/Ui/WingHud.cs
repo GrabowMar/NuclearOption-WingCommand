@@ -6,12 +6,12 @@ using UnityEngine.UI;
 namespace WingCommand
 {
     /// <summary>
-    /// Native HUD rendering for the compact wing strip, plus IMGUI fallbacks for the
-    /// standalone radial menu and transient messages.
+    /// Native HUD rendering for the compact wing strip, plus an IMGUI toast for
+    /// debug-only fallback messages.
     ///
-    /// The stock <c>RadialMenuMain</c> is a SceneSingleton driven by a fixed
-    /// <c>RadialMenuAction.ActionType</c> enum and weapon-bound ScriptableObjects, so it
-    /// cannot carry wing orders without invasive patching. IMGUI is used instead.
+    /// The command wheel lives in <see cref="WingRadialOverlay"/> (uGUI) and the stock
+    /// <c>RadialMenuMain</c> (via <see cref="WingRadialMenu"/>). This file used to draw
+    /// the wheel in IMGUI as well; that path is gone.
     /// </summary>
     internal static class WingHud
     {
@@ -75,7 +75,6 @@ namespace WingCommand
         private static TMP_Text statusTitle;
         private static CombatHUD statusHud;
         private static Canvas statusCanvas;
-        private static TMP_FontAsset statusFont;
         private static Sprite statusBackdropSprite;
         private static float nextStatusRefresh;
         private static int lastStatusCount = -1;
@@ -133,7 +132,6 @@ namespace WingCommand
             statusTitle = null;
             statusHud = null;
             statusCanvas = null;
-            statusFont = null;
             statusRows.Clear();
             if (statusBackdropSprite != null)
             {
@@ -149,7 +147,7 @@ namespace WingCommand
         private static void BuildStatusPanel(CombatHUD hud, Canvas canvas, DynamicMap map)
         {
             TMP_Text template = hud.GetComponentInChildren<TMP_Text>(includeInactive: true);
-            statusFont = template != null ? template.font : null;
+            if (template != null) WingUi.Font = template.font;
             statusHud = hud;
             statusCanvas = canvas;
             statusWidth = StatusPanelWidth;
@@ -164,9 +162,9 @@ namespace WingCommand
 
             CreateStatusBackdrop(statusRoot, map);
 
-            statusTitle = StatusLabel(statusRoot, "", new Rect(7f, -2f, statusWidth - 14f, 20f),
-                                      HeaderText, UiTheme.Green.WithAlpha(0.90f),
-                                      TextAlignmentOptions.Left);
+            statusTitle = WingUi.Label(statusRoot, "", new Rect(7f, -2f, statusWidth - 14f, 20f),
+                                       UiTheme.Green.WithAlpha(0.90f), HeaderText, FontStyles.Normal,
+                                       TextAlignmentOptions.Left);
             PositionStatusPanel(map);
         }
 
@@ -392,18 +390,21 @@ namespace WingCommand
                 rect.SetParent(parent, worldPositionStays: false);
 
                 icon = StatusIcon(rect, new Rect(7f, -6f, 18f, 18f));
-                identity = StatusLabel(rect, "", new Rect(32f, -2f, 92f, 17f), PrimaryText,
-                                       WingMarkers.MemberColor, TextAlignmentOptions.Left);
-                state = StatusLabel(rect, "", new Rect(32f, -17f, 118f, 13f), SecondaryText,
-                                    WingMarkers.MemberColor.WithAlpha(0.62f), TextAlignmentOptions.Left);
-                distance = StatusLabel(rect, "", new Rect(126f, -3f, 76f, 16f), PrimaryText,
-                                       WingMarkers.MemberColor.WithAlpha(0.78f), TextAlignmentOptions.Right);
+                identity = WingUi.Label(rect, "", new Rect(32f, -2f, 92f, 17f),
+                                        WingMarkers.MemberColor, PrimaryText, FontStyles.Normal,
+                                        TextAlignmentOptions.Left);
+                state = WingUi.Label(rect, "", new Rect(32f, -17f, 118f, 13f),
+                                     WingMarkers.MemberColor.WithAlpha(0.62f), SecondaryText,
+                                     FontStyles.Normal, TextAlignmentOptions.Left);
+                distance = WingUi.Label(rect, "", new Rect(126f, -3f, 76f, 16f),
+                                        WingMarkers.MemberColor.WithAlpha(0.78f), PrimaryText,
+                                        FontStyles.Normal, TextAlignmentOptions.Right);
                 rangeCue = StatusIcon(rect, new Rect(32f, -27f, 168f, 1f));
             }
 
             public void Place(int index, int count)
             {
-                StatusPlace(rect, new Rect(
+                WingUi.Place(rect, new Rect(
                     0f,
                     -StatusHeaderHeight - index * StatusRowHeight,
                     statusWidth,
@@ -516,49 +517,16 @@ namespace WingCommand
 
         }
 
-        private static TMP_Text StatusLabel(RectTransform parent, string text, Rect rect,
-                                            float size, Color color, TextAlignmentOptions alignment)
-        {
-            var go = new GameObject("Text", typeof(RectTransform));
-            RectTransform rt = go.GetComponent<RectTransform>();
-            rt.SetParent(parent, worldPositionStays: false);
-            StatusPlace(rt, rect);
-
-            TextMeshProUGUI label = go.AddComponent<TextMeshProUGUI>();
-            if (statusFont != null) label.font = statusFont;
-            label.text = text;
-            label.fontSize = size;
-            label.color = color;
-            label.alignment = alignment;
-            label.enableWordWrapping = false;
-            label.overflowMode = TextOverflowModes.Ellipsis;
-            label.raycastTarget = false;
-            return label;
-        }
-
         private static Image StatusIcon(RectTransform parent, Rect rect)
         {
             var go = new GameObject("AircraftIcon", typeof(RectTransform), typeof(Image));
             RectTransform rt = go.GetComponent<RectTransform>();
             rt.SetParent(parent, worldPositionStays: false);
-            StatusPlace(rt, rect);
+            WingUi.Place(rt, rect);
             Image image = go.GetComponent<Image>();
             image.preserveAspect = true;
             image.raycastTarget = false;
             return image;
-        }
-
-        private static void StatusPlace(RectTransform rt, Rect rect)
-        {
-            rt.anchorMin = rt.anchorMax = rt.pivot = new Vector2(0f, 1f);
-            rt.sizeDelta = new Vector2(rect.width, rect.height);
-            rt.anchoredPosition = new Vector2(rect.x, rect.y);
-            rt.localScale = Vector3.one;
-        }
-
-        [System.Obsolete("Use WingRadialOverlay")]
-        public static void DrawRadial(RadialSlice[] slices, Vector2 centre, int hovered)
-        {
         }
 
         public static void DrawToast(string message)

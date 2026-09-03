@@ -104,7 +104,7 @@ namespace WingCommand
 
         // ------------------------------------------------------------------ hangar path
 
-        private sealed class PendingDelivery
+        internal sealed class PendingDelivery
         {
             public WingShop.PurchaseTransaction Transaction;
             public Airbase Origin;
@@ -116,10 +116,23 @@ namespace WingCommand
             public float ExpiresAt;
             public bool Starting;
             public readonly List<Aircraft> EarlyCandidates = new List<Aircraft>();
+
+            public AircraftDefinition Definition => Transaction?.Definition;
+            public string AirframeName => Definition != null ? Definition.unitName : "Airframe";
         }
 
         private static readonly List<PendingDelivery> pending = new List<PendingDelivery>();
         private static FactionHQ watched;
+
+        public static int PendingCount => pending.Count;
+        public static PendingDelivery GetPending(int index) => (index >= 0 && index < pending.Count) ? pending[index] : null;
+
+        public static bool CancelPending(PendingDelivery order)
+        {
+            if (order == null || !pending.Contains(order)) return false;
+            FailDelivery(order, "cancelled by player");
+            return true;
+        }
 
         /// <summary>
         /// Order a hangar delivery from the nearest field that stocks this airframe, and queue
@@ -228,18 +241,28 @@ namespace WingCommand
             // rather than whatever was left of the time this order spent queued.
             order.ExpiresAt = Time.unscaledTime + HangarDeliveryTimeout;
 
+            // If an immediate hangar spawn produced an object on the hangar, claim it directly.
+            GameObject immediateSpawn = GameAccess.GetHangarSpawnedObject(result.Hangar);
+            if (immediateSpawn != null)
+            {
+                Aircraft direct = immediateSpawn.GetComponent<Aircraft>();
+                if (direct != null) TryClaim(direct);
+            }
+
             // An immediate hangar spawn registers inside TrySpawnAircraft, before it returns
             // the native Hangar identifier. Re-evaluate only after that identifier is known.
             for (int i = 0; i < order.EarlyCandidates.Count; i++)
                 TryClaim(order.EarlyCandidates[i]);
         }
 
-        /// <summary>The closest friendly field that stocks this airframe in some hangar, whether or not that hangar is free to launch it this instant.</summary>
+        /// <summary>The closest friendly field that stocks this airframe in some hangar, preferring one ready to launch it this instant.</summary>
         private static Airbase NearestStockedAirbase(AircraftDefinition definition, FactionHQ hq,
                                                      Vector3 from)
         {
-            Airbase best = null;
-            float bestSq = float.MaxValue;
+            Airbase bestReady = null;
+            float bestReadySq = float.MaxValue;
+            Airbase bestStocked = null;
+            float bestStockedSq = float.MaxValue;
 
             foreach (Airbase airbase in hq.GetAirbases())
             {
@@ -247,13 +270,22 @@ namespace WingCommand
                 if (!airbase.GetAvailableAircraft().Contains(definition)) continue;
 
                 float sq = (airbase.transform.position - from).sqrMagnitude;
-                if (sq >= bestSq) continue;
-
-                bestSq = sq;
-                best = airbase;
+                if (airbase.CanSpawnAircraft(definition))
+                {
+                    if (sq < bestReadySq)
+                    {
+                        bestReadySq = sq;
+                        bestReady = airbase;
+                    }
+                }
+                if (sq < bestStockedSq)
+                {
+                    bestStockedSq = sq;
+                    bestStocked = airbase;
+                }
             }
 
-            return best;
+            return bestReady ?? bestStocked;
         }
 
         private static void Watch(FactionHQ hq)
@@ -327,6 +359,8 @@ namespace WingCommand
                 return false;
             if (order.Transaction.Definition != aircraft.definition) return false;
             if (aircraft.NetworkHQ != order.Transaction.Hq) return false;
+            GameObject spawnedObject = GameAccess.GetHangarSpawnedObject(order.Hangar);
+            if (spawnedObject != null && spawnedObject == aircraft.gameObject) return true;
             if (aircraft.NetworkspawningHangar != order.Hangar) return false;
             if (Time.unscaledTime + 0.01f < order.RequestedAt) return false;
 
@@ -345,6 +379,24 @@ namespace WingCommand
         /// </summary>
         public static void Tick()
         {
+            for (int i = pending.Count - 1; i >= 0; i--)
+            {
+                PendingDelivery order = pending[i];
+                if (order.Hangar != null)
+                {
+                    GameObject spawnedObject = GameAccess.GetHangarSpawnedObject(order.Hangar);
+                    if (spawnedObject != null)
+                    {
+                        Aircraft direct = spawnedObject.GetComponent<Aircraft>();
+                        if (direct != null && Matches(order, direct))
+                        {
+                            TryClaim(direct);
+                            continue;
+                        }
+                    }
+                }
+            }
+
             for (int i = pending.Count - 1; i >= 0; i--)
             {
                 PendingDelivery order = pending[i];

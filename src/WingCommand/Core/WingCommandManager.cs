@@ -78,42 +78,20 @@ namespace WingCommand
         {
             new RadialSlice(WingOrderCatalog.Label(WingOrder.Formation).ToUpperInvariant(),
                 WingHost.Current.IsSurfaceVehicle ? "ON STATION" : "REJOIN",
-                WingAction.Rejoin, "rejoin",
-                WingHost.Current.IsSurfaceVehicle
-                    ? "Hold all flight members on station above your vehicle."
-                    : "Recall all flight members to assigned formation slots."),
+                WingAction.Rejoin, "rejoin"),
             new RadialSlice(WingOrderCatalog.Label(WingOrder.Attack).ToUpperInvariant(),
                 WingHost.Current.IsSurfaceVehicle ? "PRIORITY LOCK" : "PRIORITY LOCK",
-                WingAction.AttackMyTarget, "attack",
-                "Order all wingmen to concentrate attack on player's designated target."),
+                WingAction.AttackMyTarget, "attack"),
             new RadialSlice(WingOrderCatalog.Label(WingOrder.Engage).ToUpperInvariant(),
                 WingHost.Current.IsSurfaceVehicle ? "CLOSE AIR SUPPORT" : "SEARCH & DESTROY",
-                WingAction.Engage, "engage",
-                "Order wingmen to autonomously search and engage hostiles within operational leash."),
-            new RadialSlice(WingOrderCatalog.Label(WingOrder.FireForEffect).ToUpperInvariant(),
-                WingHost.Current.IsSurfaceVehicle ? "FIRE FOR EFFECT" : "FIRE FOR EFFECT",
-                WingAction.FireForEffect, "orders",
-                "Fire for effect: wingmen expend all effective stores onto designated target."),
+                WingAction.Engage, "engage"),
             new RadialSlice(WingOrderCatalog.Label(WingOrder.FallBack).ToUpperInvariant(),
                 WingHost.Current.IsSurfaceVehicle ? "BREAK CONTACT" : "DEFENSIVE BREAK",
-                WingAction.FallBack, "fallback",
-                "Defensive break: wingmen deploy countermeasures, break contact, and egress."),
+                WingAction.FallBack, "fallback"),
             new RadialSlice(WingOrderCatalog.Label(WingOrder.ReturnToBase).ToUpperInvariant(),
                 WingHost.Current.IsSurfaceVehicle ? "WITHDRAW" : "RTB RECOVERY",
-                WingAction.ReturnToBase, "rtb",
-                "Order wingmen to disengage and return to nearest friendly airbase for recovery."),
-            new RadialSlice("CYCLE ROE", "RULES OF ENGAGEMENT", WingAction.CycleRoe, "posture",
-                "Cycle standing Rules of Engagement: HOLD -> TIGHT -> FREE."),
-            new RadialSlice("NEXT FORMATION", "FLIGHT SHAPE", WingAction.CycleShape, "formation",
-                "Switch flight formation geometry: VIC, TRAIL, COMBAT SPREAD, FINGER FOUR, etc."),
-            new RadialSlice(WingOrderCatalog.Label(WingOrder.JamTarget).ToUpperInvariant(),
-                WingHost.Current.IsSurfaceVehicle ? "ELECTRONIC WARFARE" : "ELECTRONIC WARFARE",
-                WingAction.JamMyTarget, "jam",
-                "Order wingmen to jam radar and sensors of player's designated target."),
-            new RadialSlice(WingOrderCatalog.Label(WingOrder.OrbitHere).ToUpperInvariant(),
-                WingHost.Current.IsSurfaceVehicle ? "HOLD STATION" : "COMBAT AIR PATROL",
-                WingAction.OrbitHere, "orbit",
-                "Combat Air Patrol: wingmen orbit and hold current coordinates."),
+                WingAction.ReturnToBase, "rtb"),
+            new RadialSlice("CYCLE ROE", "RULES OF ENGAGEMENT", WingAction.CycleRoe, "posture"),
         };
 
         private void Awake()
@@ -153,6 +131,7 @@ namespace WingCommand
                 mapLayer?.Reset();
                 Wing.Clear();
                 Selection.Reset();
+                WingInteropPush.Clear();
                 resetForNonPlayableState = true;
                 return;
             }
@@ -197,6 +176,8 @@ namespace WingCommand
 
             HandleRadialInput();
             HandleHotkeys();
+
+            WingInteropPush.Publish(Wing);
 
             if (Plugin.Settings.MapCommandEnabled.Value)
                 mapLayer.Update();
@@ -358,7 +339,7 @@ namespace WingCommand
             {
                 AccumulateRadialDelta();
                 hoveredSlice = SliceFromDelta();
-                WingRadialOverlay.Show(Slices, hoveredSlice, radialDelta, Wing);
+                WingRadialOverlay.Show(Slices, hoveredSlice, Wing);
             }
             else
             {
@@ -485,28 +466,6 @@ namespace WingCommand
                     break;
                 }
 
-                case WingAction.DeliverCargo:
-                    Show(Commands.Apply(WingDirective.Simple(WingOrder.DeliverCargo), wholeWing));
-                    break;
-
-                case WingAction.LandHere:
-                {
-                    Aircraft leader = Wing.Leader;
-                    if (leader == null) { Toast("Not flying"); break; }
-                    Show(Commands.Apply(
-                        WingDirective.AtPoint(WingOrder.LandHere, leader.GlobalPosition()),
-                        wholeWing));
-                    break;
-                }
-
-                case WingAction.CycleShape:
-                {
-                    FormationShape next = FormationShapes.CycleCore(WingFormation.Shape, 1);
-                    WingFormation.Shape = next;
-                    Toast("Formation: " + FormationShapes.Pretty(next));
-                    break;
-                }
-
                 case WingAction.FireForEffect:
                     Show(Commands.FireForEffect(CurrentPlayerTargets(), wholeWing));
                     break;
@@ -529,19 +488,10 @@ namespace WingCommand
                 {
                     // Cycles all three rungs rather than toggling two, so the wheel can
                     // reach the whole escalation without a submenu.
-                    Wing.Roe = (WingRoe)(((int)Wing.Roe + 1) % 3);
+                    Wing.Roe = RoeRules.Next(Wing.Roe);
                     Toast("ROE: " + RoeRules.Label(Wing.Roe));
                     break;
                 }
-
-                case WingAction.Disband:
-                    if (RequireWing())
-                    {
-                        int n = Wing.Count;
-                        Wing.DisbandAll("player disbanded wing");
-                        Toast("Wing disbanded (" + n + ")");
-                    }
-                    break;
             }
         }
 
@@ -755,13 +705,6 @@ namespace WingCommand
             return playerTargets;
         }
 
-        private bool RequireWing()
-        {
-            if (Wing.Count > 0) return true;
-            Toast("No wingmen assigned");
-            return false;
-        }
-
         /// <summary>
         /// Internal gameplay notice. These remain available to verbose diagnostics but no
         /// longer enter MessageUI: its black boxes were the obsolete second chatter/log
@@ -819,12 +762,8 @@ namespace WingCommand
         ReturnToBase,
         FallBack,
         OrbitHere,
-        DeliverCargo,
-        LandHere,
-        CycleShape,
         AttackMyTarget,
         CycleRoe,
-        Disband,
         JamMyTarget,
     }
 
@@ -834,22 +773,13 @@ namespace WingCommand
         public readonly string Subtitle;
         public readonly WingAction Action;
         public readonly string IconKey;
-        public readonly string Description;
 
-        public string Label => Title;
-
-        public RadialSlice(string title, string subtitle, WingAction action, string iconKey, string description)
+        public RadialSlice(string title, string subtitle, WingAction action, string iconKey)
         {
             Title = title;
             Subtitle = subtitle;
             Action = action;
             IconKey = iconKey;
-            Description = description;
-        }
-
-        public RadialSlice(string label, WingAction action)
-            : this(label.Replace("\n", " "), "COMMAND", action, "orders", "")
-        {
         }
     }
 }

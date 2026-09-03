@@ -21,7 +21,8 @@ a pylon-level loadout editor, a squadron shop/economy, and radio chatter.
 | `src/WingCommand/Economy/` | shop, delivery, reserve, loadout templates |
 | `src/WingCommand/Ui/` | everything that draws: WMC panel, HUD, map layers, radial |
 | `src/WingCommand/Comms/` | radio chatter and its HUD |
-| `src/WingCommand/Core/Plugin.cs` | entry point: `harmony.PatchAll`, persistent manager GameObject |
+| `src/WingCommand/Core/Plugin.cs` | entry point: explicit `harmony.PatchAll(typeof(...))` list (not the assembly), persistent manager GameObject |
+| `src/WingCommand/Interop/` | public façade + presence-board push; Boscali must not compile against this assembly |
 | `src/WingCommand/Core/WingConfig.cs` | every BepInEx binding, one `Bind*` method per section |
 | `src/WingCommand/Pure/WingTuning.cs` | every tuned number that is **not** a setting — see below |
 | `src/WingCommand/Core/GameAccess.cs` | every reflection accessor into private game members; resolved once at startup |
@@ -85,10 +86,12 @@ dotnet test tests/WingCommand.PureTests/WingCommand.PureTests.csproj -c Release
 - **Private game members are reached through `GameAccess`**, never inline reflection: a
   publicizer is blocked by this machine's application-control policy. `GameAccess.Initialise()`
   runs before `PatchAll` so patches can stand down when the game layout moves.
-- Types are `internal` by default. The public surface is the entry point plus three
+- Dual-mod rules (bezels, map picker, no hard dep on Boscali Summer):
+  `C:\Users\marci\dev\nomodkit\shared\avionics\README.md`.
+- Types are `internal` by default. The public surface is the entry point plus four
   extension seams: `Pure/WingAi.cs` (reflexes), `Core/WingBehaviourCatalog.cs` (pilot-state
-  factories) and `Pure/WingHost.cs` (what the player is commanding *from*, when it is not an
-  aircraft). `WingHost` is a **pushed struct**, not a callback, because its call sites are
+  factories), `Pure/WingHost.cs` (what the player is commanding *from*, when it is not an
+  aircraft), and `Interop/` (presence board for Boscali, no compile reference). `WingHost` is a **pushed struct**, not a callback, because its call sites are
   the label table, the order gate and the deck test - all of which run per roster row per
   repaint, and none of which can afford third-party code inside them. Wing Command: KREW
   (`C:\Users\marci\dev\Wing Command KREW`) is its only consumer and holds every line of KAR-

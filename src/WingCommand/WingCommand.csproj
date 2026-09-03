@@ -69,6 +69,13 @@
     <Reference Include="Rewired_Core"><HintPath>$(ManagedDir)\Rewired_Core.dll</HintPath><Private>false</Private></Reference>
   </ItemGroup>
 
+  <ItemGroup>
+    <!-- Engine-free avionics protocol, compiled into this plugin so Wing Command and
+         Boscali Summer can coordinate bezels and map gestures without a shared DLL. -->
+    <Compile Include="..\..\..\nomodkit\shared\avionics\*.cs" Link="Avionics\%(Filename)%(Extension)"
+             Exclude="..\..\..\nomodkit\shared\avionics\*Tests.cs" />
+  </ItemGroup>
+
   <ItemGroup Label="Unity">
     <Reference Include="UnityEngine"><HintPath>$(ManagedDir)\UnityEngine.dll</HintPath><Private>false</Private></Reference>
     <Reference Include="UnityEngine.CoreModule"><HintPath>$(ManagedDir)\UnityEngine.CoreModule.dll</HintPath><Private>false</Private></Reference>

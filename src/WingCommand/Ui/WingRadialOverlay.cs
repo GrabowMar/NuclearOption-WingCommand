@@ -7,64 +7,70 @@ using UnityEngine.UI;
 namespace WingCommand
 {
     /// <summary>
-    /// Modern tactical HUD command wheel for whole-wing flight control.
-    ///
-    /// Replaces the legacy IMGUI radial menu with an authentic, screen-space uGUI
-    /// military avionics overlay. Features anti-aliased procedural vector icons,
-    /// 10 non-overlapping ergonomically placed cards, real-time deflection reticle needle,
-    /// central telemetry hub, live target inspection, and smooth alpha fading.
+    /// Standalone uGUI command wheel. The stock <c>RadialMenuMain</c> cannot carry
+    /// wing orders without invasive patching, so this draws the six whole-wing
+    /// slices on its own canvas.
     /// </summary>
     internal static class WingRadialOverlay
     {
         private const float CanvasWidth = 1920f;
         private const float CanvasHeight = 1080f;
 
-        private const float WheelRadius = 240f;
-        private const float CardWidth = 136f;
-        private const float CardHeight = 52f;
-        private const float CenterHubRadius = 96f;
+        private const float WheelRadius = 200f;
+        private const float CenterHubRadius = 82f;
+        private const float IconRadius = 142f;
+
+        private const int SectorCount = 6;
+        private const float DegreesPerSector = 360f / SectorCount; // 60 deg
+
+        private static Color SectorRestingColor => WingUi.SurfaceCard;
+        private static Color SectorHoveredColor => WingUi.CardFillHover;
+        private static Color SectorDividerColor => WingUi.BorderSubtle;
+        private static Color OuterBorderColor => WingUi.BorderSubtle;
+        private static Color OuterArcColor => WingUi.RailEmerald;
+        private static Color HubBackgroundColor => WingUi.Unity(UiPalette.PanelGround);
+        private static Color HubBorderColor => WingUi.BorderSubtle;
+        private static Color IconRestingColor => WingUi.Dim;
+        private static Color HubSubtitleColor => WingUi.Dim;
 
         private static GameObject canvasRoot;
         private static CanvasGroup canvasGroup;
         private static RectTransform centerRoot;
-        private static RectTransform pointerRoot;
-        private static Image pointerNeedle;
-        private static Image reticleRing;
-        private static Image backdropVignette;
 
-        // Central hub telemetry
+        // Visual layers
+        private static Image backdropVignette;
+        private static Image outerRingBorder;
+        private static Image outerArcHighlight;
+        private static Image hubBackground;
+        private static Image hubBorder;
+
+        // Central hub telemetry text
         private static TMP_Text hubTitle;
-        private static TMP_Text hubStatus;
-        private static TMP_Text hubPosture;
-        private static TMP_Text orderTitle;
-        private static TMP_Text orderBriefing;
-        private static TMP_Text orderTarget;
+        private static TMP_Text hubSubtitle;
 
         // Procedural sprites
+        private static Sprite discSprite;
         private static Sprite ringSprite;
-        private static Sprite pointerSprite;
+        private static Sprite thickRingSprite;
         private static Sprite vignetteSprite;
+        private static Sprite solidSprite;
 
-        // 10 radial card widgets
-        private static readonly RadialCardWidget[] cards = new RadialCardWidget[10];
+        // 6 radial sector widgets
+        private static readonly SectorWidget[] sectors = new SectorWidget[SectorCount];
         private static int lastHoveredIndex = -2;
 
-        private sealed class RadialCardWidget
+        private sealed class SectorWidget
         {
             public RectTransform Root;
-            public Image Background;
-            public Image Outline;
+            public Image Fill;
             public Image Icon;
-            public TMP_Text Title;
-            public TMP_Text Subtitle;
-            public Vector2 BasePos;
             public float TargetScale = 1f;
             public float CurrentScale = 1f;
         }
 
         // ------------------------------------------------------------------ Lifecycle
 
-        public static void Show(RadialSlice[] slices, int hoveredIndex, Vector2 delta, WingRegistry wing)
+        public static void Show(RadialSlice[] slices, int hoveredIndex, WingRegistry wing)
         {
             EnsureBuilt();
             if (canvasRoot == null) return;
@@ -77,9 +83,9 @@ namespace WingCommand
 
             if (canvasGroup != null) canvasGroup.alpha = 1f;
 
-            UpdatePointer(delta, hoveredIndex);
             UpdateHub(slices, hoveredIndex, wing);
-            UpdateCards(slices, hoveredIndex, wing);
+            UpdateSectors(slices, hoveredIndex);
+            UpdateOuterArc(hoveredIndex);
         }
 
         public static void Hide()
@@ -99,16 +105,21 @@ namespace WingCommand
             canvasRoot = null;
             canvasGroup = null;
             centerRoot = null;
-            pointerRoot = null;
-            pointerNeedle = null;
-            reticleRing = null;
             backdropVignette = null;
+            outerRingBorder = null;
+            outerArcHighlight = null;
+            hubBackground = null;
+            hubBorder = null;
+            hubTitle = null;
+            hubSubtitle = null;
 
-            for (int i = 0; i < cards.Length; i++) cards[i] = null;
+            for (int i = 0; i < sectors.Length; i++) sectors[i] = null;
 
+            DestroySprite(ref discSprite);
             DestroySprite(ref ringSprite);
-            DestroySprite(ref pointerSprite);
+            DestroySprite(ref thickRingSprite);
             DestroySprite(ref vignetteSprite);
+            DestroySprite(ref solidSprite);
 
             lastHoveredIndex = -2;
         }
@@ -157,7 +168,7 @@ namespace WingCommand
             centerRoot.SetParent(canvasRoot.transform, worldPositionStays: false);
             centerRoot.anchorMin = centerRoot.anchorMax = centerRoot.pivot = new Vector2(0.5f, 0.5f);
             centerRoot.anchoredPosition = Vector2.zero;
-            centerRoot.sizeDelta = new Vector2(CanvasWidth, CanvasHeight);
+            centerRoot.sizeDelta = new Vector2(WheelRadius * 2.5f, WheelRadius * 2.5f);
             centerRoot.localScale = Vector3.one;
 
             // Background soft vignette
@@ -166,180 +177,177 @@ namespace WingCommand
             vignRt.SetParent(centerRoot, worldPositionStays: false);
             vignRt.anchorMin = vignRt.anchorMax = vignRt.pivot = new Vector2(0.5f, 0.5f);
             vignRt.anchoredPosition = Vector2.zero;
-            vignRt.sizeDelta = new Vector2(760f, 760f);
+            vignRt.sizeDelta = new Vector2(WheelRadius * 2.6f, WheelRadius * 2.6f);
             backdropVignette = vignGo.GetComponent<Image>();
             backdropVignette.sprite = vignetteSprite;
-            backdropVignette.color = new Color(0.02f, 0.04f, 0.03f, 0.72f);
+            backdropVignette.color = new Color(0f, 0f, 0f, 0.40f);
             backdropVignette.raycastTarget = false;
 
-            // Reticle ring
-            var ringGo = new GameObject("ReticleRing", typeof(RectTransform), typeof(Image));
-            var ringRt = ringGo.GetComponent<RectTransform>();
-            ringRt.SetParent(centerRoot, worldPositionStays: false);
-            ringRt.anchorMin = ringRt.anchorMax = ringRt.pivot = new Vector2(0.5f, 0.5f);
-            ringRt.anchoredPosition = Vector2.zero;
-            ringRt.sizeDelta = new Vector2(CenterHubRadius * 2.2f, CenterHubRadius * 2.2f);
-            reticleRing = ringGo.GetComponent<Image>();
-            reticleRing.sprite = ringSprite;
-            reticleRing.color = UiTheme.Green.WithAlpha(0.45f);
-            reticleRing.raycastTarget = false;
+            // Build circular sectors and dividers
+            BuildSectors(centerRoot);
 
-            // Directional pointer needle
-            var pointerGo = new GameObject("PointerNeedle", typeof(RectTransform), typeof(Image));
-            pointerRoot = pointerGo.GetComponent<RectTransform>();
-            pointerRoot.SetParent(centerRoot, worldPositionStays: false);
-            pointerRoot.anchorMin = pointerRoot.anchorMax = pointerRoot.pivot = new Vector2(0.5f, 0.5f);
-            pointerRoot.anchoredPosition = Vector2.zero;
-            pointerRoot.sizeDelta = new Vector2(28f, 150f);
-            pointerNeedle = pointerGo.GetComponent<Image>();
-            pointerNeedle.sprite = pointerSprite;
-            pointerNeedle.color = UiTheme.Green.WithAlpha(0.85f);
-            pointerNeedle.raycastTarget = false;
+            // Outer ring border
+            var borderGo = new GameObject("OuterBorder", typeof(RectTransform), typeof(Image));
+            var borderRt = borderGo.GetComponent<RectTransform>();
+            borderRt.SetParent(centerRoot, worldPositionStays: false);
+            borderRt.anchorMin = borderRt.anchorMax = borderRt.pivot = new Vector2(0.5f, 0.5f);
+            borderRt.anchoredPosition = Vector2.zero;
+            borderRt.sizeDelta = new Vector2(WheelRadius * 2f, WheelRadius * 2f);
+            outerRingBorder = borderGo.GetComponent<Image>();
+            outerRingBorder.sprite = ringSprite;
+            outerRingBorder.color = OuterBorderColor;
+            outerRingBorder.raycastTarget = false;
 
-            // Center hub telemetry
+            // Outer highlight arc indicator (hovered sector)
+            var arcGo = new GameObject("OuterArcHighlight", typeof(RectTransform), typeof(Image));
+            var arcRt = arcGo.GetComponent<RectTransform>();
+            arcRt.SetParent(centerRoot, worldPositionStays: false);
+            arcRt.anchorMin = arcRt.anchorMax = arcRt.pivot = new Vector2(0.5f, 0.5f);
+            arcRt.anchoredPosition = Vector2.zero;
+            arcRt.sizeDelta = new Vector2(WheelRadius * 2f, WheelRadius * 2f);
+            outerArcHighlight = arcGo.GetComponent<Image>();
+            outerArcHighlight.sprite = thickRingSprite;
+            outerArcHighlight.type = Image.Type.Filled;
+            outerArcHighlight.fillMethod = Image.FillMethod.Radial360;
+            outerArcHighlight.fillOrigin = (int)Image.Origin360.Top;
+            outerArcHighlight.fillClockwise = true;
+            outerArcHighlight.fillAmount = (DegreesPerSector - 2f) / 360f; // Gap across dividers
+            outerArcHighlight.color = OuterArcColor;
+            outerArcHighlight.raycastTarget = false;
+            outerArcHighlight.gameObject.SetActive(false);
+
+            // Center hub (draws on top of sectors, creating the donut shape)
             BuildCenterHub(centerRoot);
-
-            // 10 radial cards
-            BuildCards(centerRoot);
 
             canvasRoot.SetActive(false);
         }
 
+        private static void BuildSectors(RectTransform parent)
+        {
+            var sectorsContainer = new GameObject("Sectors", typeof(RectTransform));
+            var containerRt = sectorsContainer.GetComponent<RectTransform>();
+            containerRt.SetParent(parent, worldPositionStays: false);
+            containerRt.anchorMin = containerRt.anchorMax = containerRt.pivot = new Vector2(0.5f, 0.5f);
+            containerRt.anchoredPosition = Vector2.zero;
+            containerRt.sizeDelta = new Vector2(WheelRadius * 2f, WheelRadius * 2f);
+
+            // 1. Sector fill wedges
+            for (int i = 0; i < SectorCount; i++)
+            {
+                var sectorGo = new GameObject("Sector_" + i, typeof(RectTransform), typeof(Image));
+                var sectorRt = sectorGo.GetComponent<RectTransform>();
+                sectorRt.SetParent(containerRt, worldPositionStays: false);
+                sectorRt.anchorMin = sectorRt.anchorMax = sectorRt.pivot = new Vector2(0.5f, 0.5f);
+                sectorRt.anchoredPosition = Vector2.zero;
+                sectorRt.sizeDelta = new Vector2(WheelRadius * 2f, WheelRadius * 2f);
+
+                // Sector 0 is centered at 0 deg (12 o'clock, spanning -30 to +30)
+                sectorRt.localRotation = Quaternion.Euler(0f, 0f, 30f - i * DegreesPerSector);
+
+                Image fill = sectorGo.GetComponent<Image>();
+                fill.sprite = discSprite;
+                fill.type = Image.Type.Filled;
+                fill.fillMethod = Image.FillMethod.Radial360;
+                fill.fillOrigin = (int)Image.Origin360.Top;
+                fill.fillClockwise = true;
+                fill.fillAmount = DegreesPerSector / 360f;
+                fill.color = SectorRestingColor;
+                fill.raycastTarget = false;
+
+                sectors[i] = new SectorWidget
+                {
+                    Root = sectorRt,
+                    Fill = fill,
+                };
+            }
+
+            // 2. Radial divider lines
+            for (int i = 0; i < SectorCount; i++)
+            {
+                float angleDeg = i * DegreesPerSector - 30f;
+                float angleRad = angleDeg * Mathf.Deg2Rad;
+                float dividerLength = WheelRadius - CenterHubRadius;
+
+                var divGo = new GameObject("Divider_" + i, typeof(RectTransform), typeof(Image));
+                var divRt = divGo.GetComponent<RectTransform>();
+                divRt.SetParent(containerRt, worldPositionStays: false);
+                divRt.anchorMin = divRt.anchorMax = new Vector2(0.5f, 0.5f);
+                divRt.pivot = new Vector2(0.5f, 0f);
+                divRt.anchoredPosition = new Vector2(Mathf.Sin(angleRad) * CenterHubRadius,
+                                                     Mathf.Cos(angleRad) * CenterHubRadius);
+                divRt.sizeDelta = new Vector2(1.5f, dividerLength);
+                divRt.localRotation = Quaternion.Euler(0f, 0f, -angleDeg);
+
+                Image divImg = divGo.GetComponent<Image>();
+                divImg.sprite = solidSprite;
+                divImg.color = SectorDividerColor;
+                divImg.raycastTarget = false;
+            }
+
+            // 3. Sector icons (centered inside each sector)
+            for (int i = 0; i < SectorCount; i++)
+            {
+                float iconAngleDeg = i * DegreesPerSector;
+                float iconAngleRad = iconAngleDeg * Mathf.Deg2Rad;
+                Vector2 iconPos = new Vector2(Mathf.Sin(iconAngleRad) * IconRadius,
+                                              Mathf.Cos(iconAngleRad) * IconRadius);
+
+                var iconGo = new GameObject("Icon_" + i, typeof(RectTransform), typeof(Image));
+                var iconRt = iconGo.GetComponent<RectTransform>();
+                iconRt.SetParent(containerRt, worldPositionStays: false);
+                iconRt.anchorMin = iconRt.anchorMax = iconRt.pivot = new Vector2(0.5f, 0.5f);
+                iconRt.anchoredPosition = iconPos;
+                iconRt.sizeDelta = new Vector2(36f, 36f);
+
+                Image iconImg = iconGo.GetComponent<Image>();
+                iconImg.preserveAspect = true;
+                iconImg.color = IconRestingColor;
+                iconImg.raycastTarget = false;
+
+                sectors[i].Icon = iconImg;
+            }
+        }
+
         private static void BuildCenterHub(RectTransform parent)
         {
-            var hubGo = new GameObject("HubTelemetry", typeof(RectTransform));
+            float hubDiameter = CenterHubRadius * 2f;
+
+            var hubGo = new GameObject("CenterHub", typeof(RectTransform));
             var hubRt = hubGo.GetComponent<RectTransform>();
             hubRt.SetParent(parent, worldPositionStays: false);
             hubRt.anchorMin = hubRt.anchorMax = hubRt.pivot = new Vector2(0.5f, 0.5f);
             hubRt.anchoredPosition = Vector2.zero;
-            hubRt.sizeDelta = new Vector2(230f, 184f);
+            hubRt.sizeDelta = new Vector2(hubDiameter, hubDiameter);
 
             // Hub plate background
-            var hubPlateGo = new GameObject("HubPlate", typeof(RectTransform), typeof(Image));
-            var hubPlateRt = hubPlateGo.GetComponent<RectTransform>();
-            hubPlateRt.SetParent(hubRt, worldPositionStays: false);
-            WingUi.Stretch(hubPlateRt);
-            Image hubPlate = hubPlateGo.GetComponent<Image>();
-            hubPlate.sprite = WingUi.PanelSprite();
-            hubPlate.type = Image.Type.Sliced;
-            hubPlate.color = new Color(0.02f, 0.05f, 0.03f, 0.90f);
-            hubPlate.raycastTarget = false;
+            var plateGo = new GameObject("HubPlate", typeof(RectTransform), typeof(Image));
+            var plateRt = plateGo.GetComponent<RectTransform>();
+            plateRt.SetParent(hubRt, worldPositionStays: false);
+            WingUi.Stretch(plateRt);
+            hubBackground = plateGo.GetComponent<Image>();
+            hubBackground.sprite = discSprite;
+            hubBackground.color = HubBackgroundColor;
+            hubBackground.raycastTarget = false;
 
-            // Hub outline
-            var hubOutGo = new GameObject("HubOutline", typeof(RectTransform), typeof(Image));
-            var hubOutRt = hubOutGo.GetComponent<RectTransform>();
-            hubOutRt.SetParent(hubRt, worldPositionStays: false);
-            WingUi.Stretch(hubOutRt);
-            Image hubOut = hubOutGo.GetComponent<Image>();
-            hubOut.sprite = WingUi.PanelSprite();
-            hubOut.type = Image.Type.Sliced;
-            hubOut.color = WingUi.BorderSubtle;
-            hubOut.raycastTarget = false;
+            // Hub outline border
+            var outGo = new GameObject("HubBorder", typeof(RectTransform), typeof(Image));
+            var outRt = outGo.GetComponent<RectTransform>();
+            outRt.SetParent(hubRt, worldPositionStays: false);
+            WingUi.Stretch(outRt);
+            hubBorder = outGo.GetComponent<Image>();
+            hubBorder.sprite = ringSprite;
+            hubBorder.color = HubBorderColor;
+            hubBorder.raycastTarget = false;
 
-            hubTitle = CreateLabel(hubRt, "WING COMMAND", new Vector2(0f, 48f), 13f, FontStyles.Bold,
-                                   UiTheme.Green, TextAlignmentOptions.Center);
-            hubTitle.characterSpacing = 2.5f;
+            // Centered order title (e.g. "TOGGLE OVERLAYS" style)
+            hubTitle = CreateLabel(hubRt, "WING COMMAND", new Vector2(0f, 9f), 15f, FontStyles.Bold,
+                                   Color.white, TextAlignmentOptions.Center);
+            hubTitle.characterSpacing = 1.8f;
 
-            hubStatus = CreateLabel(hubRt, "FLIGHT LEAD", new Vector2(0f, 28f), 10.5f, FontStyles.Normal,
-                                    UiTheme.Friendly, TextAlignmentOptions.Center);
-
-            hubPosture = CreateLabel(hubRt, "ROE: HOLD  ·  FORM: VIC", new Vector2(0f, 12f), 10f, FontStyles.Normal,
-                                     WingUi.TextSecondary, TextAlignmentOptions.Center);
-
-            // Hovered order briefing block (lower center)
-            orderTitle = CreateLabel(hubRt, "SELECT ORDER", new Vector2(0f, -12f), 14.5f, FontStyles.Bold,
-                                     Color.white, TextAlignmentOptions.Center);
-
-            orderBriefing = CreateLabel(hubRt, "Hover an order to preview  ·  Center to cancel",
-                                        new Vector2(0f, -34f), 10.5f, FontStyles.Italic,
-                                        WingUi.TextSecondary, TextAlignmentOptions.Center);
-            orderBriefing.enableWordWrapping = true;
-            orderBriefing.rectTransform.sizeDelta = new Vector2(250f, 32f);
-
-            orderTarget = CreateLabel(hubRt, "", new Vector2(0f, -56f), 10f, FontStyles.Bold,
-                                      UiTheme.Warning, TextAlignmentOptions.Center);
-        }
-
-        private static void BuildCards(RectTransform parent)
-        {
-            float step = 360f / cards.Length;
-
-            for (int i = 0; i < cards.Length; i++)
-            {
-                // Angle: 0 deg = Top (12 o'clock), clockwise
-                float angleDeg = i * step;
-                float angleRad = angleDeg * Mathf.Deg2Rad;
-
-                float x = Mathf.Sin(angleRad) * WheelRadius;
-                float y = Mathf.Cos(angleRad) * WheelRadius;
-
-                var cardGo = new GameObject("Card_" + i, typeof(RectTransform));
-                var cardRt = cardGo.GetComponent<RectTransform>();
-                cardRt.SetParent(parent, worldPositionStays: false);
-                cardRt.anchorMin = cardRt.anchorMax = cardRt.pivot = new Vector2(0.5f, 0.5f);
-                cardRt.anchoredPosition = new Vector2(x, y);
-                cardRt.sizeDelta = new Vector2(CardWidth, CardHeight);
-                cardRt.localScale = Vector3.one;
-
-                // Background (uses native 9-slice panel sprite)
-                var bgGo = new GameObject("Bg", typeof(RectTransform), typeof(Image));
-                var bgRt = bgGo.GetComponent<RectTransform>();
-                bgRt.SetParent(cardRt, worldPositionStays: false);
-                WingUi.Stretch(bgRt);
-                Image bg = bgGo.GetComponent<Image>();
-                bg.sprite = WingUi.PanelSprite();
-                bg.type = Image.Type.Sliced;
-                bg.color = WingUi.CardFill;
-                bg.raycastTarget = false;
-
-                // Outline frame
-                var outGo = new GameObject("Outline", typeof(RectTransform), typeof(Image));
-                var outRt = outGo.GetComponent<RectTransform>();
-                outRt.SetParent(cardRt, worldPositionStays: false);
-                WingUi.Stretch(outRt);
-                Image outline = outGo.GetComponent<Image>();
-                outline.sprite = WingUi.PanelSprite();
-                outline.type = Image.Type.Sliced;
-                outline.color = WingUi.BorderSubtle;
-                outline.raycastTarget = false;
-
-                // Icon (Left side)
-                var iconGo = new GameObject("Icon", typeof(RectTransform), typeof(Image));
-                var iconRt = iconGo.GetComponent<RectTransform>();
-                iconRt.SetParent(cardRt, worldPositionStays: false);
-                iconRt.anchorMin = iconRt.anchorMax = iconRt.pivot = new Vector2(0f, 0.5f);
-                iconRt.anchoredPosition = new Vector2(10f, 0f);
-                iconRt.sizeDelta = new Vector2(32f, 32f);
-                Image icon = iconGo.GetComponent<Image>();
-                icon.preserveAspect = true;
-                icon.raycastTarget = false;
-                icon.color = Color.white;
-
-                // Text block (Right side)
-                float textLeft = 46f;
-                float textWidth = CardWidth - textLeft - 6f;
-
-                TMP_Text title = CreateLabel(cardRt, "", new Vector2(textLeft + textWidth * 0.5f - CardWidth * 0.5f, 8f),
-                                             12f, FontStyles.Bold, WingUi.TextPrimary, TextAlignmentOptions.Left);
-                title.rectTransform.sizeDelta = new Vector2(textWidth, 18f);
-
-                TMP_Text subtitle = CreateLabel(cardRt, "", new Vector2(textLeft + textWidth * 0.5f - CardWidth * 0.5f, -9f),
-                                                9.5f, FontStyles.Normal, WingUi.TextSecondary, TextAlignmentOptions.Left);
-                subtitle.rectTransform.sizeDelta = new Vector2(textWidth, 16f);
-
-                cards[i] = new RadialCardWidget
-                {
-                    Root = cardRt,
-                    Background = bg,
-                    Outline = outline,
-                    Icon = icon,
-                    Title = title,
-                    Subtitle = subtitle,
-                    BasePos = new Vector2(x, y),
-                    TargetScale = 1f,
-                    CurrentScale = 1f,
-                };
-            }
+            // Subtitle hint / status
+            hubSubtitle = CreateLabel(hubRt, "FLIGHT LEAD", new Vector2(0f, -11f), 10.5f, FontStyles.Normal,
+                                      HubSubtitleColor, TextAlignmentOptions.Center);
+            hubSubtitle.characterSpacing = 1.0f;
         }
 
         private static TMP_Text CreateLabel(RectTransform parent, string text, Vector2 pos, float size,
@@ -350,7 +358,7 @@ namespace WingCommand
             rt.SetParent(parent, worldPositionStays: false);
             rt.anchorMin = rt.anchorMax = rt.pivot = new Vector2(0.5f, 0.5f);
             rt.anchoredPosition = pos;
-            rt.sizeDelta = new Vector2(200f, 24f);
+            rt.sizeDelta = new Vector2(CenterHubRadius * 1.85f, 24f);
 
             var t = go.AddComponent<TextMeshProUGUI>();
             TMP_FontAsset resolved = WingUi.Font;
@@ -368,53 +376,26 @@ namespace WingCommand
 
         // ---------------------------------------------------------------- Dynamic Updates
 
-        private static void UpdatePointer(Vector2 delta, int hoveredIndex)
-        {
-            if (pointerRoot == null || pointerNeedle == null) return;
-
-            float mag = delta.magnitude;
-            bool active = hoveredIndex >= 0 && mag > 0.15f;
-
-            if (active)
-            {
-                float angle = -Vector2.SignedAngle(Vector2.up, delta.normalized);
-                pointerRoot.localRotation = Quaternion.Euler(0f, 0f, -angle);
-                float needleLen = Mathf.Clamp(CenterHubRadius + mag * 14f, CenterHubRadius, WheelRadius - 30f);
-                pointerRoot.sizeDelta = new Vector2(24f, needleLen);
-                pointerNeedle.color = UiTheme.Green.WithAlpha(Mathf.Clamp01(0.4f + mag * 0.4f));
-            }
-            else
-            {
-                pointerRoot.sizeDelta = new Vector2(18f, CenterHubRadius * 0.7f);
-                pointerNeedle.color = UiTheme.Friendly.WithAlpha(0.20f);
-            }
-        }
-
         private static void UpdateHub(RadialSlice[] slices, int hoveredIndex, WingRegistry wing)
         {
-            if (hubTitle == null) return;
+            if (hubTitle == null || hubSubtitle == null) return;
 
-            // Wing count & posture
             int count = wing?.Count ?? 0;
-            hubStatus.text = count > 0
-                ? $"[ {count} {(count == 1 ? "WINGMAN" : "WINGMEN")} AIRBORNE ]"
-                : "[ NO WINGMEN ASSIGNED ]";
 
-            string roeName = wing != null ? RoeRules.Label(wing.Roe).ToUpperInvariant() : "HOLD";
-            string formName = FormationShapes.Pretty(WingFormation.Shape).ToUpperInvariant();
-            hubPosture.text = $"ROE: {roeName}  ·  FORM: {formName}";
-
-            // Hover details
             if (hoveredIndex >= 0 && hoveredIndex < slices.Length)
             {
                 RadialSlice slice = slices[hoveredIndex];
-                orderTitle.text = slice.Title;
-                orderTitle.color = UiTheme.Green;
-                orderBriefing.text = slice.Description;
+                hubTitle.text = slice.Title;
+                hubTitle.color = Color.white;
 
-                // Inspect locked target for combat actions
-                if (slice.Action == WingAction.AttackMyTarget || slice.Action == WingAction.FireForEffect ||
-                    slice.Action == WingAction.JamMyTarget)
+                // Subtitle context
+                if (slice.Action == WingAction.CycleRoe && wing != null)
+                {
+                    WingRoe nextRoe = RoeRules.Next(wing.Roe);
+                    hubSubtitle.text = "NEXT: " + RoeRules.Label(nextRoe);
+                    hubSubtitle.color = UiTheme.Green;
+                }
+                else if (slice.Action == WingAction.AttackMyTarget || slice.Action == WingAction.Engage)
                 {
                     Unit target = GetPrimaryLockedTarget();
                     if (target != null && !target.disabled)
@@ -422,29 +403,32 @@ namespace WingCommand
                         float dist = wing?.Leader != null
                             ? Vector3.Distance(wing.Leader.transform.position, target.transform.position) * 0.001f
                             : 0f;
-                        orderTarget.text = $"LOCKED: {target.unitName.ToUpperInvariant()} · {dist:F1} KM";
-                        orderTarget.color = UiTheme.Friendly;
+                        hubSubtitle.text = $"LOCK: {target.unitName.ToUpperInvariant()} · {dist:F1} KM";
+                        hubSubtitle.color = UiTheme.Friendly;
                     }
                     else
                     {
-                        orderTarget.text = "[ NO TARGET DESIGNATED ]";
-                        orderTarget.color = UiTheme.Warning.WithAlpha(0.85f);
+                        hubSubtitle.text = slice.Subtitle;
+                        hubSubtitle.color = HubSubtitleColor;
                     }
                 }
                 else
                 {
-                    orderTarget.text = "";
+                    hubSubtitle.text = slice.Subtitle;
+                    hubSubtitle.color = HubSubtitleColor;
                 }
             }
             else
             {
-                orderTitle.text = "TACTICAL MENU";
-                orderTitle.color = Color.white;
-                orderBriefing.text = "Hover an order to select  ·  Center to cancel";
-                orderTarget.text = "";
+                hubTitle.text = "WING COMMAND";
+                hubTitle.color = Color.white;
+                hubSubtitle.text = count > 0
+                    ? $"{count} {(count == 1 ? "WINGMAN" : "WINGMEN")} ACTIVE"
+                    : "TACTICAL MENU";
+                hubSubtitle.color = HubSubtitleColor;
             }
 
-            // Play audio tick on slice change
+            // Audio click cue on slice transition
             if (hoveredIndex != lastHoveredIndex)
             {
                 if (hoveredIndex >= 0 && lastHoveredIndex >= -1)
@@ -455,66 +439,55 @@ namespace WingCommand
             }
         }
 
-        private static void UpdateCards(RadialSlice[] slices, int hoveredIndex, WingRegistry wing)
+        private static void UpdateSectors(RadialSlice[] slices, int hoveredIndex)
         {
-            for (int i = 0; i < cards.Length; i++)
+            for (int i = 0; i < SectorCount; i++)
             {
-                RadialCardWidget card = cards[i];
-                if (card == null || i >= slices.Length) continue;
+                SectorWidget sec = sectors[i];
+                if (sec == null) continue;
 
-                RadialSlice slice = slices[i];
                 bool isHovered = (i == hoveredIndex);
 
-                // Contextual adjustments
-                string title = slice.Title;
-                string subtitle = slice.Subtitle;
-                string iconKey = slice.IconKey;
-
-                if (slice.Action == WingAction.CycleRoe && wing != null)
+                // Set icon sprite from slice
+                if (i < slices.Length)
                 {
-                    WingRoe nextRoe = (WingRoe)(((int)wing.Roe + 1) % 3);
-                    subtitle = "NEXT: " + RoeRules.Label(nextRoe).ToUpperInvariant();
-                }
-                else if (slice.Action == WingAction.CycleShape)
-                {
-                    FormationShape nextShape = FormationShapes.CycleCore(WingFormation.Shape, 1);
-                    subtitle = "NEXT: " + FormationShapes.Pretty(nextShape).ToUpperInvariant();
-                    iconKey = "shape_" + nextShape;
-                }
-                else if (slice.Action == WingAction.JamMyTarget)
-                {
-                    Unit target = GetPrimaryLockedTarget();
-                    subtitle = (target != null && !target.disabled) ? "LOCK JAM" : "ELECTRONIC WARFARE";
+                    RadialSlice slice = slices[i];
+                    Sprite iconSprite = IconFactory.Get(slice.IconKey);
+                    if (iconSprite != null && sec.Icon.sprite != iconSprite)
+                        sec.Icon.sprite = iconSprite;
                 }
 
-                card.Title.text = title;
-                card.Subtitle.text = subtitle;
+                // Sector wedge fill highlight
+                Color targetFill = isHovered ? SectorHoveredColor : SectorRestingColor;
+                sec.Fill.color = Color.Lerp(sec.Fill.color, targetFill, Time.unscaledDeltaTime * 14f);
 
-                Sprite iconSprite = IconFactory.Get(iconKey);
-                if (iconSprite != null && card.Icon.sprite != iconSprite)
-                    card.Icon.sprite = iconSprite;
+                // Icon scale & color
+                sec.TargetScale = isHovered ? 1.14f : 1.0f;
+                sec.CurrentScale = Mathf.MoveTowards(sec.CurrentScale, sec.TargetScale, Time.unscaledDeltaTime * 8f);
+                sec.Icon.rectTransform.localScale = Vector3.one * sec.CurrentScale;
 
-                // Visual styling based on hover
-                card.TargetScale = isHovered ? 1.08f : 1.0f;
-                card.CurrentScale = Mathf.MoveTowards(card.CurrentScale, card.TargetScale, Time.unscaledDeltaTime * 10f);
-                card.Root.localScale = Vector3.one * card.CurrentScale;
+                Color targetIconColor = isHovered ? Color.white : IconRestingColor;
+                sec.Icon.color = Color.Lerp(sec.Icon.color, targetIconColor, Time.unscaledDeltaTime * 14f);
+            }
+        }
 
-                if (isHovered)
-                {
-                    card.Background.color = WingUi.CardFillHover;
-                    card.Outline.color = UiTheme.Green;
-                    card.Title.color = Color.white;
-                    card.Subtitle.color = UiTheme.Green;
-                    card.Icon.color = Color.white;
-                }
-                else
-                {
-                    card.Background.color = WingUi.CardFill;
-                    card.Outline.color = WingUi.BorderSubtle;
-                    card.Title.color = WingUi.TextPrimary;
-                    card.Subtitle.color = WingUi.TextSecondary;
-                    card.Icon.color = UiTheme.Friendly.WithAlpha(0.85f);
-                }
+        private static void UpdateOuterArc(int hoveredIndex)
+        {
+            if (outerArcHighlight == null) return;
+
+            if (hoveredIndex >= 0 && hoveredIndex < SectorCount)
+            {
+                if (!outerArcHighlight.gameObject.activeSelf)
+                    outerArcHighlight.gameObject.SetActive(true);
+
+                // Align arc to the hovered 60 deg sector with a subtle 1 deg margin
+                outerArcHighlight.rectTransform.localRotation =
+                    Quaternion.Euler(0f, 0f, 30f - hoveredIndex * DegreesPerSector + 1.0f);
+            }
+            else
+            {
+                if (outerArcHighlight.gameObject.activeSelf)
+                    outerArcHighlight.gameObject.SetActive(false);
             }
         }
 
@@ -550,17 +523,23 @@ namespace WingCommand
 
         private static void EnsureSprites()
         {
-            if (ringSprite == null)
-                ringSprite = CreateReticleRingSprite("RadialReticleRing", 256, 110f, 2.0f);
+            if (discSprite == null)
+                discSprite = CreateFilledCircleSprite("RadialDisc", 256);
 
-            if (pointerSprite == null)
-                pointerSprite = CreatePointerSprite("RadialPointer", 32, 128);
+            if (ringSprite == null)
+                ringSprite = CreateRingSprite("RadialRing", 256, 126f, 1.5f);
+
+            if (thickRingSprite == null)
+                thickRingSprite = CreateRingSprite("RadialThickRing", 256, 125f, 4.0f);
 
             if (vignetteSprite == null)
                 vignetteSprite = CreateVignetteSprite("RadialVignette", 128);
+
+            if (solidSprite == null)
+                solidSprite = CreateSolidSprite("RadialSolid", 4, 4);
         }
 
-        private static Sprite CreateReticleRingSprite(string name, int size, float radius, float stroke)
+        private static Sprite CreateFilledCircleSprite(string name, int size)
         {
             var tex = new Texture2D(size, size, TextureFormat.RGBA32, mipChain: false)
             {
@@ -571,7 +550,7 @@ namespace WingCommand
             };
 
             float half = size * 0.5f;
-            Color solid = Color.white;
+            float rMax = half - 1.5f;
 
             for (int y = 0; y < size; y++)
             {
@@ -579,26 +558,10 @@ namespace WingCommand
                 {
                     float dx = x + 0.5f - half;
                     float dy = y + 0.5f - half;
-                    float r = Mathf.Sqrt(dx * dx + dy * dy);
+                    float d = Mathf.Sqrt(dx * dx + dy * dy);
 
-                    // Circular ring stroke
-                    float distFromRing = Mathf.Abs(r - radius);
-                    float ringAlpha = Mathf.Clamp01(stroke * 0.5f - distFromRing + 0.5f);
-
-                    // Cardinal tick marks at 0, 90, 180, 270 degrees
-                    float angleDeg = Mathf.Repeat(Mathf.Atan2(dx, dy) * Mathf.Rad2Deg + 360f, 360f);
-                    float tickDist = Mathf.Min(Mathf.Abs(angleDeg - 0f), Mathf.Abs(angleDeg - 90f),
-                                               Mathf.Abs(angleDeg - 180f), Mathf.Abs(angleDeg - 270f),
-                                               Mathf.Abs(angleDeg - 360f));
-
-                    if (tickDist < 0.8f && r >= radius - 8f && r <= radius + 12f)
-                    {
-                        ringAlpha = Mathf.Max(ringAlpha, 1f);
-                    }
-
-                    Color c = solid;
-                    c.a = ringAlpha;
-                    tex.SetPixel(x, y, c);
+                    float alpha = Mathf.Clamp01(rMax - d + 0.5f);
+                    tex.SetPixel(x, y, new Color(1f, 1f, 1f, alpha));
                 }
             }
 
@@ -609,9 +572,9 @@ namespace WingCommand
             return sprite;
         }
 
-        private static Sprite CreatePointerSprite(string name, int width, int height)
+        private static Sprite CreateRingSprite(string name, int size, float radius, float stroke)
         {
-            var tex = new Texture2D(width, height, TextureFormat.RGBA32, mipChain: false)
+            var tex = new Texture2D(size, size, TextureFormat.RGBA32, mipChain: false)
             {
                 name = name,
                 filterMode = FilterMode.Bilinear,
@@ -619,30 +582,24 @@ namespace WingCommand
                 hideFlags = HideFlags.HideAndDontSave,
             };
 
-            float halfW = width * 0.5f;
+            float half = size * 0.5f;
 
-            for (int y = 0; y < height; y++)
+            for (int y = 0; y < size; y++)
             {
-                float t = (float)y / height; // 0 at bottom, 1 at top tip
-                float tipWidth = Mathf.Lerp(1.5f, halfW - 2f, Mathf.Sin(t * Mathf.PI));
-
-                for (int x = 0; x < width; x++)
+                for (int x = 0; x < size; x++)
                 {
-                    float dx = Mathf.Abs(x + 0.5f - halfW);
-                    if (dx <= tipWidth && y > 10)
-                    {
-                        float alpha = Mathf.Clamp01(tipWidth - dx + 0.5f) * t;
-                        tex.SetPixel(x, y, new Color(1f, 1f, 1f, alpha));
-                    }
-                    else
-                    {
-                        tex.SetPixel(x, y, Color.clear);
-                    }
+                    float dx = x + 0.5f - half;
+                    float dy = y + 0.5f - half;
+                    float d = Mathf.Sqrt(dx * dx + dy * dy);
+
+                    float distFromRing = Mathf.Abs(d - radius);
+                    float alpha = Mathf.Clamp01(stroke * 0.5f - distFromRing + 0.5f);
+                    tex.SetPixel(x, y, new Color(1f, 1f, 1f, alpha));
                 }
             }
 
             tex.Apply(updateMipmaps: false, makeNoLongerReadable: true);
-            var sprite = Sprite.Create(tex, new Rect(0, 0, width, height), new Vector2(0.5f, 0f), 100f);
+            var sprite = Sprite.Create(tex, new Rect(0, 0, size, size), new Vector2(0.5f, 0.5f), 100f);
             sprite.name = name + "Sprite";
             sprite.hideFlags = HideFlags.HideAndDontSave;
             return sprite;
@@ -676,6 +633,27 @@ namespace WingCommand
 
             tex.Apply(updateMipmaps: false, makeNoLongerReadable: true);
             var sprite = Sprite.Create(tex, new Rect(0, 0, size, size), new Vector2(0.5f, 0.5f), 100f);
+            sprite.name = name + "Sprite";
+            sprite.hideFlags = HideFlags.HideAndDontSave;
+            return sprite;
+        }
+
+        private static Sprite CreateSolidSprite(string name, int width, int height)
+        {
+            var tex = new Texture2D(width, height, TextureFormat.RGBA32, mipChain: false)
+            {
+                name = name,
+                filterMode = FilterMode.Point,
+                wrapMode = TextureWrapMode.Clamp,
+                hideFlags = HideFlags.HideAndDontSave,
+            };
+
+            for (int y = 0; y < height; y++)
+                for (int x = 0; x < width; x++)
+                    tex.SetPixel(x, y, Color.white);
+
+            tex.Apply(updateMipmaps: false, makeNoLongerReadable: true);
+            var sprite = Sprite.Create(tex, new Rect(0, 0, width, height), new Vector2(0.5f, 0.5f), 100f);
             sprite.name = name + "Sprite";
             sprite.hideFlags = HideFlags.HideAndDontSave;
             return sprite;

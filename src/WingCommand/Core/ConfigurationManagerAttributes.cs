@@ -21,9 +21,6 @@ internal sealed class ConfigurationManagerAttributes
     /// <summary>Hide unless the user ticks "Advanced settings" or searches for it.</summary>
     public bool? IsAdvanced;
 
-    /// <summary>Hide retired compatibility keys entirely from ConfigurationManager.</summary>
-    public bool? Browsable;
-
     /// <summary>
     /// Draw this entry's value area yourself, in the settings window's IMGUI pass.
     ///

@@ -156,8 +156,6 @@ namespace WingCommand
         /// </summary>
         public static bool Available => roleDataSeen || !probeFailed;
 
-        public static string UnavailableReason { get; private set; }
-
         /// <summary>Drop cached prefab data when a mission ends; prefabs may be reloaded.</summary>
         public static void Reset()
         {
@@ -759,8 +757,6 @@ namespace WingCommand
 
         private static void Fail(string reason)
         {
-            UnavailableReason = reason;
-
             if (!probeFailed)
             {
                 probeFailed = true;
