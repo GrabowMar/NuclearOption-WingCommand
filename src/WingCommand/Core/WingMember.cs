@@ -106,8 +106,26 @@ namespace WingCommand
         /// <summary>True while a hangar delivery is still taxiing or waiting to launch.</summary>
         public bool DeliveryPending => deliveryPending;
 
-        /// <summary>Whether the airframe has cleared the delivery launch threshold.</summary>
-        public bool IsAirborne => Aircraft != null && Aircraft.radarAlt >= 25f;
+        /// <summary>
+        /// A ship or a ground vehicle rather than an aircraft.
+        ///
+        /// Asked of the autopilot, which is the same question <c>WingShop.IsFlyableAircraft</c>
+        /// asks of a prefab and the same one that makes <c>WingRegistry.IsRotary</c> answer
+        /// "rotary" for a hull. Nothing here knows which mod supplied the vehicle, and that
+        /// is deliberate: an addon nobody has written yet is handled for the same reason.
+        /// </summary>
+        public bool IsSurface => Aircraft != null && Aircraft.autopilot == null;
+
+        /// <summary>
+        /// Whether the airframe has cleared the delivery launch threshold.
+        ///
+        /// A surface member clears it by existing. The threshold is a proxy for "has left
+        /// the hangar and is under its own control", and a hull that is alive already is -
+        /// waiting for it to reach 25 metres would leave a delivered ship permanently
+        /// pending and therefore permanently uncommandable.
+        /// </summary>
+        public bool IsAirborne => Aircraft != null &&
+                                  (Aircraft.radarAlt >= 25f || (IsSurface && Alive));
 
         /// <summary>True when player commands may be applied to this member.</summary>
         public bool IsCommandable => Alive && !deliveryPending;
@@ -369,6 +387,7 @@ namespace WingCommand
                 leaderDistance: leaderDistance,
                 leashRadius: WingTuning.LeashRadius,
                 radarAlt: Aircraft.radarAlt,
+                memberIsSurface: IsSurface,
                 fuel: sampledFuel,
                 ammo: sampledAmmo,
                 integrity: sampledIntegrity,
@@ -422,6 +441,19 @@ namespace WingCommand
         /// </summary>
         private void EnterBehaviour(string behaviourId)
         {
+            // A surface member takes one behaviour whatever the arbiter picked. Every case
+            // below steers through the autopilot it does not have, and the bands above Task
+            // - a missile break, a deck hold, a leash recall - would each route it into one.
+            // Where it should actually go is published through WingSurface, which reads the
+            // same directive the cases below read.
+            if (IsSurface)
+            {
+                if (WingBehaviourCatalog.TryEnter(this, WingBehaviours.Surface)) return;
+
+                WarnSurfaceUnhandled();
+                return;
+            }
+
             switch (behaviourId)
             {
                 case WingBehaviours.Held:
@@ -1215,9 +1247,49 @@ namespace WingCommand
         {
             if (state == null || ReferenceEquals(state, enteredState)) return false;
 
+            // The one guard that makes a surface member safe. Every built-in state, and both
+            // of the game's own AI combat states, steer through Autopilot.AutoAim - twenty
+            // of those call sites are unguarded, and a null autopilot classifies as rotary,
+            // so a hull reaching any of them is a NullReferenceException on the first fixed
+            // update. Refusing here makes all of them unreachable without touching one.
+            if (IsSurface && !enteringRegisteredBehaviour) return false;
+
             enteredState = state;
             Pilot.SwitchState(state);
             return true;
+        }
+
+        // Set only while WingBehaviourCatalog is installing a registered behaviour - the one
+        // route a surface member is allowed through, because a registered state is the only
+        // kind that was written knowing there is no autopilot.
+        private bool enteringRegisteredBehaviour;
+
+        /// <summary>
+        /// Install a behaviour that came from <see cref="WingBehaviourCatalog"/>.
+        ///
+        /// Routed through <see cref="SwitchTo"/> rather than calling <c>Pilot.SwitchState</c>
+        /// directly, so a registered behaviour gets the same re-entry protection everything
+        /// else does. It previously did not, which meant re-resolving to the same registered
+        /// behaviour re-ran its EnterState every pass.
+        /// </summary>
+        internal bool SwitchToRegistered(PilotBaseState state)
+        {
+            enteringRegisteredBehaviour = true;
+            try { return SwitchTo(state); }
+            finally { enteringRegisteredBehaviour = false; }
+        }
+
+        private bool surfaceUnhandledReported;
+
+        private void WarnSurfaceUnhandled()
+        {
+            if (surfaceUnhandledReported) return;
+            surfaceUnhandledReported = true;
+
+            Plugin.Logger.LogWarning(
+                $"[Wing] {Name} has no autopilot and nothing is registered for " +
+                $"'{WingBehaviours.Surface}'. It will hold its position until a plugin " +
+                "supplies a surface behaviour.");
         }
 
         private void SwitchToCombat()

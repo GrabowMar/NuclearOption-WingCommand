@@ -426,7 +426,11 @@ namespace WingCommand
                 // At low altitude the trailing/later element deconflicts high, matching the
                 // real tactical priority: preserve terrain awareness for the lead element
                 // and use the vertical for the aircraft responsible for separation.
-                if (self.radarAlt < 300f && selfSlot > otherMember.Slot)
+                // Airborne only. A hull sits under 300 metres permanently, so without the
+                // autopilot test every trailing ship would be given a standing push into
+                // the sky - which it cannot act on, and which corrupts the lateral
+                // component of the push it can.
+                if (self.autopilot != null && self.radarAlt < 300f && selfSlot > otherMember.Slot)
                     away += Vector3.up * radius * 0.45f;
 
                 // Bounded inverse square: urgent at a close predicted pass, but never large

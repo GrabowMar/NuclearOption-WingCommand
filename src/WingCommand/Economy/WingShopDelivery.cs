@@ -486,6 +486,12 @@ namespace WingCommand
             rotation = Quaternion.identity;
             velocity = Vector3.zero;
 
+            // A warship cannot be delivered into a hangar and taxied onto a runway. The
+            // player is by construction somewhere a surface unit can exist, so a purchased
+            // hull arrives astern of them and joins from there.
+            if (WingShop.IsSurfaceDefinition(definition))
+                return SurfacePlacement(leader, out position, out rotation, out velocity);
+
             Airbase airbase = hq != null ? hq.GetNearestAirbase(leader.transform.position) : null;
             if (airbase == null)
             {
@@ -507,6 +513,32 @@ namespace WingCommand
             float cruise = p != null ? Mathf.Max(p.landingSpeed * 1.6f, 80f) : 120f;
             velocity = toLeader * cruise;
 
+            return true;
+        }
+
+        /// <summary>
+        /// Astern of the player, at a slot interval, on the player's own plane.
+        ///
+        /// Deliberately not run through ClearOfGround: that lifts a point clear of terrain
+        /// and sea, which is the right answer for an aircraft in the circuit and the wrong
+        /// one for a hull that belongs at the player's own level.
+        /// </summary>
+        private static bool SurfacePlacement(Aircraft leader, out Vector3 position,
+                                             out Quaternion rotation, out Vector3 velocity)
+        {
+            Vector3 forward = leader.transform.forward;
+            forward.y = 0f;
+            if (forward.sqrMagnitude < 0.0001f) forward = Vector3.forward;
+            forward.Normalize();
+
+            float astern = WingFormation.SlotSpacing * WingTuning.SurfaceSpacingScale;
+
+            position = leader.transform.position - forward * astern;
+            rotation = Quaternion.LookRotation(forward, Vector3.up);
+
+            // Stationary. A hull under way from the first frame would be driving before
+            // anything has told it where to go.
+            velocity = Vector3.zero;
             return true;
         }
 

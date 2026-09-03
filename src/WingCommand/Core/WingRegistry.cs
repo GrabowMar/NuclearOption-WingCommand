@@ -553,7 +553,9 @@ namespace WingCommand
             Pilot pilot = PrimaryPilot(candidate);
             if (pilot == null || pilot.dead || pilot.ejected)
             { reason = "Aircraft has no available AI pilot"; return false; }
-            if (candidate.radarAlt < 10f)
+            // A hull is never airborne and never will be. The gate exists to stop a wingman
+            // being recruited out of a hangar mid-taxi, which a surface unit is not doing.
+            if (!IsSurface(candidate) && candidate.radarAlt < 10f)
             { reason = "Aircraft must be airborne"; return false; }
             if (!candidate.LocalSim)
             { reason = "Aircraft is not controlled by this host"; return false; }
@@ -577,6 +579,11 @@ namespace WingCommand
         {
             if (Leader == null || candidate == null) return false;
 
+            // Surface is a class of its own, and it is the one class this test must never
+            // wave through on the rotary rule: IsRotary answers "rotary" for anything with
+            // no autopilot, so without this a ship and a helicopter read as the same kind.
+            if (IsSurface(candidate)) return WingHost.Current.AllowSurfaceWingmen;
+
             // Nobody is holding a slot under overwatch - each aircraft steers its own orbit
             // - so the reason for the refusal is gone, and a surface leader has no airframe
             // class of its own to match against anyway.
@@ -595,9 +602,11 @@ namespace WingCommand
             if (!TypeMatchesLeader(aircraft))
             {
                 WingCommandManager.Instance?.Toast(
-                    IsRotary(aircraft)
-                        ? aircraft.unitName + " is rotary - it cannot formate on a fixed-wing leader"
-                        : aircraft.unitName + " is fixed-wing - it cannot formate on a rotary leader");
+                    IsSurface(aircraft)
+                        ? aircraft.unitName + " is a surface vehicle - it cannot join this wing"
+                        : IsRotary(aircraft)
+                            ? aircraft.unitName + " is rotary - it cannot formate on a fixed-wing leader"
+                            : aircraft.unitName + " is fixed-wing - it cannot formate on a rotary leader");
                 return null;
             }
 
@@ -625,6 +634,10 @@ namespace WingCommand
         private void WarnIfTooSlow(Aircraft recruit)
         {
             if (Leader == null) return;
+
+            // Meaningless against a hull, and it would fire on every single recruit: a ship
+            // is always an order of magnitude slower than a jet and is not trying to keep up.
+            if (IsSurface(recruit) || IsSurface(Leader)) return;
 
             float mine = recruit.GetAircraftParameters().maxSpeed;
             float leader = Leader.GetAircraftParameters().maxSpeed;
@@ -715,8 +728,19 @@ namespace WingCommand
             if (Leader == null || joining == null)
                 return members.Count + 1;
 
+            bool surface = IsSurface(joining);
+
             float spacing = WingFormation.SlotSpacing;
-            if (IsRotary(joining)) spacing *= WingTuning.RotarySpacingScale;
+            if (surface) spacing *= WingTuning.SurfaceSpacingScale;
+            else if (IsRotary(joining)) spacing *= WingTuning.RotarySpacingScale;
+
+            // Hulls hold a column astern with no vertical stagger. The horizontal geometry
+            // is already 2D and the vertical is a separate term, so a stack of zero flattens
+            // any shape onto the surface - and Trail, at 90 degrees of sweep, is a column
+            // already, which is how ships and vehicle columns actually manoeuvre. The
+            // formation the player picked for the aircraft is left alone.
+            FormationShape shape = surface ? FormationShape.Trail : WingFormation.Shape;
+            float stack = surface ? 0f : WingTuning.SlotStack;
 
             Vector3 from = joining.transform.position;
             Vector3 leaderPos = Leader.transform.position;
@@ -730,8 +754,7 @@ namespace WingCommand
                 if (SlotTaken(slot)) continue;
 
                 Vector3 slotPos = leaderPos + FormationSolver.SlotOffset(
-                    leaderForward, slot, WingFormation.Shape,
-                    spacing, WingTuning.SlotStack);
+                    leaderForward, slot, shape, spacing, stack);
 
                 float d = (slotPos - from).sqrMagnitude;
                 if (d < bestDistance)
@@ -762,6 +785,17 @@ namespace WingCommand
         {
             return aircraft != null && !(aircraft.autopilot is AutopilotPlane);
         }
+
+        /// <summary>
+        /// Whether this unit is a ship or a ground vehicle rather than an aircraft.
+        ///
+        /// The same question <see cref="WingMember.IsSurface"/> asks, in the static form the
+        /// recruitment gates need before there is a member to ask it of. Note that it is not
+        /// simply "not rotary": <see cref="IsRotary"/> answers true for a null autopilot, so
+        /// a hull and a helicopter are indistinguishable to it.
+        /// </summary>
+        public static bool IsSurface(Aircraft aircraft) =>
+            aircraft != null && aircraft.autopilot == null;
 
         public static Pilot PrimaryPilot(Aircraft aircraft)
         {

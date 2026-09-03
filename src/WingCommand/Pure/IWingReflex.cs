@@ -110,5 +110,21 @@ namespace WingCommand
 
         /// <summary>Whatever the standing directive says. The resting behaviour.</summary>
         public const string Task = "wingcommand.task";
+
+        /// <summary>
+        /// The behaviour a member with no autopilot flies, whatever it was told to do.
+        ///
+        /// Every built-in behaviour steers through <c>Autopilot.AutoAim</c>, which a ship or
+        /// a ground vehicle does not have, so a surface member is routed here instead of
+        /// through the switch above - and this is the one id Wing Command declares but does
+        /// not implement. A companion plugin registers the state through
+        /// <see cref="WingBehaviourCatalog"/>; with nothing registered a surface member is
+        /// simply never given a state, which is inert rather than broken.
+        ///
+        /// Where it should go is Wing Command's answer, published through <c>WingSurface</c>.
+        /// How to make a hull go there is the registrant's, because the gains that drive a
+        /// light truck are not the gains that drive a fleet carrier.
+        /// </summary>
+        public const string Surface = "wingcommand.surface";
     }
 }

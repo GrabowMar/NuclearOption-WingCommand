@@ -85,7 +85,14 @@ dotnet test tests/WingCommand.PureTests/WingCommand.PureTests.csproj -c Release
 - **Private game members are reached through `GameAccess`**, never inline reflection: a
   publicizer is blocked by this machine's application-control policy. `GameAccess.Initialise()`
   runs before `PatchAll` so patches can stand down when the game layout moves.
-- Types are `internal` by default; only the BepInEx entry point is public.
+- Types are `internal` by default. The public surface is the entry point plus three
+  extension seams: `Pure/WingAi.cs` (reflexes), `Core/WingBehaviourCatalog.cs` (pilot-state
+  factories) and `Pure/WingHost.cs` (what the player is commanding *from*, when it is not an
+  aircraft). `WingHost` is a **pushed struct**, not a callback, because its call sites are
+  the label table, the order gate and the deck test - all of which run per roster row per
+  repaint, and none of which can afford third-party code inside them. Wing Command: KREW
+  (`C:\Users\marci\dev\Wing Command KREW`) is its only consumer and holds every line of KAR-
+  and BOTE-specific knowledge, so nothing here knows either mod exists.
 - Comments explain *why* — especially which decompiled behaviour forced a workaround.
   Match that density; do not narrate the obvious.
 - **A new number is a constant in `Pure/WingTuning.cs` until someone asks for it.** A setting

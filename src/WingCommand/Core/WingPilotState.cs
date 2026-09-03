@@ -49,7 +49,10 @@ namespace WingCommand
             // Retract the gear whenever it is not already up. A freshly spawned helicopter
             // can still be Uninitialized here, which is what used to leave it flying with
             // the gear hanging out.
-            if (aircraft.gearState != LandingGear.GearState.LockedRetracted)
+            // A ship or a ground vehicle has no gear to retract, and asking for it moves a
+            // state the vehicle's own mod may be using for something else entirely.
+            if (aircraft.autopilot != null &&
+                aircraft.gearState != LandingGear.GearState.LockedRetracted)
                 aircraft.SetGear(deployed: false);
 
             pilot.flightInfo.HasTakenOff = true;

@@ -2,7 +2,7 @@
   "id": "WingCommand",
   "artifact": {
     "fileName": "WingCommand.dll",
-    "version": "0.9.3",
+    "version": "0.9.4",
     "category": "Release",
     "type": "plugin",
     "gameVersion": "0.34.2",

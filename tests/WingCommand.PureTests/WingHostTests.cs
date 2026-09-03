@@ -150,6 +150,22 @@ namespace WingCommand.PureTests
         }
 
         [Fact]
+        public void SurfaceWingmenAreOffByDefault()
+        {
+            WingHost.Set(new WingHostProfile(new object(), overwatch: true));
+            Assert.False(WingHost.Current.AllowSurfaceWingmen);
+        }
+
+        [Fact]
+        public void SurfaceWingmenWithoutOverwatchIsRefused()
+        {
+            // The roster may only hold something no flight state can fly once the aircraft
+            // in it have stopped trying to hold slots on it.
+            Assert.Throws<ArgumentException>(() =>
+                WingHost.Set(new WingHostProfile(new object(), allowSurfaceWingmen: true)));
+        }
+
+        [Fact]
         public void MixedAirframesWithoutOverwatchIsRefused()
         {
             // The refusal it lifts exists because a helicopter cannot hold a slot on a jet.

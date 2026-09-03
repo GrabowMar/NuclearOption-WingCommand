@@ -59,8 +59,7 @@ namespace WingCommand
                 PilotBaseState state = member.CachedBehaviour(behaviourId, factory);
                 if (state == null) return false;
 
-                member.Pilot.SwitchState(state);
-                return true;
+                return member.SwitchToRegistered(state);
             }
             catch (Exception e)
             {

@@ -52,6 +52,15 @@ namespace WingCommand
         /// <summary>Height above ground, metres.</summary>
         public readonly float RadarAlt;
 
+        /// <summary>
+        /// This wingman has no autopilot - it is a ship or a ground vehicle.
+        ///
+        /// Here because a reflex has no other way to find out: the snapshot is engine-free
+        /// by design and carries no aircraft to interrogate. A reflex that resolves a
+        /// surface member to a flying behaviour would resolve it to nothing at all.
+        /// </summary>
+        public readonly bool MemberIsSurface;
+
         /// <summary>Fuel remaining, 0-1.</summary>
         public readonly float Fuel;
 
@@ -91,6 +100,7 @@ namespace WingCommand
             float leaderDistance = 0f,
             float leashRadius = 0f,
             float radarAlt = 1000f,
+            bool memberIsSurface = false,
             float fuel = 1f,
             int ammo = 1,
             float integrity = 1f,
@@ -107,6 +117,7 @@ namespace WingCommand
             LeaderDistance = leaderDistance;
             LeashRadius = leashRadius;
             RadarAlt = radarAlt;
+            MemberIsSurface = memberIsSurface;
             Fuel = fuel;
             Ammo = ammo;
             Integrity = integrity;

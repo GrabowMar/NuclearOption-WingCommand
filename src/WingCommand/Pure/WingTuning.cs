@@ -145,6 +145,16 @@ namespace WingCommand
         /// <summary>Slot spacing multiplier for helicopters, which fly slower and much closer together.</summary>
         public const float RotarySpacingScale = 0.55f;
 
+        /// <summary>
+        /// Slot spacing multiplier for a ship or a ground vehicle.
+        ///
+        /// Wider than an aircraft's, not narrower. Hulls cannot climb over each other to
+        /// resolve a converging pass, they take hundreds of metres to answer the helm, and
+        /// a column that closes up is a column that rams. Three slots at this scale put
+        /// the last hull about a kilometre astern, which is an ordinary naval interval.
+        /// </summary>
+        public const float SurfaceSpacingScale = 2.8f;
+
         /// <summary>Leader speed, m/s, below which helicopters hold their slot as a point in space.</summary>
         public const float RotaryHoverSpeed = 25f;
 

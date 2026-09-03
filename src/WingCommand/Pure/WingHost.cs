@@ -143,6 +143,15 @@ namespace WingCommand
         /// </summary>
         public bool AllowMixedAirframes { get; }
 
+        /// <summary>
+        /// Let units with no autopilot join the wing as members.
+        ///
+        /// Off by default and gated the same way as <see cref="AllowMixedAirframes"/>,
+        /// because with it on the roster can contain something none of the built-in flight
+        /// states can fly - safe only once the wing has stopped trying to hold slots.
+        /// </summary>
+        public bool AllowSurfaceWingmen { get; }
+
         /// <summary>Metres above the host to orbit at. Zero keeps the stock altitudes.</summary>
         public float OverwatchAltitude { get; }
 
@@ -170,6 +179,7 @@ namespace WingCommand
             string vehicleClass = null,
             bool overwatch = false,
             bool allowMixedAirframes = false,
+            bool allowSurfaceWingmen = false,
             float overwatchAltitude = 0f,
             uint hiddenOrders = 0u,
             string hiddenReason = null,
@@ -184,6 +194,7 @@ namespace WingCommand
             VehicleClass = vehicleClass;
             Overwatch = overwatch;
             AllowMixedAirframes = allowMixedAirframes;
+            AllowSurfaceWingmen = allowSurfaceWingmen;
             OverwatchAltitude = overwatchAltitude;
             HiddenOrders = hiddenOrders;
             HiddenReason = hiddenReason;
@@ -267,6 +278,12 @@ namespace WingCommand
             {
                 throw new ArgumentException(
                     "Mixed airframes are only safe under overwatch - a helicopter cannot hold a formation slot on a jet.");
+            }
+
+            if (AllowSurfaceWingmen && !Overwatch)
+            {
+                throw new ArgumentException(
+                    "Surface wingmen are only safe under overwatch - the aircraft in the wing must stop flying slots first.");
             }
         }
     }

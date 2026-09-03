@@ -180,13 +180,13 @@ namespace WingCommand
 
             var combat = new List<WingMenuAction>
             {
-                Leaf("Attack My Target", WingAction.AttackMyTarget, "attack",
+                Leaf(WingOrderCatalog.Label(WingOrder.Attack), WingAction.AttackMyTarget, "attack",
                      () => WingOrderCatalog.IsOfferable(WingOrder.Attack)),
-                Leaf("Engage", WingAction.Engage, "engage",
+                Leaf(WingOrderCatalog.Label(WingOrder.Engage), WingAction.Engage, "engage",
                      () => WingOrderCatalog.IsOfferable(WingOrder.Engage)),
-                Leaf("Splash 'Em", WingAction.FireForEffect, "attack",
+                Leaf(WingOrderCatalog.Label(WingOrder.FireForEffect), WingAction.FireForEffect, "attack",
                      () => WingOrderCatalog.IsOfferable(WingOrder.FireForEffect)),
-                Leaf("Disengage", WingAction.FallBack, "fallback",
+                Leaf(WingOrderCatalog.Label(WingOrder.FallBack), WingAction.FallBack, "fallback",
                      () => WingOrderCatalog.IsOfferable(WingOrder.FallBack)),
                 Back(ShowCommanderMenu),
             };
@@ -195,9 +195,9 @@ namespace WingCommand
             {
                 Leaf(WingOrderCatalog.Label(WingOrder.Formation), WingAction.Rejoin, "rejoin",
                      () => WingOrderCatalog.IsOfferable(WingOrder.Formation)),
-                Leaf("Hold Position", WingAction.OrbitHere, "orbit",
+                Leaf(WingOrderCatalog.Label(WingOrder.OrbitHere), WingAction.OrbitHere, "orbit",
                      () => WingOrderCatalog.IsOfferable(WingOrder.OrbitHere)),
-                Leaf("Return To Base", WingAction.ReturnToBase, "rtb",
+                Leaf(WingOrderCatalog.Label(WingOrder.ReturnToBase), WingAction.ReturnToBase, "rtb",
                      () => WingOrderCatalog.IsOfferable(WingOrder.ReturnToBase)),
                 Icon(WingMenuAction.Create("Special Tasking", _ => ShowTaskingMenu()), "tasking"),
                 Back(ShowCommanderMenu),
@@ -205,11 +205,11 @@ namespace WingCommand
 
             var tasking = new List<WingMenuAction>
             {
-                Leaf("Jam Target", WingAction.JamMyTarget, "jam",
+                Leaf(WingOrderCatalog.Label(WingOrder.JamTarget), WingAction.JamMyTarget, "jam",
                      () => WingBrain.Jamming && WingOrderCatalog.IsOfferable(WingOrder.JamTarget)),
-                Leaf("Deliver Cargo", WingAction.DeliverCargo, "cargo",
+                Leaf(WingOrderCatalog.Label(WingOrder.DeliverCargo), WingAction.DeliverCargo, "cargo",
                      () => WingOrderCatalog.IsOfferable(WingOrder.DeliverCargo)),
-                Leaf("Land Here", WingAction.LandHere, "land",
+                Leaf(WingOrderCatalog.Label(WingOrder.LandHere), WingAction.LandHere, "land",
                      () => WingOrderCatalog.IsOfferable(WingOrder.LandHere)),
                 Back(ShowFlightMenu),
             };

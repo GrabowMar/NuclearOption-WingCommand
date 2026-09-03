@@ -287,6 +287,26 @@ namespace WingCommand
         private static readonly Dictionary<AircraftDefinition, bool> autopilotCache =
             new Dictionary<AircraftDefinition, bool>();
 
+        /// <summary>
+        /// Whether this definition may be offered at all.
+        ///
+        /// Ships and ground vehicles registered as AircraftDefinition by Blueprinter addons
+        /// are not flyable, and offering one to a wing that cannot command it sells an
+        /// airframe that then orbits on its own with no way to reach it. That is still the
+        /// default. A host profile that has taken responsibility for surface members - it
+        /// has a behaviour registered and the wing has stopped flying slots - lifts it.
+        /// </summary>
+        public static bool IsSurfaceDefinition(AircraftDefinition definition) =>
+            definition != null && !IsFlyableAircraft(definition);
+
+        /// <summary>
+        /// Whether this definition may be offered at all.
+        ///
+        /// See <see cref="IsSurfaceDefinition"/> above for the distinction it rests on.
+        /// </summary>
+        public static bool IsCommandableUnit(AircraftDefinition definition) =>
+            IsFlyableAircraft(definition) || WingHost.Current.AllowSurfaceWingmen;
+
         /// <summary>True when this definition's prefab is armed with an autopilot — i.e. it is an aircraft, not a ship or vehicle.</summary>
         public static bool IsFlyableAircraft(AircraftDefinition definition)
         {
@@ -320,6 +340,11 @@ namespace WingCommand
             // catalogue would offer helicopters only. Under overwatch nothing holds a slot,
             // so both classes are equally able to escort a ship or a convoy.
             if (WingHost.Current.AllowMixedAirframes) return true;
+
+            // A hull is its own class, and IsRotary cannot see that: it answers "rotary"
+            // for anything without an autopilot, which is every ship and every helicopter
+            // alike.
+            if (!IsFlyableAircraft(definition)) return WingHost.Current.AllowSurfaceWingmen;
 
             return IsRotary(definition) == WingRegistry.IsRotary(leader);
         }
@@ -509,9 +534,7 @@ namespace WingCommand
         {
             if (definition == null) return false;
 
-            // Ships and ground vehicles registered as AircraftDefinition by Blueprinter
-            // addons are not flyable; never offer them, regardless of rotary/fixed-wing match.
-            if (!IsFlyableAircraft(definition)) return false;
+            if (!IsCommandableUnit(definition)) return false;
 
             // Hide what could never join the formation, rather than selling it and leaving
             // the aircraft orphaned in the air with no way to command it.
@@ -558,7 +581,8 @@ namespace WingCommand
             if (hq == null) return Denied("No faction");
             if (!GameManager.GetLocalPlayer(out player) || player == null) return Denied("No player");
 
-            if (!IsFlyableAircraft(definition)) return Denied("Selected unit is not a flyable aircraft");
+            if (!IsCommandableUnit(definition))
+                return Denied("Selected unit is not a flyable aircraft");
             if (!MatchesLeader(definition))
                 return Denied(IsRotary(definition)
                     ? "Helicopters cannot formate on a jet"
