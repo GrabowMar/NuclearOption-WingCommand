@@ -15,13 +15,7 @@ namespace WingCommand
     /// </summary>
     internal static class WingHud
     {
-        private const float RadialRadius = 150f;
-        private const float SliceWidth = 108f;
-        private const float SliceHeight = 54f;
-
         private static bool stylesReady;
-        private static GUIStyle sliceStyle;
-        private static GUIStyle sliceHotStyle;
         private static GUIStyle toastStyle;
 
         // Read through UiPalette rather than restated here. The accent in particular was a
@@ -29,26 +23,11 @@ namespace WingCommand
         // green even in a mission whose theme had moved off it.
         private static Color Panel => WingUi.Unity(UiPalette.HudPanel);
         private static Color Accent => UiTheme.Friendly;
-        private static Color Hot => WingUi.Unity(UiPalette.HudSliceHot);
-        private static Color Cold => WingUi.Unity(UiPalette.HudSliceCold);
 
         private static void EnsureStyles()
         {
             if (stylesReady) return;
             stylesReady = true;
-
-            sliceStyle = new GUIStyle(GUI.skin.box)
-            {
-                alignment = TextAnchor.MiddleCenter,
-                fontSize = 12,
-            };
-            sliceStyle.normal.background = Solid(Cold);
-            sliceStyle.normal.textColor = WingUi.Unity(UiPalette.HudSliceText);
-
-            sliceHotStyle = new GUIStyle(sliceStyle);
-            sliceHotStyle.normal.background = Solid(Hot);
-            sliceHotStyle.normal.textColor = Color.white;
-            sliceHotStyle.fontStyle = FontStyle.Bold;
 
             toastStyle = new GUIStyle(GUI.skin.box)
             {
@@ -570,26 +549,9 @@ namespace WingCommand
             rt.localScale = Vector3.one;
         }
 
+        [System.Obsolete("Use WingRadialOverlay")]
         public static void DrawRadial(RadialSlice[] slices, Vector2 centre, int hovered)
         {
-            EnsureStyles();
-
-            // IMGUI has an inverted Y axis relative to Input.mousePosition.
-            float cx = centre.x;
-            float cy = Screen.height - centre.y;
-
-            for (int i = 0; i < slices.Length; i++)
-            {
-                float angle = i * (360f / slices.Length) * Mathf.Deg2Rad;
-                float x = cx + Mathf.Sin(angle) * RadialRadius - SliceWidth * 0.5f;
-                float y = cy - Mathf.Cos(angle) * RadialRadius - SliceHeight * 0.5f;
-
-                GUI.Box(new Rect(x, y, SliceWidth, SliceHeight),
-                        slices[i].Label,
-                        i == hovered ? sliceHotStyle : sliceStyle);
-            }
-
-            GUI.Box(new Rect(cx - 46f, cy - 14f, 92f, 28f), "WING", sliceStyle);
         }
 
         public static void DrawToast(string message)

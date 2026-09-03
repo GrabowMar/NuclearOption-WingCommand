@@ -72,14 +72,13 @@ namespace WingCommand
         private float trailTurnScale = 1f;
 
         /// <summary>
-        /// Seconds of the leader's vertical motion fed into the slot position, so a climb or
-        /// dive is led rather than trailed. The horizontal along-track component is deliberately
-        /// not led: at cruise speed a second of lead is several hundred metres, which parked the
-        /// slots ahead of the leader — the leader is the front of the formation, always. The
-        /// along-track lag a fast leader would otherwise open is the throttle's job to close
-        /// (see <see cref="FixedWingFormation.Throttle"/> and its speed lead), not the slot's.
+        /// Seconds of the leader's vertical motion fed into the slot position.
+        /// Zeroed out: the leader's climb/dive angle is already carried by baseDir in the steering
+        /// aim point, and adding vertical velocity lead to the slot position pumped the slot
+        /// altitude up and down with every small pitch fluctuation of the leader, triggering
+        /// vertical bounce.
         /// </summary>
-        private const float SlotVerticalLeadSeconds = 1f;
+        private const float SlotVerticalLeadSeconds = 0f;
         private const float ShapeTransitionSeconds = 1.6f;
         private const float TurnGeometrySeconds = 0.7f;
         private RotaryFormation.Mode lastRotaryMode = (RotaryFormation.Mode)(-1);
@@ -155,8 +154,8 @@ namespace WingCommand
         /// </summary>
         private const float LeaderTrackSmoothing = 0.35f;
 
-        /// <summary>Seconds of smoothing on the differentiated heading rate.</summary>
-        private const float TurnRateSmoothing = 0.35f;
+        /// <summary>Seconds of smoothing on the differentiated heading rate. Tightened to 0.20s for faster turn detection.</summary>
+        private const float TurnRateSmoothing = 0.20f;
 
         /// <summary>
         /// Heading rate below which the leader counts as flying straight, in rad/s. A third

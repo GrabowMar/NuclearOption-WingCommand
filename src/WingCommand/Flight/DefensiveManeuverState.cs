@@ -161,18 +161,32 @@ namespace WingCommand
             bool radar = seekerType == "SARH" || seekerType == "ARH";
 
             // Radar: place the threat on the beam and descend toward clutter. IR: unload
-            // the engine, dispense flares, and open aspect away from the missile. Unknown
-            // seekers get a conservative blend of both rather than no reaction.
-            Vector3 direction = radar
-                ? (beam + away * 0.18f).normalized
-                : (away + beam * 0.65f).normalized;
+            // the engine, dispense flares, and open aspect away from the missile.
+            // When terminal (impact < 3s), execute a maximum-G break across the missile LOS.
+            bool terminal = impactTime < 3.0f;
+
+            Vector3 direction;
+            if (radar)
+            {
+                direction = (beam + away * 0.15f).normalized;
+            }
+            else if (terminal)
+            {
+                // Terminal break: hard slice across threat line-of-sight to force tracking overshoot.
+                direction = (beam * 0.90f + away * 0.20f).normalized;
+            }
+            else
+            {
+                direction = (away + beam * 0.65f).normalized;
+            }
 
             float vertical = 0f;
-            if (radar && aircraft.radarAlt > 180f) vertical = -0.12f;
-            if (impactTime < 2.5f || aircraft.radarAlt < 100f) vertical = 0.22f;
+            if (radar && aircraft.radarAlt > 140f) vertical = -0.15f;
+            if (terminal || aircraft.radarAlt < 120f) vertical = 0.25f;
             direction = (direction + Vector3.up * vertical).normalized;
 
-            controlInputs.throttle = infrared ? 0.15f : 1f;
+            // Idle throttle on terminal IR evasion to cool engine and maximize flare effectiveness.
+            controlInputs.throttle = infrared ? (terminal ? 0f : 0.15f) : 1f;
 
             // Dispense only inside the useful window. The ejectors rate-limit themselves
             // (ChaffEjector.Fire refuses inside its own ejectionInterval), so holding the
@@ -198,16 +212,20 @@ namespace WingCommand
 
             if (!rotary)
             {
+                float bankLimit = terminal
+                    ? FixedWingFormation.MaxSafeBank
+                    : WingTuning.DefensiveBankAllowed;
+
                 aircraft.autopilot.AutoAim(
                     destination: destination,
                     aimVelocity: true,
                     ignoreCollisions: false,
                     runwayAlign: false,
                     effort: 2f,
-                    bankAllowed: WingTuning.DefensiveBankAllowed,
+                    bankAllowed: bankLimit,
                     followTerrain: radar,
                     altitudeHold: AutopilotMath.CruiseHold(aircraft,
-                        radar ? Mathf.Max(aircraft.maxRadius, 120f) : aircraft.radarAlt),
+                        radar ? Mathf.Max(aircraft.maxRadius, 100f) : aircraft.radarAlt),
                     targetVelocity: Vector3.zero);
             }
             else

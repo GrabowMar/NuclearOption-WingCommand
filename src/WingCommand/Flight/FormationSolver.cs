@@ -150,19 +150,19 @@ namespace WingCommand
                     return new Spec(1.0f, 40f, symmetric: false, side: -1f, 0.20f, Vertical.Step);
 
                 case FormationShape.LineAbreast:
-                    return new Spec(1.0f, 6f, symmetric: true, side: 0f, 0.12f, Vertical.Step);
+                    return new Spec(1.0f, 0f, symmetric: true, side: 0f, 0.12f, Vertical.Step);
 
                 case FormationShape.Trail:
                     return new Spec(0.95f, 90f, symmetric: false, side: 0f, 0.35f, Vertical.Alternating);
 
                 case FormationShape.CombatSpread:
-                    return new Spec(1.85f, 18f, symmetric: true, side: 0f, 0.16f, Vertical.Step);
+                    return new Spec(1.75f, 10f, symmetric: true, side: 0f, 0.16f, Vertical.Step);
 
                 case FormationShape.Vic:
                     return new Spec(1.05f, 45f, symmetric: true, side: 0f, 0.20f, Vertical.Step);
 
                 case FormationShape.Wall:
-                    return new Spec(1.85f, 4f, symmetric: true, side: 0f, 0.12f, Vertical.Step);
+                    return new Spec(1.85f, 0f, symmetric: true, side: 0f, 0.12f, Vertical.Step);
 
                 case FormationShape.Ladder:
                     return new Spec(0.95f, 90f, symmetric: false, side: 0f, 0f, Vertical.Ladder);
@@ -223,51 +223,58 @@ namespace WingCommand
         }
 
         /// <summary>
-        /// Finger four: lead plus a close wingman one side, an element lead across and back,
-        /// and that element lead's wingman wider still. The first three slots are fixed; any
-        /// beyond them form a second finger astern rather than stacking on a slot.
+        /// Finger four: standard right-hand arrangement. Flight leader at the point, flight
+        /// wingman on the left, element lead on the right, and element wingman stepped back
+        /// and wider still to the right. Exactly matches the fingertips of an outstretched hand.
+        /// The first three slots are fixed; any beyond them form a second finger astern.
         /// </summary>
         private static SlotShape FingerFour(int slot)
         {
             switch (slot)
             {
-                case 1: return Place(1.0f, 38f, 1f, 0f);
-                case 2: return Place(1.7f, 40f, -1f, 0f);
-                case 3: return Place(2.7f, 41f, -1f, 0.15f);
+                case 1: return Place(1.0f, 40f, -1f, 0f);
+                case 2: return Place(1.15f, 40f, 1f, 0.05f);
+                case 3: return Place(2.15f, 40f, 1f, 0.15f);
             }
 
             int extra = slot - 4;
             int group = extra / 4 + 1;
             int within = extra % 4;
-            float back = group * 3f;
-            float height = group * 0.5f;
+            float back = group * 2.6f;
+            float height = group * 0.4f;
 
             SlotShape lead;
             switch (within)
             {
                 case 0:  lead = Place(0f, 90f, 0f, height); break;
-                case 1:  lead = Place(1.0f, 38f, 1f, height); break;
-                case 2:  lead = Place(1.7f, 40f, -1f, height); break;
-                default: lead = Place(2.7f, 41f, -1f, height); break;
+                case 1:  lead = Place(1.0f, 40f, -1f, height); break;
+                case 2:  lead = Place(1.15f, 40f, 1f, height + 0.05f); break;
+                default: lead = Place(2.15f, 40f, 1f, height + 0.15f); break;
             }
 
             return new SlotShape(lead.Lateral, lead.Back + back, lead.Height);
         }
 
-        /// <summary>Diamond: two on the wings, one in the slot astern, repeating in threes.</summary>
+        /// <summary>
+        /// Diamond: two on the wings at 45°, one in the slot astern. A geometrically exact
+        /// rhombus where all four edges are equal in length (1.0 spacing units).
+        /// </summary>
         private static SlotShape Diamond(int slot)
         {
+            const float diamondSweep = 45f;
+            float tailBack = 2f * Mathf.Sin(diamondSweep * Mathf.Deg2Rad); // ~1.4142 for 45°
+
             int group = (slot - 1) / 3;
             int within = (slot - 1) % 3;
-            float back = group * 2f;
-            float height = group * 0.5f;
+            float back = group * (tailBack + 0.6f);
+            float height = group * 0.4f;
 
             SlotShape point;
             switch (within)
             {
-                case 0:  point = Place(1.0f, 38f, 1f, height); break;
-                case 1:  point = Place(1.0f, 38f, -1f, height); break;
-                default: point = Place(1.5f, 90f, 0f, height + 0.25f); break;
+                case 0:  point = Place(1.0f, diamondSweep, 1f, height); break;
+                case 1:  point = Place(1.0f, diamondSweep, -1f, height); break;
+                default: point = Place(tailBack, 90f, 0f, height + 0.25f); break;
             }
 
             return new SlotShape(point.Lateral, point.Back + back, point.Height);

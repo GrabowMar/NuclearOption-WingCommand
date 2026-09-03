@@ -29,7 +29,6 @@ namespace WingCommand
 
         // Radial menu state
         private bool radialOpen;
-        private Vector2 radialCentre;
         private Vector2 radialDelta;
         private int hoveredSlice = -1;
 
@@ -55,16 +54,26 @@ namespace WingCommand
 
         private static readonly RadialSlice[] Slices =
         {
-            new RadialSlice("Form Up", WingAction.Rejoin),
-            new RadialSlice("Attack\nMy Target", WingAction.AttackMyTarget),
-            new RadialSlice("Splash\n'Em", WingAction.FireForEffect),
-            new RadialSlice("Engage", WingAction.Engage),
-            new RadialSlice("Disengage", WingAction.FallBack),
-            new RadialSlice("Hold\nPosition", WingAction.OrbitHere),
-            new RadialSlice("Deliver\nCargo", WingAction.DeliverCargo),
-            new RadialSlice("Land\nHere", WingAction.LandHere),
-            new RadialSlice("Return\nTo Base", WingAction.ReturnToBase),
-            new RadialSlice("Cycle\nROE", WingAction.CycleRoe),
+            new RadialSlice("FORM UP", "REJOIN", WingAction.Rejoin, "rejoin",
+                "Recall all flight members to assigned formation slots."),
+            new RadialSlice("ATTACK TARGET", "PRIORITY LOCK", WingAction.AttackMyTarget, "attack",
+                "Order all wingmen to concentrate attack on player's designated target."),
+            new RadialSlice("ENGAGE", "SEARCH & DESTROY", WingAction.Engage, "engage",
+                "Order wingmen to autonomously search and engage hostiles within operational leash."),
+            new RadialSlice("SPLASH 'EM", "FIRE FOR EFFECT", WingAction.FireForEffect, "orders",
+                "Fire for effect: wingmen expend all effective stores onto designated target."),
+            new RadialSlice("DISENGAGE", "DEFENSIVE BREAK", WingAction.FallBack, "fallback",
+                "Defensive break: wingmen deploy countermeasures, break contact, and egress."),
+            new RadialSlice("RETURN TO BASE", "RTB RECOVERY", WingAction.ReturnToBase, "rtb",
+                "Order wingmen to disengage and return to nearest friendly airbase for recovery."),
+            new RadialSlice("CYCLE ROE", "RULES OF ENGAGEMENT", WingAction.CycleRoe, "posture",
+                "Cycle standing Rules of Engagement: DEFEND -> ESCORT -> FREE."),
+            new RadialSlice("NEXT FORMATION", "FLIGHT SHAPE", WingAction.CycleShape, "formation",
+                "Switch flight formation geometry: VIC, TRAIL, COMBAT SPREAD, FINGER FOUR, etc."),
+            new RadialSlice("JAM TARGET", "ELECTRONIC WARFARE", WingAction.JamMyTarget, "jam",
+                "Order wingmen to jam radar and sensors of player's designated target."),
+            new RadialSlice("HOLD POSITION", "COMBAT AIR PATROL", WingAction.OrbitHere, "orbit",
+                "Combat Air Patrol: wingmen orbit and hold current coordinates."),
         };
 
         private void Awake()
@@ -84,6 +93,7 @@ namespace WingCommand
                 if (resetForNonPlayableState) return;
 
                 if (radialOpen) CloseRadial(apply: false);
+                WingRadialOverlay.Reset();
                 WingHud.ResetStatusPanel();
                 WmcScreen.Reset();
                 PlayerFireWatcher.Reset();
@@ -270,6 +280,8 @@ namespace WingCommand
 
         // ------------------------------------------------------------------ input
 
+        private float lastSliceSelectTime;
+
         /// <summary>
         /// The mod's own wheel, opened by the optional key. Independent of the slice on the
         /// game's wheel: binding a key adds a second way in rather than turning the first
@@ -284,22 +296,35 @@ namespace WingCommand
                 return;
             }
 
+            // Right-click while radial is open cancels immediately
+            if (radialOpen && Input.GetMouseButtonDown(1))
+            {
+                CloseRadial(apply: false);
+                return;
+            }
+
             if (Input.GetKeyDown(key) && Wing.Leader != null)
             {
                 radialOpen = true;
-                radialCentre = new Vector2(Screen.width * 0.5f, Screen.height * 0.5f);
                 radialDelta = Vector2.zero;
                 hoveredSlice = -1;
+                lastSliceSelectTime = 0f;
             }
             else if (Input.GetKeyUp(key) && radialOpen)
             {
                 CloseRadial(apply: true);
+                return;
             }
 
             if (radialOpen)
             {
                 AccumulateRadialDelta();
                 hoveredSlice = SliceFromDelta();
+                WingRadialOverlay.Show(Slices, hoveredSlice, radialDelta, Wing);
+            }
+            else
+            {
+                WingRadialOverlay.Hide();
             }
         }
 
@@ -311,16 +336,29 @@ namespace WingCommand
         private void AccumulateRadialDelta()
         {
             Rewired.Player p = GameManager.playerInput;
+            float mx = Input.GetAxis("Mouse X");
+            float my = Input.GetAxis("Mouse Y");
+            Vector2 mouse = new Vector2(mx, my);
+
             if (p != null)
             {
-                radialDelta += new Vector2(p.GetAxis("Pan View"), -p.GetAxis("Tilt View")) * 0.5f;
-            }
-            else
-            {
-                radialDelta += new Vector2(Input.GetAxis("Mouse X"), Input.GetAxis("Mouse Y"));
+                Vector2 look = new Vector2(p.GetAxis("Pan View"), -p.GetAxis("Tilt View")) * 0.5f;
+                if (look.sqrMagnitude > mouse.sqrMagnitude)
+                    mouse = look;
+
+                float stickH = p.GetAxis("Radial Menu Horizontal");
+                float stickV = p.GetAxis("Radial Menu Vertical");
+                Vector2 stick = new Vector2(stickH, stickV);
+                if (stick.sqrMagnitude > 0.1f)
+                {
+                    radialDelta = stick * 2.5f;
+                    return;
+                }
             }
 
-            radialDelta = Vector2.Lerp(radialDelta, Vector2.zero, 0.05f);
+            radialDelta += mouse * 1.6f;
+            radialDelta = Vector2.ClampMagnitude(radialDelta, 3.0f);
+            radialDelta = Vector2.Lerp(radialDelta, Vector2.zero, 0.04f);
         }
 
         private void HandleHotkeys()
@@ -339,14 +377,25 @@ namespace WingCommand
         /// <summary>Same angle convention the stock wheel uses: index 0 at the top, clockwise.</summary>
         private int SliceFromDelta()
         {
-            if (radialDelta.sqrMagnitude <= 0.1f) return hoveredSlice;
+            if (radialDelta.sqrMagnitude > 0.08f)
+            {
+                lastSliceSelectTime = Time.unscaledTime;
 
-            float angle = -Vector2.SignedAngle(Vector2.up, radialDelta.normalized);
-            if (angle < 0f) angle += 360f;
+                float angle = -Vector2.SignedAngle(Vector2.up, radialDelta.normalized);
+                if (angle < 0f) angle += 360f;
 
-            float per = 360f / Slices.Length;
-            angle = Mathf.Repeat(angle + per * 0.5f, 360f);
-            return Mathf.Clamp(Mathf.FloorToInt(angle / per), 0, Slices.Length - 1);
+                float per = 360f / Slices.Length;
+                angle = Mathf.Repeat(angle + per * 0.5f, 360f);
+                return Mathf.Clamp(Mathf.FloorToInt(angle / per), 0, Slices.Length - 1);
+            }
+
+            // In deadzone: latch previous selection for 1.2s so stopping mouse drag doesn't drop selection!
+            if (hoveredSlice >= 0 && (Time.unscaledTime - lastSliceSelectTime) < 1.2f)
+            {
+                return hoveredSlice;
+            }
+
+            return -1;
         }
 
         private void CloseRadial(bool apply)
@@ -356,6 +405,8 @@ namespace WingCommand
 
             radialOpen = false;
             hoveredSlice = -1;
+            lastSliceSelectTime = 0f;
+            WingRadialOverlay.Hide();
         }
 
         // ---------------------------------------------------------------- actions
@@ -695,11 +746,8 @@ namespace WingCommand
         {
             if (!InPlayableState()) return;
 
-            // The aircraft-recovery prompt is native uGUI and draws itself; only the
-            // fallback radial and the debug-only fallback toast still live here.
-            if (radialOpen)
-                WingHud.DrawRadial(Slices, radialCentre, hoveredSlice);
-
+            // The aircraft-recovery prompt and the radial command wheel are native uGUI;
+            // only the debug-only fallback toast still lives here.
             if (toast != null && Time.unscaledTime < toastUntil)
                 WingHud.DrawToast(toast);
         }
@@ -724,13 +772,26 @@ namespace WingCommand
 
     internal struct RadialSlice
     {
-        public readonly string Label;
+        public readonly string Title;
+        public readonly string Subtitle;
         public readonly WingAction Action;
+        public readonly string IconKey;
+        public readonly string Description;
+
+        public string Label => Title;
+
+        public RadialSlice(string title, string subtitle, WingAction action, string iconKey, string description)
+        {
+            Title = title;
+            Subtitle = subtitle;
+            Action = action;
+            IconKey = iconKey;
+            Description = description;
+        }
 
         public RadialSlice(string label, WingAction action)
+            : this(label.Replace("\n", " "), "COMMAND", action, "orders", "")
         {
-            Label = label;
-            Action = action;
         }
     }
 }

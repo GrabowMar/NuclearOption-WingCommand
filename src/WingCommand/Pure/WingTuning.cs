@@ -23,12 +23,10 @@ namespace WingCommand
 
         /// <summary>
         /// Largest heading correction, in degrees, a wingman commands while holding station -
-        /// the real limit on how fast it can close a lateral error. The settings this replaced
-        /// (a 1200 m look-ahead over a 220 m maximum correction) worked out to 10.4 degrees,
-        /// which is why station-keeping used to feel sluggish. Nudged from 25 to 27 to give a
-        /// wingman the authority to hold the tighter slot zone.
+        /// the real limit on how fast it can close a lateral error. Raised to 32 to give wingmen
+        /// more prompt heading authority to follow aggressive player manoeuvres.
         /// </summary>
-        public const float CommandAngle = 27f;
+        public const float CommandAngle = 32f;
 
         /// <summary>
         /// Bank authority, degrees, once settled in the slot. The game scales this down again
@@ -92,17 +90,10 @@ namespace WingCommand
         /// <summary>
         /// How much of the leader's uncommanded lever travel the wingman copies.
         ///
-        /// A fifth, not all of it, and the reason is worth stating because the obvious
-        /// argument says otherwise: <see cref="ThrustModel.ThrottleAnticipation"/> is zero
-        /// whenever the leader is settled, so copying it outright looks free. It is not,
-        /// because it is not independent of <see cref="SpeedLeadSeconds"/> - the lever and
-        /// the acceleration are the same speed change seen through two channels, one early
-        /// and one accurate, and adding both in full counts it twice. Simulated, full gain
-        /// alongside the acceleration lead is worse than either term alone. This is the
-        /// share that buys the head start the lever offers without re-commanding what the
-        /// acceleration term has already asked for.
+        /// A fourth, giving a slightly crisper head start to player throttle changes without
+        /// fighting the acceleration lead term.
         /// </summary>
-        public const float AnticipationGain = 0.2f;
+        public const float AnticipationGain = 0.25f;
 
         /// <summary>
         /// Seconds of smoothing on the leader's throttle before it is read as intent. Long
@@ -116,10 +107,10 @@ namespace WingCommand
 
         /// <summary>
         /// Metres from the slot at which a wingman switches from rejoining to holding.
-        /// Pulled in from 500 so the precise station-keeping law owns a larger share of the
+        /// Pulled in to 300 m so the precise station-keeping law owns a larger share of the
         /// approach and the wing settles onto the slot sooner.
         /// </summary>
-        public const float CaptureDistance = 375f;
+        public const float CaptureDistance = 300f;
 
         /// <summary>Seconds of rejoin boost per slot index, so a wing does not converge as one mass.</summary>
         public const float RejoinStagger = 1.2f;
@@ -128,8 +119,9 @@ namespace WingCommand
         /// How much of the leader's bank a settled wingman copies outright. Blending with the
         /// autopilot's own roll rather than overriding it is what keeps the turn stable; the
         /// controller disengages the term past a hard bank limit and near the ground.
+        /// Raised to 0.45 for tighter bank matching during player turns.
         /// </summary>
-        public const float BankMatchBlend = 0.35f;
+        public const float BankMatchBlend = 0.45f;
 
         /// <summary>
         /// Slot-spacing multipliers by rules of engagement. Defend/Hold (0.7) pulls the wing

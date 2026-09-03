@@ -39,51 +39,43 @@ namespace WingCommand
 
         /// <summary>
         /// Seconds of flight used as the steering baseline. This is the loop gain: the
-        /// aircraft's velocity is rotated towards a point this far ahead, so a short
-        /// baseline makes a high-gain loop that oscillates. The previous value of six
-        /// seconds (~1200 m at cruise) read as sluggish — wingmen sat a long way off the
-        /// slot before a lateral error grew into a visible correction. 4.5 seconds still
-        /// sits above the 800 m floor at cruise, so it stays stable while responding a
-        /// good deal more crisply to a manoeuvre.
+        /// aircraft's velocity is rotated towards a point this far ahead. Tightened from 4.5
+        /// to 3.5 seconds (with a 650 m floor) to tighten the formation leash and make wingmen
+        /// respond crisply to player turns and manoeuvres without oscillating.
         /// </summary>
-        private const float LookAheadSeconds = 4.5f;
+        private const float LookAheadSeconds = 3.5f;
 
         /// <summary>Shortest baseline, for aircraft slow enough that seconds alone is not enough.</summary>
-        private const float MinLookAhead = 800f;
+        private const float MinLookAhead = 650f;
 
         /// <summary>
         /// Slot radius, as a fraction of spacing, inside which position is not chased at
-        /// all. Tightened from 0.12: the wing sits visibly closer to the exact slot before
-        /// the proportional term lets go, and the always-live damping term still keeps that
-        /// from turning into a hunt.
+        /// all. Tightened from 0.085 to 0.025 (~3 m at standard spacing) so wingmen hold a
+        /// much tighter leash and react immediately to drifting off their slots.
         /// </summary>
-        private const float SlotZoneInner = 0.085f;
+        private const float SlotZoneInner = 0.025f;
 
         /// <summary>
-        /// Radius at which position correction reaches full authority. Pulled in from 0.5
-        /// alongside <see cref="SlotZoneInner"/> so the correction ramps up over a shorter
-        /// band and the formation holds a tighter margin; the damping ratio the lateral
-        /// gains were chosen for still has headroom at this width.
+        /// Radius at which position correction reaches full authority. Pulled in from 0.35
+        /// to 0.18 alongside <see cref="SlotZoneInner"/> so correction ramps up over a much
+        /// tighter band and wingmen stay firmly locked in formation during manoeuvres.
         /// </summary>
-        private const float SlotZoneOuter = 0.35f;
+        private const float SlotZoneOuter = 0.18f;
 
         /// <summary>
-        /// The same two radii for the vertical axis, as a fraction of
-        /// <see cref="WingTuning.SlotStack"/> rather than of lateral spacing.
+        /// Correction and damping gains for the vertical axis.
         ///
-        /// They have to be separate, and the arithmetic says why. The lateral radii are
-        /// fractions of a 120 m slot spacing, so the deadband is around ten metres - while
-        /// a slot's whole vertical stagger is <c>StackStep * SlotStack</c>, which for every
-        /// shape but Ladder is under seven metres, and is exactly zero for the first rank.
-        /// Measured against the lateral band, the entire vertical channel therefore lived
-        /// inside the deadband: the proportional term never woke up for a vertical error,
-        /// the only live term was drift damping, and a pure rate damper has no opinion about
-        /// where it is - so altitude relative to the slot wandered until the *combined* 3D
-        /// error crossed ten metres, got yanked back, and went quiet again. That limit cycle
-        /// is what "the wingmen constantly fly up and down" was.
+        /// Elevator pitch response is direct and aerodynamic, without the roll inertia and
+        /// bank-angle lag of lateral turns. Using the lateral gains on the vertical channel
+        /// vastly over-damped pitch corrections, while the previous 2-metre deadband dropped
+        /// proportional authority to zero and allowed the damping term alone to kick the
+        /// aircraft into a limit-cycle oscillation ("porpoising" / bouncing up and down).
+        ///
+        /// Dedicated gains with zero deadband provide continuous, critically-damped altitude
+        /// holding that settles cleanly without hunting or limit cycles.
         /// </summary>
-        private const float VerticalZoneInner = 0.1f;
-        private const float VerticalZoneOuter = 0.5f;
+        private const float VerticalPositionGain = 1.4f;
+        private const float VerticalDriftDamping = 2.0f;
 
         /// <summary>
         /// Bank authority when nothing is being asked of the roll axis. Small on purpose:
@@ -137,7 +129,7 @@ namespace WingCommand
         /// almost undamped pendulum, which is exactly what "sways left and right" is.
         /// P is lowered and D raised so ζ sits near 0.8 across the speed range.
         /// </summary>
-        private const float PositionGain = 1.0f;
+        private const float PositionGain = 1.35f;
 
         /// <summary>
         /// Damping gain on drift relative to the leader, before <c>Damping</c>. Chosen with
@@ -145,7 +137,7 @@ namespace WingCommand
         /// authority now goes to arresting the drift the position error created, which is
         /// what stops the wingman from swinging through the slot on every correction.
         /// </summary>
-        private const float DriftDamping = 5.5f;
+        private const float DriftDamping = 5.0f;
 
         /// <summary>
         /// Damping on the along-track closing rate, in m/s of speed demand per m/s of
@@ -157,7 +149,7 @@ namespace WingCommand
         private const float ClosingDamp = 3.0f;
 
         /// <summary>Speed demand per metre of along-track gap, in (m/s)/m.</summary>
-        private const float GapGain = 0.35f;
+        private const float GapGain = 0.45f;
 
         /// <summary>Hard ceiling on the closing speed demand, in m/s.</summary>
         private const float MaxClosure = 90f;
@@ -188,7 +180,7 @@ namespace WingCommand
         private const float BankRateGain = 0.5f;
 
         /// <summary>Leader roll rate fed forward, in stick fraction per rad/s, so a fast player roll is copied not chased.</summary>
-        private const float BankFeedForward = 0.35f;
+        private const float BankFeedForward = 0.50f;
 
         /// <summary>Hard ceiling on the roll bias, as a fraction of full stick.</summary>
         private const float MaxBankTrim = 0.4f;
@@ -586,14 +578,14 @@ namespace WingCommand
             // clamp did.
             flatCorrection = Vector3.ClampMagnitude(flatCorrection, maxCorrection);
 
-            float verticalInner = WingTuning.SlotStack * VerticalZoneInner;
-            float verticalOuter = WingTuning.SlotStack * VerticalZoneOuter;
-            float verticalRamp = Mathf.SmoothStep(
-                0f, 1f, Mathf.InverseLerp(verticalInner, verticalOuter, Mathf.Abs(across.y)));
-
+            // The vertical channel operates as a continuous, critically-damped linear PD
+            // controller with zero deadband. Without a deadband where restoring authority
+            // collapses to zero, there is no boundary to trigger limit-cycle hunting, and
+            // the dedicated VerticalPositionGain / VerticalDriftDamping settle the aircraft
+            // smoothly onto slot altitude.
             float verticalCorrection = Mathf.Clamp(
-                (across.y * PositionGain * aggression * verticalRamp)
-                - (acrossDrift.y * DriftDamping * damping),
+                (across.y * VerticalPositionGain * aggression)
+                - (acrossDrift.y * VerticalDriftDamping * damping),
                 -maxCorrection, maxCorrection);
 
             Vector3 correction = flatCorrection + Vector3.up * verticalCorrection;
@@ -828,7 +820,7 @@ namespace WingCommand
             // autopilot's bank term is noise — settled flight, straight or in a steady turn —
             // which is also exactly when the sway it fixes lives.
             float authority = Mathf.Clamp01(
-                blend * (1f - outOfPosition * 2f) * (1f - Mathf.Clamp01(commandAngle / 12f)));
+                blend * (1f - outOfPosition * 2f) * (1f - Mathf.Clamp01(commandAngle / 18f)));
 
             float bias = Mathf.Clamp(trim * authority, -MaxBankTrim, MaxBankTrim);
 
