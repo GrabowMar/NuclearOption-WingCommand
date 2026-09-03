@@ -22,7 +22,7 @@ namespace WingCommand
             {
                 case WingBehaviours.Held:         return "DEPT";
                 case WingBehaviours.MissileBreak: return "DEF";
-                case WingBehaviours.DeckHold:     return "HOLD";
+                case WingBehaviours.DeckHold:     return WingHost.Current.DeckHoldShortCode ?? "HOLD";
                 case WingBehaviours.Rejoin:       return "RJN";
                 default:                          return null;
             }
@@ -35,7 +35,7 @@ namespace WingCommand
             {
                 case WingBehaviours.Held:         return "DEPT";
                 case WingBehaviours.MissileBreak: return "DEFENSIVE";
-                case WingBehaviours.DeckHold:     return "HOLDING";
+                case WingBehaviours.DeckHold:     return WingHost.Current.DeckHoldLabel ?? "HOLDING";
                 case WingBehaviours.Rejoin:       return "REJOIN";
                 default:                          return null;
             }

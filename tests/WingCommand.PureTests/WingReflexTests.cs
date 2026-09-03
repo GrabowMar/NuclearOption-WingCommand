@@ -240,7 +240,8 @@ namespace WingCommand.PureTests
             WingSituation s = new WingSituation(
                 order: WingOrder.Attack, targetAlive: true,
                 leaderDistance: Leash * (WingTuning.LeashReleaseFraction - 0.05f),
-                leashRadius: Leash);
+                leashRadius: Leash,
+                secondsInBehaviour: WingTuning.LeashHoldSeconds + 1f);
 
             Assert.Equal(WingBehaviours.Task, Behaviour(s, active: "wingcommand.leash-recall"));
         }

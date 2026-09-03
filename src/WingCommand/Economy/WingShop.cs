@@ -316,6 +316,11 @@ namespace WingCommand
             Aircraft leader = WingCommandManager.Instance?.Wing?.Leader;
             if (leader == null || definition == null) return false;
 
+            // A surface host has no autopilot, so IsRotary reads it as a helicopter and the
+            // catalogue would offer helicopters only. Under overwatch nothing holds a slot,
+            // so both classes are equally able to escort a ship or a convoy.
+            if (WingHost.Current.AllowMixedAirframes) return true;
+
             return IsRotary(definition) == WingRegistry.IsRotary(leader);
         }
 

@@ -124,15 +124,15 @@ namespace WingCommand
         public const float BankMatchBlend = 0.45f;
 
         /// <summary>
-        /// Slot-spacing multipliers by rules of engagement. Defend/Hold (0.7) pulls the wing
-        /// into a tight parade slot the leader keeps in sight and is hard to lose; Free (1.5)
-        /// opens it toward combat-spread width for room to react and turn; Escort holds the
-        /// unscaled baseline. <see cref="FormationFlyState"/> takes the larger of this and
-        /// the reactive threat widen rather than multiplying the two, so selecting Free does
-        /// not also compound a missile-warning widen on top of it.
+        /// Slot-spacing multipliers by rules of engagement. Hold (0.7) pulls the wing into a
+        /// tight parade slot the leader keeps in sight and is hard to lose; Free (1.5) opens
+        /// it toward combat-spread width for room to react and turn; Tight holds the unscaled
+        /// baseline. <see cref="FormationFlyState"/> takes the larger of this and the
+        /// reactive threat widen rather than multiplying the two, so selecting Free does not
+        /// also compound a missile-warning widen on top of it.
         /// </summary>
         public const float RoeSpacingHold = 0.7f;
-        public const float RoeSpacingEscort = 1f;
+        public const float RoeSpacingTight = 1f;
         public const float RoeSpacingFree = 1.5f;
 
         // ------------------------------------------------------------------ rotary
@@ -256,12 +256,32 @@ namespace WingCommand
         ///
         /// This is the hysteresis, and it needs to be well under 1: with a single threshold
         /// a wingman sitting on the boundary flips between hunting and rejoining every
-        /// frame, which is exactly what it used to do.
+        /// frame, which is exactly what it used to do. Pulled to a third so a recalled
+        /// wingman is genuinely back with the formation before it is turned loose again,
+        /// rather than released the moment it clears the boundary and immediately overshooting
+        /// it once more.
         /// </summary>
-        public const float LeashReleaseFraction = 0.5f;
+        public const float LeashReleaseFraction = 0.35f;
 
         /// <summary>
-        /// Weapons range, metres, for a wingman shooting from its slot. Hold and Escort both
+        /// Seconds the leash recall keeps the controls once it has taken them, regardless of
+        /// its own score. Without a floor a wingman parked on the boundary hands control back
+        /// and forth every arbitration pass; with one the rejoin actually completes. The
+        /// survival band (a missile break) still pre-empts it instantly - the minimum only
+        /// holds against its own band and below.
+        /// </summary>
+        public const float LeashHoldSeconds = 3f;
+
+        /// <summary>
+        /// Seconds an Engage or a stalled Attack may go with nothing to prosecute - no live
+        /// designated target we can still hurt, no threat within engage range of us or the
+        /// leader - before the wingman comes home to the formation and awaits the next order.
+        /// Long enough that a lull between merges is not mistaken for a finished fight.
+        /// </summary>
+        public const float EngageIdleSeconds = 8f;
+
+        /// <summary>
+        /// Weapons range, metres, for a wingman shooting from its slot. Hold and Tight both
         /// use it; neither manoeuvres to engage, so for both it is purely a range limit.
         /// </summary>
         public const float HoldEngageRange = 6000f;
@@ -271,21 +291,18 @@ namespace WingCommand
 
         /// <summary>
         /// How far a wingman may stray from the leader before it abandons the fight and
-        /// rejoins. This is what stops the wing dispersing.
+        /// rejoins. This is what stops the wing dispersing. Kept short on purpose: an Engage
+        /// or an Attack is meant to be flown close to the formation, not chased over the
+        /// horizon, so a wingman that has to leave the slot to take a shot is pulled back
+        /// the moment the target is no longer near.
         /// </summary>
-        public const float LeashRadius = 8000f;
+        public const float LeashRadius = 5000f;
 
         /// <summary>Metres from the threat a Fall Back runs before the wing settles into its holding orbit.</summary>
         public const float FallBackStandoff = 6000f;
 
         /// <summary>Radius of the circle flown when holding over a point, for Orbit Here and after a Fall Back.</summary>
         public const float OrbitRadius = 2000f;
-
-        /// <summary>
-        /// Seconds a Defend wingman stays weapons-free against ground targets after the player
-        /// fires an anti-surface weapon.
-        /// </summary>
-        public const float MirrorWindowSeconds = 15f;
 
         /// <summary>
         /// Minimum seconds between shots from one wingman. Without a gap they fire on every

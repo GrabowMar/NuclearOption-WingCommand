@@ -449,10 +449,10 @@ namespace WingCommand
             if (WingRegistry.IsRotary(aircraft))
                 spacing *= WingTuning.RotarySpacingScale;
 
-            // Rules of engagement set the resting spread — Defend pulls in, Free opens out —
+            // Rules of engagement set the resting spread — Hold pulls in, Free opens out —
             // and the reactive threat widen is layered on as the larger of the two, never
             // multiplied in: a Free wing already flying a spread should not scatter further
-            // still the moment a missile is called, and a Defend wing must still be allowed
+            // still the moment a missile is called, and a Hold wing must still be allowed
             // to open up when it is actually being shot at. ThreatSpacingScale is called
             // unconditionally regardless, because it also latches leaderMissileThreat for
             // the combat-spread reaction.

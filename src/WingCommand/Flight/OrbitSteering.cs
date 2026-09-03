@@ -51,7 +51,14 @@ namespace WingCommand
             float aimBearing = (bearing + LeadAngle + phase) * Mathf.Deg2Rad;
             Vector3 ring = new Vector3(Mathf.Cos(aimBearing), 0f, Mathf.Sin(aimBearing)) * radius;
 
-            float altitude = rotary ? RotaryAltitude : FixedWingAltitude;
+            // A host profile may raise the ring - a wing overwatching a warship wants
+            // separation from the ship's own mast and missiles. Only fixed-wing takes it:
+            // the rotary figure is tied to RotaryAgl and terrain following, and a
+            // helicopter told to orbit at jet height is outside what that autopilot holds.
+            float overwatch = WingHost.Current.OverwatchAltitude;
+            float altitude = rotary
+                ? RotaryAltitude
+                : (overwatch > 0f ? overwatch : FixedWingAltitude);
             GlobalPosition target = anchor + ring + Vector3.up * altitude;
 
             if (rotary)

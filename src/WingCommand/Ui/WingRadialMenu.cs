@@ -143,16 +143,26 @@ namespace WingCommand
 
         // -------------------------------------------------------------------- menus
 
+        private static int builtRevision = -1;
+
         private static void BuildMenus(RadialMenuMain menu)
         {
-            if (rootEntry != null) return;
+            // The wheel is built once and kept, but a host profile can rename the orders on
+            // it - the leaf labels below are baked into the WingMenuAction instances, so
+            // without this the wheel would keep offering "Form Up" from a ship's bridge.
+            if (rootEntry != null && builtRevision == WingHost.Revision) return;
+            builtRevision = WingHost.Revision;
 
             // Borrow appearance from whatever the stock wheel already has.
             RadialMenuAction[] templates = GameAccess.GetActionsMain(menu);
             Func<int, RadialMenuAction> template = i =>
                 (templates != null && templates.Length > 0) ? templates[i % templates.Length] : null;
 
-            rootEntry = WingMenuAction.Create(RootLabel, _ => ShowCommanderMenu());
+            // Identity is load-bearing: EnsureRootInjected finds our slice in the stock
+            // wheel by reference, so a rebuild must reuse the same root action rather than
+            // make a new one, which would be injected alongside the old.
+            if (rootEntry == null)
+                rootEntry = WingMenuAction.Create(RootLabel, _ => ShowCommanderMenu());
 
             // Keep the first page categorical and every following page small enough to
             // scan at a glance. Deliberate management (recruitment, release and purchase)
@@ -170,27 +180,37 @@ namespace WingCommand
 
             var combat = new List<WingMenuAction>
             {
-                Leaf("Attack My Target", WingAction.AttackMyTarget, "attack"),
-                Leaf("Engage", WingAction.Engage, "engage"),
-                Leaf("Splash 'Em", WingAction.FireForEffect, "attack"),
-                Leaf("Disengage", WingAction.FallBack, "fallback"),
+                Leaf("Attack My Target", WingAction.AttackMyTarget, "attack",
+                     () => WingOrderCatalog.IsOfferable(WingOrder.Attack)),
+                Leaf("Engage", WingAction.Engage, "engage",
+                     () => WingOrderCatalog.IsOfferable(WingOrder.Engage)),
+                Leaf("Splash 'Em", WingAction.FireForEffect, "attack",
+                     () => WingOrderCatalog.IsOfferable(WingOrder.FireForEffect)),
+                Leaf("Disengage", WingAction.FallBack, "fallback",
+                     () => WingOrderCatalog.IsOfferable(WingOrder.FallBack)),
                 Back(ShowCommanderMenu),
             };
 
             var flight = new List<WingMenuAction>
             {
-                Leaf("Form Up", WingAction.Rejoin, "rejoin"),
-                Leaf("Hold Position", WingAction.OrbitHere, "orbit"),
-                Leaf("Return To Base", WingAction.ReturnToBase, "rtb"),
+                Leaf(WingOrderCatalog.Label(WingOrder.Formation), WingAction.Rejoin, "rejoin",
+                     () => WingOrderCatalog.IsOfferable(WingOrder.Formation)),
+                Leaf("Hold Position", WingAction.OrbitHere, "orbit",
+                     () => WingOrderCatalog.IsOfferable(WingOrder.OrbitHere)),
+                Leaf("Return To Base", WingAction.ReturnToBase, "rtb",
+                     () => WingOrderCatalog.IsOfferable(WingOrder.ReturnToBase)),
                 Icon(WingMenuAction.Create("Special Tasking", _ => ShowTaskingMenu()), "tasking"),
                 Back(ShowCommanderMenu),
             };
 
             var tasking = new List<WingMenuAction>
             {
-                Leaf("Jam Target", WingAction.JamMyTarget, "jam", () => WingBrain.Jamming),
-                Leaf("Deliver Cargo", WingAction.DeliverCargo, "cargo"),
-                Leaf("Land Here", WingAction.LandHere, "land"),
+                Leaf("Jam Target", WingAction.JamMyTarget, "jam",
+                     () => WingBrain.Jamming && WingOrderCatalog.IsOfferable(WingOrder.JamTarget)),
+                Leaf("Deliver Cargo", WingAction.DeliverCargo, "cargo",
+                     () => WingOrderCatalog.IsOfferable(WingOrder.DeliverCargo)),
+                Leaf("Land Here", WingAction.LandHere, "land",
+                     () => WingOrderCatalog.IsOfferable(WingOrder.LandHere)),
                 Back(ShowFlightMenu),
             };
 
@@ -222,8 +242,8 @@ namespace WingCommand
 
             var roes = new List<WingMenuAction>
             {
-                Roe("Defend", WingRoe.Hold),
-                Roe("Escort", WingRoe.Escort),
+                Roe("Hold", WingRoe.Hold),
+                Roe("Tight", WingRoe.Tight),
                 Roe("Free", WingRoe.Free),
                 Back(ShowCommanderMenu),
             };
@@ -334,7 +354,7 @@ namespace WingCommand
                 if (Mgr != null)
                 {
                     Mgr.Wing.Roe = roe;
-                    Mgr.Toast("ROE: " + label.ToUpperInvariant());
+                    Mgr.Toast("ROE: " + RoeRules.Label(roe));
                 }
                 RestoreStockWheel();
             });

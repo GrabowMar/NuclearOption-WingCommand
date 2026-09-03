@@ -15,16 +15,24 @@ namespace WingCommand
     /// to invent an Engage order or replace a point/target directive:
     ///
     /// <list type="bullet">
-    /// <item>Hold fires only for missile defence or when mirroring the player's attack.</item>
-    /// <item>Escort prioritises aircraft threatening the leader or wingman.</item>
+    /// <item>Hold fires only for missile defence; otherwise it holds fire completely.</item>
+    /// <item>Tight prioritises aircraft threatening the leader or wingman.</item>
     /// <item>Free may fire at any valid opportunity target while maintaining the task.</item>
     /// </list>
     /// </summary>
     /// <summary>Resolves what a wingman may shoot at, given the rules of engagement.</summary>
     internal static class RoeRules
     {
-        /// <summary>Player-facing name; Hold remains only as the legacy config enum value.</summary>
-        public static string Label(WingRoe roe) => roe == WingRoe.Hold ? "Defend" : roe.ToString();
+        /// <summary>The player-facing name of a rung, in the caps the UI shows it in.</summary>
+        public static string Label(WingRoe roe)
+        {
+            switch (roe)
+            {
+                case WingRoe.Tight: return "TIGHT";
+                case WingRoe.Free:  return "FREE";
+                default:            return "HOLD";
+            }
+        }
 
         /// <summary>
         /// The wing's current rules of engagement.
@@ -50,19 +58,17 @@ namespace WingCommand
                 return WingWeapons.Allow.MissilesOnly;
             }
 
-            // Escort protects the leader from hostile aircraft while staying in its slot.
-            // Ground attack is deliberately reserved for Free (or the player's mirrored
-            // attack in Hold), so Escort remains a useful middle rung instead of a second
-            // Free posture with a different label.
-            if (roe == WingRoe.Escort) return WingWeapons.Allow.AirOnly;
+            // Tight protects the leader from hostile aircraft while staying in its slot.
+            // Ground attack is deliberately reserved for Free, so Tight remains a useful
+            // middle rung instead of a second Free posture with a different label.
+            if (roe == WingRoe.Tight) return WingWeapons.Allow.AirOnly;
             if (roe == WingRoe.Free) return WingWeapons.Allow.AirAndGround;
 
-            // Hold: mirror the player's ground attack, and otherwise hold fire. Shooting
-            // at whatever aircraft happens to be in range is Escort/Free behaviour, not
-            // Hold's — a Hold wingman that fired at every enemy in range was exactly the
-            // "they shoot missiles very aggressively" complaint.
-            if (PlayerFireWatcher.GroundAttackOpen) return WingWeapons.Allow.GroundOnly;
-
+            // Hold holds fire. Missile defence above is the only exception; incidental fire
+            // at whatever happens to be in range is Tight/Free behaviour, and firing at
+            // ground targets is an explicit Attack My Target / Splash 'Em order, which sets
+            // its own weapons authority and never reaches here. A Hold wingman that opened up
+            // because the player did was the "they shoot very aggressively" complaint.
             return WingWeapons.Allow.None;
         }
 
@@ -79,10 +85,10 @@ namespace WingCommand
             WingRegistry wing = WingCommandManager.Instance?.Wing;
             Aircraft leader = wing?.Leader;
 
-            // Escort is the rung that exists to guard the leader, so it answers the
+            // Tight is the rung that exists to guard the leader, so it answers the
             // leader's missiles before its own. The other cautious rungs see to themselves
             // first, then the leader.
-            bool leaderFirst = wing != null && wing.Roe == WingRoe.Escort;
+            bool leaderFirst = wing != null && wing.Roe == WingRoe.Tight;
 
             if (leaderFirst && leader != null && UnderMissileAttack(leader)) return leader;
             if (UnderMissileAttack(aircraft)) return aircraft;
@@ -104,14 +110,14 @@ namespace WingCommand
         }
 
         /// <summary>
-        /// Pick the target that gives Escort its protective character. Unlike Free's broad
-        /// opportunity search, Escort anchors the search on the leader first and the firing
+        /// Pick the target that gives Tight its protective character. Unlike Free's broad
+        /// opportunity search, Tight anchors the search on the leader first and the firing
         /// wingman second, and never turns that target choice into a movement order.
         /// </summary>
         public static Unit PriorityTarget(WingRoe roe, Aircraft aircraft, Aircraft leader,
                                           float range)
         {
-            if (roe != WingRoe.Escort) return null;
+            if (roe != WingRoe.Tight) return null;
 
             Unit target = WingWeapons.NearestThreatTo(leader, range);
             return target ?? WingWeapons.NearestThreatTo(aircraft, range);
@@ -119,16 +125,15 @@ namespace WingCommand
 
         /// <summary>
         /// Whether the generic opportunity search may run after a priority target was not
-        /// found. Escort deliberately says no: it protects the package; Free says yes and
-        /// may shoot any valid contact; Defend's mirrored ground-fire allowance also needs
-        /// the generic selector to find the player's kind of target.
+        /// found. Tight deliberately says no: it protects the package; Free says yes and
+        /// may shoot any valid contact.
         /// </summary>
-        public static bool MayChooseOpportunityTarget(WingRoe roe) => roe != WingRoe.Escort;
+        public static bool MayChooseOpportunityTarget(WingRoe roe) => roe != WingRoe.Tight;
 
         /// <summary>Engagement range for a rung, in metres.</summary>
         public static float EngageRange(WingRoe roe)
         {
-            // Hold and Escort share a range because neither manoeuvres to engage, so for
+            // Hold and Tight share a range because neither manoeuvres to engage, so for
             // both of them it is purely a weapons-range limit.
             return roe == WingRoe.Free
                 ? WingTuning.FreeEngageRange
@@ -136,8 +141,8 @@ namespace WingCommand
         }
 
         /// <summary>
-        /// Slot-spacing multiplier for a rung: Defend/Hold flies a tight parade slot, Free
-        /// opens to a fighting spread, Escort holds the baseline. Applied by
+        /// Slot-spacing multiplier for a rung: Hold flies a tight parade slot, Free opens to
+        /// a fighting spread, Tight holds the baseline. Applied by
         /// <see cref="FormationFlyState"/>, which does not let it compound with the reactive
         /// threat widen.
         /// </summary>
@@ -145,9 +150,9 @@ namespace WingCommand
         {
             switch (roe)
             {
-                case WingRoe.Free:   return WingTuning.RoeSpacingFree;
-                case WingRoe.Escort: return WingTuning.RoeSpacingEscort;
-                default:             return WingTuning.RoeSpacingHold;
+                case WingRoe.Free:  return WingTuning.RoeSpacingFree;
+                case WingRoe.Tight: return WingTuning.RoeSpacingTight;
+                default:            return WingTuning.RoeSpacingHold;
             }
         }
 
@@ -165,12 +170,12 @@ namespace WingCommand
         {
             switch (roe)
             {
-                case WingRoe.Escort:
+                case WingRoe.Tight:
                     return "Holds the slot. Engages aircraft, guarding you first.";
                 case WingRoe.Free:
                     return "Flies a loose spread. Weapons free from the current task. Engage authorises pursuit.";
                 default:
-                    return "Holds a tight slot. Intercepts missiles. Ground fire only when you fire.";
+                    return "Holds a tight slot. Intercepts missiles. Holds fire otherwise.";
             }
         }
 

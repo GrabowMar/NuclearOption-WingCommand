@@ -37,13 +37,13 @@ namespace WingCommand
             // Each rung explains itself from the same source the status line already used
             // for the standing hint, so the hovered description and the resting one cannot
             // drift apart.
-            holdButton = Button(parent, "DEFEND", new Rect(left, y, roeWidth, RowHeight),
+            holdButton = Button(parent, "HOLD", new Rect(left, y, roeWidth, RowHeight),
                                 () => SetRoe(WingRoe.Hold))
-                         .WithTooltip("DEFEND - " + RoeRules.Hint(WingRoe.Hold));
-            escortButton = Button(parent, "ESCORT",
+                         .WithTooltip("HOLD - " + RoeRules.Hint(WingRoe.Hold));
+            tightButton = Button(parent, "TIGHT",
                                   new Rect(left + roeWidth + Gap, y, roeWidth, RowHeight),
-                                  () => SetRoe(WingRoe.Escort))
-                           .WithTooltip("ESCORT - " + RoeRules.Hint(WingRoe.Escort));
+                                  () => SetRoe(WingRoe.Tight))
+                           .WithTooltip("TIGHT - " + RoeRules.Hint(WingRoe.Tight));
             freeButton = Button(parent, "FREE",
                                 new Rect(left + (roeWidth + Gap) * 2f, y, roeWidth, RowHeight),
                                 () => SetRoe(WingRoe.Free))
@@ -78,7 +78,7 @@ namespace WingCommand
             if (wing == null) return;
 
             wing.Roe = roe;
-            WingCommandManager.Instance?.Toast("ROE: " + roe.ToString().ToUpperInvariant());
+            WingCommandManager.Instance?.Toast("ROE: " + RoeRules.Label(roe));
         }
 
         private static float AddSummary(RectTransform parent, float y)
@@ -450,7 +450,7 @@ namespace WingCommand
                                     "  (YOUR FLIGHT)";
 
             holdButton?.SetLatched(wing.Roe == WingRoe.Hold);
-            escortButton?.SetLatched(wing.Roe == WingRoe.Escort);
+            tightButton?.SetLatched(wing.Roe == WingRoe.Tight);
             freeButton?.SetLatched(wing.Roe == WingRoe.Free);
 
             // A scope whose members disagree lights nothing, rather than lighting the first
@@ -543,7 +543,7 @@ namespace WingCommand
                 }
             }
 
-            string roeName = wing != null ? wing.Roe.ToString().ToUpperInvariant() : "DEFEND";
+            string roeName = wing != null ? RoeRules.Label(wing.Roe) : "HOLD";
             string wepName = shared.HasValue ? shared.Value.ToString().ToUpperInvariant() : "AUTO";
             string shapeName = FormationShapes.Pretty(shape).ToUpperInvariant();
 
@@ -672,6 +672,7 @@ namespace WingCommand
             private readonly Image selectionRule;
             private readonly Image fill;
             private readonly WingButton hit;
+            private readonly WingButton lead;
             private readonly WingButton release;
             private WingMember bound;
 
@@ -721,6 +722,18 @@ namespace WingCommand
                 ammo  = Label(rt, "", new Rect(280f, 0f, 40f, RowHeight), Dim(), FontSmall,
                               FontStyles.Normal, TextAlignmentOptions.Right);
 
+                // LD grants this wingman temporary flight lead: the rest of the wing then
+                // formates on them instead of on the player. It sits in the gap the AMMO
+                // readout leaves before REL, latched (not a two-press confirm) because it is
+                // a toggle with no cost and an obvious undo.
+                const float leadWidth = 30f;
+                lead = WingUi.Button(rt, "LD",
+                                     new Rect(width - releaseWidth - 6f - leadWidth - 2f, -1f,
+                                              leadWidth, RowHeight - 2f),
+                                     FontSmall, UiButtonStyle.Default, ToggleLead)
+                             .WithTooltip("Flight lead - the rest of the wing formates on this " +
+                                          "wingman while it takes your orders. Press again to release.");
+
                 // REL discharges a wingman for good, and it sat one row-width from the row
                 // you click to select one, in the same green as the orders. It is now drawn
                 // as the destructive control it is, and it asks twice — the same
@@ -732,6 +745,11 @@ namespace WingCommand
                                                  RowHeight - 2f),
                                         FontSmall, UiButtonStyle.Danger, ConfirmRelease)
                                 .WithTooltip(OrderHint.Release);
+            }
+
+            private void ToggleLead()
+            {
+                if (bound != null) WingCommandManager.Instance?.ToggleFlightLead(bound);
             }
 
             /// <summary>Arm on the first press, discharge on the second.</summary>
@@ -763,6 +781,8 @@ namespace WingCommand
                 bool armed = memberRelease.IsArmedFor(m);
                 release?.SetLatched(armed);
                 release?.SetText(armed ? "SURE?" : "REL");
+
+                lead?.SetLatched(m.IsFlightLead);
 
                 // Just the slot number. The filled/hollow circles this used to draw are not
                 // in the MFD font, so every row rendered the same tofu box and the marker

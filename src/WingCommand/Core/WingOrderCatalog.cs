@@ -5,6 +5,13 @@ namespace WingCommand
     {
         public static string Label(WingOrder order)
         {
+            // A companion plugin describing a non-aircraft host renames what an order means
+            // from its seat - "Form Up" is not a thing a jet can do on a moving warship.
+            // Checked here rather than at each surface because this is the one place every
+            // surface reads an order's name from.
+            string host = WingHost.Current.LabelFor(order);
+            if (host != null) return host;
+
             switch (order)
             {
                 case WingOrder.Formation:    return "Form Up";
@@ -25,6 +32,9 @@ namespace WingCommand
 
         public static string ShortLabel(WingOrder order)
         {
+            string host = WingHost.Current.ShortLabelFor(order);
+            if (host != null) return host;
+
             switch (order)
             {
                 case WingOrder.Formation:    return "FORM";
@@ -60,6 +70,7 @@ namespace WingCommand
         public static bool CanApply(WingMember member, WingOrder order)
         {
             if (member == null || !member.IsCommandable) return false;
+            if (WingHost.Current.IsHidden(order)) return false;
             if (order == WingOrder.DeliverCargo) return member.CanDeliverCargo;
             if (order == WingOrder.LandHere) return member.CanLandInPlace;
             if (order == WingOrder.JamTarget)
@@ -68,8 +79,23 @@ namespace WingCommand
             return true;
         }
 
+        /// <summary>
+        /// Whether an order may be offered at all, with no wingman in hand.
+        ///
+        /// The radial wheel builds its slices before there is a selection to test, so it
+        /// cannot ask <see cref="CanApply"/>. This answers the half of that question which
+        /// does not depend on who is being ordered.
+        /// </summary>
+        public static bool IsOfferable(WingOrder order) => !WingHost.Current.IsHidden(order);
+
         public static string UnavailableReason(WingOrder order)
         {
+            if (WingHost.Current.IsHidden(order))
+            {
+                return WingHost.Current.HiddenReason ??
+                       "That order does not apply from your current vehicle";
+            }
+
             if (order == WingOrder.DeliverCargo) return "No selected wingman is carrying cargo";
             if (order == WingOrder.FireForEffect) return "No selected wingman can prosecute that target";
             if (order == WingOrder.LandHere) return "Land is available to rotary aircraft only";

@@ -52,10 +52,36 @@ namespace WingCommand
 
         private readonly List<PendingRecruit> recruitQueue = new List<PendingRecruit>();
 
-        private static readonly RadialSlice[] Slices =
+        private static RadialSlice[] slices;
+        private static int slicesRevision = -1;
+
+        /// <summary>
+        /// The overlay wheel's ten cards.
+        ///
+        /// Rebuilt when <see cref="WingHost.Revision"/> moves rather than being a static
+        /// initialiser, because the rejoin card names an order whose meaning a host profile
+        /// can change - "FORM UP" is not what the wing does above a moving warship - and a
+        /// once-per-process array would keep showing the aircraft wording forever.
+        /// </summary>
+        private static RadialSlice[] Slices
         {
-            new RadialSlice("FORM UP", "REJOIN", WingAction.Rejoin, "rejoin",
-                "Recall all flight members to assigned formation slots."),
+            get
+            {
+                if (slices != null && slicesRevision == WingHost.Revision) return slices;
+                slicesRevision = WingHost.Revision;
+                slices = BuildSlices();
+                return slices;
+            }
+        }
+
+        private static RadialSlice[] BuildSlices() => new[]
+        {
+            new RadialSlice(WingOrderCatalog.Label(WingOrder.Formation).ToUpperInvariant(),
+                WingHost.Current.IsSurfaceVehicle ? "ON STATION" : "REJOIN",
+                WingAction.Rejoin, "rejoin",
+                WingHost.Current.IsSurfaceVehicle
+                    ? "Hold all flight members on station above your vehicle."
+                    : "Recall all flight members to assigned formation slots."),
             new RadialSlice("ATTACK TARGET", "PRIORITY LOCK", WingAction.AttackMyTarget, "attack",
                 "Order all wingmen to concentrate attack on player's designated target."),
             new RadialSlice("ENGAGE", "SEARCH & DESTROY", WingAction.Engage, "engage",
@@ -67,7 +93,7 @@ namespace WingCommand
             new RadialSlice("RETURN TO BASE", "RTB RECOVERY", WingAction.ReturnToBase, "rtb",
                 "Order wingmen to disengage and return to nearest friendly airbase for recovery."),
             new RadialSlice("CYCLE ROE", "RULES OF ENGAGEMENT", WingAction.CycleRoe, "posture",
-                "Cycle standing Rules of Engagement: DEFEND -> ESCORT -> FREE."),
+                "Cycle standing Rules of Engagement: HOLD -> TIGHT -> FREE."),
             new RadialSlice("NEXT FORMATION", "FLIGHT SHAPE", WingAction.CycleShape, "formation",
                 "Switch flight formation geometry: VIC, TRAIL, COMBAT SPREAD, FINGER FOUR, etc."),
             new RadialSlice("JAM TARGET", "ELECTRONIC WARFARE", WingAction.JamMyTarget, "jam",
@@ -96,7 +122,6 @@ namespace WingCommand
                 WingRadialOverlay.Reset();
                 WingHud.ResetStatusPanel();
                 WmcScreen.Reset();
-                PlayerFireWatcher.Reset();
                 WingComms.Reset();
                 TacticalCoordinator.Reset();
                 WingMarkers.Reset();
@@ -152,7 +177,6 @@ namespace WingCommand
             // passes whose order was the priority system.
             Wing.CheckReserves();
             Wing.Tick();
-            PlayerFireWatcher.Track(local);
 
             if (NativeRadialActive)
                 WingRadialMenu.Tick();
@@ -492,7 +516,7 @@ namespace WingCommand
                     // Cycles all three rungs rather than toggling two, so the wheel can
                     // reach the whole escalation without a submenu.
                     Wing.Roe = (WingRoe)(((int)Wing.Roe + 1) % 3);
-                    Toast("ROE: " + RoeRules.Label(Wing.Roe).ToUpperInvariant());
+                    Toast("ROE: " + RoeRules.Label(Wing.Roe));
                     break;
                 }
 
@@ -654,6 +678,26 @@ namespace WingCommand
             string name = member.Name;
             Wing.Remove(member, "removed from the map panel");
             Toast(name + " released - returning to base");
+        }
+
+        /// <summary>
+        /// Grant or revoke temporary flight lead. Pressing it on the current lead, or on a
+        /// second wingman, hands it over cleanly - there is only ever one lead.
+        /// </summary>
+        internal void ToggleFlightLead(WingMember member)
+        {
+            if (member == null) return;
+
+            if (Wing.FlightLead == member)
+            {
+                Wing.ClearFlightLead();
+                Toast("Flight lead released - wing forming on you");
+                return;
+            }
+
+            Toast(Wing.TrySetFlightLead(member, out string reason)
+                ? member.Name + " leads the flight - wing forming on them"
+                : "Cannot make " + member.Name + " lead: " + reason);
         }
 
         /// <summary>Assign the current map selection to the wing. Used by the map panel.</summary>

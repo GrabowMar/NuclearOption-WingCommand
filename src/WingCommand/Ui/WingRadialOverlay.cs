@@ -243,7 +243,7 @@ namespace WingCommand
             hubStatus = CreateLabel(hubRt, "FLIGHT LEAD", new Vector2(0f, 28f), 10.5f, FontStyles.Normal,
                                     UiTheme.Friendly, TextAlignmentOptions.Center);
 
-            hubPosture = CreateLabel(hubRt, "ROE: DEFEND  ·  FORM: VIC", new Vector2(0f, 12f), 10f, FontStyles.Normal,
+            hubPosture = CreateLabel(hubRt, "ROE: HOLD  ·  FORM: VIC", new Vector2(0f, 12f), 10f, FontStyles.Normal,
                                      WingUi.TextSecondary, TextAlignmentOptions.Center);
 
             // Hovered order briefing block (lower center)

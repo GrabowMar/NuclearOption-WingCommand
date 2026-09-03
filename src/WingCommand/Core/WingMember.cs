@@ -134,7 +134,25 @@ namespace WingCommand
             lastIntegrity = Integrity;
         }
 
-        public Aircraft Leader => owner?.Leader;
+        /// <summary>
+        /// The aircraft this wingman formates on. Normally the player; when the player has
+        /// named a flight lead, every other member forms on that aircraft instead, while the
+        /// lead itself still forms on the player. This is the single chokepoint the whole
+        /// formation stack reads, so retargeting it here is the entire behavioural core of
+        /// the flight-lead feature.
+        /// </summary>
+        public Aircraft Leader
+        {
+            get
+            {
+                WingMember lead = owner?.FlightLead;
+                return FlightLeadPolicy.FormationLeader(
+                    ReferenceEquals(lead, this), lead?.Aircraft, owner?.Leader);
+            }
+        }
+
+        /// <summary>True when the player has granted this wingman temporary flight lead.</summary>
+        public bool IsFlightLead => ReferenceEquals(owner?.FlightLead, this);
 
         /// <summary>The rest of the wing, for separation steering.</summary>
         public System.Collections.Generic.IReadOnlyList<WingMember> Siblings =>
@@ -172,6 +190,11 @@ namespace WingCommand
 
             if (directive.Order != WingOrder.MoveToPoint)
                 waypointQueue.Clear();
+
+            // Start the idle clock fresh whenever an open-ended fight order is issued, so the
+            // rest-state timeout is measured from the order rather than from the last one.
+            if (directive.Order == WingOrder.Engage || directive.Order == WingOrder.Attack)
+                engageActivityAt = Time.timeSinceLevelLoad;
 
             SetDirective(directive);
 
@@ -1100,6 +1123,52 @@ namespace WingCommand
             {
                 WingComms.Say(this, WingComms.Call.Winchester);
                 Apply(WingOrder.ReturnToBase);
+            }
+        }
+
+        private float engageActivityAt;
+
+        /// <summary>
+        /// Give an open-ended fight an ending.
+        ///
+        /// An <see cref="WingOrder.Engage"/> hands the wingman to the stock combat AI with no
+        /// completion condition of its own, and an <see cref="WingOrder.Attack"/> whose
+        /// target has drifted out of reach keeps circling. Both should simply come home to
+        /// the formation and await the next order once there is nothing left to prosecute:
+        /// no live designated target we can still hurt, and no threat within engage range of
+        /// us or the leader for <see cref="WingTuning.EngageIdleSeconds"/>.
+        ///
+        /// Runs on the same once-a-second housekeeping pass as <see cref="CheckReserves"/>;
+        /// the timeout is long enough that a lull between merges does not send the wing home.
+        /// </summary>
+        internal void CheckEngageIdle()
+        {
+            float now = Time.timeSinceLevelLoad;
+
+            if ((Order != WingOrder.Engage && Order != WingOrder.Attack) || IsPanicking)
+            {
+                engageActivityAt = now;
+                return;
+            }
+
+            Aircraft leader = Leader;
+            bool active =
+                (Order == WingOrder.Attack &&
+                 WingWeapons.CanStillEngage(Aircraft, AssignedTarget)) ||
+                WingWeapons.NearestThreatTo(Aircraft, WingTuning.FreeEngageRange) != null ||
+                (leader != null &&
+                 WingWeapons.NearestThreatTo(leader, WingTuning.FreeEngageRange) != null);
+
+            if (active)
+            {
+                engageActivityAt = now;
+                return;
+            }
+
+            if (now - engageActivityAt >= WingTuning.EngageIdleSeconds)
+            {
+                WingComms.Say(this, WingComms.Call.Rejoining);
+                Apply(WingOrder.Formation);
             }
         }
 

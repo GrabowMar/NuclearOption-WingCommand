@@ -169,9 +169,16 @@ namespace WingCommand
         private void BindEngagement(ConfigFile c)
         {
             DefaultRoe = c.Bind("Engagement", "DefaultRoe", WingRoe.Hold,
-                "Rules of engagement the wing starts a mission with. Defend limits fire to " +
-                "missile defence and mirrored attacks; Escort prioritises threats around " +
-                "the formation; Free may shoot opportunity targets without changing orders.");
+                "Rules of engagement the wing starts a mission with. Hold limits fire to " +
+                "missile defence only; Tight prioritises threats around the formation; " +
+                "Free may shoot opportunity targets without changing orders.");
+
+            // The middle rung was renamed Escort -> Tight. A config file written before the
+            // rename holds "DefaultRoe = Escort", which no longer parses, so BepInEx has
+            // silently substituted the default above. Recover the choice from the file on
+            // disk and carry it across.
+            if (DefaultRoe.Value == WingRoe.Hold && FileMentionsLegacyRoe(c, "Escort"))
+                DefaultRoe.Value = WingRoe.Tight;
             AutoReturnOnEmpty = c.Bind("Engagement", "AutoReturnOnEmpty", true,
                 "Wingmen return to base on their own once out of ammunition or down to " +
                 "bingo fuel, instead of holding station empty.");
@@ -184,6 +191,32 @@ namespace WingCommand
                 "When your pilot dies or ejects, offer control of a surviving aircraft in " +
                 "your wing. Host or single-player only; mission failures unrelated to the " +
                 "player's aircraft are never suppressed.");
+        }
+
+        /// <summary>
+        /// Whether the raw config file still assigns <c>DefaultRoe</c> a value that no longer
+        /// parses. Reads the file directly because BepInEx keeps no public record of an entry
+        /// it failed to bind.
+        /// </summary>
+        private static bool FileMentionsLegacyRoe(ConfigFile c, string legacyValue)
+        {
+            try
+            {
+                string path = c.ConfigFilePath;
+                if (string.IsNullOrEmpty(path) || !System.IO.File.Exists(path)) return false;
+
+                foreach (string line in System.IO.File.ReadAllLines(path))
+                {
+                    string t = line.Trim();
+                    if (t.StartsWith("DefaultRoe", System.StringComparison.Ordinal) &&
+                        t.IndexOf(legacyValue, System.StringComparison.OrdinalIgnoreCase) >= 0)
+                        return true;
+                }
+            }
+            catch (System.IO.IOException) { }
+            catch (System.UnauthorizedAccessException) { }
+
+            return false;
         }
 
         private void BindComms(ConfigFile c)

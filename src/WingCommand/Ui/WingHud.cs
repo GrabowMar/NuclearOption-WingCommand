@@ -491,6 +491,13 @@ namespace WingCommand
                 string behaviour = WingBehaviourLabels.ShortCode(member.Behaviour.BehaviourId);
                 if (behaviour != null) return behaviour;
 
+                // A host profile renames orders whose meaning changes from a non-aircraft
+                // seat. The stock codes below are deliberately terser than the catalogue's
+                // ("ENG", not "ENGAGE") because this strip is four characters wide, so this
+                // asks the profile directly rather than routing through ShortLabel.
+                string host = WingHost.Current.ShortLabelFor(member.Order);
+                if (host != null) return host;
+
                 switch (member.Order)
                 {
                     case WingOrder.Engage:       return "ENG";

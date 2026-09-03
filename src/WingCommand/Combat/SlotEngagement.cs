@@ -83,9 +83,9 @@ namespace WingCommand
                 assigned = null;
             }
 
-            // Escort: with no explicit order standing, shoot at what is hunting the leader
+            // Tight: with no explicit order standing, shoot at what is hunting the leader
             // rather than at whatever is nearest to us. This is the entire difference
-            // between Escort and Hold - station-keeping and fire gating are untouched, only
+            // between Tight and Hold - station-keeping and fire gating are untouched, only
             // the choice of target changes.
             bool coveringLeader = false;
             if (assigned == null)

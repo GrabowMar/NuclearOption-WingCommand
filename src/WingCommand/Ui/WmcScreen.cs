@@ -123,7 +123,7 @@ namespace WingCommand
         private static TMP_Text summaryLabel;
         private static TMP_Text rosterPageLabel;
         private static WingButton holdButton;
-        private static WingButton escortButton;
+        private static WingButton tightButton;
         private static WingButton freeButton;
         private static WingButton cargoButton;
         private static WingButton landButton;
@@ -308,7 +308,7 @@ namespace WingCommand
             shopPage = 0;
             rosterPage = 0;
             holdButton = null;
-            escortButton = null;
+            tightButton = null;
             freeButton = null;
             cargoButton = null;
             landButton = null;

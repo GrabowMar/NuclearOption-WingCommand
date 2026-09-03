@@ -172,7 +172,11 @@ namespace WingCommand
             public string Id => "wingcommand.leash-recall";
             public WingReflexBand Band => WingReflexBand.Cohesion;
             public string BehaviourId => WingBehaviours.Rejoin;
-            public float MinimumSeconds => 0f;
+
+            // Once the recall has the controls it keeps them briefly, so a wingman parked on
+            // the leash boundary completes the rejoin instead of trading control back and
+            // forth every pass. The wide release threshold below is the other half of that.
+            public float MinimumSeconds => WingTuning.LeashHoldSeconds;
             public bool RequiresSmartMode => false;
 
             public float Score(in WingSituation s, bool incumbent)

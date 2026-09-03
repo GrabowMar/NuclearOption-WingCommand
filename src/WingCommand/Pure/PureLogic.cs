@@ -51,7 +51,7 @@ namespace WingCommand
     public enum WingRoe
     {
         Hold,
-        Escort,
+        Tight,
         Free,
     }
 
@@ -166,6 +166,20 @@ namespace WingCommand
                     return Authority(order);
             }
         }
+    }
+
+    /// <summary>
+    /// Which aircraft a wingman formates on, given an optional designated flight lead.
+    ///
+    /// The rule is small on purpose and lives here so it can be tested without Unity: a
+    /// follower forms on the designated lead; the lead itself, and every member when no
+    /// lead is set, falls through to the wing leader (the player).
+    /// </summary>
+    internal static class FlightLeadPolicy
+    {
+        public static T FormationLeader<T>(bool isThisMemberTheLead, T designatedLead,
+                                           T wingLeader) where T : class =>
+            (isThisMemberTheLead || designatedLead == null) ? wingLeader : designatedLead;
     }
 
     /// <summary>Pure rotary hover transition, separated from Unity steering for tests.</summary>

@@ -21,6 +21,70 @@ namespace WingCommand
         public IReadOnlyList<WingMember> Members => members;
         public int Count => members.Count;
 
+        private WingMember flightLead;
+
+        /// <summary>
+        /// One wingman the player has granted temporary flight lead, or null for the
+        /// default where every member forms on <see cref="Leader"/> (the player).
+        ///
+        /// A follower reads this through <see cref="WingMember.Leader"/> and formates on the
+        /// designated aircraft instead of the player, so the player can peel off while the
+        /// rest of the flight proceeds as one. The lead itself still forms on, and takes its
+        /// orders from, the player.
+        ///
+        /// The getter self-heals: a lead that has left the roster, died, or lost
+        /// commandability stops being the lead the moment it is asked for, so the removal
+        /// paths do not each have to remember to clear it. <see cref="CheckReserves"/> is
+        /// what turns that silent drop into a toast.
+        /// </summary>
+        public WingMember FlightLead
+        {
+            get
+            {
+                if (flightLead != null &&
+                    (!members.Contains(flightLead) || !flightLead.Alive ||
+                     !flightLead.IsCommandable))
+                {
+                    flightLead = null;
+                }
+                return flightLead;
+            }
+        }
+
+        /// <summary>
+        /// Grant flight lead to a member, or report why not. Rejects an aircraft that is not
+        /// on the roster, is not commandable, or is the wrong airframe class to be formated
+        /// on by the rest of the wing.
+        /// </summary>
+        public bool TrySetFlightLead(WingMember member, out string reason)
+        {
+            if (member == null || !members.Contains(member))
+            {
+                reason = "Not in the wing";
+                return false;
+            }
+            if (!member.IsCommandable)
+            {
+                reason = member.Name + " is not taking orders";
+                return false;
+            }
+            if (Leader != null && member.Aircraft != null &&
+                IsRotary(member.Aircraft) != IsRotary(Leader))
+            {
+                reason = IsRotary(member.Aircraft)
+                    ? "A rotary lead cannot head a fixed-wing flight"
+                    : "A fixed-wing lead cannot head a rotary flight";
+                return false;
+            }
+
+            flightLead = member;
+            reason = null;
+            return true;
+        }
+
+        /// <summary>Return the wing to forming on the player.</summary>
+        public void ClearFlightLead() => flightLead = null;
+
         public void SetLeader(Aircraft leader)
         {
             // GetLocalAircraft keeps returning the old airframe briefly after death or
@@ -37,6 +101,12 @@ namespace WingCommand
             if (Leader == leader) return;
             Aircraft previous = Leader;
             Leader = leader;
+
+            // A host profile describes one vehicle, and this is the whole of its liveness
+            // story: every route out of a seat - death, ejection, mission end, taking over a
+            // wingman - passes through here, so a companion plugin that never unregisters
+            // still cannot leave its profile applied to an aircraft it did not describe.
+            WingHost.NoteLeader(leader);
 
             // The deck hold describes one leader's situation. Carrying it across a change of
             // seat would leave the wing orbiting for an aircraft that is no longer theirs.
@@ -109,7 +179,13 @@ namespace WingCommand
                 members[i].CheckCargoRun();
                 members[i].CheckDamage();
                 members[i].CheckReserves();
+                members[i].CheckEngageIdle();
             }
+
+            // The property self-heals silently; this is the one place that notices the drop
+            // and says so, so a flight losing its lead is not a mystery.
+            if (flightLead != null && FlightLead == null)
+                WingCommandManager.Instance?.Toast("Flight lead off station - wing re-forming on you");
 
             CheckLeaderOnDeck();
         }
@@ -147,6 +223,12 @@ namespace WingCommand
             Aircraft leader = Leader;
             if (leader == null || leader.disabled) return false;
 
+            // A surface host is on the deck for as long as the player is in it, and the
+            // gear test below would never say so: a ship or a ground vehicle has no landing
+            // gear to extend, so it reads as an aircraft skimming the waves at zero feet
+            // and the wing flies formation slots into the sea.
+            if (WingHost.Current.Overwatch) return true;
+
             if (LeaderOnDeck) return leader.radarAlt < AirborneAltitude;
             return leader.gearDeployed && leader.radarAlt < DeckAltitude;
         }
@@ -172,7 +254,8 @@ namespace WingCommand
             LeaderOnDeck = onDeck;
             if (!onDeck) return;
 
-            WingCommandManager.Instance?.Toast("Leader on the deck - wing holding overhead");
+            WingCommandManager.Instance?.Toast(
+                WingHost.Current.OverwatchToast ?? "Leader on the deck - wing holding overhead");
         }
 
         /// <summary>
@@ -493,6 +576,12 @@ namespace WingCommand
         private bool TypeMatchesLeader(Aircraft candidate)
         {
             if (Leader == null || candidate == null) return false;
+
+            // Nobody is holding a slot under overwatch - each aircraft steers its own orbit
+            // - so the reason for the refusal is gone, and a surface leader has no airframe
+            // class of its own to match against anyway.
+            if (WingHost.Current.AllowMixedAirframes) return true;
+
             return IsRotary(candidate) == IsRotary(Leader);
         }
 
