@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using NOAvionics;
+using NOAvionics.Ui;
 using NuclearOption.SavedMission;
 using NuclearOption.UIStyleSystem;
 using TMPro;
@@ -25,13 +26,8 @@ namespace WingCommand
     /// </summary>
     internal static partial class WmcScreen
     {
-        private const float PanelWidth = 430f;
+        private const float PanelWidth = AvTokens.PanelWidth;
 
-        // The panel's measurements are WingUi's, not its own. They were duplicated here as
-        // literals, which is how the page ended up laid out on 2/6/10/16/18/20/22/26/34
-        // as well as the 4/12/30 it thought it was using — a block that looked deliberately
-        // separated from the one above it and a block that had simply been nudged were
-        // indistinguishable in the source and on screen.
         private const float Pad = WingUi.Pad;
         private const float RowHeight = WingUi.RowHeight;
         private const float Gap = WingUi.Gap;
@@ -53,21 +49,10 @@ namespace WingCommand
         /// <summary>Height of a single-line label block: hint lines, status lines, readouts.</summary>
         private const float LineHeight = Space4;
 
-        /// <summary>
-        /// The left column the engagement and fit rows hang their names in.
-        ///
-        /// Both blocks used a local <c>gutter</c> constant of their own, and they agreed by
-        /// luck rather than by construction.
-        /// </summary>
         private const float GutterWidth = 62f;
-
-        /// <summary>Width of a page-turn arrow, on every list that has one.</summary>
         private const float ArrowWidth = 34f;
 
-        /// <summary>Two lines of hint text plus the padding around them.</summary>
-        private const float StatusStripHeight = 38f;
-
-        /// <summary>Shown on a status line when the pointer is not explaining anything.</summary>
+        private const float StatusStripHeight = AvTokens.StatusStripHeight;
         private const string HoverPrompt = "Hover a control to see what it does.";
 
         /// <summary>
@@ -121,6 +106,8 @@ namespace WingCommand
         private static WingButton rosterPrevButton;
         private static WingButton rosterNextButton;
         private static TMP_Text summaryLabel;
+        private static TMP_Text chipNetLabel;
+        private static TMP_Text chipRoeLabel;
         private static TMP_Text rosterPageLabel;
         private static WingButton holdButton;
         private static WingButton tightButton;
@@ -221,7 +208,7 @@ namespace WingCommand
                     WingKeyboardGuard.Defocus();
                     WingKeyboardGuard.ForceRelease();
                 }
-                WingUi.Popup.CloseAny();
+                AvKit.Popup.CloseAny();
                 return;
             }
 
@@ -271,11 +258,14 @@ namespace WingCommand
             rosterPrevButton = null;
             rosterNextButton = null;
             summaryLabel = null;
+            chipNetLabel = null;
+            chipRoeLabel = null;
             doctrineTitleLabel = null;
             doctrineProfileLabel = null;
             doctrineRulesLabel = null;
             doctrineWeaponsLabel = null;
             formationButtons = null;
+            maneuverButtons = null;
             formationWingmenDots.Clear();
             formationVectorLines.Clear();
             rosterPageLabel = null;
@@ -333,6 +323,8 @@ namespace WingCommand
             pylonPrevButton = null;
             pylonNextButton = null;
             pylonPageLabel = null;
+            pylonEmptyCard = null;
+            pylonEmptyLabel = null;
             loadoutPopup = null;
             shopTemplatePopup = null;
             shopTemplateButton = null;
@@ -486,8 +478,8 @@ namespace WingCommand
             pageHeights[(int)Page.Loadout] = Mathf.Abs(loadoutY) + stripBlock + Pad;
             pageHeights[(int)Page.Wing] = Mathf.Abs(wingY) + stripBlock + Pad;
 
-            // One frame for all four pages. See panelHeight.
-            panelHeight = 0f;
+            // One frame for all four pages. Unified to shared AvTokens.PanelHeight.
+            panelHeight = AvTokens.PanelHeight;
             for (int i = 0; i < PageCount; i++)
                 panelHeight = Mathf.Max(panelHeight, pageHeights[i]);
 
@@ -528,13 +520,26 @@ namespace WingCommand
             return rt;
         }
 
-        /// <summary>Centred green title over a rule, as on BOSCALI / TARGET SELECTION / HUD OPTIONS.</summary>
+        /// <summary>Centred green title over chip rail and rule, matching unified avionics contract.</summary>
         private static float AddTitle(RectTransform parent, float y)
         {
             float inner = PanelWidth - Pad * 2f;
-            Label(parent, "WING COMMAND", new Rect(Pad, y, inner, Space5),
-                  Green(), FontTitle, FontStyles.Bold, TextAlignmentOptions.Center);
-            y -= Space5;
+            TMP_Text title = Label(parent, "WING COMMAND", new Rect(Pad, y, inner, AvTokens.TitleBarHeight),
+                                   Green(), FontTitle, FontStyles.Bold, TextAlignmentOptions.Center);
+            title.characterSpacing = 0.8f;
+            y -= AvTokens.TitleBarHeight + Space1;
+
+            float chipW = (inner - Gap * 2f) / 3f;
+            WingUi.StatusChip(parent, "SYS: WING", new Rect(Pad, y, chipW, AvTokens.ChipRailHeight),
+                              WingUi.RailEmerald, WingUi.TextPrimary, FontMicro);
+            var (_, netLbl) = WingUi.StatusChip(parent, "NET: 0 LINKED", new Rect(Pad + chipW + Gap, y, chipW, AvTokens.ChipRailHeight),
+                                                WingUi.RailCyan, WingUi.TextPrimary, FontMicro);
+            chipNetLabel = netLbl;
+            var (_, roeLbl) = WingUi.StatusChip(parent, "ROE: WEAPONS FREE", new Rect(Pad + (chipW + Gap) * 2f, y, chipW, AvTokens.ChipRailHeight),
+                                                WingUi.RailEmerald, WingUi.TextPrimary, FontMicro);
+            chipRoeLabel = roeLbl;
+            y -= AvTokens.ChipRailHeight + Space2;
+
             Rule(parent, new Rect(Pad, y, inner, 1f), WingUi.BorderSubtle);
             return y - Space2;
         }
@@ -598,7 +603,7 @@ namespace WingCommand
             // scrim still eating every click. Dropping focus first unwinds the keyboard
             // guard through the field's own deselect rather than the forced path.
             WingKeyboardGuard.Defocus();
-            WingUi.Popup.CloseAny();
+            AvKit.Popup.CloseAny();
 
             // Leaving Tactical stops the map intercepting wing-icon clicks, so the icons
             // have to lose their command-selection bracket at the same moment.
@@ -841,6 +846,11 @@ namespace WingCommand
         {
             PruneFocus(wing);
 
+            if (chipNetLabel != null)
+                chipNetLabel.text = "NET: " + (wing?.Count ?? 0) + " LINKED";
+            if (chipRoeLabel != null && wing != null)
+                chipRoeLabel.text = "ROE: " + wing.Roe.ToString().ToUpperInvariant();
+
             switch (page)
             {
                 case Page.Supply:
@@ -990,7 +1000,7 @@ namespace WingCommand
 
                 slot.text = kia ? "†" : RankBadgeText(pilot.Rank);
                 slot.color = kia ? Alert() : RankColor(pilot.Rank);
-                name.text = UiTheme.Truncate(pilot.Callsign, 12);
+                name.text = AvTheme.Truncate(pilot.Callsign, 12);
                 name.color = kia ? Alert() : selected ? Green() : Friendly();
                 detail.text = kia ? "KIA" : WingPilotRoster.RankName(pilot.Rank);
                 detail.color = kia ? Alert() : Dim();
@@ -1168,11 +1178,11 @@ namespace WingCommand
         {
             switch (rank)
             {
-                case WingRank.Wingman: return Friendly();
-                case WingRank.Veteran: return new Color(0.32f, 0.85f, 1f);
-                case WingRank.Ace:     return new Color(1f, 0.68f, 0.25f);
-                case WingRank.Legend:  return Color.white;
-                default:               return Dim();
+                case WingRank.Wingman: return AvTheme.RailReady;
+                case WingRank.Veteran: return AvTheme.RailInfo;
+                case WingRank.Ace:     return AvTheme.RailCaution;
+                case WingRank.Legend:  return AvTheme.Unity(AvTokens.TextPrimary);
+                default:               return AvTheme.Dim;
             }
         }
 
@@ -1237,7 +1247,7 @@ namespace WingCommand
 
             Unit assigned = m.AssignedTarget;
             if (assigned != null && !assigned.disabled)
-                return UiTheme.Truncate(assigned.definition != null ? assigned.definition.code : assigned.unitName, 8);
+                return AvTheme.Truncate(assigned.definition != null ? assigned.definition.code : assigned.unitName, 8);
 
             return WingOrderCatalog.ShortLabel(m.Order);
         }

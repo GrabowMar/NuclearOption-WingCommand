@@ -6,6 +6,8 @@ using TMPro;
 using UnityEngine;
 using UnityEngine.EventSystems;
 using UnityEngine.UI;
+using NOAvionics.Ui;
+
 namespace WingCommand
 {
     /// <summary>The WMC panel's TACTICAL tab: rules of engagement, weapon preference, the order grid, and the flight roster.</summary>
@@ -188,6 +190,7 @@ namespace WingCommand
         private static TMP_Text doctrineRulesLabel;
         private static TMP_Text doctrineWeaponsLabel;
         private static WingButton[] formationButtons;
+        private static WingButton[] maneuverButtons;
         private static float formationRadarCenterY;
         private static readonly List<RectTransform> formationWingmenDots = new List<RectTransform>();
         private static readonly List<Image> formationVectorLines = new List<Image>();
@@ -233,7 +236,7 @@ namespace WingCommand
             Label(parent, "▲", new Rect(radarCenterX - 10f, formationRadarCenterY - 6f, 20f, 16f),
                   Green(), FontSmall, FontStyles.Bold, TextAlignmentOptions.Center);
             Label(parent, "LDR", new Rect(radarCenterX - 15f, formationRadarCenterY + 10f, 30f, 10f),
-                  Green(), 9f, FontStyles.Bold, TextAlignmentOptions.Center);
+                  Green(), FontMicro, FontStyles.Bold, TextAlignmentOptions.Center);
 
             // 3 Wingmen indicators and connecting lines
             formationWingmenDots.Clear();
@@ -301,13 +304,43 @@ namespace WingCommand
                 formationButtons[i] = WingUi.Button(
                     parent, ShortFormationName(shape),
                     new Rect(bx, by, btnW, btnH),
-                    FontMicro, UiButtonStyle.Default,
+                    FontMicro, UiButtonStyle.Toggle,
                     () => SetFormationShape(shape))
                     .WithTooltip(FormationShapes.Pretty(shape) + " formation geometry");
             }
 
             int rows = Mathf.CeilToInt(FormationShapes.All.Length / (float)cols);
-            return y - (rows * btnH + (rows - 1) * Gap + Space2);
+            y -= rows * btnH + (rows - 1) * Gap + Space2;
+
+            // --- Combat manoeuvres: transient moves flown once, then the wing rejoins ---
+            y -= Space1;
+            Label(parent, "COMBAT MANOEUVRES",
+                  new Rect(Pad, y, w, Space4),
+                  Dim(), FontMicro, FontStyles.Bold, TextAlignmentOptions.Left);
+            y -= Space4 + Space1;
+
+            const int maneuverCols = 5;
+            float maneuverBtnW = (w - (maneuverCols - 1) * Gap) / maneuverCols;
+            maneuverButtons = new WingButton[ManeuverCatalog.All.Length];
+
+            for (int i = 0; i < ManeuverCatalog.All.Length; i++)
+            {
+                ManeuverKind kind = ManeuverCatalog.All[i];
+                int col = i % maneuverCols;
+                int row = i / maneuverCols;
+                float bx = Pad + col * (maneuverBtnW + Gap);
+                float by = y - row * (btnH + Gap);
+
+                maneuverButtons[i] = WingUi.Button(
+                    parent, ManeuverCatalog.ShortLabel(kind),
+                    new Rect(bx, by, maneuverBtnW, btnH),
+                    FontMicro,
+                    () => WingCommandManager.Instance?.ExecuteManeuver(kind, wholeWing: false))
+                    .WithTooltip(ManeuverCatalog.Label(kind) + " - the selected wingmen fly this, then rejoin.");
+            }
+
+            int maneuverRows = Mathf.CeilToInt(ManeuverCatalog.All.Length / (float)maneuverCols);
+            return y - (maneuverRows * btnH + (maneuverRows - 1) * Gap + Space2);
         }
 
         private static void SetFormationShape(FormationShape shape)
@@ -417,9 +450,9 @@ namespace WingCommand
                 "confirm.";
 
             public const string Jam =
-                "JAM - the selected wingmen hold their formation slot and run their radar " +
-                "jammer against the target you have locked, until it dies or you order them " +
-                "off. Only wingmen carrying a jammer can take it.";
+                "JAM - the selected wingmen hold their formation slot and run their jammer " +
+                "pod against the target you have locked, until it dies or you order them " +
+                "off. Only wingmen carrying a jammer pod can take it.";
 
             public const string Pager = "Show the rest of the list.";
         }
@@ -500,6 +533,17 @@ namespace WingCommand
                 }
             }
 
+            // Manoeuvres are gated on the host profile: in Performance mode the whole set
+            // is unavailable, the same gate the radial wheel uses to grey its slices.
+            if (maneuverButtons != null)
+            {
+                for (int i = 0; i < maneuverButtons.Length; i++)
+                {
+                    if (maneuverButtons[i] != null)
+                        maneuverButtons[i].SetEnabled(WingBrain.Manoeuvres);
+                }
+            }
+
             const float radarW = 108f;
             float radarCenterX = Pad + radarW * 0.5f;
 
@@ -550,23 +594,23 @@ namespace WingCommand
                 {
                     case FormationShape.EchelonRight:
                     case FormationShape.EchelonLeft:
-                        doctrineProfileLabel.text = "FLIGHT: Staggered visual echelon. Clear tail coverage & wide firing arcs.";
+                        doctrineProfileLabel.text = "FLIGHT: Scimitar echelon, stepped down. One photograph from abeam.";
                         break;
                     case FormationShape.Trail:
                     case FormationShape.Ladder:
-                        doctrineProfileLabel.text = "FLIGHT: In-line follow. Optimal terrain masking through ravines & canyons.";
+                        doctrineProfileLabel.text = "FLIGHT: Tight column astern. Trail weaves the wake; ladder climbs it.";
                         break;
                     case FormationShape.Vic:
-                        doctrineProfileLabel.text = "FLIGHT: Wedge V-sweep. Maximizes forward radar & overlapping missile fields.";
+                        doctrineProfileLabel.text = "FLIGHT: Display V, lead at the point. Reads as one aircraft head-on.";
                         break;
                     case FormationShape.LineAbreast:
                     case FormationShape.Wall:
-                        doctrineProfileLabel.text = "FLIGHT: Line abreast. Wide optical sweep for ground recon & bomb passes.";
+                        doctrineProfileLabel.text = "FLIGHT: Shallow crescent abreast. Wall stacks the same line vertically.";
                         break;
                     case FormationShape.Diamond:
                     case FormationShape.FingerFour:
                     default:
-                        doctrineProfileLabel.text = "FLIGHT: Standard tactical element. Balanced 360° defensive awareness.";
+                        doctrineProfileLabel.text = "FLIGHT: Close element. Diamond rolls as a rhombus; finger-four as a hand.";
                         break;
                 }
             }
@@ -828,7 +872,7 @@ namespace WingCommand
                 if (memberChanged)
                 {
                     slot.text = m.Slot.ToString();
-                    name.text = UiTheme.Truncate(m.Name, 16);
+                    name.text = AvTheme.Truncate(m.Name, 16);
                 }
                 slot.color = selected ? Green() : Dim();
                 name.color = selected ? Green() : WingColor();
@@ -871,14 +915,14 @@ namespace WingCommand
                 if (pendingChanged)
                 {
                     slot.text = slotNumber.ToString();
-                    name.text = UiTheme.Truncate(p.AirframeName, 16);
+                    name.text = AvTheme.Truncate(p.AirframeName, 16);
                 }
                 slot.color = Dim();
                 name.color = WingColor();
                 selectionRule.color = MemberFrameColor();
 
                 hit?.SetRowHighlight(fill, WingUi.CardFill, WingUi.CardFillHover);
-                order.text = "DEPT";
+                order.text = p.StatusCode;
 
                 float fuelFraction = p.Fuel;
                 fuel.text = Mathf.RoundToInt(fuelFraction * 100f) + "%";

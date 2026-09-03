@@ -45,7 +45,7 @@ namespace WingCommand
             if (wing == null) return result;
             foreach (WingMember member in wing.Members)
             {
-                if (member != null && member.IsCommandable) result.Add(member);
+                if (member != null && member.Alive) result.Add(member);
             }
             return result;
         }
@@ -54,8 +54,7 @@ namespace WingCommand
         {
             List<WingMember> scope = Scope(wholeWing);
             if (scope.Count == 0)
-                return new WingDispatchResult(0,
-                    wholeWing ? "No wingmen assigned" : "No wingmen selected");
+                return new WingDispatchResult(0, EmptyScopeMessage(wholeWing));
 
             if (WingOrderCatalog.NeedsPoint(directive.Order) && !directive.HasPoint)
                 return new WingDispatchResult(0, "Select a point on the map");
@@ -77,7 +76,7 @@ namespace WingCommand
             string message = ScopePrefix(wholeWing, applied) + ": " +
                              WingOrderCatalog.Label(directive.Order);
             if (skipped > 0) message += " (" + skipped + " unable)";
-            return new WingDispatchResult(applied, message, responders, directive.Order);
+            return new WingDispatchResult(applied, WithQueued(message, responders), responders, directive.Order);
         }
 
         public WingDispatchResult Attack(IReadOnlyList<Unit> targets, bool wholeWing,
@@ -85,8 +84,7 @@ namespace WingCommand
         {
             List<WingMember> scope = Scope(wholeWing);
             if (scope.Count == 0)
-                return new WingDispatchResult(0,
-                    wholeWing ? "No wingmen assigned" : "No wingmen selected");
+                return new WingDispatchResult(0, EmptyScopeMessage(wholeWing));
             if (targets == null || targets.Count == 0)
                 return new WingDispatchResult(0, "No target selected");
 
@@ -99,7 +97,7 @@ namespace WingCommand
             string message = ScopePrefix(wholeWing, applied) + ": attack";
             if (targets.Count > 1) message += " " + covered + " target(s)";
             if (skipped > 0) message += " (" + skipped + " covering)";
-            return new WingDispatchResult(applied, message, responders, WingOrder.Attack);
+            return new WingDispatchResult(applied, WithQueued(message, responders), responders, WingOrder.Attack);
         }
 
         /// <summary>
@@ -114,8 +112,7 @@ namespace WingCommand
         {
             List<WingMember> scope = Scope(wholeWing);
             if (scope.Count == 0)
-                return new WingDispatchResult(0,
-                    wholeWing ? "No wingmen assigned" : "No wingmen selected");
+                return new WingDispatchResult(0, EmptyScopeMessage(wholeWing));
 
             Unit target = FirstLive(targets);
             if (target == null)
@@ -125,7 +122,8 @@ namespace WingCommand
             foreach (WingMember member in scope)
             {
                 if (!WingOrderCatalog.CanApply(member, WingOrder.FireForEffect)) continue;
-                if (!WingWeapons.CanStillEngage(member.Aircraft, target)) continue;
+                if (!member.DeliveryPending &&
+                    !WingWeapons.CanStillEngage(member.Aircraft, target)) continue;
                 member.FireForEffect(target, report: false);
                 responders.Add(member);
             }
@@ -139,19 +137,18 @@ namespace WingCommand
             string message = ScopePrefix(wholeWing, applied) + ": splash 'em on " +
                              target.unitName;
             if (skipped > 0) message += " (" + skipped + " unable)";
-            return new WingDispatchResult(applied, message, responders, WingOrder.FireForEffect);
+            return new WingDispatchResult(applied, WithQueued(message, responders), responders, WingOrder.FireForEffect);
         }
 
         /// <summary>
         /// Put every jam-capable wingman in scope onto one designation: hold the slot,
-        /// run the radar jammer against that unit until it dies or the order is replaced.
+        /// run the jammer pod against that unit until it dies or the order is replaced.
         /// </summary>
         public WingDispatchResult JamTarget(IReadOnlyList<Unit> targets, bool wholeWing)
         {
             List<WingMember> scope = Scope(wholeWing);
             if (scope.Count == 0)
-                return new WingDispatchResult(0,
-                    wholeWing ? "No wingmen assigned" : "No wingmen selected");
+                return new WingDispatchResult(0, EmptyScopeMessage(wholeWing));
 
             Unit target = FirstLive(targets);
             if (target == null)
@@ -172,8 +169,8 @@ namespace WingCommand
                     WingOrderCatalog.UnavailableReason(WingOrder.JamTarget));
 
             string message = ScopePrefix(wholeWing, applied) + ": jamming " + target.unitName;
-            if (skipped > 0) message += " (" + skipped + " without ECM)";
-            return new WingDispatchResult(applied, message, responders, WingOrder.JamTarget);
+            if (skipped > 0) message += " (" + skipped + " without a jammer pod)";
+            return new WingDispatchResult(applied, WithQueued(message, responders), responders, WingOrder.JamTarget);
         }
 
         /// <summary>Send the scope through one scripted manoeuvre. Transient; it rejoins after.</summary>
@@ -181,8 +178,7 @@ namespace WingCommand
         {
             List<WingMember> scope = Scope(wholeWing);
             if (scope.Count == 0)
-                return new WingDispatchResult(0,
-                    wholeWing ? "No wingmen assigned" : "No wingmen selected");
+                return new WingDispatchResult(0, EmptyScopeMessage(wholeWing));
 
             var responders = new List<WingMember>();
             foreach (WingMember member in scope)
@@ -210,6 +206,31 @@ namespace WingCommand
                 if (targets[i] != null && !targets[i].disabled) return targets[i];
             }
             return null;
+        }
+
+        private string EmptyScopeMessage(bool wholeWing)
+        {
+            if (wing == null || wing.Count == 0)
+                return wholeWing ? "No wingmen assigned" : "No wingmen. Requisition on SUPPLY.";
+            if (!wholeWing && selection != null && selection.IsNone)
+                return "No wingmen selected";
+            return wholeWing ? "No wingmen assigned" : "No wingmen selected";
+        }
+
+        private static int CountQueued(List<WingMember> responders)
+        {
+            int queued = 0;
+            if (responders == null) return 0;
+            for (int i = 0; i < responders.Count; i++)
+                if (responders[i] != null && responders[i].DeliveryPending) queued++;
+            return queued;
+        }
+
+        private static string WithQueued(string message, List<WingMember> responders)
+        {
+            int queued = CountQueued(responders);
+            if (queued > 0) message += " (" + queued + " queued until airborne)";
+            return message;
         }
 
         private static string ScopePrefix(bool wholeWing, int applied) =>

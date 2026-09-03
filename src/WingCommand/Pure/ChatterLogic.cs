@@ -332,6 +332,11 @@ namespace WingCommand
                             ? Pick(seed, "Taking " + subject + ".", "Found " + subject + ". Engaging.")
                             : Pick(seed, "Engaging " + subject + ".", "Tally " + subject + ".");
                 case "DEFENDING": return Pick(seed, "Defending.", "Covering the formation.");
+                case "BREAKCALL": return Pick(seed,
+                    "Lead, break break! Missile tracking you!",
+                    "Missile inbound! Evade, Lead!",
+                    "Spike on your six! Break hard!",
+                    "Missile tracking you, Lead! Defensive!");
                 case "SPLASH":
                     string target = subject ?? "one";
                     return Pick(persona, seed,

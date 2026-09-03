@@ -71,6 +71,7 @@ namespace WingCommand
                     Mathf.Max(FireInterval(aircraft) * 1.5f, 3f)))
                 return false;
 
+            int guidedBefore = GetGuidedAmmo(aircraft);
             wm.currentWeaponStation = station;
             wm.ClearTargetList();
             wm.AddTargetList(target);
@@ -79,6 +80,23 @@ namespace WingCommand
             pilot.SetPrimaryTarget(target);
             pilot.Fire();
             WingKillCredit.NoteShot(aircraft, target);
+
+            if (station != null && station.WeaponInfo != null)
+            {
+                float dist = FastMath.Distance(aircraft.GlobalPosition(), target.GlobalPosition());
+                float speed = Mathf.Max(station.WeaponInfo.muzzleVelocity, station.WeaponInfo.maxSpeed, 350f);
+                WingDeliveryTracker.TrackShot(aircraft, target, station.WeaponInfo.shortName, dist / speed);
+            }
+
+            if (guidedBefore > 0 && GetGuidedAmmo(aircraft) == 0)
+            {
+                WingMember member = WingCommandManager.Instance?.Wing?.Find(aircraft);
+                if (member != null && member.Ammo > 0)
+                {
+                    WingComms.Say(member, WingComms.Call.Expended);
+                }
+            }
+
             return true;
         }
 
@@ -107,6 +125,14 @@ namespace WingCommand
             float distance = FastMath.Distance(target.GlobalPosition(), aircraft.GlobalPosition());
             if (req.maxRange > 0f && distance > req.maxRange * envelope) return false;
             if (distance < req.minRange) return false;
+
+            if (req.minAltitude > 0f && aircraft.radarAlt < req.minAltitude) return false;
+            if (req.maxAltitude > 0f && aircraft.radarAlt > req.maxAltitude * envelope) return false;
+
+            // Bombs and glide bombs are pickled, not aimed like a missile. The nose check
+            // is a seeker cone: a bomber on a run-in is looking at a point above the
+            // target, so the target sits below the boresight and every drop was refused.
+            if (info.bomb || info.glideBomb) return true;
 
             // Alignment: the target has to be somewhere near the nose. minAlignment is the
             // widest off-boresight angle the weapon accepts.
@@ -190,6 +216,8 @@ namespace WingCommand
         private static void FireStation(Aircraft aircraft, Pilot pilot, Unit target,
                                         WeaponManager wm, WeaponStation station)
         {
+            int guidedBefore = GetGuidedAmmo(aircraft);
+
             wm.currentWeaponStation = station;
             wm.ClearTargetList();
             wm.AddTargetList(target);
@@ -198,6 +226,22 @@ namespace WingCommand
             pilot.SetPrimaryTarget(target);
             pilot.Fire();
             WingKillCredit.NoteShot(aircraft, target);
+
+            if (station != null && station.WeaponInfo != null)
+            {
+                float dist = FastMath.Distance(aircraft.GlobalPosition(), target.GlobalPosition());
+                float speed = Mathf.Max(station.WeaponInfo.muzzleVelocity, station.WeaponInfo.maxSpeed, 350f);
+                WingDeliveryTracker.TrackShot(aircraft, target, station.WeaponInfo.shortName, dist / speed);
+            }
+
+            if (guidedBefore > 0 && GetGuidedAmmo(aircraft) == 0)
+            {
+                WingMember member = WingCommandManager.Instance?.Wing?.Find(aircraft);
+                if (member != null && member.Ammo > 0)
+                {
+                    WingComms.Say(member, WingComms.Call.Expended);
+                }
+            }
         }
 
         /// <summary>
@@ -289,6 +333,101 @@ namespace WingCommand
             }
 
             return false;
+        }
+
+        /// <summary>
+        /// Height a bomber wants above a surface target so its bombs clear their own
+        /// min-altitude gate. Fighters with only missiles or guns return zero and keep the
+        /// attack-run default.
+        /// </summary>
+        public static float BombReleaseFloor(Aircraft aircraft, Unit target)
+        {
+            if (aircraft == null || aircraft.weaponStations == null || target == null) return 0f;
+
+            bool isAir = target.definition != null && target.definition.typeIdentity.air > 0.5f;
+            if (isAir) return 0f;
+
+            float floor = 0f;
+            foreach (WeaponStation station in aircraft.weaponStations)
+            {
+                if (station == null || station.Cargo || station.WeaponInfo == null) continue;
+                if (station.Ammo <= 0) continue;
+                WeaponInfo info = station.WeaponInfo;
+                if (!info.bomb && !info.glideBomb) continue;
+                if (info.effectiveness.antiSurface <= 0f) continue;
+                float minAlt = info.targetRequirements.minAltitude;
+                if (minAlt > floor) floor = minAlt;
+            }
+
+            return floor;
+        }
+
+        /// <summary>
+        /// True when this airframe is carrying a jammer <i>weapon</i> — a pod whose
+        /// <c>WeaponInfo.jammer</c> flag is set, typically the stock <c>JammingPod</c>.
+        ///
+        /// Self-protection ECM (<c>RadarJammer</c>, a countermeasure) is a different thing
+        /// and does not count. Almost every combat aircraft has one, and using it as the
+        /// gate made the Jam order available to the whole wing, then applied <c>Unit.Jam</c>
+        /// as a cheat that never touched a pod.
+        /// </summary>
+        public static bool HasJammer(Aircraft aircraft) => JammerStation(aircraft) != null;
+
+        /// <summary>
+        /// Run the aircraft's jammer pod against a designated unit, using the same
+        /// select-and-fire sequence every other shot in this file uses.
+        ///
+        /// The stock <c>JammingPod</c> is what actually blinds the target: <c>SetTarget</c>
+        /// plus <c>Fire</c> lets its own range falloff, power and <c>FixedUpdate</c> tick
+        /// drive <c>Unit.Jam</c>. Calling <c>Unit.Jam</c> from here with a hardcoded amount
+        /// was how every wingman jammed at any range without carrying a pod.
+        /// </summary>
+        public static bool EngageJammer(Aircraft aircraft, Pilot pilot, Unit target)
+        {
+            if (aircraft == null || pilot == null || target == null || target.disabled)
+                return false;
+
+            WeaponManager wm = aircraft.weaponManager;
+            if (wm == null) return false;
+
+            WeaponStation station = JammerStation(aircraft);
+            if (station == null) return false;
+
+            wm.currentWeaponStation = station;
+            wm.ClearTargetList();
+            wm.AddTargetList(target);
+            wm.TargetListChanged();
+
+            List<Weapon> weapons = station.Weapons;
+            if (weapons != null)
+            {
+                for (int i = 0; i < weapons.Count; i++)
+                {
+                    Weapon weapon = weapons[i];
+                    if (weapon != null) weapon.SetTarget(target);
+                }
+            }
+
+            if (!station.Ready()) return false;
+
+            pilot.SetPrimaryTarget(target);
+            pilot.Fire();
+            return true;
+        }
+
+        private static WeaponStation JammerStation(Aircraft aircraft)
+        {
+            if (aircraft == null || aircraft.weaponStations == null) return null;
+
+            foreach (WeaponStation station in aircraft.weaponStations)
+            {
+                if (station == null || station.Cargo || station.WeaponInfo == null) continue;
+                if (!station.WeaponInfo.jammer) continue;
+                if (station.Weapons == null || station.Weapons.Count == 0) continue;
+                return station;
+            }
+
+            return null;
         }
 
         /// <summary>
@@ -439,6 +578,23 @@ namespace WingCommand
                 score *= Mathf.Lerp(1f, 0.35f, Mathf.Clamp01(distance / weaponRange));
                 score /= 1f + committed * WingTuning.TargetSaturationPenalty;
                 score *= ClassBias(preference, isAir);
+
+                // Preserve scarce guided munitions for high-threat / high-value targets
+                if (candidate.WeaponInfo != null &&
+                    (candidate.WeaponInfo.missile || candidate.WeaponInfo.laserGuided || candidate.WeaponInfo.glideBomb))
+                {
+                    if (candidate.Ammo <= 2)
+                    {
+                        bool highThreat = isAir ||
+                                          (unit.definition != null && unit.definition.typeIdentity.radar > 0.25f) ||
+                                          unit is Ship;
+                        if (!highThreat)
+                        {
+                            score *= 0.25f;
+                        }
+                    }
+                }
+
                 if (score <= bestScore) continue;
 
                 bestScore = score;
@@ -500,6 +656,22 @@ namespace WingCommand
             }
 
             return best;
+        }
+
+        /// <summary>Total remaining guided munitions (missiles, laser-guided bombs, glide bombs).</summary>
+        public static int GetGuidedAmmo(Aircraft aircraft)
+        {
+            if (aircraft == null || aircraft.weaponStations == null) return 0;
+            int count = 0;
+            for (int i = 0; i < aircraft.weaponStations.Count; i++)
+            {
+                WeaponStation st = aircraft.weaponStations[i];
+                if (st == null || st.Cargo || st.WeaponInfo == null || st.Ammo <= 0) continue;
+                WeaponInfo info = st.WeaponInfo;
+                if (info.missile || info.laserGuided || info.glideBomb)
+                    count += st.Ammo;
+            }
+            return count;
         }
 
         internal static int RequiredAttackers(WeaponStation station, Unit target)

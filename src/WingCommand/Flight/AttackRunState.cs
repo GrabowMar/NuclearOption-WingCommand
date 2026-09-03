@@ -70,6 +70,15 @@ namespace WingCommand
                 return;
             }
 
+            if (member.Order == WingOrder.FireForEffect &&
+                !WingWeapons.CanStillEngage(aircraft, target))
+            {
+                WingComms.Say(member, WingComms.Call.Expended);
+                member.ClearAssignedTarget();
+                member.Complete(WingOrder.Formation);
+                return;
+            }
+
             Fly(target);
             Shoot(target);
         }
@@ -79,6 +88,8 @@ namespace WingCommand
             GlobalPosition targetPos = target.GlobalPosition();
             bool rotary = WingRegistry.IsRotary(aircraft);
             float altitude = rotary ? RotaryAttackAltitude : AttackAltitude;
+            float bombFloor = WingWeapons.BombReleaseFloor(aircraft, target);
+            if (bombFloor > 0f) altitude = Mathf.Max(altitude, bombFloor + 150f);
 
             // Aim above a surface target rather than at it. Aiming at the ground drives the
             // autopilot into the ground, and its terrain avoidance then fights the attack
@@ -120,9 +131,16 @@ namespace WingCommand
             // attack run cannot dump the loadout at a target it has no business shooting.
             // A designated target is an explicit weapons authorization. The ROE still owns
             // incidental fire elsewhere, but cannot shorten or veto this order.
-            float range = RoeRules.ExplicitOrderRange();
+            // Splash 'Em is "expend what you have": the weapon envelope is the only range
+            // gate. An extra ROE cap was sending bombers home from outside Hold range with
+            // a full bomb bay.
+            float range = member.Order == WingOrder.FireForEffect
+                ? float.MaxValue
+                : RoeRules.ExplicitOrderRange();
 
-            bool fired = WingWeapons.EngageSpecific(aircraft, pilot, target, range);
+            bool fired = member.Order == WingOrder.FireForEffect
+                ? WingWeapons.EngageMassed(aircraft, pilot, target, range)
+                : WingWeapons.EngageSpecific(aircraft, pilot, target, range);
             if (fired) lastFiredTime = Time.timeSinceLevelLoad;
         }
     }

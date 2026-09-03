@@ -122,12 +122,14 @@ namespace WingCommand
                 WingRecruitment.Reset();
                 WingPilotRoster.Reset();
                 WingKillCredit.Reset();
+                WingDeliveryTracker.Reset();
                 recruitQueue.Clear();
                 WingRecovery.Reset();
                 WingDeparture.Reset();
                 WingSupplyReserve.Reset();
                 WingTakeover.Reset();
                 WingUi.Reset();
+                DynamicMapFitPatch.Reset();
                 mapLayer?.Reset();
                 Wing.Clear();
                 Selection.Reset();
@@ -183,6 +185,7 @@ namespace WingCommand
                 mapLayer.Update();
 
             WingKillCredit.Tick();
+            WingDeliveryTracker.Tick();
             WingMarkers.Tick(Wing);
             WingHud.TickStatusPanel(Wing);
             WmcScreen.Tick(Wing);
@@ -207,6 +210,22 @@ namespace WingCommand
             WingMember member = WingRegistry.HasRoom(Wing.Count)
                 ? Wing.Add(aircraft, deferCommand: true)
                 : null;
+
+            if (member != null)
+            {
+                Plugin.Logger.LogInfo("[Wing] " + aircraft.unitName +
+                                      " rostered slot " + member.Slot +
+                                      ", awaiting airborne activation");
+            }
+            else
+            {
+                Pilot pilot = WingRegistry.PrimaryPilot(aircraft);
+                Plugin.Logger.LogInfo(
+                    "[Wing] " + aircraft.unitName + " bought but not yet rostered" +
+                    " (LocalSim=" + aircraft.LocalSim +
+                    ", room=" + WingRegistry.HasRoom(Wing.Count) +
+                    ", pilot=" + (pilot != null) + ")");
+            }
 
             recruitQueue.Add(new PendingRecruit
             {
@@ -244,7 +263,9 @@ namespace WingCommand
                     if (p.Member != null && Wing.Contains(p.Member))
                         Wing.Remove(p.Member, "delivery never got airborne");
                     recruitQueue.RemoveAt(i);
-                    Toast(a.unitName + " never got airborne - assign it from the map when it does");
+                    Toast(p.Member == null
+                        ? a.unitName + " never joined the wing - assign it from the map when airborne"
+                        : a.unitName + " never got airborne - assign it from the map when it does");
                     continue;
                 }
 
@@ -254,7 +275,13 @@ namespace WingCommand
                 {
                     p.Member = Wing.Find(a);
                     if (p.Member == null && WingRegistry.HasRoom(Wing.Count))
+                    {
                         p.Member = Wing.Add(a, deferCommand: true);
+                        if (p.Member != null)
+                            Plugin.Logger.LogInfo("[Wing] " + a.unitName +
+                                                  " rostered slot " + p.Member.Slot +
+                                                  " after wait, awaiting airborne activation");
+                    }
                     recruitQueue[i] = p;
                     if (p.Member == null) continue;
                 }
@@ -588,7 +615,9 @@ namespace WingCommand
             List<WingMember> scope = Commands.Scope(wholeWing: false);
             if (scope.Count == 0)
             {
-                Toast("No wingmen selected");
+                Toast(Wing.Count == 0
+                    ? "No wingmen. Requisition on SUPPLY."
+                    : "No wingmen selected");
                 return;
             }
 

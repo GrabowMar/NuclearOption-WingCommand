@@ -44,6 +44,7 @@ namespace WingCommand
         public WingPilot Crew => WingPilotRoster.Of(Aircraft);
 
         private readonly FormationFlyState formationState;
+        private readonly ClimbOutState climbOutState;
         private readonly FallBackState fallBackState;
         private readonly OrbitState orbitState;
         private readonly LandInPlaceState landState;
@@ -52,15 +53,6 @@ namespace WingCommand
         private readonly AttackRunState attackState;
         private readonly DefensiveManeuverState defensiveState;
         private readonly ManeuverState maneuverState;
-
-        /// <summary>
-        /// Drives this aircraft's radar jammer while a Jam Target order is standing. Held
-        /// on the member because the order is flown from inside <see cref="FormationFlyState"/>,
-        /// which owns no per-aircraft state of its own.
-        /// </summary>
-        internal RadarJammerPulser Jammer { get; } = new RadarJammerPulser();
-
-        private bool? canJam;
 
         /// <summary>
         /// What the arbiter last decided, and when it took effect. Together with
@@ -127,12 +119,17 @@ namespace WingCommand
         /// Rotary aircraft use a higher threshold. 25 m is still inside ground effect for
         /// a helicopter that has just left the apron; if the player is hovering for an air
         /// assault at that moment the arbiter immediately resolves to deck-hold orbit, which
-        /// a helicopter doing 4-6 m/s cannot sustain. 80 m is enough free air that the
-        /// stock launch AI has already accelerated it into normal cruise.
+        /// a helicopter doing 4-6 m/s cannot sustain.
+        ///
+        /// Jets used to clear at 25 m as well. That is still the climbout: the live log
+        /// recorded a 131° bank command at 25 m AGL with a 20 km slot error, then
+        /// pilot-killed at 1-8 m. The stock launch AI has to finish the takeoff first.
         /// </summary>
         public bool IsAirborne => Aircraft != null &&
                                   (IsSurface && Alive ||
-                                   Aircraft.radarAlt >= (WingRegistry.IsRotary(Aircraft) ? 80f : 25f));
+                                   Aircraft.radarAlt >= (WingRegistry.IsRotary(Aircraft)
+                                       ? WingTuning.RotaryAirborneAlt
+                                       : WingTuning.FixedWingAirborneAlt));
 
         /// <summary>True when player commands may be applied to this member.</summary>
         public bool IsCommandable => Alive && !deliveryPending;
@@ -146,6 +143,7 @@ namespace WingCommand
             Slot = slot;
             this.deliveryPending = deliveryPending;
             formationState = new FormationFlyState(this);
+            climbOutState = new ClimbOutState(this);
             fallBackState = new FallBackState(this);
             orbitState = new OrbitState(this);
             landState = new LandInPlaceState(this);
@@ -202,9 +200,16 @@ namespace WingCommand
         public void Apply(WingDirective directive)
         {
             // A hangar-delivered aircraft belongs to the roster immediately, but the stock
-            // taxi/launch state must own it until it is airborne. Dispatcher and automation
-            // filters also enforce this; keeping the guard here protects every call site.
-            if (deliveryPending) return;
+            // taxi/launch state must own it until it is airborne. Record the standing order
+            // anyway so ActivateWhenAirborne can fly it instead of defaulting to Form Up.
+            if (deliveryPending)
+            {
+                if (!WingOrderRules.CanQueueWhilePending(directive.Order)) return;
+                if (directive.Order != WingOrder.MoveToPoint)
+                    waypointQueue.Clear();
+                SetDirective(directive);
+                return;
+            }
 
             // A scripted manoeuvre is transient and cannot usefully wait behind a missile
             // break - by the time the break clears the moment has passed. Drop it rather
@@ -476,6 +481,11 @@ namespace WingCommand
                     EnterDeckHold();
                     return;
 
+                case WingBehaviours.ClimbOut:
+                    TacticalCoordinator.Release(Aircraft);
+                    SwitchTo(climbOutState);
+                    return;
+
                 case WingBehaviours.Rejoin:
                     // Unconditional, unlike the Formation task above: this behaviour exists
                     // precisely because the wingman is a long way out, so it wants the boost
@@ -586,13 +596,15 @@ namespace WingCommand
                     break;
 
                 case WingOrder.Attack:
+                case WingOrder.FireForEffect:
+                    // Splash 'Em used to hold the slot and shoot from there. That works for
+                    // a fighter with a gun or a missile already on the nose; a bomber in
+                    // formation is looking at the leader, not the target, so ShotIsValid
+                    // refused every pickle and FinishSplash sent it "back" to Form Up
+                    // without ever firing. An expend order is a run-in.
                     EnterAttack(Directive);
                     break;
 
-                // Both are flown from the formation slot rather than as a break-away run,
-                // so the wingman is already where it needs to be; FormationFlyState reads
-                // SlotTask to know which one it is working.
-                case WingOrder.FireForEffect:
                 case WingOrder.JamTarget:
                     EnterSlotTask();
                     break;
@@ -719,13 +731,13 @@ namespace WingCommand
         }
 
         /// <summary>
-        /// Splash 'Em and Jam Target: hold the slot and work the designated unit from where
-        /// we are, rather than breaking off into an attack run. FormationFlyState owns the
-        /// shooting and the jamming; it reads <see cref="SlotTask"/> to know which.
+        /// Jam Target: hold the slot and work the designated unit from where we are.
+        /// Splash 'Em used to share this path and never pickled a bomber; it now flies an
+        /// attack run. FormationFlyState still reads <see cref="SlotTask"/> for jam.
         ///
-        /// No rejoin boost. The wingman is already in its slot — these orders never take it
-        /// out of formation, so hurrying it back to a place it has not left only produced a
-        /// visible surge every time a target was designated.
+        /// No rejoin boost. The wingman is already in its slot, so hurrying it back to a
+        /// place it has not left only produced a visible surge every time a target was
+        /// designated.
         /// </summary>
         private void EnterSlotTask()
         {
@@ -763,9 +775,14 @@ namespace WingCommand
         internal bool ActivateWhenAirborne()
         {
             if (!deliveryPending || !IsAirborne) return false;
+            // Host-only command still needs LocalSim. Hangar registration can precede it;
+            // wait rather than taking over a remote or half-initialised airframe.
+            if (Aircraft != null && !Aircraft.LocalSim) return false;
 
             deliveryPending = false;
-            Apply(WingOrder.Formation);
+            Apply(Directive);
+            if (Plugin.Settings.VerboseLogging.Value)
+                Plugin.Logger.LogInfo("[Wing] " + Name + " airborne, flying " + Order);
             return true;
         }
 
@@ -859,20 +876,12 @@ namespace WingCommand
         public bool CanLandInPlace => HoverAssist.CanHover(Aircraft);
 
         /// <summary>
-        /// True when this airframe carries a radar jammer it can be told to run against a
-        /// designated target. Resolved once the aircraft's countermeasure manager exists,
-        /// then cached.
+        /// True when this airframe carries a jammer pod it can be told to run against a
+        /// designated target. Walked each time rather than cached: a mid-mission rearm
+        /// can add or drop the station, and a cache from the empty hangar fit would
+        /// permanently hide the order.
         /// </summary>
-        public bool CanJam
-        {
-            get
-            {
-                if (canJam.HasValue) return canJam.Value;
-                if (Aircraft == null || Aircraft.countermeasureManager == null) return false;
-                canJam = Jammer.HasJammer(Aircraft);
-                return canJam.Value;
-            }
-        }
+        public bool CanJam => WingWeapons.HasJammer(Aircraft);
 
         /// <summary>
         /// How intact the airframe is, 0-1, from the game's own part hit points. Read by
@@ -1051,7 +1060,7 @@ namespace WingCommand
         /// </summary>
         public void AttackTarget(Unit target, bool report = true)
         {
-            if (target == null || !IsCommandable) return;
+            if (target == null || !Alive) return;
             Apply(WingDirective.Attack(target));
             if (report && !IsPanicking)
                 WingComms.Say(this, WingComms.Call.Engaging, target.unitName);
@@ -1065,7 +1074,7 @@ namespace WingCommand
         /// </summary>
         public void FireForEffect(Unit target, bool report = true)
         {
-            if (target == null || !IsCommandable) return;
+            if (target == null || !Alive) return;
             Apply(WingDirective.AtTarget(WingOrder.FireForEffect, target));
             if (report && !IsPanicking)
                 WingComms.Say(this, WingComms.Call.FireForEffect, target.unitName);
@@ -1082,7 +1091,7 @@ namespace WingCommand
         /// <summary>Issue a tactical-map move, replacing or appending to this member's route.</summary>
         public void IssueWaypoint(GlobalPosition point, bool append)
         {
-            if (!IsCommandable) return;
+            if (!Alive) return;
             if (!append) waypointQueue.Clear();
             waypointQueue.Add(point);
 

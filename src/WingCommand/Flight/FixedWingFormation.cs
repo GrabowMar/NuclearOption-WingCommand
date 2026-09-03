@@ -170,8 +170,19 @@ namespace WingCommand
         /// </summary>
         private const float BankMatchLimit = 100f;
 
-        /// <summary>Height below which the bank match yields to terrain avoidance.</summary>
-        private const float BankMatchFloor = 150f;
+        /// <summary>Height below which bank match and pursuit authority yield to a climb.</summary>
+        internal const float BankMatchFloor = 150f;
+
+        /// <summary>
+        /// Collapse turn authority as the aircraft nears the ground. Shared with the
+        /// orbit so a deck-hold at 80 m AGL cannot grant a vertical bank either.
+        /// </summary>
+        internal static float GroundLimitedBank(float radarAlt, float requested)
+        {
+            if (radarAlt >= BankMatchFloor) return requested;
+            float scale = Mathf.Clamp01(radarAlt / BankMatchFloor);
+            return Mathf.Lerp(LevelBank, requested, scale);
+        }
 
         /// <summary>Roll command per degree of bank-angle error. Full stick around twenty degrees out.</summary>
         private const float BankAngleGain = 0.05f;
@@ -629,6 +640,11 @@ namespace WingCommand
             if (requested.sqrMagnitude > 1f)
             {
                 float allowed = Mathf.Lerp(maxAngle, MaxRejoinCommandAngle, outOfPosition);
+                if (aircraft.radarAlt < BankMatchFloor)
+                {
+                    float scale = Mathf.Clamp01(aircraft.radarAlt / BankMatchFloor);
+                    allowed = Mathf.Lerp(maxAngle * 0.25f, allowed, scale);
+                }
                 Vector3 safeDirection = Vector3.RotateTowards(
                     currentDirection, requested.normalized, allowed * Mathf.Deg2Rad, 0f);
                 aimPoint = aircraft.GlobalPosition()
@@ -701,6 +717,13 @@ namespace WingCommand
             // catching back up — the exact "they spend a lot of time chasing me" symptom.
             maxBank = Mathf.Max(maxBank, leaderBankMag * BankFollowScale + LevelBank);
             maxBank = Mathf.Min(maxBank, MaxSafeBank);
+
+            // Near the ground, turn authority collapses. Formation used to grant
+            // PursuitBank the moment a wingman was out of position, including a jet
+            // that had just left the runway — 131° of commanded bank at 25 m AGL in
+            // the log. Leader-bank feed-forward is included in maxBank before this
+            // scale, so an inverted player cannot authorize 88° at 30 m either.
+            maxBank = GroundLimitedBank(aircraft.radarAlt, maxBank);
 
             float bankAllowed = Mathf.Clamp(turnDemand, LevelBank, maxBank);
 

@@ -294,7 +294,7 @@ namespace WingCommand
             var free = new List<WingMember>();
             foreach (WingMember m in candidates)
             {
-                if (m != null && m.IsCommandable && members.Contains(m)) free.Add(m);
+                if (m != null && m.Alive && members.Contains(m)) free.Add(m);
             }
             if (free.Count == 0) return 0;
 
@@ -564,19 +564,29 @@ namespace WingCommand
 
         public WingMember Add(Aircraft aircraft, bool deferCommand = false)
         {
-            if (aircraft == null || !aircraft.LocalSim) return null;
+            if (aircraft == null) return null;
+            // Hangar deliveries register before LocalSim is reliable. Command still waits
+            // until ActivateWhenAirborne, which requires it. Refusing here left bought
+            // aircraft in the world and off the roster until a 420 s timeout.
+            if (!deferCommand && !aircraft.LocalSim) return null;
             if (!HasRoom(members.Count)) return null;
 
             // Checked here as well as in CanRecruit, because map selection and the debug
             // spawn can add directly without passing through the eligibility filter.
             if (!TypeMatchesLeader(aircraft))
             {
-                WingCommandManager.Instance?.Toast(
-                    IsSurface(aircraft)
-                        ? aircraft.unitName + " is a surface vehicle - it cannot join this wing"
-                        : IsRotary(aircraft)
-                            ? aircraft.unitName + " is rotary - it cannot formate on a fixed-wing leader"
-                            : aircraft.unitName + " is fixed-wing - it cannot formate on a rotary leader");
+                // A deferred add is retried every frame until the delivery is airborne.
+                // Toasting that on every miss would drown the screen; QueueRecruit logs
+                // the first miss and the timeout toast covers a persistent refusal.
+                if (!deferCommand)
+                {
+                    WingCommandManager.Instance?.Toast(
+                        IsSurface(aircraft)
+                            ? aircraft.unitName + " is a surface vehicle - it cannot join this wing"
+                            : IsRotary(aircraft)
+                                ? aircraft.unitName + " is rotary - it cannot formate on a fixed-wing leader"
+                                : aircraft.unitName + " is fixed-wing - it cannot formate on a rotary leader");
+                }
                 return null;
             }
 

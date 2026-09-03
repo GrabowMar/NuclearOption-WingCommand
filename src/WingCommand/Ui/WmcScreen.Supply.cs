@@ -6,6 +6,8 @@ using TMPro;
 using UnityEngine;
 using UnityEngine.EventSystems;
 using UnityEngine.UI;
+using NOAvionics.Ui;
+
 namespace WingCommand
 {
     /// <summary>The WMC panel's SUPPLY tab: squadron funds, the aircraft shop, and the wing reserve.</summary>
@@ -317,7 +319,7 @@ namespace WingCommand
         {
             if (!Plugin.Settings.ShopEnabled.Value) return y;
 
-            shopTemplatePopup = new WingUi.Popup(parent, PanelWidth);
+            shopTemplatePopup = new AvKit.Popup(parent, PanelWidth);
 
             y = Heading(parent, y, "AIRFRAME REQUISITION");
 
@@ -593,7 +595,7 @@ namespace WingCommand
                     }
 
                     offerDetailLabel.text = quote.CanBuy
-                        ? UiTheme.Truncate(selectedOffer.unitName, 18) +
+                        ? AvTheme.Truncate(selectedOffer.unitName, 18) +
                           "  ·  " + Grouped(cost) + " funds" +
                           (overLimit ? " (over limit)" : "") +
                           "  ·  " + stock + " available" +
@@ -669,7 +671,7 @@ namespace WingCommand
             }
 
             shopTemplateButton.SetText(
-                UiTheme.Truncate(WingLoadoutCatalog.Label(planned), 34)
+                AvTheme.Truncate(WingLoadoutCatalog.Label(planned), 34)
                        .ToUpperInvariant());
             shopTemplateButton.SetEnabled(true);
             shopTemplateButton.SetLatched(planned.IsTemplate);
@@ -696,14 +698,14 @@ namespace WingCommand
             // is one branch rather than an index offset to keep straight.
             var ids = new List<string>(mine.Count + 1) { null };
             popupEntries.Clear();
-            popupEntries.Add(new WingUi.PopupEntry(
+            popupEntries.Add(new AvKit.PopupEntry(
                 "STANDARD FIT", "as issued", !planned.IsTemplate));
 
             for (int i = 0; i < mine.Count; i++)
             {
                 ids.Add(mine[i].Id);
-                popupEntries.Add(new WingUi.PopupEntry(
-                    UiTheme.Truncate(mine[i].Name, 24),
+                popupEntries.Add(new AvKit.PopupEntry(
+                    AvTheme.Truncate(mine[i].Name, 24),
                     FittedCount(mine[i]) + " fitted",
                     planned.TemplateId == mine[i].Id));
             }
@@ -805,7 +807,7 @@ namespace WingCommand
                 code.overflowMode = TextOverflowModes.Ellipsis;
 
                 priceStock = Label(rt, "", new Rect(textLeft, -18f, textWidth, 14f), Green(),
-                                   9f, FontStyles.Normal, TextAlignmentOptions.Left);
+                                   FontMicro, FontStyles.Normal, TextAlignmentOptions.Left);
                 priceStock.overflowMode = TextOverflowModes.Ellipsis;
 
                 hit = HitButton(rt, new Rect(0f, 0f, rect.width, rect.height), () =>
@@ -825,14 +827,14 @@ namespace WingCommand
                 bool affordable = WingShop.Allocation >= cost;
                 bool selected = selectedOffer == offer.Definition;
 
-                Sprite sprite = offer.Definition.friendlyIcon != null ? offer.Definition.friendlyIcon
-                              : offer.Definition.mapIcon != null ? offer.Definition.mapIcon
+                Sprite sprite = offer.Definition.mapIcon != null ? offer.Definition.mapIcon
+                              : offer.Definition.friendlyIcon != null ? offer.Definition.friendlyIcon
                               : IconFactory.Get("airframe");
                 icon.sprite = sprite;
                 icon.color = selected ? Color.white : Dim();
 
                 string codeStr = !string.IsNullOrEmpty(offer.Definition.code) ? offer.Definition.code : offer.Name;
-                code.text = UiTheme.Truncate(codeStr, 7);
+                code.text = AvTheme.Truncate(codeStr, 7);
                 code.color = selected ? Green() : (affordable ? Friendly() : Dim());
 
                 priceStock.text = Grouped(cost) + " · " + offer.Stock + "x";

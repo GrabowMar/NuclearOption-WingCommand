@@ -9,20 +9,14 @@ namespace WingCommand
     /// <summary>
     /// Where a purchased aircraft appears, and the spawn call itself.
     ///
-    /// Requisitioned aircraft always launch from a friendly airbase and fly to the wing
-    /// under their own power. There was once a paid "fast delivery" that materialised the
-    /// aircraft on the player's wing instead; it was removed because a surcharge that skips
-    /// the transit is not a decision worth making — it only bought away the one part of a
-    /// requisition that reads as the aircraft actually coming from somewhere.
+    /// Requisitioned aircraft launch from a hangar or helipad at the nearest friendly
+    /// field that stocks the airframe. If every pad there is busy the order queues and
+    /// the roster reads QUE until one frees up — it does not jump to a farther field
+    /// that happens to be idle, and it does not materialise in the circuit overhead.
+    /// Surface hulls still arrive astern of the player; they have no hangar to come from.
     /// </summary>
     internal static class WingShopDelivery
     {
-        /// <summary>Height above the airbase that a delivery joins the circuit at.</summary>
-        private const float CircuitAltitude = 1200f;
-
-        /// <summary>Metres of clearance kept above terrain and sea.</summary>
-        private const float TerrainClearance = 120f;
-
         /// <summary>
         /// How long a hangar delivery has to produce an aircraft before it is written off.
         /// Generous: a carrier hangar runs a door sequence before it spawns anything.
@@ -30,23 +24,15 @@ namespace WingCommand
         private const float HangarDeliveryTimeout = 60f;
 
         /// <summary>
-        /// Put a requisitioned airframe into the world, from a hangar where the airbase can
-        /// manage it and from the circuit overhead where it cannot.
+        /// Put a requisitioned airframe into the world from a hangar or helipad, or queue
+        /// it at the nearest field that can produce it.
         ///
         /// The hangar path is the game's own: <c>Airbase.TrySpawnAircraft</c> picks a hangar
         /// by priority, respects occupancy and the clearance the airframe needs, runs a
-        /// carrier's door sequence, and lets the stock AI taxi out and take off. That is a
-        /// great deal more than this mod could reproduce, and it means a requisition arrives
-        /// the way the faction's own aircraft do rather than materialising in mid-air. The
-        /// roster records it as departing immediately; command waits until it is airborne.
-        ///
-        /// It cannot always be used: a hangar stocks specific types, so an airframe the
-        /// mission does have in supply may still have nowhere on the field to come from. The
-        /// circuit spawn stays as the fallback for exactly that case.
-        ///
-        /// The catch is that the airbase call returns permission, not an aircraft — the
-        /// spawn can be several seconds away. The faction's own <c>onRegisterUnit</c> event
-        /// is what closes that gap.
+        /// carrier's door sequence, and lets the stock AI taxi out and take off. The catch
+        /// is that the airbase call returns permission, not an aircraft — the spawn can be
+        /// several seconds away. The faction's own <c>onRegisterUnit</c> event closes that
+        /// gap. Until a hangar has actually taken the order, the roster shows QUE.
         /// </summary>
         public static bool Deliver(WingShop.PurchaseTransaction transaction, Aircraft leader,
                                    FactionHQ hq, out string reason)
@@ -61,22 +47,28 @@ namespace WingCommand
             AircraftDefinition definition = transaction.Definition;
             Loadout loadout = BuildLoadout(definition, transaction.Loadout);
 
+            if (WingShop.IsSurfaceDefinition(definition))
+            {
+                Aircraft spawned = SpawnSurface(definition, leader, hq, loadout);
+                if (spawned == null)
+                {
+                    reason = "Delivery failed - see the BepInEx log";
+                    return false;
+                }
+
+                if (!transaction.Commit(spawned))
+                {
+                    reason = "Delivery transaction could not be committed";
+                    return false;
+                }
+                WingCommandManager.Instance?.QueueRecruit(spawned);
+                return true;
+            }
+
             if (TryHangarDelivery(transaction, leader, hq, loadout)) return true;
 
-            Aircraft spawned = Spawn(definition, leader, hq, loadout);
-            if (spawned == null)
-            {
-                reason = "Delivery failed - see the BepInEx log";
-                return false;
-            }
-
-            if (!transaction.Commit(spawned))
-            {
-                reason = "Delivery transaction could not be committed";
-                return false;
-            }
-            WingCommandManager.Instance?.QueueRecruit(spawned);
-            return true;
+            reason = "No hangar or helipad that can launch this airframe";
+            return false;
         }
 
         /// <summary>
@@ -119,6 +111,7 @@ namespace WingCommand
 
             public AircraftDefinition Definition => Transaction?.Definition;
             public string AirframeName => Definition != null ? Definition.unitName : "Airframe";
+            public string StatusCode => HangarFieldPolicy.StatusCode(Hangar != null);
         }
 
         private static readonly List<PendingDelivery> pending = new List<PendingDelivery>();
@@ -136,14 +129,8 @@ namespace WingCommand
 
         /// <summary>
         /// Order a hangar delivery from the nearest field that stocks this airframe, and queue
-        /// it there if that field's hangar is momentarily busy rather than defecting to a
-        /// farther one.
-        ///
-        /// Selection used to require a hangar free to launch *right now*: buy a second aircraft
-        /// while the first's hangar was still mid-door-cycle and the nearest field no longer
-        /// qualified at all, so the order jumped to whichever field, however far, happened to
-        /// have an idle hangar that instant. A field worth flying from is worth queuing for; a
-        /// field only reachable because its hangar is idle this frame is not.
+        /// it there if that field's hangar or helipad is busy rather than defecting to a
+        /// farther one or spawning in the circuit overhead.
         /// </summary>
         private static bool TryHangarDelivery(WingShop.PurchaseTransaction transaction,
                                               Aircraft leader, FactionHQ hq, Loadout loadout)
@@ -255,37 +242,56 @@ namespace WingCommand
                 TryClaim(order.EarlyCandidates[i]);
         }
 
-        /// <summary>The closest friendly field that stocks this airframe in some hangar, preferring one ready to launch it this instant.</summary>
+        /// <summary>
+        /// The closest friendly field whose hangars or helipads can ever produce this
+        /// airframe, busy or not. Occupancy is a reason to queue, not to look farther.
+        /// </summary>
         private static Airbase NearestStockedAirbase(AircraftDefinition definition, FactionHQ hq,
                                                      Vector3 from)
         {
-            Airbase bestReady = null;
-            float bestReadySq = float.MaxValue;
-            Airbase bestStocked = null;
-            float bestStockedSq = float.MaxValue;
-
+            List<Airbase> fields = new List<Airbase>();
             foreach (Airbase airbase in hq.GetAirbases())
-            {
-                if (airbase == null || airbase.disabled) continue;
-                if (!airbase.GetAvailableAircraft().Contains(definition)) continue;
+                fields.Add(airbase);
 
-                float sq = (airbase.transform.position - from).sqrMagnitude;
-                if (airbase.CanSpawnAircraft(definition))
+            int index = HangarFieldPolicy.SelectNearestStocked(
+                fields.Count,
+                i =>
                 {
-                    if (sq < bestReadySq)
-                    {
-                        bestReadySq = sq;
-                        bestReady = airbase;
-                    }
-                }
-                if (sq < bestStockedSq)
-                {
-                    bestStockedSq = sq;
-                    bestStocked = airbase;
-                }
+                    Airbase airbase = fields[i];
+                    if (airbase == null || airbase.disabled) return float.MaxValue;
+                    return (airbase.transform.position - from).sqrMagnitude;
+                },
+                i => CanEverProduce(fields[i], definition));
+            return index >= 0 ? fields[index] : null;
+        }
+
+        /// <summary>
+        /// Whether this field has a hangar or helipad that stocks the airframe, regardless
+        /// of whether that pad is free this frame.
+        ///
+        /// <c>Airbase.GetAvailableAircraft</c> tracks what can launch <i>right now</i>, so
+        /// a busy door sequence made the nearest field look unable to produce the type and
+        /// the order either jumped to a farther idle pad or spawned in the circuit. The
+        /// hangar's own type list is the editor-configured stock and does not blink off
+        /// while the pad is occupied.
+        /// </summary>
+        private static bool CanEverProduce(Airbase airbase, AircraftDefinition definition)
+        {
+            if (airbase == null || airbase.disabled || definition == null) return false;
+            IList<Hangar> hangars = airbase.hangars;
+            if (hangars == null) return false;
+
+            for (int i = 0; i < hangars.Count; i++)
+            {
+                Hangar hangar = hangars[i];
+                if (hangar == null || hangar.Disabled) continue;
+                AircraftDefinition[] types = hangar.GetAvailableAircraft();
+                if (types == null) continue;
+                for (int j = 0; j < types.Length; j++)
+                    if (types[j] == definition) return true;
             }
 
-            return bestReady ?? bestStocked;
+            return false;
         }
 
         private static void Watch(FactionHQ hq)
@@ -344,12 +350,17 @@ namespace WingCommand
             pending.Remove(match);
             if (pending.Count == 0) Watch(null);
 
-            if (!match.Transaction.Commit(aircraft)) return;
+            if (!match.Transaction.Commit(aircraft))
+            {
+                Plugin.Logger.LogError("[Shop] " + aircraft.unitName +
+                    " spawned from hangar but purchase commit failed; not recruiting");
+                return;
+            }
             try { aircraft.SetLiveryKey(match.Livery); } catch { }
             WingCommandManager.Instance?.QueueRecruit(aircraft);
             Plugin.Logger.LogInfo("[Shop] " + aircraft.unitName +
                                   " registered from " + match.Origin.name +
-                                  "; rostered, awaiting airborne activation");
+                                  "; handed to wing recruit queue");
         }
 
         private static bool Matches(PendingDelivery order, Aircraft aircraft)
@@ -403,12 +414,10 @@ namespace WingCommand
                 if (order.Hangar != null || order.Starting) continue;
 
                 // Still queued for its target airbase. Keep waiting as long as that airbase
-                // remains capable of ever producing this airframe — the entire point of
-                // queuing is to hold out for the near field rather than defect to a far one —
-                // but give up the instant it genuinely cannot (captured, hangar destroyed),
-                // rather than sitting out the full timeout for an order that can never land.
-                if (!order.Origin.disabled &&
-                    order.Origin.GetAvailableAircraft().Contains(order.Transaction.Definition))
+                // remains capable of ever producing this airframe — occupancy is not a
+                // reason to give up — but write the order off the instant it genuinely
+                // cannot (captured, hangar destroyed).
+                if (CanEverProduce(order.Origin, order.Transaction.Definition))
                     continue;
 
                 Plugin.Logger.LogWarning(
@@ -457,10 +466,10 @@ namespace WingCommand
             Watch(null);
         }
 
-        // ----------------------------------------------------------------- circuit path
+        // ----------------------------------------------------------------- surface path
 
-        private static Aircraft Spawn(AircraftDefinition definition, Aircraft leader,
-                                      FactionHQ hq, Loadout loadout)
+        private static Aircraft SpawnSurface(AircraftDefinition definition, Aircraft leader,
+                                             FactionHQ hq, Loadout loadout)
         {
             Spawner spawner = NetworkSceneSingleton<Spawner>.i;
             if (spawner == null)
@@ -476,15 +485,10 @@ namespace WingCommand
                 return null;
             }
 
-            Vector3 position;
-            Quaternion rotation;
-            Vector3 velocity;
-
-            if (!BasePlacement(definition, leader, hq, out position, out rotation, out velocity))
+            if (!SurfacePlacement(leader, out Vector3 position, out Quaternion rotation,
+                                  out Vector3 velocity))
                 return null;
 
-            // The airframe's own standard loadout and livery, which is what "default
-            // equipment" means and what the faction's own AI aircraft launch with.
             AircraftParameters p = definition.aircraftParameters;
             float fuel = WingShop.SpawnFuelFor(definition);
 
@@ -527,57 +531,17 @@ namespace WingCommand
         }
 
         /// <summary>
-        /// In the circuit over the nearest friendly airbase, pointed at the player. It is
-        /// recruited immediately and flies to its slot under its own power.
-        /// </summary>
-        private static bool BasePlacement(AircraftDefinition definition, Aircraft leader,
-                                          FactionHQ hq, out Vector3 position,
-                                          out Quaternion rotation, out Vector3 velocity)
-        {
-            position = Vector3.zero;
-            rotation = Quaternion.identity;
-            velocity = Vector3.zero;
-
-            // A warship cannot be delivered into a hangar and taxied onto a runway. The
-            // player is by construction somewhere a surface unit can exist, so a purchased
-            // hull arrives astern of them and joins from there.
-            if (WingShop.IsSurfaceDefinition(definition))
-                return SurfacePlacement(leader, out position, out rotation, out velocity);
-
-            Airbase airbase = hq != null ? hq.GetNearestAirbase(leader.transform.position) : null;
-            if (airbase == null)
-            {
-                Plugin.Logger.LogWarning("[Shop] no friendly airbase for base delivery");
-                return false;
-            }
-
-            Vector3 field = airbase.transform.position;
-
-            Vector3 toLeader = leader.transform.position - field;
-            toLeader.y = 0f;
-            if (toLeader.sqrMagnitude < 1f) toLeader = leader.transform.forward;
-            toLeader.Normalize();
-
-            position = ClearOfGround(field + Vector3.up * CircuitAltitude);
-            rotation = Quaternion.LookRotation(toLeader, Vector3.up);
-
-            AircraftParameters p = definition.aircraftParameters;
-            float cruise = p != null ? Mathf.Max(p.landingSpeed * 1.6f, 80f) : 120f;
-            velocity = toLeader * cruise;
-
-            return true;
-        }
-
-        /// <summary>
         /// Astern of the player, at a slot interval, on the player's own plane.
-        ///
-        /// Deliberately not run through ClearOfGround: that lifts a point clear of terrain
-        /// and sea, which is the right answer for an aircraft in the circuit and the wrong
-        /// one for a hull that belongs at the player's own level.
+        /// A warship cannot be delivered into a hangar and taxied onto a runway.
         /// </summary>
         private static bool SurfacePlacement(Aircraft leader, out Vector3 position,
                                              out Quaternion rotation, out Vector3 velocity)
         {
+            position = Vector3.zero;
+            rotation = Quaternion.identity;
+            velocity = Vector3.zero;
+            if (leader == null) return false;
+
             Vector3 forward = leader.transform.forward;
             forward.y = 0f;
             if (forward.sqrMagnitude < 0.0001f) forward = Vector3.forward;
@@ -592,19 +556,6 @@ namespace WingCommand
             // anything has told it where to go.
             velocity = Vector3.zero;
             return true;
-        }
-
-        /// <summary>Keep the spawn point clear of terrain and sea.</summary>
-        private static Vector3 ClearOfGround(Vector3 position)
-        {
-            if (Physics.Raycast(position + Vector3.up * 3000f, Vector3.down,
-                                out RaycastHit hit, 6000f, PhysicsLayers.StaticsMask))
-            {
-                position.y = Mathf.Max(position.y, hit.point.y + TerrainClearance);
-            }
-
-            position.y = Mathf.Max(position.y, Datum.LocalSeaY + TerrainClearance);
-            return position;
         }
     }
 }

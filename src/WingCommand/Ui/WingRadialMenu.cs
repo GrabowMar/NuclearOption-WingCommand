@@ -194,6 +194,7 @@ namespace WingCommand
             {
                 ManeuverLeaf(ManeuverKind.BreakLeft),
                 ManeuverLeaf(ManeuverKind.BreakRight),
+                ManeuverLeaf(ManeuverKind.NotchThreat),
                 ManeuverLeaf(ManeuverKind.SplitS),
                 ManeuverLeaf(ManeuverKind.Immelmann),
                 Back(ShowSecondaryMenu),

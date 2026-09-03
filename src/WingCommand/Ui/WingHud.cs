@@ -2,6 +2,8 @@ using System.Collections.Generic;
 using TMPro;
 using UnityEngine;
 using UnityEngine.UI;
+using NOAvionics;
+using NOAvionics.Ui;
 
 namespace WingCommand
 {
@@ -21,21 +23,29 @@ namespace WingCommand
         // Read through UiPalette rather than restated here. The accent in particular was a
         // hand-copied duplicate of UiTheme.Friendly's fallback, so the HUD kept the stock
         // green even in a mission whose theme had moved off it.
-        private static Color Panel => WingUi.Unity(UiPalette.HudPanel);
-        private static Color Accent => UiTheme.Friendly;
+        private static Color Panel => AvTheme.Unity(AvTokens.HudPanel);
+        private static Color Accent => AvTheme.Friendly;
 
         private static void EnsureStyles()
         {
             if (stylesReady) return;
             stylesReady = true;
 
-            toastStyle = new GUIStyle(GUI.skin.box)
+            Color toastBg = Panel;
+            Color toastBorder = Accent.WithAlpha(0.35f);
+            Color toastText = Color.white;
+
+            var bg = Solid(toastBg);
+
+            toastStyle = new GUIStyle
             {
                 alignment = TextAnchor.MiddleCenter,
                 fontSize = 14,
+                fontStyle = FontStyle.Bold,
+                normal = { textColor = toastText, background = bg },
+                border = new RectOffset(1, 1, 1, 1),
+                padding = new RectOffset(12, 12, 6, 6),
             };
-            toastStyle.normal.background = Solid(Panel);
-            toastStyle.normal.textColor = Accent;
         }
 
         private static Texture2D Solid(Color c)
@@ -61,13 +71,13 @@ namespace WingCommand
         // why it read as a separate overlay rather than as part of the HUD.
 
         /// <summary>The strip's own heading.</summary>
-        private const float HeaderText = 11f;
+        private const float HeaderText = AvTokens.FontSmall;
 
         /// <summary>Callsign and range: what the strip is actually read for.</summary>
-        private const float PrimaryText = 13f;
+        private const float PrimaryText = AvTokens.FontLead;
 
         /// <summary>Order code and other supporting detail.</summary>
-        private const float SecondaryText = 10f;
+        private const float SecondaryText = AvTokens.FontMicro;
 
         private static float statusWidth = StatusPanelWidth;
 
@@ -163,7 +173,7 @@ namespace WingCommand
             CreateStatusBackdrop(statusRoot, map);
 
             statusTitle = WingUi.Label(statusRoot, "", new Rect(7f, -2f, statusWidth - 14f, 20f),
-                                       UiTheme.Green.WithAlpha(0.90f), HeaderText, FontStyles.Normal,
+                                       AvTheme.Accent.WithAlpha(0.90f), HeaderText, FontStyles.Normal,
                                        TextAlignmentOptions.Left);
             PositionStatusPanel(map);
         }
@@ -444,8 +454,8 @@ namespace WingCommand
                 // Colours come from the game's theme, so the strip follows a theme change the
                 // way the rest of the HUD does.
                 Color color = !member.Alive || damaged || member.IsPanicking
-                    ? UiTheme.Alert
-                    : lowStores ? UiTheme.Warning : WingMarkers.MemberColor;
+                    ? AvTheme.Alert
+                    : lowStores ? AvTheme.Warning : WingMarkers.MemberColor;
                 icon.color = color;
                 identity.color = color;
                 state.color = color.WithAlpha(0.62f);
@@ -479,7 +489,28 @@ namespace WingCommand
             /// </summary>
             private static string StateText(WingMember member)
             {
+                if (member == null) return string.Empty;
+
+                string delivery = WingDeliveryTracker.GetDeliveryTag(member.Aircraft);
+                if (delivery != null) return delivery;
+
                 string order = OrderCode(member);
+
+                if (IsDamaged(member.Aircraft))
+                {
+                    return order + " · DMG";
+                }
+
+                if (member.Fuel <= WingTuning.BingoFuel)
+                {
+                    return order + " · BINGO";
+                }
+
+                if (member.Ammo > 0 && WingWeapons.GetGuidedAmmo(member.Aircraft) == 0)
+                {
+                    return order + " · WINC";
+                }
+
                 return member.WeaponPreference == WingWeaponPreference.Auto
                     ? order
                     : order + " · " + WingWeaponPreferences.ShortLabel(member.WeaponPreference);

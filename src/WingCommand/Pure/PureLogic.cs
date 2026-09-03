@@ -24,7 +24,7 @@ namespace WingCommand
         FireForEffect,
         MoveToPoint,
 
-        /// <summary>Hold the formation slot, but run the radar jammer against a designated unit.</summary>
+        /// <summary>Hold the formation slot, but run the jammer pod against a designated unit.</summary>
         JamTarget,
 
         /// <summary>Fly one scripted manoeuvre, then rejoin. Transient: never a resting state.</summary>
@@ -42,6 +42,7 @@ namespace WingCommand
         AileronRoll,
         Loop,
         WingWaggle,
+        NotchThreat,
     }
 
     /// <summary>
@@ -104,6 +105,17 @@ namespace WingCommand
             order == WingOrder.Attack ||
             order == WingOrder.FireForEffect ||
             order == WingOrder.JamTarget;
+
+        /// <summary>
+        /// Standing orders a hangar delivery may accept while it is still taxiing.
+        ///
+        /// The airframe is already on the roster, but the stock launch AI owns it until it
+        /// is airborne. Recording the order here is what lets ActivateWhenAirborne fly what
+        /// the player asked for instead of defaulting to Form Up. Manoeuvres are excluded
+        /// because they are transient: they would be spent on the apron and never flown.
+        /// </summary>
+        public static bool CanQueueWhilePending(WingOrder order) =>
+            order != WingOrder.Maneuver;
     }
 
     /// <summary>Pure precedence table shared by runtime code and tests.</summary>
@@ -337,5 +349,99 @@ namespace WingCommand
             }
             return -1;
         }
+    }
+
+    /// <summary>
+    /// Where a requisitioned airframe should come from, and what the roster calls that wait.
+    ///
+    /// A farther field that happens to have an idle hangar this frame is not a better
+    /// answer than the nearest one that can produce the airframe. The order queues there
+    /// until a hangar or helipad frees up, rather than materialising in the circuit or
+    /// defecting across the map.
+    /// </summary>
+    internal static class HangarFieldPolicy
+    {
+        public static int SelectNearestStocked(int count, Func<int, float> distanceSq,
+                                               Func<int, bool> stocks)
+        {
+            int best = -1;
+            float bestSq = float.MaxValue;
+            for (int i = 0; i < count; i++)
+            {
+                if (!stocks(i)) continue;
+                float sq = distanceSq(i);
+                if (sq >= bestSq) continue;
+                bestSq = sq;
+                best = i;
+            }
+            return best;
+        }
+
+        /// <summary>QUE while waiting for a pad; DEPT once a hangar has taken the order.</summary>
+        public static string StatusCode(bool hangarClaimed) => hangarClaimed ? "DEPT" : "QUE";
+    }
+
+    /// <summary>
+    /// When a wingman must climb before it is allowed to chase a slot.
+    ///
+    /// Formation is a station-keeping law. Handing it an aircraft at 25-150 m AGL with a
+    /// kilometres-long slot error produces a 100° intercept at treetop height — the live
+    /// log's 131° command at 25 m, then pilot-killed at 1-8 m. Climb-out is the missing
+    /// state between "stock launch AI is done" and "fly the slot": wings level, climb,
+    /// then rejoin. Nap-of-earth station keeping (low and already close) is left alone.
+    /// </summary>
+    internal static class ClimbOutPolicy
+    {
+        /// <summary>Grab climb-out below this AGL when far from the leader.</summary>
+        public const float GrabAlt = 300f;
+
+        /// <summary>Keep climbing until here, so the behaviour does not flap on the floor.</summary>
+        public const float ReleaseAlt = 450f;
+
+        /// <summary>Metres from the leader that count as "far" — a rejoin, not a slot.</summary>
+        public const float GrabRange = 400f;
+
+        /// <summary>Release the range check inside this, so a closing climb-out can finish.</summary>
+        public const float ReleaseRange = 200f;
+
+        /// <summary>Survival pull-up: below this, even a missile break is the worse turn.</summary>
+        public const float AbortAlt = 50f;
+
+        /// <summary>Hold the abort until here so a bounce off the floor does not resume the intercept.</summary>
+        public const float AbortReleaseAlt = 90f;
+
+        public static bool ShouldClimbOut(
+            float radarAlt, float leaderDistance, WingOrder order,
+            bool incumbent, bool deliveryPending, bool leaderPresent)
+        {
+            if (deliveryPending || !leaderPresent) return false;
+            if (order != WingOrder.Formation) return false;
+
+            float alt = incumbent ? ReleaseAlt : GrabAlt;
+            float range = incumbent ? ReleaseRange : GrabRange;
+            return radarAlt < alt && leaderDistance > range;
+        }
+
+        public static bool ShouldAbort(
+            float radarAlt, float leaderDistance, WingOrder order,
+            bool incumbent, bool deliveryPending)
+        {
+            if (deliveryPending) return false;
+            if (!AllowsAbort(order)) return false;
+
+            float alt = incumbent ? AbortReleaseAlt : AbortAlt;
+            float range = incumbent ? ReleaseRange : GrabRange;
+            return radarAlt < alt && leaderDistance > range;
+        }
+
+        /// <summary>
+        /// Orders that are supposed to be low. A pull-up here would fight the task.
+        /// </summary>
+        public static bool AllowsAbort(WingOrder order) =>
+            order != WingOrder.LandHere &&
+            order != WingOrder.ReturnToBase &&
+            order != WingOrder.Attack &&
+            order != WingOrder.FireForEffect &&
+            order != WingOrder.DeliverCargo;
     }
 }

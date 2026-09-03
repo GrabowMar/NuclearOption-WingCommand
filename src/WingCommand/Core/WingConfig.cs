@@ -66,6 +66,7 @@ namespace WingCommand
         public ConfigEntry<bool> ShowHud { get; private set; }
         public ConfigEntry<bool> UseMfdPanel { get; private set; }
         public ConfigEntry<bool> MapCommandEnabled { get; private set; }
+        public ConfigEntry<bool> FitMapToPanels { get; private set; }
         public ConfigEntry<HighlightMode> Highlight { get; private set; }
         public ConfigEntry<string> WingIconColor { get; private set; }
         public ConfigEntry<string> WingTargetColor { get; private set; }
@@ -285,6 +286,8 @@ namespace WingCommand
                 "Add a WMC screen to the cockpit MFD bezel, alongside BDF/MAP/HUD.");
             MapCommandEnabled = c.Bind("UI", "MapCommands", true,
                 "Enable tactical wing selection and point tasking on the maximised map.");
+            FitMapToPanels = c.Bind("UI", "FitMapToPanels", true,
+                "Keep the maximised tactical map at its original dimensions and move the MFD bezel buttons into rows above and below the map instead of flanking it.");
 
             // Was three booleans that nobody wanted to set independently - the map and HUD
             // tints are one decision seen from two places, and targets are a step further out.

@@ -14,7 +14,7 @@ namespace WingCommand
         /// <summary>Just fly the slot.</summary>
         None,
 
-        /// <summary>Run the radar jammer against the designated unit.</summary>
+        /// <summary>Run the jammer pod against the designated unit.</summary>
         Jam,
 
         /// <summary>Work every effective store into the designated unit.</summary>

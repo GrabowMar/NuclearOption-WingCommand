@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using UnityEngine;
 
 namespace WingCommand
@@ -34,6 +35,8 @@ namespace WingCommand
         private AircraftParameters parameters;
         private bool aborted;
         private string abortReason;
+        private Vector3 notchDirection;
+        private static readonly List<Unit> scratchUnits = new List<Unit>(32);
 
         private enum Step { Running, Done, Failed }
 
@@ -68,11 +71,15 @@ namespace WingCommand
                 : aircraft.transform.forward;
             entryForward = Flatten(fwd);
 
+            if (kind == ManeuverKind.NotchThreat)
+                notchDirection = ResolveNotchDirection(aircraft, entryForward);
+
             // Reasons the manoeuvre cannot be flown. Recorded, not acted on here: switching
             // pilot state from inside EnterState is re-entrant, so the first FixedUpdate
             // tick does the rejoin instead - the same pattern AttackRunState uses.
             if (ManeuverCatalog.BreakDirection(kind) == 0 &&
                 kind != ManeuverKind.WingWaggle &&
+                kind != ManeuverKind.NotchThreat &&
                 !WingBrain.Manoeuvres)
             {
                 Abort("aerobatics are off in Performance mode");
@@ -144,6 +151,7 @@ namespace WingCommand
             {
                 case ManeuverKind.BreakLeft:
                 case ManeuverKind.BreakRight:  step = FlyBreak();          break;
+                case ManeuverKind.NotchThreat: step = FlyNotch();          break;
                 case ManeuverKind.WingWaggle:  step = FlyWaggle();         break;
                 case ManeuverKind.Loop:        step = FlyLoop();           break;
                 case ManeuverKind.Immelmann:   step = FlyImmelmann();      break;
@@ -211,6 +219,134 @@ namespace WingCommand
             }
 
             return Step.Running;
+        }
+
+        private Step FlyNotch()
+        {
+            if (fixedWing)
+            {
+                float safeY = aircraft.radarAlt < entryRadarAlt
+                    ? aircraft.GlobalPosition().y + (entryRadarAlt - aircraft.radarAlt) * 0.6f
+                    : aircraft.GlobalPosition().y;
+
+                GlobalPosition dest = new GlobalPosition(
+                    aircraft.GlobalPosition().x + notchDirection.x * 8000f,
+                    safeY,
+                    aircraft.GlobalPosition().z + notchDirection.z * 8000f);
+
+                controlInputs.throttle = 1f;
+                aircraft.autopilot.AutoAim(
+                    destination: dest,
+                    aimVelocity: true,
+                    ignoreCollisions: false,
+                    runwayAlign: false,
+                    effort: 2f,
+                    bankAllowed: FixedWingFormation.MaxSafeBank,
+                    followTerrain: false,
+                    altitudeHold: AutopilotMath.CruiseHold(aircraft, entryRadarAlt),
+                    targetVelocity: Vector3.zero);
+                aircraft.FilterInputs();
+            }
+            else
+            {
+                GlobalPosition dest = aircraft.GlobalPosition() + notchDirection * 3000f;
+                aircraft.autopilot.AutoAim(
+                    destination: dest,
+                    altitudeHold: AutopilotMath.RotaryAgl(aircraft, aircraft.radarAlt, 25f, 2000f),
+                    aimDirection: notchDirection,
+                    targetVelocity: Vector3.zero,
+                    followTerrain: true);
+            }
+
+            float limit = fixedWing ? 6f : 8f;
+            float currentHeadingDelta = Vector3.Angle(Flatten(Heading()), notchDirection);
+            if ((currentHeadingDelta <= 15f && Time.timeSinceLevelLoad - startedAt >= 2.5f) ||
+                Time.timeSinceLevelLoad - startedAt > limit)
+            {
+                RecoverWingsLevel();
+                return Step.Done;
+            }
+
+            return Step.Running;
+        }
+
+        private static Vector3 ResolveNotchDirection(Aircraft aircraft, Vector3 forward)
+        {
+            Vector3 threatPos = Vector3.zero;
+            bool foundThreat = false;
+
+            MissileWarning mws = aircraft.GetMissileWarningSystem();
+            if (mws != null && mws.IsWarning())
+            {
+                if (mws.TryGetNearestIncoming(out Missile incoming) && incoming != null && !incoming.disabled)
+                {
+                    threatPos = incoming.transform.position;
+                    foundThreat = true;
+                }
+                else if (mws.knownMissiles != null && mws.knownMissiles.Count > 0)
+                {
+                    for (int i = 0; i < mws.knownMissiles.Count; i++)
+                    {
+                        Missile m = mws.knownMissiles[i];
+                        if (m != null && !m.disabled)
+                        {
+                            threatPos = m.transform.position;
+                            foundThreat = true;
+                            break;
+                        }
+                    }
+                }
+            }
+
+            if (!foundThreat)
+            {
+                Unit bestEmitter = null;
+                float bestDistSq = float.MaxValue;
+                Vector3 acPos = aircraft.transform.position;
+
+                scratchUnits.Clear();
+                BattlefieldGrid.GetUnitsInRangeNonAlloc(aircraft.GlobalPosition(), 25000f, scratchUnits);
+                for (int i = 0; i < scratchUnits.Count; i++)
+                {
+                    Unit u = scratchUnits[i];
+                    if (u == null || u.disabled || u == aircraft) continue;
+                    if (u.NetworkHQ == null || u.NetworkHQ == aircraft.NetworkHQ) continue;
+
+                    if (u.definition != null && (u.definition.typeIdentity.radar > 0.3f || u.definition.typeIdentity.air > 0.5f))
+                    {
+                        float dSq = (u.transform.position - acPos).sqrMagnitude;
+                        if (dSq < bestDistSq)
+                        {
+                            bestDistSq = dSq;
+                            bestEmitter = u;
+                        }
+                    }
+                }
+                scratchUnits.Clear();
+
+                if (bestEmitter != null)
+                {
+                    threatPos = bestEmitter.transform.position;
+                    foundThreat = true;
+                }
+            }
+
+            if (!foundThreat)
+            {
+                return Quaternion.AngleAxis(-90f, Vector3.up) * forward;
+            }
+
+            Vector3 toThreat = Flatten(threatPos - aircraft.transform.position);
+            if (toThreat.sqrMagnitude < 1f)
+            {
+                return Quaternion.AngleAxis(-90f, Vector3.up) * forward;
+            }
+            toThreat.Normalize();
+
+            Vector3 optA = Quaternion.AngleAxis(90f, Vector3.up) * toThreat;
+            Vector3 optB = Quaternion.AngleAxis(-90f, Vector3.up) * toThreat;
+
+            return Vector3.Dot(optA, forward) >= Vector3.Dot(optB, forward) ? optA : optB;
         }
 
         private Step FlyWaggle()

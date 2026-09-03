@@ -1,3 +1,4 @@
+using System;
 using Xunit;
 
 namespace WingCommand.PureTests
@@ -42,6 +43,18 @@ namespace WingCommand.PureTests
         {
             Assert.False(WingOrderRules.SendsWingmanHunting(order));
             Assert.False(WingOrderRules.CarriesTarget(order));
+        }
+
+        [Fact]
+        public void APendingDeliveryCanQueueEveryStandingOrderButNotAManoeuvre()
+        {
+            foreach (WingOrder order in (WingOrder[])Enum.GetValues(typeof(WingOrder)))
+            {
+                if (order == WingOrder.Maneuver)
+                    Assert.False(WingOrderRules.CanQueueWhilePending(order));
+                else
+                    Assert.True(WingOrderRules.CanQueueWhilePending(order), order.ToString());
+            }
         }
     }
 }

@@ -6,6 +6,8 @@ using TMPro;
 using UnityEngine;
 using UnityEngine.EventSystems;
 using UnityEngine.UI;
+using NOAvionics.Ui;
+
 namespace WingCommand
 {
     /// <summary>The WMC panel's LOADOUT tab: the per-pylon template editor.</summary>
@@ -23,6 +25,8 @@ namespace WingCommand
         private static TMP_InputField templateNameField;
         private static TMP_Text templateSummaryLabel;
         private static WingButton templateSelectButton;
+        private static RectTransform pylonEmptyCard;
+        private static TMP_Text pylonEmptyLabel;
         private static WingButton templateNewButton;
         private static WingButton templateCopyButton;
         private static WingButton templateDeleteButton;
@@ -45,14 +49,14 @@ namespace WingCommand
         private static readonly List<AirframeTile> airframeTiles = new List<AirframeTile>();
 
         /// <summary>The list the popup is currently showing, rebuilt on each open.</summary>
-        private static readonly List<WingUi.PopupEntry> popupEntries =
-            new List<WingUi.PopupEntry>();
+        private static readonly List<AvKit.PopupEntry> popupEntries =
+            new List<AvKit.PopupEntry>();
 
         private static readonly List<WingLoadoutCatalog.StoreOption> storeScratch =
             new List<WingLoadoutCatalog.StoreOption>();
 
-        private static WingUi.Popup loadoutPopup;
-        private static WingUi.Popup shopTemplatePopup;
+        private static AvKit.Popup loadoutPopup;
+        private static AvKit.Popup shopTemplatePopup;
 
         /// <summary>
         /// Which template the editor is working on, by id.
@@ -90,7 +94,7 @@ namespace WingCommand
         /// </summary>
         private static float AddLoadoutPage(RectTransform parent, float y)
         {
-            loadoutPopup = new WingUi.Popup(parent, PanelWidth);
+            loadoutPopup = new AvKit.Popup(parent, PanelWidth);
 
             y = Heading(parent, y, "AIRFRAME");
 
@@ -184,6 +188,9 @@ namespace WingCommand
             float areaHeight = RowPitch * PylonRowsPerPage;
             Place(pylonArea, new Rect(Pad, y, PanelWidth - Pad * 2f, areaHeight));
             pylonAreaY = y;
+
+            pylonEmptyCard = WingUi.TacticalCard(pylonArea, new Rect(0f, 0f, PanelWidth - Pad * 2f, areaHeight), WingUi.RailInert, hasRail: false).CardFill.rectTransform;
+            pylonEmptyLabel = EmptyNote(pylonEmptyCard, "NO HARDPOINTS DETECTED ON AIRFRAME");
 
             for (int i = 0; i < PylonRowsPerPage; i++) pylonRows.Add(new PylonRow(pylonArea, i));
             y -= areaHeight + Gap;
@@ -379,8 +386,8 @@ namespace WingCommand
             for (int i = 0; i < mine.Count; i++)
             {
                 ids.Add(mine[i].Id);
-                popupEntries.Add(new WingUi.PopupEntry(
-                    UiTheme.Truncate(mine[i].Name, 24),
+                popupEntries.Add(new AvKit.PopupEntry(
+                    AvTheme.Truncate(mine[i].Name, 24),
                     FittedCount(mine[i]) + " fitted",
                     mine[i].Id == editingTemplateId));
             }
@@ -578,8 +585,8 @@ namespace WingCommand
             {
                 WingLoadoutCatalog.StoreOption option = storeScratch[i];
                 keys.Add(option.Key);
-                popupEntries.Add(new WingUi.PopupEntry(
-                    UiTheme.Truncate(option.Label, 26), StoreDetail(option),
+                popupEntries.Add(new AvKit.PopupEntry(
+                    AvTheme.Truncate(option.Label, 26), StoreDetail(option),
                     option.Key == current));
             }
 
@@ -666,7 +673,7 @@ namespace WingCommand
             if (templateSelectButton != null)
             {
                 templateSelectButton.SetText(
-                    template != null ? UiTheme.Truncate(template.Name, 22).ToUpperInvariant()
+                    template != null ? AvTheme.Truncate(template.Name, 22).ToUpperInvariant()
                     : saved > 0 ? "SELECT A TEMPLATE"
                     : "NO TEMPLATES");
                 templateSelectButton.SetEnabled(saved > 0);
@@ -753,6 +760,10 @@ namespace WingCommand
                     : "pylon page " + (pylonPage + 1) + " of " + pages;
             }
 
+            bool hasPylons = visiblePylons.Count > 0;
+            if (pylonEmptyCard != null) pylonEmptyCard.gameObject.SetActive(!hasPylons);
+            if (pylonEmptyLabel != null) pylonEmptyLabel.gameObject.SetActive(!hasPylons);
+
             pylonPrevButton?.SetEnabled(pylonPage > 0);
             pylonNextButton?.SetEnabled(pylonPage < pages - 1);
 
@@ -825,7 +836,7 @@ namespace WingCommand
             if (WingLoadoutCatalog.PylonCount(selectedOffer) == 0)
             {
                 loadoutStatusLabel.text =
-                    UiTheme.Truncate(selectedOffer.unitName, 18) +
+                    AvTheme.Truncate(selectedOffer.unitName, 18) +
                     "'s hardpoints cannot be read; it flies its standard fit.";
                 loadoutStatusLabel.color = Dim();
                 return;
@@ -835,7 +846,7 @@ namespace WingCommand
             {
                 loadoutStatusLabel.text =
                     "Press + to start a template for " +
-                    UiTheme.Truncate(selectedOffer.unitName, 18) + ".";
+                    AvTheme.Truncate(selectedOffer.unitName, 18) + ".";
                 loadoutStatusLabel.color = Dim();
                 return;
             }
@@ -951,17 +962,17 @@ namespace WingCommand
 
                 if (!go.activeSelf) go.SetActive(true);
 
-                Sprite sprite = def.friendlyIcon != null ? def.friendlyIcon
-                              : def.mapIcon != null ? def.mapIcon
+                Sprite sprite = def.mapIcon != null ? def.mapIcon
+                              : def.friendlyIcon != null ? def.friendlyIcon
                               : IconFactory.Get("airframe");
                 icon.sprite = sprite;
                 icon.color = selected ? Color.white : Dim();
 
                 string codeStr = !string.IsNullOrEmpty(def.code) ? def.code : def.unitName;
-                code.text = UiTheme.Truncate(codeStr, 7);
+                code.text = AvTheme.Truncate(codeStr, 7);
                 code.color = selected ? Green() : Friendly();
 
-                name.text = UiTheme.Truncate(def.unitName, 10);
+                name.text = AvTheme.Truncate(def.unitName, 10);
                 name.color = selected ? Friendly() : Dim();
 
                 fill.color = selected ? WingUi.CardFillSelected : WingUi.CardFill;
@@ -1028,8 +1039,8 @@ namespace WingCommand
                 // A mirrored pair says so, so the player is not left wondering why the list
                 // is shorter than the aircraft looks.
                 name.text = mirrors > 1
-                    ? UiTheme.Truncate(pylonName, 20) + "  x" + mirrors
-                    : UiTheme.Truncate(pylonName, 24);
+                    ? AvTheme.Truncate(pylonName, 20) + "  x" + mirrors
+                    : AvTheme.Truncate(pylonName, 24);
 
                 if (blocked)
                 {
@@ -1050,7 +1061,7 @@ namespace WingCommand
                 }
 
                 bool empty = fitted.IsEmpty;
-                store.text = empty ? "— EMPTY —" : UiTheme.Truncate(fitted.Label, 24);
+                store.text = empty ? "— EMPTY —" : AvTheme.Truncate(fitted.Label, 24);
                 store.color = empty ? Dim() : Friendly();
                 name.color = Friendly();
 

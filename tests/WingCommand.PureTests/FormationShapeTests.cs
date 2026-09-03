@@ -99,42 +99,32 @@ namespace WingCommand.Tests
         [Fact]
         public void DiamondRhombusHasEqualSideLengths()
         {
-            // A true diamond (rhombus) requires that distance from Lead to Wing
-            // equals the distance from Wing to Slot.
-            const double sweepDeg = 45.0;
-            double rad = sweepDeg * (Math.PI / 180.0);
-            double wingX = Math.Cos(rad);
-            double wingZ = Math.Sin(rad);
-            double leadToWing = Math.Sqrt(wingX * wingX + wingZ * wingZ);
+            SlotLayout right = FormationLayout.Slot(FormationShape.Diamond, 1);
+            SlotLayout tail = FormationLayout.Slot(FormationShape.Diamond, 3);
 
-            double tailZ = 2.0 * Math.Sin(rad);
-            double deltaX = 0.0 - wingX;
-            double deltaZ = tailZ - wingZ;
-            double wingToTail = Math.Sqrt(deltaX * deltaX + deltaZ * deltaZ);
+            double leadToWing = Math.Sqrt(right.Lateral * right.Lateral + right.Back * right.Back);
+            double wingToTail = Math.Sqrt(
+                (tail.Lateral - right.Lateral) * (tail.Lateral - right.Lateral) +
+                (tail.Back - right.Back) * (tail.Back - right.Back));
 
-            Assert.Equal(1.0, leadToWing, precision: 6);
-            Assert.Equal(1.0, wingToTail, precision: 6);
-            Assert.Equal(leadToWing, wingToTail, precision: 6);
+            Assert.Equal(leadToWing, wingToTail, precision: 5);
         }
 
         [Fact]
         public void FingerFourFingertipLayoutMatchesHand()
         {
-            // Right-hand finger four: Slot 1 is left (-1), Slot 2 is right (+1), Slot 3 is outer right (+1)
-            double sweepRad = 40.0 * (Math.PI / 180.0);
-            double slot1X = -1.0 * Math.Cos(sweepRad);
-            double slot2X = 1.15 * Math.Cos(sweepRad);
-            double slot3X = 2.15 * Math.Cos(sweepRad);
+            SlotLayout port = FormationLayout.Slot(FormationShape.FingerFour, 1);
+            SlotLayout starboard = FormationLayout.Slot(FormationShape.FingerFour, 2);
+            SlotLayout outer = FormationLayout.Slot(FormationShape.FingerFour, 3);
 
-            Assert.True(slot1X < 0.0, "Slot 1 (flight wingman) should be on port/left");
-            Assert.True(slot2X > 0.0, "Slot 2 (element lead) should be on starboard/right");
-            Assert.True(slot3X > slot2X, "Slot 3 (element wingman) should be wider to the right of element lead");
+            Assert.True(port.Lateral < 0f, "Slot 1 (flight wingman) should be on port/left");
+            Assert.True(starboard.Lateral > 0f, "Slot 2 (element lead) should be on starboard/right");
+            Assert.True(outer.Lateral > starboard.Lateral,
+                        "Slot 3 (element wingman) should be wider to the right of element lead");
 
-            // Spacing between Slot 2 and Slot 3 along the echelon arm must be exactly 1.0 spacing arm
-            double deltaX = slot3X - slot2X;
-            double deltaZ = (2.15 - 1.15) * Math.Sin(sweepRad);
-            double elementDistance = Math.Sqrt(deltaX * deltaX + deltaZ * deltaZ);
-            Assert.Equal(1.0, elementDistance, precision: 6);
+            double dx = outer.Lateral - starboard.Lateral;
+            double dz = outer.Back - starboard.Back;
+            Assert.Equal(1.0, Math.Sqrt(dx * dx + dz * dz), precision: 5);
         }
     }
 }

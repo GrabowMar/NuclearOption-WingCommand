@@ -36,6 +36,14 @@ namespace WingCommand
         /// </summary>
         public readonly float ClimbRate;
 
+        /// <summary>
+        /// Filtered bank, degrees, positive right wing down. The settled formation hangs
+        /// off this so a rolling leader carries the diamond with it. Live attitude is
+        /// still what MatchLeaderBank copies; this is only the geometry's copy, smoothed
+        /// so a stick twitch does not throw every slot.
+        /// </summary>
+        public readonly float Bank;
+
         /// <summary>Smoothed lever position, 0-1. Meaningless unless <see cref="ThrottleKnown"/>.</summary>
         public readonly float Throttle;
 
@@ -48,13 +56,14 @@ namespace WingCommand
         public readonly bool ThrottleKnown;
 
         public LeaderState(Vector3 track, Vector3 flatTrack, float turnRate, float speedRate,
-                           float climbRate, float throttle, bool throttleKnown)
+                           float climbRate, float bank, float throttle, bool throttleKnown)
         {
             Track = track;
             FlatTrack = flatTrack;
             TurnRate = turnRate;
             SpeedRate = speedRate;
             ClimbRate = climbRate;
+            Bank = bank;
             Throttle = throttle;
             ThrottleKnown = throttleKnown;
         }

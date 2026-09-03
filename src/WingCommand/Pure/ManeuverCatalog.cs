@@ -18,6 +18,7 @@ namespace WingCommand
             ManeuverKind.AileronRoll,
             ManeuverKind.Loop,
             ManeuverKind.WingWaggle,
+            ManeuverKind.NotchThreat,
         };
 
         public static string Label(ManeuverKind kind)
@@ -32,6 +33,7 @@ namespace WingCommand
                 case ManeuverKind.AileronRoll: return "Aileron Roll";
                 case ManeuverKind.Loop:        return "Loop";
                 case ManeuverKind.WingWaggle:  return "Wing Waggle";
+                case ManeuverKind.NotchThreat: return "Notch Threat";
                 default:                       return kind.ToString();
             }
         }
@@ -48,6 +50,7 @@ namespace WingCommand
                 case ManeuverKind.AileronRoll: return "ROLL";
                 case ManeuverKind.Loop:        return "LOOP";
                 case ManeuverKind.WingWaggle:  return "WAGGLE";
+                case ManeuverKind.NotchThreat: return "NOTCH";
                 default:                       return kind.ToString().ToUpperInvariant();
             }
         }
@@ -60,7 +63,8 @@ namespace WingCommand
         public static bool RotaryCapable(ManeuverKind kind) =>
             kind == ManeuverKind.BreakLeft ||
             kind == ManeuverKind.BreakRight ||
-            kind == ManeuverKind.WingWaggle;
+            kind == ManeuverKind.WingWaggle ||
+            kind == ManeuverKind.NotchThreat;
 
         /// <summary>
         /// Height above ground, in metres, a wingman must have before it will start the
@@ -78,6 +82,7 @@ namespace WingCommand
                 case ManeuverKind.AileronRoll: return 350f;
                 case ManeuverKind.BreakLeft:
                 case ManeuverKind.BreakRight:  return 120f;
+                case ManeuverKind.NotchThreat: return 80f;
                 case ManeuverKind.WingWaggle:  return 60f;
                 default:                       return 400f;
             }

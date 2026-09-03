@@ -79,8 +79,9 @@ namespace WingCommand
         /// vertical bounce.
         /// </summary>
         private const float SlotVerticalLeadSeconds = 0f;
-        private const float ShapeTransitionSeconds = 1.6f;
+        private const float ShapeTransitionSeconds = 1.15f;
         private const float TurnGeometrySeconds = 0.7f;
+        private const float BankSmoothing = 0.22f;
         private RotaryFormation.Mode lastRotaryMode = (RotaryFormation.Mode)(-1);
         private float lastRotaryReport;
 
@@ -130,6 +131,12 @@ namespace WingCommand
 
         /// <summary>Filtered vertical speed of the leader, m/s. The slot's height feed-forward.</summary>
         private float leaderClimbRate;
+
+        /// <summary>Filtered leader bank, degrees. Geometry only; MatchLeaderBank reads live attitude.</summary>
+        private float leaderBank;
+
+        /// <summary>True once this state has written <see cref="WingMember.SlotError"/> at least once.</summary>
+        private bool slotErrorKnown;
 
         /// <summary>Leader speed last sample, for differentiating the above.</summary>
         private float lastLeaderSpeed;
@@ -221,6 +228,7 @@ namespace WingCommand
                 leaderTurnRate = 0f;
                 leaderSpeedRate = 0f;
                 leaderClimbRate = leader.rb != null ? leader.rb.velocity.y : 0f;
+                leaderBank = FixedWingFormation.BankOf(leader);
                 lastLeaderSpeed = leader.speed;
                 return State();
             }
@@ -268,13 +276,17 @@ namespace WingCommand
                 Mathf.Clamp(climb, -MaxCredibleClimbRate, MaxCredibleClimbRate),
                 1f - Mathf.Exp(-dt / WingTuning.SpeedRateSmoothing));
 
+            leaderBank = Mathf.Lerp(
+                leaderBank, FixedWingFormation.BankOf(leader),
+                1f - Mathf.Exp(-dt / BankSmoothing));
+
             return State();
         }
 
         /// <summary>Bundle this tick's filtered leader signals for the flight models.</summary>
         private LeaderState State() =>
             new LeaderState(smoothedLeaderDir, flatLeaderTrack, LeaderTurnRate,
-                            leaderSpeedRate, leaderClimbRate, leaderThrottle,
+                            leaderSpeedRate, leaderClimbRate, leaderBank, leaderThrottle,
                             leaderThrottleKnown);
 
         /// <summary>
@@ -327,6 +339,7 @@ namespace WingCommand
             BeginFlight(pilot);
 
             slotLocalReady = false;
+            slotErrorKnown = false;
             lastRotaryMode = (RotaryFormation.Mode)(-1);
             lastRotaryReport = 0f;
             turnPersist = 0f;
@@ -409,10 +422,10 @@ namespace WingCommand
             if (stride > 1 && (++geometryTick + member.Slot) % stride != 0)
                 return;
 
-            // Behind the stride, deliberately. Unit.Jam broadcasts a ClientRpc, so running
-            // it ahead of the stride made the one behaviour with a per-tick networked side
-            // effect the one behaviour Performance mode could not thin out - on a host
-            // simulating a squadron per player, which is the case the mode exists for.
+            // Behind the stride, deliberately. Firing the jammer pod still ends in a
+            // networked Unit.Jam inside the stock weapon, so running it ahead of the
+            // stride made the one behaviour with a per-tick networked side effect the
+            // one behaviour Performance mode could not thin out.
             if (task == SlotTask.Jam) RunJam();
 
             if (task == SlotTask.Splash)
@@ -438,7 +451,6 @@ namespace WingCommand
             // and could therefore disagree with one another about which way the leader was
             // actually going.
             LeaderState leaderState = TrackLeader(leader, dt);
-            Vector3 track = leaderState.FlatTrack;
             float turnRate = leaderState.TurnRate;
 
             FormationShape shape = WingFormation.Shape;
@@ -462,13 +474,14 @@ namespace WingCommand
 
             EaseSlotLocal(shape, spacing, turnRate, dt);
 
-            GlobalPosition slotPos = SlotPosition(leader, leaderState, track, spacing, dt,
+            GlobalPosition slotPos = SlotPosition(leader, leaderState, spacing, dt,
                                                   out Vector3 offset);
 
             Vector3 toSlot = slotPos - aircraft.GlobalPosition();
             float distance = toSlot.magnitude;
 
             member.SlotError = distance;
+            slotErrorKnown = true;
             CheckAbleToKeepUp(leader, distance);
 
             // Two flight models, chosen by autopilot type, each in its own file. They are
@@ -566,15 +579,17 @@ namespace WingCommand
         /// avoidance and the terrain floor.
         /// </summary>
         private GlobalPosition SlotPosition(Aircraft leader, LeaderState leaderState,
-                                            Vector3 track, float spacing,
-                                            float dt, out Vector3 offset)
+                                            float spacing, float dt, out Vector3 offset)
         {
-            // The frame the slots hang off is the leader's *track*, not its nose. Sideslip and
-            // yaw wobble swing the nose several degrees either side of the flight path, and
-            // rotating the whole formation by that moves every slot laterally in proportion
-            // to how far out it sits — so the outermost wingman travelled several times as
-            // far as the closest one, which is what the sway looked like.
-            offset = FormationSolver.WorldOffset(track, smoothedSlotLocal);
+            // The frame the slots hang off is the leader's *track*, not its nose. Sideslip
+            // and yaw wobble swing the nose several degrees either side of the flight path,
+            // and rotating the whole formation by that is the sway. The track is left in
+            // three dimensions so a climb carries the diamond with it, then rolled about
+            // that track by the leader's bank once the wingman is close enough that a
+            // banked slot is not a destination through the ground.
+            offset = FormationSolver.WorldOffset(
+                leaderState.Track, smoothedSlotLocal, FormationBank(leaderState),
+                velocityPlane: true);
 
             // The slot hangs off the leader's current position plus its formation offset, so
             // it is always behind the leader — the leader is the front of the formation. Only
@@ -624,6 +639,27 @@ namespace WingCommand
             slotPos = ApplyTerrainFloor(slotPos);
 
             return slotPos;
+        }
+
+        /// <summary>
+        /// How much of the leader's bank the slot frame takes. Zero until this wingman has
+        /// a known slot error, zero for rotary (the helo controller cannot fly a rolling
+        /// diamond), and faded out near the ground so the low wing of a banked echelon is
+        /// not a hole in the dirt.
+        /// </summary>
+        private float FormationBank(LeaderState leaderState)
+        {
+            if (WingRegistry.IsRotary(aircraft) || !slotErrorKnown) return 0f;
+
+            float settle = 1f - Mathf.SmoothStep(
+                0f, 1f, Mathf.Clamp01(member.SlotError / Mathf.Max(WingTuning.CaptureDistance, 1f)));
+            float bank = leaderState.Bank * settle;
+
+            const float floor = 150f;
+            if (aircraft.radarAlt < floor)
+                bank *= Mathf.Clamp01(aircraft.radarAlt / floor);
+
+            return bank;
         }
 
         /// <summary>
@@ -818,28 +854,18 @@ namespace WingCommand
         }
 
         /// <summary>
-        /// <summary>
-        /// Hold the jammer on the designated unit while flying the slot.
+        /// Hold the jammer pod on the designated unit while flying the slot.
         ///
-        /// The pulse only ever protects this aircraft: RadarJammer.Fire calls
-        /// Aircraft.AddECMIntensity on itself, nothing about the target. Actually denying
-        /// that unit's own radar needs Unit.Jam - the call the stock JammingPod weapon makes
-        /// against whatever it is aimed at - which raises jamAccumulation on every Radar
-        /// attached to the target until Radar.IsJammed blinds it. That decays continuously
-        /// in Radar.Update, so it rides the same pulse cadence to stay saturated. Host-only:
-        /// Unit.Jam broadcasts a ClientRpc.
+        /// This used to pulse self-protection ECM and then call <c>Unit.Jam</c> with a
+        /// hardcoded amount, which is why every aircraft could jam and none of them needed
+        /// a pod. The stock weapon does the work now: range, power and the networked jam
+        /// tick all live on <c>JammingPod</c>.
         /// </summary>
         private void RunJam()
         {
             Unit jamTarget = member.AssignedTarget;
             if (jamTarget == null) return;
-
-            if (member.Jammer.Pulse(aircraft) && aircraft.IsServer)
-                jamTarget.Jam(new Unit.JamEventArgs
-                {
-                    jammingUnit = aircraft,
-                    jamAmount = WingTuning.JamTargetAmount
-                });
+            WingWeapons.EngageJammer(aircraft, pilot, jamTarget);
         }
 
         /// <summary>

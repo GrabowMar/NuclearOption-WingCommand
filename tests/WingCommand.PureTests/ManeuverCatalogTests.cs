@@ -37,6 +37,7 @@ namespace WingCommand.Tests
             Assert.Equal(0, ManeuverCatalog.BreakDirection(ManeuverKind.Loop));
             Assert.Equal(0, ManeuverCatalog.BreakDirection(ManeuverKind.SplitS));
             Assert.Equal(0, ManeuverCatalog.BreakDirection(ManeuverKind.WingWaggle));
+            Assert.Equal(0, ManeuverCatalog.BreakDirection(ManeuverKind.NotchThreat));
         }
 
         [Fact]
@@ -45,6 +46,7 @@ namespace WingCommand.Tests
             Assert.True(ManeuverCatalog.RotaryCapable(ManeuverKind.BreakLeft));
             Assert.True(ManeuverCatalog.RotaryCapable(ManeuverKind.BreakRight));
             Assert.True(ManeuverCatalog.RotaryCapable(ManeuverKind.WingWaggle));
+            Assert.True(ManeuverCatalog.RotaryCapable(ManeuverKind.NotchThreat));
             Assert.False(ManeuverCatalog.RotaryCapable(ManeuverKind.Loop));
             Assert.False(ManeuverCatalog.RotaryCapable(ManeuverKind.SplitS));
             Assert.False(ManeuverCatalog.RotaryCapable(ManeuverKind.Immelmann));

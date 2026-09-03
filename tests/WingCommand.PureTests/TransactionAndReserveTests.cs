@@ -92,6 +92,47 @@ namespace WingCommand
         }
 
         [Fact]
+        public void Delivery_origin_is_the_nearest_stocked_field_even_when_a_far_one_is_ready()
+        {
+            float[] dist = { 100f, 10_000f };
+            bool[] stocks = { true, true };
+
+            Assert.Equal(0, HangarFieldPolicy.SelectNearestStocked(
+                dist.Length, i => dist[i], i => stocks[i]));
+        }
+
+        [Fact]
+        public void Delivery_origin_skips_fields_that_cannot_produce_the_airframe()
+        {
+            float[] dist = { 10f, 100f };
+            bool[] stocks = { false, true };
+
+            Assert.Equal(1, HangarFieldPolicy.SelectNearestStocked(
+                dist.Length, i => dist[i], i => stocks[i]));
+        }
+
+        [Fact]
+        public void Queued_orders_read_QUE_until_a_hangar_is_claimed()
+        {
+            Assert.Equal("QUE", HangarFieldPolicy.StatusCode(hangarClaimed: false));
+            Assert.Equal("DEPT", HangarFieldPolicy.StatusCode(hangarClaimed: true));
+        }
+
+        [Fact]
+        public void Climb_out_is_for_a_low_far_rejoin_not_nap_of_earth()
+        {
+            Assert.True(ClimbOutPolicy.ShouldClimbOut(
+                radarAlt: 30f, leaderDistance: 8000f, order: WingOrder.Formation,
+                incumbent: false, deliveryPending: false, leaderPresent: true));
+            Assert.False(ClimbOutPolicy.ShouldClimbOut(
+                radarAlt: 30f, leaderDistance: 80f, order: WingOrder.Formation,
+                incumbent: false, deliveryPending: false, leaderPresent: true));
+            Assert.False(ClimbOutPolicy.ShouldAbort(
+                radarAlt: 20f, leaderDistance: 8000f, order: WingOrder.Attack,
+                incumbent: false, deliveryPending: false));
+        }
+
+        [Fact]
         public void Rotary_hover_requires_both_a_hovering_leader_and_an_established_slot()
         {
             Assert.False(RotaryHoverPolicy.ShouldHover(

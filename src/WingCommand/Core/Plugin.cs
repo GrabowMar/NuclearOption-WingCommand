@@ -79,6 +79,7 @@ namespace WingCommand
                 typeof(WingRadialMenuPatches.AwakePatch),
                 typeof(WingMenuActionPatches),
                 typeof(WingTakeoverPatches),
+                typeof(DynamicMapFitPatch),
             };
             for (int i = 0; i < patchTypes.Length; i++)
                 harmony.PatchAll(patchTypes[i]);
@@ -152,6 +153,8 @@ namespace WingCommand
                 "AIPilotCombatModes.EnterState",
                 "CombatAI.ChooseHQTarget",
                 "GameManager.FinishGame",
+                "DynamicMap.Maximize",
+                "DynamicMap.Minimize",
             };
 
             foreach (string want in expected)

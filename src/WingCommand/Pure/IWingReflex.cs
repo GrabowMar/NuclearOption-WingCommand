@@ -105,6 +105,12 @@ namespace WingCommand
         /// <summary>Orbit overhead while the leader is on the runway.</summary>
         public const string DeckHold = "wingcommand.deck-hold";
 
+        /// <summary>
+        /// Wings-level climb before chasing a distant slot. Shared by the climb-out
+        /// Safety reflex and the terrain-abort Survival reflex.
+        /// </summary>
+        public const string ClimbOut = "wingcommand.climb-out";
+
         /// <summary>Fly the slot to close a leash overshoot.</summary>
         public const string Rejoin = "wingcommand.rejoin";
 

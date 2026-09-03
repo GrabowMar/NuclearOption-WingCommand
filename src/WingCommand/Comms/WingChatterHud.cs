@@ -2,6 +2,8 @@ using System.Collections.Generic;
 using TMPro;
 using UnityEngine;
 using UnityEngine.UI;
+using NOAvionics;
+using NOAvionics.Ui;
 
 namespace WingCommand
 {
@@ -194,13 +196,13 @@ namespace WingCommand
 
             Color cyan = Cyan();
             identityLabel = WingUi.Label(card, "", new Rect(0f, -1f, 900f, 22f),
-                cyan, 13.5f, FontStyles.Bold, TextAlignmentOptions.Center);
+                cyan, AvTokens.FontLead, FontStyles.Bold, TextAlignmentOptions.Center);
             identityLabel.characterSpacing = 0.8f;
             contextLabel = WingUi.Label(card, "", new Rect(0f, -21f, 900f, 16f),
-                Cyan(0.62f), 9f, FontStyles.Normal, TextAlignmentOptions.Center);
+                Cyan(0.62f), AvTokens.FontMicro, FontStyles.Normal, TextAlignmentOptions.Center);
             contextLabel.characterSpacing = 1.8f;
             messageLabel = WingUi.Label(card, "", new Rect(0f, -42f, 900f, 30f),
-                MessageColor(), 16.5f, FontStyles.Italic,
+                MessageColor(), AvTokens.FontTitle, FontStyles.Italic,
                 TextAlignmentOptions.Center);
             messageLabel.enableWordWrapping = false;
             messageLabel.overflowMode = TextOverflowModes.Ellipsis;
@@ -208,9 +210,9 @@ namespace WingCommand
             canvasRoot.SetActive(false);
         }
 
-        private static Color Cyan(float alpha = 1f) => new Color(0.25f, 0.88f, 1f, alpha);
+        private static Color Cyan(float alpha = 1f) => AvTheme.RailInfo.WithAlpha(alpha);
 
-        private static Color MessageColor() => new Color(0.92f, 0.98f, 1f, 1f);
+        private static Color MessageColor() => AvTheme.Unity(AvTokens.TextPrimary);
 
         private static bool Same(Transmission a, Transmission b) =>
             a != null && b != null && a.Identity == b.Identity && a.Message == b.Message;

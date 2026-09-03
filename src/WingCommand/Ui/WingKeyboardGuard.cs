@@ -176,7 +176,7 @@ namespace WingCommand
     /// </summary>
     internal sealed class WingHoverNote : MonoBehaviour, IPointerEnterHandler, IPointerExitHandler
     {
-        public string Note;
+        public string Note { get; set; }
 
         public void OnPointerEnter(PointerEventData eventData) =>
             WingButton.PublishExternal(Note, entering: true);

@@ -6,6 +6,8 @@ using NuclearOption.SavedMission;
 using TMPro;
 using UnityEngine;
 using UnityEngine.UI;
+using NOAvionics;
+using NOAvionics.Ui;
 
 namespace WingCommand
 {
@@ -210,15 +212,15 @@ namespace WingCommand
             float width = PanelWidth - Pad * 2f;
 
             WingUi.Label(content, "WING COMMAND  /  AIRFRAME RECOVERY",
-                         new Rect(Pad, -10f, width, 20f), WingUi.Green, 13f,
+                         new Rect(Pad, -10f, width, 20f), WingUi.Green, AvTokens.FontLead,
                          FontStyles.Normal, TextAlignmentOptions.Left);
             WingUi.Rule(content, new Rect(Pad, -HeaderHeight, width, 1f), WingUi.Green);
 
             WingUi.Label(content, "PILOT DOWN", new Rect(Pad, -48f, width, 28f),
-                         WingUi.Alert, 22f, FontStyles.Normal, TextAlignmentOptions.Left);
+                         WingUi.Alert, AvTokens.FontTitle + 4f, FontStyles.Normal, TextAlignmentOptions.Left);
             WingUi.Label(content,
                          "Select a surviving wing aircraft. A fresh player airframe will replace it in position.",
-                         new Rect(Pad, -82f, width, 20f), WingUi.Friendly, 12f,
+                         new Rect(Pad, -82f, width, 20f), WingUi.Friendly, AvTokens.FontBody,
                          FontStyles.Normal, TextAlignmentOptions.Left);
         }
 
@@ -338,7 +340,7 @@ namespace WingCommand
                 Aircraft aircraft = member.Aircraft;
                 card.Key.text = (i + 1).ToString();
                 card.Callsign.text = Callsign(member);
-                card.Type.text = UiTheme.Truncate(TypeName(member), 22);
+                card.Type.text = AvTheme.Truncate(TypeName(member), 22);
 
                 int fuel = Mathf.RoundToInt(member.Fuel * 100f);
                 float range = aircraft != null

@@ -79,7 +79,10 @@ namespace WingCommand.PureTests
         [Fact]
         public void NoBreakOnTheDeckWhereTheBreakIsTheMoreDangerousOption()
         {
-            WingSituation s = new WingSituation(missileWarned: true, radarAlt: 2f);
+            // Close to the leader: a missile break into the dirt is worse than holding
+            // station, and a climb-out would fight nap-of-earth formation.
+            WingSituation s = new WingSituation(
+                missileWarned: true, radarAlt: 2f, leaderDistance: 40f);
             Assert.Equal(WingBehaviours.Task, Behaviour(s));
         }
 
@@ -121,6 +124,71 @@ namespace WingCommand.PureTests
         }
 
         // ---------------------------------------------------------------------- delivery
+
+        [Fact]
+        public void ALowFarFormationWingmanClimbsOutInsteadOfChasingTheSlot()
+        {
+            WingSituation s = new WingSituation(
+                order: WingOrder.Formation,
+                radarAlt: 80f,
+                leaderDistance: 8000f);
+            Assert.Equal("wingcommand.climb-out", ReflexOf(s));
+            Assert.Equal(WingBehaviours.ClimbOut, Behaviour(s));
+        }
+
+        [Fact]
+        public void NapOfEarthStationKeepingIsNotAClimbOut()
+        {
+            WingSituation s = new WingSituation(
+                order: WingOrder.Formation,
+                radarAlt: 30f,
+                leaderDistance: 80f);
+            Assert.Equal(WingBehaviours.Task, Behaviour(s));
+        }
+
+        [Fact]
+        public void ADangerouslyLowRejoinPullsUpBeforeItTurns()
+        {
+            // Survival: a missile break at 20 m is a 100° bank into the ground.
+            WingSituation s = new WingSituation(
+                order: WingOrder.Formation,
+                radarAlt: 20f,
+                leaderDistance: 2000f,
+                missileWarned: true);
+            Assert.Equal("wingcommand.terrain-abort", ReflexOf(s));
+            Assert.Equal(WingBehaviours.ClimbOut, Behaviour(s));
+        }
+
+        [Fact]
+        public void AnAttackRunIsNotPulledUpOffTheTarget()
+        {
+            WingSituation s = new WingSituation(
+                order: WingOrder.Attack,
+                radarAlt: 20f,
+                leaderDistance: 2000f,
+                targetAlive: true);
+            Assert.Equal(WingBehaviours.Task, Behaviour(s));
+        }
+
+        [Fact]
+        public void ClimbOutReleasesOnceHighEnoughOrCloseEnough()
+        {
+            WingSituation high = new WingSituation(
+                order: WingOrder.Formation,
+                radarAlt: ClimbOutPolicy.ReleaseAlt + 10f,
+                leaderDistance: 8000f,
+                secondsInBehaviour: 3f);
+            Assert.Equal(WingBehaviours.Task,
+                         Behaviour(high, active: "wingcommand.climb-out"));
+
+            WingSituation close = new WingSituation(
+                order: WingOrder.Formation,
+                radarAlt: 80f,
+                leaderDistance: ClimbOutPolicy.ReleaseRange - 10f,
+                secondsInBehaviour: 3f);
+            Assert.Equal(WingBehaviours.Task,
+                         Behaviour(close, active: "wingcommand.climb-out"));
+        }
 
         [Fact]
         public void ADeliveryUnderTheStockLaunchAiIsNotFlownByUsAtAll()

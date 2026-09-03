@@ -69,8 +69,10 @@ namespace WingCommand
 
         public static bool CanApply(WingMember member, WingOrder order)
         {
-            if (member == null || !member.IsCommandable) return false;
+            if (member == null || !member.Alive) return false;
             if (WingHost.Current.IsHidden(order)) return false;
+            // A taxiing delivery can accept a standing order; it flies it once airborne.
+            if (member.DeliveryPending && !WingOrderRules.CanQueueWhilePending(order)) return false;
             if (order == WingOrder.DeliverCargo) return member.CanDeliverCargo;
             if (order == WingOrder.LandHere) return member.CanLandInPlace;
             if (order == WingOrder.JamTarget)
@@ -101,7 +103,7 @@ namespace WingCommand
             if (order == WingOrder.LandHere) return "Land is available to rotary aircraft only";
             if (order == WingOrder.JamTarget)
                 return WingBrain.Jamming
-                    ? "No selected wingman has a radar jammer"
+                    ? "No selected wingman has a jammer pod"
                     : "Jamming is off in Performance mode";
             if (order == WingOrder.Maneuver) return "Manoeuvres are off in Performance mode";
             return "No selected wingman can carry out that order";

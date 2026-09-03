@@ -3,6 +3,8 @@ using System.Collections.Generic;
 using TMPro;
 using UnityEngine;
 using UnityEngine.UI;
+using NOAvionics;
+using NOAvionics.Ui;
 
 namespace WingCommand
 {
@@ -28,7 +30,7 @@ namespace WingCommand
         private static Color SectorDividerColor => WingUi.BorderSubtle;
         private static Color OuterBorderColor => WingUi.BorderSubtle;
         private static Color OuterArcColor => WingUi.RailEmerald;
-        private static Color HubBackgroundColor => WingUi.Unity(UiPalette.PanelGround);
+        private static Color HubBackgroundColor => AvTheme.Ground;
         private static Color HubBorderColor => WingUi.BorderSubtle;
         private static Color IconRestingColor => WingUi.Dim;
         private static Color HubSubtitleColor => WingUi.Dim;
@@ -393,7 +395,7 @@ namespace WingCommand
                 {
                     WingRoe nextRoe = RoeRules.Next(wing.Roe);
                     hubSubtitle.text = "NEXT: " + RoeRules.Label(nextRoe);
-                    hubSubtitle.color = UiTheme.Green;
+                    hubSubtitle.color = AvTheme.Accent;
                 }
                 else if (slice.Action == WingAction.AttackMyTarget || slice.Action == WingAction.Engage)
                 {
@@ -404,7 +406,7 @@ namespace WingCommand
                             ? Vector3.Distance(wing.Leader.transform.position, target.transform.position) * 0.001f
                             : 0f;
                         hubSubtitle.text = $"LOCK: {target.unitName.ToUpperInvariant()} · {dist:F1} KM";
-                        hubSubtitle.color = UiTheme.Friendly;
+                        hubSubtitle.color = AvTheme.Friendly;
                     }
                     else
                     {

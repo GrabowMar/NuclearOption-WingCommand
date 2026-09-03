@@ -59,6 +59,7 @@ namespace WingCommand
             JammingOff,
             Maneuvering,
             ManeuverDone,
+            BreakCall,
         }
 
         /// <summary>
@@ -79,6 +80,7 @@ namespace WingCommand
                 case Call.Panic:
                 case Call.DefensiveClear:
                 case Call.NoDropOff:
+                case Call.BreakCall:
                     return true;
                 default:
                     return false;
@@ -207,7 +209,12 @@ namespace WingCommand
         {
             WingChatterHud.Tick();
 
-            if (Plugin.Settings.Radio.Value == ChatterLevel.Off || !WingBrain.RichChatter || wing == null)
+            if (Plugin.Settings.Radio.Value == ChatterLevel.Off || wing == null)
+                return;
+
+            CheckLeaderThreats(wing);
+
+            if (!WingBrain.RichChatter)
                 return;
 
             float now = Time.unscaledTime;
@@ -240,10 +247,48 @@ namespace WingCommand
                 Broadcast(second, exchange.Reply, urgent: false);
         }
 
+        private static float nextThreatCheck;
+
+        private static void CheckLeaderThreats(WingRegistry wing)
+        {
+            if (wing == null || wing.Leader == null) return;
+            float now = Time.timeSinceLevelLoad;
+            if (now < nextThreatCheck) return;
+            nextThreatCheck = now + 1.2f;
+
+            MissileWarning mws = wing.Leader.GetMissileWarningSystem();
+            if (mws == null || !mws.IsWarning()) return;
+            if (!mws.TryGetNearestIncoming(out Missile incoming) || incoming == null || incoming.disabled) return;
+
+            WingMember bestCaller = null;
+            float bestDistSq = float.MaxValue;
+            Vector3 leadPos = wing.Leader.transform.position;
+            IReadOnlyList<WingMember> members = wing.Members;
+
+            for (int i = 0; i < members.Count; i++)
+            {
+                WingMember m = members[i];
+                if (m == null || !m.Alive || m.Aircraft == null || m.IsPanicking) continue;
+                float dSq = (m.Aircraft.transform.position - leadPos).sqrMagnitude;
+                if (dSq < bestDistSq)
+                {
+                    bestDistSq = dSq;
+                    bestCaller = m;
+                }
+            }
+
+            if (bestCaller != null)
+            {
+                Say(bestCaller, Call.BreakCall);
+                nextThreatCheck = now + 6.5f;
+            }
+        }
+
         public static void Reset()
         {
             lastSpoken.Clear();
             nextBanterCheck = 0f;
+            nextThreatCheck = 0f;
             WingChatterHud.Reset();
         }
 

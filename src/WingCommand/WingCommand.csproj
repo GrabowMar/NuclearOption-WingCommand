@@ -74,6 +74,7 @@
          Boscali Summer can coordinate bezels and map gestures without a shared DLL. -->
     <Compile Include="..\..\..\nomodkit\shared\avionics\*.cs" Link="Avionics\%(Filename)%(Extension)"
              Exclude="..\..\..\nomodkit\shared\avionics\*Tests.cs" />
+    <Compile Include="..\..\..\nomodkit\shared\avionics-ui\*.cs" Link="AvionicsUi\%(Filename)%(Extension)" />
   </ItemGroup>
 
   <ItemGroup Label="Unity">

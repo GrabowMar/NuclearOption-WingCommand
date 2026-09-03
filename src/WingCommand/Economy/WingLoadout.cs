@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Reflection;
 using NuclearOption.SavedMission;
 using UnityEngine;
+using NOAvionics.Ui;
 
 namespace WingCommand
 {
@@ -173,7 +174,7 @@ namespace WingCommand
             // names it everywhere.
             if (!choice.IsTemplate) return "STANDARD";
 
-            return UiTheme.Truncate(WingLoadoutTemplates.NameOf(choice.TemplateId), 20)
+            return AvTheme.Truncate(WingLoadoutTemplates.NameOf(choice.TemplateId), 20)
                           .ToUpperInvariant();
         }
 

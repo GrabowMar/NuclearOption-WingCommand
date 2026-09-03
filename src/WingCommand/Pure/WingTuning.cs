@@ -338,19 +338,23 @@ namespace WingCommand
         /// </summary>
         public const float PartialFuelLevel = 0.5f;
 
-        // ------------------------------------------------------------------ jamming
+        // ------------------------------------------------------------------ delivery
 
         /// <summary>
-        /// jamAmount sent to the designated target's own <c>Unit.Jam</c> on every pulse.
-        ///
-        /// The native call is <c>jamAmount / radar.jamTolerance</c> against a tolerance the mod
-        /// can never read, and the result decays continuously in <c>Radar.Update</c>. The stock
-        /// JammingPod weapon re-sends every 0.2 s at a range- and power-scaled amount; this
-        /// pulses faster (alongside the self-protection ECM, on the same cadence) and generous
-        /// enough to clear any tolerance outright, so the target stays saturated rather than
-        /// merely nudged.
+        /// Radar altitude at which a hangar delivery is considered launched and this mod
+        /// may take the controls. Jets used to clear at 25 m, which is still the climbout:
+        /// the live log recorded a 131° bank command at 25 m AGL against a 20 km slot
+        /// error, then pilot-killed at 1-8 m. 150 m is the same floor the bank-match
+        /// already refuses to fight terrain at.
         /// </summary>
-        public const float JamTargetAmount = 2f;
+        public const float FixedWingAirborneAlt = 150f;
+
+        /// <summary>
+        /// Rotary equivalent. 25 m is still inside ground effect for a helicopter that has
+        /// just left the apron; 80 m is enough free air that the stock launch AI has
+        /// already accelerated it into cruise.
+        /// </summary>
+        public const float RotaryAirborneAlt = 80f;
 
         // ------------------------------------------------------------------ economy
 
@@ -402,5 +406,16 @@ namespace WingCommand
         /// reach and off-boresight tolerance and cycles shots about 12% faster than a rookie.
         /// </summary>
         public const float RankEffect = 1f;
+
+        // ------------------------------------------------------------------ map fit
+
+        /// <summary>
+        /// Viewport scale factor applied to the maximized tactical map when FitMapToPanels is enabled.
+        ///
+        /// Kept at 1.0: the map stays at its original dimensions and the MFD bezel buttons are
+        /// moved into rows above and below it by <see cref="DynamicMapFitPatch"/> instead of the
+        /// map being shrunk. A future non-1.0 value would re-introduce the old shrink-to-fit.
+        /// </summary>
+        public const float MapFitScaleFactor = 1f;
     }
 }

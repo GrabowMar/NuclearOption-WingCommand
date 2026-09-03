@@ -68,7 +68,24 @@ namespace WingCommand
                     commandSelected = manager != null && manager.Selection.Contains(member);
                 }
                 WingMarkerBadge.ApplyCommandSelection(unitIcon.iconImage, commandSelected);
-                if (role == WingMarkers.Role.None) return;
+                if (role == WingMarkers.Role.None)
+                {
+                    Unit u = unitIcon.unit;
+                    if (u != null && !u.disabled && u.definition != null)
+                    {
+                        if (GameManager.GetLocalAircraft(out Aircraft local) && local != null &&
+                            local.NetworkHQ != null && u.NetworkHQ != null && u.NetworkHQ != local.NetworkHQ)
+                        {
+                            if (u.definition.typeIdentity.radar > 0.25f || (u is Ship && u.definition.typeIdentity.air > 0.4f))
+                            {
+                                unitIcon.iconImage.color = IsSelected(unitIcon)
+                                    ? new Color(1f, 0.45f, 0.15f, 1f)
+                                    : new Color(0.95f, 0.25f, 0.2f, 0.85f);
+                            }
+                        }
+                    }
+                    return;
+                }
 
                 // Keep the game's own selected-vs-unselected contrast by brightening the
                 // selected state rather than flattening both to one colour.

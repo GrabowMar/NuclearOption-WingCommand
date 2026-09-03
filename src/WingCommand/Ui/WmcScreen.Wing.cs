@@ -6,6 +6,8 @@ using TMPro;
 using UnityEngine;
 using UnityEngine.EventSystems;
 using UnityEngine.UI;
+using NOAvionics.Ui;
+
 namespace WingCommand
 {
     /// <summary>The WMC panel's WING tab: one pilot's record and the aircraft they are flying.</summary>
@@ -278,7 +280,7 @@ namespace WingCommand
             AircraftDefinition definition = DefinitionOf(flying);
 
             string type = definition != null
-                ? UiTheme.Truncate(definition.unitName, 22) + "   SLOT " + flying.Slot
+                ? AvTheme.Truncate(definition.unitName, 22) + "   SLOT " + flying.Slot
                 : "AIRFRAME   SLOT " + flying.Slot;
 
             float fuel = flying.Fuel;
@@ -428,7 +430,7 @@ namespace WingCommand
             {
                 if (i > 0) result += "   ·   ";
                 string count = stations[i] > 1 ? stations[i] + "x " : "";
-                result += count + UiTheme.Truncate(names[i], 20) + "  [" + ammo[i] + "]";
+                result += count + AvTheme.Truncate(names[i], 20) + "  [" + ammo[i] + "]";
             }
             return result;
         }

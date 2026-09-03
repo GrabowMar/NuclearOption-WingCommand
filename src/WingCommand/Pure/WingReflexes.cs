@@ -1,7 +1,7 @@
 namespace WingCommand
 {
     /// <summary>
-    /// The reflexes this mod ships, and the five overrides they replace.
+    /// The reflexes this mod ships, and the overrides they replace.
     ///
     /// Each one used to be a bespoke mechanism scattered across two files — a boolean here,
     /// a HashSet there, a direct <c>SwitchState</c> that bypassed the order system
@@ -19,8 +19,10 @@ namespace WingCommand
             // took a shortcut here the public path would be the untested one.
             WingAi.Register(new DeliveryHold());
             WingAi.Register(new MissileBreak());
+            WingAi.Register(new TerrainAbort());
             WingAi.Register(new LeaderLost());
             WingAi.Register(new DeckHold());
+            WingAi.Register(new ClimbOut());
             WingAi.Register(new LeashRecall());
             WingAi.Register(new StandingTask());
         }
@@ -32,11 +34,11 @@ namespace WingCommand
         /// is not ours to fly yet, and commandeering a parked one to make it dodge would
         /// drive it off the apron.
         ///
-        /// It does <b>not</b> replace the <c>deliveryPending</c> lockout, which is still
-        /// enforced in <c>Apply</c>, <c>Complete</c>, <c>IsCommandable</c> and the dispatcher
-        /// — and should be. This reflex stops the arbiter flying the aircraft; those stop it
-        /// being given orders in the first place, which is a different question with a worse
-        /// failure mode.
+        /// It does <b>not</b> replace the <c>deliveryPending</c> lockout on actually flying
+        /// the aircraft. Standing orders are recorded while pending and flown at
+        /// <c>ActivateWhenAirborne</c>; manoeuvres are refused because they would be spent
+        /// on the apron. <c>IsCommandable</c> remains "alive and not pending" for automation
+        /// that must not commandeer a taxiing airframe (bingo, cargo auto-run, flight lead).
         /// </summary>
         private sealed class DeliveryHold : IWingReflex
         {
@@ -84,6 +86,28 @@ namespace WingCommand
                     ? 0.9f
                     : 0f;
             }
+        }
+
+        /// <summary>
+        /// Pull up before turning. A Survival reflex so a missile break at 25 m AGL —
+        /// which is a 100° bank into the dirt — cannot outrank it.
+        ///
+        /// Only scores when the aircraft is both low and far from the leader. Nap-of-earth
+        /// station keeping (low and already in the slot) is left to the formation law's
+        /// own ground bank cap.
+        /// </summary>
+        private sealed class TerrainAbort : IWingReflex
+        {
+            public string Id => "wingcommand.terrain-abort";
+            public WingReflexBand Band => WingReflexBand.Survival;
+            public string BehaviourId => WingBehaviours.ClimbOut;
+            public float MinimumSeconds => 1.5f;
+            public bool RequiresSmartMode => false;
+
+            public float Score(in WingSituation s, bool incumbent) =>
+                ClimbOutPolicy.ShouldAbort(
+                    s.RadarAlt, s.LeaderDistance, s.Order, incumbent, s.DeliveryPending)
+                    ? 1f : 0f;
         }
 
         /// <summary>
@@ -156,6 +180,29 @@ namespace WingCommand
                 // outlives their landing.
                 return s.Order == WingOrder.Formation ? 1f : 0f;
             }
+        }
+
+        /// <summary>
+        /// Too low, and too far from the slot, to be allowed to intercept.
+        ///
+        /// Safety rather than Survival: a missile at cruise altitude still outranks a
+        /// climb, but a deck-hold orbit or a leash rejoin must not start a 20 km intercept
+        /// at treetop height. Assigned aircraft skip delivery-hold, so this is also what
+        /// stops a 44 m AGL Tarantula being snatched into formation.
+        /// </summary>
+        private sealed class ClimbOut : IWingReflex
+        {
+            public string Id => "wingcommand.climb-out";
+            public WingReflexBand Band => WingReflexBand.Safety;
+            public string BehaviourId => WingBehaviours.ClimbOut;
+            public float MinimumSeconds => 2f;
+            public bool RequiresSmartMode => false;
+
+            public float Score(in WingSituation s, bool incumbent) =>
+                ClimbOutPolicy.ShouldClimbOut(
+                    s.RadarAlt, s.LeaderDistance, s.Order, incumbent,
+                    s.DeliveryPending, s.LeaderPresent)
+                    ? 1f : 0f;
         }
 
         /// <summary>

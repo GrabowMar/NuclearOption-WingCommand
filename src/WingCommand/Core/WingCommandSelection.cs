@@ -80,7 +80,7 @@ namespace WingCommand
             {
                 foreach (WingMember member in wing.Members)
                 {
-                    if (member != null && member.IsCommandable) result.Add(member);
+                    if (member != null && member.Alive) result.Add(member);
                 }
                 return result;
             }
@@ -88,7 +88,7 @@ namespace WingCommand
             Prune(wing);
             foreach (WingMember member in wing.Members)
             {
-                if (member != null && member.IsCommandable && selected.Contains(member))
+                if (member != null && member.Alive && selected.Contains(member))
                     result.Add(member);
             }
             return result;
