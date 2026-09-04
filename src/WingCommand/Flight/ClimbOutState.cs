@@ -32,7 +32,11 @@ namespace WingCommand
 
         public override void EnterState(Pilot pilot)
         {
-            BeginFlight(pilot);
+            BindControls(pilot);
+            HoverAssist.Release(aircraft);
+            RetractGearIfClear();
+            if (pilot != null && pilot.flightInfo != null)
+                pilot.flightInfo.HasTakenOff = true;
             if (Plugin.Settings.VerboseLogging.Value)
                 Plugin.Logger.LogInfo("[Wing] " + aircraft.unitName + " climbing out before joining");
         }
@@ -49,8 +53,7 @@ namespace WingCommand
         {
             if (aircraft == null || aircraft.disabled) return;
 
-            if (aircraft.gearState != LandingGear.GearState.LockedRetracted)
-                aircraft.SetGear(deployed: false);
+            RetractGearIfClear();
 
             Vector3 forward = aircraft.transform.forward;
             forward.y = 0f;
@@ -86,13 +89,25 @@ namespace WingCommand
             aircraft.autopilot.AutoAim(
                 destination: destination,
                 aimVelocity: true,
-                ignoreCollisions: false,
+                ignoreCollisions: true,
                 runwayAlign: false,
                 effort: 2f,
                 bankAllowed: Bank,
                 followTerrain: false,
                 altitudeHold: AutopilotMath.CruiseHold(aircraft, aircraft.radarAlt + climb),
                 targetVelocity: Vector3.zero);
+        }
+
+        /// <summary>
+        /// Gear stays down on the runway. Retracting it here is only safe once the
+        /// airframe has actually left the ground.
+        /// </summary>
+        private void RetractGearIfClear()
+        {
+            if (aircraft == null || aircraft.autopilot == null) return;
+            if (aircraft.radarAlt < WingTuning.ClimbOutGearAlt) return;
+            if (aircraft.gearState == LandingGear.GearState.LockedRetracted) return;
+            aircraft.SetGear(deployed: false);
         }
     }
 }

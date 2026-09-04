@@ -216,6 +216,46 @@ namespace WingCommand
             return false;
         }
 
+        /// <summary>
+        /// Attempts to read the runway assigned to an aircraft currently landing, including
+        /// its start, end, and nominal approach direction.
+        /// </summary>
+        public static bool TryGetLandingRunway(Pilot pilot, out GlobalPosition start, out GlobalPosition end, out Vector3 approachDir)
+        {
+            start = default;
+            end = default;
+            approachDir = default;
+            if (!LandingDestinationAvailable || pilot == null) return false;
+
+            try
+            {
+                if (pilot.currentState == pilot.AILandingState && pilot.AILandingState != null)
+                {
+                    Airbase airbase = landingAirbaseRef(pilot.AILandingState);
+                    if (airbase != null && airbase.runways != null && airbase.runways.Length > 0)
+                    {
+                        Airbase.Runway rw = airbase.GetLandingRunway() ?? airbase.runways[0];
+                        if (rw != null && rw.Start != null && rw.End != null)
+                        {
+                            start = rw.Start.GlobalPosition();
+                            end = rw.End.GlobalPosition();
+                            Vector3 dir = (end - start).normalized;
+                            if (dir.sqrMagnitude < 0.01f) dir = rw.Start.forward;
+                            approachDir = dir;
+                            return true;
+                        }
+                    }
+                }
+            }
+            catch (Exception e)
+            {
+                if (Plugin.Settings.VerboseLogging.Value)
+                    Plugin.Logger.LogWarning("Landing runway read failed: " + e.Message);
+            }
+
+            return false;
+        }
+
         public static GameObject GetHangarSpawnedObject(Hangar hangar)
         {
             if (!HangarSpawnAvailable || hangar == null) return null;

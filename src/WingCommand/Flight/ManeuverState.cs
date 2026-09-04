@@ -80,6 +80,7 @@ namespace WingCommand
             if (ManeuverCatalog.BreakDirection(kind) == 0 &&
                 kind != ManeuverKind.WingWaggle &&
                 kind != ManeuverKind.NotchThreat &&
+                kind != ManeuverKind.MaskTerrain &&
                 !WingBrain.Manoeuvres)
             {
                 Abort("aerobatics are off in Performance mode");
@@ -91,8 +92,10 @@ namespace WingCommand
                 return;
             }
 
-            float floor = Mathf.Max(WingTuning.ManeuverEntryFloor,
-                                    ManeuverCatalog.MinEntryAltitudeAgl(kind));
+            float floor = kind == ManeuverKind.MaskTerrain
+                ? ManeuverCatalog.MinEntryAltitudeAgl(kind)
+                : Mathf.Max(WingTuning.ManeuverEntryFloor,
+                            ManeuverCatalog.MinEntryAltitudeAgl(kind));
             if (aircraft.radarAlt < floor)
             {
                 Abort("not enough height");
@@ -133,7 +136,8 @@ namespace WingCommand
             }
 
             // Hard floor and timeout apply in every phase of every manoeuvre.
-            if (aircraft.radarAlt < WingTuning.ManeuverHardFloor)
+            float hardFloor = kind == ManeuverKind.MaskTerrain ? 20f : WingTuning.ManeuverHardFloor;
+            if (aircraft.radarAlt < hardFloor)
             {
                 RecoverWingsLevel();
                 Finish(unable: true, "reached the hard deck");
@@ -153,6 +157,7 @@ namespace WingCommand
                 case ManeuverKind.BreakRight:  step = FlyBreak();          break;
                 case ManeuverKind.NotchThreat: step = FlyNotch();          break;
                 case ManeuverKind.WingWaggle:  step = FlyWaggle();         break;
+                case ManeuverKind.MaskTerrain: step = FlyMaskTerrain();    break;
                 case ManeuverKind.Loop:        step = FlyLoop();           break;
                 case ManeuverKind.Immelmann:   step = FlyImmelmann();      break;
                 case ManeuverKind.SplitS:      step = FlySplitS();         break;
@@ -396,6 +401,45 @@ namespace WingCommand
             }
 
             return t >= 3.5f ? Step.Done : Step.Running;
+        }
+
+        private Step FlyMaskTerrain()
+        {
+            float elapsed = Time.timeSinceLevelLoad - startedAt;
+            GlobalPosition ahead = aircraft.GlobalPosition() + entryForward * 4000f;
+
+            if (fixedWing)
+            {
+                controlInputs.throttle = 0.95f;
+                aircraft.autopilot.AutoAim(
+                    destination: ahead,
+                    aimVelocity: true,
+                    ignoreCollisions: false,
+                    runwayAlign: false,
+                    effort: 1.5f,
+                    bankAllowed: Mathf.Min(35f, FixedWingFormation.MaxSafeBank),
+                    followTerrain: true,
+                    altitudeHold: 35f,
+                    targetVelocity: Vector3.zero);
+                aircraft.FilterInputs();
+            }
+            else
+            {
+                aircraft.autopilot.AutoAim(
+                    destination: ahead,
+                    altitudeHold: AutopilotMath.RotaryAgl(aircraft, 25f, 20f, 100f),
+                    aimDirection: entryForward,
+                    targetVelocity: Vector3.zero,
+                    followTerrain: true);
+            }
+
+            if (elapsed >= 12f)
+            {
+                RecoverWingsLevel();
+                return Step.Done;
+            }
+
+            return Step.Running;
         }
 
         private Step FlyLoop()

@@ -129,8 +129,9 @@ namespace WingCommand
                 WingSupplyReserve.Reset();
                 WingTakeover.Reset();
                 WingUi.Reset();
-                DynamicMapFitPatch.Reset();
+                MfdRailPatch.Reset();
                 mapLayer?.Reset();
+                FormationFlyState.ResetTerrainCache();
                 Wing.Clear();
                 Selection.Reset();
                 WingInteropPush.Clear();
@@ -189,6 +190,7 @@ namespace WingCommand
             WingMarkers.Tick(Wing);
             WingHud.TickStatusPanel(Wing);
             WmcScreen.Tick(Wing);
+            VanillaPanelSkin.Tick();
             WingComms.Tick(Wing);
             WingShopDelivery.Tick();
             FlushRecruitQueue();

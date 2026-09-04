@@ -43,6 +43,7 @@ namespace WingCommand
         Loop,
         WingWaggle,
         NotchThreat,
+        MaskTerrain,
     }
 
     /// <summary>
@@ -352,23 +353,54 @@ namespace WingCommand
     }
 
     /// <summary>
+    /// How a requisition picks a field among the ones the player has allowed.
+    /// </summary>
+    internal enum HangarLaunchMode
+    {
+        /// <summary>
+        /// Pin to the closest allowed field that can ever produce the airframe, and wait
+        /// there even if every pad is busy. A farther idle field is not a better answer.
+        /// </summary>
+        OnlyNearest,
+
+        /// <summary>
+        /// Do not pin. Take the closest allowed field that can launch right now. If none
+        /// can, wait unpinned until one can, rather than queueing at a busy nearest.
+        /// </summary>
+        Any,
+    }
+
+    /// <summary>
     /// Where a requisitioned airframe should come from, and what the roster calls that wait.
     ///
-    /// A farther field that happens to have an idle hangar this frame is not a better
-    /// answer than the nearest one that can produce the airframe. The order queues there
-    /// until a hangar or helipad frees up, rather than materialising in the circuit or
-    /// defecting across the map.
+    /// Only-nearest: a farther field that happens to have an idle hangar this frame is not
+    /// a better answer than the nearest allowed one that can produce the airframe. The
+    /// order queues there until a hangar or helipad frees up.
+    ///
+    /// Any: occupancy is a reason to look farther, not to wait. The order is unpinned until
+    /// some allowed pad can actually launch.
     /// </summary>
     internal static class HangarFieldPolicy
     {
         public static int SelectNearestStocked(int count, Func<int, float> distanceSq,
-                                               Func<int, bool> stocks)
+                                               Func<int, bool> stocks) =>
+            SelectOrigin(count, HangarLaunchMode.OnlyNearest, distanceSq,
+                         _ => true, stocks, _ => false);
+
+        public static int SelectOrigin(
+            int count,
+            HangarLaunchMode mode,
+            Func<int, float> distanceSq,
+            Func<int, bool> allowed,
+            Func<int, bool> stocks,
+            Func<int, bool> readyNow)
         {
             int best = -1;
             float bestSq = float.MaxValue;
             for (int i = 0; i < count; i++)
             {
-                if (!stocks(i)) continue;
+                if (!allowed(i) || !stocks(i)) continue;
+                if (mode == HangarLaunchMode.Any && !readyNow(i)) continue;
                 float sq = distanceSq(i);
                 if (sq >= bestSq) continue;
                 bestSq = sq;

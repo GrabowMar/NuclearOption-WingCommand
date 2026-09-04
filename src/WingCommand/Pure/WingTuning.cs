@@ -356,6 +356,26 @@ namespace WingCommand
         /// </summary>
         public const float RotaryAirborneAlt = 80f;
 
+        /// <summary>
+        /// Climb-out does not retract gear below this AGL. Stock takeoff still owns the
+        /// aircraft on the runway; yanking the gear there is how a stray state enter
+        /// plants a jet on its belly.
+        /// </summary>
+        public const float ClimbOutGearAlt = 50f;
+
+        /// <summary>
+        /// How often a queued hangar order retries <c>TrySpawnAircraft</c>. Every frame
+        /// was occupancy-blind and could double-charge faction supply on a busy door.
+        /// </summary>
+        public const float HangarRetryInterval = 0.5f;
+
+        /// <summary>
+        /// Backstop for a hangar delivery, matching the recruit queue's wait for taxi
+        /// and takeoff. Sixty seconds was shorter than a carrier door sequence, so the
+        /// purchase rolled back while the hangar still produced an unclaimed airframe.
+        /// </summary>
+        public const float HangarDeliveryTimeout = 420f;
+
         // ------------------------------------------------------------------ economy
 
         /// <summary>
@@ -407,15 +427,5 @@ namespace WingCommand
         /// </summary>
         public const float RankEffect = 1f;
 
-        // ------------------------------------------------------------------ map fit
-
-        /// <summary>
-        /// Viewport scale factor applied to the maximized tactical map when FitMapToPanels is enabled.
-        ///
-        /// Kept at 1.0: the map stays at its original dimensions and the MFD bezel buttons are
-        /// moved into rows above and below it by <see cref="DynamicMapFitPatch"/> instead of the
-        /// map being shrunk. A future non-1.0 value would re-introduce the old shrink-to-fit.
-        /// </summary>
-        public const float MapFitScaleFactor = 1f;
     }
 }

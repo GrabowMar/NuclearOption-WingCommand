@@ -70,6 +70,8 @@ namespace WingCommand
         public ConfigEntry<HighlightMode> Highlight { get; private set; }
         public ConfigEntry<string> WingIconColor { get; private set; }
         public ConfigEntry<string> WingTargetColor { get; private set; }
+        public ConfigEntry<bool> TacticalPauseInSingleplayer { get; private set; }
+        public ConfigEntry<bool> ExternalHitmarkerAudio { get; private set; }
 
         // --- Debug ---
         /// <summary>Carrier for the Debug category's one-line warning banner. Never read.</summary>
@@ -286,8 +288,12 @@ namespace WingCommand
                 "Add a WMC screen to the cockpit MFD bezel, alongside BDF/MAP/HUD.");
             MapCommandEnabled = c.Bind("UI", "MapCommands", true,
                 "Enable tactical wing selection and point tasking on the maximised map.");
+            // Same key and default as the row-layout version this replaced: renaming it
+            // would strand the old key in every existing config file.
             FitMapToPanels = c.Bind("UI", "FitMapToPanels", true,
-                "Keep the maximised tactical map at its original dimensions and move the MFD bezel buttons into rows above and below the map instead of flanking it.");
+                "Lay the maximised tactical map out in three columns - MFD panels on the left, " +
+                "the map enlarged in the centre, and every bezel button in one rail on the right. " +
+                "Off restores the stock centred map with a bezel column down each side.");
 
             // Was three booleans that nobody wanted to set independently - the map and HUD
             // tints are one decision seen from two places, and targets are a step further out.
@@ -300,6 +306,10 @@ namespace WingCommand
                          HexHelp, HexColour));
             WingTargetColor = c.Bind("UI", "WingTargetColor", "#FFB020",
                 Advanced("Hex colour for units your wing is engaging. " + HexHelp, HexColour));
+            TacticalPauseInSingleplayer = c.Bind("UI", "TacticalPauseInSingleplayer", false,
+                "Slow down game time to 0.25x while the tactical command screen is active in singleplayer for tactical planning.");
+            ExternalHitmarkerAudio = c.Bind("UI", "ExternalHitmarkerAudio", true,
+                "Play hitmarker audio confirmation when landing hits in 3rd-person external/orbit camera views.");
         }
 
         private void BindDebug(ConfigFile c)

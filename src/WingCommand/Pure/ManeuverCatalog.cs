@@ -19,6 +19,7 @@ namespace WingCommand
             ManeuverKind.Loop,
             ManeuverKind.WingWaggle,
             ManeuverKind.NotchThreat,
+            ManeuverKind.MaskTerrain,
         };
 
         public static string Label(ManeuverKind kind)
@@ -34,6 +35,7 @@ namespace WingCommand
                 case ManeuverKind.Loop:        return "Loop";
                 case ManeuverKind.WingWaggle:  return "Wing Waggle";
                 case ManeuverKind.NotchThreat: return "Notch Threat";
+                case ManeuverKind.MaskTerrain: return "Terrain Mask";
                 default:                       return kind.ToString();
             }
         }
@@ -51,6 +53,7 @@ namespace WingCommand
                 case ManeuverKind.Loop:        return "LOOP";
                 case ManeuverKind.WingWaggle:  return "WAGGLE";
                 case ManeuverKind.NotchThreat: return "NOTCH";
+                case ManeuverKind.MaskTerrain: return "MASK";
                 default:                       return kind.ToString().ToUpperInvariant();
             }
         }
@@ -64,7 +67,8 @@ namespace WingCommand
             kind == ManeuverKind.BreakLeft ||
             kind == ManeuverKind.BreakRight ||
             kind == ManeuverKind.WingWaggle ||
-            kind == ManeuverKind.NotchThreat;
+            kind == ManeuverKind.NotchThreat ||
+            kind == ManeuverKind.MaskTerrain;
 
         /// <summary>
         /// Height above ground, in metres, a wingman must have before it will start the
@@ -84,6 +88,7 @@ namespace WingCommand
                 case ManeuverKind.BreakRight:  return 120f;
                 case ManeuverKind.NotchThreat: return 80f;
                 case ManeuverKind.WingWaggle:  return 60f;
+                case ManeuverKind.MaskTerrain: return 40f;
                 default:                       return 400f;
             }
         }

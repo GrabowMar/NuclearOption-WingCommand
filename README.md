@@ -243,8 +243,12 @@ Built on Nuclear Option's existing economy, not a separate one:
 - Price is paid from your allocation; declared aircraft consume faction mission supply. Rank,
   mission restrictions and fixed-wing/rotary compatibility are respected.
 - Requisitioned aircraft launch from a friendly airbase and fly out under their own power —
-  from a stocking hangar via the game's own airbase spawn (door, taxi, takeoff), otherwise
-  delivered into the circuit overhead. They show as departing immediately, commandable once airborne.
+  from a stocking hangar via the game's own airbase spawn (door, taxi, takeoff). Supply's
+  **LAUNCH FROM** list (5 fields per page, checkboxes) chooses which bases may spawn.
+  **ONLY NEAREST** queues at the closest checked field that stocks the airframe.
+  **ANY** launches immediately from the closest checked field with a free hangar, and waits
+  unpinned if every allowed pad is busy. They show as departing immediately, commandable
+  once the stock takeoff has finished.
 - **Wing Reserve** holds up to three specific airframes across all types. `HOLD` pulls one
   faction airframe out of AI-accessible stock; `RELEASE` returns it. It doesn't create supply.
 - **Releasing a wingman sends it home** (`REL` on the Wing roster) — it flies the stock

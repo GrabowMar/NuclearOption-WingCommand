@@ -99,5 +99,31 @@ namespace WingCommand
                 return map != null && map.selectedIcons.Contains(icon);
             }
         }
+
+        /// <summary>
+        /// Keeps airbase icons visible on the tactical map when doing tactical planning
+        /// or when any wingman is actively landing or returning to base.
+        /// </summary>
+        [HarmonyPatch(typeof(DynamicMap), "ShouldShowAirbase")]
+        internal static class ShowAirbasePatch
+        {
+            [HarmonyPostfix]
+            internal static void Postfix(ref bool __result)
+            {
+                if (__result) return;
+
+                if (WmcScreen.TacticalCommandModeActive)
+                {
+                    __result = true;
+                    return;
+                }
+
+                WingCommandManager manager = WingCommandManager.Instance;
+                if (manager != null && manager.Wing != null && manager.Wing.HasAnyLandingOrder())
+                {
+                    __result = true;
+                }
+            }
+        }
     }
 }

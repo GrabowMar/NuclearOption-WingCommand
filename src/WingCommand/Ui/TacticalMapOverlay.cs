@@ -48,6 +48,13 @@ namespace WingCommand
             public bool Node;
         }
 
+        private struct RunwayInfo
+        {
+            public GlobalPosition Start;
+            public GlobalPosition End;
+            public Vector3 ApproachDir;
+        }
+
         private static readonly List<Group> groups = new List<Group>();
 
         /// <summary>
@@ -59,10 +66,30 @@ namespace WingCommand
         /// </summary>
         private static readonly Dictionary<WingMember, GlobalPosition> rtbDestinations =
             new Dictionary<WingMember, GlobalPosition>();
+        private static readonly Dictionary<WingMember, RunwayInfo> rtbRunways =
+            new Dictionary<WingMember, RunwayInfo>();
+        private struct LineState
+        {
+            public Vector3 From;
+            public Vector3 To;
+            public float Thickness;
+        }
+
+        private struct NodeState
+        {
+            public Vector3 Position;
+            public float Size;
+        }
+
         private static readonly List<Marker> markers = new List<Marker>();
         private static readonly List<Leg> legs = new List<Leg>();
         private static readonly List<Image> lines = new List<Image>();
         private static readonly List<Image> nodes = new List<Image>();
+        private static readonly List<LineState> lineStates = new List<LineState>();
+        private static readonly List<NodeState> nodeStates = new List<NodeState>();
+        private static float lastInverseScale = -1f;
+        private static float lastDisplayFactor = -1f;
+        private static bool markersDirty = true;
         private static Sprite nodeSprite;
         private static float nextRefresh;
 
@@ -109,19 +136,30 @@ namespace WingCommand
             markers.Clear();
             lines.Clear();
             nodes.Clear();
+            lineStates.Clear();
+            nodeStates.Clear();
             groups.Clear();
             legs.Clear();
             rtbDestinations.Clear();
+            rtbRunways.Clear();
+            lastInverseScale = -1f;
+            lastDisplayFactor = -1f;
+            markersDirty = true;
             nextRefresh = 0f;
         }
 
         /// <summary>Request an immediate collection after a directive changes.</summary>
-        public static void Invalidate() => nextRefresh = 0f;
+        public static void Invalidate()
+        {
+            markersDirty = true;
+            nextRefresh = 0f;
+        }
 
         private static void Collect(WingRegistry wing)
         {
             groups.Clear();
             rtbDestinations.Clear();
+            rtbRunways.Clear();
             if (wing == null) return;
 
             foreach (WingMember member in wing.Members)
@@ -138,6 +176,17 @@ namespace WingCommand
                     {
                         rtbDestinations[member] = home;
                         Add(WingOrder.ReturnToBase, home);
+                    }
+
+                    if (GameAccess.TryGetLandingRunway(member.Pilot, out GlobalPosition rwStart,
+                                                       out GlobalPosition rwEnd, out Vector3 approachDir))
+                    {
+                        rtbRunways[member] = new RunwayInfo
+                        {
+                            Start = rwStart,
+                            End = rwEnd,
+                            ApproachDir = approachDir,
+                        };
                     }
                     continue;
                 }
@@ -216,6 +265,29 @@ namespace WingCommand
                         To = home,
                         Color = color.WithAlpha(color.a * QueuedAlpha),
                     });
+
+                    // Draw runway centerline and final approach alignment vector if available
+                    if (rtbRunways.TryGetValue(member, out RunwayInfo rw))
+                    {
+                        // Runway strip
+                        legs.Add(new Leg
+                        {
+                            From = rw.Start,
+                            To = rw.End,
+                            Color = new Color(0.3f, 0.95f, 1f, 0.85f),
+                            Node = true,
+                        });
+
+                        // Extended final approach vector (3.5 km out from touchdown threshold)
+                        GlobalPosition approachExt = rw.Start - rw.ApproachDir * 3500f;
+                        legs.Add(new Leg
+                        {
+                            From = approachExt,
+                            To = rw.Start,
+                            Color = new Color(0.2f, 0.8f, 1f, 0.45f),
+                            Node = true,
+                        });
+                    }
                     continue;
                 }
 
@@ -243,6 +315,7 @@ namespace WingCommand
 
         private static void Sync(DynamicMap map)
         {
+            markersDirty = true;
             while (markers.Count < groups.Count) markers.Add(Create(map));
             for (int i = 0; i < markers.Count; i++)
             {
@@ -392,16 +465,28 @@ namespace WingCommand
             float inverseScale = 1f / Mathf.Max(0.01f, map.mapImage.transform.localScale.x);
             float displayFactor = map.mapDisplayFactor;
 
-            for (int i = 0; i < groups.Count && i < markers.Count; i++)
+            bool zoomChanged = !Mathf.Approximately(inverseScale, lastInverseScale) ||
+                               !Mathf.Approximately(displayFactor, lastDisplayFactor);
+
+            if (markersDirty || zoomChanged)
             {
-                markers[i].Rect.localPosition = ToMap(groups[i].Point, displayFactor);
-                markers[i].Rect.localScale = Vector3.one * inverseScale;
+                for (int i = 0; i < groups.Count && i < markers.Count; i++)
+                {
+                    markers[i].Rect.localPosition = ToMap(groups[i].Point, displayFactor);
+                    markers[i].Rect.localScale = Vector3.one * inverseScale;
+                }
+                markersDirty = false;
+                lastInverseScale = inverseScale;
+                lastDisplayFactor = displayFactor;
             }
 
             // A leg's length is a distance on the map and scales with it; its width is a
             // screen quantity and must not. Only the thickness takes the inverse scale, so
             // the line stays a hairline at every zoom instead of thickening into a slab.
             int node = 0;
+            float lineThickness = LineThickness * inverseScale;
+            float nodeSize = NodeRadius * 2f * inverseScale;
+
             for (int i = 0; i < legs.Count && i < lines.Count; i++)
             {
                 Leg leg = legs[i];
@@ -409,19 +494,41 @@ namespace WingCommand
                 Vector3 to = ToMap(leg.To, displayFactor);
                 Vector3 delta = to - from;
 
-                RectTransform rect = lines[i].rectTransform;
-                rect.localPosition = from;
-                rect.localRotation = Quaternion.Euler(
-                    0f, 0f, Mathf.Atan2(delta.y, delta.x) * Mathf.Rad2Deg);
-                rect.sizeDelta = new Vector2(delta.magnitude, LineThickness * inverseScale);
-                lines[i].color = leg.Color;
+                while (lineStates.Count <= i) lineStates.Add(new LineState { Thickness = -1f });
+                LineState prev = lineStates[i];
+
+                if (prev.From != from || prev.To != to || !Mathf.Approximately(prev.Thickness, lineThickness))
+                {
+                    lineStates[i] = new LineState { From = from, To = to, Thickness = lineThickness };
+                    RectTransform rect = lines[i].rectTransform;
+                    rect.localPosition = from;
+                    rect.localRotation = Quaternion.Euler(
+                        0f, 0f, Mathf.Atan2(delta.y, delta.x) * Mathf.Rad2Deg);
+                    rect.sizeDelta = new Vector2(delta.magnitude, lineThickness);
+                }
+
+                if (lines[i].color != leg.Color)
+                {
+                    lines[i].color = leg.Color;
+                }
 
                 if (!leg.Node || node >= nodes.Count) continue;
 
-                RectTransform nodeRect = nodes[node].rectTransform;
-                nodeRect.localPosition = to;
-                nodeRect.sizeDelta = Vector2.one * (NodeRadius * 2f * inverseScale);
-                nodes[node].color = leg.Color;
+                while (nodeStates.Count <= node) nodeStates.Add(new NodeState { Size = -1f });
+                NodeState prevNode = nodeStates[node];
+
+                if (prevNode.Position != to || !Mathf.Approximately(prevNode.Size, nodeSize))
+                {
+                    nodeStates[node] = new NodeState { Position = to, Size = nodeSize };
+                    RectTransform nodeRect = nodes[node].rectTransform;
+                    nodeRect.localPosition = to;
+                    nodeRect.sizeDelta = Vector2.one * nodeSize;
+                }
+
+                if (nodes[node].color != leg.Color)
+                {
+                    nodes[node].color = leg.Color;
+                }
                 node++;
             }
         }

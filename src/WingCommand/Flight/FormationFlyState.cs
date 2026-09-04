@@ -103,6 +103,16 @@ namespace WingCommand
         private float nextTerrainProbe;
         private const float TerrainProbeInterval = 0.3f;
 
+        /// <summary>
+        /// Quantized spatial terrain height cache to eliminate redundant physics raycasts
+        /// when wingmen traverse nearby or identical terrain cells.
+        /// </summary>
+        private static readonly System.Collections.Generic.Dictionary<int, float> terrainFloorCache =
+            new System.Collections.Generic.Dictionary<int, float>(256);
+        private const int MaxTerrainCacheEntries = 1024;
+
+        public static void ResetTerrainCache() => terrainFloorCache.Clear();
+
         /// <summary>Physics-tick counter for the fidelity geometry stride.</summary>
         private int geometryTick;
 
@@ -734,11 +744,26 @@ namespace WingCommand
                 nextTerrainProbe = Time.timeSinceLevelLoad +
                                    WingBrain.Interval(TerrainProbeInterval);
 
-                float ground = Datum.LocalSeaY;
-                if (Physics.Raycast(new Vector3(local.x, Datum.LocalSeaY + 3000f, local.z),
-                                    Vector3.down, out RaycastHit hit, 6000f,
-                                    PhysicsLayers.StaticsMask))
-                    ground = Mathf.Max(ground, hit.point.y);
+                int cellX = Mathf.RoundToInt(local.x * 0.05f);
+                int cellZ = Mathf.RoundToInt(local.z * 0.05f);
+                int key = (cellX * 73856093) ^ (cellZ * 19349663);
+
+                if (!terrainFloorCache.TryGetValue(key, out float ground))
+                {
+                    ground = Datum.LocalSeaY;
+                    if (Physics.Raycast(new Vector3(local.x, Datum.LocalSeaY + 3000f, local.z),
+                                        Vector3.down, out RaycastHit hit, 6000f,
+                                        PhysicsLayers.StaticsMask))
+                    {
+                        ground = Mathf.Max(ground, hit.point.y);
+                    }
+
+                    if (terrainFloorCache.Count >= MaxTerrainCacheEntries)
+                    {
+                        terrainFloorCache.Clear();
+                    }
+                    terrainFloorCache[key] = ground;
+                }
 
                 terrainFloorY = ground + clearance;
             }

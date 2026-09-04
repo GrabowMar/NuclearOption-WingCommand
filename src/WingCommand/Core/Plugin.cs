@@ -5,6 +5,7 @@ using System;
 using System.Collections.Generic;
 using System.Reflection;
 using HarmonyLib;
+using NOAvionics.Ui;
 using UnityEngine;
 
 // Unity invokes Awake and OnDestroy by reflection.
@@ -35,6 +36,12 @@ namespace WingCommand
             Instance = this;
             Logger = base.Logger;
             Settings = new WingConfig(Config);
+
+            // The panels' look lives in a stylesheet, not in literals. The embedded copy is
+            // always valid; pointing the host at the config directory is what lets a player
+            // drop their own avionics.avss beside it and retune every panel in both mods
+            // without a rebuild. Both plugins configure the same path on purpose.
+            AvStyleHost.Configure(BepInEx.Paths.ConfigPath, Logger.LogInfo, Logger.LogWarning);
 
             // The retired keys these warnings described are no longer bound at all, so an
             // old configuration file simply carries dead lines that BepInEx drops on its
@@ -74,12 +81,16 @@ namespace WingCommand
                 typeof(WingMapWaypointPatch),
                 typeof(WingMapSelectionPatch),
                 typeof(WingMapTint.MapIconColorPatch),
+                typeof(WingMapTint.ShowAirbasePatch),
                 typeof(WingHudTint.UpdateColorPatch),
+                typeof(CombatHUDHitAudioPatch),
                 typeof(WingRadialMenuPatches),
                 typeof(WingRadialMenuPatches.AwakePatch),
                 typeof(WingMenuActionPatches),
                 typeof(WingTakeoverPatches),
-                typeof(DynamicMapFitPatch),
+                typeof(MfdRailPatch),
+                typeof(MfdSinglePanelPatch),
+                typeof(MfdScreenChromePatch),
             };
             for (int i = 0; i < patchTypes.Length; i++)
                 harmony.PatchAll(patchTypes[i]);

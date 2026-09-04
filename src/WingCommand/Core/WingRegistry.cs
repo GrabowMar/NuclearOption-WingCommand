@@ -208,6 +208,18 @@ namespace WingCommand
         /// </summary>
         public bool LeaderOnDeck { get; private set; }
 
+        /// <summary>True if any active wingman has an RTB or Land order.</summary>
+        public bool HasAnyLandingOrder()
+        {
+            for (int i = 0; i < members.Count; i++)
+            {
+                WingMember m = members[i];
+                if (m.Alive && (m.Order == WingOrder.ReturnToBase || m.Order == WingOrder.LandHere))
+                    return true;
+            }
+            return false;
+        }
+
         /// <summary>
         /// Whether the leader is on the ground rather than merely low.
         ///

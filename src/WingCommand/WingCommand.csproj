@@ -75,6 +75,13 @@
     <Compile Include="..\..\..\nomodkit\shared\avionics\*.cs" Link="Avionics\%(Filename)%(Extension)"
              Exclude="..\..\..\nomodkit\shared\avionics\*Tests.cs" />
     <Compile Include="..\..\..\nomodkit\shared\avionics-ui\*.cs" Link="AvionicsUi\%(Filename)%(Extension)" />
+
+    <!-- The panels' look, as data. Embedded so there is always a valid default, and
+         overridable at BepInEx/config/NOAvionics/avionics.avss so it can be retuned
+         without a rebuild. Both plugins embed the same file under the same name. -->
+    <EmbeddedResource Include="..\..\..\nomodkit\shared\avionics-ui\avionics.avss">
+      <LogicalName>NOAvionics.avionics.avss</LogicalName>
+    </EmbeddedResource>
   </ItemGroup>
 
   <ItemGroup Label="Unity">

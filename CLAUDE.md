@@ -53,6 +53,16 @@ that no longer exists, and a patch class missing its class-level `[HarmonyPatch]
 nomod asm verify --mod wingcommand
 ```
 
+For iteration once the game is up, hot-reload instead of deploy+restart — ScriptEngine
+picks up the rebuilt DLL from `BepInEx/scripts` in about a second, no keypress needed.
+It only works while WingCommand is *not* also loaded from `plugins/`; see the
+`nuclear-option-modkit` skill's "Faster iteration" for the one-time disable step and
+the cleanup before a normal play session:
+
+```bash
+nomod build --mod wingcommand && nomod hot-reload --mod wingcommand
+```
+
 Deploy, then package a release:
 
 ```bash

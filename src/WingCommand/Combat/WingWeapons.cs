@@ -645,10 +645,11 @@ namespace WingCommand
                 Vector3 relativeVelocity = missile.rb != null && protectee.rb != null
                     ? missile.rb.velocity - protectee.rb.velocity
                     : Vector3.zero;
-                float closing = toMissile.sqrMagnitude > 1f
-                    ? Mathf.Max(Vector3.Dot(-toMissile.normalized, relativeVelocity), 1f)
+                float dist = toMissile.magnitude;
+                float closing = dist > 1f
+                    ? Mathf.Max(Vector3.Dot(-toMissile / dist, relativeVelocity), 1f)
                     : 1f;
-                float impactTime = toMissile.magnitude / closing;
+                float impactTime = dist / closing;
 
                 if (impactTime >= bestTime) continue;
                 bestTime = impactTime;

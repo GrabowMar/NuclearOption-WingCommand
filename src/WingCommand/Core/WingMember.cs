@@ -123,13 +123,33 @@ namespace WingCommand
         ///
         /// Jets used to clear at 25 m as well. That is still the climbout: the live log
         /// recorded a 131° bank command at 25 m AGL with a 20 km slot error, then
-        /// pilot-killed at 1-8 m. The stock launch AI has to finish the takeoff first.
+        /// pilot-killed at 1-8 m. Altitude alone is not enough — stock taxi/takeoff can
+        /// still own the aircraft at 150 m AGL — so launch states must have finished too.
         /// </summary>
         public bool IsAirborne => Aircraft != null &&
                                   (IsSurface && Alive ||
                                    Aircraft.radarAlt >= (WingRegistry.IsRotary(Aircraft)
                                        ? WingTuning.RotaryAirborneAlt
-                                       : WingTuning.FixedWingAirborneAlt));
+                                       : WingTuning.FixedWingAirborneAlt) &&
+                                   !StillLaunching);
+
+        /// <summary>
+        /// True while the stock airbase AI is still taxiing, taking off, or parked.
+        /// Commandeering any of those to chase a formation slot is the crash-on-liftoff.
+        /// </summary>
+        private bool StillLaunching
+        {
+            get
+            {
+                if (Pilot == null) return false;
+                PilotBaseState state = Pilot.currentState;
+                if (state == null) return false;
+                return state == Pilot.AITaxiState ||
+                       state == Pilot.AITakeoffState ||
+                       state == Pilot.AIHeloTakeoffState ||
+                       state is PilotParkedState;
+            }
+        }
 
         /// <summary>True when player commands may be applied to this member.</summary>
         public bool IsCommandable => Alive && !deliveryPending;

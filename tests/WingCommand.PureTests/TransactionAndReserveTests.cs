@@ -112,6 +112,74 @@ namespace WingCommand
         }
 
         [Fact]
+        public void Only_nearest_ignores_an_unchecked_closer_field()
+        {
+            float[] dist = { 10f, 100f };
+            bool[] allowed = { false, true };
+            bool[] stocks = { true, true };
+            bool[] ready = { true, false };
+
+            Assert.Equal(1, HangarFieldPolicy.SelectOrigin(
+                dist.Length, HangarLaunchMode.OnlyNearest,
+                i => dist[i], i => allowed[i], i => stocks[i], i => ready[i]));
+        }
+
+        [Fact]
+        public void Only_nearest_pins_a_busy_closer_field_instead_of_a_ready_far_one()
+        {
+            float[] dist = { 100f, 10_000f };
+            bool[] allowed = { true, true };
+            bool[] stocks = { true, true };
+            bool[] ready = { false, true };
+
+            Assert.Equal(0, HangarFieldPolicy.SelectOrigin(
+                dist.Length, HangarLaunchMode.OnlyNearest,
+                i => dist[i], i => allowed[i], i => stocks[i], i => ready[i]));
+        }
+
+        [Fact]
+        public void Any_picks_the_closest_ready_allowed_field_not_a_closer_busy_one()
+        {
+            float[] dist = { 100f, 500f, 10_000f };
+            bool[] allowed = { true, true, true };
+            bool[] stocks = { true, true, true };
+            bool[] ready = { false, true, true };
+
+            Assert.Equal(1, HangarFieldPolicy.SelectOrigin(
+                dist.Length, HangarLaunchMode.Any,
+                i => dist[i], i => allowed[i], i => stocks[i], i => ready[i]));
+        }
+
+        [Fact]
+        public void Any_returns_no_origin_when_nothing_is_ready()
+        {
+            float[] dist = { 100f, 200f };
+            bool[] allowed = { true, true };
+            bool[] stocks = { true, true };
+            bool[] ready = { false, false };
+
+            Assert.Equal(-1, HangarFieldPolicy.SelectOrigin(
+                dist.Length, HangarLaunchMode.Any,
+                i => dist[i], i => allowed[i], i => stocks[i], i => ready[i]));
+        }
+
+        [Fact]
+        public void Empty_allowed_set_has_no_origin()
+        {
+            float[] dist = { 10f, 20f };
+            bool[] allowed = { false, false };
+            bool[] stocks = { true, true };
+            bool[] ready = { true, true };
+
+            Assert.Equal(-1, HangarFieldPolicy.SelectOrigin(
+                dist.Length, HangarLaunchMode.OnlyNearest,
+                i => dist[i], i => allowed[i], i => stocks[i], i => ready[i]));
+            Assert.Equal(-1, HangarFieldPolicy.SelectOrigin(
+                dist.Length, HangarLaunchMode.Any,
+                i => dist[i], i => allowed[i], i => stocks[i], i => ready[i]));
+        }
+
+        [Fact]
         public void Queued_orders_read_QUE_until_a_hangar_is_claimed()
         {
             Assert.Equal("QUE", HangarFieldPolicy.StatusCode(hangarClaimed: false));
