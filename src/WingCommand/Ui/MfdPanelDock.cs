@@ -17,9 +17,11 @@ namespace WingCommand
     /// screens into a container the mod positions is the only placement vanilla will not
     /// undo.</para>
     ///
-    /// <para>The dock's pivot is its top-left corner and each docked screen's pivot is set to
-    /// match, so <c>localPosition = 0</c> lands a panel's top-left exactly on the column's
-    /// top-left however tall that panel happens to be.</para>
+    /// <para>Each slot's origin is raised from the bottom by the rendered display panel's
+    /// height, and the screen keeps a top-left pivot. This matters because some stock
+    /// screen roots report zero height even though their display panel is 596px tall.
+    /// Vanilla can still write <c>localPosition = 0</c>, while every visible surface ends
+    /// at the foot of the column and leaves its true remaining space above.</para>
     /// </summary>
     internal static class MfdPanelDock
     {
@@ -82,20 +84,25 @@ namespace WingCommand
             // in the middle of the column.
             dock.anchorMin = dock.anchorMax = new Vector2(0.5f, 0.5f);
             dock.pivot = new Vector2(0f, 1f);
-            dock.sizeDelta = new Vector2(columns.Panel.width, columns.Panel.height);
+            // The map viewport stops above its footer, but the left instrument column
+            // should share the footer's lower baseline. Keep the same top and extend the
+            // dock through the reserved bottom band to the canvas margin.
+            float footerBottom = -columns.Canvas.y * 0.5f + MfdLayout.Margin;
+            float dockHeight = Mathf.Max(columns.Panel.height, columns.Panel.y - footerBottom);
+            dock.sizeDelta = new Vector2(columns.Panel.width, dockHeight);
             dock.anchoredPosition = MfdLayout.TopLeftOf(columns.Panel);
             dock.localScale = Vector3.one;
 
-            // A quiet backing so the gaps around a panel are column, not terrain. Each stock
-            // panel draws its own ground on its slot (VanillaPanelSkin); the mod screens
-            // bring their own.
+            // Do not paint a full-height dock backing. It was the source of the isolated
+            // blue-green tint below a 596px MFD: the dock is deliberately taller so it can
+            // coexist with the game's bottom spawn strip. MfdMapDeck now supplies one
+            // coherent passive surface behind the entire maximised-map UI instead.
             var bg = dock.GetComponent<Image>();
-            if (bg == null) bg = dock.gameObject.AddComponent<Image>();
-            bg.sprite = AvSprites.Panel;
-            bg.type = Image.Type.Sliced;
-            bg.color = AvTheme.Unity(AvTokens.Ground.WithAlpha(0.82f));
-            bg.raycastTarget = true;
-            bg.enabled = true;
+            if (bg != null)
+            {
+                bg.raycastTarget = false;
+                bg.enabled = false;
+            }
 
             // Last, not first: the dock is a sibling of the map on the same canvas, and
             // sibling order is draw order. First would file every panel behind the map.
@@ -113,7 +120,8 @@ namespace WingCommand
         /// parent's pivot is the alignment. Encoding it in a slot means a screen's own
         /// pivot never has to be touched.</para>
         ///
-        /// Idempotent: a screen already in a slot is left alone.
+        /// Idempotent: a screen already in a slot is left in place, but an adapter that
+        /// deferred while the native controller initialized gets another chance to attach.
         /// </summary>
         public static void Dock(MFDScreen screen)
         {
@@ -121,9 +129,12 @@ namespace WingCommand
 
             var rt = screen.transform as RectTransform;
             if (rt == null) return;
-            if (rt.parent != null && rt.parent.parent == dock) return;
-
-            bool mine = IsModPanel(rt);
+            if (IsDocked(screen))
+            {
+                if (IsStockScreen(screen) && !VanillaMfdRebuild.IsHosted(screen))
+                    VanillaMfdRebuild.TryApply(screen);
+                return;
+            }
 
             docked.Add(new Docked
             {
@@ -137,31 +148,41 @@ namespace WingCommand
                 LocalScale = rt.localScale,
             });
 
-            RectTransform slot = MakeSlot(screen.name, mine);
+            RectTransform slot = MakeSlot(screen.name);
             rt.SetParent(slot, worldPositionStays: false);
 
-            rt.anchorMin = rt.anchorMax = rt.pivot = new Vector2(0f, 1f);
+            rt.anchorMin = rt.anchorMax = Vector2.zero;
+            rt.pivot = new Vector2(0f, 1f);
             rt.anchoredPosition = Vector2.zero;
             rt.localScale = Vector3.one;
 
-            // A stock game panel has no ground of its own; draw one on its slot, behind it.
-            if (IsStockScreen(screen)) VanillaPanelSkin.Apply(screen, slot);
+            // Own the presentation surface outright. The native controller remains alive
+            // behind it as the data/action authority, without leaving its prefab layout in
+            // the rendering or input path.
+            if (IsStockScreen(screen)) VanillaMfdRebuild.TryApply(screen);
+
+            // CloseScreen may have run while the screen still belonged to the vanilla
+            // bezel, when the chrome patch intentionally does nothing. Reconcile the root
+            // graphics now that the screen is docked so inactive backplates cannot follow
+            // it into the visible column.
+            MfdScreenChromePatch.SyncDockedState(screen);
+            AlignToBottom(screen, slot);
         }
 
         public const float MaxColumnWidth = 520f;
 
         /// <summary>
-        /// A slot child of the dock that carries top-left pinning for deterministic alignment.
+        /// A slot child of the dock that carries bottom-left pinning for deterministic alignment.
         /// </summary>
-        private static RectTransform MakeSlot(string screenName, bool topLeft)
+        private static RectTransform MakeSlot(string screenName)
         {
             var go = new GameObject("Slot_" + screenName, typeof(RectTransform));
             var slot = go.GetComponent<RectTransform>();
             slot.SetParent(dock, worldPositionStays: false);
 
-            slot.anchorMin = new Vector2(0f, 1f);
-            slot.anchorMax = new Vector2(0f, 1f);
-            slot.pivot = new Vector2(0f, 1f);
+            slot.anchorMin = Vector2.zero;
+            slot.anchorMax = Vector2.zero;
+            slot.pivot = Vector2.zero;
             slot.anchoredPosition = Vector2.zero;
             slot.sizeDelta = dock != null ? dock.sizeDelta : new Vector2(AvTokens.PanelWidth, 1000f);
             slot.localScale = Vector3.one;
@@ -171,12 +192,6 @@ namespace WingCommand
         }
 
         /// <summary>
-        /// Whether this screen is one the mods built to the column's width.
-        /// </summary>
-        private static bool IsModPanel(RectTransform rt) =>
-            Mathf.Abs(rt.rect.width - AvTokens.PanelWidth) < 2f;
-
-        /// <summary>
         /// A stock game panel, as opposed to one the mods built from scratch. Both mods name
         /// their content object "Content"; every stock screen's is "DisplayPanel". Width
         /// alone would misread a stock panel that happened to be the mod column's width.
@@ -184,27 +199,70 @@ namespace WingCommand
         private static bool IsStockScreen(MFDScreen screen) =>
             screen != null && screen.displayPanel != null && screen.displayPanel.name != "Content";
 
-        /// <summary>
-        /// Align a shown screen deterministically to the dock's top-left cell.
-        /// </summary>
-        public static void OnScreenShown(MFDScreen screen)
+        /// <summary>Whether this exact screen currently belongs to one of our dock slots.</summary>
+        public static bool IsDocked(MFDScreen screen)
         {
-            if (screen == null || dock == null) return;
+            if (screen == null || dock == null) return false;
+            RectTransform slot = screen.transform.parent as RectTransform;
+            return slot != null && slot.parent == dock;
+        }
+
+        /// <summary>The height of the surface the player actually sees.</summary>
+        public static float VisibleHeight(MFDScreen screen)
+        {
+            if (screen == null) return 0f;
+
+            var display = screen.displayPanel == null
+                ? null
+                : screen.displayPanel.transform as RectTransform;
+            float height = display == null ? 0f : display.rect.height;
+
+            if (height <= 1f)
+            {
+                var root = screen.transform as RectTransform;
+                height = root == null ? 0f : root.rect.height;
+            }
+
+            if (height <= 1f) height = AvTokens.PanelHeight;
+            return dock == null ? height : Mathf.Min(height, dock.rect.height);
+        }
+
+        /// <summary>The full left bay, including the map footer's vertical band.</summary>
+        public static float AvailableHeight(float fallback) =>
+            dock == null || dock.rect.height <= 1f ? fallback : dock.rect.height;
+
+        private static void AlignToBottom(MFDScreen screen, RectTransform slot)
+        {
+            if (screen == null || slot == null) return;
 
             var rt = screen.transform as RectTransform;
             if (rt == null) return;
 
-            rt.anchorMin = rt.anchorMax = rt.pivot = new Vector2(0f, 1f);
+            rt.anchorMin = rt.anchorMax = Vector2.zero;
+            rt.pivot = new Vector2(0f, 1f);
             rt.anchoredPosition = Vector2.zero;
+            slot.anchoredPosition = new Vector2(0f, VisibleHeight(screen));
+        }
+
+        /// <summary>
+        /// Align a shown screen deterministically to the dock's bottom-left cell.
+        /// </summary>
+        public static void OnScreenShown(MFDScreen screen)
+        {
+            if (screen == null || dock == null) return;
+            if (!IsDocked(screen)) return;
+
+            var rt = screen.transform as RectTransform;
+            if (rt == null) return;
 
             var slot = rt.parent as RectTransform;
-            if (slot == null || slot.parent != dock) return;
+            if (slot == null) return;
 
-            slot.anchoredPosition = Vector2.zero;
+            AlignToBottom(screen, slot);
 
-            // A stock panel is nudged down so its top row clears the canvas edge, and its
-            // ground comes up with it. Runs last so the drop wins over the zero above.
-            if (VanillaPanelSkin.IsSkinned(screen)) VanillaPanelSkin.OnShown(screen);
+            if (IsStockScreen(screen) && !VanillaMfdRebuild.IsHosted(screen))
+                VanillaMfdRebuild.TryApply(screen);
+            VanillaMfdRebuild.OnShown(screen);
         }
 
         /// <summary>Dock every screen the two mods own, on both vanilla bezel columns.</summary>
@@ -274,10 +332,9 @@ namespace WingCommand
         /// <summary>Put every docked screen back where it came from.</summary>
         public static void Restore()
         {
-            // Stock panel visuals first, while they are still parented in the dock; then the
-            // screens, then the slots they lived in — destroying a slot first would undo the
-            // reparent out from under its screen.
-            VanillaPanelSkin.Restore();
+            // Restore each native displayPanel pointer before moving the screen out of the
+            // dock; a late CloseScreen/ShowScreen callback will then always see native UI.
+            VanillaMfdRebuild.Restore();
 
             for (int i = 0; i < docked.Count; i++) docked[i].Restore();
             docked.Clear();
@@ -290,7 +347,8 @@ namespace WingCommand
         /// <summary>Forget the dock at end of mission; the next scene builds its own.</summary>
         public static void Reset()
         {
-            VanillaPanelSkin.Reset();
+            VanillaMfdRebuild.Reset();
+            MfdScreenChromePatch.Reset();
             docked.Clear();
             slots.Clear();
             dock = null;

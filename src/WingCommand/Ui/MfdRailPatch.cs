@@ -183,6 +183,9 @@ namespace WingCommand
             ResizeMap(__instance, columns);
             BuildRail(canvas, columns);
             DockPanels(canvas, columns);
+            MfdMapDeck.Ensure(canvas, columns);
+            EnsureFooter(canvas, columns);
+            EnsureLogPanel(canvas, columns);
 
             applied = true;
         }
@@ -248,15 +251,14 @@ namespace WingCommand
             {
                 background.sizeDelta = size + new Vector2(BackgroundBleed, BackgroundBleed);
 
-                // The map's own ground is a flat blue panel, which is the single largest
-                // thing on screen still painted in a different language from the panels
-                // beside it. Give it the same chamfered bezel and green-glass ground so the
-                // three columns read as one instrument rather than a mod either side of a
-                // stock screen. The terrain and icons ride above this and are untouched.
+                // MapFrame owns the viewport bezel, so the map bed needs only the unframed
+                // ground fade. The generated sprite already contains theme-ground pixels;
+                // tinting it with AvTheme.Ground again would multiply those colours into the
+                // muddy blue-green stain the stock screen used to show.
                 Image ground = dynamicMap.mapBackground;
-                ground.sprite = AvSprites.Panel;
-                ground.type = Image.Type.Sliced;
-                ground.color = AvTheme.Unity(AvTokens.Ground.WithAlpha(0.90f));
+                ground.sprite = AvSprites.GroundGradient;
+                ground.type = Image.Type.Simple;
+                ground.color = new Color(1f, 1f, 1f, 0.68f);
             }
 
             // Nothing but ClampToMapEdge reads mapScaleCurrent, and it uses it as a radius.
@@ -470,13 +472,37 @@ namespace WingCommand
 
             MfdRail.Ensure(canvas, columns);
             MfdPanelDock.Ensure(canvas, columns);
+            MfdMapDeck.Ensure(canvas, columns);
+            EnsureFooter(canvas, columns);
+            EnsureLogPanel(canvas, columns);
+        }
+
+        private static void EnsureFooter(Canvas canvas, MfdLayout.Columns columns)
+        {
+            VirtualMFD mfd = canvas.GetComponentInChildren<VirtualMFD>(true) ??
+                             Object.FindObjectOfType<VirtualMFD>();
+            if (mfd != null) MfdMapFooter.Ensure(canvas, columns, mfd);
+        }
+
+        private static void EnsureLogPanel(Canvas canvas, MfdLayout.Columns columns)
+        {
+            VirtualMFD mfd = canvas.GetComponentInChildren<VirtualMFD>(true) ??
+                             Object.FindObjectOfType<VirtualMFD>();
+            if (mfd != null) MfdLogPanel.Ensure(canvas, columns, mfd);
         }
 
         // --------------------------------------------------------------------- restore
 
         private static void Restore(bool onMinimize = false, DynamicMap dynamicMap = null)
         {
-            if (!applied) return;
+            if (!applied)
+            {
+                // Maximise can be interrupted while the UI is still coming up. The deck is
+                // independently owned, so clean it even if no complete map transaction was
+                // captured yet rather than leaving a root overlay canvas behind.
+                MfdMapDeck.Restore();
+                return;
+            }
 
             // Backdrops first: the buttons go back into these containers next, and a hidden
             // frame around restored buttons would be its own artifact.
@@ -497,6 +523,9 @@ namespace WingCommand
             buttons.Clear();
 
             if (mapFrame != null) { Object.Destroy(mapFrame); mapFrame = null; }
+            MfdLogPanel.Restore();
+            MfdMapFooter.Restore();
+            MfdMapDeck.Restore();
 
             MfdPanelDock.Restore();
 
@@ -523,6 +552,9 @@ namespace WingCommand
             containers.Clear();
             spares.Clear();
             if (mapFrame != null) { Object.Destroy(mapFrame); mapFrame = null; }
+            MfdLogPanel.Reset();
+            MfdMapFooter.Reset();
+            MfdMapDeck.Reset();
             map = null;
             applied = false;
             MfdRail.Reset();

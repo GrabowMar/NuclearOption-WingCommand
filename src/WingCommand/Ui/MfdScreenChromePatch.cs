@@ -30,6 +30,7 @@ namespace WingCommand
     {
         /// <summary>Root graphics this patch switched off, so they can be switched back on.</summary>
         private static readonly List<Graphic> scratch = new List<Graphic>();
+        private static readonly HashSet<MFDScreen> managed = new HashSet<MFDScreen>();
 
         [HarmonyPostfix]
         [HarmonyPatch(typeof(MFDScreen), nameof(MFDScreen.CloseScreen))]
@@ -43,16 +44,40 @@ namespace WingCommand
             if (Plugin.Settings.FitMapToPanels.Value && GameAccess.MfdAvailable)
             {
                 MfdPanelDock.OnScreenShown(__instance);
+
+                // VirtualMFD reopens its remembered left and right pages in sequence on
+                // every maximise. Both now share one dock, so the later ShowScreen must win
+                // immediately or the two page surfaces ghost through one another.
+                VirtualMFD mfd = Object.FindObjectOfType<VirtualMFD>();
+                if (mfd != null) MfdPanelDock.CloseOthers(mfd, __instance);
             }
         }
+
+        /// <summary>
+        /// Apply the screen's existing active state after it has entered the shared dock.
+        /// A screen can be closed before the maximised-map postfix creates that dock; in
+        /// that ordering the CloseScreen postfix quite correctly leaves vanilla alone, but
+        /// its root backplate would otherwise be carried on-screen when it is reparented.
+        /// </summary>
+        public static void SyncDockedState(MFDScreen screen)
+        {
+            if (screen == null) return;
+            managed.Add(screen);
+            SetRootChrome(screen, screen.isActive);
+        }
+
+        /// <summary>Discard scene-owned screen references after the MFD is destroyed.</summary>
+        public static void Reset() => managed.Clear();
 
         private static void SetRootChrome(MFDScreen screen, bool visible)
         {
             if (screen == null) return;
 
-            // Only while this mod owns the layout. With the stock bezel the park distance is
-            // sufficient and vanilla should be left entirely alone.
-            if (!Plugin.Settings.FitMapToPanels.Value || !GameAccess.MfdAvailable) return;
+            // Once a screen has passed through our dock, keep its root chrome paired with
+            // isActive for the rest of the scene. Minimize restores the stock parent before
+            // the final CloseScreen callback; limiting this to IsDocked would miss that
+            // callback and strand the restored white border over the cockpit.
+            if (!managed.Contains(screen) && !MfdPanelDock.IsDocked(screen)) return;
 
             scratch.Clear();
             screen.GetComponents(scratch);
@@ -64,10 +89,6 @@ namespace WingCommand
             }
 
             scratch.Clear();
-
-            // A stock panel's ground is a slot child, and the slot stays active when the
-            // panel is parked — take the ground with the panel.
-            VanillaPanelSkin.SetGroundVisible(screen, visible);
         }
     }
 }

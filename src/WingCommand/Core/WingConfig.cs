@@ -73,6 +73,13 @@ namespace WingCommand
         public ConfigEntry<bool> TacticalPauseInSingleplayer { get; private set; }
         public ConfigEntry<bool> ExternalHitmarkerAudio { get; private set; }
 
+        // --- MFD ---
+        public ConfigEntry<bool> UseSetPanel { get; private set; }
+        public ConfigEntry<float> MfdBackgroundOpacity { get; private set; }
+        public ConfigEntry<bool> MfdCheckeredGrid { get; private set; }
+        public ConfigEntry<bool> MfdCustomImageEnabled { get; private set; }
+        public ConfigEntry<string> MfdCustomImageFile { get; private set; }
+
         // --- Debug ---
         /// <summary>Carrier for the Debug category's one-line warning banner. Never read.</summary>
         public ConfigEntry<bool> DebugWarning { get; private set; }
@@ -151,6 +158,7 @@ namespace WingCommand
             BindLoadout(c);
             BindKeys(c);
             BindUi(c);
+            BindMfd(c);
             BindDebug(c);
         }
 
@@ -310,6 +318,22 @@ namespace WingCommand
                 "Slow down game time to 0.25x while the tactical command screen is active in singleplayer for tactical planning.");
             ExternalHitmarkerAudio = c.Bind("UI", "ExternalHitmarkerAudio", true,
                 "Play hitmarker audio confirmation when landing hits in 3rd-person external/orbit camera views.");
+        }
+
+        private void BindMfd(ConfigFile c)
+        {
+            UseSetPanel = c.Bind("MFD", "UseSetPanel", true,
+                "Add a SET (Settings) screen to the cockpit MFD bezel, alongside WMC/BDF/MAP/HUD.");
+            MfdBackgroundOpacity = c.Bind("MFD", "BackgroundOpacity", 0.40f,
+                new ConfigDescription(
+                    "Opacity of the tactical MFD background (0.0 = fully transparent, 1.0 = solid opaque).",
+                    new AcceptableValueRange<float>(0f, 1f)));
+            MfdCheckeredGrid = c.Bind("MFD", "CheckeredGrid", false,
+                "Draw the checkered datum grid across the MFD background.");
+            MfdCustomImageEnabled = c.Bind("MFD", "CustomImageEnabled", false,
+                "Display a custom user-uploaded wallpaper image as the MFD background.");
+            MfdCustomImageFile = c.Bind("MFD", "CustomImageFile", "",
+                "Filename or path of user-uploaded wallpaper image in BepInEx/config/WingCommand/Backgrounds/.");
         }
 
         private void BindDebug(ConfigFile c)

@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Reflection;
 using HarmonyLib;
+using TMPro;
 using UnityEngine;
 using UnityEngine.UI;
 
@@ -30,6 +31,15 @@ namespace WingCommand
         private static AccessTools.FieldRef<VirtualMFD, List<Button>> rightButtonsRef;
         private static AccessTools.FieldRef<VirtualMFD, List<MFDScreen>> leftScreensRef;
         private static AccessTools.FieldRef<VirtualMFD, List<MFDScreen>> rightScreensRef;
+        private static AccessTools.FieldRef<VirtualMFD, TextMeshProUGUI> mfdSpeedRef;
+
+        // GameplayUI surfaces moved into the map footer while the map is maximised.
+        private static AccessTools.FieldRef<GameplayUI, GameObject> selectAirbasePanelRef;
+        private static AccessTools.FieldRef<GameplayUI, GameObject> spectatorPanelRef;
+
+        // MessageUI streams mirrored into the adaptive log bay above an open MFD.
+        private static AccessTools.FieldRef<MessageUI, TextMeshProUGUI> messageTextRef;
+        private static AccessTools.FieldRef<MessageUI, TextMeshProUGUI> killFeedTextRef;
 
         // RadialMenuAction
         private static AccessTools.FieldRef<RadialMenuAction, RadialMenuAction.ActionType> actionTypeRef;
@@ -46,6 +56,13 @@ namespace WingCommand
 
         /// <summary>True when the VirtualMFD internals resolved, enabling the WMC screen.</summary>
         public static bool MfdAvailable { get; private set; }
+
+        /// <summary>True when the native instruments and spawn/spectator strips can be hosted
+        /// in the maximised-map footer.</summary>
+        public static bool MfdFooterAvailable { get; private set; }
+
+        /// <summary>True when the native tactical message streams can be mirrored.</summary>
+        public static bool MfdLogAvailable { get; private set; }
 
         // Where a landing aircraft is actually going. Both stock landing states keep their
         // destination private, and it is the only honest source for it: Return To Base
@@ -100,6 +117,38 @@ namespace WingCommand
                     Plugin.Logger.LogWarning(
                         "MFD panel integration unavailable (" + mfd.Message +
                         "). The map overlay panel will be used instead.");
+                }
+
+                // Kept independent from the core MFD seam: a future game build that renames
+                // one footer surface should lose only the footer adoption, never the rail,
+                // panels or radial integration.
+                try
+                {
+                    mfdSpeedRef = Field<VirtualMFD, TextMeshProUGUI>("speed");
+                    selectAirbasePanelRef = Field<GameplayUI, GameObject>("selectAirbasePanel");
+                    spectatorPanelRef = Field<GameplayUI, GameObject>("spectatorPanel");
+                    MfdFooterAvailable = true;
+                }
+                catch (Exception footer)
+                {
+                    MfdFooterAvailable = false;
+                    Plugin.Logger.LogWarning(
+                        "MFD footer integration unavailable (" + footer.Message +
+                        "). Native instruments will keep their stock positions.");
+                }
+
+                try
+                {
+                    messageTextRef = Field<MessageUI, TextMeshProUGUI>("messageText");
+                    killFeedTextRef = Field<MessageUI, TextMeshProUGUI>("killFeedText");
+                    MfdLogAvailable = true;
+                }
+                catch (Exception log)
+                {
+                    MfdLogAvailable = false;
+                    Plugin.Logger.LogWarning(
+                        "MFD tactical log integration unavailable (" + log.Message +
+                        "). The native message feed will remain unchanged.");
                 }
 
                 // Cosmetic on its own: without it the map simply draws no line for a
@@ -172,6 +221,25 @@ namespace WingCommand
         public static List<Button> GetRightButtons(VirtualMFD mfd) => rightButtonsRef(mfd);
         public static List<MFDScreen> GetLeftScreens(VirtualMFD mfd) => leftScreensRef(mfd);
         public static List<MFDScreen> GetRightScreens(VirtualMFD mfd) => rightScreensRef(mfd);
+
+        public static RectTransform GetMfdTopInstruments(VirtualMFD mfd)
+        {
+            if (!MfdFooterAvailable || mfd == null) return null;
+            TextMeshProUGUI speed = mfdSpeedRef(mfd);
+            return speed != null ? speed.transform.parent as RectTransform : null;
+        }
+
+        public static GameObject GetSelectAirbasePanel(GameplayUI ui) =>
+            MfdFooterAvailable && ui != null ? selectAirbasePanelRef(ui) : null;
+
+        public static GameObject GetSpectatorPanel(GameplayUI ui) =>
+            MfdFooterAvailable && ui != null ? spectatorPanelRef(ui) : null;
+
+        public static TextMeshProUGUI GetMessageText(MessageUI ui) =>
+            MfdLogAvailable && ui != null ? messageTextRef(ui) : null;
+
+        public static TextMeshProUGUI GetKillFeedText(MessageUI ui) =>
+            MfdLogAvailable && ui != null ? killFeedTextRef(ui) : null;
 
         // ------------------------------------------------------------------- landing
 

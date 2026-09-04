@@ -114,6 +114,7 @@ namespace WingCommand
                 WingRadialOverlay.Reset();
                 WingHud.ResetStatusPanel();
                 WmcScreen.Reset();
+                SetScreen.Reset();
                 WingComms.Reset();
                 TacticalCoordinator.Reset();
                 WingMarkers.Reset();
@@ -190,7 +191,9 @@ namespace WingCommand
             WingMarkers.Tick(Wing);
             WingHud.TickStatusPanel(Wing);
             WmcScreen.Tick(Wing);
-            VanillaPanelSkin.Tick();
+            SetScreen.Tick();
+            VanillaMfdRebuild.Tick();
+            MfdLogPanel.Tick();
             WingComms.Tick(Wing);
             WingShopDelivery.Tick();
             FlushRecruitQueue();
