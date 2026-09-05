@@ -38,3 +38,6 @@ docs/
 
 # CI workflows
 .github/workflows/
+
+# AI agent instructions
+CLAUDE.md
