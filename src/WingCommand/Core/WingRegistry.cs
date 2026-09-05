@@ -459,6 +459,13 @@ namespace WingCommand
             string state = string.Format(
                 " (alt {0:F0} m, speed {1:F0} m/s, slot error {2:F0} m)",
                 a.radarAlt, a.speed, m.SlotError);
+            Hangar origin = a.NetworkspawningHangar;
+            state += " [id=" + a.GetInstanceID() +
+                     ", deliveryPending=" + m.DeliveryPending +
+                     ", nativeState=" + (m.Pilot?.currentState?.GetType().Name ?? "none") +
+                     ", origin=" + (origin != null && origin.parentAirbase != null
+                         ? origin.parentAirbase.name : "none") +
+                     ", position=" + a.GlobalPosition() + "]";
 
             // Pilot state is checked first on purpose: Pilot.ApplyDamage calls
             // aircraft.DisableUnit() when the pilot dies, so "disabled" is also true for a

@@ -20,7 +20,7 @@ namespace WingCommand
         /// fraction of this (<see cref="WingTuning.RotarySpacingScale"/>) and the wing
         /// widens it by itself under threat.
         /// </summary>
-        public const float SlotSpacing = 120f;
+        public static float SlotSpacing { get; set; } = 120f;
 
         /// <summary>
         /// Most wingmen the roster holds. Formation geometry, HUD layout and the shop

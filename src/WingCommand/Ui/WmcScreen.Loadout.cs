@@ -36,9 +36,9 @@ namespace WingCommand
         private static TMP_Text pylonPageLabel;
         private static readonly List<PylonRow> pylonRows = new List<PylonRow>();
 
-        private const int AirframeGridRows = 3;
+        private const int AirframeGridRows = 5;
         private const int AirframeGridCols = 4;
-        private const int AirframeGridCapacity = AirframeGridRows * AirframeGridCols; // 12
+        private const int AirframeGridCapacity = AirframeGridRows * AirframeGridCols; // 20
         private const float AirframeTileHeight = 36f;
         private const float AirframeTileGap = 4f;
 
@@ -71,10 +71,10 @@ namespace WingCommand
         private static int pylonPage;
 
         /// <summary>
-        /// Pylons drawn at once. Ten: allows 3 full rows of airframe icons at the top while
-        /// keeping hardpoints visible without unnecessary pagination.
+        /// Pylons drawn at once. Seven: allows 5 full rows of airframe icons at the top while
+        /// keeping hardpoints visible without vertical panel overflow.
         /// </summary>
-        private const int PylonRowsPerPage = 10;
+        private const int PylonRowsPerPage = 7;
 
         // ----------------------------------------------------------------- loadout page
 
@@ -234,6 +234,21 @@ namespace WingCommand
             return rt;
         }
 
+        /// <summary>
+        /// Every airframe in the catalogue gets a starting template, not just the one on
+        /// screen — a player paging through the grid should find every plane already
+        /// carrying the fit the game itself would have suggested, not just the ones they
+        /// happened to open the editor on first.
+        ///
+        /// Cheap to call on every refresh: <see cref="WingLoadoutTemplates.EnsureDefault"/>
+        /// bails immediately once an airframe has a template of its own.
+        /// </summary>
+        private static void SeedDefaultTemplates(IReadOnlyList<WingShop.Offer> offers)
+        {
+            for (int i = 0; i < offers.Count; i++)
+                WingLoadoutTemplates.EnsureDefault(offers[i].Definition);
+        }
+
         private static void SelectAirframe(AircraftDefinition def)
         {
             if (def == null || selectedOffer == def) return;
@@ -245,7 +260,7 @@ namespace WingCommand
 
         private static void TurnAirframePage(int direction)
         {
-            IReadOnlyList<WingShop.Offer> offers = WingShop.Catalogue();
+            IReadOnlyList<WingShop.Offer> offers = WingShop.LoadoutCatalogue();
             int pages = Mathf.Max(1, Mathf.CeilToInt(offers.Count / (float)AirframeGridCapacity));
             airframePage = Mathf.Clamp(airframePage + direction, 0, pages - 1);
             int first = airframePage * AirframeGridCapacity;
@@ -281,7 +296,7 @@ namespace WingCommand
 
         private static void RefreshAirframeGrid()
         {
-            IReadOnlyList<WingShop.Offer> offers = WingShop.Catalogue();
+            IReadOnlyList<WingShop.Offer> offers = WingShop.LoadoutCatalogue();
 
             if (selectedOffer == null && offers.Count > 0)
                 selectedOffer = offers[0].Definition;
@@ -618,7 +633,8 @@ namespace WingCommand
 
         private static void RefreshLoadoutPage()
         {
-            IReadOnlyList<WingShop.Offer> offers = WingShop.Catalogue();
+            IReadOnlyList<WingShop.Offer> offers = WingShop.LoadoutCatalogue();
+            SeedDefaultTemplates(offers);
             ValidateSelectedOffer(offers);
 
             if (selectedOffer == null && offers.Count > 0) selectedOffer = offers[0].Definition;

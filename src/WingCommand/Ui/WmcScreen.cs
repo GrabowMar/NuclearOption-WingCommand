@@ -234,7 +234,7 @@ namespace WingCommand
                 if (!tacticalPauseActive && Time.timeScale > 0.5f)
                 {
                     tacticalPauseActive = true;
-                    Time.timeScale = 0.25f;
+                    Time.timeScale = Mathf.Clamp(Plugin.Settings.TacticalPauseScale.Value, 0f, 0.5f);
                 }
             }
 
@@ -745,10 +745,11 @@ namespace WingCommand
         // what, with how much fuel and ammo. Every header is one word so none of them wrap.
         private static readonly Column[] RosterColumns =
         {
-            new Column("CALLSIGN", 26f, 108f),
-            new Column("STATE", 138f, 86f),
-            new Column("FUEL", 224f, 52f, rightAligned: true),
-            new Column("AMMO", 280f, 40f, rightAligned: true),
+            new Column("PLANE", 22f, 56f),
+            new Column("CALLSIGN", 80f, 66f),
+            new Column("STATE", 148f, 54f),
+            new Column("FUEL", 204f, 36f, rightAligned: true),
+            new Column("AMMO", 242f, 34f, rightAligned: true),
         };
 
         /// <summary>The two-column header over the Wing tab's squadron list.</summary>
@@ -929,10 +930,11 @@ namespace WingCommand
                     }
                 }
 
-                bool bingo = any && lowest <= WingTuning.BingoFuel;
+                float bingoThreshold = Plugin.Settings != null ? Plugin.Settings.BingoFuel : WingTuning.BingoFuel;
+                bool bingo = any && lowest <= bingoThreshold;
                 fuelMetric.Set(
                     any ? Mathf.RoundToInt(lowest * 100f).ToString() : "--",
-                    any ? "BINGO AT " + Mathf.RoundToInt(WingTuning.BingoFuel * 100f) + "%" : "NO FLIGHT",
+                    any ? "BINGO AT " + Mathf.RoundToInt(bingoThreshold * 100f) + "%" : "NO FLIGHT",
                     any ? lowest : 0f,
                     bingo ? WingUi.Alert : any ? WingUi.RailEmerald : WingUi.Disabled);
             }

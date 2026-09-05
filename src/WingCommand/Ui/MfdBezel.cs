@@ -75,9 +75,15 @@ namespace WingCommand
         public static MFDScreen FindTemplate(List<MFDScreen> screens)
         {
             if (screens == null) return null;
+            // Fixed option pages give a stable footprint; faction/target lists can grow.
             foreach (MFDScreen s in screens)
             {
-                if (s != null && s.transform.parent != null) return s;
+                if (s != null && (s.shortName == "MAP" || s.shortName == "HUD") &&
+                    s.transform.parent != null && MfdPresentation.HasNativeLayout(s)) return s;
+            }
+            foreach (MFDScreen s in screens)
+            {
+                if (s != null && s.transform.parent != null && MfdPresentation.HasNativeLayout(s)) return s;
             }
             return null;
         }

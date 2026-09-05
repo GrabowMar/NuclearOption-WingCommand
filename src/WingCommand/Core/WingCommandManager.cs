@@ -100,6 +100,8 @@ namespace WingCommand
             Commands = new WingDirectiveDispatcher(Wing, Selection);
             mapLayer = new MapCommandLayer(Wing);
             Wing.Roe = Plugin.Settings.DefaultRoe.Value;
+            WingFormation.Shape = Plugin.Settings.FormationShape.Value;
+            WingFormation.SlotSpacing = Plugin.Settings.FormationSpacing.Value;
         }
 
         private void Update()
@@ -114,7 +116,7 @@ namespace WingCommand
                 WingRadialOverlay.Reset();
                 WingHud.ResetStatusPanel();
                 WmcScreen.Reset();
-                SetScreen.Reset();
+                MfdWallpaper.Reset();
                 WingComms.Reset();
                 TacticalCoordinator.Reset();
                 WingMarkers.Reset();
@@ -146,6 +148,8 @@ namespace WingCommand
                 // this one. Snapshotting here is what makes a mid-mission change inert
                 // until the next mission.
                 WingBrain.Begin(Plugin.Settings.Mode.Value);
+                WingFormation.Shape = Plugin.Settings.FormationShape.Value;
+                WingFormation.SlotSpacing = Plugin.Settings.FormationSpacing.Value;
 
                 // A reflex disabled by a fault in the last mission gets another chance in
                 // this one; a genuinely broken one faults again immediately at no real cost.
@@ -191,7 +195,7 @@ namespace WingCommand
             WingMarkers.Tick(Wing);
             WingHud.TickStatusPanel(Wing);
             WmcScreen.Tick(Wing);
-            SetScreen.Tick();
+            MfdPresentation.Tick();
             VanillaMfdRebuild.Tick();
             MfdLogPanel.Tick();
             WingComms.Tick(Wing);
@@ -302,9 +306,9 @@ namespace WingCommand
                 // Not yet flying: keep waiting while the roster already shows the member.
                 if (Time.unscaledTime < p.ReadyAt) continue;
                 if (!p.Member.IsAirborne) continue;
+                if (!p.Member.ActivateWhenAirborne()) continue;
 
                 recruitQueue.RemoveAt(i);
-                p.Member.ActivateWhenAirborne();
             }
         }
 
@@ -423,6 +427,18 @@ namespace WingCommand
             if (Plugin.Settings.QuickEngageKey.Value != KeyCode.None &&
                 Input.GetKeyDown(Plugin.Settings.QuickEngageKey.Value))
                 Execute(WingAction.Engage);
+
+            if (Plugin.Settings.QuickDisengageKey.Value != KeyCode.None &&
+                Input.GetKeyDown(Plugin.Settings.QuickDisengageKey.Value))
+                Execute(WingAction.FallBack);
+
+            if (Plugin.Settings.QuickAttackKey.Value != KeyCode.None &&
+                Input.GetKeyDown(Plugin.Settings.QuickAttackKey.Value))
+                Execute(WingAction.AttackMyTarget);
+
+            if (Plugin.Settings.CycleRoeKey.Value != KeyCode.None &&
+                Input.GetKeyDown(Plugin.Settings.CycleRoeKey.Value))
+                Execute(WingAction.CycleRoe);
         }
 
         /// <summary>Same angle convention the stock wheel uses: index 0 at the top, clockwise.</summary>
@@ -478,6 +494,12 @@ namespace WingCommand
 
                 case WingAction.Engage:
                     Show(Commands.Apply(WingDirective.Simple(WingOrder.Engage), wholeWing));
+                    break;
+
+                case WingAction.Refit:
+                    foreach (WingMember member in Commands.Scope(wholeWing))
+                        if (member.IsCommandable && !member.IsSurface) member.RequestRefit();
+                    Toast("Refit: land, replenish and relaunch");
                     break;
 
                 case WingAction.ReturnToBase:
@@ -603,8 +625,7 @@ namespace WingCommand
 
         internal void SelectMember(WingMember member, bool toggle)
         {
-            if (toggle) Selection.Toggle(member);
-            else Selection.SelectOnly(member);
+            Selection.ClickMember(member, toggle, Wing);
             foreach (WingMember candidate in Wing.Members)
                 WingMarkers.Repaint(candidate.Aircraft);
         }
@@ -651,7 +672,7 @@ namespace WingCommand
 
         internal void SelectAllMembers()
         {
-            Selection.SelectAll();
+            Selection.ToggleSelectAll(Wing);
             foreach (WingMember member in Wing.Members) WingMarkers.Repaint(member.Aircraft);
         }
 
@@ -794,6 +815,7 @@ namespace WingCommand
         Engage,
         FireForEffect,
         ReturnToBase,
+        Refit,
         FallBack,
         OrbitHere,
         AttackMyTarget,

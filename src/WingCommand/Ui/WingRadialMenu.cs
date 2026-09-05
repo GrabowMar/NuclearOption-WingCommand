@@ -215,6 +215,7 @@ namespace WingCommand
                 FormationShape captured = shape;
                 WingMenuAction entry = WingMenuAction.Create(FormationShapes.Pretty(captured), _ =>
                 {
+                    Plugin.Logger.LogInfo($"[FormationChange] {WingFormation.Shape} -> {captured}");
                     WingFormation.Shape = captured;
                     Mgr?.Toast("Formation: " + FormationShapes.Pretty(captured));
                     RestoreStockWheel();

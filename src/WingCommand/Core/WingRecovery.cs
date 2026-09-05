@@ -52,6 +52,9 @@ namespace WingCommand
         {
             if (wing == null) return;
 
+            foreach (WingMember member in wing.Members)
+                if (member.RefitPending && IsHome(member)) member.CompleteRefit();
+
             if (!Plugin.Settings.RtbReturnsToReserve.Value)
             {
                 // Recovery is switched off, so nothing is credited or despawned. Released
@@ -76,7 +79,7 @@ namespace WingCommand
             for (int i = wing.Count - 1; i >= 0; i--)
             {
                 WingMember member = wing.Members[i];
-                if (member == null || member.Order != WingOrder.ReturnToBase) continue;
+                if (member == null || member.RefitPending || member.Order != WingOrder.ReturnToBase) continue;
                 if (IsPending(member) || !IsHome(member)) continue;
 
                 Settlement settlement = Begin(wing, member);

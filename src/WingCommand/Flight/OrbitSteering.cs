@@ -82,7 +82,8 @@ namespace WingCommand
                 runwayAlign: false,
                 effort: 2f,
                 bankAllowed: FixedWingFormation.GroundLimitedBank(
-                    aircraft.radarAlt, FixedWingFormation.MaxSafeBank),
+                    aircraft.radarAlt, FixedWingFormation.MaxSafeBank,
+                    aircraft.rb != null ? aircraft.rb.velocity.y : 0f),
                 followTerrain: false,
                 altitudeHold: AutopilotMath.CruiseHold(aircraft, altitude),
                 targetVelocity: Vector3.zero);

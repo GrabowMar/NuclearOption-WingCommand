@@ -350,6 +350,33 @@ namespace WingCommand
             }
             return -1;
         }
+
+        /// <summary>
+        /// Whether an airframe being recovered or stored can enter the wing reserve.
+        /// Owned airframes are exempt from faction hold capacity because the player paid for them.
+        /// </summary>
+        public static bool CanStoreAirframe(bool owned, int currentCount, int factionStockCapacity)
+        {
+            if (!owned && currentCount >= factionStockCapacity) return false;
+            return true;
+        }
+    }
+
+    /// <summary>
+    /// Pure policy for flight and roster selection toggles.
+    /// </summary>
+    internal static class SelectionTogglePolicy
+    {
+        public static bool ShouldDeselectAll(bool isAllMode, int selectedCount, int totalCount)
+        {
+            if (isAllMode) return true;
+            return totalCount > 0 && selectedCount >= totalCount;
+        }
+
+        public static bool ShouldDeselectMemberOnClick(bool isExplicitMode, int selectedCount, bool isMemberSelected)
+        {
+            return isExplicitMode && selectedCount == 1 && isMemberSelected;
+        }
     }
 
     /// <summary>
@@ -425,10 +452,10 @@ namespace WingCommand
     internal static class ClimbOutPolicy
     {
         /// <summary>Grab climb-out below this AGL when far from the leader.</summary>
-        public const float GrabAlt = 300f;
+        public const float GrabAlt = 100f;
 
         /// <summary>Keep climbing until here, so the behaviour does not flap on the floor.</summary>
-        public const float ReleaseAlt = 450f;
+        public const float ReleaseAlt = 150f;
 
         /// <summary>Metres from the leader that count as "far" — a rejoin, not a slot.</summary>
         public const float GrabRange = 400f;
@@ -442,16 +469,42 @@ namespace WingCommand
         /// <summary>Hold the abort until here so a bounce off the floor does not resume the intercept.</summary>
         public const float AbortReleaseAlt = 90f;
 
+        // Once terrain clearance is established, use full power to accelerate in level
+        // flight. Continuing to climb can consume the power needed to reach release speed.
+        public static bool ShouldAccelerateLevel(float radarAlt, float airspeed, float takeoffSpeed) =>
+            radarAlt >= WingTuning.FixedWingAirborneAlt && airspeed < takeoffSpeed * WingTuning.TakeoffSpeedMultiplier;
+
         public static bool ShouldClimbOut(
             float radarAlt, float leaderDistance, WingOrder order,
-            bool incumbent, bool deliveryPending, bool leaderPresent)
+            bool incumbent, bool deliveryPending, bool leaderPresent,
+            float airspeed = 150f, float takeoffSpeed = 70f, bool isRotary = false)
         {
             if (deliveryPending || !leaderPresent) return false;
             if (order != WingOrder.Formation) return false;
 
-            float alt = incumbent ? ReleaseAlt : GrabAlt;
-            float range = incumbent ? ReleaseRange : GrabRange;
-            return radarAlt < alt && leaderDistance > range;
+            bool speedDeficient = !isRotary && airspeed < takeoffSpeed * WingTuning.TakeoffSpeedMultiplier;
+
+            // A slow aircraft needs to recover energy even above the departure floor.
+            if (speedDeficient) return true;
+
+            if (incumbent)
+            {
+                // While climbing out, stay wings-level until BOTH safe altitude and safe speed are reached.
+                // Releasing into full formation maneuvering while speed-deficient invites a stall or spiral dive.
+                if (speedDeficient) return true;
+                return radarAlt < ReleaseAlt && (!isRotary || leaderDistance > ReleaseRange);
+            }
+
+            // Freshly airborne or low rejoin:
+            // If below grab altitude and speed-deficient (e.g. freshly lifted off), climb out regardless of leader distance.
+            // If below grab altitude and far from leader, climb out to safe altitude before maneuvering.
+            if (radarAlt < GrabAlt)
+            {
+                if (speedDeficient) return true;
+                if (leaderDistance > GrabRange) return true;
+            }
+
+            return false;
         }
 
         public static bool ShouldAbort(
@@ -475,5 +528,56 @@ namespace WingCommand
             order != WingOrder.Attack &&
             order != WingOrder.FireForEffect &&
             order != WingOrder.DeliverCargo;
+    }
+
+    public enum LaunchBaseStatus
+    {
+        None,
+        Ready,
+        Blocked,
+        NoPad
+    }
+
+    /// <summary>
+    /// Pure presentation and evaluation policy for launch base rows in the supply panel.
+    /// Determines whether a base can support the selected aircraft and what badge/tooltip to show.
+    /// </summary>
+    internal static class LaunchBaseStatusPolicy
+    {
+        public static LaunchBaseStatus Evaluate(bool allowed, bool canProduce, bool hasAirframeSelection)
+        {
+            if (!hasAirframeSelection)
+                return allowed ? LaunchBaseStatus.None : LaunchBaseStatus.Blocked;
+
+            if (!canProduce)
+                return LaunchBaseStatus.NoPad;
+
+            return allowed ? LaunchBaseStatus.Ready : LaunchBaseStatus.Blocked;
+        }
+
+        public static string BadgeText(LaunchBaseStatus status)
+        {
+            switch (status)
+            {
+                case LaunchBaseStatus.Ready: return "READY";
+                case LaunchBaseStatus.NoPad: return "NO PAD";
+                case LaunchBaseStatus.Blocked: return "BLOCKED";
+                default: return "";
+            }
+        }
+
+        public static string Tooltip(string baseName, string airframeName, bool allowed, bool canProduce)
+        {
+            if (string.IsNullOrEmpty(airframeName))
+                return baseName + (allowed ? " — launches allowed" : " — launches blocked");
+
+            if (!canProduce)
+                return baseName + (allowed ? " [CHECKED]" : "") +
+                       " — Cannot launch " + airframeName + " (no compatible hangar or helipad)";
+
+            return baseName + (allowed
+                ? " — Can launch " + airframeName + " [ALLOWED]"
+                : " — Can launch " + airframeName + " [BLOCKED - click to allow]");
+        }
     }
 }

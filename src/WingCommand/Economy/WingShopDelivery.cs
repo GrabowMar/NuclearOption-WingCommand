@@ -23,8 +23,7 @@ namespace WingCommand
         /// Put a requisitioned airframe into the world from a hangar or helipad, or queue
         /// it at the nearest field that can produce it.
         ///
-        /// The hangar path is the game's own: <c>Airbase.TrySpawnAircraft</c> picks a hangar
-        /// by priority, respects occupancy and the clearance the airframe needs, runs a
+        /// We select a clear compatible hangar, then the native hangar API runs a
         /// carrier's door sequence, and lets the stock AI taxi out and take off. The catch
         /// is that the airbase call returns permission, not an aircraft — the spawn can be
         /// several seconds away. The faction's own <c>onRegisterUnit</c> event closes that
@@ -119,7 +118,17 @@ namespace WingCommand
         }
 
         private static readonly List<PendingDelivery> pending = new List<PendingDelivery>();
+        private static readonly Dictionary<Airbase, float> lastDepartureAt = new Dictionary<Airbase, float>();
         private static FactionHQ watched;
+
+        /// <summary>
+        /// Whether a native departure from this field is far enough behind the last one that
+        /// their taxi-outs should not still be sharing the ramp. See
+        /// <see cref="WingTuning.DepartureStaggerSeconds"/> for why this exists at all.
+        /// </summary>
+        private static bool DepartureStaggerElapsed(Airbase airbase) =>
+            airbase == null || !lastDepartureAt.TryGetValue(airbase, out float last) ||
+            Time.unscaledTime - last >= WingTuning.DepartureStaggerSeconds;
 
         public static int PendingCount => pending.Count;
         public static PendingDelivery GetPending(int index) => (index >= 0 && index < pending.Count) ? pending[index] : null;
@@ -239,9 +248,23 @@ namespace WingCommand
         {
             if (order == null || order.Origin == null || order.Transaction == null) return;
 
+            // A clear pad is not a clear taxiway. A fixed 4-second stagger alone still let
+            // a third departure collide with a taxiing second one - HangarLaunchSafety's
+            // per-departure distance tracking is the real signal for "the last one is out
+            // of the way"; the timer stays only as a floor against re-attempting the same
+            // frame something clears.
+            if (!DepartureStaggerElapsed(order.Origin) ||
+                !HangarLaunchSafety.IsAirbaseClear(order.Origin)) return;
+
             FactionHQ hq = order.Transaction.Hq;
             AircraftDefinition definition = order.Transaction.Definition;
             if (hq == null || definition == null) return;
+
+            Hangar selected = SelectClearHangar(order.Origin, definition);
+            if (selected == null) return;
+            // Reserve the exact pad before calling native code; synchronous registration
+            // can happen inside this call, and adjacent delayed spawns need spacing too.
+            order.Hangar = selected;
 
             order.Starting = true;
             Airbase.TrySpawnResult result;
@@ -252,7 +275,7 @@ namespace WingCommand
                 // which is what the faction's aircraft launch with. A requisition with a
                 // preset hands the field the fit the player asked for instead; the hangar
                 // arms it on the ramp exactly as it arms the faction's own aircraft.
-                result = order.Origin.TrySpawnAircraft(null, definition, order.Livery,
+                result = selected.TrySpawnAircraft(null, definition, order.Livery,
                                                        order.Loadout, order.Fuel);
             }
             catch (Exception e)
@@ -271,9 +294,17 @@ namespace WingCommand
                 order.Starting = false;
             }
 
-            if (!result.Allowed) return;
+            if (!result.Allowed)
+            {
+                order.Hangar = null;
+                return;
+            }
 
             order.Hangar = result.Hangar;
+            lastDepartureAt[order.Origin] = Time.unscaledTime;
+            Plugin.Logger.LogInfo("[Shop] launch accepted: " + definition.unitName +
+                " at " + order.Origin.name + "/" + result.Hangar.name +
+                " position=" + result.Hangar.GetSpawnTransform().position.ToGlobalPosition());
             // A hangar has now actually taken the order; give it its own door-sequence budget
             // rather than whatever was left of the time this order spent queued.
             order.ExpiresAt = Time.unscaledTime + WingTuning.HangarDeliveryTimeout;
@@ -320,10 +351,13 @@ namespace WingCommand
         /// already claimed by one of our in-flight orders.
         /// </summary>
         private static bool CanLaunchNow(Airbase airbase, AircraftDefinition definition)
+            => SelectClearHangar(airbase, definition) != null;
+
+        private static Hangar SelectClearHangar(Airbase airbase, AircraftDefinition definition)
         {
-            if (airbase == null || airbase.disabled || definition == null) return false;
+            if (airbase == null || airbase.disabled || definition == null) return null;
             IList<Hangar> hangars = airbase.hangars;
-            if (hangars == null) return false;
+            if (hangars == null) return null;
 
             for (int i = 0; i < hangars.Count; i++)
             {
@@ -332,10 +366,22 @@ namespace WingCommand
                 if (!hangar.Available) continue;
                 if (!hangar.CanSpawnAircraft(definition)) continue;
                 if (HangarClaimedByPending(hangar)) continue;
-                return true;
+                if (!HangarLaunchSafety.IsClear(hangar, definition)) continue;
+                bool adjacentReserved = false;
+                foreach (PendingDelivery order in pending)
+                {
+                    if (order.Hangar == null) continue;
+                    Transform other = order.Hangar.GetSpawnTransform();
+                    if (other == null) continue;
+                    float radius = LaunchSafety.Clearance(HangarLaunchSafety.Size(definition),
+                        HangarLaunchSafety.Size(order.Definition));
+                    if ((other.position - hangar.GetSpawnTransform().position).sqrMagnitude < radius * radius)
+                    { adjacentReserved = true; break; }
+                }
+                if (!adjacentReserved) return hangar;
             }
 
-            return false;
+            return null;
         }
 
         private static bool HangarClaimedByPending(Hangar hangar)
@@ -369,24 +415,8 @@ namespace WingCommand
         /// hangar's own type list is the editor-configured stock and does not blink off
         /// while the pad is occupied.
         /// </summary>
-        private static bool CanEverProduce(Airbase airbase, AircraftDefinition definition)
-        {
-            if (airbase == null || airbase.disabled || definition == null) return false;
-            IList<Hangar> hangars = airbase.hangars;
-            if (hangars == null) return false;
-
-            for (int i = 0; i < hangars.Count; i++)
-            {
-                Hangar hangar = hangars[i];
-                if (hangar == null || hangar.Disabled) continue;
-                AircraftDefinition[] types = hangar.GetAvailableAircraft();
-                if (types == null) continue;
-                for (int j = 0; j < types.Length; j++)
-                    if (types[j] == definition) return true;
-            }
-
-            return false;
-        }
+        private static bool CanEverProduce(Airbase airbase, AircraftDefinition definition) =>
+            WingLaunchFields.CanProduce(airbase, definition);
 
         private static void Watch(FactionHQ hq)
         {
@@ -451,6 +481,7 @@ namespace WingCommand
                 return;
             }
             try { aircraft.SetLiveryKey(match.Livery); } catch { }
+            HangarLaunchSafety.Track(match.Hangar, aircraft);
             WingCommandManager.Instance?.QueueRecruit(aircraft);
             Plugin.Logger.LogInfo("[Shop] " + aircraft.unitName +
                                   " registered from " + match.Origin.name +
@@ -484,6 +515,7 @@ namespace WingCommand
         /// </summary>
         public static void Tick()
         {
+            HangarLaunchSafety.Tick();
             for (int i = pending.Count - 1; i >= 0; i--)
             {
                 PendingDelivery order = pending[i];
@@ -550,6 +582,9 @@ namespace WingCommand
                 }
 
                 AttemptNativeSpawn(order);
+                // Immediate registration removes the current order from pending.
+                // Visit the next oldest order instead of skipping its shifted index.
+                if (!pending.Contains(order)) { i--; continue; }
                 if (order.Hangar == null)
                 {
                     if (!order.Pinned) order.Origin = null;
@@ -597,6 +632,8 @@ namespace WingCommand
             for (int i = 0; i < pending.Count; i++)
                 pending[i].Transaction?.Rollback("mission reset");
             pending.Clear();
+            HangarLaunchSafety.Reset();
+            lastDepartureAt.Clear();
             fieldScratch.Clear();
             Watch(null);
             WingLaunchFields.Reset();

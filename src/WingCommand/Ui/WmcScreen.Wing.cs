@@ -64,9 +64,11 @@ namespace WingCommand
             pilotPager = new PilotPager(parent, y);
             y -= RowHeight + Gap;
 
-            y = Heading(parent, y, "PILOT");
+            y = Heading(parent, y, "PILOT DOSSIER");
             float w = PanelWidth - Pad * 2f;
 
+            WingUi.TacticalCard(parent, new Rect(Pad, y, w, 154f), WingUi.RailCyan);
+            y -= 8f;
             const float portraitW = 92f;
             const float portraitH = 138f;
             const float portraitGap = Space3;
@@ -135,35 +137,46 @@ namespace WingCommand
             pilotBackgroundLabel.enableWordWrapping = true;
             pilotBackgroundLabel.overflowMode = TextOverflowModes.Ellipsis;
 
-            y -= portraitH + Space2;
+            y -= portraitH + Space4;
 
             y = Heading(parent, y, "AIRFRAME");
             float airframeRailY = y;
+            WingUi.TacticalCard(parent, new Rect(Pad, y, w, 170f), WingUi.RailEmerald);
+            y -= Space2;
+
+            float airframeTextX = Pad + 8f;
+            float airframeTextW = w - 116f;
 
             Color ghost = WingColor();
-            ghost.a = 0.075f;
+            ghost.a = 0f;
             airframeSilhouette = AddSprite(parent, "AirframeSilhouette",
                       IconFactory.Get("airframe"),
-                      new Rect(PanelWidth - Pad - 132f, y - 8f, 128f, 128f), ghost);
+                      new Rect(PanelWidth - Pad - 104f, y - 26f, 96f, 96f), ghost);
 
-            airframeTypeLabel = Label(parent, "", new Rect(Pad, y, w, LineHeight), Friendly(),
+            airframeTypeLabel = Label(parent, "", new Rect(airframeTextX, y, airframeTextW, LineHeight), Friendly(),
                                       FontLead, FontStyles.Normal, TextAlignmentOptions.Left);
             y -= LineHeight + 2f;
-            airframeStateLabel = Label(parent, "", new Rect(Pad, y, w, LineHeight), Friendly(),
+            airframeStateLabel = Label(parent, "", new Rect(airframeTextX, y, airframeTextW, LineHeight), Friendly(),
                                        FontSmall, FontStyles.Normal, TextAlignmentOptions.Left);
             y -= LineHeight + 2f;
-            airframeOrderLabel = Label(parent, "", new Rect(Pad, y, w, LineHeight), Friendly(),
+            airframeOrderLabel = Label(parent, "", new Rect(airframeTextX, y, airframeTextW, LineHeight), Friendly(),
                                        FontSmall, FontStyles.Normal, TextAlignmentOptions.Left);
             y -= LineHeight + 2f;
-            airframeLoadoutLabel = Label(parent, "", new Rect(Pad, y, w, LineHeight), Dim(),
+            airframeLoadoutLabel = Label(parent, "", new Rect(airframeTextX, y, airframeTextW, LineHeight), Dim(),
                                          FontMicro, FontStyles.Normal, TextAlignmentOptions.Left);
             y -= LineHeight + 2f;
-            airframeWeaponsLabel = Label(parent, "", new Rect(Pad, y, w, Space6 + Space2), Friendly(),
+            airframeWeaponsLabel = Label(parent, "", new Rect(airframeTextX, y, airframeTextW, 64f), Friendly(),
                                          FontMicro, FontStyles.Normal, TextAlignmentOptions.TopLeft);
+            airframeTypeLabel.enableAutoSizing = true;
+            airframeTypeLabel.fontSizeMin = FontMicro;
+            airframeStateLabel.enableAutoSizing = true;
+            airframeStateLabel.fontSizeMin = FontMicro;
+            airframeOrderLabel.enableAutoSizing = true;
+            airframeOrderLabel.fontSizeMin = FontMicro;
             airframeWeaponsLabel.enableWordWrapping = true;
             airframeWeaponsLabel.overflowMode = TextOverflowModes.Ellipsis;
 
-            float airframeBottom = y - (Space6 + Space2) - Space5;
+            float airframeBottom = airframeRailY - 170f;
             airframeCardRail = Rule(parent,
                 new Rect(Pad, airframeRailY, 3f, airframeRailY - airframeBottom),
                 FrameColor());
@@ -259,6 +272,7 @@ namespace WingCommand
             if (flying == null)
             {
                 SetSilhouetteAlpha(0f);
+                if (airframeSilhouette != null) airframeSilhouette.sprite = IconFactory.Get("airframe");
                 if (airframeTypeLabel != null)
                 {
                     airframeTypeLabel.text = kia ? "NO AIRFRAME   (GROUNDED)" : "NO AIRFRAME";
@@ -274,10 +288,18 @@ namespace WingCommand
                 return;
             }
 
-            SetSilhouetteAlpha(0.075f);
-
             Aircraft aircraft = flying.Aircraft;
             AircraftDefinition definition = DefinitionOf(flying);
+
+            if (airframeSilhouette != null)
+            {
+                Sprite planeSprite = definition?.mapIcon != null ? definition.mapIcon
+                    : definition?.friendlyIcon != null ? definition.friendlyIcon
+                    : IconFactory.Get("airframe");
+                airframeSilhouette.sprite = planeSprite;
+            }
+
+            SetSilhouetteAlpha(0.45f);
 
             string type = definition != null
                 ? AvTheme.Truncate(definition.unitName, 22) + "   SLOT " + flying.Slot
@@ -309,7 +331,7 @@ namespace WingCommand
 
             if (airframeStateLabel != null)
             {
-                bool poor = fuel <= WingTuning.BingoFuel ||
+                bool poor = fuel <= (Plugin.Settings != null ? Plugin.Settings.BingoFuel : WingTuning.BingoFuel) ||
                             ammo <= 0 || integrity < 0.75f;
                 airframeStateLabel.color = poor ? Warning() : Friendly();
                 if (airframeCardRail != null)

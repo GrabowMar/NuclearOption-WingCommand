@@ -240,6 +240,28 @@ namespace WingCommand
             return record;
         }
 
+        /// <summary>
+        /// Give this airframe a starting template if it has none, seeded from the same
+        /// fit the base game itself suggests to a player who has never customised that
+        /// aircraft type — see <see cref="WingLoadoutCatalog.SuggestedKeys"/>.
+        ///
+        /// Only ever fires while the airframe has zero templates. A player who deletes
+        /// the seeded one, or edits it into something else, has made a choice this must
+        /// not undo the next time the LOADOUT tab refreshes.
+        /// </summary>
+        public static void EnsureDefault(AircraftDefinition definition)
+        {
+            EnsureLoaded();
+            if (definition == null) return;
+            if (CountFor(definition) > 0) return;
+            if (WingLoadoutCatalog.PylonCount(definition) == 0) return;
+
+            List<string> keys = WingLoadoutCatalog.SuggestedKeys(definition);
+            if (keys == null) return;
+
+            Create(definition, "DEFAULT", keys);
+        }
+
         public static LoadoutTemplateRecord Duplicate(LoadoutTemplateRecord source)
         {
             EnsureLoaded();

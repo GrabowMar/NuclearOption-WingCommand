@@ -166,6 +166,7 @@ namespace WingCommand
             // graphics now that the screen is docked so inactive backplates cannot follow
             // it into the visible column.
             MfdScreenChromePatch.SyncDockedState(screen);
+            MfdPresentation.Apply(screen);
             AlignToBottom(screen, slot);
         }
 
@@ -338,6 +339,7 @@ namespace WingCommand
 
             for (int i = 0; i < docked.Count; i++) docked[i].Restore();
             docked.Clear();
+            MfdPresentation.ApplyAll();
 
             for (int i = 0; i < slots.Count; i++)
                 if (slots[i] != null) Object.Destroy(slots[i].gameObject);
@@ -349,6 +351,7 @@ namespace WingCommand
         {
             VanillaMfdRebuild.Reset();
             MfdScreenChromePatch.Reset();
+            MfdPresentation.Reset();
             docked.Clear();
             slots.Clear();
             dock = null;

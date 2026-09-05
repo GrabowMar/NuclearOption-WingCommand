@@ -55,6 +55,23 @@ namespace WingCommand
             });
         }
 
+        /// <summary>Begin tracking an unassigned faction aircraft that has been ordered to fly home.</summary>
+        public static void Begin(Aircraft aircraft, string name = null, bool owned = false)
+        {
+            if (aircraft == null) return;
+            if (Contains(aircraft)) return;
+
+            outbound.Add(new Departing
+            {
+                Aircraft = aircraft,
+                AircraftId = aircraft.persistentID,
+                Name = name ?? aircraft.unitName ?? "AI",
+                Owned = owned || WingShop.IsPurchased(aircraft),
+                LoadoutKnown = false,
+                Loadout = WingLoadoutChoice.Standard,
+            });
+        }
+
         /// <summary>Stop tracking one aircraft, once it has been settled or lost.</summary>
         public static void Forget(Departing departing)
         {

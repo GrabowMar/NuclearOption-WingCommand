@@ -93,6 +93,18 @@ namespace WingCommand
             return total;
         }
 
+        public static int TotalOwnedCount
+        {
+            get
+            {
+                int total = 0;
+                for (int i = 0; i < slots.Count; i++)
+                    if (slots[i].Source == Source.Owned && !slots[i].ReservedForPurchase)
+                        total++;
+                return total;
+            }
+        }
+
         public static int FactionStockOf(AircraftDefinition definition) =>
             hq != null && definition != null ? hq.GetUnitSupply(definition) : 0;
 
@@ -176,13 +188,15 @@ namespace WingCommand
                 for (int i = 0; i < slots.Count; i++)
                     if (ReferenceEquals(slots[i].RecoveryToken, recoveryToken)) return true;
             }
-            if (Count >= Capacity) return false;
+            // Unpaid held stock from faction obeys the holding limit; owned planes bought by the player
+            // are always preserved in reserve so they do not have to be bought again.
+            if (!ReserveSlotPolicy.CanStoreAirframe(owned, Count, Capacity)) return false;
 
             slots.Add(new Slot(definition, owned ? Source.Owned : Source.Held,
                                loadoutKnown, loadout, recoveryToken));
             Plugin.Logger.LogInfo(
                 "[Reserve] recovered " + definition.unitName +
-                (owned ? " (owned)" : "") + " into slot " + Count + "/" + Capacity);
+                (owned ? " (owned)" : "") + " into reserve (" + Count + " held)");
             return true;
         }
 

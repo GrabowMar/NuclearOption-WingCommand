@@ -226,10 +226,19 @@ namespace WingCommand
 
                 Vector3 closest = relativePosition + relativeVelocity * timeToClosest;
                 float distSq = closest.sqrMagnitude;
-                if (distSq > radiusSq || distSq < 1f) continue;
+                if (!FormationControlRules.CollisionThreat(distSq, radius)) continue;
 
-                Vector3 away = -closest;
-                if (away.sqrMagnitude < 1f) away = -relativePosition;
+                int pairOrder = selfSlot != otherMember.Slot
+                    ? selfSlot.CompareTo(otherMember.Slot)
+                    : self.GetInstanceID().CompareTo(other.GetInstanceID());
+                FormationControlRules.EscapeDirection(closest.x, closest.y, closest.z,
+                    relativeVelocity.x, relativeVelocity.z, pairOrder,
+                    out float escapeX, out float escapeY, out float escapeZ);
+                Vector3 away = new Vector3(escapeX, escapeY, escapeZ);
+
+                // When low, separation must never push an aircraft down into the terrain.
+                if (self.autopilot != null && self.radarAlt < 250f && away.y < 0f)
+                    away.y = 0f;
 
                 // At low altitude the trailing/later element deconflicts high, matching the
                 // real tactical priority: preserve terrain awareness for the lead element
@@ -239,12 +248,13 @@ namespace WingCommand
                 // the sky - which it cannot act on, and which corrupts the lateral
                 // component of the push it can.
                 if (self.autopilot != null && self.radarAlt < 300f && selfSlot > otherMember.Slot)
-                    away += Vector3.up * radius * 0.45f;
+                    away += Vector3.up * 0.45f;
 
                 // Bounded inverse square: urgent at a close predicted pass, but never large
                 // enough to fling a slot destination across the formation in one frame.
                 float urgency = Mathf.Min(radiusSq / Mathf.Max(distSq, 1f), 4f);
                 urgency *= 1f + (4f - timeToClosest) * 0.15f;
+                urgency *= Mathf.Clamp01(1f - Mathf.Sqrt(distSq) / radius);
                 push += away.normalized * urgency;
             }
 

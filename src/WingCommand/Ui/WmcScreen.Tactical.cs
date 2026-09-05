@@ -133,9 +133,7 @@ namespace WingCommand
         /// The scoped orders, grouped by what the player is trying to accomplish.
         ///
         /// Target work comes first, autonomous combat follows, and point orders stay
-        /// together. Return To Base is separated at the foot because it ends the sortie;
-        /// its quiet full-width treatment makes that separation readable without turning
-        /// it into the page's primary action.
+        /// together. RTB and Refit share a final row for recovery or immediate turnaround.
         /// </summary>
         private static float AddActions(RectTransform parent, float y)
         {
@@ -173,11 +171,12 @@ namespace WingCommand
                          .WithTooltip(OrderHint.LandHere);
             y -= RowHeight + Gap;
 
-            WingUi.Button(parent, "RETURN TO BASE",
-                          new Rect(Pad, y, PanelWidth - Pad * 2f, RowHeight),
-                          FontSmall, UiButtonStyle.Quiet,
-                          () => Order(WingAction.ReturnToBase))
+            GridButton(parent, "RTB", Pad, y, w,
+                       () => Order(WingAction.ReturnToBase))
                 .WithTooltip(OrderHint.ReturnToBase);
+            GridButton(parent, "Refit", Pad + w + Gap, y, w,
+                       () => Order(WingAction.Refit))
+                .WithTooltip("REFIT - land at base, refill fuel and ammunition, then relaunch and rejoin.");
             y -= RowHeight + Gap;
 
             y = AddFormationAndDoctrine(parent, y);
@@ -498,7 +497,7 @@ namespace WingCommand
                     canJam |= WingOrderCatalog.CanApply(member, WingOrder.JamTarget);
                 }
                 cargoButton?.SetEnabled(canCargo);
-                landButton?.SetEnabled(canLand);
+                landButton?.SetEnabled(canLand && WingRegistry.IsRotary(wing.Leader));
 
                 // Jam needs a jam-capable wingman in scope. The manoeuvre controls live on
                 // the radial wheel, keeping this page focused on persistent orders.
@@ -718,7 +717,7 @@ namespace WingCommand
         private sealed class RosterRow
         {
             private readonly GameObject go;
-            private readonly TMP_Text slot, name, order, fuel, ammo;
+            private readonly TMP_Text slot, plane, name, order, fuel, ammo;
             private readonly Image selectionRule;
             private readonly Image fill;
             private readonly WingButton hit;
@@ -772,40 +771,33 @@ namespace WingCommand
                     }
                 });
 
-                // Cells sit under the four columns in RosterColumns — CALLSIGN, STATE,
+                // Cells sit under the columns in RosterColumns — PLANE, CALLSIGN, STATE,
                 // FUEL, AMMO — so a header and the value beneath it cannot drift apart.
-                slot  = Label(rt, "", new Rect(6f, 0f, 18f, RowHeight), Dim(), FontBody,
+                slot  = Label(rt, "", new Rect(4f, 0f, 16f, RowHeight), Dim(), FontBody,
                               FontStyles.Normal, TextAlignmentOptions.Left);
-                name  = Label(rt, "", new Rect(26f, 0f, 108f, RowHeight), WingColor(), FontBody,
+                plane = Label(rt, "", new Rect(22f, 0f, 56f, RowHeight), WingColor(), FontBody,
                               FontStyles.Normal, TextAlignmentOptions.Left);
-                order = Label(rt, "", new Rect(138f, 0f, 86f, RowHeight), Dim(), FontBody,
+                name  = Label(rt, "", new Rect(80f, 0f, 66f, RowHeight), WingColor(), FontBody,
                               FontStyles.Normal, TextAlignmentOptions.Left);
-                fuel  = Label(rt, "", new Rect(224f, 0f, 52f, RowHeight), Dim(), FontSmall,
+                order = Label(rt, "", new Rect(148f, 0f, 54f, RowHeight), Dim(), FontBody,
+                              FontStyles.Normal, TextAlignmentOptions.Left);
+                fuel  = Label(rt, "", new Rect(204f, 0f, 36f, RowHeight), Dim(), FontSmall,
                               FontStyles.Normal, TextAlignmentOptions.Right);
-                ammo  = Label(rt, "", new Rect(280f, 0f, 40f, RowHeight), Dim(), FontSmall,
+                ammo  = Label(rt, "", new Rect(242f, 0f, 34f, RowHeight), Dim(), FontSmall,
                               FontStyles.Normal, TextAlignmentOptions.Right);
 
                 // LD grants this wingman temporary flight lead: the rest of the wing then
-                // formates on them instead of on the player. It sits in the gap the AMMO
-                // readout leaves before REL, latched (not a two-press confirm) because it is
-                // a toggle with no cost and an obvious undo.
-                const float leadWidth = 30f;
+                // formates on them instead of on the player.
+                const float leadWidth = 26f;
                 lead = WingUi.Button(rt, "LD",
-                                     new Rect(width - releaseWidth - 6f - leadWidth - 2f, -1f,
-                                              leadWidth, RowHeight - 2f),
-                                     FontSmall, UiButtonStyle.Default, ToggleLead)
+                                     new Rect(280f, -1f, leadWidth, RowHeight - 2f),
+                                     FontMicro, UiButtonStyle.Default, ToggleLead)
                              .WithTooltip("Flight lead - the rest of the wing formates on this " +
                                           "wingman while it takes your orders. Press again to release.");
 
-                // REL discharges a wingman for good, and it sat one row-width from the row
-                // you click to select one, in the same green as the orders. It is now drawn
-                // as the destructive control it is, and it asks twice — the same
-                // press-again-to-confirm the Supply page already uses for its assignment
-                // fee, so the panel only has the one idiom for "this one is going to cost
-                // you something".
+                // REL discharges a wingman for good.
                 release = WingUi.Button(rt, "REL",
-                                        new Rect(width - releaseWidth - 6f, -1f, releaseWidth,
-                                                 RowHeight - 2f),
+                                        new Rect(310f, -1f, releaseWidth, RowHeight - 2f),
                                         FontSmall, UiButtonStyle.Danger, ConfirmRelease)
                                 .WithTooltip(OrderHint.Release);
             }
@@ -872,9 +864,17 @@ namespace WingCommand
                 if (memberChanged)
                 {
                     slot.text = m.Slot.ToString();
-                    name.text = AvTheme.Truncate(m.Name, 16);
+                    string planeStr = !string.IsNullOrEmpty(m.Aircraft?.definition?.code)
+                        ? m.Aircraft.definition.code
+                        : m.Name;
+                    plane.text = AvTheme.Truncate(planeStr, 7);
+                    string callsignStr = m.Crew != null && !string.IsNullOrEmpty(m.Crew.Callsign)
+                        ? m.Crew.Callsign
+                        : "AI";
+                    name.text = AvTheme.Truncate(callsignStr, 8);
                 }
                 slot.color = selected ? Green() : Dim();
+                plane.color = selected ? Green() : WingColor();
                 name.color = selected ? Green() : WingColor();
                 selectionRule.color = selected ? Green() : MemberFrameColor();
 
@@ -915,9 +915,14 @@ namespace WingCommand
                 if (pendingChanged)
                 {
                     slot.text = slotNumber.ToString();
-                    name.text = AvTheme.Truncate(p.AirframeName, 16);
+                    string planeStr = !string.IsNullOrEmpty(p.Definition?.code)
+                        ? p.Definition.code
+                        : p.AirframeName;
+                    plane.text = AvTheme.Truncate(planeStr, 7);
+                    name.text = "EN ROUTE";
                 }
                 slot.color = Dim();
+                plane.color = WingColor();
                 name.color = WingColor();
                 selectionRule.color = MemberFrameColor();
 

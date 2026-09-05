@@ -353,7 +353,8 @@ namespace WingCommand
             WingPilot pilot = Of(aircraft);
             if (pilot == null) return 0f;
 
-            float perRank = Mathf.Clamp01(WingTuning.RankEffect) * 0.06f;
+            float effect = Plugin.Settings != null ? Plugin.Settings.RankEffect.Value : WingTuning.RankEffect;
+            float perRank = Mathf.Clamp(effect, 0f, 2f) * 0.06f;
             return (int)pilot.Rank * perRank;
         }
 

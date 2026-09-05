@@ -163,13 +163,19 @@ namespace WingCommand
         private static MapSnapshot map;
         private static bool applied;
 
+        public static void Reconcile()
+        {
+            if (DynamicMap.mapMaximized && applied != MfdPresentation.Expanded)
+                MaximizePostfix(SceneSingleton<DynamicMap>.i);
+        }
+
         [HarmonyPostfix]
         [HarmonyPatch(typeof(DynamicMap), nameof(DynamicMap.Maximize))]
         public static void MaximizePostfix(DynamicMap __instance)
         {
             if (__instance == null) return;
 
-            if (!Plugin.Settings.FitMapToPanels.Value || !GameAccess.MfdAvailable)
+            if (!MfdPresentation.Expanded)
             {
                 // Restoring here happens with the map still maximised, so the map rect does
                 // have to be put back — unlike on Minimize, where vanilla has already done it.
@@ -179,6 +185,8 @@ namespace WingCommand
 
             Canvas canvas = __instance.maximizedMapCanvas;
             if (!MfdLayout.TryResolve(canvas, out MfdLayout.Columns columns)) return;
+
+            MfdPresentation.Capture(canvas.GetComponentInChildren<VirtualMFD>(true));
 
             ResizeMap(__instance, columns);
             BuildRail(canvas, columns);

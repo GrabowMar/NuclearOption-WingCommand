@@ -49,7 +49,7 @@ namespace WingCommand
             float opacity = Plugin.Settings != null ? Plugin.Settings.MfdBackgroundOpacity.Value : 0.40f;
             bool showGrid = Plugin.Settings != null && Plugin.Settings.MfdCheckeredGrid.Value;
             bool useCustomImage = Plugin.Settings != null && Plugin.Settings.MfdCustomImageEnabled.Value;
-            Sprite userSprite = useCustomImage ? SetScreen.CurrentUserSprite : null;
+            Sprite userSprite = useCustomImage ? MfdWallpaper.Current : null;
 
             if (backdropBaseImage != null)
             {

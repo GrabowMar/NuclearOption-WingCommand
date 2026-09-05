@@ -35,7 +35,7 @@ namespace WingCommand
         private static void AfterPress(VirtualMFD mfd, Button button, bool left)
         {
             if (mfd == null || button == null) return;
-            if (!Plugin.Settings.FitMapToPanels.Value || !GameAccess.MfdAvailable) return;
+            if (!MfdPresentation.Expanded) return;
 
             MFDScreen pressed = ScreenFor(mfd, button, left);
 

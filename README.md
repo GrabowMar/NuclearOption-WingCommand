@@ -27,6 +27,12 @@
 
 ## What it does
 
+Wing Command works independently of Boscali Summer. On its own, WMC fills the available
+side area beside its normal bezel button, keeping clear of the screen edges and bottom
+controls. With Boscali Summer loaded and `UI.FitMapToPanels` enabled, it uses the expanded
+avionics layout. Turning that setting off also selects the vanilla presentation.
+Wing Command does not provide a SET panel; that panel belongs to Boscali Summer.
+
 Vanilla gives you one semi-autonomous wingman. WingCommand turns your wing into a squadron:
 
 - 🎯 **Tactical control** — select wingmen on the map, build a scope, issue scoped orders
@@ -303,9 +309,9 @@ as `M. "COBALT" ADEYEMI`, a smaller line for flight position and aircraft. A com
 several aircraft gets one element acknowledgement from its lead; skipped aircraft don't
 answer as if they complied. Urgent missile/damage/loss calls jump the queue. Each pilot
 carries a persona (professional, aggressive, calm, dry) that picks between lines for the same
-event — a small seam for later mission dialogue. Each transmission opens with the game's
-radio click (`Comms/RadioChatterSound`). Airborne crews rarely trade jokes and rumours when
-the radio is quiet (`Comms/CrewBanter`). The mod no longer writes ordinary notices into the
+event — a small seam for later mission dialogue. Transmissions can be tailored in
+settings (`Comms/Radio`: `Off`, `Text`, `TextAndTone`). With `TextAndTone`, each call opens
+with the game's native radio click. The mod no longer writes ordinary notices into the
 game's message boxes.
 
 ## 💀 Takeover
@@ -393,7 +399,7 @@ breaks after an update, a fallback keybind is under advanced settings until the 
 <details>
 <summary><strong>Formation flying looks unstable</strong></summary>
 
-- Reset `Aggression`, `Damping` and `ThrottleGain` to defaults.
+- Reset `Formation/Spacing` to default (120m) if altered.
 - Make sure you're not outrunning the wingman's performance envelope.
 - Turn on `Debug/VerboseLogging` and check slot error before filing a bug.
 </details>
@@ -412,37 +418,55 @@ with your game version, the aircraft/order/formation involved, and the relevant 
 
 ## ⚙️ Configuration
 
-The ordinary ConfigurationManager view is limited to the settings below. Controller gains,
-integration toggles, compatibility features, colours and diagnostics are under **Advanced**;
-retired keys are hidden but still parse old files.
+Settings live in `BepInEx/config/com.marci.wingcommand.cfg`. Edit them in-game with
+[ConfigurationManager](https://github.com/BepInEx/BepInEx.ConfigurationManager) (**F1**).
+Flight laws, bank limits, and integration safety floors are fixed in code, while preference,
+tactical rules, hotkeys, and appearance can be configured.
 
 | Section | Setting | Default | Purpose |
 |---|---|---:|---|
-| Formation | `Shape` | `EchelonRight` | Initial formation |
-| Formation | `MaxWingSize` | `3` | Maximum recruited wingmen |
-| Engagement | `DefaultRoe` | `Hold` | Initial ROE |
+| AI | `Mode` | `Smart` | `Smart` (full AI passes) or `Performance` (lean updates for heavy MP hosts) |
+| Formation | `Shape` | `EchelonRight` | Initial formation at mission start |
+| Formation | `Spacing` | `120` | Lateral and longitudinal slot spacing in metres (`50`–`300`) |
+| Engagement | `DefaultRoe` | `Hold` | Initial ROE (`Hold`, `Tight`, `Free`) |
 | Engagement | `AutoReturnOnEmpty` | `true` | Auto RTB on Winchester or bingo |
-| Engagement | `BingoFuel` | `0.15` | Auto-return fuel fraction |
+| Engagement | `BingoFuel` | `0.15` | Auto-return fuel fraction (`0.05`–`0.40`) |
+| Engagement | `LeashDistance` | `5000` | Max pursuit distance in metres before breaking off and rejoining (`2000`–`15000`) |
+| Engagement | `MaxWingmenPerTarget` | `2` | Maximum wingmen allowed to focus-fire the same target (`1`–`4`) |
 | Engagement | `RtbReturnsToReserve` | `true` | Recovered airframes return to wing reserve |
 | Engagement | `TakeoverOnDeath` | `true` | Offer a surviving wing aircraft after pilot loss |
-| Loadout | `SavedTemplates` | `""` | Your saved per-pylon templates |
-| Shop | `RecruitmentCostPercent` | `0.25` | Active-AI reassignment fee, fraction of list value |
-| Shop | `ExceedSquadronLimitCost` | `3` | Price multiplier past the AI limit |
-| Shop | `ExceedSquadronLimitRank` | `3` | Rank required to exceed the limit |
-| Shop | `ExceedSquadronLimitAllowance` | `3` | Over-limit airframes airborne at once |
+| Comms | `Radio` | `TextAndTone` | Squadron radio traffic (`Off`, `Text`, `TextAndTone`) |
 | Pilot | `PilotProgression` | `true` | Pilots keep a record, rank and small skill effect |
-| Pilot | `RankEffect` | `1` | How much rank changes shooting; `0` = record only |
-| Pilot | `XpPerRank` | `120` | Experience step between ranks |
-| Comms | `RadioChatter` | `true` | Wing order and state reports |
-| Comms | `RadioChatterSound` | `true` | Open each transmission with the radio click |
-| Comms | `CrewBanter` | `true` | Rare jokes and rumours between airborne pilots |
+| Pilot | `RankEffect` | `1.0` | Multiplier on rank shooting bonuses (`0` = cosmetic progression only) |
+| Shop | `ShopEnabled` | `true` | Enable purchasing wingmen from faction supply |
+| Shop | `RecruitmentCostPercent` | `0.25` | Active-AI reassignment fee, fraction of list value (`0.0` = free) |
+| Loadout | `SavedTemplates` | `""` | Your saved per-pylon templates (managed by WMC) |
+| Keys | `WingMenu` | `None` | Optional hotkey to open standalone command wheel |
+| Keys | `QuickRejoin` | `None` | Optional hotkey: whole wing rejoins formation |
+| Keys | `QuickEngage` | `None` | Optional hotkey: whole wing engages |
+| Keys | `QuickDisengage` | `None` | Optional hotkey: whole wing falls back / disengages |
+| Keys | `QuickAttackTarget` | `None` | Optional hotkey: attack player's targeted contact |
+| Keys | `CycleRoe` | `None` | Optional hotkey: cycle ROE (Hold → Tight → Free) |
 | UI | `ShowWingHud` | `true` | Compact roster docked beside the tactical map |
-| Debug | `FreePlanePurchases` | `false` | Free requisitions; **probably breaks the mod** |
-| Debug | `DisableWingSizeLimit` | `false` | Ignore `MaxWingSize`; **probably breaks the mod** |
+| UI | `UseMfdPanel` | `true` | Cockpit MFD WMC screen alongside BDF/MAP/HUD |
+| UI | `MapCommands` | `true` | Tactical wing selection and tasking on maximised map |
+| UI | `FitMapToPanels` | `true` | Three-column maximised map layout (with Boscali Summer) |
+| UI | `Highlight` | `WingAndTargets` | Roster and target tinting (`Off`, `Wing`, `WingAndTargets`) |
+| UI | `WingMemberColor` | `#39FF65` | Hex colour for wingmen across HUD and map |
+| UI | `WingTargetColor` | `#FFB020` | Hex colour for units engaged by wing |
+| UI | `TacticalPauseInSingleplayer` | `false` | Slow down game time when tactical command screen is active |
+| UI | `TacticalPauseScale` | `0.25` | Simulation time-scale during tactical pause (`0.0` = full pause) |
+| UI | `ExternalHitmarkerAudio` | `true` | Hitmarker audio confirmation in 3rd-person/orbit view |
+| MFD | `BackgroundOpacity` | `0.40` | Tactical MFD background opacity (`0.0`–`1.0`) |
+| MFD | `CheckeredGrid` | `false` | Checkered datum grid across MFD background |
+| MFD | `CustomImageEnabled` | `false` | Custom user wallpaper image as MFD background |
+| Debug | `EnableDebugActions` | `false` | Master switch for development cheats (host-only) |
+| Debug | `SpawnDebugWing` | — | F1 button: spawn a full wing of current aircraft |
+| Debug | `FreePlanePurchases` | `false` | Requisitioned aircraft cost no allocation |
+| Debug | `DisableWingSizeLimit` | `false` | Ignore 3-wingman squadron cap |
+| Debug | `VerboseLogging` | `false` | Log state transitions and reflexes to BepInEx console |
 
-The Debug cheats are F1-only, off by default, and unsupported. Global AI `SkillScale` /
-`BraveryScale`, player-specific target protection, `WingPriceGrowth`, `RecruitRange`,
-`AdditionalWingReservePerType` and the fast-delivery keys are retired and ignored.
+The Debug cheats are F1-only, off by default, and unsupported. Squadron size is capped at 3 wingmen by design (matching HUD and WMC layout); `DisableWingSizeLimit` bypasses this for testing. Global AI `SkillScale` / `BraveryScale`, player-specific target protection, `WingPriceGrowth`, `RecruitRange`, and `AdditionalWingReservePerType` are retired and ignored.
 
 ## 🔩 Implementation
 

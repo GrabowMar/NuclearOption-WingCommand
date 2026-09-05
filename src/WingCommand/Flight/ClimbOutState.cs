@@ -3,13 +3,8 @@ using UnityEngine;
 namespace WingCommand
 {
     /// <summary>
-    /// Wings-level climb. No slot chase, no orbit, no intercept.
-    ///
-    /// The formation law is a station-keeper: it rotates velocity toward the slot and
-    /// banks to chase it. That is the wrong controller for an aircraft that has just left
-    /// the runway 10 km from the leader. This state aims ahead and up, with bank authority
-    /// small enough that AutoAim cannot roll through the horizon, until the climb-out
-    /// reflex releases.
+    /// Short departure and energy recovery. Below clearance it flies ahead; once clear,
+    /// a shallow, bounded turn starts the rendezvous while the aircraft builds speed.
     /// </summary>
     internal class ClimbOutState : WingPilotState
     {
@@ -38,7 +33,7 @@ namespace WingCommand
             if (pilot != null && pilot.flightInfo != null)
                 pilot.flightInfo.HasTakenOff = true;
             if (Plugin.Settings.VerboseLogging.Value)
-                Plugin.Logger.LogInfo("[Wing] " + aircraft.unitName + " climbing out before joining");
+                Plugin.Logger.LogInfo("[Wing] " + aircraft.unitName + " departure: accelerating and climbing toward leader");
         }
 
         public override void LeaveState()
@@ -61,17 +56,41 @@ namespace WingCommand
             forward.Normalize();
 
             float lookAhead = Mathf.Max(aircraft.speed * LookAheadSeconds, MinLookAhead);
-            float climb = ClimbBias;
+            bool isRotary = WingRegistry.IsRotary(aircraft);
+            float climb = isRotary ? ClimbBias : lookAhead * Mathf.Tan(WingTuning.DeparturePitch * Mathf.Deg2Rad);
             Aircraft leader = member.Leader;
-            if (leader != null && !leader.disabled)
+            if (isRotary && leader != null && !leader.disabled)
                 climb = Mathf.Max(climb, Mathf.Min(leader.radarAlt - aircraft.radarAlt, 600f));
             if (climb < 80f) climb = 80f;
+
+            AircraftParameters parameters = aircraft.GetAircraftParameters();
+            if (!isRotary && ClimbOutPolicy.ShouldAccelerateLevel(
+                    aircraft.radarAlt, aircraft.speed,
+                    parameters != null ? parameters.takeoffSpeed : 70f))
+                climb = 0f;
+
+            // Start the rendezvous during the safety climb. Below flying speed or
+            // terrain clearance, retain the straight departure heading.
+            float bank = Bank;
+            if (!isRotary && leader != null && !leader.disabled &&
+                aircraft.radarAlt >= WingTuning.FixedWingAirborneAlt &&
+                aircraft.speed >= (parameters != null ? parameters.takeoffSpeed : 70f) * WingTuning.LaunchSpeedMargin)
+            {
+                Vector3 toLeader = leader.GlobalPosition() - aircraft.GlobalPosition();
+                FormationControlRules.SafeRejoinDirection(
+                    forward.x, 0f, forward.z, toLeader.x, 0f, toLeader.z,
+                    WingTuning.DepartureTurnBank, 0f, 0f, aircraft.radarAlt,
+                    out float x, out _, out float z);
+                Vector3 course = new Vector3(x, 0f, z);
+                bank = Mathf.Clamp(Vector3.Angle(forward, course) * 2f, Bank, WingTuning.DepartureTurnBank);
+                forward = course;
+            }
 
             GlobalPosition destination = aircraft.GlobalPosition()
                                          + forward * lookAhead
                                          + Vector3.up * climb;
 
-            if (WingRegistry.IsRotary(aircraft))
+            if (isRotary)
             {
                 float agl = AutopilotMath.RotaryAgl(aircraft, aircraft.radarAlt + climb);
                 aircraft.autopilot.AutoAim(
@@ -89,10 +108,10 @@ namespace WingCommand
             aircraft.autopilot.AutoAim(
                 destination: destination,
                 aimVelocity: true,
-                ignoreCollisions: true,
+                ignoreCollisions: false,
                 runwayAlign: false,
                 effort: 2f,
-                bankAllowed: Bank,
+                bankAllowed: FormationControlRules.BankInput(bank, aircraft.radarAlt),
                 followTerrain: false,
                 altitudeHold: AutopilotMath.CruiseHold(aircraft, aircraft.radarAlt + climb),
                 targetVelocity: Vector3.zero);

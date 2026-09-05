@@ -49,6 +49,66 @@ namespace WingCommand
         }
 
         /// <summary>
+        /// Whether this airbase has a live hangar or helipad that can spawn the given airframe,
+        /// regardless of whether that pad is free this frame.
+        /// </summary>
+        public static bool CanProduce(Airbase airbase, AircraftDefinition definition)
+        {
+            if (airbase == null || airbase.disabled || definition == null) return false;
+            IList<Hangar> hangars = airbase.hangars;
+            if (hangars == null) return false;
+
+            for (int i = 0; i < hangars.Count; i++)
+            {
+                Hangar hangar = hangars[i];
+                if (hangar == null || hangar.Disabled) continue;
+                if (HangarLaunchSafety.IsBlocked(hangar, definition)) continue;
+                AircraftDefinition[] types = hangar.GetAvailableAircraft();
+                if (types == null) continue;
+                for (int j = 0; j < types.Length; j++)
+                    if (types[j] == definition) return true;
+            }
+
+            return false;
+        }
+
+        /// <summary>
+        /// Whether any of the allowed friendly airbases can launch this airframe.
+        /// Surface units spawn directly in water astern of the player without a hangar,
+        /// so they always return true.
+        /// </summary>
+        public static bool CanAnyAllowedLaunch(FactionHQ hq, AircraftDefinition definition)
+        {
+            if (definition == null) return false;
+            if (WingShop.IsSurfaceDefinition(definition)) return true;
+            if (hq == null) return false;
+
+            foreach (Airbase airbase in hq.GetAirbases())
+            {
+                if (airbase == null || airbase.disabled) continue;
+                if (!IsAllowed(airbase)) continue;
+                if (CanProduce(airbase, definition)) return true;
+            }
+            return false;
+        }
+
+        /// <summary>Number of allowed airbases capable of launching this airframe.</summary>
+        public static int CountAllowedCanLaunch(FactionHQ hq, AircraftDefinition definition)
+        {
+            if (definition == null || hq == null) return 0;
+            if (WingShop.IsSurfaceDefinition(definition)) return 1;
+
+            int count = 0;
+            foreach (Airbase airbase in hq.GetAirbases())
+            {
+                if (airbase == null || airbase.disabled) continue;
+                if (!IsAllowed(airbase)) continue;
+                if (CanProduce(airbase, definition)) count++;
+            }
+            return count;
+        }
+
+        /// <summary>
         /// Friendly, live fields, nearest first. The Supply pager reads this; delivery
         /// collects its own snapshot so a UI refresh cannot change a spawn decision.
         /// </summary>

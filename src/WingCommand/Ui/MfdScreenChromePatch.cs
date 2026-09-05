@@ -40,8 +40,9 @@ namespace WingCommand
         [HarmonyPatch(typeof(MFDScreen), nameof(MFDScreen.ShowScreen))]
         public static void ShowScreenPostfix(MFDScreen __instance)
         {
+            MfdPresentation.Apply(__instance);
             SetRootChrome(__instance, true);
-            if (Plugin.Settings.FitMapToPanels.Value && GameAccess.MfdAvailable)
+            if (MfdPresentation.Expanded)
             {
                 MfdPanelDock.OnScreenShown(__instance);
 

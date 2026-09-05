@@ -349,7 +349,7 @@ namespace WingCommand
                 card.Meta.text = "FUEL " + fuel + "%     STORES " + member.Ammo +
                                  "     RANGE " + UnitConverter.DistanceReading(range);
 
-                bool low = member.Fuel <= WingTuning.BingoFuel;
+                bool low = member.Fuel <= (Plugin.Settings != null ? Plugin.Settings.BingoFuel : WingTuning.BingoFuel);
                 RectTransform fill = card.FuelFill.rectTransform;
                 float trackWidth = card.FuelTrack.rectTransform.sizeDelta.x;
                 fill.sizeDelta = new Vector2(trackWidth * Mathf.Clamp01(member.Fuel),

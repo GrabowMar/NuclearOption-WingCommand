@@ -681,7 +681,8 @@ namespace WingCommand
             if (target is Missile) return 1;
 
             int estimated = Mathf.CeilToInt(station.WeaponInfo.CalcAttacksNeeded(target));
-            return Mathf.Clamp(estimated, 1, WingTuning.MaxWingmenPerTarget);
+            int maxWingmen = Plugin.Settings != null ? Plugin.Settings.MaxWingmenPerTarget.Value : WingTuning.MaxWingmenPerTarget;
+            return Mathf.Clamp(estimated, 1, maxWingmen);
         }
 
         /// <summary>Estimated useful concurrent shooters from a particular aircraft.</summary>

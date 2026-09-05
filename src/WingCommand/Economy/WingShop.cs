@@ -53,10 +53,12 @@ namespace WingCommand
             internal readonly FactionHQ Hq;
             internal readonly WingSupplyReserve.Source Source;
             internal readonly bool Declared;
+            internal readonly Aircraft AutoRtbCandidate;
 
             internal PurchaseQuote(bool canBuy, string reason, float price, int stock,
                                    bool overLimit, WingLoadoutChoice loadout, Player player,
-                                   FactionHQ hq, WingSupplyReserve.Source source, bool declared)
+                                   FactionHQ hq, WingSupplyReserve.Source source, bool declared,
+                                   Aircraft autoRtbCandidate = null)
             {
                 CanBuy = canBuy;
                 Reason = reason;
@@ -68,6 +70,7 @@ namespace WingCommand
                 Hq = hq;
                 Source = source;
                 Declared = declared;
+                AutoRtbCandidate = autoRtbCandidate;
             }
         }
 
@@ -524,8 +527,62 @@ namespace WingCommand
             return catalogue;
         }
 
+        private static readonly List<Offer> loadoutCatalogue = new List<Offer>();
+
+        /// <summary>
+        /// All commandable aircraft (both fixed-wing and rotary) available for loadout template editing.
+        /// Does not restrict to the player's current airframe class so players can configure both.
+        /// </summary>
+        public static IReadOnlyList<Offer> LoadoutCatalogue()
+        {
+            loadoutCatalogue.Clear();
+            listedDefinitions.Clear();
+
+            Aircraft leader = WingCommandManager.Instance?.Wing?.Leader;
+            FactionHQ hq = leader != null ? leader.NetworkHQ : null;
+            GameManager.GetLocalPlayer(out Player player);
+            int rank = player != null ? player.PlayerRank : 0;
+
+            if (hq != null && hq.AircraftSupply != null)
+            {
+                foreach (KeyValuePair<AircraftDefinition, FactionHQ.RuntimeSupply> entry in hq.AircraftSupply)
+                {
+                    if (entry.Key == null || !Sellable(entry.Key, hq, rank, matchLeader: false)) continue;
+                    int available = entry.Value.Count + WingSupplyReserve.CountOf(entry.Key);
+                    loadoutCatalogue.Add(new Offer(entry.Key, entry.Key.unitName, entry.Key.value, available));
+                    listedDefinitions.Add(entry.Key);
+                }
+            }
+
+            foreach (AircraftDefinition definition in WingSupplyReserve.Definitions)
+            {
+                if (definition == null || listedDefinitions.Contains(definition)) continue;
+                if (!Sellable(definition, hq, rank, matchLeader: false)) continue;
+                int available = WingSupplyReserve.CountOf(definition);
+                loadoutCatalogue.Add(new Offer(definition, definition.unitName, definition.value, available));
+                listedDefinitions.Add(definition);
+            }
+
+            // Also include all known aircraft from encyclopedia so all modded and stock planes/helos can be edited
+            Encyclopedia enc = Encyclopedia.i;
+            if (enc != null && enc.aircraft != null)
+            {
+                for (int i = 0; i < enc.aircraft.Count; i++)
+                {
+                    AircraftDefinition def = enc.aircraft[i];
+                    if (def == null || listedDefinitions.Contains(def)) continue;
+                    if (!IsCommandableUnit(def)) continue;
+                    loadoutCatalogue.Add(new Offer(def, def.unitName, def.value, 0));
+                    listedDefinitions.Add(def);
+                }
+            }
+
+            loadoutCatalogue.Sort((a, b) => a.BasePrice.CompareTo(b.BasePrice));
+            return loadoutCatalogue;
+        }
+
         /// <summary>Restrictions, rank and airframe class - the gates both sources share.</summary>
-        private static bool Sellable(AircraftDefinition definition, FactionHQ hq, int rank)
+        private static bool Sellable(AircraftDefinition definition, FactionHQ hq, int rank, bool matchLeader = true)
         {
             if (definition == null) return false;
 
@@ -533,9 +590,9 @@ namespace WingCommand
 
             // Hide what could never join the formation, rather than selling it and leaving
             // the aircraft orphaned in the air with no way to command it.
-            if (!MatchesLeader(definition)) return false;
+            if (matchLeader && !MatchesLeader(definition)) return false;
 
-            if (hq.restrictedAircraft != null &&
+            if (hq != null && hq.restrictedAircraft != null &&
                 hq.restrictedAircraft.Contains(definition.unitName)) return false;
 
             if (definition.aircraftParameters != null &&
@@ -588,6 +645,14 @@ namespace WingCommand
                 definition.aircraftParameters.rankRequired > player.PlayerRank)
                 return Denied("Requires rank " + definition.aircraftParameters.rankRequired);
 
+            if (!IsSurfaceDefinition(definition))
+            {
+                if (!WingLaunchFields.HasAnyAllowed(hq))
+                    return Denied("No launch base selected");
+                if (!WingLaunchFields.CanAnyAllowedLaunch(hq, definition))
+                    return Denied("No selected base can launch " + definition.unitName);
+            }
+
             declared = hq.AircraftSupply.ContainsKey(definition);
             source = WingSupplyReserve.NextSource(definition);
 
@@ -603,7 +668,7 @@ namespace WingCommand
                 loadout = recovered;
 
             if (!ClearedForPurchase(hq, out float multiplier, out string capReason,
-                                    out overLimit))
+                                    out overLimit, out Aircraft autoRtbCandidate))
                 return Denied(capReason);
 
             bool alreadyOwned = source == WingSupplyReserve.Source.Owned;
@@ -614,7 +679,7 @@ namespace WingCommand
                               Mathf.RoundToInt(player.Allocation));
 
             return new PurchaseQuote(true, null, price, stock, overLimit, loadout,
-                                     player, hq, source, declared);
+                                     player, hq, source, declared, autoRtbCandidate);
         }
 
         /// <summary>
@@ -632,6 +697,28 @@ namespace WingCommand
             {
                 reason = quote.Reason;
                 return false;
+            }
+
+            if (quote.AutoRtbCandidate != null)
+            {
+                Aircraft candidate = quote.AutoRtbCandidate;
+                WingMember member = WingCommandManager.Instance?.Wing?.Find(candidate);
+                if (member != null)
+                {
+                    member.SendHome("auto-RTB to free squadron slot for requisition");
+                }
+                else
+                {
+                    Pilot pilot = WingRegistry.PrimaryPilot(candidate);
+                    if (pilot != null)
+                    {
+                        PilotBaseState landing = (PilotBaseState)pilot.AILandingState ?? pilot.AIHeloLandingState;
+                        if (landing != null) pilot.SwitchState(landing);
+                    }
+                    WingDeparture.Begin(candidate);
+                }
+                WingCommandManager.Instance?.Toast(
+                    "Ordered " + candidate.unitName + " to RTB to free squadron slot");
             }
 
             if (!BeginTransaction(definition, quote, out PurchaseTransaction transaction,
@@ -841,10 +928,12 @@ namespace WingCommand
         /// dead end.
         /// </summary>
         private static bool ClearedForPurchase(FactionHQ hq, out float multiplier,
-                                               out string reason, out bool overLimit)
+                                               out string reason, out bool overLimit,
+                                               out Aircraft autoRtbCandidate)
         {
             reason = null;
             multiplier = 1f;
+            autoRtbCandidate = null;
 
             SquadronState squadron = Squadron(hq);
             overLimit = squadron.WouldExceed(capacityReservations.Squadron);
@@ -852,6 +941,14 @@ namespace WingCommand
 
             if (!ExceedLimit)
             {
+                // If over limit is not active, automatically find one friendly AI closest to an airbase and RTB it
+                autoRtbCandidate = FindClosestAiToAirbase(hq);
+                if (autoRtbCandidate != null)
+                {
+                    overLimit = false;
+                    return true;
+                }
+
                 reason = "Squadron at capacity (" +
                          (squadron.Active + capacityReservations.Squadron) +
                          " of " + squadron.Limit +
@@ -875,6 +972,62 @@ namespace WingCommand
 
             multiplier = ExceedLimitMultiplier;
             return true;
+        }
+
+        /// <summary>
+        /// Finds the friendly active AI aircraft closest to any friendly airbase, to order it home
+        /// when requisitioning at capacity without exceeding limit.
+        /// </summary>
+        public static Aircraft FindClosestAiToAirbase(FactionHQ hq)
+        {
+            if (hq == null) return null;
+            var airbases = new List<Airbase>();
+            IEnumerable<Airbase> hqBases = hq.GetAirbases();
+            if (hqBases != null)
+            {
+                foreach (Airbase ab in hqBases)
+                {
+                    if (ab != null && !ab.disabled) airbases.Add(ab);
+                }
+            }
+            if (airbases.Count == 0) return null;
+
+            Aircraft best = null;
+            float bestDistSq = float.MaxValue;
+            List<Aircraft> all = UnitRegistry.allAircraft;
+
+            for (int i = 0; i < all.Count; i++)
+            {
+                Aircraft a = all[i];
+                if (a == null || a.disabled) continue;
+                if (a.NetworkHQ != hq) continue;
+                if (a.Player != null) continue;
+                if (WingDeparture.Contains(a)) continue;
+
+                Pilot pilot = WingRegistry.PrimaryPilot(a);
+                if (pilot == null || pilot.dead || pilot.ejected) continue;
+                if (pilot.currentState != null &&
+                    (pilot.currentState == pilot.AILandingState || pilot.currentState == pilot.AIHeloLandingState))
+                    continue;
+
+                Vector3 pos = a.transform.position;
+                float dForA = float.MaxValue;
+                for (int j = 0; j < airbases.Count; j++)
+                {
+                    Airbase ab = airbases[j];
+                    if (ab == null || ab.disabled) continue;
+                    float d = (pos - ab.transform.position).sqrMagnitude;
+                    if (d < dForA) dForA = d;
+                }
+
+                if (dForA < bestDistSq)
+                {
+                    bestDistSq = dForA;
+                    best = a;
+                }
+            }
+
+            return best;
         }
     }
 }

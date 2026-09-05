@@ -201,7 +201,8 @@ namespace WingCommand
             public float Score(in WingSituation s, bool incumbent) =>
                 ClimbOutPolicy.ShouldClimbOut(
                     s.RadarAlt, s.LeaderDistance, s.Order, incumbent,
-                    s.DeliveryPending, s.LeaderPresent)
+                    s.DeliveryPending, s.LeaderPresent,
+                    s.Airspeed, s.TakeoffSpeed, s.MemberIsRotary)
                     ? 1f : 0f;
         }
 

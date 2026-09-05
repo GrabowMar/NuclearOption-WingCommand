@@ -171,7 +171,7 @@ namespace WingCommand.PureTests
         }
 
         [Fact]
-        public void ClimbOutReleasesOnceHighEnoughOrCloseEnough()
+        public void FixedWingClimbOutDoesNotReleaseEarlyWhenLeaderIsClose()
         {
             WingSituation high = new WingSituation(
                 order: WingOrder.Formation,
@@ -186,8 +186,67 @@ namespace WingCommand.PureTests
                 radarAlt: 80f,
                 leaderDistance: ClimbOutPolicy.ReleaseRange - 10f,
                 secondsInBehaviour: 3f);
-            Assert.Equal(WingBehaviours.Task,
+            Assert.Equal(WingBehaviours.ClimbOut,
                          Behaviour(close, active: "wingcommand.climb-out"));
+        }
+
+        [Fact]
+        public void ClimbOutHeldWhileSpeedDeficientAfterTakeoff()
+        {
+            // Even if above ReleaseAlt, an aircraft below safe maneuvering speed stays in climb-out
+            WingSituation slow = new WingSituation(
+                order: WingOrder.Formation,
+                radarAlt: ClimbOutPolicy.ReleaseAlt + 10f,
+                leaderDistance: 8000f,
+                airspeed: 75f,
+                takeoffSpeed: 70f,
+                secondsInBehaviour: 3f);
+            Assert.Equal(WingBehaviours.ClimbOut,
+                         Behaviour(slow, active: "wingcommand.climb-out"));
+        }
+
+        [Fact]
+        public void ClimbOutReleasesWhenBothAltitudeAndSpeedSufficient()
+        {
+            // Once both altitude (>= 450m) and airspeed (>= 70 * 1.25 = 87.5 m/s) are reached, releases to Task (Formation)
+            WingSituation ready = new WingSituation(
+                order: WingOrder.Formation,
+                radarAlt: ClimbOutPolicy.ReleaseAlt + 10f,
+                leaderDistance: 8000f,
+                airspeed: 90f,
+                takeoffSpeed: 70f,
+                secondsInBehaviour: 3f);
+            Assert.Equal(WingBehaviours.Task,
+                         Behaviour(ready, active: "wingcommand.climb-out"));
+        }
+
+        [Fact]
+        public void ClimbOutTriggeredOnLiftoffEvenIfLeaderIsClose()
+        {
+            // Freshly lifted off from runway near the leader: must climb wings-level before banking to form up
+            WingSituation liftoff = new WingSituation(
+                order: WingOrder.Formation,
+                radarAlt: 160f,
+                leaderDistance: 100f,
+                airspeed: 72f,
+                takeoffSpeed: 70f);
+            Assert.Equal(WingBehaviours.ClimbOut, Behaviour(liftoff));
+        }
+
+        [Fact]
+        public void RotaryClimbOutNotRestrictedByTakeoffSpeed()
+        {
+            // Helicopters do not have fixed-wing stall/takeoff speed requirements
+            WingSituation helo = new WingSituation(
+                order: WingOrder.Formation,
+                radarAlt: ClimbOutPolicy.ReleaseAlt + 10f,
+                leaderDistance: 8000f,
+                airspeed: 30f,
+                takeoffSpeed: 70f,
+                memberIsRotary: true,
+                secondsInBehaviour: 3f);
+            Assert.Equal(WingBehaviours.Task,
+                         Behaviour(helo, active: "wingcommand.climb-out"));
         }
 
         [Fact]

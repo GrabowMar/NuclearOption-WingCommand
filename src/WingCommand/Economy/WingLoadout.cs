@@ -468,6 +468,34 @@ namespace WingCommand
             return template != null ? BuildFromKeys(definition, template.MountKeys) : null;
         }
 
+        /// <summary>
+        /// The stores the base game itself suggests for this airframe: the fit held in
+        /// <c>AircraftParameters.loadouts[1]</c>, which is what the game's own
+        /// <c>LoadoutSelector.LoadDefaults</c> falls back to the first time a player
+        /// customises an aircraft type — before any per-player customisation exists for
+        /// it. Index 0 is not it; the game reserves that slot for something else and
+        /// reads the suggested fit from index 1.
+        ///
+        /// Returned in pylon order, matching <c>WeaponManager.hardpointSets</c> exactly
+        /// as <see cref="BuildFromKeys"/> expects. Null when the airframe declares no
+        /// such loadout to copy — a workshop aircraft with an incomplete parameters
+        /// asset — so the caller can tell "nothing to seed" from "an all-empty fit".
+        /// </summary>
+        public static List<string> SuggestedKeys(AircraftDefinition definition)
+        {
+            List<Loadout> loadouts = definition?.aircraftParameters?.loadouts;
+            if (loadouts == null || loadouts.Count == 0) return null;
+
+            int index = loadouts.Count > 1 ? 1 : 0;
+            Loadout suggested = loadouts[index];
+            if (suggested?.weapons == null) return null;
+
+            var keys = new List<string>(suggested.weapons.Count);
+            for (int i = 0; i < suggested.weapons.Count; i++)
+                keys.Add(StoreKey(suggested.weapons[i]));
+            return keys;
+        }
+
         // ------------------------------------------------------------------ profiling
 
         private static Profile ProfileOf(AircraftDefinition definition)

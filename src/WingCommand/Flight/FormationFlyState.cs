@@ -57,6 +57,10 @@ namespace WingCommand
         private float lastKeepUpDistance = float.MaxValue;
         private float losingGroundSince;
         private Vector3 smoothedAvoidance;
+        private Vector3 previousSlotOffset;
+        private Vector3 slotVelocity;
+        private Aircraft slotVelocityLeader;
+        private int collisionThreatId;
         private float threatSpacing = 1f;
 
         // Every member has the same leader, so scanning the global aircraft registry once
@@ -67,6 +71,7 @@ namespace WingCommand
         private static float nextNearbyThreatRefresh;
         private static bool nearbyThreatPresent;
         private Vector3 smoothedSlotLocal;
+        private Vector3 slotTransitionVelocity;
         private bool slotLocalReady;
         private float lateralTurnScale = 1f;
         private float trailTurnScale = 1f;
@@ -79,7 +84,6 @@ namespace WingCommand
         /// vertical bounce.
         /// </summary>
         private const float SlotVerticalLeadSeconds = 0f;
-        private const float ShapeTransitionSeconds = 1.15f;
         private const float TurnGeometrySeconds = 0.7f;
         private const float BankSmoothing = 0.22f;
         private RotaryFormation.Mode lastRotaryMode = (RotaryFormation.Mode)(-1);
@@ -146,7 +150,6 @@ namespace WingCommand
         private float leaderBank;
 
         /// <summary>True once this state has written <see cref="WingMember.SlotError"/> at least once.</summary>
-        private bool slotErrorKnown;
 
         /// <summary>Leader speed last sample, for differentiating the above.</summary>
         private float lastLeaderSpeed;
@@ -349,7 +352,10 @@ namespace WingCommand
             BeginFlight(pilot);
 
             slotLocalReady = false;
-            slotErrorKnown = false;
+            slotTransitionVelocity = Vector3.zero;
+            slotVelocityLeader = null;
+            slotVelocity = Vector3.zero;
+            collisionThreatId = 0;
             lastRotaryMode = (RotaryFormation.Mode)(-1);
             lastRotaryReport = 0f;
             turnPersist = 0f;
@@ -486,12 +492,18 @@ namespace WingCommand
 
             GlobalPosition slotPos = SlotPosition(leader, leaderState, spacing, dt,
                                                   out Vector3 offset);
+            if (slotVelocityLeader == leader && dt > 0f)
+                slotVelocity = Vector3.Lerp(slotVelocity,
+                    Vector3.ClampMagnitude((offset - previousSlotOffset) / dt, WingTuning.SlotVelocityLimit),
+                    1f - Mathf.Exp(-dt / WingTuning.SlotVelocitySmoothing));
+            else slotVelocity = Vector3.zero;
+            previousSlotOffset = offset;
+            slotVelocityLeader = leader;
 
             Vector3 toSlot = slotPos - aircraft.GlobalPosition();
             float distance = toSlot.magnitude;
 
             member.SlotError = distance;
-            slotErrorKnown = true;
             CheckAbleToKeepUp(leader, distance);
 
             // Two flight models, chosen by autopilot type, each in its own file. They are
@@ -502,10 +514,19 @@ namespace WingCommand
             if (aircraft.autopilot is AutopilotPlane)
             {
                 FixedWingFormation.Fly(
-                    aircraft, leader, controlInputs, member.Slot,
+                    aircraft, leader, controlInputs,
                     slotPos, toSlot, distance, spacing,
                     new FixedWingFormation.Rejoin(rejoinHoldUntil, rejoinBoostUntil),
-                    leaderState, DueToReport(), shape, lateralTurnScale);
+                    leaderState, DueToReport(), slotVelocity,
+                    member.Siblings, out Aircraft collisionThreat, out float predictedMiss);
+                int threatId = collisionThreat != null ? collisionThreat.GetInstanceID() : 0;
+                if (threatId != collisionThreatId)
+                {
+                    Plugin.Logger.LogInfo("[Formation] " + aircraft.unitName + " id=" + aircraft.GetInstanceID() +
+                        (threatId == 0 ? " collision avoidance clear; resuming slot" :
+                        " collision avoidance priority: neighbor=" + threatId + " predicted miss=" + predictedMiss.ToString("F0") + " m"));
+                    collisionThreatId = threatId;
+                }
             }
             else
             {
@@ -557,7 +578,7 @@ namespace WingCommand
             // smoothedSlotLocal lerp below carries the cross-under, and separation plus
             // path-cut avoidance keep it clear of the leader. Symmetric shapes already
             // split the turn, so they are left alone.
-            if (WingBrain.SmartFormation && mirrorSign != 0 &&
+            if (RoeRules.Current != WingRoe.Hold && WingBrain.SmartFormation && mirrorSign != 0 &&
                 (shape == FormationShape.EchelonRight || shape == FormationShape.EchelonLeft) &&
                 (int)Mathf.Sign(desiredSlotLocal.x) == mirrorSign)
             {
@@ -570,6 +591,7 @@ namespace WingCommand
             if (!slotLocalReady)
             {
                 smoothedSlotLocal = desiredSlotLocal;
+                slotTransitionVelocity = Vector3.zero;
                 slotLocalReady = true;
             }
             else
@@ -577,9 +599,9 @@ namespace WingCommand
                 // Shape, threat-spacing and manoeuvre changes all ease in leader-local
                 // space. The shape moves continuously, but it still rotates with the leader
                 // immediately instead of lagging behind in world space.
-                smoothedSlotLocal = Vector3.Lerp(
-                    smoothedSlotLocal, desiredSlotLocal,
-                    1f - Mathf.Exp(-dt / ShapeTransitionSeconds));
+                smoothedSlotLocal = Vector3.SmoothDamp(
+                    smoothedSlotLocal, desiredSlotLocal, ref slotTransitionVelocity,
+                    WingTuning.ShapeTransitionSeconds, WingTuning.ShapeTransitionSpeed, dt);
             }
         }
 
@@ -598,7 +620,9 @@ namespace WingCommand
             // that track by the leader's bank once the wingman is close enough that a
             // banked slot is not a destination through the ground.
             offset = FormationSolver.WorldOffset(
-                leaderState.Track, smoothedSlotLocal, FormationBank(leaderState),
+                leader.rb != null && leader.rb.velocity.sqrMagnitude > 1f
+                    ? leader.rb.velocity.normalized : leaderState.Track,
+                smoothedSlotLocal, FormationBank(),
                 velocityPlane: true);
 
             // The slot hangs off the leader's current position plus its formation offset, so
@@ -652,24 +676,15 @@ namespace WingCommand
         }
 
         /// <summary>
-        /// How much of the leader's bank the slot frame takes. Zero until this wingman has
-        /// a known slot error, zero for rotary (the helo controller cannot fly a rolling
-        /// diamond), and faded out near the ground so the low wing of a banked echelon is
-        /// not a hole in the dirt.
+        /// A common leader-relative bank for every fixed-wing slot, faded near terrain.
         /// </summary>
-        private float FormationBank(LeaderState leaderState)
+        private float FormationBank()
         {
-            if (WingRegistry.IsRotary(aircraft) || !slotErrorKnown) return 0f;
-
-            float settle = 1f - Mathf.SmoothStep(
-                0f, 1f, Mathf.Clamp01(member.SlotError / Mathf.Max(WingTuning.CaptureDistance, 1f)));
-            float bank = leaderState.Bank * settle;
-
-            const float floor = 150f;
-            if (aircraft.radarAlt < floor)
-                bank *= Mathf.Clamp01(aircraft.radarAlt / floor);
-
-            return bank;
+            if (WingRegistry.IsRotary(aircraft) || Leader == null) return 0f;
+            // All slots must use the same rotation. Scaling each by its own error
+            // moved neighboring aircraft onto intersecting targets during player rolls.
+            return FormationCollision.SlotBank(FixedWingFormation.BankOf(Leader)) *
+                Mathf.Clamp01(Leader.radarAlt / 150f);
         }
 
         /// <summary>

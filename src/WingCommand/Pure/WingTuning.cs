@@ -16,6 +16,10 @@ namespace WingCommand
     /// </summary>
     internal static class WingTuning
     {
+        // Bound a changing slot's speed relative to the leader. The old exponential
+        // lerp moved a 300 m cross-under at roughly 260 m/s on its first tick.
+        public const float ShapeTransitionSeconds = 3f;
+        public const float ShapeTransitionSpeed = 25f;
         // ------------------------------------------------------------------ formation
 
         /// <summary>Vertical stagger per slot, metres. Keeps wingmen out of each other's wash.</summary>
@@ -29,19 +33,32 @@ namespace WingCommand
         public const float CommandAngle = 32f;
 
         /// <summary>
-        /// Bank authority, degrees, once settled in the slot. The game scales this down again
-        /// by altitude and speed, so the old 45 left only 27-54 degrees of real authority and
-        /// a wingman simply could not follow a hard turn.
+        /// Speed safety margin above airframe takeoff speed before climb-out releases to
+        /// full formation maneuvering. Gives aerodynamic control surfaces sufficient dynamic
+        /// pressure so an immediate bank does not stall the aircraft.
         /// </summary>
-        public const float StationBank = 75f;
+        public const float TakeoffSpeedMultiplier = 1.25f;
 
         /// <summary>
-        /// Bank authority, degrees, while rejoining from outside <see cref="CaptureDistance"/>.
-        /// Held below inversion on purpose: the live formation log recorded requests as high
-        /// as 277 degrees after leader-bank feed-forward, which is an inversion request rather
-        /// than useful pursuit authority.
+        /// Bank authority, degrees, once settled in the slot when the leader is level.
+        /// When the leader banks, BankFollowScale opens authority up to follow the turn.
+        /// Capping level-leader bank to 40 degrees prevents severe lift loss (L * cos(bank))
+        /// and elevator suppression in AutopilotPlane during minor station-keeping corrections.
         /// </summary>
-        public const float PursuitBank = 88f;
+        public const float StationBank = 40f;
+
+        /// <summary>
+        /// Bank authority, degrees, while rejoining from outside <see cref="CaptureDistance"/>
+        /// when the leader is level. Held to 58 degrees to ensure the aircraft retains at least
+        /// half its vertical lift and does not enter a downward spiral dive during rejoin turns.
+        /// </summary>
+        public const float PursuitBank = 58f;
+
+        /// <summary>
+        /// Height below which bank match and pursuit authority yield to a climb.
+        /// Raised to 280 m so descending aircraft have enough altitude margin to arrest sink rate.
+        /// </summary>
+        public const float BankMatchFloor = 280f;
 
         /// <summary>
         /// Bank authority, degrees, while a staggered rejoin is holding a wingman at the
@@ -341,13 +358,29 @@ namespace WingCommand
         // ------------------------------------------------------------------ delivery
 
         /// <summary>
-        /// Radar altitude at which a hangar delivery is considered launched and this mod
-        /// may take the controls. Jets used to clear at 25 m, which is still the climbout:
-        /// the live log recorded a 131° bank command at 25 m AGL against a 20 km slot
-        /// error, then pilot-killed at 1-8 m. 150 m is the same floor the bank-match
-        /// already refuses to fight terrain at.
+        /// Clearance for the stable-flight handoff, just above native takeoff's 75 m
+        /// release. Speed, sink and dwell gates prevent a transient hop from qualifying.
         /// </summary>
-        public const float FixedWingAirborneAlt = 150f;
+        public const float FixedWingAirborneAlt = 80f;
+
+        // Require sustained flight after the native runway state releases at 75 m.
+        public const float LaunchStableSeconds = 2f;
+        public const float LaunchMaximumSink = 2f;
+        public const float LaunchSpeedMargin = 1.1f;
+        public const float LaunchClearanceMinimum = 30f;
+        public const float LaunchClearanceMargin = 10f;
+        public const float DepartureTurnBank = 25f;
+        public const float DeparturePitch = 8f;
+        public const float RejoinBankHeightSpan = 320f;
+        public const float RejoinMaximumBank = 88f;
+        public const float RejoinMinimumBank = 8f;
+        public const float CollisionHorizon = 6f;
+        public const float CollisionMinimumRadius = 45f;
+        public const float CollisionCourseBias = 0.65f;
+        public const float HoldPositionGain = 1.65f;
+        public const float HoldDampingGain = 1.25f;
+        public const float SlotVelocityLimit = 100f;
+        public const float SlotVelocitySmoothing = 0.15f;
 
         /// <summary>
         /// Rotary equivalent. 25 m is still inside ground effect for a helicopter that has
@@ -375,6 +408,21 @@ namespace WingCommand
         /// purchase rolled back while the hangar still produced an unclaimed airframe.
         /// </summary>
         public const float HangarDeliveryTimeout = 420f;
+
+        /// <summary>
+        /// Floor on how soon a second native hangar departure may follow the first from the
+        /// same airbase, in case <see cref="HangarLaunchSafety.IsAirbaseClear"/> reads clear
+        /// on the very frame a slot opens up. That distance-based check is the real gate —
+        /// it holds a field until its last departure has actually put room between itself
+        /// and its pad — because a fixed delay alone was not enough: three Ifrits
+        /// requisitioned in a burst from one field, spaced only by an earlier version of
+        /// this constant, still put a pilot in the log as "ejected" at 0 m/AGL, 0 m/s,
+        /// nativeState=none — a ground collision during taxi, the third aircraft launched
+        /// before the second had actually cleared the ramp. Wing Command has no control over
+        /// an aircraft until it registers past that point, and the stock taxi AI does not
+        /// appear to give way to a second aircraft doing the same thing from an adjacent pad.
+        /// </summary>
+        public const float DepartureStaggerSeconds = 2f;
 
         // ------------------------------------------------------------------ economy
 

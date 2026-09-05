@@ -203,7 +203,7 @@ namespace WingCommand
 
             WingUi.Button(parent, "ASSIGN SELECTED",
                           new Rect(Pad, y, PanelWidth - Pad * 2f, RowHeight),
-                          FontBody, UiButtonStyle.Primary,
+                          FontSmall, UiButtonStyle.Quiet,
                           () => WingCommandManager.Instance?.AddSelectedFromMap())
                 .WithTooltip(OrderHint.AssignSelected);
             return y - (RowHeight + Gap);
@@ -221,28 +221,33 @@ namespace WingCommand
         {
             y = Heading(parent, y, "LAUNCH FROM");
 
-            const float arrowW = 20f;
+            const float arrowW = 28f;
             float pagerX = PanelWidth - Pad - arrowW * 2f - 36f;
-            launchPrevButton = WingUi.Button(parent, "<", new Rect(pagerX, y + Space5, arrowW, RowHeight - 4f),
+            launchPrevButton = WingUi.Button(parent, "<", new Rect(pagerX, y, arrowW, RowHeight),
                                              FontMicro, UiButtonStyle.Quiet, () => TurnLaunchPage(-1));
-            launchPageLabel = Label(parent, "", new Rect(pagerX + arrowW, y + Space5, 36f, RowHeight - 4f),
+            launchPageLabel = Label(parent, "", new Rect(pagerX + arrowW, y, 36f, RowHeight),
                                     Dim(), FontMicro, FontStyles.Normal, TextAlignmentOptions.Center);
-            launchNextButton = WingUi.Button(parent, ">", new Rect(pagerX + arrowW + 36f, y + Space5, arrowW, RowHeight - 4f),
+            launchNextButton = WingUi.Button(parent, ">", new Rect(pagerX + arrowW + 36f, y, arrowW, RowHeight),
                                              FontMicro, UiButtonStyle.Quiet, () => TurnLaunchPage(1));
             launchPrevButton.gameObject.SetActive(false);
             launchPageLabel.gameObject.SetActive(false);
             launchNextButton.gameObject.SetActive(false);
 
-            float modeW = (PanelWidth - Pad * 2f - Gap) * 0.5f;
+            float modeW = (pagerX - Pad - Gap * 2f) * 0.5f;
             launchNearestButton = WingUi.Button(
                 parent, "ONLY NEAREST", new Rect(Pad, y, modeW, RowHeight),
                 FontMicro, UiButtonStyle.Quiet,
-                () => WingLaunchFields.Mode = HangarLaunchMode.OnlyNearest)
-                .WithTooltip("Queue at the closest checked field that stocks this airframe.");
+                SelectNearestLaunchField)
+                .WithTooltip("Select only the nearest available field for this airframe.");
             launchAnyButton = WingUi.Button(
                 parent, "ANY", new Rect(Pad + modeW + Gap, y, modeW, RowHeight),
                 FontMicro, UiButtonStyle.Quiet,
-                () => WingLaunchFields.Mode = HangarLaunchMode.Any)
+                () => {
+                    WingLaunchFields.Mode = HangarLaunchMode.Any;
+                    foreach (Airbase field in WingLaunchFields.Listing) WingLaunchFields.SetAllowed(field, true);
+                    RefreshLaunchFrom();
+                    RefreshShop();
+                })
                 .WithTooltip("Launch from the closest checked field with a free hangar. No per-field queue.");
             y -= RowHeight + Space1;
 
@@ -256,6 +261,28 @@ namespace WingCommand
             }
 
             return y - Space1;
+        }
+
+        private static void SelectNearestLaunchField()
+        {
+            RefreshLaunchFrom();
+            WingLaunchFields.Mode = HangarLaunchMode.OnlyNearest;
+            Airbase nearest = null;
+            foreach (Airbase field in WingLaunchFields.Listing)
+                if (nearest == null && (selectedOffer == null || WingLaunchFields.CanProduce(field, selectedOffer)))
+                    nearest = field;
+            foreach (Airbase field in WingLaunchFields.Listing)
+                WingLaunchFields.SetAllowed(field, field == nearest);
+            launchPage = nearest == null ? 0 : IndexOfLaunchField(nearest) / LaunchRowsPerPage;
+            RefreshLaunchFrom();
+            RefreshShop();
+        }
+
+        private static int IndexOfLaunchField(Airbase field)
+        {
+            for (int i = 0; i < WingLaunchFields.Listing.Count; i++)
+                if (WingLaunchFields.Listing[i] == field) return i;
+            return 0;
         }
 
         private static void TurnLaunchPage(int direction)
@@ -392,7 +419,7 @@ namespace WingCommand
             bool armed = reserveRelease.IsArmedFor(selectedOffer);
 
             reserveReleaseButton?.SetLatched(armed);
-            reserveReleaseButton?.SetText(armed ? "SURE?" : "RELEASE");
+            reserveReleaseButton?.SetText(armed ? "?" : "-");
             reserveReleaseButton?.SetEnabled(
                 host && selected && WingSupplyReserve.CountOf(selectedOffer) > 0);
             reserveHoldButton?.SetEnabled(
@@ -419,13 +446,13 @@ namespace WingCommand
 
             y = Heading(parent, y, "AIRFRAME REQUISITION");
 
-            const float arrowW = 20f;
+            const float arrowW = 28f;
             float pagerX = PanelWidth - Pad - arrowW * 2f - 36f;
-            shopPrevButton = WingUi.Button(parent, "<", new Rect(pagerX, y + Space5, arrowW, RowHeight - 4f),
+            shopPrevButton = WingUi.Button(parent, "<", new Rect(pagerX, y, arrowW, RowHeight),
                                            FontMicro, UiButtonStyle.Quiet, () => TurnPage(-1));
-            shopPageLabel = Label(parent, "", new Rect(pagerX + arrowW, y + Space5, 36f, RowHeight - 4f),
+            shopPageLabel = Label(parent, "", new Rect(pagerX + arrowW, y, 36f, RowHeight),
                                   Dim(), FontMicro, FontStyles.Normal, TextAlignmentOptions.Center);
-            shopNextButton = WingUi.Button(parent, ">", new Rect(pagerX + arrowW + 36f, y + Space5, arrowW, RowHeight - 4f),
+            shopNextButton = WingUi.Button(parent, ">", new Rect(pagerX + arrowW + 36f, y, arrowW, RowHeight),
                                            FontMicro, UiButtonStyle.Quiet, () => TurnPage(1));
             shopPrevButton.gameObject.SetActive(false);
             shopPageLabel.gameObject.SetActive(false);
@@ -692,12 +719,12 @@ namespace WingCommand
                         break;
                     }
 
+                    string costPart = ownedCount > 0 ? "FREE (OWNED)" : (Grouped(cost) + " funds" + (overLimit ? " (over limit)" : ""));
                     offerDetailLabel.text = quote.CanBuy
                         ? AvTheme.Truncate(selectedOffer.unitName, 18) +
-                          "  ·  " + Grouped(cost) + " funds" +
-                          (overLimit ? " (over limit)" : "") +
+                          "  ·  " + costPart +
                           "  ·  " + stock + " available" +
-                          (ownedCount > 0 ? "  ·  " + ownedCount + " owned reserve" :
+                          (ownedCount > 0 ? "  ·  READY TO RE-LAUNCH (" + ownedCount + " in wing reserve)" :
                            reservedCount > 0 ? "  ·  held in wing reserve" : "")
                         : "UNAVAILABLE  ·  " + quote.Reason;
                     offerDetailLabel.color = quote.CanBuy ? Friendly() : Warning();
@@ -736,6 +763,9 @@ namespace WingCommand
 
             RefreshShopTemplateButton();
             requisitionButton?.SetEnabled(quote.CanBuy);
+            requisitionButton?.WithTooltip(quote.CanBuy
+                ? OrderHint.Requisition
+                : "Cannot requisition — " + quote.Reason);
         }
 
         /// <summary>
@@ -910,7 +940,12 @@ namespace WingCommand
 
                 hit = HitButton(rt, new Rect(0f, 0f, rect.width, rect.height), () =>
                 {
-                    if (bound != null) selectedOffer = bound;
+                    if (bound != null)
+                    {
+                        selectedOffer = bound;
+                        RefreshShop();
+                        RefreshLaunchFrom();
+                    }
                 });
 
                 go.SetActive(false);
@@ -921,22 +956,35 @@ namespace WingCommand
                 bound = offer.Definition;
                 if (!go.activeSelf) go.SetActive(true);
 
+                Aircraft leader = WingCommandManager.Instance?.Wing?.Leader;
+                FactionHQ hq = leader != null ? leader.NetworkHQ : null;
+
+                int owned = WingSupplyReserve.OwnedOf(offer.Definition);
                 float cost = WingShop.CurrentPriceOf(offer.Definition);
                 bool affordable = WingShop.Allocation >= cost;
                 bool selected = selectedOffer == offer.Definition;
+                bool canSpawn = WingLaunchFields.CanAnyAllowedLaunch(hq, offer.Definition);
 
                 Sprite sprite = offer.Definition.mapIcon != null ? offer.Definition.mapIcon
                               : offer.Definition.friendlyIcon != null ? offer.Definition.friendlyIcon
                               : IconFactory.Get("airframe");
                 icon.sprite = sprite;
-                icon.color = selected ? Color.white : Dim();
+                icon.color = selected ? Color.white : (canSpawn ? (affordable ? Color.white : Dim()) : Dim());
 
                 string codeStr = !string.IsNullOrEmpty(offer.Definition.code) ? offer.Definition.code : offer.Name;
                 code.text = AvTheme.Truncate(codeStr, 7);
-                code.color = selected ? Green() : (affordable ? Friendly() : Dim());
+                code.color = selected ? Green() : (canSpawn ? (affordable ? Friendly() : Dim()) : Dim());
 
-                priceStock.text = Grouped(cost) + " · " + offer.Stock + "x";
-                priceStock.color = affordable ? Green() : Warning();
+                if (owned > 0)
+                {
+                    priceStock.text = "FREE · " + offer.Stock + "x (" + owned + " OWNED)";
+                    priceStock.color = !canSpawn ? Warning() : Green();
+                }
+                else
+                {
+                    priceStock.text = Grouped(cost) + " · " + offer.Stock + "x";
+                    priceStock.color = !canSpawn ? Warning() : (affordable ? Green() : Warning());
+                }
 
                 fill.color = selected ? WingUi.CardFillSelected : WingUi.CardFill;
                 Color frameColor = selected ? Green() : FrameColor();
@@ -949,7 +997,9 @@ namespace WingCommand
                 }
                 rail.color = selected ? Green() : Color.clear;
 
-                hit.WithTooltip(offer.Name + " — Cost: " + Grouped(cost) + " | Stock: " + offer.Stock);
+                string spawnNotice = !canSpawn ? " | [!] No selected launch base can spawn this aircraft" : "";
+                string costNotice = owned > 0 ? "FREE (" + owned + " owned in reserve)" : "Cost: " + Grouped(cost);
+                hit.WithTooltip(offer.Name + " — " + costNotice + " | Stock: " + offer.Stock + spawnNotice);
                 hit.SetRowHighlight(fill, selected ? WingUi.CardFillSelected : WingUi.CardFill, WingUi.CardFillHover);
             }
 
@@ -966,6 +1016,7 @@ namespace WingCommand
             private readonly GameObject go;
             private readonly WingButton check;
             private readonly TMP_Text name;
+            private readonly TMP_Text status;
             private readonly WingButton hit;
             private Airbase bound;
 
@@ -982,11 +1033,17 @@ namespace WingCommand
                     FontMicro, UiButtonStyle.Quiet, Toggle)
                     .WithTooltip("Allow launches from this field");
 
+                const float statusWidth = 60f;
+                float nameWidth = rect.width - LaunchCheckWidth - Space1 - statusWidth - Space1;
+
                 name = Label(rt, "",
-                    new Rect(LaunchCheckWidth + Space1, 0f,
-                             rect.width - LaunchCheckWidth - Space1, rect.height),
+                    new Rect(LaunchCheckWidth + Space1, 0f, nameWidth, rect.height),
                     Friendly(), FontMicro, FontStyles.Normal, TextAlignmentOptions.MidlineLeft);
                 name.overflowMode = TextOverflowModes.Ellipsis;
+
+                status = Label(rt, "",
+                    new Rect(rect.width - statusWidth, 0f, statusWidth, rect.height),
+                    Dim(), FontMicro, FontStyles.Bold, TextAlignmentOptions.MidlineRight);
 
                 hit = HitButton(rt, new Rect(LaunchCheckWidth + Space1, 0f,
                                              rect.width - LaunchCheckWidth - Space1, rect.height),
@@ -1001,12 +1058,45 @@ namespace WingCommand
                 if (!go.activeSelf) go.SetActive(true);
 
                 bool allowed = WingLaunchFields.IsAllowed(airbase);
+                bool hasAirframe = selectedOffer != null;
+                bool canProduce = hasAirframe && WingLaunchFields.CanProduce(airbase, selectedOffer);
+
+                LaunchBaseStatus state = LaunchBaseStatusPolicy.Evaluate(allowed, canProduce, hasAirframe);
+                string badge = LaunchBaseStatusPolicy.BadgeText(state);
+
                 check.SetLatched(allowed);
                 check.SetText(allowed ? "X" : "");
-                name.text = AvTheme.Truncate(WingLaunchFields.DisplayName(airbase), 32);
-                name.color = allowed ? Friendly() : Dim();
-                hit.WithTooltip(WingLaunchFields.DisplayName(airbase) +
-                                (allowed ? " — launches allowed" : " — launches blocked"));
+
+                name.text = AvTheme.Truncate(WingLaunchFields.DisplayName(airbase), 26);
+                status.text = badge;
+
+                switch (state)
+                {
+                    case LaunchBaseStatus.Ready:
+                        status.color = Green();
+                        name.color = Friendly();
+                        break;
+                    case LaunchBaseStatus.NoPad:
+                        status.color = Warning();
+                        name.color = allowed ? Warning() : Dim();
+                        break;
+                    case LaunchBaseStatus.Blocked:
+                        status.color = Dim();
+                        name.color = Dim();
+                        break;
+                    default:
+                        status.color = Dim();
+                        name.color = allowed ? Friendly() : Dim();
+                        break;
+                }
+
+                string tooltip = LaunchBaseStatusPolicy.Tooltip(
+                    WingLaunchFields.DisplayName(airbase),
+                    selectedOffer != null ? selectedOffer.unitName : null,
+                    allowed,
+                    canProduce);
+                hit.WithTooltip(tooltip);
+                check.WithTooltip(tooltip);
             }
 
             public void Hide()
@@ -1019,6 +1109,8 @@ namespace WingCommand
             {
                 if (bound == null) return;
                 WingLaunchFields.SetAllowed(bound, !WingLaunchFields.IsAllowed(bound));
+                RefreshLaunchFrom();
+                RefreshShop();
             }
         }
 

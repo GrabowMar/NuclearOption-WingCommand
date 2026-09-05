@@ -240,5 +240,56 @@ namespace WingCommand
                 Assert.Equal(OrderEngagementAuthority.DefensiveOnly,
                              OrderRoePolicy.Authority(order));
         }
+
+        [Fact]
+        public void Owned_airframes_bypass_faction_reserve_holding_capacity()
+        {
+            const int capacity = 3;
+
+            // Faction unpaid stock respects capacity
+            Assert.True(ReserveSlotPolicy.CanStoreAirframe(owned: false, currentCount: 0, factionStockCapacity: capacity));
+            Assert.True(ReserveSlotPolicy.CanStoreAirframe(owned: false, currentCount: 2, factionStockCapacity: capacity));
+            Assert.False(ReserveSlotPolicy.CanStoreAirframe(owned: false, currentCount: 3, factionStockCapacity: capacity));
+            Assert.False(ReserveSlotPolicy.CanStoreAirframe(owned: false, currentCount: 5, factionStockCapacity: capacity));
+
+            // Player-owned airframes are never discarded, even when reserve exceeds standard hold capacity
+            Assert.True(ReserveSlotPolicy.CanStoreAirframe(owned: true, currentCount: 3, factionStockCapacity: capacity));
+            Assert.True(ReserveSlotPolicy.CanStoreAirframe(owned: true, currentCount: 10, factionStockCapacity: capacity));
+        }
+
+        [Fact]
+        public void Selection_toggle_policy_deselects_all_when_all_active_or_all_selected()
+        {
+            // In ALL mode, clicking SELECT ALL deselects
+            Assert.True(SelectionTogglePolicy.ShouldDeselectAll(isAllMode: true, selectedCount: 4, totalCount: 4));
+            Assert.True(SelectionTogglePolicy.ShouldDeselectAll(isAllMode: true, selectedCount: 0, totalCount: 4));
+
+            // In explicit mode, if all members are selected, clicking SELECT ALL deselects all
+            Assert.True(SelectionTogglePolicy.ShouldDeselectAll(isAllMode: false, selectedCount: 4, totalCount: 4));
+
+            // In explicit mode with partial selection, clicking SELECT ALL selects all (does not deselect)
+            Assert.False(SelectionTogglePolicy.ShouldDeselectAll(isAllMode: false, selectedCount: 2, totalCount: 4));
+            Assert.False(SelectionTogglePolicy.ShouldDeselectAll(isAllMode: false, selectedCount: 0, totalCount: 4));
+        }
+
+        [Fact]
+        public void Selection_toggle_policy_toggles_individual_selection_on_second_click()
+        {
+            // Clicking the only selected member deselects it
+            Assert.True(SelectionTogglePolicy.ShouldDeselectMemberOnClick(
+                isExplicitMode: true, selectedCount: 1, isMemberSelected: true));
+
+            // Clicking an unselected member does not deselect
+            Assert.False(SelectionTogglePolicy.ShouldDeselectMemberOnClick(
+                isExplicitMode: true, selectedCount: 1, isMemberSelected: false));
+
+            // In multi-selection, clicking a member without Shift selects only that member (not deselect all)
+            Assert.False(SelectionTogglePolicy.ShouldDeselectMemberOnClick(
+                isExplicitMode: true, selectedCount: 3, isMemberSelected: true));
+
+            // In ALL mode, clicking does not trigger single-member deselect
+            Assert.False(SelectionTogglePolicy.ShouldDeselectMemberOnClick(
+                isExplicitMode: false, selectedCount: 1, isMemberSelected: true));
+        }
     }
 }

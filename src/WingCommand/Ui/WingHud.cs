@@ -445,12 +445,14 @@ namespace WingCommand
                     : 0f;
                 state.text = StateText(member);
                 distance.text = UnitConverter.DistanceReading(range);
-                float proximity = 1f - Mathf.Clamp01(range / WingTuning.LeashRadius);
+                float leash = Plugin.Settings != null ? Plugin.Settings.LeashDistance.Value : WingTuning.LeashRadius;
+                float proximity = 1f - Mathf.Clamp01(range / leash);
                 rangeCue.rectTransform.sizeDelta = new Vector2(
                     Mathf.Lerp(3f, cueWidth, proximity), 2f);
 
                 bool damaged = IsDamaged(aircraft);
-                bool lowStores = member.Fuel <= WingTuning.BingoFuel || member.Ammo <= 0;
+                float bingo = Plugin.Settings != null ? Plugin.Settings.BingoFuel : WingTuning.BingoFuel;
+                bool lowStores = member.Fuel <= bingo || member.Ammo <= 0;
                 // Colours come from the game's theme, so the strip follows a theme change the
                 // way the rest of the HUD does.
                 Color color = !member.Alive || damaged || member.IsPanicking
@@ -501,7 +503,7 @@ namespace WingCommand
                     return order + " · DMG";
                 }
 
-                if (member.Fuel <= WingTuning.BingoFuel)
+                if (member.Fuel <= (Plugin.Settings != null ? Plugin.Settings.BingoFuel : WingTuning.BingoFuel))
                 {
                     return order + " · BINGO";
                 }

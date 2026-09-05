@@ -65,17 +65,11 @@ namespace WingCommand
         /// <summary>
         /// Correction and damping gains for the vertical axis.
         ///
-        /// Elevator pitch response is direct and aerodynamic, without the roll inertia and
-        /// bank-angle lag of lateral turns. Using the lateral gains on the vertical channel
-        /// vastly over-damped pitch corrections, while the previous 2-metre deadband dropped
-        /// proportional authority to zero and allowed the damping term alone to kick the
-        /// aircraft into a limit-cycle oscillation ("porpoising" / bouncing up and down).
-        ///
-        /// Dedicated gains with zero deadband provide continuous, critically-damped altitude
-        /// holding that settles cleanly without hunting or limit cycles.
+        /// Dedicated vertical gains with a soft position zone. These require in-game tuning:
+        /// damping ratio also depends on airspeed and the autopilot's pitch response.
         /// </summary>
-        private const float VerticalPositionGain = 1.4f;
-        private const float VerticalDriftDamping = 2.0f;
+        private const float VerticalPositionGain = 1.0f;
+        private const float VerticalDriftDamping = 4.0f;
 
         /// <summary>
         /// Bank authority when nothing is being asked of the roll axis. Small on purpose:
@@ -103,6 +97,12 @@ namespace WingCommand
 
         /// <summary>Largest course change allowed while intercepting a distant slot.</summary>
         private const float MaxRejoinCommandAngle = 55f;
+
+        /// <summary>Maximum pitch-up angle allowed during rejoin navigation to prevent zoom-climbing into stall.</summary>
+        private const float MaxRejoinPitchUp = 18f;
+
+        /// <summary>Maximum pitch-down angle allowed during rejoin navigation.</summary>
+        private const float MaxRejoinPitchDown = 15f;
 
         /// <summary>
         /// How much bank authority to grant relative to the leader's own bank. Above one
@@ -171,16 +171,20 @@ namespace WingCommand
         private const float BankMatchLimit = 100f;
 
         /// <summary>Height below which bank match and pursuit authority yield to a climb.</summary>
-        internal const float BankMatchFloor = 150f;
+        internal static float BankMatchFloor => WingTuning.BankMatchFloor;
 
         /// <summary>
-        /// Collapse turn authority as the aircraft nears the ground. Shared with the
-        /// orbit so a deck-hold at 80 m AGL cannot grant a vertical bank either.
+        /// Collapse turn authority as the aircraft nears the ground or experiences a high
+        /// sink rate. Shared with the orbit so a deck-hold cannot grant a steep bank either.
         /// </summary>
-        internal static float GroundLimitedBank(float radarAlt, float requested)
+        internal static float GroundLimitedBank(float radarAlt, float requested, float verticalSpeed = 0f)
         {
-            if (radarAlt >= BankMatchFloor) return requested;
-            float scale = Mathf.Clamp01(radarAlt / BankMatchFloor);
+            float floor = BankMatchFloor;
+            float sinkRate = Mathf.Max(0f, -verticalSpeed);
+            float effectiveFloor = floor + sinkRate * 4f;
+
+            if (radarAlt >= effectiveFloor) return requested;
+            float scale = Mathf.Clamp01(radarAlt / effectiveFloor);
             return Mathf.Lerp(LevelBank, requested, scale);
         }
 
@@ -250,15 +254,19 @@ namespace WingCommand
         /// formation's left-right sway.
         /// </param>
         public static void Fly(Aircraft aircraft, Aircraft leader, ControlInputs controls,
-                               int slot, GlobalPosition slotPos, Vector3 toSlot,
+                               GlobalPosition slotPos, Vector3 toSlot,
                                float distance, float spacing, Rejoin rejoin,
-                               LeaderState leaderState, bool report, FormationShape shape,
-                               float lateralScale)
+                               LeaderState leaderState, bool report, Vector3 slotVelocity,
+                               System.Collections.Generic.IReadOnlyList<WingMember> members,
+                               out Aircraft collisionThreat, out float predictedMiss)
         {
             AircraftParameters p = aircraft.GetAircraftParameters();
             float leaderTurnRate = leaderState.TurnRate;
             float aggression = WingBrain.Aggression;
             float damping = WingBrain.Damping;
+            float holdBlend = FormationCollision.HoldBlend(RoeRules.Current == WingRoe.Hold, distance, spacing);
+            aggression *= Mathf.Lerp(1f, WingTuning.HoldPositionGain, holdBlend);
+            damping *= Mathf.Lerp(1f, WingTuning.HoldDampingGain, holdBlend);
 
             // The speed to hold station on is the leader's speed *when we get there*, not
             // the one it has now. Formating on the current speed is a proportional
@@ -270,7 +278,7 @@ namespace WingCommand
             float leaderSpeed = Mathf.Max(
                 leaderState.PredictedSpeed(leader.speed, WingTuning.SpeedLeadSeconds), 1f);
 
-            Vector3 leaderVel = leader.rb.velocity;
+            Vector3 leaderVel = leader.rb.velocity + slotVelocity;
             Vector3 drift = aircraft.rb.velocity - leaderVel;
 
             // How far out of position, as a fraction of the capture distance. One number
@@ -279,31 +287,50 @@ namespace WingCommand
             float capture = Mathf.Max(WingTuning.CaptureDistance, 1f);
             float outOfPosition = Mathf.SmoothStep(0f, 1f, Mathf.Clamp01(distance / capture));
 
-            ThrottleState throttle = Throttle(aircraft, leader, controls, p, slot, toSlot, distance, capture, spacing,
+            ThrottleState throttle = Throttle(aircraft, leader, controls, p, toSlot, distance, capture, spacing,
                                               leaderSpeed, drift, aggression, damping, rejoin, outOfPosition,
-                                              shape, lateralScale, leaderState);
+                                              slotVelocity, leaderState);
+
+            if (FormationCollisionGuard.TryAvoid(aircraft, leader, members, spacing,
+                out Vector3 escape, out collisionThreat, out predictedMiss))
+            {
+                Vector3 current = aircraft.rb.velocity.sqrMagnitude > 1f
+                    ? aircraft.rb.velocity.normalized : aircraft.transform.forward;
+                Vector3 requested = current + escape * WingTuning.CollisionCourseBias;
+                FormationControlRules.SafeRejoinDirection(current.x, current.y, current.z,
+                    requested.x, requested.y, requested.z, 40f, 15f, 10f, aircraft.radarAlt,
+                    out float x, out float y, out float z);
+                GlobalPosition avoidAim = TerrainLimitedAim(aircraft, aircraft.GlobalPosition() +
+                    new Vector3(x, y, z) * Mathf.Max(MinLookAhead, aircraft.speed * LookAheadSeconds));
+                float bank = GroundLimitedBank(aircraft.radarAlt,
+                    Mathf.Min(55f, LaunchSafety.RejoinBankLimit(aircraft.radarAlt, aircraft.speed, p.takeoffSpeed)),
+                    aircraft.rb.velocity.y);
+                aircraft.autopilot.AutoAim(avoidAim, aimVelocity: true, ignoreCollisions: false,
+                    runwayAlign: false, effort: FullAuthority,
+                    bankAllowed: FormationControlRules.BankInput(bank, aircraft.radarAlt),
+                    followTerrain: false, altitudeHold: 0f, targetVelocity: Vector3.zero);
+                // No slot pursuit or leader roll trim may oppose this escape.
+                return;
+            }
 
             float commandAngle = Steer(aircraft, leader, slotPos, toSlot, distance,
                                        leaderVel, drift, aggression, damping, spacing,
-                                       outOfPosition, leaderState.Track, leaderTurnRate,
+                                       outOfPosition, Vector3.Slerp(leaderState.Track, leaderVel.normalized, holdBlend), leaderTurnRate,
                                        leaderState.ClimbRate, throttle, report,
                                        rejoin.Holding);
 
-            MatchLeaderBank(aircraft, leader, controls, outOfPosition, commandAngle);
+            MatchLeaderBank(aircraft, leader, controls, outOfPosition, commandAngle, leaderVel.y);
         }
 
         // ------------------------------------------------------------------- throttle
 
         private static ThrottleState Throttle(Aircraft aircraft, Aircraft leader, ControlInputs controls,
-                                              AircraftParameters p, int slot, Vector3 toSlot,
+                                              AircraftParameters p, Vector3 toSlot,
                                               float distance, float capture, float spacing,
                                                float leaderSpeed, Vector3 drift,
                                                float aggression, float damping, Rejoin rejoin,
-                                               float outOfPosition, FormationShape shape,
-                                               float lateralScale, LeaderState leaderState)
+                                               float outOfPosition, Vector3 slotVelocity, LeaderState leaderState)
         {
-            float leaderTurnRate = leaderState.TurnRate;
-
             // --- Turn compensation: fly concentric arcs, not a swinging offset. ---
             // When the leader turns at heading rate w, every slot orbits the same centre, so
             // a wingman at signed lateral offset d must fly at v_leader + w*d — the outside
@@ -313,10 +340,8 @@ namespace WingCommand
             // w is the caller's filtered heading rate. Reading it off the rigidbody meant a
             // rolling leader commanded its wingmen tens of m/s faster and slower by turns,
             // for a turn that was not happening.
-            float lateral = FormationSolver.SlotLateral(
-                slot, shape, spacing, lateralScale);
             float turnCompensation = Mathf.Clamp(
-                leaderTurnRate * lateral, -p.maxSpeed * 0.25f, p.maxSpeed * 0.25f);
+                Vector3.Dot(slotVelocity, leaderState.Track), -p.maxSpeed * 0.25f, p.maxSpeed * 0.25f);
 
             // --- Arrival: deceleration-limited, rate-damped closure. ---
             // Two independent demands pull on the speed: the position error (gap ahead
@@ -325,15 +350,12 @@ namespace WingCommand
             // so the commanded overspeed can never exceed the one the airframe can scrub
             // off before it reaches the slot — that profile arrives at the slot at exactly
             // the leader's speed instead of arriving hot and swinging through.
-            Vector3 leaderForward = leader.transform.forward;
+            Vector3 leaderForward = leaderState.Track;
             float gap = Vector3.Dot(toSlot, leaderForward);           // + behind the slot
             float closing = Vector3.Dot(drift, leaderForward);         // + moving forward faster than the leader
 
-            float closure = GapGain * gap * aggression
-                          - ClosingDamp * closing * damping;
-
-            float overspeedCap = Mathf.Sqrt(2f * MaxDecel * Mathf.Max(gap, 0f));
-            closure = Mathf.Clamp(closure, -MaxClosure, Mathf.Min(MaxClosure, overspeedCap));
+            float closure = FormationControlRules.RejoinClosure(
+                gap, closing, MaxDecel, aggression, damping, GapGain, ClosingDamp, MaxClosure);
 
             // While waiting its turn in a staggered rejoin, a wingman matches the leader's
             // speed instead of closing, so it holds its place in the queue rather than
@@ -389,15 +411,9 @@ namespace WingCommand
 
             throttle += anticipation;
 
-            // Full throttle only when genuinely out of position, and never once close in.
-            //
-            // The rejoin boost used to run for a fixed eight seconds regardless of distance,
-            // so a wingman spawned a hundred metres from its slot got the same firewalled
-            // throttle as one two kilometres out. It would rocket past the leader and then
-            // have to be dragged back — and jets decelerate on throttle alone very slowly,
-            // so the overshoot was large.
-            bool far = outOfPosition >= 1f;
-            if (!rejoin.Holding && far && (distance > capture * 3f || rejoin.Boosting))
+            // Full throttle boost during rejoin order window, but only if behind the slot
+            // and not already exceeding the deceleration-limited desired speed.
+            if (!rejoin.Holding && rejoin.Boosting && gap > 0f && aircraft.speed < desiredSpeed)
                 throttle = 1f;
 
             controls.throttle = Mathf.Clamp01(throttle);
@@ -443,7 +459,7 @@ namespace WingCommand
         {
             Aim aim = AimFor(aircraft, leader, slotPos, toSlot, distance, leaderVel, drift,
                              aggression, damping, spacing, outOfPosition, smoothedLeaderDir,
-                             leaderTurnRate, holding);
+                             leaderTurnRate, leaderClimb, holding);
 
             float bankAllowed =
                 BankAuthority(aircraft, leader, aim.Point, outOfPosition, holding,
@@ -458,7 +474,7 @@ namespace WingCommand
                 ignoreCollisions: false,
                 runwayAlign: false,
                 effort: FullAuthority,
-                bankAllowed: bankAllowed,
+                bankAllowed: FormationControlRules.BankInput(bankAllowed, aircraft.radarAlt),
                 followTerrain: false,
                 // Inert, and deliberately so. AutopilotPlane.AutoAim reads altitudeHold only
                 // inside its `if (followTerrain)` branch - decompiled and confirmed against
@@ -482,7 +498,7 @@ namespace WingCommand
                                   Vector3 drift, float aggression, float damping,
                                   float spacing, float outOfPosition,
                                   Vector3 smoothedLeaderDir, float leaderTurnRate,
-                                  bool holding)
+                                  float leaderClimb, bool holding)
         {
             // AutoAim is a pursuit controller: it rotates the aircraft's velocity toward the
             // destination and banks to chase it, so the distance to that destination sets the
@@ -531,7 +547,8 @@ namespace WingCommand
             // wingman knife-edge into the ground: fly straight along the leader's track, and
             // let the boost that follows the hold do the actual intercept.
             if (holding)
-                return new Aim(aircraft.GlobalPosition() + baseDir * lookAhead, 0f, 0f,
+                return new Aim(TerrainLimitedAim(aircraft,
+                                   aircraft.GlobalPosition() + baseDir * lookAhead), 0f, 0f,
                                lookAhead, toSlot.y, 0f);
 
             // Only cross-track error steers. The along-track part is throttle's job, and
@@ -565,11 +582,8 @@ namespace WingCommand
             // log) scaled the vertical term down with it, so the axis with the least
             // authority lost what it had precisely when the wingman was most out of place.
             //
-            // Splitting them changes the *geometry* of the zone, not the loop gains:
-            // PositionGain and DriftDamping are the values chosen for a damping ratio near
-            // 0.8 and are used unchanged on both axes. The vertical loop simply stops being
-            // switched off. It stays comfortably overdamped, because vertical errors are
-            // metres while the drift that damps them is metres per second.
+            // Each axis has its own gains and clamp so lateral saturation cannot consume
+            // the vertical correction's authority.
             float maxAngle = Mathf.Clamp(WingTuning.CommandAngle, 1f, 80f);
             float maxCorrection = lookAhead * Mathf.Tan(maxAngle * Mathf.Deg2Rad);
 
@@ -578,6 +592,9 @@ namespace WingCommand
 
             float inner = spacing * SlotZoneInner;
             float outer = spacing * SlotZoneOuter;
+            float holdBlend = FormationCollision.HoldBlend(RoeRules.Current == WingRoe.Hold, distance, spacing);
+            inner *= Mathf.Lerp(1f, 0.5f, holdBlend);
+            outer *= Mathf.Lerp(1f, 0.5f, holdBlend);
             float ramp = Mathf.SmoothStep(0f, 1f, Mathf.InverseLerp(inner, outer, acrossFlat.magnitude));
 
             Vector3 flatCorrection = (acrossFlat * PositionGain * aggression * ramp)
@@ -589,15 +606,27 @@ namespace WingCommand
             // clamp did.
             flatCorrection = Vector3.ClampMagnitude(flatCorrection, maxCorrection);
 
-            // The vertical channel operates as a continuous, critically-damped linear PD
-            // controller with zero deadband. Without a deadband where restoring authority
-            // collapses to zero, there is no boundary to trigger limit-cycle hunting, and
-            // the dedicated VerticalPositionGain / VerticalDriftDamping settle the aircraft
-            // smoothly onto slot altitude.
+            // The vertical channel uses world altitude error and a soft position zone.
+            // Within vertInner (2.5m), the proportional position gain smoothly ramps to 0 so
+            // the aircraft does not continuously fight over the last metre. Damping remains 100%
+            // active against filtered leader climb rate. A small steady altitude offset
+            // inside the zone is expected; these gains alone do not guarantee critical damping.
+            float vertInner = Mathf.Lerp(2.5f, 1f, holdBlend);
+            float vertOuter = Mathf.Lerp(10f, 5f, holdBlend);
+            float vertRamp = Mathf.SmoothStep(0f, 1f, Mathf.InverseLerp(vertInner, vertOuter, Mathf.Abs(toSlot.y)));
+            float vertDrift = (aircraft.rb != null ? aircraft.rb.velocity.y : 0f) - leaderClimb;
+
             float verticalCorrection = Mathf.Clamp(
-                (across.y * VerticalPositionGain * aggression)
-                - (acrossDrift.y * VerticalDriftDamping * damping),
+                (toSlot.y * VerticalPositionGain * aggression * vertRamp)
+                - (vertDrift * VerticalDriftDamping * damping),
                 -maxCorrection, maxCorrection);
+
+            // Ground safety: if low, never command a descent into the terrain.
+            if (aircraft.radarAlt < 250f && verticalCorrection < 0f)
+            {
+                float maxFloorDescent = Mathf.Max(0f, aircraft.radarAlt - 60f);
+                verticalCorrection = Mathf.Max(verticalCorrection, -maxFloorDescent);
+            }
 
             Vector3 correction = flatCorrection + Vector3.up * verticalCorrection;
 
@@ -645,14 +674,33 @@ namespace WingCommand
                     float scale = Mathf.Clamp01(aircraft.radarAlt / BankMatchFloor);
                     allowed = Mathf.Lerp(maxAngle * 0.25f, allowed, scale);
                 }
-                Vector3 safeDirection = Vector3.RotateTowards(
-                    currentDirection, requested.normalized, allowed * Mathf.Deg2Rad, 0f);
+                FormationControlRules.SafeRejoinDirection(
+                    currentDirection.x, currentDirection.y, currentDirection.z,
+                    requested.x, requested.y, requested.z,
+                    allowed,
+                    MaxRejoinPitchUp,
+                    MaxRejoinPitchDown,
+                    aircraft.radarAlt,
+                    out float sx, out float sy, out float sz);
+
+                Vector3 safeDirection = new Vector3(sx, sy, sz);
+
                 aimPoint = aircraft.GlobalPosition()
                          + safeDirection * Mathf.Max(requested.magnitude, lookAhead);
             }
 
+            aimPoint = TerrainLimitedAim(aircraft, aimPoint);
+
             return new Aim(aimPoint, correction.magnitude, maxCorrection, lookAhead,
                            toSlot.y, verticalCorrection);
+        }
+
+        // Apply to pursuit AND staggered holds.
+        private static GlobalPosition TerrainLimitedAim(Aircraft aircraft, GlobalPosition point)
+        {
+            float safeY = FormationSafety.AimAltitude(
+                aircraft.GlobalPosition().y, point.y, aircraft.radarAlt);
+            return new GlobalPosition(point.x, safeY, point.z);
         }
 
         /// <summary>How much bank the autopilot may use, and the command angle it came from.</summary>
@@ -694,7 +742,9 @@ namespace WingCommand
                 : 0f;
 
             float leaderBankMag = Mathf.Abs(BankOf(leader));
-            float turnDemand = leaderBankMag + commandAngle * TurnDemandGain;
+            float horizontalAngle = FormationControlRules.HorizontalAngle(
+                velocityDir.x, velocityDir.z, aimDir.x, aimDir.z);
+            float turnDemand = leaderBankMag + horizontalAngle * TurnDemandGain;
 
             // Bank authority follows genuine turn demand everywhere. Out of position the
             // ceiling rises toward PursuitBankDegrees so a hard rejoin turn is not clipped,
@@ -718,12 +768,13 @@ namespace WingCommand
             maxBank = Mathf.Max(maxBank, leaderBankMag * BankFollowScale + LevelBank);
             maxBank = Mathf.Min(maxBank, MaxSafeBank);
 
-            // Near the ground, turn authority collapses. Formation used to grant
-            // PursuitBank the moment a wingman was out of position, including a jet
-            // that had just left the runway — 131° of commanded bank at 25 m AGL in
-            // the log. Leader-bank feed-forward is included in maxBank before this
-            // scale, so an inverted player cannot authorize 88° at 30 m either.
-            maxBank = GroundLimitedBank(aircraft.radarAlt, maxBank);
+            // Sink limits depend on terrain clearance. A coordinated descending turn
+            // at 3000 m must not lose 75% of its bank authority simply for descending.
+            float verticalSpeed = aircraft.rb != null ? aircraft.rb.velocity.y : 0f;
+            maxBank = GroundLimitedBank(aircraft.radarAlt, maxBank, verticalSpeed);
+            AircraftParameters parameters = aircraft.GetAircraftParameters();
+            maxBank = Mathf.Min(maxBank, LaunchSafety.RejoinBankLimit(aircraft.radarAlt,
+                aircraft.speed, parameters != null ? parameters.takeoffSpeed : 70f));
 
             float bankAllowed = Mathf.Clamp(turnDemand, LevelBank, maxBank);
 
@@ -773,20 +824,26 @@ namespace WingCommand
         /// </summary>
         private static void MatchLeaderBank(Aircraft aircraft, Aircraft leader,
                                             ControlInputs controls, float outOfPosition,
-                                            float commandAngle)
+                                            float commandAngle, float slotClimb)
         {
             float blend = WingTuning.BankMatchBlend;
             if (blend <= 0.001f || outOfPosition > 0.5f) return;
 
             float myBank = BankOf(aircraft);
 
-            if (Mathf.Abs(myBank) > BankMatchLimit || aircraft.radarAlt < BankMatchFloor)
+            float verticalSpeed = aircraft.rb != null ? aircraft.rb.velocity.y : 0f;
+            if (Mathf.Abs(myBank) > BankMatchLimit ||
+                !FormationSafety.AllowsBankMatch(aircraft.radarAlt, verticalSpeed, slotClimb))
             {
                 ReportInterlock(aircraft, myBank);
                 return;
             }
 
             float leaderBank = BankOf(leader);
+            AircraftParameters parameters = aircraft.GetAircraftParameters();
+            float safeBank = LaunchSafety.RejoinBankLimit(aircraft.radarAlt, aircraft.speed,
+                parameters != null ? parameters.takeoffSpeed : 70f);
+            if (Mathf.Abs(leaderBank) > safeBank || Mathf.Abs(myBank) > safeBank) return;
 
             // No deadband any more. The deadband is what produced the constant small
             // left-right roll: with the leader level the match did nothing at all, which
@@ -887,7 +944,7 @@ namespace WingCommand
                              * Mathf.Rad2Deg;
 
             Plugin.Logger.LogInfo(
-                $"[Formation] {aircraft.unitName}: error {distance:F0} m, " +
+                $"[Formation] {aircraft.unitName} id={aircraft.GetInstanceID()} shape={WingFormation.Shape}: error {distance:F0} m, " +
                 $"gap {throttle.Gap:F0} m, closing {throttle.Closing:F0} m/s, " +
                 $"speed {aircraft.speed:F0} -> {throttle.DesiredSpeed:F0} m/s, thr {throttle.Throttle:F2}, " +
                 $"leader accel {throttle.LeaderAccel:F1} m/s2, anticip {throttle.Anticipation:+0.00;-0.00; 0.00}, " +
@@ -896,10 +953,36 @@ namespace WingCommand
                 $"bank {BankOf(aircraft):F0} vs leader {BankOf(leader):F0} deg, " +
                 $"roll rate {rollRate:F0} deg/s, " +
                 $"cmd {commandAngle:F1} deg, bank allowed {bankAllowed:F0} deg, " +
+                $"bank input {FormationControlRules.BankInput(bankAllowed, aircraft.radarAlt):F1} deg, " +
                 $"vert err {aim.VerticalError:+0;-0; 0} m, " +
                 $"vert corr {aim.VerticalCorrection:+0;-0; 0} m, " +
                 $"climb {ownClimb:+0.0;-0.0; 0.0} vs leader {leaderClimb:+0.0;-0.0; 0.0} m/s, " +
-                $"radar alt {aircraft.radarAlt:F0} m");
+                $"radar alt {aircraft.radarAlt:F0} m, {NearestPass(aircraft)}");
+        }
+
+        private static string NearestPass(Aircraft aircraft)
+        {
+            WingRegistry wing = WingCommandManager.Instance?.Wing;
+            if (wing == null || aircraft.rb == null) return "neighbor=none";
+            Aircraft nearest = null;
+            float miss = float.PositiveInfinity;
+            float range = 0f;
+            foreach (WingMember member in wing.Members)
+            {
+                Aircraft other = member.Aircraft;
+                if (other == null || other == aircraft || other.disabled || other.rb == null) continue;
+                Vector3 delta = other.transform.position - aircraft.transform.position;
+                Vector3 velocity = other.rb.velocity - aircraft.rb.velocity;
+                float time = velocity.sqrMagnitude > 1f
+                    ? Mathf.Clamp(-Vector3.Dot(delta, velocity) / velocity.sqrMagnitude, 0f, 4f) : 0f;
+                float predicted = (delta + velocity * time).magnitude;
+                if (predicted >= miss) continue;
+                nearest = other;
+                miss = predicted;
+                range = delta.magnitude;
+            }
+            return nearest == null ? "neighbor=none" :
+                $"neighbor={nearest.GetInstanceID()} range={range:F0} m predicted miss={miss:F0} m";
         }
 
         /// <summary>

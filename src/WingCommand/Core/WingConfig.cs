@@ -36,10 +36,17 @@ namespace WingCommand
     /// </summary>
     internal class WingConfig
     {
+        // --- Formation ---
+        public ConfigEntry<FormationShape> FormationShape { get; private set; }
+        public ConfigEntry<float> FormationSpacing { get; private set; }
+
         // --- Keys ---
         public ConfigEntry<KeyCode> RadialKey { get; private set; }
         public ConfigEntry<KeyCode> QuickRejoinKey { get; private set; }
         public ConfigEntry<KeyCode> QuickEngageKey { get; private set; }
+        public ConfigEntry<KeyCode> QuickDisengageKey { get; private set; }
+        public ConfigEntry<KeyCode> QuickAttackKey { get; private set; }
+        public ConfigEntry<KeyCode> CycleRoeKey { get; private set; }
 
         // --- AI ---
         public ConfigEntry<WingMode> Mode { get; private set; }
@@ -49,15 +56,20 @@ namespace WingCommand
         public ConfigEntry<bool> AutoReturnOnEmpty { get; private set; }
         public ConfigEntry<bool> RtbReturnsToReserve { get; private set; }
         public ConfigEntry<bool> TakeoverOnDeath { get; private set; }
+        public ConfigEntry<float> LeashDistance { get; private set; }
+        public ConfigEntry<int> MaxWingmenPerTarget { get; private set; }
+        public ConfigEntry<float> BingoFuelThreshold { get; private set; }
 
         // --- Comms ---
         public ConfigEntry<ChatterLevel> Radio { get; private set; }
 
         // --- Pilots ---
         public ConfigEntry<bool> PilotProgression { get; private set; }
+        public ConfigEntry<float> RankEffect { get; private set; }
 
         // --- Shop ---
         public ConfigEntry<bool> ShopEnabled { get; private set; }
+        public ConfigEntry<float> RecruitmentCostPercent { get; private set; }
 
         // --- Loadout ---
         public ConfigEntry<string> LoadoutTemplates { get; private set; }
@@ -71,10 +83,10 @@ namespace WingCommand
         public ConfigEntry<string> WingIconColor { get; private set; }
         public ConfigEntry<string> WingTargetColor { get; private set; }
         public ConfigEntry<bool> TacticalPauseInSingleplayer { get; private set; }
+        public ConfigEntry<float> TacticalPauseScale { get; private set; }
         public ConfigEntry<bool> ExternalHitmarkerAudio { get; private set; }
 
         // --- MFD ---
-        public ConfigEntry<bool> UseSetPanel { get; private set; }
         public ConfigEntry<float> MfdBackgroundOpacity { get; private set; }
         public ConfigEntry<bool> MfdCheckeredGrid { get; private set; }
         public ConfigEntry<bool> MfdCustomImageEnabled { get; private set; }
@@ -101,6 +113,9 @@ namespace WingCommand
         // ANDing at each of the seven call sites is what keeps it that way.
         public bool CheatFreePurchases => EnableDebugActions.Value && FreePlanePurchases.Value;
         public bool CheatNoWingLimit => EnableDebugActions.Value && DisableWingSizeLimit.Value;
+
+        public float BingoFuel => BingoFuelThreshold != null ? BingoFuelThreshold.Value : WingTuning.BingoFuel;
+        public float RecruitmentCostRate => RecruitmentCostPercent != null ? RecruitmentCostPercent.Value : WingTuning.RecruitmentCostRate;
 
         private const string HexHelp = "Six-digit hex, with or without the leading #.";
 
@@ -151,6 +166,7 @@ namespace WingCommand
             // the player. Keys removed since the last release stay in existing files as
             // orphaned lines, which BepInEx ignores and rewrites away on the next save.
             BindMode(c);
+            BindFormation(c);
             BindEngagement(c);
             BindComms(c);
             BindPilots(c);
@@ -160,6 +176,16 @@ namespace WingCommand
             BindUi(c);
             BindMfd(c);
             BindDebug(c);
+        }
+
+        private void BindFormation(ConfigFile c)
+        {
+            FormationShape = c.Bind("Formation", "Shape", WingCommand.FormationShape.EchelonRight,
+                "The formation geometry the wing assumes at the start of a mission.");
+            FormationSpacing = c.Bind("Formation", "Spacing", 120f,
+                new ConfigDescription(
+                    "Standard lateral and longitudinal distance between formation slots, in metres.",
+                    new AcceptableValueRange<float>(50f, 300f)));
         }
 
         private void BindMode(ConfigFile c)
@@ -202,6 +228,18 @@ namespace WingCommand
                 "When your pilot dies or ejects, offer control of a surviving aircraft in " +
                 "your wing. Host or single-player only; mission failures unrelated to the " +
                 "player's aircraft are never suppressed.");
+            LeashDistance = c.Bind("Engagement", "LeashDistance", 5000f,
+                new ConfigDescription(
+                    "Maximum distance (in metres) wingmen may stray from the leader to pursue targets before breaking off and rejoining.",
+                    new AcceptableValueRange<float>(2000f, 15000f)));
+            MaxWingmenPerTarget = c.Bind("Engagement", "MaxWingmenPerTarget", 2,
+                new ConfigDescription(
+                    "Maximum number of wingmen that can simultaneously engage the same target.",
+                    new AcceptableValueRange<int>(1, 4)));
+            BingoFuelThreshold = c.Bind("Engagement", "BingoFuel", 0.15f,
+                new ConfigDescription(
+                    "Fuel fraction at which wingmen call bingo and automatically return to base when AutoReturnOnEmpty is active.",
+                    new AcceptableValueRange<float>(0.05f, 0.40f)));
         }
 
         /// <summary>
@@ -250,6 +288,10 @@ namespace WingCommand
                 "completed sorties and engagements survived. Rank has a small effect on how " +
                 "well they shoot: a Legend gets roughly 12% more weapon reach and cycles " +
                 "shots about 12% faster than a rookie.");
+            RankEffect = c.Bind("Pilot", "RankEffect", 1.0f,
+                new ConfigDescription(
+                    "Multiplier on the mechanical combat benefits of pilot rank (weapon reach and reaction cadence). Set to 0 for cosmetic progression only.",
+                    new AcceptableValueRange<float>(0f, 2.0f)));
         }
 
         private void BindShop(ConfigFile c)
@@ -258,6 +300,10 @@ namespace WingCommand
                 "Allow buying wingmen. Aircraft are priced from the same value the player's " +
                 "own aircraft menu uses, paid for out of your allocation, and drawn from " +
                 "your faction's stock - so a purchase competes with the mission's own AI.");
+            RecruitmentCostPercent = c.Bind("Shop", "RecruitmentCostPercent", 0.25f,
+                new ConfigDescription(
+                    "Fraction of an airframe's list price charged when recruiting active friendly mission AI into the wing (0.0 = free).",
+                    new AcceptableValueRange<float>(0f, 1.0f)));
         }
 
         private void BindLoadout(ConfigFile c)
@@ -285,6 +331,12 @@ namespace WingCommand
                 Advanced("Optional hotkey: order the whole wing to rejoin formation."));
             QuickEngageKey = c.Bind("Keys", "QuickEngage", KeyCode.None,
                 Advanced("Optional hotkey: order the whole wing to engage."));
+            QuickDisengageKey = c.Bind("Keys", "QuickDisengage", KeyCode.None,
+                Advanced("Optional hotkey: order the whole wing to fall back / disengage."));
+            QuickAttackKey = c.Bind("Keys", "QuickAttackTarget", KeyCode.None,
+                Advanced("Optional hotkey: order the wing to attack the player's currently targeted unit."));
+            CycleRoeKey = c.Bind("Keys", "CycleRoe", KeyCode.None,
+                Advanced("Optional hotkey: cycle wing Rules of Engagement (Hold -> Tight -> Free)."));
         }
 
         private void BindUi(ConfigFile c)
@@ -315,15 +367,17 @@ namespace WingCommand
             WingTargetColor = c.Bind("UI", "WingTargetColor", "#FFB020",
                 Advanced("Hex colour for units your wing is engaging. " + HexHelp, HexColour));
             TacticalPauseInSingleplayer = c.Bind("UI", "TacticalPauseInSingleplayer", false,
-                "Slow down game time to 0.25x while the tactical command screen is active in singleplayer for tactical planning.");
+                "Slow down game time while the tactical command screen is active in singleplayer for tactical planning.");
+            TacticalPauseScale = c.Bind("UI", "TacticalPauseScale", 0.25f,
+                new ConfigDescription(
+                    "Game speed time-scale while tactical pause in singleplayer is active (0.0 = full pause, 0.25 = slow-mo).",
+                    new AcceptableValueRange<float>(0f, 0.5f)));
             ExternalHitmarkerAudio = c.Bind("UI", "ExternalHitmarkerAudio", true,
                 "Play hitmarker audio confirmation when landing hits in 3rd-person external/orbit camera views.");
         }
 
         private void BindMfd(ConfigFile c)
         {
-            UseSetPanel = c.Bind("MFD", "UseSetPanel", true,
-                "Add a SET (Settings) screen to the cockpit MFD bezel, alongside WMC/BDF/MAP/HUD.");
             MfdBackgroundOpacity = c.Bind("MFD", "BackgroundOpacity", 0.40f,
                 new ConfigDescription(
                     "Opacity of the tactical MFD background (0.0 = fully transparent, 1.0 = solid opaque).",

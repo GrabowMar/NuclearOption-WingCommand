@@ -61,6 +61,15 @@ namespace WingCommand
         /// </summary>
         public readonly bool MemberIsSurface;
 
+        /// <summary>This wingman is a rotary-wing aircraft (helicopter).</summary>
+        public readonly bool MemberIsRotary;
+
+        /// <summary>Current forward airspeed, m/s.</summary>
+        public readonly float Airspeed;
+
+        /// <summary>Airframe rotation/takeoff airspeed, m/s.</summary>
+        public readonly float TakeoffSpeed;
+
         /// <summary>Fuel remaining, 0-1.</summary>
         public readonly float Fuel;
 
@@ -101,6 +110,9 @@ namespace WingCommand
             float leashRadius = 0f,
             float radarAlt = 1000f,
             bool memberIsSurface = false,
+            bool memberIsRotary = false,
+            float airspeed = 150f,
+            float takeoffSpeed = 70f,
             float fuel = 1f,
             int ammo = 1,
             float integrity = 1f,
@@ -118,6 +130,9 @@ namespace WingCommand
             LeashRadius = leashRadius;
             RadarAlt = radarAlt;
             MemberIsSurface = memberIsSurface;
+            MemberIsRotary = memberIsRotary;
+            Airspeed = airspeed;
+            TakeoffSpeed = takeoffSpeed;
             Fuel = fuel;
             Ammo = ammo;
             Integrity = integrity;

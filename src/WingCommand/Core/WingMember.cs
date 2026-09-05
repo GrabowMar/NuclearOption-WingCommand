@@ -89,6 +89,7 @@ namespace WingCommand
         private WingRegistry owner;
         private readonly List<GlobalPosition> waypointQueue = new List<GlobalPosition>();
         private bool deliveryPending;
+        private float airborneStableSince = -1f;
 
         private readonly CargoProgressTracker cargoProgress = new CargoProgressTracker();
         private float lastIntegrity;
@@ -97,6 +98,45 @@ namespace WingCommand
 
         /// <summary>True while a hangar delivery is still taxiing or waiting to launch.</summary>
         public bool DeliveryPending => deliveryPending;
+        public bool RefitPending { get; private set; }
+
+        public void RequestRefit()
+        {
+            Apply(WingOrder.ReturnToBase);
+            RefitPending = true;
+        }
+
+        public void CompleteRefit()
+        {
+            if (!RefitPending || Pilot == null || Pilot.dead || Pilot.ejected) return;
+            foreach (FuelTank tank in Aircraft.GetFuelTanks())
+                if (tank != null) tank.Refuel(1f);
+            Aircraft.NetworkfuelLevel = Aircraft.GetFuelLevel();
+            var ammunition = new int[Aircraft.weaponStations.Count];
+            for (int i = 0; i < ammunition.Length; i++)
+            {
+                var station = Aircraft.weaponStations[i];
+                ammunition[i] = Mathf.Max(0, station.FullAmmo - station.GetAmmoTotal());
+            }
+            Aircraft.RpcRearm(new RearmEventArgs { Rearmer = Aircraft, Stations = ammunition });
+            WingPilotRoster.NoteSortie(Aircraft);
+            SetDirective(WingDirective.Simple(WingOrder.Formation));
+            RefitPending = false;
+            deliveryPending = true;
+            airborneStableSince = -1f;
+            Pilot.flightInfo.HasTakenOff = false;
+            Aircraft.NetworkIgnition = true;
+            if (WingRegistry.IsRotary(Aircraft))
+            {
+                Pilot.AIHeloTakeoffState = new AIHeloTakeoffState();
+                SwitchTo(Pilot.AIHeloTakeoffState);
+            }
+            else
+            {
+                Pilot.AITaxiState = new AIPilotTaxiState();
+                SwitchTo(Pilot.AITaxiState);
+            }
+        }
 
         /// <summary>
         /// A ship or a ground vehicle rather than an aircraft.
@@ -109,29 +149,16 @@ namespace WingCommand
         public bool IsSurface => Aircraft != null && Aircraft.autopilot == null;
 
         /// <summary>
-        /// Whether the airframe has cleared the delivery launch threshold.
-        ///
-        /// A surface member clears it by existing. The threshold is a proxy for "has left
-        /// the hangar and is under its own control", and a hull that is alive already is -
-        /// waiting for it to reach 25 metres would leave a delivered ship permanently
-        /// pending and therefore permanently uncommandable.
-        ///
-        /// Rotary aircraft use a higher threshold. 25 m is still inside ground effect for
-        /// a helicopter that has just left the apron; if the player is hovering for an air
-        /// assault at that moment the arbiter immediately resolves to deck-hold orbit, which
-        /// a helicopter doing 4-6 m/s cannot sustain.
-        ///
-        /// Jets used to clear at 25 m as well. That is still the climbout: the live log
-        /// recorded a 131° bank command at 25 m AGL with a 20 km slot error, then
-        /// pilot-killed at 1-8 m. Altitude alone is not enough — stock taxi/takeoff can
-        /// still own the aircraft at 150 m AGL — so launch states must have finished too.
+        /// Physical flight gate for delivery handoff. Native taxi/takeoff must release,
+        /// then the aircraft must have clearance, flying speed and no significant sink.
+        /// ActivateWhenAirborne also requires this to hold continuously for two seconds.
+        /// Surface units do not need an airborne gate.
         /// </summary>
         public bool IsAirborne => Aircraft != null &&
-                                  (IsSurface && Alive ||
-                                   Aircraft.radarAlt >= (WingRegistry.IsRotary(Aircraft)
-                                       ? WingTuning.RotaryAirborneAlt
-                                       : WingTuning.FixedWingAirborneAlt) &&
-                                   !StillLaunching);
+            (IsSurface && Alive || Aircraft.rb != null &&
+             LaunchSafety.ReadyForHandoff(Aircraft.radarAlt, Aircraft.speed,
+                 Aircraft.GetAircraftParameters() != null ? Aircraft.GetAircraftParameters().takeoffSpeed : 70f,
+                 Aircraft.rb.velocity.y, WingRegistry.IsRotary(Aircraft), StillLaunching));
 
         /// <summary>
         /// True while the stock airbase AI is still taxiing, taking off, or parked.
@@ -283,6 +310,7 @@ namespace WingCommand
         /// </summary>
         private void SetDirective(WingDirective directive)
         {
+            RefitPending = false;
             if (Directive.SameIntentAs(in directive)) return;
 
             Directive = directive;
@@ -407,6 +435,10 @@ namespace WingCommand
 
             RefreshSlowSamples(now);
 
+            AircraftParameters p = Aircraft.GetAircraftParameters();
+            float takeoffSpeed = p != null ? p.takeoffSpeed : 70f;
+            bool isRotary = WingRegistry.IsRotary(Aircraft);
+
             return new WingSituation(
                 order: Order,
                 roe: RoeRules.Current,
@@ -417,9 +449,12 @@ namespace WingCommand
                 leaderPresent: leaderDistance >= 0f,
                 targetAlive: AssignedTarget != null && !AssignedTarget.disabled,
                 leaderDistance: leaderDistance,
-                leashRadius: WingTuning.LeashRadius,
+                leashRadius: Plugin.Settings != null ? Plugin.Settings.LeashDistance.Value : WingTuning.LeashRadius,
                 radarAlt: Aircraft.radarAlt,
                 memberIsSurface: IsSurface,
+                memberIsRotary: isRotary,
+                airspeed: Aircraft.speed,
+                takeoffSpeed: takeoffSpeed,
                 fuel: sampledFuel,
                 ammo: sampledAmmo,
                 integrity: sampledIntegrity,
@@ -794,15 +829,25 @@ namespace WingCommand
         /// <summary>Release the stock launch state once a pending delivery is airborne.</summary>
         internal bool ActivateWhenAirborne()
         {
-            if (!deliveryPending || !IsAirborne) return false;
+            if (!deliveryPending) return false;
+            if (!IsAirborne || !Aircraft.LocalSim)
+            {
+                airborneStableSince = -1f;
+                return false;
+            }
+            if (airborneStableSince < 0f) airborneStableSince = Time.timeSinceLevelLoad;
+            if (!IsSurface && Time.timeSinceLevelLoad - airborneStableSince < WingTuning.LaunchStableSeconds)
+                return false;
             // Host-only command still needs LocalSim. Hangar registration can precede it;
             // wait rather than taking over a remote or half-initialised airframe.
             if (Aircraft != null && !Aircraft.LocalSim) return false;
 
             deliveryPending = false;
             Apply(Directive);
-            if (Plugin.Settings.VerboseLogging.Value)
-                Plugin.Logger.LogInfo("[Wing] " + Name + " airborne, flying " + Order);
+            Plugin.Logger.LogInfo("[Wing] " + Name + " stable airborne handoff: alt " +
+                Aircraft.radarAlt.ToString("F0") + " m, speed " + Aircraft.speed.ToString("F0") +
+                " m/s, climb " + (Aircraft.rb != null ? Aircraft.rb.velocity.y : 0f).ToString("F1") +
+                " m/s; flying " + Order);
             return true;
         }
 
@@ -1178,7 +1223,7 @@ namespace WingCommand
             // straight home the moment it joined.
             if (Time.timeSinceLevelLoad - joinedAt < 10f) return;
 
-            if (Fuel <= WingTuning.BingoFuel)
+            if (Fuel <= (Plugin.Settings != null ? Plugin.Settings.BingoFuel : WingTuning.BingoFuel))
             {
                 WingComms.Say(this, WingComms.Call.Bingo);
                 Apply(WingOrder.ReturnToBase);

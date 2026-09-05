@@ -29,11 +29,63 @@ namespace WingCommand
             CurrentMode = Mode.All;
         }
 
+        public void DeselectAll()
+        {
+            selected.Clear();
+            CurrentMode = Mode.Explicit;
+        }
+
+        public void ToggleSelectAll(WingRegistry wing = null)
+        {
+            int total = wing != null ? wing.Count : 0;
+            int count = wing != null ? Snapshot(wing).Count : 0;
+            if (SelectionTogglePolicy.ShouldDeselectAll(IsAll, count, total))
+            {
+                DeselectAll();
+            }
+            else
+            {
+                SelectAll();
+            }
+        }
+
         public void SelectOnly(WingMember member)
         {
             selected.Clear();
             CurrentMode = Mode.Explicit;
             if (member != null && member.Alive) selected.Add(member);
+        }
+
+        public void ClickMember(WingMember member, bool toggle, WingRegistry wing = null)
+        {
+            if (member == null || !member.Alive) return;
+
+            if (toggle)
+            {
+                if (CurrentMode == Mode.All && wing != null)
+                {
+                    selected.Clear();
+                    CurrentMode = Mode.Explicit;
+                    foreach (WingMember m in wing.Members)
+                    {
+                        if (m != null && m.Alive && !ReferenceEquals(m, member))
+                            selected.Add(m);
+                    }
+                    return;
+                }
+
+                Toggle(member);
+                return;
+            }
+
+            // A second click on an already-selected individual plane deselects it.
+            if (SelectionTogglePolicy.ShouldDeselectMemberOnClick(CurrentMode == Mode.Explicit, selected.Count, selected.Contains(member)))
+            {
+                DeselectAll();
+                return;
+            }
+
+            SelectOnly(member);
         }
 
         public void Toggle(WingMember member)
