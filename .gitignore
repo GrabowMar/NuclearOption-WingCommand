@@ -15,6 +15,12 @@ Thumbs.db
 # Release archives
 dist/
 
+# Build metadata
+build/
+
+# Docs
+docs/
+
 # Local AI agent skills (kept in-tree for portability, not published)
 .opencode/
 
@@ -26,3 +32,9 @@ dist/
 
 # nomodkit's local session archives and caches
 .nomodkit/
+
+# Local AI agent config
+.claude/
+
+# CI workflows
+.github/workflows/
