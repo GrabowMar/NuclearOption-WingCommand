@@ -1,23 +1,23 @@
 <Project Sdk="Microsoft.NET.Sdk">
+
   <PropertyGroup>
     <TargetFramework>net8.0</TargetFramework>
+    <LangVersion>latest</LangVersion>
+    <Nullable>disable</Nullable>
     <IsPackable>false</IsPackable>
-    <IsTestProject>true</IsTestProject>
+    <RootNamespace>WingCommand.PureTests</RootNamespace>
   </PropertyGroup>
 
   <ItemGroup>
-    <!-- Globbed, not listed. Pure/ is by definition the engine-free code, so it is by
-         definition what this project compiles; enumerating the files here meant a new pure
-         file could be added and silently go untested. If a file in Pure/ does not compile
-         against net8.0 it is not pure, and this project failing to build is the correct
-         and immediate answer. -->
-    <Compile Include="../../src/WingCommand/Pure/*.cs" LinkBase="Pure" />
-    <Compile Include="../../../nomodkit/shared/avionics/*.cs" LinkBase="Avionics" />
-    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.12.0" />
+    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.11.1" />
     <PackageReference Include="xunit" Version="2.9.2" />
-    <PackageReference Include="xunit.runner.visualstudio" Version="2.8.2">
-      <PrivateAssets>all</PrivateAssets>
-      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
-    </PackageReference>
+    <PackageReference Include="xunit.runner.visualstudio" Version="2.8.2" />
   </ItemGroup>
+
+  <ItemGroup Label="Pure/ is engine-free by convention; link its sources directly rather
+                     than referencing WingCommand.csproj, which requires the game's
+                     Unity/BepInEx assemblies to be present on disk to build.">
+    <Compile Include="..\..\Pure\*.cs" Link="Pure\%(Filename)%(Extension)" />
+  </ItemGroup>
+
 </Project>

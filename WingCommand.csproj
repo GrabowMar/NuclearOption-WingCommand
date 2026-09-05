@@ -1,0 +1,92 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>netstandard2.1</TargetFramework>
+    <AssemblyName>WingCommand</AssemblyName>
+    <RootNamespace>WingCommand</RootNamespace>
+    <Version>0.9.4</Version>
+    <LangVersion>latest</LangVersion>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <DebugType>portable</DebugType>
+    <!-- Unity assemblies are not reference assemblies; silence the resulting noise. -->
+    <NoWarn>$(NoWarn);CS0436;MSB3277</NoWarn>
+    <GenerateAssemblyInfo>true</GenerateAssemblyInfo>
+    <EnableNETAnalyzers>true</EnableNETAnalyzers>
+    <EnforceCodeStyleInBuild>true</EnforceCodeStyleInBuild>
+    <EnableDefaultCompileItems>true</EnableDefaultCompileItems>
+  </PropertyGroup>
+
+  <PropertyGroup>
+    <GameDir>C:\Program Files (x86)\Steam\steamapps\common\Nuclear Option</GameDir>
+    <ManagedDir>$(GameDir)\NuclearOption_Data\Managed</ManagedDir>
+    <BepInExDir>$(GameDir)\BepInEx\core</BepInExDir>
+  </PropertyGroup>
+
+  <!-- The version is stated twice and cannot be stated once: BepInPlugin needs a compile-time
+       constant, so Plugin.PluginVersion cannot read the assembly it is being compiled into.
+       This target makes the duplication safe rather than trusting it to a note in CLAUDE.md
+       — a bump applied to only one of the two ships a DLL whose file version disagrees with
+       the version BepInEx logs and NOMNOM packages. -->
+  <Target Name="CheckPluginVersionMatchesCsproj" BeforeTargets="CoreCompile">
+    <PropertyGroup>
+      <_PluginSource>$([System.IO.File]::ReadAllText('$(MSBuildProjectDirectory)/Core/Plugin.cs'))</_PluginSource>
+      <_DeclaredVersion>$([System.Text.RegularExpressions.Regex]::Match($(_PluginSource), 'PluginVersion\s*=\s*"([^"]*)"').Groups[1].Value)</_DeclaredVersion>
+    </PropertyGroup>
+    <Error Condition="'$(_DeclaredVersion)' == ''"
+           Text="Could not find Plugin.PluginVersion in Core/Plugin.cs. If it moved, update this check." />
+    <Error Condition="'$(_DeclaredVersion)' != '$(Version)'"
+           Text="Version mismatch: csproj &lt;Version&gt; is '$(Version)' but Plugin.PluginVersion is '$(_DeclaredVersion)'. Bump both." />
+  </Target>
+
+  <ItemGroup Label="BepInEx / Harmony">
+    <Reference Include="BepInEx"><HintPath>$(BepInExDir)\BepInEx.dll</HintPath><Private>false</Private></Reference>
+    <Reference Include="0Harmony"><HintPath>$(BepInExDir)\0Harmony.dll</HintPath><Private>false</Private></Reference>
+  </ItemGroup>
+
+  <ItemGroup Label="Game">
+    <!-- Private members needed by the radial integration are reached through reflection
+         in GameAccess.cs; a publicizer MSBuild task is blocked by this machine's
+         application-control policy. -->
+    <Reference Include="Assembly-CSharp"><HintPath>$(ManagedDir)\Assembly-CSharp.dll</HintPath><Private>false</Private></Reference>
+    <Reference Include="Assembly-CSharp-firstpass"><HintPath>$(ManagedDir)\Assembly-CSharp-firstpass.dll</HintPath><Private>false</Private></Reference>
+    <Reference Include="Mirage"><HintPath>$(ManagedDir)\Mirage.dll</HintPath><Private>false</Private></Reference>
+    <Reference Include="UniTask"><HintPath>$(ManagedDir)\UniTask.dll</HintPath><Private>false</Private></Reference>
+    <Reference Include="Rewired_Core"><HintPath>$(ManagedDir)\Rewired_Core.dll</HintPath><Private>false</Private></Reference>
+  </ItemGroup>
+
+  <ItemGroup Label="Test project lives under tests/ and is built standalone; EnableDefaultCompileItems
+                     would otherwise double-compile its sources into this plugin too.">
+    <Compile Remove="tests\**\*.cs" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- Engine-free avionics protocol, compiled into this plugin so Wing Command and
+         Boscali Summer can coordinate bezels and map gestures without a shared DLL. -->
+    <Compile Include="..\nomodkit\shared\avionics\*.cs" Link="Avionics\%(Filename)%(Extension)"
+             Exclude="..\nomodkit\shared\avionics\*Tests.cs" />
+    <Compile Include="..\nomodkit\shared\avionics-ui\*.cs" Link="AvionicsUi\%(Filename)%(Extension)" />
+
+    <!-- The panels' look, as data. Embedded so there is always a valid default, and
+         overridable at BepInEx/config/NOAvionics/avionics.avss so it can be retuned
+         without a rebuild. Both plugins embed the same file under the same name. -->
+    <EmbeddedResource Include="..\nomodkit\shared\avionics-ui\avionics.avss">
+      <LogicalName>NOAvionics.avionics.avss</LogicalName>
+    </EmbeddedResource>
+  </ItemGroup>
+
+  <ItemGroup Label="Unity">
+    <Reference Include="UnityEngine"><HintPath>$(ManagedDir)\UnityEngine.dll</HintPath><Private>false</Private></Reference>
+    <Reference Include="UnityEngine.CoreModule"><HintPath>$(ManagedDir)\UnityEngine.CoreModule.dll</HintPath><Private>false</Private></Reference>
+    <Reference Include="UnityEngine.PhysicsModule"><HintPath>$(ManagedDir)\UnityEngine.PhysicsModule.dll</HintPath><Private>false</Private></Reference>
+    <!-- AudioClip, for the radio click that opens a squadron transmission. -->
+    <Reference Include="UnityEngine.AudioModule"><HintPath>$(ManagedDir)\UnityEngine.AudioModule.dll</HintPath><Private>false</Private></Reference>
+    <Reference Include="UnityEngine.IMGUIModule"><HintPath>$(ManagedDir)\UnityEngine.IMGUIModule.dll</HintPath><Private>false</Private></Reference>
+    <Reference Include="UnityEngine.InputLegacyModule"><HintPath>$(ManagedDir)\UnityEngine.InputLegacyModule.dll</HintPath><Private>false</Private></Reference>
+    <Reference Include="UnityEngine.ImageConversionModule"><HintPath>$(ManagedDir)\UnityEngine.ImageConversionModule.dll</HintPath><Private>false</Private></Reference>
+    <Reference Include="UnityEngine.TextRenderingModule"><HintPath>$(ManagedDir)\UnityEngine.TextRenderingModule.dll</HintPath><Private>false</Private></Reference>
+    <Reference Include="UnityEngine.UI"><HintPath>$(ManagedDir)\UnityEngine.UI.dll</HintPath><Private>false</Private></Reference>
+    <Reference Include="UnityEngine.UIModule"><HintPath>$(ManagedDir)\UnityEngine.UIModule.dll</HintPath><Private>false</Private></Reference>
+    <Reference Include="Unity.TextMeshPro"><HintPath>$(ManagedDir)\Unity.TextMeshPro.dll</HintPath><Private>false</Private></Reference>
+  </ItemGroup>
+
+</Project>

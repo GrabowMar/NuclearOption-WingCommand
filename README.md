@@ -191,6 +191,23 @@ Separation predicts the closest approach over four seconds, adds vertical deconf
 terrain, and bounds corrections. Threat spacing widens the formation only during a missile
 warning or with hostiles near, then settles back. You don't babysit spacing.
 
+If you stay below a fixed-wing member's safe flying speed, it announces **holding wide**
+and flies a shallow circuit at formation altitude. It automatically rejoins after you
+maintain enough speed. An aircraft that overshoots flies a separated lane alongside you
+until you pass it, then eases back into its slot. The standing formation order is preserved.
+Braking and engine-response estimates adapt per wingman from stable flight samples;
+terrain and collision avoidance retain priority over formation corrections.
+
+Recruited AI pilots no longer automatically eject during taxi because of ground tilt,
+body-damage notifications, or stuck timers. If native taxi navigation cannot continue,
+they stop with the pilot aboard; this does not repair an obstructed route. Player ejection
+and emergency ejection outside the taxi AI remain available.
+
+With verbose logging enabled, instability triggers an eight-second diagnostic burst at
+five samples per second, with a thirty-second interval between burst starts. The
+`[FormationControl]` records include time, aircraft ID, recovery mode, control inputs,
+airspeed margin, terrain-warning urgency, and learned response estimates.
+
 ## 🔫 Preferred weapon
 
 Which of a wingman's own stores it reaches for first. Set per selection on **WMC → Tactical**;
@@ -487,7 +504,7 @@ testing. Contributions and test reports welcome.
 Requires the .NET 8 SDK, BepInEx 5, and a local Nuclear Option install at the Steam path in the project.
 
 ```powershell
-dotnet build src/WingCommand/WingCommand.csproj -c Release
+dotnet build WingCommand.csproj -c Release
 ```
 
 Release assets:
