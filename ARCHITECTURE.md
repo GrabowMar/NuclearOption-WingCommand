@@ -160,6 +160,91 @@ requested spacing as one common scale. Scaling each slot independently can rever
 ordering or overlap neighboring slots. Geometry and leader motion still pass through the
 curved tracking and smoothing in `FormationTracking` and `FormationFlyState`.
 
+### Formation pursuit, energy and rapid maneuvers
+
+The existing separation of intent, arbitration and flight control remains the foundation.
+Formation improvements belong below the arbiter: faster rendezvous does not create an
+Engage order, cancel a route, bypass a staggered hold, or grant weapons authority.
+
+`FormationIntercept` solves the positive moving-target intercept in horizontal ground
+coordinates and returns a future slot and arrival velocity. `FixedWingFormation` computes
+one plan per control tick and shares it between navigation and the long-range speed demand.
+Close flight retains its short prediction; distant straight pursuits can look up to 45 seconds
+ahead. Turn prediction is limited to 45 degrees of sweep and recalculated each tick, so a
+hard reversal cannot leave the follower committed to a long hypothetical turn. Hermite
+preview timing remains the local steering response, distinct from the target prediction horizon.
+
+`FormationClosure` uses the **actual** slot gap for the stopping envelope, reserving both
+engine response time and clearance before the slot. The predicted destination must never
+inflate the distance available for braking. Aligned distant aircraft can use full throttle
+throughout the join, even after a manual rejoin boost expires. Heading alignment tapers the
+extra speed while turning back toward the leader. Aircraft capability, staggered holds,
+slow-leader circuits, overshoot lanes, terrain and energy limits remain authoritative.
+
+Speed-brake control follows the installed game's implementation: `Airbrake.Update` opens
+fitted brakes at **exactly zero throttle**; `ControlInputs.brake` operates wheel brakes.
+Arrival can command zero with excess closure and adequate airspeed/height. Separate entry
+and release thresholds retract the brakes before co-airspeed. Positive idle (0.01) prevents
+unintended deployment when braking is denied. Bank-loaded minimum airspeed protects both
+the brake decision and the subsequent altitude-overshoot throttle cap. Braked samples do
+not train the retracted-brake drag estimate. Collision escape releases arrival braking,
+native `AutoAim` exclusion-zone power overrides remain final, and leaving formation releases
+its brake demand before the next controller enters. Aircraft without fitted brakes coast at idle.
+
+Leader filters retain their quiet-flight response for small tilts and shorten their response
+for substantial track/bank errors. Heading-rate estimation still derives from velocity,
+rejecting near-vertical ambiguity rather than interpreting a loop apex as yaw. Rapid rolls
+also raise bank permission sooner; demanded bank still passes the existing aerodynamic,
+terrain and pitch-down limits. Slot position/velocity stay continuous and bounded rather
+than asking a distant wingman to rigidly follow an impossible roll radius.
+
+`FormationLayout` defines fixed echelons, abeam lines and repeatable aircraft elements.
+Combat Spread uses an offset box; Finger Four preserves paired intervals and Diamond grows
+in connected groups. Ordinary altitude stacks are bounded; Ladder deliberately climbs.
+Geometry validation includes the leader and zero-stack horizontal clearance through turn
+compression, so adjacent slots do not permanently repel one another at their assigned positions.
+The banked frame also reserves terrain clearance for the whole formation's current slot
+footprint, including stack, climb and shape transitions. Wide outer slots limit everyone's
+geometry bank together before terrain floors can flatten the low side into overlapping targets.
+
+### Weapons authority during temporary flight control
+
+`OrderRoePolicy.StationFire` selects one station weapons task before examining any retained
+designation. Missile defence has priority, including during Jam and with optional opportunity
+scans disabled. An active explicit attack retains its designated-target authority; a recalled
+attack instead uses standing ROE: Hold holds incidental fire, Tight protects the wing from
+air threats, and Free selects valid opportunities. The retained target alone never grants
+permission. Jam shares formation's deck hold and resumes its standing designation afterward.
+
+The Core decision adapter retires completed target orders even when recall or deck hold
+owns flight; pending deliveries retain their queued intent. `TacticalCoordinator` counts
+only available explicit attackers as assignment pressure. Its existing firing reservations
+remain separate from those assignments, preventing suspended orders from deterring useful shots.
+
+### Research and validation rationale
+
+The changes adapt these sources to the game's native flight controller and airframe limits:
+
+- [Reynolds, Steering Behaviors for Autonomous Characters](https://www.red3d.com/cwr/steer/gdc99/):
+  moving-target prediction, arrival and priority for avoidance over ordinary steering.
+- [PX4 controller diagrams](https://docs.px4.io/main/en/flight_stack/controller_diagrams):
+  separate navigation, energy and attitude control responsibilities.
+- [ArduPilot TECS tuning](https://ardupilot.org/plane/docs/tecs-total-energy-control-system-for-speed-height-tuning-guide.html):
+  respect airframe energy limits and response delay when combining speed and height demands.
+- [USAF AETCMAN 11-251](https://static.e-publishing.af.mil/production/1/aetc/publication/aetcman11-251/aetcman11-251.pdf),
+  section 6.41.4: offset-box elements and vertical separation. Distances here are gameplay tuning.
+
+Regressions include numerical intercepts, faster/unreachable leaders, brake hysteresis and
+loaded stall recovery, small/large attitude changes, geometry through turn compression,
+direct production station firing, and order arbitration. Flight simulations run the production
+guidance with finite bank/acceleration/engine lag: multi-kilometer and opposite-heading joins
+must converge; an accelerating join and a hot arrival must settle without passing more than
+one slot ahead. These tests model flight dynamics; they do not replace in-game trials of mixed
+airframes, wind, low-level hard turns and abrupt leader braking. FormationControl diagnostics
+now include airbrake demand and prediction lead time for those trials.
+
+### Task completion and presentation
+
 Flight states complete through `WingPilotState.CompleteTask`, which checks both current
 state identity and the order revision before changing the directive or its route. A stale
 completion cannot erase a newer command. Phase-based states restart on a changed payload

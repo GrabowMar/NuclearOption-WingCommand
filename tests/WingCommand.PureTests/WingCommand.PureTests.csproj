@@ -23,6 +23,7 @@
     <Compile Include="..\..\Core\WingCommandManager.Recruit.cs" Link="Core\WingCommandManager.Recruit.cs" />
     <Compile Include="..\..\Core\WingOrderCatalog.cs" Link="Core\WingOrderCatalog.cs" />
     <Compile Include="..\..\Combat\TacticalCoordinator.cs" Link="Combat\TacticalCoordinator.cs" />
+    <Compile Include="..\..\Combat\SlotEngagement.cs" Link="Combat\SlotEngagement.cs" />
     <Compile Include="..\..\Economy\HangarDepartureLane.cs" Link="Economy\HangarDepartureLane.cs" />
     <Compile Include="..\..\Flight\HoverAssist.cs" Link="Flight\HoverAssist.cs" />
   </ItemGroup>

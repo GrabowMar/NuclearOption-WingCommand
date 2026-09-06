@@ -186,7 +186,7 @@ namespace WingCommand
                 // Only a wingman actually trying to hold formation is moved. An explicit
                 // order - an attack, a hold somewhere else, an RTB - is the player's and
                 // outlives their landing.
-                return s.Order == WingOrder.Formation ? 1f : 0f;
+                return WingOrderRules.UsesFormationSlot(s.Order) ? 1f : 0f;
             }
         }
 

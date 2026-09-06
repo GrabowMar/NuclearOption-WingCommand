@@ -43,6 +43,35 @@ namespace WingCommand.PureTests
                 "wingcommand.missile-break", true, WingAi.Reflexes).BehaviourId);
         }
 
+        [Theory]
+        [InlineData(WingOrder.Formation)]
+        [InlineData(WingOrder.JamTarget)]
+        public void SlotOrdersHoldOverheadWhileTheLeaderIsOnDeckAndResumeTheirPayload(WingOrder order)
+        {
+            WingReflexes.RegisterDefaults();
+            var grounded = new WingSituation(order: order, targetAlive: true, leaderOnDeck: true);
+            var result = WingArbiter.Resolve(in grounded, null, true, WingAi.Reflexes);
+            Assert.Equal(WingBehaviours.DeckHold, result.BehaviourId);
+            Assert.Equal(order, grounded.Order);
+            Assert.True(grounded.TargetAlive);
+            var airborne = new WingSituation(order: order, targetAlive: true, leaderOnDeck: false);
+            Assert.Equal(WingBehaviours.Task,
+                WingArbiter.Resolve(in airborne, result.ReflexId, true, WingAi.Reflexes).BehaviourId);
+        }
+
+        [Theory]
+        [InlineData(WingOrder.ReturnToBase)]
+        [InlineData(WingOrder.MoveToPoint)]
+        [InlineData(WingOrder.Attack)]
+        [InlineData(WingOrder.OrbitHere)]
+        public void LandingTheLeaderDoesNotInterruptIndependentTasks(WingOrder order)
+        {
+            WingReflexes.RegisterDefaults();
+            var s = new WingSituation(order: order, targetAlive: true, leaderOnDeck: true);
+            Assert.Equal(WingBehaviours.Task,
+                WingArbiter.Resolve(in s, null, true, WingAi.Reflexes).BehaviourId);
+        }
+
         [Fact]
         public void ExtensionsCanDeclareAnImmediateEmergencyWithoutBuiltInBehaviourNames()
         {

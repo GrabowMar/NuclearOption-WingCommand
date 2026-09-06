@@ -65,6 +65,16 @@ namespace WingCommand
         AutonomousCombat,
     }
 
+    /// <summary>One weapons task selected for a station-keeping controller this pass.</summary>
+    internal enum StationFireMode
+    {
+        None,
+        MissileDefence,
+        DesignatedTarget,
+        ProtectWing,
+        Opportunity,
+    }
+
     /// <summary>
     /// Shared order metadata for targeting, pursuit leashes, and pending deliveries.
     /// </summary>
@@ -84,6 +94,14 @@ namespace WingCommand
             order == WingOrder.FireForEffect ||
             order == WingOrder.JamTarget;
 
+        /// <summary>Orders whose destination is the leader's formation slot.</summary>
+        public static bool UsesFormationSlot(WingOrder order) =>
+            order == WingOrder.Formation || order == WingOrder.JamTarget;
+
+        /// <summary>A completed designation must not wait for a suspended task to regain flight.</summary>
+        public static bool TargetTaskComplete(WingOrder order, bool targetAlive, bool deliveryPending) =>
+            !deliveryPending && CarriesTarget(order) && !targetAlive;
+
         /// <summary>
         /// Pending deliveries retain standing orders until airborne. Transient manoeuvres
         /// cannot be queued because they would expire during taxi.
@@ -95,6 +113,27 @@ namespace WingCommand
     /// <summary>Pure precedence table shared by runtime code and tests.</summary>
     internal static class OrderRoePolicy
     {
+        /// <summary>
+        /// Resolve weapons intent independently of any retained target payload. A temporary
+        /// rejoin can keep an Attack target without inheriting permission to fire at it.
+        /// Missile defence takes priority even when optional opportunity scans are disabled.
+        /// </summary>
+        public static StationFireMode StationFire(OrderEngagementAuthority authority,
+            WingRoe roe, bool missileDefenceAvailable, bool opportunityFireEnabled)
+        {
+            if (missileDefenceAvailable) return StationFireMode.MissileDefence;
+            if (authority == OrderEngagementAuthority.ExplicitTarget)
+                return StationFireMode.DesignatedTarget;
+            if (authority == OrderEngagementAuthority.AutonomousCombat)
+                return StationFireMode.Opportunity;
+            if (authority != OrderEngagementAuthority.StandingRoe || !opportunityFireEnabled)
+                return StationFireMode.None;
+
+            if (roe == WingRoe.Tight) return StationFireMode.ProtectWing;
+            if (roe == WingRoe.Free) return StationFireMode.Opportunity;
+            return StationFireMode.None;
+        }
+
         public static OrderEngagementAuthority Authority(WingOrder order)
         {
             switch (order)

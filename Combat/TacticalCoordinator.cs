@@ -64,9 +64,10 @@ namespace WingCommand
                     if (Active(list[i])) AddOwner(list[i].Owner, except);
             }
 
-            // Assignments discourage opportunists from piling onto an existing attack,
-            // but are not the hard firing cap: otherwise two assigned pilots can each
-            // wait forever for the other's reservation without either firing a shot.
+            // Active assignments discourage opportunists from piling onto an attack.
+            // A retained designation during recall/defence/taxi is not an available
+            // shooter. Actual shots above keep their short reservation independently.
+            // Assignments are never the hard cap, so assigned pilots cannot deadlock.
             WingRegistry wing = WingCommandManager.Instance?.Wing;
             if (wing != null)
             {
@@ -74,8 +75,9 @@ namespace WingCommand
                 for (int i = 0; i < members.Count; i++)
                 {
                     WingMember member = members[i];
-                    if (member.AssignedTarget == target &&
-                        (member.Order == WingOrder.Attack || member.Order == WingOrder.FireForEffect))
+                    if (member != null && member.Alive && !member.DeliveryPending &&
+                        member.AssignedTarget == target &&
+                        member.EngagementAuthority == OrderEngagementAuthority.ExplicitTarget)
                         AddOwner(member.Aircraft, except);
                 }
             }

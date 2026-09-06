@@ -129,6 +129,54 @@ namespace WingCommand.PureTests
             Assert.Equal(0, TacticalCoordinator.CountCommitments(target));
         }
 
+        [Theory]
+        [InlineData(WingBehaviours.Rejoin)]
+        [InlineData(WingBehaviours.MissileBreak)]
+        [InlineData(WingBehaviours.DeckHold)]
+        public void SuspendedDesignationsDoNotDiscourageAvailableShooters(string behaviour)
+        {
+            var target = new Unit();
+            var member = new WingMember
+            {
+                Aircraft = new Aircraft(), AssignedTarget = target, BehaviourId = behaviour,
+            };
+            WingCommandManager.Instance.Wing.Members.Add(member);
+            Assert.Equal(0, TacticalCoordinator.CountCommitments(target));
+            Assert.Same(target, member.AssignedTarget);
+            member.BehaviourId = WingBehaviours.Task;
+            Assert.Equal(1, TacticalCoordinator.CountCommitments(target));
+        }
+
+        [Fact]
+        public void PendingOrUnavailablePilotsCannotPromiseAnAttack()
+        {
+            var target = new Unit();
+            var member = new WingMember
+            {
+                Aircraft = new Aircraft(), AssignedTarget = target, DeliveryPending = true,
+            };
+            WingCommandManager.Instance.Wing.Members.Add(member);
+            Assert.Equal(0, TacticalCoordinator.CountCommitments(target));
+            member.DeliveryPending = false;
+            member.Alive = false;
+            Assert.Equal(0, TacticalCoordinator.CountCommitments(target));
+        }
+
+        [Fact]
+        public void AShotAlreadyFiredRemainsReservedAfterTheShooterBreaksAway()
+        {
+            var target = new Unit();
+            var member = new WingMember { Aircraft = new Aircraft(), AssignedTarget = target };
+            WingCommandManager.Instance.Wing.Members.Add(member);
+            Assert.True(TacticalCoordinator.TryClaim(target, member.Aircraft, 1, 3f));
+            member.BehaviourId = WingBehaviours.Rejoin;
+            Assert.Equal(1, TacticalCoordinator.CountCommitments(target));
+            Assert.Equal(1, TacticalCoordinator.CountClaims(target));
+            UnityEngine.Time.timeSinceLevelLoad += 3f;
+            Assert.Equal(0, TacticalCoordinator.CountCommitments(target));
+            Assert.Equal(0, TacticalCoordinator.CountClaims(target));
+        }
+
         [Fact]
         public void ExpiredOrDisabledOwners_FreeCapacityEvenAfterThisFramesPrune()
         {

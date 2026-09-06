@@ -31,5 +31,26 @@ namespace WingCommand.PureTests
             Assert.False(WingOrderCatalog.CanApply(member, WingOrder.Maneuver));
             Assert.True(WingOrderCatalog.CanApply(member, WingOrder.Formation));
         }
+
+        [Theory]
+        [InlineData(WingOrder.Attack)]
+        [InlineData(WingOrder.FireForEffect)]
+        [InlineData(WingOrder.JamTarget)]
+        public void CompletedDesignationsRetireIndependentlyOfWhichReflexOwnsFlight(WingOrder order)
+        {
+            Assert.True(WingOrderRules.TargetTaskComplete(order, targetAlive: false, deliveryPending: false));
+            Assert.False(WingOrderRules.TargetTaskComplete(order, targetAlive: true, deliveryPending: false));
+            Assert.False(WingOrderRules.TargetTaskComplete(order, targetAlive: false, deliveryPending: true));
+        }
+
+        [Fact]
+        public void ARouteOrOpenEndedOrderDoesNotNeedADesignatedTargetToSurvive()
+        {
+            foreach (WingOrder order in System.Enum.GetValues(typeof(WingOrder)))
+            {
+                if (WingOrderRules.CarriesTarget(order)) continue;
+                Assert.False(WingOrderRules.TargetTaskComplete(order, targetAlive: false, deliveryPending: false));
+            }
+        }
     }
 }

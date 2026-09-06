@@ -1,9 +1,10 @@
+using System;
+
 namespace WingCommand
 {
     /// <summary>
-    /// One slot in formation units: lateral (+ right of the leader), back (+ astern) and
-    /// height (+ up, in vertical-stack units). The flight code multiplies the first two
-    /// by slot spacing and the third by stack height; this type never sees metres.
+    /// One slot in formation units: lateral (+ right), back (+ astern), height (+ up).
+    /// The adapter multiplies lateral/back by spacing and height by vertical stack.
     /// </summary>
     internal readonly struct SlotLayout
     {
@@ -20,227 +21,105 @@ namespace WingCommand
     }
 
     /// <summary>
-    /// Display-team slot geometry. Pure numbers, no engine types.
-    ///
-    /// The previous layout was a tactical diagram: a straight arm at a fixed sweep, wingmen
-    /// stacked <i>up</i> so each rank sat above the one ahead. It read as a briefing slide.
-    /// This one is built the way a formation is photographed — slightly tight, slightly
-    /// down, and with the line allowed to curve — so a three-ship reads as one aircraft
-    /// from a chase cam rather than three occupying nearby pieces of sky.
-    ///
-    /// Every regular shape still goes through <see cref="Place"/>: an arm in spacing units
-    /// and a sweep from beam (0°) to astern (90°). Sweep grows with rank on the parade
-    /// shapes, which is what turns a ruler into a scimitar. Finger Four and Diamond place
-    /// each of the first three slots by hand because their asymmetry is the whole point,
-    /// then repeat as a second element astern.
+    /// Aircraft formations with stable lanes and repeatable element spacing. Fixed
+    /// sweep keeps extended echelons on their assigned side; tactical shapes grow aft
+    /// in elements rather than demanding ever larger outside-turn speeds. Every shape
+    /// has horizontal clearance even without its stack (surface units and terrain floors).
     /// </summary>
     internal static class FormationLayout
     {
-        /// <summary>Vertical stacks each Ladder rung climbs. The climb <i>is</i> the shape.</summary>
-        private const float LadderRise = 1.55f;
-
-        /// <summary>How the shape steps its slots off the leader's altitude.</summary>
-        private enum Stack
-        {
-            /// <summary>Each rank a little lower. The parade look: lead silhouetted against sky.</summary>
-            Down,
-
-            /// <summary>Small down-weave plus a slow drop, so a long trail is not a staircase.</summary>
-            Weave,
-
-            /// <summary>Each rank a full stack higher. Wall and ladder.</summary>
-            Up,
-
-            /// <summary>A large fixed climb per slot — ladder's defining feature.</summary>
-            Ladder,
-        }
-
-        /// <summary>
-        /// One regular formation. <see cref="BaseArm"/> is the innermost slot in spacing
-        /// units; <see cref="SweepDeg"/> is that slot's angle off the beam; <see cref="SweepGrow"/>
-        /// adds degrees of sweep per rank so the line curves aft as it widens.
-        /// </summary>
-        private readonly struct Spec
-        {
-            public readonly float BaseArm;
-            public readonly float SweepDeg;
-            public readonly float SweepGrow;
-            public readonly bool Symmetric;
-            public readonly float Side;
-            public readonly float StackStep;
-            public readonly Stack Stack;
-
-            public Spec(float baseArm, float sweepDeg, float sweepGrow, bool symmetric,
-                        float side, float stackStep, Stack stack)
-            {
-                BaseArm = baseArm;
-                SweepDeg = sweepDeg;
-                SweepGrow = sweepGrow;
-                Symmetric = symmetric;
-                Side = side;
-                StackStep = stackStep;
-                Stack = stack;
-            }
-        }
+        // Shared with flight's turn deformation and checked by geometry regressions.
+        internal const float TurnLateralScale = 0.72f;
+        internal const float TurnBackScale = 1.12f;
+        internal const float MinimumPlanarSeparation = 0.75f;
 
         public static SlotLayout Slot(FormationShape shape, int slot)
         {
             if (slot <= 0) return new SlotLayout(0f, 0f, 0f);
 
-            switch (shape)
-            {
-                case FormationShape.FingerFour: return FingerFour(slot);
-                case FormationShape.Diamond:    return Diamond(slot);
-                default:                        return FromSpec(SpecFor(shape), slot);
-            }
-        }
-
-        /// <summary>
-        /// Parade numbers. Tight inner arms, a scimitar of extra sweep per rank, and a
-        /// step-down so the lead sits highest. Combat Spread is the exception: it stays
-        /// wide on purpose. Wall and Ladder climb because that is what those shapes are.
-        /// </summary>
-        private static Spec SpecFor(FormationShape shape)
-        {
+            int rank = (slot - 1) / 2 + 1;
+            float side = slot % 2 == 1 ? 1f : -1f;
             switch (shape)
             {
                 case FormationShape.EchelonLeft:
-                    return new Spec(0.90f, 36f, 5f, symmetric: false, side: -1f, 0.32f, Stack.Down);
-
-                case FormationShape.LineAbreast:
-                    // A few degrees of sweep is a crescent, not a ruler. Outer aircraft sit
-                    // a body-length aft so the line reads as a formation from head-on.
-                    return new Spec(1.02f, 8f, 3f, symmetric: true, side: 0f, 0.20f, Stack.Down);
-
-                case FormationShape.Trail:
-                    return new Spec(0.86f, 90f, 0f, symmetric: false, side: 0f, 0.22f, Stack.Weave);
-
-                case FormationShape.CombatSpread:
-                    return new Spec(1.85f, 14f, 2f, symmetric: true, side: 0f, 0.22f, Stack.Down);
-
-                case FormationShape.Vic:
-                    return new Spec(0.98f, 32f, 4f, symmetric: true, side: 0f, 0.28f, Stack.Down);
-
-                case FormationShape.Wall:
-                    return new Spec(1.08f, 6f, 2f, symmetric: true, side: 0f, 1.10f, Stack.Up);
-
-                case FormationShape.Ladder:
-                    return new Spec(0.88f, 88f, 0f, symmetric: false, side: 0f, 0f, Stack.Ladder);
-
+                    return new SlotLayout(-0.90f * slot, 0.80f * slot, StepDown(slot));
                 case FormationShape.EchelonRight:
                 default:
-                    return new Spec(0.90f, 36f, 5f, symmetric: false, side: 1f, 0.32f, Stack.Down);
+                    return new SlotLayout(0.90f * slot, 0.80f * slot, StepDown(slot));
+
+                case FormationShape.LineAbreast:
+                    // All wingmen remain abeam instead of curving progressively into trail.
+                    return new SlotLayout(side * 1.10f * rank, 0f, -0.15f);
+                case FormationShape.Trail:
+                    return new SlotLayout(0f, 1.10f * slot, StepDown(slot));
+                case FormationShape.Vic:
+                    return new SlotLayout(side * 0.95f * rank, 0.80f * rank, StepDown(rank));
+
+                case FormationShape.CombatSpread:
+                    return CombatSpread(slot);
+                case FormationShape.FingerFour:
+                    return FingerFour(slot);
+                case FormationShape.Diamond:
+                    return Diamond(slot);
+
+                case FormationShape.Ladder:
+                    // A deliberate climbing trail; unlike other shapes, altitude is its identity.
+                    return new SlotLayout(0f, 1.10f * slot, 1.55f * slot);
+                case FormationShape.Wall:
+                    return new SlotLayout(side * 1.55f * rank, 0f, Math.Min(0.75f * rank, 3f));
             }
         }
 
-        private static SlotLayout FromSpec(Spec spec, int slot)
-        {
-            int pair = (slot + 1) / 2;
-            int rank = spec.Symmetric ? pair : slot;
-            float side = spec.Symmetric ? (slot % 2 == 1 ? 1f : -1f) : spec.Side;
-            float arm = spec.BaseArm * rank;
-            float sweep = spec.SweepDeg + spec.SweepGrow * (rank - 1);
-
-            float height;
-            switch (spec.Stack)
-            {
-                case Stack.Weave:
-                    // Off the wake of the one ahead, overall dropping so a long trail still
-                    // photographs as a descending line rather than a column of equals.
-                    height = (slot % 2 == 1 ? -spec.StackStep : -spec.StackStep * 1.7f)
-                             - (slot - 1) * 0.07f;
-                    break;
-
-                case Stack.Ladder:
-                    height = LadderRise * slot;
-                    break;
-
-                case Stack.Up:
-                    height = spec.StackStep * (rank - 1);
-                    break;
-
-                default:
-                    height = -spec.StackStep * rank;
-                    break;
-            }
-
-            return Place(arm, sweep, side, height);
-        }
+        // Keep a large wing near its leader's altitude; a terrain clamp must not erase
+        // the only separation between slots or make the last aircraft chase a deep staircase.
+        private static float StepDown(int rank) => -0.25f * Math.Min(rank, 4);
 
         /// <summary>
-        /// The one placement primitive. <paramref name="arm"/> is distance from the leader
-        /// along the formation line; <paramref name="sweepDeg"/> rotates that line from the
-        /// beam (0°) to dead astern (90°); <paramref name="side"/> is +1 right, −1 left, 0
-        /// on the centreline.
+        /// Two-aircraft elements in an offset box. Element wingmen hold the same wide
+        /// lateral interval; later elements sit aft and slightly high. The offset leaves
+        /// the rear element a view past the lead pair without an unbounded lateral arm.
         /// </summary>
-        internal static SlotLayout Place(float arm, float sweepDeg, float side, float height)
+        private static SlotLayout CombatSpread(int slot)
         {
-            float sweep = sweepDeg * (float)(System.Math.PI / 180.0);
-            float cos = (float)System.Math.Cos(sweep);
-            float sin = (float)System.Math.Sin(sweep);
-            return new SlotLayout(side * arm * cos, arm * sin, height);
+            int element = slot / 2;
+            bool wingman = slot % 2 == 1;
+            float offset = element % 2 == 1 ? -0.55f : 0f;
+            return new SlotLayout(offset + (wingman ? 2.20f : 0f),
+                element * 2.20f + (wingman ? 0.15f : 0f),
+                Math.Min(element, 2) * 0.65f + (wingman ? 0.35f : 0f));
         }
 
         /// <summary>
-        /// Classic right-hand finger-four: close wingman to port, element lead to
-        /// starboard, element wingman a full arm further out and slightly more swept so
-        /// the four fingertips of an outstretched hand are visible from above. Extra
-        /// slots form a second finger astern and a little low.
+        /// Strong-right finger four: lead's wingman left, element lead right, its
+        /// wingman farther right and aft by the same interval. Extra four-ships repeat
+        /// behind with enough gap for the aft member of the preceding group.
         /// </summary>
         private static SlotLayout FingerFour(int slot)
         {
-            const float sweep = 36f;
-
-            SlotLayout lead;
-            switch (slot)
+            int group = slot / 4;
+            float back = group * 3f;
+            float height = -0.35f * Math.Min(group, 2);
+            switch (slot % 4)
             {
-                case 1: return Place(0.88f, sweep, -1f, -0.20f);
-                case 2: return Place(1.08f, sweep, 1f, -0.12f);
-                case 3: return Place(2.08f, sweep, 1f, -0.28f);
+                case 0: return new SlotLayout(0f, back, height);
+                case 1: return new SlotLayout(-0.95f, back + 0.80f, height - 0.25f);
+                case 2: return new SlotLayout(1.10f, back + 0.60f, height - 0.15f);
+                default: return new SlotLayout(2.05f, back + 1.40f, height - 0.40f);
             }
-
-            int extra = slot - 4;
-            int group = extra / 4 + 1;
-            int within = extra % 4;
-            float astern = group * 2.45f;
-            float drop = -group * 0.45f;
-
-            switch (within)
-            {
-                case 0:  lead = Place(0f, 90f, 0f, drop); break;
-                case 1:  lead = Place(0.88f, sweep, -1f, drop - 0.20f); break;
-                case 2:  lead = Place(1.08f, sweep, 1f, drop - 0.12f); break;
-                default: lead = Place(2.08f, sweep, 1f, drop - 0.28f); break;
-            }
-
-            return new SlotLayout(lead.Lateral, lead.Back + astern, lead.Height);
         }
 
-        /// <summary>
-        /// A pointed rhombus: wings at 40°, tail on the centreline at the distance that
-        /// keeps the four horizontal edges equal, and the tail a half-stack lower so the
-        /// diamond has thickness when seen from abeam.
-        /// </summary>
+        /// <summary>Equal-sided diamonds sharing each preceding tail as the next lead.</summary>
         private static SlotLayout Diamond(int slot)
         {
-            const float arm = 0.95f;
-            const float sweep = 40f;
-            float tailBack = 2f * arm * (float)System.Math.Sin(sweep * (System.Math.PI / 180.0));
-
             int group = (slot - 1) / 3;
-            int within = (slot - 1) % 3;
-            float astern = group * (tailBack + 0.55f);
-            float drop = -group * 0.40f;
-
-            SlotLayout point;
-            switch (within)
+            float back = group * 1.60f;
+            float height = -0.40f * Math.Min(group, 2);
+            switch ((slot - 1) % 3)
             {
-                case 0:  point = Place(arm, sweep, 1f, drop - 0.16f); break;
-                case 1:  point = Place(arm, sweep, -1f, drop - 0.16f); break;
-                default: point = Place(tailBack, 90f, 0f, drop - 0.48f); break;
+                case 0: return new SlotLayout(1f, back + 0.80f, height - 0.20f);
+                case 1: return new SlotLayout(-1f, back + 0.80f, height - 0.20f);
+                default: return new SlotLayout(0f, back + 1.60f, height - 0.40f);
             }
-
-            return new SlotLayout(point.Lateral, point.Back + astern, point.Height);
         }
     }
 }

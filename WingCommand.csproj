@@ -63,6 +63,8 @@
   <ItemGroup Label="Test project lives under tests/ and is built standalone; EnableDefaultCompileItems
                      would otherwise double-compile its sources into this plugin too.">
     <Compile Remove="tests\**\*.cs" />
+    <!-- Isolated test runs keep generated assembly metadata under ignored build/. -->
+    <Compile Remove="build\**\*.cs" />
   </ItemGroup>
 
   <ItemGroup>

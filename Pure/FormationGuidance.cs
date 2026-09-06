@@ -58,6 +58,13 @@ namespace WingCommand
             return Math.Max(WingTuning.RejoinMinimumBank, Math.Min(terrain, energy));
         }
 
+        // A rapid leader roll may need turn authority sooner than the calm-flight
+        // ramp permits. This only raises permission: AutoAim still chooses the
+        // demanded bank, and terrain, airspeed and pitch-down limits remain final.
+        public static float BankRiseRate(float leaderBankRate) =>
+            WingTuning.FormationBankRiseRate + 60f * Smooth01(
+                ((float)Math.Abs(leaderBankRate * 180d / Math.PI) - 15f) / 75f);
+
         private static float Smooth01(float value)
         { value = Clamp(value, 0f, 1f); return value * value * (3f - 2f * value); }
         private static float Clamp(float value, float low, float high) => Math.Max(low, Math.Min(high, value));

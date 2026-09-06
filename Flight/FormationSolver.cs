@@ -14,6 +14,14 @@ namespace WingCommand
     /// </summary>
     internal static class FormationSolver
     {
+        /// <summary>Bounds needed by the common terrain bank limit: lateral, down, aft.</summary>
+        internal static void IncludeBankFootprint(ref Vector3 footprint, Vector3 local)
+        {
+            footprint.x = Mathf.Max(footprint.x, Mathf.Abs(local.x));
+            footprint.y = Mathf.Max(footprint.y, -local.y);
+            footprint.z = Mathf.Max(footprint.z, -local.z);
+        }
+
         // A shape uses one scale. Per-slot scales can reverse trail ordering or put
         // neighboring finger-four slots in the same place; the most cautious member
         // sets the common spacing while each keeps its own control gains.
@@ -41,24 +49,33 @@ namespace WingCommand
 
             foreach (FormationShape shape in FormationShapes.All)
             {
-                var slots = new List<Vector3>();
-                for (int slot = 1; slot <= maxSlots; slot++)
+                // Validate the leader as well as followers, with no vertical stack.
+                // Terrain floors and surface formations must still have safe spacing.
+                for (int turn = 0; turn <= 1; turn++)
                 {
-                    Vector3 point = SlotCoordinates(slot, shape, 1f, 1f);
-                    if (float.IsNaN(point.x) || float.IsNaN(point.y) || float.IsNaN(point.z) ||
-                        float.IsInfinity(point.x) || float.IsInfinity(point.y) || float.IsInfinity(point.z))
+                    var slots = new Vector3[System.Math.Max(0, maxSlots) + 1];
+                    float lateralScale = turn == 0 ? 1f : FormationLayout.TurnLateralScale;
+                    float backScale = turn == 0 ? 1f : FormationLayout.TurnBackScale;
+                    for (int slot = 1; slot <= maxSlots; slot++)
                     {
-                        report.Append(shape).Append(" slot ").Append(slot).Append(" is not finite; ");
-                        continue;
-                    }
+                        Vector3 point = SlotCoordinates(slot, shape, 1f, 0f, lateralScale, backScale);
+                        slots[slot] = point;
+                        if (float.IsNaN(point.x) || float.IsNaN(point.y) || float.IsNaN(point.z) ||
+                            float.IsInfinity(point.x) || float.IsInfinity(point.y) || float.IsInfinity(point.z))
+                        {
+                            report.Append(shape).Append(" slot ").Append(slot).Append(" is not finite; ");
+                            continue;
+                        }
 
-                    for (int previous = 0; previous < slots.Count; previous++)
-                    {
-                        if ((slots[previous] - point).sqrMagnitude >= 0.2f * 0.2f) continue;
-                        report.Append(shape).Append(" slots ").Append(previous + 1)
-                              .Append(" and ").Append(slot).Append(" overlap; ");
+                        for (int previous = 0; previous < slot; previous++)
+                        {
+                            float minimum = FormationLayout.MinimumPlanarSeparation;
+                            if ((slots[previous] - point).sqrMagnitude >= minimum * minimum) continue;
+                            report.Append(shape).Append(" slots ").Append(previous)
+                                  .Append(" and ").Append(slot).Append(" lack horizontal clearance")
+                                  .Append(turn == 0 ? "; " : " in a turn; ");
+                        }
                     }
-                    slots.Add(point);
                 }
             }
 
@@ -160,9 +177,13 @@ namespace WingCommand
         public static Vector3 AvoidLeaderPath(Aircraft self, Aircraft leader,
                                               float lookAhead, float corridorRadius, float strength)
         {
-            if (self == null || leader == null) return Vector3.zero;
+            if (self == null || leader == null || lookAhead <= 0f || corridorRadius <= 0f)
+                return Vector3.zero;
 
-            Vector3 forward = leader.transform.forward;
+            // Protect the leader's actual path, matching the frame used for its slots.
+            // Nose direction alone points the corridor aside during sideslip or a gust.
+            Vector3 forward = leader.rb != null && leader.rb.velocity.sqrMagnitude > 25f
+                ? leader.rb.velocity.normalized : leader.transform.forward;
             Vector3 toSelf = self.transform.position - leader.transform.position;
 
             // Only the corridor *ahead* of the leader matters; behind is where slots live.
@@ -176,7 +197,15 @@ namespace WingCommand
             // Push sideways out of the corridor, hardest on the centreline and closest in.
             Vector3 escape = offCentre > 0.1f
                 ? lateral / offCentre
-                : Vector3.Cross(forward, Vector3.up).normalized;
+                : WorldOffset(forward, Vector3.left, bankDeg: 0f, velocityPlane: true);
+
+            if (self.autopilot != null && self.radarAlt < 250f && escape.y < 0f)
+            {
+                escape.y = 0f;
+                if (escape.sqrMagnitude < 0.0001f)
+                    escape = WorldOffset(forward, Vector3.left, bankDeg: 0f, velocityPlane: true);
+                escape.Normalize();
+            }
 
             float urgency = (1f - offCentre / corridorRadius) * (1f - ahead / lookAhead);
             return escape * (strength * urgency);
@@ -201,12 +230,14 @@ namespace WingCommand
             int selfSlot = 0;
             for (int i = 0; i < members.Count; i++)
             {
-                if (members[i].Aircraft == self) { selfSlot = members[i].Slot; break; }
+                if (members[i] != null && members[i].Aircraft == self)
+                { selfSlot = members[i].Slot; break; }
             }
 
             for (int i = 0; i < members.Count; i++)
             {
                 WingMember otherMember = members[i];
+                if (otherMember == null) continue;
                 Aircraft other = otherMember.Aircraft;
                 if (other == null || other == self || other.disabled) continue;
 

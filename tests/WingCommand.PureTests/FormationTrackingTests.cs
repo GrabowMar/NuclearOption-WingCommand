@@ -169,5 +169,77 @@ namespace WingCommand.PureTests
             Assert.Equal(-FormationTracking.QuietTurnRate(0.009f, 0.006f),
                 FormationTracking.QuietTurnRate(-0.009f, 0.006f));
         }
+
+        [Theory]
+        [InlineData(-2f)]
+        [InlineData(0f)]
+        [InlineData(2f)]
+        public void SmallTiltsKeepTheEstablishedQuietFlightResponse(float error)
+        {
+            Assert.Equal(0.35f, FormationTracking.TrackResponse(error, 0.35f));
+            Assert.Equal(0.45f, FormationTracking.BankResponse(error, 0.45f));
+        }
+
+        [Theory]
+        [InlineData(0.02f)]
+        [InlineData(0.06f)]
+        public void LargeBankReversalRespondsPromptlyWithoutOvershoot(float dt)
+        {
+            float bank = -60f, previous = bank, fixedBank = bank;
+            for (int i = 0; i < (int)(0.3f / dt); i++)
+            {
+                bank = FormationTracking.SmoothBank(bank, 60f,
+                    FormationTracking.BankResponse(60f - bank, 0.45f), dt);
+                fixedBank = FormationTracking.SmoothBank(fixedBank, 60f, 0.45f, dt);
+                Assert.InRange(bank, previous, 60f);
+                previous = bank;
+            }
+            Assert.True(bank > 30f, $"Bank still lagging at {bank} degrees");
+            Assert.True(bank > fixedBank + 25f);
+        }
+
+        [Fact]
+        public void LargeTrackChangeCatchesUpWhileSmallCorrectionsRemainDamped()
+        {
+            float track = 0f, fixedTrack = 0f;
+            for (int i = 0; i < 15; i++)
+            {
+                track = FormationTracking.SmoothBank(track, 25f,
+                    FormationTracking.TrackResponse(25f - track, 0.35f), 0.02f);
+                fixedTrack = FormationTracking.SmoothBank(fixedTrack, 25f, 0.35f, 0.02f);
+            }
+            Assert.InRange(track, 20f, 25f);
+            Assert.True(track > fixedTrack + 5f);
+            Assert.Equal(0.45f, FormationTracking.BankResponse(-358f, 0.45f));
+        }
+
+        [Theory]
+        [InlineData(-1f)]
+        [InlineData(1f)]
+        public void HeadingRateUsesFlightTrackWithCorrectTurnSign(float side)
+        {
+            float angle = side * 0.02f;
+            float rate = FormationTracking.TrackTurnRate(0f, 1f,
+                (float)Math.Sin(angle), (float)Math.Cos(angle), 0.1f, 1.5f);
+            Assert.InRange(rate * side, 0.1999f, 0.2001f);
+        }
+
+        [Fact]
+        public void PitchChangeAndNearVerticalNoiseCannotInventAHorizontalTurn()
+        {
+            Assert.Equal(0f, FormationTracking.TrackTurnRate(0f, 1f, 0f, 0.3f, 0.02f, 1.5f));
+            Assert.Equal(0f, FormationTracking.TrackTurnRate(0f, 0.01f, 0.01f, 0f, 0.02f, 1.5f));
+            Assert.Equal(0f, FormationTracking.TrackTurnRate(0f, 0.01f, 0f, -0.01f, 0.02f, 1.5f));
+            Assert.Equal(0f, FormationTracking.TrackTurnRate(0f, 1f, 1f, 0f, 0f, 1.5f));
+        }
+
+        [Fact]
+        public void VerticalHeadingConfidenceReturnsContinuouslyAndBoundsDiscontinuities()
+        {
+            Assert.Equal(0f, FormationTracking.HorizontalTrackWeight(0f, 0.05f));
+            Assert.InRange(FormationTracking.HorizontalTrackWeight(0f, 0.05001f), 0f, 0.00001f);
+            Assert.Equal(1f, FormationTracking.HorizontalTrackWeight(0f, 0.2f));
+            Assert.Equal(1.5f, FormationTracking.TrackTurnRate(0f, 1f, 1f, 0f, 0.02f, 1.5f));
+        }
     }
 }

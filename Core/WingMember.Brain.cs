@@ -37,6 +37,19 @@ namespace WingCommand
             if (!brain.BeginUpdate(now, warned, controlLost, force,
                 WingFidelity.Full ? 0f : WingFidelity.Interval(0.25f))) return;
 
+            // A designated unit can die while recall/deck hold owns flight, so the attack
+            // state may never run again to report completion. Retire that one-shot intent
+            // here before sampling; warning and other safety owners keep their controls.
+            if (WingOrderRules.TargetTaskComplete(Order,
+                AssignedTarget != null && !AssignedTarget.disabled, deliveryPending))
+            {
+                if (Order == WingOrder.JamTarget)
+                    WingComms.Say(this, WingComms.Call.JammingOff);
+                else if (AssignedTarget != null)
+                    WingComms.Say(this, WingComms.Call.Splash, AssignedTarget.unitName);
+                Complete(WingOrder.Formation);
+            }
+
             List<WingReflexTrace> trace = Plugin.Settings.VerboseLogging.Value
                 ? traceBuffer ??= new List<WingReflexTrace>() : null;
             WingFlightSituation telemetry = Sample(warned, now);

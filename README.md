@@ -172,11 +172,12 @@ Winchester still recall it.
 
 ## 🎯 Rules of engagement
 
-Orders decide **where** a wingman flies; ROE decides **what it may shoot**.
+Orders choose the flight task and explicit combat intent. During formation, holding and
+temporary recall, ROE controls incidental fire.
 
 | ROE | Weapons policy | Under fire |
 |---|---|---|
-| **Defend** (`Hold` in config) | Incoming missiles and mirrored ground attacks | Tries to intercept the missile |
+| **Defend** (`Hold` in config) | Incoming missiles only | Tries to intercept the missile |
 | **Escort** | Air threats around the formation | Prioritises the threat to you |
 | **Free** | Any valid opportunity target in range | Fires while holding the current task |
 
@@ -184,20 +185,25 @@ No ROE leaves formation. Every wingman still ducks its slot briefly to dodge an 
 missile regardless of ROE — self-preservation always wins, and the interrupt resumes the
 standing order.
 
+An active Attack or Splash order authorizes its designated target. During a temporary
+recall, the target is remembered but firing follows ROE until the attack resumes. Missile
+interception remains available during Jam and when optional opportunity scans are disabled.
+
 ## 🛩️ Formations
 
 | Shape | Best for |
 |---|---|
 | **Echelon Right** | General-purpose swept line, elements staggered |
 | **Line Abreast** | Broad sensor and weapons frontage |
-| **Trail** | Compact column, alternating vertical separation |
-| **Combat Spread** | Wide mutual support, hard to bracket |
+| **Trail** | Spaced column with a bounded step down |
+| **Combat Spread** | Wide two-ship elements in an offset box |
 | **Finger Four** | Asymmetric four-ship elements, repeated for larger wings |
 | **Vic** | Balanced V for compact groups |
 
 Echelon Left, Diamond, Ladder and Wall still parse from old config files but aren't in the
 selector. Slots are leader-local and transition gradually. In hard turns, lateral spacing
 compresses and trail depth grows so wingmen aren't given impossible speed demands.
+Near terrain, the formation limits its shared tilt to keep the low outer slots above the ground.
 Separation predicts the closest approach over four seconds, adds vertical deconfliction near
 terrain, and bounds corrections. Threat spacing widens the formation only during a missile
 warning or with hostiles near, then settles back. You don't babysit spacing.
@@ -207,7 +213,10 @@ and flies a shallow circuit at formation altitude. It automatically rejoins afte
 maintain enough speed. A nearby, aligned aircraft that overshoots flies a separated lane
 alongside you until you pass it, then eases back into its slot. Distant aircraft keep closing
 on a curved rendezvous path, even when ahead of you or on the opposite heading. Closure
-speed controls braking as they reach their slots. The standing formation order is preserved.
+speed controls braking as they reach their slots. Distant joins aim farther ahead along your
+predicted flight path and use full throttle while the remaining gap allows safe deceleration.
+Fitted airbrakes help shed excessive closure, then retract before matching your speed; low
+airspeed, hard banks, climbs and terrain warnings restrict their use. The standing formation order is preserved.
 Braking and engine-response estimates adapt per wingman from stable flight samples;
 terrain and collision avoidance retain priority over formation corrections.
 
@@ -220,7 +229,8 @@ filtering runs once per steering command.
 Distance, relative closure, forward airspeed, fuel, damage, pilot experience and ROE jointly
 adjust capture effort and damping. Aircraft condition can widen the whole formation while
 each pilot retains its own control response. Smooth leader tracking filters small attitude
-changes without moving the destination abruptly.
+changes, responds faster to large turns and roll reversals, and keeps slot motion continuous.
+Hard maneuvers still respect each airframe's turning and speed limits.
 
 Recruited AI pilots no longer automatically eject during taxi because of ground tilt,
 body-damage notifications, or stuck timers. If native taxi navigation cannot continue,
@@ -230,7 +240,8 @@ and emergency ejection outside the taxi AI remain available.
 With verbose logging enabled, instability triggers an eight-second diagnostic burst at
 five samples per second, with a thirty-second interval between burst starts. The
 `[FormationControl]` records include time, aircraft ID, recovery mode, control inputs,
-airspeed margin, terrain-warning urgency, and learned response estimates.
+airspeed margin, terrain-warning urgency, learned response estimates, airbrake demand and
+intercept prediction time.
 
 ## 🔫 Preferred weapon
 

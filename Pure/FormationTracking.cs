@@ -77,6 +77,45 @@ namespace WingCommand
             WrapDegrees(bank + WrapDegrees(observed - bank) *
                 (1f - (float)Math.Exp(-Math.Max(0f, dt) / Math.Max(0.001f, responseSeconds))));
 
+        // Preserve the established quiet-flight filters. Only a manoeuvre large
+        // enough to leave them visibly behind earns faster tracking; making every
+        // tick faster would feed stick noise back into the close formation.
+        public static float TrackResponse(float errorDegrees, float quietSeconds) =>
+            ManeuverResponse(errorDegrees, quietSeconds, 0.10f, 2f, 12f);
+
+        public static float BankResponse(float errorDegrees, float quietSeconds) =>
+            ManeuverResponse(WrapDegrees(errorDegrees), quietSeconds, 0.12f, 8f, 45f);
+
+        private static float ManeuverResponse(float error, float quiet, float fast,
+            float begin, float full)
+        {
+            float blend = Math.Max(0f, Math.Min(1f, (Math.Abs(error) - begin) / (full - begin)));
+            blend = blend * blend * (3f - 2f * blend);
+            return quiet + (Math.Min(quiet, fast) - quiet) * blend;
+        }
+
+        // x/z are components of a normalized 3D velocity, not an already flattened
+        // heading. Near vertical flight has almost no horizontal track information:
+        // tiny lateral noise or crossing the loop apex must not predict a sharp yaw.
+        public static float HorizontalTrackWeight(float x, float z)
+        {
+            float horizontal = (float)Math.Sqrt(x * x + z * z);
+            float blend = Math.Max(0f, Math.Min(1f, (horizontal - 0.05f) / 0.15f));
+            return blend * blend * (3f - 2f * blend);
+        }
+
+        public static float TrackTurnRate(float previousX, float previousZ,
+            float currentX, float currentZ, float dt, float maximumRate)
+        {
+            if (dt <= 0f) return 0f;
+            float confidence = Math.Min(HorizontalTrackWeight(previousX, previousZ),
+                HorizontalTrackWeight(currentX, currentZ));
+            double angle = Math.Atan2(previousZ * currentX - previousX * currentZ,
+                previousX * currentX + previousZ * currentZ);
+            float rate = (float)(angle / dt);
+            return Math.Max(-maximumRate, Math.Min(maximumRate, rate)) * confidence;
+        }
+
         // Cubic Hermite approach: leave along the follower's current velocity and
         // arrive along the slot's future velocity. Tangents cannot exceed the gap,
         // preventing loops when a prediction horizon is long or the gap is small.

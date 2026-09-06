@@ -22,7 +22,7 @@ namespace WingCommand
         // to sit wider than a whole rotary formation.
 
         /// <summary>Separation radius: just inside the gap between neighbouring slots.</summary>
-        private const float SeparationSpacings = 0.75f;
+        private const float SeparationSpacings = FormationLayout.MinimumPlanarSeparation;
 
         /// <summary>Repulsion strength at that radius, in metres of slot displacement.</summary>
         private const float SeparationStrength = 12f;
@@ -233,18 +233,24 @@ namespace WingCommand
                 return State();
             }
 
+            Vector3 previousTrack = smoothedLeaderDir;
+            float trackResponse = FormationTracking.TrackResponse(
+                Vector3.Angle(smoothedLeaderDir, instant), LeaderTrackSmoothing);
             smoothedLeaderDir = Vector3.Slerp(
                 smoothedLeaderDir, instant,
-                1f - Mathf.Exp(-dt / LeaderTrackSmoothing)).normalized;
+                1f - Mathf.Exp(-dt / trackResponse)).normalized;
 
-            Vector3 flat = Flatten(smoothedLeaderDir);
+            // Keep the last useful heading through a loop apex. Flattening an
+            // almost vertical velocity otherwise invents a north-facing heading.
+            Vector3 flat = FormationTracking.HorizontalTrackWeight(
+                smoothedLeaderDir.x, smoothedLeaderDir.z) > 0f
+                ? Flatten(smoothedLeaderDir) : flatLeaderTrack;
 
             // Clamped to a rate no aircraft can actually fly — a nine-g turn at combat speed
             // is under half a rad/s — so that any discontinuity in the track, from whatever
             // source, can never be read as a turn and thrown at the formation geometry.
-            float measured = Mathf.Clamp(
-                Vector3.SignedAngle(flatLeaderTrack, flat, Vector3.up) * Mathf.Deg2Rad / dt,
-                -MaxCredibleTurnRate, MaxCredibleTurnRate);
+            float measured = FormationTracking.TrackTurnRate(previousTrack.x, previousTrack.z,
+                smoothedLeaderDir.x, smoothedLeaderDir.z, dt, MaxCredibleTurnRate);
             flatLeaderTrack = flat;
 
             leaderTurnRate = Mathf.Lerp(
@@ -265,11 +271,14 @@ namespace WingCommand
                 1f - Mathf.Exp(-dt / WingTuning.SpeedRateSmoothing));
 
             float previousBank = leaderBank;
+            float observedBank = FixedWingFormation.BankOf(leader);
+            float bankResponse = FormationTracking.BankResponse(observedBank - leaderBank, BankSmoothing);
             leaderBank = FormationTracking.SmoothBank(
-                leaderBank, FixedWingFormation.BankOf(leader), BankSmoothing, dt);
+                leaderBank, observedBank, bankResponse, dt);
             leaderBankRate = Mathf.Lerp(leaderBankRate,
-                Mathf.DeltaAngle(previousBank, leaderBank) * Mathf.Deg2Rad / dt,
-                1f - Mathf.Exp(-dt / BankSmoothing));
+                Mathf.Clamp(Mathf.DeltaAngle(previousBank, leaderBank) * Mathf.Deg2Rad / dt,
+                    -Mathf.PI, Mathf.PI),
+                1f - Mathf.Exp(-dt / bankResponse));
 
             return State();
         }
@@ -362,6 +371,12 @@ namespace WingCommand
 
         public override void LeaveState()
         {
+            // Native Airbrake deploys at exact zero throttle and retracts above zero.
+            // Release only our active brake demand before the successor takes controls;
+            // native Pilot.SwitchState calls LeaveState before the next EnterState.
+            if (fixedWingMemory.Airbraking && controlInputs != null && controlInputs.throttle == 0f)
+                controlInputs.throttle = 0.01f;
+            fixedWingMemory.Airbraking = false;
         }
 
         public override void UpdateState(Pilot pilot)
@@ -527,8 +542,8 @@ namespace WingCommand
             // recognisable instead of letting it dissolve into individual chases.
             float turn = Mathf.Clamp01(Mathf.Abs(turnRate) / 0.18f);
             float geometryBlend = 1f - Mathf.Exp(-dt / TurnGeometrySeconds);
-            lateralTurnScale = Mathf.Lerp(lateralTurnScale, Mathf.Lerp(1f, 0.72f, turn), geometryBlend);
-            trailTurnScale = Mathf.Lerp(trailTurnScale, Mathf.Lerp(1f, 1.12f, turn), geometryBlend);
+            lateralTurnScale = Mathf.Lerp(lateralTurnScale, Mathf.Lerp(1f, FormationLayout.TurnLateralScale, turn), geometryBlend);
+            trailTurnScale = Mathf.Lerp(trailTurnScale, Mathf.Lerp(1f, FormationLayout.TurnBackScale, turn), geometryBlend);
 
             int mirrorSign = TurnMirrorSign(turnRate, dt);
 
@@ -661,11 +676,40 @@ namespace WingCommand
         /// </summary>
         private float FormationBank(LeaderState leaderState)
         {
-            if (WingRegistry.IsRotary(aircraft) || Leader == null) return 0f;
+            Aircraft leader = Leader;
+            if (WingRegistry.IsRotary(aircraft) || leader == null) return 0f;
             // All slots must use the same rotation. Scaling each by its own error
             // moved neighboring aircraft onto intersecting targets during player rolls.
-            return FormationCollision.SlotBank(leaderState.Bank) *
-                Mathf.Clamp01(Leader.radarAlt / 150f);
+            Vector3 footprint = Vector3.zero;
+            FormationSolver.IncludeBankFootprint(ref footprint, smoothedSlotLocal);
+            float fallbackSpacing = WingFormation.SlotSpacing * RoeRules.SpacingScale(RoeRules.Current) *
+                FormationSolver.SharedFlightSpacing(member.Siblings, leader);
+            if (member.Siblings != null)
+                foreach (WingMember wingman in member.Siblings)
+                {
+                    if (wingman == null || !wingman.Alive || wingman.DeliveryPending ||
+                        wingman.Leader != leader || WingRegistry.IsRotary(wingman.Aircraft)) continue;
+                    var formation = wingman.Pilot != null
+                        ? wingman.Pilot.currentState as FormationFlyState : null;
+                    if (formation != null && formation.slotLocalReady)
+                    {
+                        // Actual filtered slots include threat spacing, compressed turns,
+                        // cross-unders and transitions away from a wider previous shape.
+                        FormationSolver.IncludeBankFootprint(ref footprint, formation.smoothedSlotLocal);
+                    }
+                    else
+                    {
+                        FormationSolver.IncludeBankFootprint(ref footprint, FormationSolver.SlotCoordinates(
+                            wingman.Slot, WingFormation.Shape, fallbackSpacing, WingTuning.SlotStack));
+                        FormationSolver.IncludeBankFootprint(ref footprint, FormationSolver.SlotCoordinates(
+                            wingman.Slot, WingFormation.Shape, fallbackSpacing, WingTuning.SlotStack,
+                            FormationLayout.TurnLateralScale, FormationLayout.TurnBackScale));
+                    }
+                }
+            float requested = FormationCollision.SlotBank(leaderState.Bank) *
+                Mathf.Clamp01(leader.radarAlt / 150f);
+            return FormationCollision.TerrainBank(requested, leader.radarAlt, WingFidelity.TerrainClearance,
+                footprint.x, footprint.y, footprint.z, leaderState.Track.y);
         }
 
         /// <summary>

@@ -40,6 +40,8 @@ namespace WingCommand
             public bool CaptureReported;
             public int Slot;
             public bool ModeChanged;
+            public bool Airbraking;
+            public FormationIntercept.Plan Intercept;
         }
 
         /// <summary>
@@ -280,7 +282,10 @@ namespace WingCommand
             bool stableFlight = terrainUrgency <= 0f && aircraft.radarAlt > BankMatchFloor &&
                 Mathf.Abs(BankOf(aircraft)) < 10f && Mathf.Abs(aircraft.rb.velocity.y) < 2f &&
                 aircraft.rb.angularVelocity.magnitude < 0.1f && memory.Airspeed > minimumSpeed;
-            memory.Recovery.Observe(memory.Airspeed, controls.throttle, stableFlight, dt);
+            // Fitted airbrakes deploy at exact idle. Their additional drag must not
+            // be learned as the deceleration available with brakes retracted.
+            memory.Recovery.Observe(memory.Airspeed, controls.throttle,
+                stableFlight && !memory.Airbraking && controls.throttle > 0f, dt);
             float holdBlend = FormationCollision.HoldBlend(RoeRules.Current == WingRoe.Hold, distance, spacing);
             float aggression = Mathf.Lerp(1f, WingTuning.HoldPositionGain, holdBlend) * member.FlightProfile.CaptureGain;
             float damping = Mathf.Lerp(1f, WingTuning.HoldDampingGain, holdBlend) * member.FlightProfile.DampingScale;
@@ -297,6 +302,10 @@ namespace WingCommand
 
             Vector3 leaderVel = leaderState.Velocity + slotVelocity;
             Vector3 drift = aircraft.rb.velocity - leaderVel;
+            Vector3 slotOffset = slotPos - leader.GlobalPosition();
+            memory.Intercept = FormationIntercept.Solve(Horizontal(toSlot), Horizontal(leaderState.Velocity),
+                Horizontal(slotOffset), Horizontal(leaderVel), aircraft.speed,
+                Mathf.Max(memory.MinimumAirspeed, p.maxSpeed + memory.WindAlong), leaderState.TurnRate);
 
             // How far out of position, as a fraction of the capture distance. One number
             // drives steering, bank authority and the throttle boost, so they can no longer
@@ -311,6 +320,10 @@ namespace WingCommand
             if (FormationCollisionGuard.TryAvoid(aircraft, leader, members, spacing,
                 out Vector3 escape, out collisionThreat, out predictedMiss))
             {
+                // Do not carry arrival drag into the collision escape. Positive
+                // throttle retracts native airbrakes; AutoAim may add escape power.
+                controls.throttle = Mathf.Max(0.1f, controls.throttle);
+                memory.Airbraking = false;
                 Vector3 current = aircraft.rb.velocity.sqrMagnitude > 1f
                     ? aircraft.rb.velocity.normalized : aircraft.transform.forward;
                 Vector3 requested = current + escape * WingTuning.CollisionCourseBias;
@@ -345,6 +358,9 @@ namespace WingCommand
                                        outOfPosition, leaderState,
                                        leaderVel.y, throttle, report,
                                        rejoin.Holding, controls, memory);
+            // AutoAim can restore full power for its native exclusion-zone escape.
+            // Observe the final actuator rather than reapplying our arrival request.
+            memory.Airbraking = controls.throttle == 0f;
         }
 
         // ------------------------------------------------------------------- throttle
@@ -405,6 +421,10 @@ namespace WingCommand
             // behind every report. Capability is the ceiling, not the leader's wish.
             float minSafeSpeed = Mathf.Max(memory.MinimumAirspeed + memory.WindAlong, 1f);
             float maxUsableSpeed = Mathf.Max(p.maxSpeed + memory.WindAlong, minSafeSpeed);
+            if (!rejoin.Holding && memory.Recovery.Blend < 0.01f)
+                desiredSpeed = FormationClosure.PursuitSpeed(Horizontal(toSlot), Horizontal(aircraft.rb.velocity),
+                    memory.Intercept, desiredSpeed, maxUsableSpeed, memory.Recovery.Braking,
+                    memory.Recovery.ResponseSeconds, spacing);
             desiredSpeed = Mathf.Clamp(desiredSpeed, minSafeSpeed, maxUsableSpeed);
             // Holding wide needs flying speed, not a permanent full-power chase of
             // a slot that a slower leader cannot make physically attainable.
@@ -454,13 +474,30 @@ namespace WingCommand
 
             // Full throttle boost during rejoin order window, but only if behind the slot
             // and not already exceeding the deceleration-limited desired speed.
-            if (!rejoin.Holding && memory.Recovery.Blend < 0.01f && rejoin.Boosting && gap > 0f && aircraft.speed < desiredSpeed)
+            if (!rejoin.Holding && memory.Recovery.Blend < 0.01f && rejoin.Boosting && gap > 0f && speedError > 0f)
                 throttle = 1f;
 
-            float rawThrottle = Mathf.Clamp01(throttle);
             float verticalSpeed = aircraft.rb != null ? aircraft.rb.velocity.y : 0f;
-            controls.throttle = FormationControlRules.ClimbThrottleCap(rawThrottle, verticalSpeed, toSlot.y,
-                airspeed: memory.Airspeed, minimumSpeed: memory.MinimumAirspeed);
+            Vector3 flatGap = new Vector3(toSlot.x, 0f, toSlot.z);
+            float arrivalDistance = flatGap.magnitude;
+            float arrivalClosing = arrivalDistance > 1f ? Vector3.Dot(drift, flatGap / arrivalDistance) : closing;
+            // Once ahead in the overshoot lane, shed forward closure beside the
+            // leader. A backwards line of sight would otherwise read as opening.
+            if (memory.Recovery.Mode == FormationRecoveryMode.Overshoot)
+            { arrivalDistance = Mathf.Max(0f, gap); arrivalClosing = closing; }
+            var ownMotion = Horizontal(aircraft.rb.velocity);
+            float alignment = ownMotion.LengthSquared() > 1f && memory.Intercept.Gap.LengthSquared() > 1f
+                ? System.Numerics.Vector2.Dot(System.Numerics.Vector2.Normalize(ownMotion),
+                    System.Numerics.Vector2.Normalize(memory.Intercept.Gap)) : 0f;
+            var energy = FormationClosure.Resolve(throttle, speedError, memory.Airspeed, memory.MinimumAirspeed,
+                arrivalDistance, arrivalClosing, spacing, memory.Recovery.Braking, memory.Recovery.ResponseSeconds,
+                alignment, BankOf(aircraft), aircraft.radarAlt, verticalSpeed,
+                (aircraft.autopilot.GetTerrainWarningSystem()?.urgency ?? 0f) > 0f,
+                !rejoin.Holding && memory.Recovery.Blend < 0.01f,
+                !rejoin.Holding && memory.Recovery.Mode != FormationRecoveryMode.SlowLeader, memory.Airbraking);
+            controls.throttle = FormationControlRules.ClimbThrottleCap(energy.Throttle, verticalSpeed, toSlot.y,
+                airspeed: memory.Airspeed, minimumSpeed: FormationClosure.LoadedMinimum(memory.MinimumAirspeed, BankOf(aircraft)));
+            memory.Airbraking = controls.throttle == 0f;
 
             return new ThrottleState(gap, closing, desiredSpeed, controls.throttle,
                                      leaderState.SpeedRate, anticipation);
@@ -525,7 +562,7 @@ namespace WingCommand
             if (!intercept)
                 bankAllowed = Mathf.Lerp(bankAllowed, Mathf.Min(bankAllowed, WingTuning.FormationRecoveryBank), memory.Recovery.Blend);
             bankAllowed = WingFlightProfile.LimitBank(bankAllowed, LevelBank, memory.BankScale);
-            bankAllowed = Mathf.Min(bankAllowed, memory.Bank + WingTuning.FormationBankRiseRate * memory.Dt);
+            bankAllowed = Mathf.Min(bankAllowed, memory.Bank + FormationGuidance.BankRiseRate(leaderState.BankRate) * memory.Dt);
             memory.Bank = bankAllowed;
             aircraft.autopilot.AutoAim(
                 destination: aim.Point,
@@ -623,13 +660,8 @@ namespace WingCommand
 
             float maxAngle = Mathf.Clamp(WingTuning.CommandAngle, 1f, 80f);
             float holdBlend = FormationCollision.HoldBlend(RoeRules.Current == WingRoe.Hold, distance, spacing);
-            float leadTime = Mathf.Clamp(distance / Mathf.Max(aircraft.speed, 50f), 0f, 6f);
-            Vector3 offsetFromLeader = slotPos - leader.GlobalPosition();
-            GlobalPosition rendezvous = leaderState.FutureSlot(leader.GlobalPosition(), offsetFromLeader, leadTime);
-            Vector3 rendezvousGap = rendezvous - aircraft.GlobalPosition();
-            Vector3 arrivalVelocity = leaderState.Turn(leadTime) * leaderVel;
             var horizontal = FormationGuidance.Horizontal(Horizontal(toSlot), Horizontal(ownVelocity),
-                Horizontal(leaderVel), Horizontal(baseDir), Horizontal(rendezvousGap), Horizontal(arrivalVelocity),
+                Horizontal(leaderVel), Horizontal(baseDir), memory.Intercept.Gap, memory.Intercept.ArrivalVelocity,
                 distance, spacing, lookAhead, aircraft.speed, outOfPosition, aggression, damping, holdBlend);
             float maxCorrection = horizontal.MaxCorrection;
             Vector3 flatCorrection = new Vector3(horizontal.Correction.X, 0f, horizontal.Correction.Y);
@@ -900,7 +932,8 @@ namespace WingCommand
             Plugin.Logger.LogInfo($"[FormationControl] t={Time.timeSinceLevelLoad:F2} id={aircraft.GetInstanceID()} " +
                 $"mode={mode} blend={memory.Recovery.Blend:F2} pitch={controls.pitch:F3} roll={controls.roll:F3} " +
                 $"throttle={controls.throttle:F3} airspeed={memory.Airspeed:F1} margin={memory.Airspeed - minimum:F1} " +
-                $"terrain={urgency:F2} braking={memory.Recovery.Braking:F2} response={memory.Recovery.ResponseSeconds:F2}");
+                $"terrain={urgency:F2} braking={memory.Recovery.Braking:F2} response={memory.Recovery.ResponseSeconds:F2}" +
+                $" airbrake={memory.Airbraking} interceptLead={memory.Intercept.Seconds:F1}s");
         }
         /// <summary>
         /// Periodic station-keeping numbers, the fixed-wing equivalent of the [Rotary]

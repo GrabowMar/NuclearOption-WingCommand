@@ -55,6 +55,7 @@ namespace WingCommand.PureTests
         [InlineData(5000f, -1000f, -90f, 90f, 1f, 1f)]
         [InlineData(2200f, 1800f, 0f, 68f, 0.65f, 1.5f)]
         [InlineData(-1500f, -3500f, 0f, 68f, 1.35f, 1f)]
+        [InlineData(-2500f, -9000f, 0f, 90f, 1f, 1f)]
         public void BankAndAccelerationLimitedAircraftActuallyConverges(
             float x, float z, float headingDegrees, float leaderSpeed, float aggression, float damping)
         {
@@ -86,16 +87,19 @@ namespace WingCommand.PureTests
                 float stationSpeed = leaderSpeed + closure;
                 float approachSpeed = FormationTracking.ApproachSpeed(gx, gz, vx, vz, 0f, leaderSpeed, 2f, aggression, damping, 0.75f);
                 float desiredSpeed = stationSpeed + (approachSpeed - stationSpeed) * blend;
+                var intercept = FormationIntercept.Solve(new Vector2(gx, gz), new Vector2(0f, leaderSpeed),
+                    Vector2.Zero, new Vector2(0f, leaderSpeed), speed, 340f, 0f);
+                if (recovery.Blend < 0.01f)
+                    desiredSpeed = FormationClosure.PursuitSpeed(new Vector2(gx, gz), new Vector2(vx, vz),
+                        intercept, desiredSpeed, 340f, 2f, 0.75f, spacing);
                 desiredSpeed += (Math.Max(minimum, leaderSpeed - 10f) - desiredSpeed) * recovery.Blend;
                 desiredSpeed = Clamp(desiredSpeed, minimum, 340f);
                 speed += Clamp((desiredSpeed - speed) / 1.5f, -2f, 3f) * dt;
 
                 float baseline = Math.Max(650f, speed * 3.5f);
-                float travel = Math.Max(0.1f, distance / Math.Max(speed, 50f));
-                float lead = Math.Min(6f, travel);
                 var guidance = FormationGuidance.Horizontal(new Vector2(gx, gz), new Vector2(vx, vz),
                     new Vector2(0f, leaderSpeed), Vector2.UnitY,
-                    new Vector2(gx, gz + leaderSpeed * lead), new Vector2(0f, leaderSpeed),
+                    intercept.Gap, intercept.ArrivalVelocity,
                     distance, spacing, baseline, speed, blend, aggression, damping, 0f);
                 float ax = guidance.Aim.X, az = guidance.Aim.Y;
                 if (recovery.Blend > 0f)
@@ -161,5 +165,13 @@ namespace WingCommand.PureTests
         }
 
         private static float Clamp(float value, float low, float high) => Math.Max(low, Math.Min(high, value));
+
+        [Fact]
+        public void RapidRollCanAcquireBankAuthorityBeforeTheLeaderFinishesItsTurn()
+        {
+            Assert.Equal(WingTuning.FormationBankRiseRate, FormationGuidance.BankRiseRate(0.1f));
+            Assert.InRange(FormationGuidance.BankRiseRate((float)Math.PI / 2f), 89.9f, 90.1f);
+            Assert.Equal(FormationGuidance.BankRiseRate(2f), FormationGuidance.BankRiseRate(-2f));
+        }
     }
 }
