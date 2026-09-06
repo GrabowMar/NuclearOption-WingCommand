@@ -3,23 +3,9 @@ using UnityEngine;
 namespace WingCommand
 {
     /// <summary>
-    /// Shooting from a station-keeping slot, for every state that keeps station.
-    ///
-    /// Nothing here touches attitude or throttle, so a wingman can fire without ever
-    /// compromising the slot it is holding. That is the whole reason this is separable from
-    /// the flying: formation and orbit disagree completely about where the aircraft should
-    /// be and not at all about what it may shoot.
-    ///
-    /// It used to exist twice. <see cref="FormationFlyState"/> had the full version;
-    /// <see cref="OrbitState"/> had a copy that had drifted — a different check interval, no
-    /// handling of an explicitly assigned target, and, worst, it asked the standing rules of
-    /// engagement directly instead of asking what the wingman was actually doing. That last
-    /// difference made it the only shooting state in the mod that could not be silenced by a
-    /// <see cref="OrderEngagementAuthority.DefensiveOnly"/> behaviour and could not honour an
-    /// explicit designation. It was correct in practice only because both routes into an
-    /// orbit happened to resolve to the standing rules anyway.
-    ///
-    /// One instance per state, holding that state's own firing cadence.
+    /// Weapons handling for station-keeping states; never changes attitude or throttle.
+    /// Each state owns an instance for its firing cadence. Authority follows the active
+    /// behaviour and explicit target, rather than the standing order alone.
     /// </summary>
     internal sealed class SlotEngagement
     {
@@ -40,7 +26,7 @@ namespace WingCommand
         /// </summary>
         public bool Run(WingMember member, Aircraft aircraft, Pilot pilot, Aircraft leader)
         {
-            if (Time.timeSinceLevelLoad - lastCheck < WingBrain.Interval(checkInterval))
+            if (Time.timeSinceLevelLoad - lastCheck < WingFidelity.Interval(checkInterval))
                 return false;
             lastCheck = Time.timeSinceLevelLoad;
 
@@ -69,7 +55,7 @@ namespace WingCommand
             // Performance mode: a station-keeping wingman flies its slot and defends only.
             // Explicit attack/engage orders and inbound-missile interception still run; the
             // opportunity/priority-target hunt - which does the all-aircraft scans - does not.
-            if (!WingBrain.OpportunityFire && !orderOwnsWeapons &&
+            if (!WingFidelity.OpportunityFire && !orderOwnsWeapons &&
                 allow != WingWeapons.Allow.MissilesOnly)
                 return false;
 

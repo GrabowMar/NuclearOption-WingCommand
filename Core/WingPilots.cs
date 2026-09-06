@@ -77,16 +77,6 @@ namespace WingCommand
         /// <summary>Highest rank a pilot can reach.</summary>
         public static readonly WingRank TopRank = WingRank.Legend;
 
-        /// <summary>
-        /// How many pilots the squadron holds at the start of a game.
-        ///
-        /// The old roster grew one name at a time as aircraft joined the wing, which meant a
-        /// single-mission squadron was often one or two people and there was never anyone to
-        /// choose between. A pregenerated squad gives the Wing tab a list to page through and
-        /// the SUPPLY tab someone to put in the seat.
-        /// </summary>
-        public const int RosterSize = 8;
-
         private static readonly List<WingPilot> pool = new List<WingPilot>();
         private static readonly HashSet<WingPilot> reserved = new HashSet<WingPilot>();
         private static readonly Dictionary<PersistentID, WingPilot> assigned =
@@ -117,16 +107,7 @@ namespace WingCommand
         public static bool Contains(WingPilot pilot) => pilot != null && roster.Contains(pilot);
 
         /// <summary>Whether a pilot with this callsign is already on the squadron list.</summary>
-        public static bool ContainsCallsign(string callsign)
-        {
-            if (string.IsNullOrWhiteSpace(callsign)) return false;
-            for (int i = 0; i < roster.Count; i++)
-            {
-                if (string.Equals(roster[i]?.Callsign, callsign, StringComparison.OrdinalIgnoreCase))
-                    return true;
-            }
-            return false;
-        }
+        public static bool ContainsCallsign(string callsign) => FindByCallsign(callsign) != null;
 
         /// <summary>Finds a pilot in the roster by callsign, or null if not found.</summary>
         public static WingPilot FindByCallsign(string callsign)
@@ -139,8 +120,6 @@ namespace WingCommand
             }
             return null;
         }
-
-        public static int RosterCount => roster.Count;
 
         /// <summary>Whether this pilot may be assigned to an airframe at all.</summary>
         public static bool IsSelectable(WingPilot pilot) => pilot != null && !pilot.Lost;

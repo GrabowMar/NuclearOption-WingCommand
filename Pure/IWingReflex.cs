@@ -27,7 +27,7 @@ namespace WingCommand
     /// <summary>
     /// One reason a wingman might do something other than its standing order.
     ///
-    /// <b>This is the modding surface.</b> The mod's own six reflexes are registered
+    /// <b>This is the modding surface.</b> The mod's built-in reflexes are registered
     /// through the same public call a third-party plugin uses — if the core did not eat its
     /// own cooking here, the public path would rot the first time an internal shortcut was
     /// more convenient.
@@ -42,7 +42,8 @@ namespace WingCommand
         /// <summary>
         /// Stable, unique, namespaced — <c>"wingcommand.missile-break"</c>. Used as the tie
         /// break when two reflexes in a band score identically, so registration order can
-        /// never change the outcome.
+        /// never change the outcome. Cached at registration; changing it requires
+        /// unregistering and registering the extension again.
         /// </summary>
         string Id { get; }
 
@@ -52,7 +53,8 @@ namespace WingCommand
         /// <summary>
         /// The behaviour to fly when this reflex wins, from <see cref="WingBehaviours"/> or
         /// registered by the plugin that owns it. A string rather than an enum so a third
-        /// party can add a behaviour without the core enumerating it.
+        /// party can add a behaviour without the core enumerating it. Sampled with
+        /// the other metadata once per decision; changes apply on the next decision.
         /// </summary>
         string BehaviourId { get; }
 
@@ -87,10 +89,21 @@ namespace WingCommand
         /// this flag and stays stateless. One instance serves the whole wing, so there is
         /// nowhere to keep a "was I running last tick" field even if it wanted one.
         ///
-        /// Must not throw. One that does is caught, reported once and disabled for the
-        /// mission rather than being allowed to take the wing AI down with it.
+        /// Must not throw. Score, metadata and lifecycle faults are caught, reported
+        /// once and disabled for the mission; other extensions continue resolving.
         /// </summary>
         float Score(in WingSituation situation, bool incumbent);
+    }
+
+    /// <summary>
+    /// Optional lifecycle constraints for a reflex. A minimum hold bridges noisy scores;
+    /// it must not outlive the order/aircraft conditions that make the behavior valid.
+    /// An immediate emergency may interrupt another hold within its own band.
+    /// </summary>
+    public interface IWingReflexLifecycle
+    {
+        bool CanHold(in WingSituation situation);
+        bool InterruptsMinimumHold { get; }
     }
 
     /// <summary>The behaviours this mod ships. A third party may register more.</summary>

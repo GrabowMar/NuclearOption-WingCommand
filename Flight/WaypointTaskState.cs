@@ -9,6 +9,7 @@ namespace WingCommand
     /// </summary>
     internal sealed class WaypointTaskState : WingPilotState
     {
+        internal override bool RestartOnOrderChange => false;
         private const float ArrivalRadius = 140f;
         private const float FixedCruiseAltitude = 700f;
         private const float RotaryCruiseAltitude = 180f;
@@ -47,7 +48,7 @@ namespace WingCommand
             float arrival = Mathf.Max(ArrivalRadius, aircraft.speed * 1.5f);
             if (delta.sqrMagnitude <= arrival * arrival)
             {
-                member.CompleteWaypoint();
+                member.CompleteWaypoint(this);
                 return;
             }
 

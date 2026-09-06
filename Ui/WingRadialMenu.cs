@@ -184,9 +184,9 @@ namespace WingCommand
                 Leaf(WingOrderCatalog.Label(WingOrder.OrbitHere), WingAction.OrbitHere, "orbit",
                      () => WingOrderCatalog.IsOfferable(WingOrder.OrbitHere)),
                 Leaf(WingOrderCatalog.Label(WingOrder.JamTarget), WingAction.JamMyTarget, "jam",
-                     () => WingBrain.Jamming && WingOrderCatalog.IsOfferable(WingOrder.JamTarget)),
+                     () => WingFidelity.Jamming && WingOrderCatalog.IsOfferable(WingOrder.JamTarget)),
                 Icon(WingMenuAction.Create("Manoeuvres", _ => ShowCombatManeuverMenu(),
-                                           _ => WingBrain.Manoeuvres), "maneuver"),
+                                           _ => WingFidelity.Manoeuvres), "maneuver"),
                 Back(ShowCommanderMenu),
             };
 
@@ -224,6 +224,9 @@ namespace WingCommand
             }
             formations.Add(Back(ShowSecondaryMenu));
 
+            // Rebuilding is only allowed on the root wheel, so none of these submenu
+            // actions is displayed. HideAndDontSave assets require explicit destruction.
+            DestroySubmenus();
             commanderMenu = commander.ToArray();
             secondaryMenu = secondary.ToArray();
             formationMenu = formations.ToArray();
@@ -296,7 +299,7 @@ namespace WingCommand
             WingMenuAction entry = WingMenuAction.Create(
                 ManeuverCatalog.Label(kind),
                 _ => { Mgr?.ExecuteManeuver(kind, wholeWing: true); RestoreStockWheel(); },
-                _ => WingBrain.Manoeuvres);
+                _ => WingFidelity.Manoeuvres);
             return Icon(entry, "maneuver");
         }
 
@@ -370,6 +373,27 @@ namespace WingCommand
             stockActions = null;
             baselineWheel = null;
             inSubmenu = false;
+            DestroySubmenus();
+            if (rootEntry != null) UnityEngine.Object.Destroy(rootEntry);
+            rootEntry = null;
+            builtRevision = -1;
+        }
+
+        private static void DestroySubmenus()
+        {
+            DestroyActions(ref commanderMenu);
+            DestroyActions(ref secondaryMenu);
+            DestroyActions(ref formationMenu);
+            DestroyActions(ref combatManeuverMenu);
+            DestroyActions(ref roeMenu);
+        }
+
+        private static void DestroyActions(ref WingMenuAction[] actions)
+        {
+            if (actions == null) return;
+            foreach (WingMenuAction action in actions)
+                if (action != null) UnityEngine.Object.Destroy(action);
+            actions = null;
         }
     }
 

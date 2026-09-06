@@ -49,7 +49,7 @@ namespace WingCommand
         /// </summary>
         public static bool Engage(Aircraft aircraft, Pilot pilot, Allow allow, float maxRange)
         {
-            if (aircraft == null || pilot == null || allow == Allow.None) return false;
+            if (aircraft == null || !aircraft.LocalSim || pilot == null || allow == Allow.None) return false;
 
             WeaponManager wm = aircraft.weaponManager;
             if (wm == null) return false;
@@ -65,38 +65,12 @@ namespace WingCommand
             Unit target = ChooseTarget(aircraft, allow, maxRange,
                                        out WeaponStation station, out int capacity);
             if (target == null || station == null) return false;
-            if (!ShotIsValid(aircraft, station, target)) return false;
             if (!TacticalCoordinator.TryClaim(
                     target, aircraft, capacity,
                     Mathf.Max(FireInterval(aircraft) * 1.5f, 3f)))
                 return false;
 
-            int guidedBefore = GetGuidedAmmo(aircraft);
-            wm.currentWeaponStation = station;
-            wm.ClearTargetList();
-            wm.AddTargetList(target);
-            wm.TargetListChanged();
-
-            pilot.SetPrimaryTarget(target);
-            pilot.Fire();
-            WingKillCredit.NoteShot(aircraft, target);
-
-            if (station != null && station.WeaponInfo != null)
-            {
-                float dist = FastMath.Distance(aircraft.GlobalPosition(), target.GlobalPosition());
-                float speed = Mathf.Max(station.WeaponInfo.muzzleVelocity, station.WeaponInfo.maxSpeed, 350f);
-                WingDeliveryTracker.TrackShot(aircraft, target, station.WeaponInfo.shortName, dist / speed);
-            }
-
-            if (guidedBefore > 0 && GetGuidedAmmo(aircraft) == 0)
-            {
-                WingMember member = WingCommandManager.Instance?.Wing?.Find(aircraft);
-                if (member != null && member.Ammo > 0)
-                {
-                    WingComms.Say(member, WingComms.Call.Expended);
-                }
-            }
-
+            FireStation(aircraft, pilot, target, wm, station);
             return true;
         }
 
@@ -175,7 +149,8 @@ namespace WingCommand
         private static bool EngageDesignated(Aircraft aircraft, Pilot pilot, Unit target,
                                              float maxRange, bool massed)
         {
-            if (aircraft == null || pilot == null || target == null || target.disabled) return false;
+            if (aircraft == null || !aircraft.LocalSim || pilot == null || target == null || target.disabled)
+                return false;
 
             WeaponManager wm = aircraft.weaponManager;
             if (wm == null) return false;
@@ -200,7 +175,6 @@ namespace WingCommand
 
             WeaponStation chosen = DesignatedStationFor(aircraft, target);
             if (chosen == null) return false;
-            if (!ShotIsValid(aircraft, chosen, target)) return false;
 
             int capacity = RequiredAttackers(chosen, target);
             if (!TacticalCoordinator.TryClaim(
@@ -212,15 +186,16 @@ namespace WingCommand
             return true;
         }
 
-        /// <summary>The shared select-and-fire sequence used by every designated shot.</summary>
+        /// <summary>The shared select-and-fire sequence for offensive shots.</summary>
         private static void FireStation(Aircraft aircraft, Pilot pilot, Unit target,
                                         WeaponManager wm, WeaponStation station)
         {
             int guidedBefore = GetGuidedAmmo(aircraft);
 
             wm.currentWeaponStation = station;
-            wm.ClearTargetList();
-            wm.AddTargetList(target);
+            List<Unit> targets = wm.GetTargetList();
+            targets.Clear();
+            targets.Add(target);
             wm.TargetListChanged();
 
             pilot.SetPrimaryTarget(target);
@@ -256,43 +231,9 @@ namespace WingCommand
             bool isAir = target.definition != null && target.definition.typeIdentity.air > 0.5f;
             TargetClass targetClass = isAir ? TargetClass.Air : TargetClass.Surface;
 
-            WeaponStation pick = BestMassedStation(aircraft, target, targetClass, justFired);
-            return pick ?? BestMassedStation(aircraft, target, targetClass, null);
-        }
-
-        /// <summary>
-        /// Highest-effectiveness ready station that can hit <paramref name="target"/> now,
-        /// optionally skipping <paramref name="exclude"/> to rotate the loadout. Unlike
-        /// <see cref="BestStationFor"/>, this enforces <see cref="ShotIsValid"/> inline so a
-        /// rotated-to store that is out of its own envelope is passed over rather than fired
-        /// at, and it applies no weapon preference — Splash 'Em expends what is there.
-        /// </summary>
-        private static WeaponStation BestMassedStation(Aircraft aircraft, Unit target,
-                                                       TargetClass targetClass,
-                                                       WeaponStation exclude)
-        {
-            WeaponStation best = null;
-            float bestScore = 0f;
-
-            foreach (WeaponStation station in aircraft.weaponStations)
-            {
-                if (station == null || station.Cargo || station.WeaponInfo == null) continue;
-                if (station.Ammo <= 0 || !station.Ready()) continue;
-                if (station == exclude) continue;
-                if (!ShotIsValid(aircraft, station, target)) continue;
-
-                RoleIdentity role = station.WeaponInfo.effectiveness;
-                float value = targetClass == TargetClass.Air ? role.antiAir : role.antiSurface;
-                if (value <= 0f) continue;
-
-                if (value > bestScore)
-                {
-                    bestScore = value;
-                    best = station;
-                }
-            }
-
-            return best;
+            WeaponStation pick = BestStationFor(
+                aircraft, targetClass, WingWeaponPreference.Auto, target, justFired);
+            return pick ?? BestStationFor(aircraft, targetClass, WingWeaponPreference.Auto, target);
         }
 
         /// <summary>
@@ -304,7 +245,7 @@ namespace WingCommand
         {
             bool isAir = target.definition != null && target.definition.typeIdentity.air > 0.5f;
             TargetClass targetClass = isAir ? TargetClass.Air : TargetClass.Surface;
-            return BestStationFor(aircraft, targetClass);
+            return BestStationFor(aircraft, targetClass, PreferenceOf(aircraft), target);
         }
 
         /// <summary>
@@ -473,11 +414,12 @@ namespace WingCommand
         /// </summary>
         public static bool InterceptMissiles(Aircraft aircraft, Pilot pilot, Aircraft protectee)
         {
+            if (aircraft == null || !aircraft.LocalSim || pilot == null || aircraft.weaponManager == null ||
+                aircraft.NetworkHQ == null) return false;
             if (protectee == null) protectee = aircraft;
 
             WeaponManager wm = aircraft.weaponManager;
-            WeaponStation station = BestStationFor(aircraft, TargetClass.Missile);
-            if (station == null) return false;
+            if (wm.currentWeaponStation != null && wm.currentWeaponStation.SalvoInProgress) return false;
 
             // The intercept search anchors on a concrete inbound missile. Passing null used
             // to return zero targets immediately — CombatAI.LookForMissileTargets bails when
@@ -488,23 +430,29 @@ namespace WingCommand
             if (warning == null || !warning.IsWarning())
                 return false;
 
-            Missile incoming = ChooseIncoming(warning, protectee, aircraft);
+            Missile incoming = ChooseIncoming(warning, protectee, aircraft, out WeaponStation station);
             if (incoming == null) return false;
 
-            // One interceptor per inbound missile. If it cannot take the shot the claim
-            // expires quickly and another wingman gets the next opportunity.
-            if (!TacticalCoordinator.TryClaim(incoming, aircraft, 1, 3f)) return false;
+            // Confirm the native target search before claiming anything. Repeated failed
+            // searches used to renew a reservation forever and deny another wingman a shot.
+            interceptTargets.Clear();
+            int found = CombatAI.LookForMissileTargets(aircraft, incoming, station, interceptTargets);
+            if (found <= 0 || !interceptTargets.Contains(incoming) ||
+                !TacticalCoordinator.TryClaim(incoming, aircraft, 1, 3f))
+            {
+                interceptTargets.Clear();
+                return false;
+            }
 
             wm.currentWeaponStation = station;
-
             List<Unit> targets = wm.GetTargetList();
             targets.Clear();
-
-            int found = CombatAI.LookForMissileTargets(aircraft, incoming, station, targets);
+            // The native helper finds targets for missile weapons, including nearby
+            // aircraft and surface units. Defensive fire may engage only this inbound;
+            // copying the whole result would start an offensive salvo under Hold ROE.
+            targets.Add(incoming);
+            interceptTargets.Clear();
             wm.TargetListChanged();
-
-            if (found <= 0) return false;
-
             pilot.Fire();
             return true;
         }
@@ -527,10 +475,12 @@ namespace WingCommand
             // air-to-air still shoots the tank in front of it rather than nothing.
             WingWeaponPreference preference = PreferenceOf(aircraft);
 
-            // Resolve the two candidate stations once. Doing this per unit meant walking
-            // every weapon station for every unit on the map on every engagement tick.
-            WeaponStation airStation = wantAir ? BestStationFor(aircraft, TargetClass.Air) : null;
-            WeaponStation groundStation = wantGround ? BestStationFor(aircraft, TargetClass.Surface) : null;
+            // Most contacts can use the preferred station. Only inspect alternatives
+            // when that station cannot take the concrete shot.
+            WeaponStation airStation = wantAir
+                ? BestStationFor(aircraft, TargetClass.Air, preference) : null;
+            WeaponStation groundStation = wantGround
+                ? BestStationFor(aircraft, TargetClass.Surface, preference) : null;
             if (airStation == null && groundStation == null) return null;
 
             Unit best = null;
@@ -548,7 +498,7 @@ namespace WingCommand
             for (int i = 0; i < scratch.Count; i++)
             {
                 Unit unit = scratch[i];
-                if (unit == null || unit.disabled || unit == aircraft) continue;
+                if (unit == null || unit.disabled || unit == aircraft || unit.definition == null) continue;
                 if (unit.NetworkHQ == null || unit.NetworkHQ == hq) continue;   // friendly or neutral
 
                 TypeIdentity id = unit.definition.typeIdentity;
@@ -557,20 +507,26 @@ namespace WingCommand
                 WeaponStation candidate = isAir ? airStation : groundStation;
                 if (candidate == null) continue;
 
+                if (!ShotIsValid(aircraft, candidate, unit) ||
+                    candidate.WeaponInfo.effectiveness.OpportunityAgainst(id) <= 0f)
+                {
+                    candidate = BestStationFor(aircraft,
+                        isAir ? TargetClass.Air : TargetClass.Surface, preference, unit);
+                    if (candidate == null) continue;
+                }
+
                 // The game's own weapon/target matching, so a wingman does not try to take
                 // a tank with an anti-air missile.
                 float score = candidate.WeaponInfo.effectiveness.OpportunityAgainst(id);
                 if (score <= 0f) continue;
 
                 float distance = FastMath.Distance(unit.GlobalPosition(), from);
+                if (distance > maxRange) continue;
                 float weaponRange = Mathf.Min(maxRange,
                     Mathf.Max(candidate.WeaponInfo.targetRequirements.maxRange, 1f));
-                if (distance > weaponRange || distance < candidate.WeaponInfo.targetRequirements.minRange)
-                    continue;
-
                 int needed = RequiredAttackers(candidate, unit);
-                int committed = TacticalCoordinator.CountClaims(unit, aircraft);
-                if (committed >= needed) continue;
+                if (TacticalCoordinator.CountClaims(unit, aircraft) >= needed) continue;
+                int committed = TacticalCoordinator.CountCommitments(unit, aircraft);
 
                 // Effectiveness first, then range and reservation pressure. The old loop
                 // used effectiveness alone, so equal contacts all resolved to whichever
@@ -626,12 +582,13 @@ namespace WingCommand
             }
         }
 
-        /// <summary>Closest-time unclaimed missile aimed at the protected aircraft.</summary>
+        /// <summary>Closest-time unclaimed, tracked missile that a ready station can engage.</summary>
         private static Missile ChooseIncoming(MissileWarning warning, Aircraft protectee,
-                                              Aircraft interceptor)
+                                              Aircraft interceptor, out WeaponStation station)
         {
             Missile best = null;
             float bestTime = float.MaxValue;
+            station = null;
 
             List<Missile> missiles = warning.knownMissiles;
             for (int i = 0; i < missiles.Count; i++)
@@ -640,6 +597,11 @@ namespace WingCommand
                 if (missile == null || missile.disabled || missile.targetID != protectee.persistentID)
                     continue;
                 if (TacticalCoordinator.CountClaims(missile, interceptor) > 0) continue;
+                if (!interceptor.NetworkHQ.TryGetKnownPosition(missile, out _)) continue;
+
+                WeaponStation candidate = BestStationFor(
+                    interceptor, TargetClass.Missile, WingWeaponPreference.Auto, missile);
+                if (candidate == null) continue;
 
                 Vector3 toMissile = missile.GlobalPosition() - protectee.GlobalPosition();
                 Vector3 relativeVelocity = missile.rb != null && protectee.rb != null
@@ -654,6 +616,7 @@ namespace WingCommand
                 if (impactTime >= bestTime) continue;
                 bestTime = impactTime;
                 best = missile;
+                station = candidate;
             }
 
             return best;
@@ -699,6 +662,7 @@ namespace WingCommand
 
         /// <summary>Reused across calls so target search allocates nothing per tick.</summary>
         private static readonly List<Unit> scratch = new List<Unit>(64);
+        private static readonly List<Unit> interceptTargets = new List<Unit>();
 
         /// <summary>
         /// The ready station this aircraft should use against a class of target.
@@ -708,21 +672,31 @@ namespace WingCommand
         /// stays inside the same set the stock ranking would have picked from — and an
         /// aircraft whose preferred stores are empty, unready or absent simply gets the
         /// most effective station it has, exactly as before.
+        /// When a target is supplied, reject unusable shots before ranking; a preferred
+        /// weapon outside its envelope must not hide another station that can fire now.
         /// </summary>
         private static WeaponStation BestStationFor(Aircraft aircraft, TargetClass targetClass) =>
             BestStationFor(aircraft, targetClass, PreferenceOf(aircraft));
 
         private static WeaponStation BestStationFor(Aircraft aircraft, TargetClass targetClass,
-                                                    WingWeaponPreference preference)
+                                                    WingWeaponPreference preference,
+                                                    Unit target = null,
+                                                    WeaponStation exclude = null)
         {
             WeaponStation best = null;
             float bestScore = 0f;
+            if (aircraft == null || aircraft.weaponStations == null) return null;
 
             foreach (WeaponStation station in aircraft.weaponStations)
             {
                 if (station == null || station.Cargo) continue;
                 if (station.WeaponInfo == null) continue;
                 if (station.Ammo <= 0 || !station.Ready()) continue;
+                if (station.SafetyIsOn(aircraft)) continue;
+                if (station.WeaponInfo.energy && (aircraft.GetPowerSupply()?.GetCharge() ?? 0f) < 0.6f)
+                    continue;
+                if (station == exclude) continue;
+                if (target != null && !ShotIsValid(aircraft, station, target)) continue;
 
                 RoleIdentity role = station.WeaponInfo.effectiveness;
 
@@ -735,6 +709,8 @@ namespace WingCommand
                 }
 
                 if (value <= 0f) continue;
+                if (target != null && target.definition != null &&
+                    role.OpportunityAgainst(target.definition.typeIdentity) <= 0f) continue;
 
                 float score = value * StationBias(preference, station, targetClass);
                 if (score > bestScore)

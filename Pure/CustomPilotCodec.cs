@@ -50,7 +50,7 @@ namespace WingCommand
 
     /// <summary>
     /// Resilient, zero-dependency JSON decoder for custom pilot and chatter files.
-    /// Supports comments, missing properties, casing differences, and syntax errors.
+    /// Supports comments, missing properties and casing differences. Invalid input is ignored.
     /// </summary>
     internal static class CustomPilotCodec
     {
@@ -62,7 +62,9 @@ namespace WingCommand
             object root;
             try
             {
-                root = ParseJsonValue(new JsonScanner(json));
+                var scanner = new JsonScanner(json);
+                root = ParseJsonValue(scanner);
+                if (scanner.Peek() != '\0') throw new FormatException("Unexpected trailing input.");
             }
             catch
             {
@@ -349,7 +351,8 @@ namespace WingCommand
                         pos += 2;
                         while (pos + 1 < source.Length && !(source[pos] == '*' && source[pos + 1] == '/'))
                             pos++;
-                        if (pos + 1 < source.Length) pos += 2;
+                        if (pos + 1 >= source.Length) throw new FormatException("Unterminated comment.");
+                        pos += 2;
                         continue;
                     }
 
@@ -360,7 +363,8 @@ namespace WingCommand
             public string ReadString()
             {
                 SkipWhitespaceAndComments();
-                if (pos >= source.Length || source[pos] != '"') return "";
+                if (pos >= source.Length || source[pos] != '"')
+                    throw new FormatException("Expected a quoted string.");
                 pos++; // skip opening quote
 
                 var sb = new StringBuilder();
@@ -399,7 +403,7 @@ namespace WingCommand
                         sb.Append(c);
                     }
                 }
-                return sb.ToString();
+                throw new FormatException("Unterminated string.");
             }
 
             public object ReadNumberOrKeyword()
@@ -412,6 +416,7 @@ namespace WingCommand
                     pos++;
                 }
 
+                if (pos == start) throw new FormatException("Expected a value.");
                 string token = source.Substring(start, pos - start).Trim();
                 if (string.Equals(token, "true", StringComparison.OrdinalIgnoreCase)) return true;
                 if (string.Equals(token, "false", StringComparison.OrdinalIgnoreCase)) return false;
@@ -426,17 +431,18 @@ namespace WingCommand
             }
         }
 
-        private static object ParseJsonValue(JsonScanner s)
+        private static object ParseJsonValue(JsonScanner s, int depth = 0)
         {
+            if (depth >= 64) throw new FormatException("JSON nesting is too deep.");
             char c = s.Peek();
-            if (c == '{') return ParseJsonObject(s);
-            if (c == '[') return ParseJsonArray(s);
+            if (c == '{') return ParseJsonObject(s, depth + 1);
+            if (c == '[') return ParseJsonArray(s, depth + 1);
             if (c == '"') return s.ReadString();
-            if (c == '\0') return null;
+            if (c == '\0') throw new FormatException("Unexpected end of input.");
             return s.ReadNumberOrKeyword();
         }
 
-        private static Dictionary<string, object> ParseJsonObject(JsonScanner s)
+        private static Dictionary<string, object> ParseJsonObject(JsonScanner s, int depth)
         {
             var dict = new Dictionary<string, object>(StringComparer.OrdinalIgnoreCase);
             s.Next(); // skip '{'
@@ -456,20 +462,19 @@ namespace WingCommand
                 }
 
                 string key = s.ReadString();
-                char colon = s.Peek();
-                if (colon == ':') s.Next();
+                if (s.Next() != ':') throw new FormatException("Expected a colon.");
 
-                object val = ParseJsonValue(s);
+                object val = ParseJsonValue(s, depth);
                 if (!string.IsNullOrEmpty(key))
                 {
                     dict[key] = val;
                 }
             }
 
-            return dict;
+            throw new FormatException("Unterminated object.");
         }
 
-        private static List<object> ParseJsonArray(JsonScanner s)
+        private static List<object> ParseJsonArray(JsonScanner s, int depth)
         {
             var list = new List<object>();
             s.Next(); // skip '['
@@ -488,11 +493,11 @@ namespace WingCommand
                     continue;
                 }
 
-                object val = ParseJsonValue(s);
+                object val = ParseJsonValue(s, depth);
                 list.Add(val);
             }
 
-            return list;
+            throw new FormatException("Unterminated array.");
         }
     }
 }

@@ -1,0 +1,27 @@
+{
+  "maneuvers": [
+    {"kind":"Loop","phases":[
+      {"pitch":1,"rollDamping":0.45,"minPitch":-1,"throttle":1,"until":"pitch","pitchLevelGain":0,"bankTarget":0,"maxPitch":1,"roll":0,"rollLimit":0.6,"bankGain":0.04,"amount":180},
+      {"pitch":1,"rollDamping":0.45,"minPitch":-1,"throttle":0.3,"until":"pitch","pitchLevelGain":0,"bankTarget":0,"maxPitch":1,"roll":0,"rollLimit":0.6,"bankGain":0.04,"amount":135},
+      {"pitch":0.5,"rollDamping":0.45,"minPitch":0.1,"throttle":0.85,"until":"recover","pitchLevelGain":1.5,"bankTarget":0,"maxPitch":1,"roll":0,"rollLimit":1,"bankGain":0.04,"amount":0}
+    ]},
+    {"kind":"Immelmann","phases":[
+      {"pitch":1,"rollDamping":0.4,"minPitch":-1,"throttle":1,"until":"pitch","pitchLevelGain":0,"bankTarget":0,"maxPitch":1,"roll":0,"rollLimit":0.5,"bankGain":0.035,"amount":163},
+      {"pitch":0.25,"rollDamping":0.45,"minPitch":0.05,"throttle":0.95,"until":"recover","pitchLevelGain":0.5,"bankTarget":0,"maxPitch":1,"roll":0,"rollLimit":1,"bankGain":0.035,"amount":0}
+    ]},
+    {"kind":"SplitS","phases":[
+      {"pitch":0,"rollDamping":0.4,"minPitch":-1,"throttle":0.2,"until":"bank","pitchLevelGain":0,"bankTarget":180,"maxPitch":1,"roll":0,"rollLimit":1,"bankGain":0.035,"amount":0},
+      {"pitch":1,"rollDamping":0.45,"minPitch":-1,"throttle":0.3,"until":"pitch","pitchLevelGain":0,"bankTarget":0,"maxPitch":1,"roll":0,"rollLimit":0.4,"bankGain":0,"amount":160},
+      {"pitch":0.5,"rollDamping":0.45,"minPitch":0.1,"throttle":1,"until":"recover","pitchLevelGain":1.5,"bankTarget":0,"maxPitch":1,"roll":0,"rollLimit":1,"bankGain":0.04,"amount":0}
+    ]},
+    {"kind":"AileronRoll","phases":[
+      {"pitch":0.12,"rollDamping":0,"minPitch":-1,"throttle":0.85,"until":"roll","pitchLevelGain":0,"bankTarget":0,"maxPitch":1,"roll":1,"rollLimit":1,"bankGain":0,"amount":326},
+      {"pitch":0.05,"rollDamping":0.45,"minPitch":-1,"throttle":0.85,"until":"recover","pitchLevelGain":0.5,"bankTarget":0,"maxPitch":1,"roll":0,"rollLimit":1,"bankGain":0.04,"amount":0}
+    ]},
+    {"kind":"BarrelRoll","phases":[
+      {"pitch":0.85,"rollDamping":0,"minPitch":-1,"throttle":1,"until":"seconds","pitchLevelGain":0,"bankTarget":0,"maxPitch":1,"roll":0.2,"rollLimit":1,"bankGain":0,"amount":0.5},
+      {"pitch":0.55,"rollDamping":0,"minPitch":-1,"throttle":1,"until":"roll","pitchLevelGain":0,"bankTarget":0,"maxPitch":1,"roll":0.8,"rollLimit":1,"bankGain":0,"amount":331},
+      {"pitch":0.15,"rollDamping":0.45,"minPitch":0.05,"throttle":1,"until":"recover","pitchLevelGain":0.5,"bankTarget":0,"maxPitch":0.4,"roll":0,"rollLimit":1,"bankGain":0.04,"amount":0}
+    ]}
+  ]
+}

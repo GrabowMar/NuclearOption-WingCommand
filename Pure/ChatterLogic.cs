@@ -31,13 +31,6 @@ namespace WingCommand
             SpeakerTag = speakerTag;
             ReplyTag = replyTag;
         }
-
-        public bool SpeakerMatches(string tag) => Matches(SpeakerTag, tag);
-        public bool ReplyMatches(string tag) => Matches(ReplyTag, tag);
-
-        private static bool Matches(string required, string actual) =>
-            required == null || string.Equals(required, actual,
-                                               StringComparison.OrdinalIgnoreCase);
     }
 
     /// <summary>
@@ -380,6 +373,23 @@ namespace WingCommand
                         new[] { "Bingo fuel. Egressing.", "At bingo. Turning for home." },
                         new[] { "Bingo. Apparently fuel is mandatory.", "Fuel says we're done. RTB." });
                 case "REJOINING": return Pick(seed, "Rejoining.", "Coming back to formation.");
+                case "TAXIING": return Pick(persona, seed,
+                    new[] { "Taxiing to the runway.", "Taxiing out." },
+                    new[] { "Taxiing out. Ready to go.", "Rolling out to the runway." },
+                    new[] { "Taxiing out. Holding interval.", "Moving to the runway." },
+                    new[] { "Taxiing out. One queue at a time.", "Taxiing out. Runway next." });
+                case "DEPARTING": return Pick(persona, seed,
+                    new[] { "Beginning departure.", "Starting takeoff." },
+                    new[] { "Starting takeoff. Let's move.", "Beginning departure. See you up there." },
+                    new[] { "Beginning departure.", "Starting takeoff. Coming up." },
+                    new[] { "Starting takeoff. Finally.", "Departing. Enough sightseeing." });
+                case "AIRBORNE": return Pick(seed, "Airborne. Proceeding as ordered.",
+                    "Off the ground. Continuing on task.");
+                case "AIRBORNEREJOINING": return Pick(persona, seed,
+                    new[] { "Airborne. Joining your wing.", "Off the ground. Forming up." },
+                    new[] { "Airborne. Coming to you.", "Off the ground. Catching up." },
+                    new[] { "Airborne. Moving into formation.", "Off the ground. Joining up." },
+                    new[] { "Airborne. Room for one more?", "Off the ground. Coming to join you." });
                 // A released wingman signs off exactly as one ordered home does: it is
                 // the same thing happening to it, arrived at from the other direction.
                 case "DETACHED": return Acknowledge(persona, "RETURNTOBASE", seed);

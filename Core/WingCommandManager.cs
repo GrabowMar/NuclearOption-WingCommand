@@ -58,7 +58,6 @@ namespace WingCommand
                 WingRadialOverlay.Reset();
                 WingHud.ResetStatusPanel();
                 WmcScreen.Reset();
-                MfdWallpaper.Reset();
                 WingComms.Reset();
                 TacticalCoordinator.Reset();
                 WingMarkers.Reset();
@@ -74,7 +73,8 @@ namespace WingCommand
                 WingSupplyReserve.Reset();
                 WingTakeover.Reset();
                 WingUi.Reset();
-                MfdRailPatch.Reset();
+                MfdPresentation.Reset();
+                ManeuverScriptLoader.Reset();
                 mapLayer?.Reset();
                 FormationFlyState.ResetTerrainCache();
                 Wing.Clear();
@@ -89,18 +89,16 @@ namespace WingCommand
                 // First frame back in a mission: resolve the Smart/Performance mode for
                 // this one. Snapshotting here is what makes a mid-mission change inert
                 // until the next mission.
-                WingBrain.Begin(Plugin.Settings.Mode.Value);
+                WingFidelity.Begin(Plugin.Settings.Mode.Value);
                 WingFormation.Shape = Plugin.Settings.FormationShape.Value;
                 WingFormation.SlotSpacing = Plugin.Settings.FormationSpacing.Value;
 
                 // A reflex disabled by a fault in the last mission gets another chance in
                 // this one; a genuinely broken one faults again immediately at no real cost.
-                // Behaviour factories are dropped outright: they close over nothing that
-                // survives a mission, and leaving them registered leaked a previous
-                // mission's states into this one.
+                // Factories are plugin registrations and survive missions. Their aircraft
+                // states live on WingMember and disappear with the old roster.
                 WingAi.ResetFaults();
-                WingBehaviourCatalog.Clear();
-                Plugin.Logger.LogInfo("[WingBrain] mission start - " + WingBrain.Summary());
+                Plugin.Logger.LogInfo("[WingFidelity] mission start - " + WingFidelity.Summary());
             }
             resetForNonPlayableState = false;
 
@@ -108,6 +106,10 @@ namespace WingCommand
             Wing.SetLeader(GameManager.GetLocalAircraft(out Aircraft local) ? local : null);
             WingSupplyReserve.Tick();
             WingShop.Tick();
+            // Settle new aircraft and advance flight ownership before UI rendering. A
+            // broken map/panel must not strand an otherwise healthy native departure.
+            WingShopDelivery.Tick();
+            FlushRecruitQueue();
 
             // Before Prune, deliberately: a wingman that has completed its RTB has an
             // ejected pilot, which Prune would otherwise report as a combat loss.
@@ -129,8 +131,7 @@ namespace WingCommand
 
             WingInteropPush.Publish(Wing);
 
-            if (Plugin.Settings.MapCommandEnabled.Value)
-                mapLayer.Update();
+            mapLayer.Update();
 
             WingKillCredit.Tick();
             WingDeliveryTracker.Tick();
@@ -138,11 +139,7 @@ namespace WingCommand
             WingHud.TickStatusPanel(Wing);
             WmcScreen.Tick(Wing);
             MfdPresentation.Tick();
-            VanillaMfdRebuild.Tick();
-            MfdLogPanel.Tick();
             WingComms.Tick(Wing);
-            WingShopDelivery.Tick();
-            FlushRecruitQueue();
         }
 
         /// <summary>

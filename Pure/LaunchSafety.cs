@@ -4,6 +4,16 @@ namespace WingCommand
 {
     internal static class LaunchSafety
     {
+        public static bool CanHandOff(bool nativeTakeoffComplete, bool inTakeoffState,
+            bool rotary, float altitude, float speed, float takeoffSpeed)
+        {
+            if (nativeTakeoffComplete) return true;
+            if (!inTakeoffState) return false;
+            // Clear the runway/helipad before formation can request a turn.
+            return rotary ? altitude >= 5f :
+                altitude >= 8f && takeoffSpeed > 0f && speed >= takeoffSpeed * WingTuning.LaunchSpeedMargin;
+        }
+
         public static float RejoinBankLimit(float altitude, float speed, float takeoffSpeed)
         {
             float clearance = Math.Max(0f, Math.Min(1f,

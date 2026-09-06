@@ -1,5 +1,4 @@
 using System.Collections.Generic;
-using HarmonyLib;
 using UnityEngine;
 
 namespace WingCommand
@@ -19,22 +18,40 @@ namespace WingCommand
         {
             public Aircraft Owner;
             public float Until;
+            public bool Firing;
         }
 
         private static readonly Dictionary<Unit, List<Claim>> claims =
             new Dictionary<Unit, List<Claim>>();
         private static readonly List<Unit> staleTargets = new List<Unit>();
         private static readonly List<Aircraft> owners = new List<Aircraft>();
+        private static int lastPrunedFrame = -1;
 
         public static void Reset()
         {
             claims.Clear();
             staleTargets.Clear();
             owners.Clear();
+            lastPrunedFrame = -1;
         }
 
-        /// <summary>Number of distinct other aircraft currently committed to a target.</summary>
+        /// <summary>Active firing reservations; an assignment alone never consumes a shot.</summary>
         public static int CountClaims(Unit target, Aircraft except = null)
+        {
+            if (target == null || target.disabled) return 0;
+
+            Prune();
+            int count = 0;
+            if (claims.TryGetValue(target, out List<Claim> list))
+            {
+                for (int i = 0; i < list.Count; i++)
+                    if (list[i].Firing && Active(list[i]) && list[i].Owner != except) count++;
+            }
+            return count;
+        }
+
+        /// <summary>Selection pressure from shooters, native selections and explicit attack assignments.</summary>
+        public static int CountCommitments(Unit target, Aircraft except = null)
         {
             if (target == null || target.disabled) return 0;
 
@@ -44,11 +61,12 @@ namespace WingCommand
             if (claims.TryGetValue(target, out List<Claim> list))
             {
                 for (int i = 0; i < list.Count; i++)
-                    AddOwner(list[i].Owner, except);
+                    if (Active(list[i])) AddOwner(list[i].Owner, except);
             }
 
-            // Explicit attack orders are persistent commitments, not short weapon pulses.
-            // Read them from the roster so they never expire halfway through an attack run.
+            // Assignments discourage opportunists from piling onto an existing attack,
+            // but are not the hard firing cap: otherwise two assigned pilots can each
+            // wait forever for the other's reservation without either firing a shot.
             WingRegistry wing = WingCommandManager.Instance?.Wing;
             if (wing != null)
             {
@@ -56,7 +74,8 @@ namespace WingCommand
                 for (int i = 0; i < members.Count; i++)
                 {
                     WingMember member = members[i];
-                    if (member.AssignedTarget == target)
+                    if (member.AssignedTarget == target &&
+                        (member.Order == WingOrder.Attack || member.Order == WingOrder.FireForEffect))
                         AddOwner(member.Aircraft, except);
                 }
             }
@@ -65,19 +84,41 @@ namespace WingCommand
         }
 
         /// <summary>
-        /// Reserve a target if its concurrency limit has room. An existing owner may renew
-        /// its own claim even while the target is full.
+        /// Record a native AI target choice for deconfliction. Selection does not prove
+        /// that the aircraft can fire yet, so it must not consume the hard firing cap.
         /// </summary>
-        public static bool TryClaim(Unit target, Aircraft owner, int maximum, float seconds)
+        public static void NoteSelection(Unit target, Aircraft owner, float seconds)
         {
-            if (target == null || target.disabled || owner == null || maximum <= 0) return false;
+            if (target == null || target.disabled || owner == null || owner.disabled) return;
 
             Prune();
             if (claims.TryGetValue(target, out List<Claim> list))
             {
                 for (int i = 0; i < list.Count; i++)
                 {
-                    if (list[i].Owner != owner) continue;
+                    if (list[i].Firing || list[i].Owner != owner) continue;
+                    list[i].Until = Time.timeSinceLevelLoad + seconds;
+                    return;
+                }
+            }
+            AddClaim(target, owner, seconds, firing: false);
+        }
+
+        /// <summary>
+        /// Reserve a target if its concurrency limit has room. An existing owner may renew
+        /// its own claim even while the target is full.
+        /// </summary>
+        public static bool TryClaim(Unit target, Aircraft owner, int maximum, float seconds)
+        {
+            if (target == null || target.disabled || owner == null || owner.disabled || maximum <= 0)
+                return false;
+
+            Prune();
+            if (claims.TryGetValue(target, out List<Claim> list))
+            {
+                for (int i = 0; i < list.Count; i++)
+                {
+                    if (!list[i].Firing || list[i].Owner != owner || !Active(list[i])) continue;
                     list[i].Until = Time.timeSinceLevelLoad + seconds;
                     return true;
                 }
@@ -85,10 +126,13 @@ namespace WingCommand
 
             if (CountClaims(target, owner) >= maximum) return false;
 
-            // CountClaims prunes empty buckets, so create the bucket only after the capacity
-            // check. Creating it first let the prune remove it and the new claim was then
-            // added to a detached list that the dictionary no longer owned.
-            if (!claims.TryGetValue(target, out list))
+            AddClaim(target, owner, seconds, firing: true);
+            return true;
+        }
+
+        private static void AddClaim(Unit target, Aircraft owner, float seconds, bool firing)
+        {
+            if (!claims.TryGetValue(target, out List<Claim> list))
             {
                 list = new List<Claim>();
                 claims.Add(target, list);
@@ -98,8 +142,8 @@ namespace WingCommand
             {
                 Owner = owner,
                 Until = Time.timeSinceLevelLoad + seconds,
+                Firing = firing,
             });
-            return true;
         }
 
         public static void Release(Aircraft owner)
@@ -123,8 +167,16 @@ namespace WingCommand
             owners.Add(owner);
         }
 
+        private static bool Active(Claim claim) =>
+            claim.Owner != null && !claim.Owner.disabled && claim.Until > Time.timeSinceLevelLoad;
+
         private static void Prune()
         {
+            // Target searches ask once per candidate and weapon. The global sweep only
+            // needs to run once per frame; target-local reads still check liveness and
+            // expiry so changes later in the same frame are immediately visible.
+            if (lastPrunedFrame == Time.frameCount) return;
+            lastPrunedFrame = Time.frameCount;
             float now = Time.timeSinceLevelLoad;
             staleTargets.Clear();
 
@@ -145,99 +197,6 @@ namespace WingCommand
             }
 
             for (int i = 0; i < staleTargets.Count; i++) claims.Remove(staleTargets[i]);
-        }
-    }
-
-    /// <summary>
-    /// Adds reservation pressure to the stock target search for all locally simulated AI.
-    /// The original opportunity/threat calculation remains authoritative; this only breaks
-    /// the pathological tie where several pilots independently select the same best target.
-    /// A player remains a valid target, but each existing commitment makes another AI choose
-    /// a similarly useful unclaimed contact instead of dog-piling the human.
-    /// </summary>
-    [HarmonyPatch(typeof(CombatAI), nameof(CombatAI.ChooseHQTarget))]
-    internal static class AiTargetDeconflictionPatch
-    {
-        private const float ClaimSeconds = 7f;
-
-        [HarmonyPostfix]
-        private static void Postfix(Unit searcher, float bravery, List<WeaponStation> stationList,
-                                    ref CombatAI.TargetSearchResults __result)
-        {
-            if (!WingBrain.Deconfliction) return;
-            if (!(searcher is Aircraft aircraft) || aircraft.Player != null || !aircraft.LocalSim) return;
-            if (aircraft.NetworkHQ == null || stationList == null || stationList.Count == 0) return;
-
-            Unit bestTarget = null;
-            WeaponStation bestStation = null;
-            float bestScore = 0f;
-            float bestOpportunity = 0f;
-            int bestCapacity = 1;
-
-            foreach (WeaponStation station in stationList)
-            {
-                if (station == null || station.Cargo || station.Ammo <= 0 || station.WeaponInfo == null)
-                    continue;
-
-                foreach (KeyValuePair<PersistentID, TrackingInfo> pair in aircraft.NetworkHQ.trackingDatabase)
-                {
-                    TrackingInfo tracking = pair.Value;
-                    if (tracking == null || !tracking.TryGetUnit(out Unit candidate)) continue;
-                    if (candidate == null || candidate.disabled || candidate.NetworkHQ == null ||
-                        candidate.NetworkHQ == aircraft.NetworkHQ)
-                        continue;
-                    if (!aircraft.NetworkHQ.IsTargetPositionAccurate(candidate, 1000f)) continue;
-
-                    float range = FastMath.Distance(tracking.GetPosition(), aircraft.GlobalPosition());
-                    OpportunityThreat analysis = CombatAI.AnalyzeTarget(
-                        station, aircraft, tracking, 0f, range, 100f);
-                    if (analysis.opportunity <= 0f) continue;
-
-                    float score = analysis.opportunity * (1f + analysis.threat)
-                                / Mathf.Max(range, 500f);
-
-                    TargetRequirements requirements = station.WeaponInfo.targetRequirements;
-                    if (range > requirements.maxRange * 1.2f) score *= 0.5f;
-
-                    int capacity = Mathf.Clamp(
-                        Mathf.CeilToInt(station.WeaponInfo.CalcAttacksNeeded(candidate)), 1, 4);
-                    if (candidate is Missile) capacity = 1;
-
-                    int committed = TacticalCoordinator.CountClaims(candidate, aircraft)
-                                  + Mathf.Max(tracking.attackers, 0);
-                    int excess = Mathf.Max(committed - capacity + 1, 0);
-
-                    float pressure = 1f + excess * WingTuning.TargetSaturationPenalty;
-                    score /= pressure;
-                    if (score <= bestScore) continue;
-
-                    bestScore = score;
-                    bestTarget = candidate;
-                    bestStation = station;
-                    bestOpportunity = analysis.opportunity;
-                    bestCapacity = capacity;
-                }
-            }
-
-            if (bestTarget == null)
-            {
-                if (__result.target != null)
-                    TacticalCoordinator.TryClaim(__result.target, aircraft, 1, ClaimSeconds);
-                return;
-            }
-
-            // Preserve the stock bravery escape gate. Deconfliction should change who an AI
-            // fights, not make a timid aircraft accept a threat the base game rejected.
-            if (bestOpportunity * bravery * 2f < 0.35f &&
-                aircraft.NetworkHQ.GetAircraftThreat(bestTarget.persistentID) >
-                    bestOpportunity * bravery * 2f &&
-                FastMath.Distance(bestTarget.GlobalPosition(), aircraft.GlobalPosition()) >
-                    bestStation.WeaponInfo.targetRequirements.maxRange * 2f)
-                return;
-
-            __result = new CombatAI.TargetSearchResults(
-                bestTarget, bestStation, bestOpportunity, __result.outOfAmmo);
-            TacticalCoordinator.TryClaim(bestTarget, aircraft, bestCapacity, ClaimSeconds);
         }
     }
 }

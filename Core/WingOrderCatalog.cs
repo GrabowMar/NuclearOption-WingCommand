@@ -76,8 +76,8 @@ namespace WingCommand
             if (order == WingOrder.DeliverCargo) return member.CanDeliverCargo;
             if (order == WingOrder.LandHere) return member.CanLandInPlace;
             if (order == WingOrder.JamTarget)
-                return WingBrain.Jamming && member.CanJam;
-            if (order == WingOrder.Maneuver) return WingBrain.Manoeuvres;
+                return WingFidelity.Jamming && member.CanJam;
+            if (order == WingOrder.Maneuver) return WingFidelity.Manoeuvres && !member.IsPanicking;
             return true;
         }
 
@@ -102,10 +102,13 @@ namespace WingCommand
             if (order == WingOrder.FireForEffect) return "No selected wingman can prosecute that target";
             if (order == WingOrder.LandHere) return "Land is available to rotary aircraft only";
             if (order == WingOrder.JamTarget)
-                return WingBrain.Jamming
+                return WingFidelity.Jamming
                     ? "No selected wingman has a jammer pod"
                     : "Jamming is off in Performance mode";
-            if (order == WingOrder.Maneuver) return "Manoeuvres are off in Performance mode";
+            if (order == WingOrder.Maneuver)
+                return WingFidelity.Manoeuvres
+                    ? "No selected wingman can manoeuvre right now"
+                    : "Manoeuvres are off in Performance mode";
             return "No selected wingman can carry out that order";
         }
     }

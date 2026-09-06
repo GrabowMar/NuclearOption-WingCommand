@@ -25,9 +25,11 @@ namespace WingCommand
         private bool pointArmed;
         private WingOrder armedOrder;
         private int armedFrame;
+        private readonly MapPointGesture pointGesture = new MapPointGesture();
 
         public bool PointArmed => pointArmed;
         public WingOrder ArmedOrder => armedOrder;
+        internal bool ConsumesIconClick => pointArmed || pointGesture.ConsumesClick(Time.frameCount);
 
         /// <summary>
         /// True while <see cref="Status"/> is reporting something rather than repeating the
@@ -63,17 +65,31 @@ namespace WingCommand
         public void Update()
         {
             TacticalMapOverlay.Tick(wing);
-            if (!DynamicMap.mapMaximized) return;
+            if (!Plugin.Settings.MapCommandEnabled.Value || !DynamicMap.mapMaximized ||
+                !WmcScreen.TacticalCommandModeActive)
+            {
+                CancelPointOrder(notify: false);
+                pointGesture.Reset();
+                return;
+            }
+
+            pointGesture.Update(Time.frameCount, Input.GetMouseButton(0));
 
             DynamicMap map = SceneSingleton<DynamicMap>.i;
             if (map == null) return;
 
-            HandlePointOrder(map);
-            HandleWaypointInput(map);
+            // Cancelling an armed point with right-click must not also create a waypoint.
+            if (pointArmed) HandlePointOrder(map);
+            else HandleWaypointInput(map);
         }
 
         public void ArmPointOrder(WingOrder order)
         {
+            if (!Plugin.Settings.MapCommandEnabled.Value)
+            {
+                Toast("Map commands are disabled");
+                return;
+            }
             if (!WingOrderCatalog.TakesPoint(order)) return;
             string prompt = WingOrderCatalog.Label(order).ToUpperInvariant() + " ARMED · CLICK MAP";
             if (!MapPicker.TryArm(MapPicker.WingPoint, MapPicker.GestureLeft, prompt))
@@ -100,6 +116,7 @@ namespace WingCommand
         {
             MapPicker.Disarm(MapPicker.WingPoint);
             pointArmed = false;
+            pointGesture.Reset();
             recruited.Clear();
             pendingRecruit.Clear();
             recruitConfirmationUntil = 0f;
@@ -119,15 +136,17 @@ namespace WingCommand
 
             if (Input.GetKeyDown(KeyCode.Escape) || Input.GetMouseButtonDown(1))
             {
+                pointGesture.Consume(Time.frameCount, Input.GetMouseButton(0));
                 CancelPointOrder(notify: true);
                 return;
             }
 
             // Do not consume the WMC button press that armed the command.
             if (Time.frameCount <= armedFrame + 1 || !Input.GetMouseButtonDown(0)) return;
-            if (!map.TryGetCursorCoordinates(out GlobalPosition point)) return;
+            if (!TryGetMapPointer(map, out GlobalPosition point, out _)) return;
 
             WingOrder order = armedOrder;
+            pointGesture.Consume(Time.frameCount, Input.GetMouseButton(0));
             pointArmed = false;
             MapPicker.Disarm(MapPicker.WingPoint);
             WingCommandManager.Instance?.IssuePointOrder(order, point);
@@ -140,7 +159,7 @@ namespace WingCommand
             if (MapPicker.IsBusy && !MapPicker.IsOwner(MapPicker.WingPoint)) return;
 
             WingCommandManager manager = WingCommandManager.Instance;
-            if (manager == null || !manager.Selection.IsExplicit) return;
+            if (manager == null) return;
 
             // Right-clicking a hostile is an attack, not a move.
             //
@@ -149,14 +168,13 @@ namespace WingCommand
             // wingmen would fly to the contact's last known position and then need a second
             // order to do anything about it. Checked before the cursor is resolved to a
             // ground point so the two readings of the same click cannot both fire.
-            Unit hostile = HostileUnderCursor();
-            if (hostile != null)
+            if (!TryGetMapPointer(map, out GlobalPosition point, out Unit target)) return;
+            if (target != null && !target.disabled &&
+                DynamicMap.GetFactionMode(target.NetworkHQ) == FactionMode.Enemy)
             {
-                manager.AttackUnit(hostile);
+                manager.AttackUnit(target);
                 return;
             }
-
-            if (!map.TryGetCursorCoordinates(out GlobalPosition point)) return;
 
             List<WingMember> scope = manager.Commands.Scope(wholeWing: false);
             if (scope.Count == 0) return;
@@ -178,17 +196,24 @@ namespace WingCommand
         }
 
         /// <summary>
-        /// The hostile unit the map cursor is over, if any.
-        ///
-        /// Resolved by asking the event system what is under the pointer rather than by
-        /// searching the icon list for the nearest one: the icons are ordinary clickable UI,
-        /// so the raycast already answers "what would a click land on" exactly as the game
-        /// itself would answer it, including overlap and z-order.
+        /// Resolve the foremost pointer target before accepting a map point. The native
+        /// coordinate helper tests only the map rectangle, so it also succeeds behind MFD
+        /// controls. A foreground panel blocks the click; a friendly icon cannot expose an
+        /// enemy underneath it.
         /// </summary>
-        private static Unit HostileUnderCursor()
+        private static bool TryGetMapPointer(DynamicMap map, out GlobalPosition point, out Unit unit) =>
+            TryGetMapPointer(map, out point, out unit, out _);
+
+        internal static bool TryGetMapPointer(DynamicMap map, out GlobalPosition point, out Unit unit,
+                                              out bool pointerOverIcon)
         {
+            unit = null;
+            point = default;
+            pointerOverIcon = false;
+            if (map == null) return false;
+            if (!map.TryGetCursorCoordinates(out point)) return false;
             EventSystem events = EventSystem.current;
-            if (events == null) return null;
+            if (events == null) return false;
 
             var pointer = new PointerEventData(events) { position = Input.mousePosition };
             var hits = new List<RaycastResult>();
@@ -198,24 +223,29 @@ namespace WingCommand
             {
                 if (hit.gameObject == null) continue;
 
-                UnitMapIcon icon = hit.gameObject.GetComponentInParent<UnitMapIcon>();
-                Unit unit = icon != null ? icon.unit : null;
-                if (unit == null || unit.disabled) continue;
+                MapIcon icon = hit.gameObject.GetComponentInParent<MapIcon>();
+                if (icon == null)
+                    icon = hit.gameObject.GetComponentInParent<UnitMapMarker>()?.Icon;
+                if (icon != null)
+                {
+                    pointerOverIcon = true;
+                    unit = (icon as UnitMapIcon)?.unit;
+                    return true;
+                }
 
-                // Only actual enemies. Neutrals and unknown contacts fall through to the
-                // move behaviour, because ordering an attack on something the faction has
-                // not called hostile is not a thing a misplaced click should be able to do.
-                if (DynamicMap.GetFactionMode(unit.NetworkHQ) != FactionMode.Enemy) continue;
-
-                return unit;
+                Transform target = hit.gameObject.transform;
+                return (map.mapBackground != null && target == map.mapBackground.transform) ||
+                       (map.mapImage != null && target.IsChildOf(map.mapImage.transform));
             }
 
-            return null;
+            // Some map artwork does not receive raycasts. The rectangle test above still
+            // permits an empty map point when no interactive foreground target was hit.
+            return true;
         }
 
         /// <summary>
         /// The stock map consumes right-click for ICommandable units. When a tactical wing
-        /// scope is explicitly selected, reserve that gesture for aircraft waypoints.
+        /// scope is selected (including ALL), reserve that gesture for aircraft waypoints.
         /// </summary>
         internal static bool ShouldConsumeNativeRightClick()
         {
@@ -226,8 +256,8 @@ namespace WingCommand
                 return false;
 
             WingCommandManager manager = WingCommandManager.Instance;
-            return manager != null && manager.Selection.IsExplicit &&
-                   manager.Commands.Scope(wholeWing: false).Count > 0;
+            return manager != null &&
+                   (manager.MapConsumesIconClick || manager.Commands.Scope(wholeWing: false).Count > 0);
         }
 
         /// <summary>
@@ -370,10 +400,29 @@ namespace WingCommand
                 return true;
 
             WingCommandManager manager = WingCommandManager.Instance;
-            if (manager == null || !(__instance.unit is Aircraft aircraft)) return true;
+            if (manager == null) return true;
+
+            // The EventSystem click runs on release, which may be several frames after
+            // the point was placed. The entire held gesture belongs to the point command.
+            if (manager.MapConsumesIconClick) return false;
+            if (!(__instance.unit is Aircraft aircraft)) return true;
 
             WingMember member = manager.Wing.Find(aircraft);
             if (member == null) return true;
+
+            // Native controller selection searches near the cursor without raycasting
+            // foreground UI. A WMC row click must not also select a plane behind the panel.
+            if (!MapCommandLayer.TryGetMapPointer(SceneSingleton<DynamicMap>.i, out _, out _,
+                                                  out bool pointerOverIcon))
+                return false;
+
+            // Rewired Select can share the mouse binding. Its controller-source call on
+            // press and the EventSystem's mouse call on release must not toggle twice.
+            bool mouseGestureActive = Input.GetMouseButton(0) || Input.GetMouseButtonDown(0) ||
+                                      Input.GetMouseButtonUp(0);
+            if (MapSelectionPolicy.DeferToMouseClick(clickSource == MapIcon.ClickSource.Controller,
+                                                    mouseGestureActive, pointerOverIcon))
+                return false;
 
             bool toggle = Input.GetKey(KeyCode.LeftShift) || Input.GetKey(KeyCode.RightShift);
             manager.SelectMember(member, toggle);

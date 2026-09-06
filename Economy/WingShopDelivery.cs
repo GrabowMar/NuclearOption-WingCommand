@@ -100,6 +100,12 @@ namespace WingCommand
             public LiveryKey Livery;
             public float Fuel;
             public Hangar Hangar;
+            public GameObject PreviousSpawnedObject;
+            public bool NativeAccepted;
+            public bool NativeSequenceFinished;
+            public bool NativeAircraftObserved;
+            public Aircraft ObservedAircraft;
+            public bool DelayReported;
             public float RequestedAt;
             public float ExpiresAt;
             public float NextAttemptAt;
@@ -110,11 +116,11 @@ namespace WingCommand
             /// until a pad actually accepts them.
             /// </summary>
             public bool Pinned;
-            public readonly List<Aircraft> EarlyCandidates = new List<Aircraft>();
 
             public AircraftDefinition Definition => Transaction?.Definition;
             public string AirframeName => Definition != null ? Definition.unitName : "Airframe";
             public string StatusCode => HangarFieldPolicy.StatusCode(Hangar != null);
+            public bool CanCancel => !NativeAccepted && !Starting;
         }
 
         private static readonly List<PendingDelivery> pending = new List<PendingDelivery>();
@@ -123,9 +129,21 @@ namespace WingCommand
         public static int PendingCount => pending.Count;
         public static PendingDelivery GetPending(int index) => (index >= 0 && index < pending.Count) ? pending[index] : null;
 
+        internal static PendingDelivery StartingAt(Hangar hangar)
+        {
+            for (int i = 0; i < pending.Count; i++)
+                if (pending[i].Starting && pending[i].Hangar == hangar) return pending[i];
+            return null;
+        }
+
         public static bool CancelPending(PendingDelivery order)
         {
             if (order == null || !pending.Contains(order)) return false;
+            if (!order.CanCancel)
+            {
+                WingCommandManager.Instance?.Toast("Launch already accepted; wait for delivery before releasing");
+                return false;
+            }
             FailDelivery(order, "cancelled by player");
             return true;
         }
@@ -244,10 +262,13 @@ namespace WingCommand
 
             Hangar selected = SelectClearHangar(order.Origin, definition);
             if (selected == null) return;
-            if (!HangarDepartureLane.Reserve(order.Origin, selected)) return;
+            if (!HangarDepartureLane.Reserve(order.Origin, selected, order)) return;
             // Reserve the exact pad before calling native code; synchronous registration
             // can happen inside this call, and adjacent delayed spawns need spacing too.
             order.Hangar = selected;
+            // Native Hangar keeps this field after the last aircraft leaves. It is not
+            // evidence of a new delivery until a different aircraft replaces it.
+            order.PreviousSpawnedObject = GameAccess.GetHangarSpawnedObject(selected);
 
             order.Starting = true;
             Airbase.TrySpawnResult result;
@@ -263,47 +284,55 @@ namespace WingCommand
             }
             catch (Exception e)
             {
-                Plugin.Logger.LogWarning("[Shop] hangar delivery threw, will retry: " + e.Message);
+                Plugin.Logger.LogWarning("[Shop] hangar delivery threw: " + e.Message);
                 result = default(Airbase.TrySpawnResult);
             }
             finally
             {
+                order.NativeAccepted = order.NativeAircraftObserved ||
+                                       (selected != null && !selected.Available);
                 // Hangar.TrySpawnAircraft charges faction supply itself when player is null.
                 // The purchase transaction already reserved its exact source, so retain only
                 // that debit and compensate the hangar's otherwise duplicate charge.
-                int stockAfterNative = hq.GetUnitSupply(definition);
-                if (stockAfterNative < stockBeforeNative)
-                    hq.AddSupplyUnit(definition, stockBeforeNative - stockAfterNative);
-                order.Starting = false;
+                try
+                {
+                    int stockAfterNative = hq.GetUnitSupply(definition);
+                    if (stockAfterNative < stockBeforeNative)
+                        hq.AddSupplyUnit(definition, stockBeforeNative - stockAfterNative);
+                }
+                finally { order.Starting = false; }
             }
 
-            if (!result.Allowed)
+            // TrySpawnAircraft can throw after scheduling doors (for example while
+            // charging native stock). Once the pad becomes busy it may still emit an
+            // aircraft, so retain ownership even when the return value was lost.
+            order.NativeAccepted = result.Allowed || order.NativeAircraftObserved ||
+                                   (selected != null && !selected.Available);
+            if (!order.NativeAccepted)
             {
                 order.Hangar = null;
-                HangarDepartureLane.Release(order.Origin);
+                HangarDepartureLane.Release(order);
                 return;
             }
 
-            order.Hangar = result.Hangar;
+            order.Hangar = selected;
             Plugin.Logger.LogInfo("[Shop] launch accepted: " + definition.unitName +
-                " at " + order.Origin.name + "/" + result.Hangar.name +
-                " position=" + result.Hangar.GetSpawnTransform().position.ToGlobalPosition());
+                " at " + order.Origin.name + "/" + selected.name +
+                " position=" + selected.GetSpawnTransform().position.ToGlobalPosition());
             // A hangar has now actually taken the order; give it its own door-sequence budget
             // rather than whatever was left of the time this order spent queued.
             order.ExpiresAt = Time.unscaledTime + WingTuning.HangarDeliveryTimeout;
 
             // If an immediate hangar spawn produced an object on the hangar, claim it directly.
-            GameObject immediateSpawn = GameAccess.GetHangarSpawnedObject(result.Hangar);
+            GameObject immediateSpawn = GameAccess.GetHangarSpawnedObject(selected);
             if (immediateSpawn != null)
             {
                 Aircraft direct = immediateSpawn.GetComponent<Aircraft>();
                 if (direct != null) TryClaim(direct);
             }
 
-            // An immediate hangar spawn registers inside TrySpawnAircraft, before it returns
-            // the native Hangar identifier. Re-evaluate only after that identifier is known.
-            for (int i = 0; i < order.EarlyCandidates.Count; i++)
-                TryClaim(order.EarlyCandidates[i]);
+            // Registration can precede the native call's return and hangar field update.
+            TryClaim(order.ObservedAircraft);
         }
 
         private static void CollectFields(FactionHQ hq)
@@ -399,19 +428,21 @@ namespace WingCommand
         /// <summary>Claim only the aircraft emitted by the native hangar that accepted the order.</summary>
         private static void OnUnitRegistered(Unit unit)
         {
-            if (!(unit is Aircraft aircraft) || aircraft.Player != null) return;
+            if (!(unit is Aircraft aircraft)) return;
 
-            // Immediate spawns can arrive before TrySpawnAircraft returns its Hangar. Keep
-            // only candidates from the requested origin, then require the exact native spawn
-            // identifier once the call returns.
+            // Bind registrations to the exact requested hangar even before its native
+            // spawnedObject field is updated. A partial spawn must never be refunded.
             for (int i = 0; i < pending.Count; i++)
             {
                 PendingDelivery order = pending[i];
-                if (!order.Starting || order.Transaction.Definition != aircraft.definition)
+                if (order.Transaction.Definition != aircraft.definition ||
+                    order.Transaction.Hq != aircraft.NetworkHQ ||
+                    aircraft.gameObject == order.PreviousSpawnedObject)
                     continue;
                 Hangar spawningHangar = aircraft.NetworkspawningHangar;
-                if (spawningHangar == null || spawningHangar.parentAirbase != order.Origin) continue;
-                order.EarlyCandidates.Add(aircraft);
+                if (spawningHangar == null || spawningHangar != order.Hangar) continue;
+                order.NativeAircraftObserved = true;
+                order.ObservedAircraft = aircraft;
             }
 
             TryClaim(aircraft);
@@ -441,7 +472,7 @@ namespace WingCommand
             }
             if (matches != 1 || match == null) return;
 
-            HangarDepartureLane.Track(match.Origin, aircraft);
+            HangarDepartureLane.Track(match, aircraft);
             pending.Remove(match);
             if (pending.Count == 0) Watch(null);
 
@@ -465,6 +496,7 @@ namespace WingCommand
                 return false;
             if (order.Transaction.Definition != aircraft.definition) return false;
             if (aircraft.NetworkHQ != order.Transaction.Hq) return false;
+            if (aircraft.gameObject == order.PreviousSpawnedObject) return false;
             GameObject spawnedObject = GameAccess.GetHangarSpawnedObject(order.Hangar);
             if (spawnedObject != null && spawnedObject == aircraft.gameObject) return true;
             if (aircraft.NetworkspawningHangar != order.Hangar) return false;
@@ -489,6 +521,11 @@ namespace WingCommand
             for (int i = pending.Count - 1; i >= 0; i--)
             {
                 PendingDelivery order = pending[i];
+                if (order.ObservedAircraft != null)
+                {
+                    TryClaim(order.ObservedAircraft);
+                    if (!pending.Contains(order)) continue;
+                }
                 if (order.Hangar != null)
                 {
                     GameObject spawnedObject = GameAccess.GetHangarSpawnedObject(order.Hangar);
@@ -497,6 +534,8 @@ namespace WingCommand
                         Aircraft direct = spawnedObject.GetComponent<Aircraft>();
                         if (direct != null && Matches(order, direct))
                         {
+                            order.NativeAircraftObserved = true;
+                            order.ObservedAircraft = direct;
                             TryClaim(direct);
                             continue;
                         }
@@ -507,6 +546,15 @@ namespace WingCommand
             for (int i = pending.Count - 1; i >= 0; i--)
             {
                 PendingDelivery order = pending[i];
+                if (order.NativeAccepted && HangarFieldPolicy.CanRefundDelivery(
+                    order.NativeAccepted, order.NativeSequenceFinished,
+                    order.Hangar == null, order.NativeAircraftObserved))
+                {
+                    FailDelivery(order, order.Hangar == null
+                        ? "launch hangar was destroyed"
+                        : "native launch ended without producing an aircraft");
+                    continue;
+                }
                 if (order.Hangar != null || order.Starting) continue;
 
                 bool stillPossible = order.Pinned
@@ -566,13 +614,15 @@ namespace WingCommand
             for (int i = pending.Count - 1; i >= 0; i--)
             {
                 PendingDelivery order = pending[i];
-                if (order.Hangar != null)
+                if (order.NativeAccepted)
                 {
-                    if (now < order.ExpiresAt) continue;
+                    if (now < order.ExpiresAt || order.DelayReported) continue;
+                    order.DelayReported = true;
                     Plugin.Logger.LogWarning(
                         "[Shop] hangar delivery of " +
-                        order.Transaction.Definition.unitName + " never arrived");
-                    FailDelivery(order, "hangar delivery timed out");
+                        order.Transaction.Definition.unitName +
+                        " is delayed; retaining the order until the native launch completes");
+                    WingCommandManager.Instance?.Toast(order.AirframeName + " launch delayed; still awaiting delivery");
                     continue;
                 }
 
@@ -588,7 +638,9 @@ namespace WingCommand
 
         private static void FailDelivery(PendingDelivery order, string reason)
         {
-            HangarDepartureLane.Release(order?.Origin);
+            if (!HangarFieldPolicy.CanRefundDelivery(order.NativeAccepted,
+                order.NativeSequenceFinished, order.Hangar == null, order.NativeAircraftObserved)) return;
+            HangarDepartureLane.Release(order);
             bool restored = order.Transaction.Rollback(reason);
             WingCommandManager.Instance?.Toast(
                 order.Transaction.Definition.unitName +

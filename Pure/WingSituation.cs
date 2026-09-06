@@ -84,6 +84,16 @@ namespace WingCommand
         /// rule; a reflex reads it to know whether it is being entered or sustained.
         /// </summary>
         public readonly float SecondsInBehaviour;
+        public readonly float SecondsWithoutEngagement;
+
+        // Keep the original constructor signature available to existing plugins.
+        private WingSituation(in WingSituation basis, float secondsWithoutEngagement)
+        {
+            this = basis;
+            SecondsWithoutEngagement = System.Math.Max(0f, secondsWithoutEngagement);
+        }
+
+        public WingSituation WithEngagementIdle(float seconds) => new WingSituation(in this, seconds);
 
         /// <summary>
         /// A benign situation: airborne, leader present, nothing shooting at us.
@@ -137,6 +147,7 @@ namespace WingCommand
             Ammo = ammo;
             Integrity = integrity;
             SecondsInBehaviour = secondsInBehaviour;
+            SecondsWithoutEngagement = 0f;
         }
 
     }

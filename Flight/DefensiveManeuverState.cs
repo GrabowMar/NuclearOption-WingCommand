@@ -14,7 +14,7 @@ namespace WingCommand
     internal sealed class DefensiveManeuverState : WingPilotState
     {
         // Missile evasion is safety-critical: this interval is deliberately NOT routed
-        // through WingBrain.Interval, so Performance mode never slows the threat refresh.
+        // through WingFidelity.Interval, so Performance mode never slows the threat refresh.
         private const float ThreatRefreshSeconds = 0.2f;
         private const float FixedWingRunDistance = 8000f;
         private const float RotaryRunDistance = 4000f;

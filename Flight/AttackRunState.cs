@@ -18,6 +18,7 @@ namespace WingCommand
     /// </summary>
     internal class AttackRunState : WingPilotState
     {
+        internal override bool RestartOnOrderChange => false;
         /// <summary>Height held above a surface target while running in, in metres.</summary>
         private const float AttackAltitude = 900f;
 
@@ -65,8 +66,7 @@ namespace WingCommand
             if (target == null || target.disabled)
             {
                 if (target != null) WingComms.Say(member, WingComms.Call.Splash, target.unitName);
-                member.ClearAssignedTarget();
-                member.Complete(WingOrder.Formation);
+                CompleteTask(WingOrder.Formation);
                 return;
             }
 
@@ -74,8 +74,7 @@ namespace WingCommand
                 !WingWeapons.CanStillEngage(aircraft, target))
             {
                 WingComms.Say(member, WingComms.Call.Expended);
-                member.ClearAssignedTarget();
-                member.Complete(WingOrder.Formation);
+                CompleteTask(WingOrder.Formation);
                 return;
             }
 

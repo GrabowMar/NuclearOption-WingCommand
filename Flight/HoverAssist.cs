@@ -83,9 +83,18 @@ namespace WingCommand
 
             ControlsFilter filter = aircraft.GetControlsFilter();
             if (filter == null || !filter.HasAutoHover()) return;
-            if (!filter.IsAutoHoverEnabled()) return;
+            if (filter.IsAutoHoverEnabled()) filter.SetAutoHover(enabled: false);
 
-            filter.SetAutoHover(enabled: false);
+            // SwivelDuctSystem puts an uncrewed aircraft in Manual mode, while the
+            // VT-7's DuctedThrustSystem only chooses modes for the local player. Clearing
+            // auto-hover therefore stops its writer but never restores forward thrust:
+            // customAxis1 retains the previous downward nozzle command. Restore
+            // the cruise command even if a native state already cleared the hover flag.
+            // Check the actual duct component; a helicopter or tiltwing may use the same
+            // custom axis for a different purpose and must retain its own controller.
+            if (aircraft.GetComponentInChildren<SwivelDuctSystem>(includeInactive: true) != null ||
+                aircraft.GetComponentInChildren<DuctedThrustSystem>(includeInactive: true) != null)
+                aircraft.GetInputs().customAxis1 = 1f;
         }
 
         /// <summary>

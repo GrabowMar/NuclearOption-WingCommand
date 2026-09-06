@@ -2,6 +2,44 @@ using System;
 
 namespace WingCommand
 {
+    /// <summary>Owns a temporary time scale until the panel closes or another system changes it.</summary>
+    internal struct TacticalPauseState
+    {
+        private bool requested;
+        private bool ownsScale;
+        private float previousScale;
+        private float appliedScale;
+
+        public float Update(bool shouldPause, float currentScale, float configuredScale)
+        {
+            bool opening = shouldPause && !requested;
+            requested = shouldPause;
+
+            // A native pause or another mod takes precedence. Do not reacquire until
+            // the next opening, or closing WMC could resume somebody else's pause.
+            if (ownsScale && currentScale != appliedScale) ownsScale = false;
+            if (!shouldPause)
+            {
+                if (!ownsScale) return currentScale;
+                ownsScale = false;
+                return previousScale;
+            }
+
+            if (!ownsScale)
+            {
+                if (!opening || currentScale <= 0.5f ||
+                    float.IsNaN(currentScale) || float.IsInfinity(currentScale))
+                    return currentScale;
+                previousScale = currentScale;
+                ownsScale = true;
+            }
+
+            appliedScale = float.IsNaN(configuredScale)
+                ? 0.25f : Math.Max(0f, Math.Min(0.5f, configuredScale));
+            return appliedScale;
+        }
+    }
+
     internal static class MfdPresentationRules
     {
         internal readonly struct Placement
@@ -30,9 +68,6 @@ namespace WingCommand
             float top = center + height * scale * 0.5f;
             return new Placement(left ? max - width * scale : min, top, scale);
         }
-
-        public static bool UseExpanded(bool boscaliLoaded, bool fitMapToPanels, bool mfdAvailable) =>
-            boscaliLoaded && fitMapToPanels && mfdAvailable;
 
         // A missing/invalid prefab measurement must defer installation, never produce a
         // zero-size (or infinitely large) screen that still intercepts map input.

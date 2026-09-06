@@ -417,9 +417,6 @@ namespace WingCommand
                 "Which weapons the selected wingmen reach for first. Scoped, so a mixed " +
                 "flight can split between the air and the ground.";
 
-            public const string Form =
-                "The formation shape wingmen fly when they are formed up on the leader.";
-
             public const string Requisition =
                 "Buy the selected airframe. It launches from a friendly base with the fit " +
                 "chosen on LOADOUT and flies out to join the wing.";
@@ -439,10 +436,6 @@ namespace WingCommand
             public const string AssignSelected =
                 "Conscript the friendly AI aircraft selected on the map into your wing. " +
                 "Press twice to confirm the fee.";
-
-            public const string ReserveHold =
-                "Take this airframe out of the faction pool and keep it for the wing, so " +
-                "the AI cannot spend it.";
 
             public const string ReserveRelease =
                 "Give this airframe back to the faction pool. Press once to arm, again to " +
@@ -539,7 +532,7 @@ namespace WingCommand
                 for (int i = 0; i < maneuverButtons.Length; i++)
                 {
                     if (maneuverButtons[i] != null)
-                        maneuverButtons[i].SetEnabled(WingBrain.Manoeuvres);
+                        maneuverButtons[i].SetEnabled(WingFidelity.Manoeuvres);
                 }
             }
 
@@ -831,6 +824,13 @@ namespace WingCommand
 
                 if (boundPending != null)
                 {
+                    if (!boundPending.CanCancel)
+                    {
+                        pendingRelease.Clear();
+                        WingCommandManager.Instance?.Toast(
+                            "Launch already accepted; wait for delivery before releasing");
+                        return;
+                    }
                     if (pendingRelease.IsArmedFor(boundPending))
                     {
                         WingShopDelivery.PendingDelivery going = boundPending;
@@ -855,6 +855,8 @@ namespace WingCommand
                 bool selected = WingCommandManager.Instance?.Selection.Contains(m) ?? true;
 
                 bool armed = memberRelease.IsArmedFor(m);
+                release?.SetEnabled(true);
+                release?.WithTooltip(OrderHint.Release);
                 release?.SetLatched(armed);
                 release?.SetText(armed ? "SURE?" : "REL");
 
@@ -909,9 +911,14 @@ namespace WingCommand
                 boundPending = p;
                 if (!go.activeSelf) go.SetActive(true);
 
-                bool armed = pendingRelease.IsArmedFor(p);
+                bool canCancel = p.CanCancel;
+                if (!canCancel && pendingRelease.IsArmedFor(p)) pendingRelease.Clear();
+                bool armed = canCancel && pendingRelease.IsArmedFor(p);
+                release?.SetEnabled(canCancel);
+                release?.WithTooltip(canCancel ? OrderHint.Release :
+                    "Launch already accepted; wait for delivery before releasing");
                 release?.SetLatched(armed);
-                release?.SetText(armed ? "SURE?" : "REL");
+                release?.SetText(canCancel ? (armed ? "SURE?" : "REL") : "DEPT");
 
                 lead?.SetLatched(false);
 

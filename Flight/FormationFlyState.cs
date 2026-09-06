@@ -13,10 +13,8 @@ namespace WingCommand
     /// </summary>
     internal class FormationFlyState : WingPilotState
     {
+        internal override bool RestartOnOrderChange => false;
         private const float EngageInterval = 0.5f;
-
-        /// <summary>Seconds between massed shots while expending on a Splash 'Em target from the slot.</summary>
-        private const float SplashFireInterval = 0.8f;
 
         // Avoidance geometry, all expressed as multiples of the slot spacing in use so a
         // change to spacing moves them together. These were config entries; none of them
@@ -49,15 +47,12 @@ namespace WingCommand
 
         /// <summary>Shooting from the slot. Shared with OrbitState; this state only flies.</summary>
         private readonly SlotEngagement engagement = new SlotEngagement(EngageInterval);
-
-        private float lastEngageCheck;
-        private float lastFiredTime;
         private float rejoinBoostUntil;
         private float rejoinHoldUntil;
         private float lastKeepUpDistance = float.MaxValue;
         private float losingGroundSince;
         private Vector3 smoothedAvoidance;
-        private Vector3 previousSlotOffset;
+        private Vector3 smoothedSlotOffset;
         private Vector3 slotVelocity;
         private Aircraft slotVelocityLeader;
         private int collisionThreatId;
@@ -77,16 +72,8 @@ namespace WingCommand
         private float lateralTurnScale = 1f;
         private float trailTurnScale = 1f;
 
-        /// <summary>
-        /// Seconds of the leader's vertical motion fed into the slot position.
-        /// Zeroed out: the leader's climb/dive angle is already carried by baseDir in the steering
-        /// aim point, and adding vertical velocity lead to the slot position pumped the slot
-        /// altitude up and down with every small pitch fluctuation of the leader, triggering
-        /// vertical bounce.
-        /// </summary>
-        private const float SlotVerticalLeadSeconds = 0f;
         private const float TurnGeometrySeconds = 0.7f;
-        private const float BankSmoothing = 0.22f;
+        private const float BankSmoothing = 0.45f;
         private RotaryFormation.Mode lastRotaryMode = (RotaryFormation.Mode)(-1);
         private float lastRotaryReport;
 
@@ -103,7 +90,7 @@ namespace WingCommand
         private const float CombatSpreadBackScale = 1.4f;
         private const float CombatSpreadEaseSeconds = 2f;
 
-        /// <summary>Cached terrain-floor height for this wingman's slot, in local render Y.</summary>
+        /// <summary>Cached terrain-floor altitude above sea level, unaffected by origin shifts.</summary>
         private float terrainFloorY = float.MinValue;
         private float nextTerrainProbe;
         private const float TerrainProbeInterval = 0.3f;
@@ -112,8 +99,8 @@ namespace WingCommand
         /// Quantized spatial terrain height cache to eliminate redundant physics raycasts
         /// when wingmen traverse nearby or identical terrain cells.
         /// </summary>
-        private static readonly System.Collections.Generic.Dictionary<int, float> terrainFloorCache =
-            new System.Collections.Generic.Dictionary<int, float>(256);
+        private static readonly System.Collections.Generic.Dictionary<(int x, int z), float> terrainFloorCache =
+            new System.Collections.Generic.Dictionary<(int x, int z), float>(256);
         private const int MaxTerrainCacheEntries = 1024;
 
         public static void ResetTerrainCache() => terrainFloorCache.Clear();
@@ -144,11 +131,10 @@ namespace WingCommand
         /// <summary>Filtered rate of change of the leader's speed, m/s². The acceleration feed-forward.</summary>
         private float leaderSpeedRate;
 
-        /// <summary>Filtered vertical speed of the leader, m/s. The slot's height feed-forward.</summary>
-        private float leaderClimbRate;
-
-        /// <summary>Filtered leader bank, degrees. Geometry only; MatchLeaderBank reads live attitude.</summary>
+        /// <summary>Filtered leader bank shared by slot geometry and roll control.</summary>
         private float leaderBank;
+        private float leaderBankRate;
+        private Aircraft trackedLeader;
 
         /// <summary>True once this state has written <see cref="WingMember.SlotError"/> at least once.</summary>
 
@@ -189,14 +175,6 @@ namespace WingCommand
         private const float MaxCredibleTurnRate = 1.5f;
 
         /// <summary>
-        /// Fastest leader vertical speed treated as real, m/s. Above any sustained climb or
-        /// dive in the game, so a genuine manoeuvre is never clipped. Like
-        /// <see cref="MaxCredibleTurnRate"/> it exists only so that a respawn, a collision or
-        /// a dropped frame cannot be read off the rigidbody and projected into the slot.
-        /// </summary>
-        private const float MaxCredibleClimbRate = 250f;
-
-        /// <summary>
         /// One report every five seconds, per wingman. The timer lives here rather than in
         /// the flight model because the model is static and shared: a single static timer
         /// meant three wingmen took turns logging, so consecutive lines described different
@@ -233,6 +211,14 @@ namespace WingCommand
                 ? leader.rb.velocity.normalized
                 : leader.transform.forward;
 
+            if (trackedLeader != leader)
+            {
+                trackedLeader = leader;
+                smoothedLeaderDir = Vector3.zero;
+                leaderThrottleKnown = false;
+                smoothedAvoidance = Vector3.zero;
+                turnPersist = 0f;
+            }
             ReadLeaderThrottle(leader, dt);
 
             if (smoothedLeaderDir.sqrMagnitude < 0.5f)
@@ -241,8 +227,8 @@ namespace WingCommand
                 flatLeaderTrack = Flatten(instant);
                 leaderTurnRate = 0f;
                 leaderSpeedRate = 0f;
-                leaderClimbRate = leader.rb != null ? leader.rb.velocity.y : 0f;
                 leaderBank = FixedWingFormation.BankOf(leader);
+                leaderBankRate = 0f;
                 lastLeaderSpeed = leader.speed;
                 return State();
             }
@@ -278,20 +264,11 @@ namespace WingCommand
                 Mathf.Clamp(rate, -WingTuning.MaxCredibleAccel, WingTuning.MaxCredibleAccel),
                 1f - Mathf.Exp(-dt / WingTuning.SpeedRateSmoothing));
 
-            // The leader's vertical speed, filtered like every other signal here and for the
-            // same reason. It is fed forward into the slot's height over a full second, so
-            // read raw off the rigidbody it hands the wingman a destination that moves up and
-            // down with the leader's every pitch twitch - the vertical twin of the roll-rate
-            // leak that used to be the formation's left-right sway. Nothing else in this
-            // struct was allowed to reach the geometry unfiltered; this was the omission.
-            float climb = leader.rb != null ? leader.rb.velocity.y : 0f;
-            leaderClimbRate = Mathf.Lerp(
-                leaderClimbRate,
-                Mathf.Clamp(climb, -MaxCredibleClimbRate, MaxCredibleClimbRate),
-                1f - Mathf.Exp(-dt / WingTuning.SpeedRateSmoothing));
-
-            leaderBank = Mathf.Lerp(
-                leaderBank, FixedWingFormation.BankOf(leader),
+            float previousBank = leaderBank;
+            leaderBank = FormationTracking.SmoothBank(
+                leaderBank, FixedWingFormation.BankOf(leader), BankSmoothing, dt);
+            leaderBankRate = Mathf.Lerp(leaderBankRate,
+                Mathf.DeltaAngle(previousBank, leaderBank) * Mathf.Deg2Rad / dt,
                 1f - Mathf.Exp(-dt / BankSmoothing));
 
             return State();
@@ -300,7 +277,7 @@ namespace WingCommand
         /// <summary>Bundle this tick's filtered leader signals for the flight models.</summary>
         private LeaderState State() =>
             new LeaderState(smoothedLeaderDir, flatLeaderTrack, LeaderTurnRate,
-                            leaderSpeedRate, leaderClimbRate, leaderBank, leaderThrottle,
+                            leaderSpeedRate, leaderBank, leaderBankRate, lastLeaderSpeed, leaderThrottle,
                             leaderThrottleKnown);
 
         /// <summary>
@@ -337,7 +314,7 @@ namespace WingCommand
 
         /// <summary>The turn rate the geometry acts on: filtered, and zero inside the noise band.</summary>
         private float LeaderTurnRate =>
-            Mathf.Abs(leaderTurnRate) < TurnRateDeadband ? 0f : leaderTurnRate;
+            FormationTracking.QuietTurnRate(leaderTurnRate, TurnRateDeadband);
 
         private static Vector3 Flatten(Vector3 direction)
         {
@@ -372,9 +349,9 @@ namespace WingCommand
             // and the throttle are differentiated and filtered the same way and go stale the
             // same way, so they reset with it.
             smoothedLeaderDir = Vector3.zero;
+            trackedLeader = null;
             leaderTurnRate = 0f;
             leaderSpeedRate = 0f;
-            leaderClimbRate = 0f;
             lastLeaderSpeed = 0f;
             leaderThrottleKnown = false;
             lastGeometryTime = 0f;
@@ -427,7 +404,7 @@ namespace WingCommand
             if (member.Order == WingOrder.JamTarget && task != SlotTask.Jam)
             {
                 WingComms.Say(member, WingComms.Call.JammingOff);
-                member.Complete(WingOrder.Formation);
+                CompleteTask(WingOrder.Formation);
                 return;
             }
 
@@ -436,7 +413,7 @@ namespace WingCommand
             // Phased by slot so the wing does not all recompute on the same frame. The
             // missile-defence panic path runs from the manager loop, not here, so it is
             // never strided.
-            int stride = WingBrain.GeometryStride;
+            int stride = WingFidelity.GeometryStride;
             if (stride > 1 && (++geometryTick + member.Slot) % stride != 0)
                 return;
 
@@ -446,10 +423,7 @@ namespace WingCommand
             // one behaviour Performance mode could not thin out.
             if (task == SlotTask.Jam) RunJam();
 
-            if (task == SlotTask.Splash)
-                RunSplash();
-            else
-                engagement.Run(member, aircraft, pilot, leader);
+            engagement.Run(member, aircraft, pilot, leader);
 
             // The time that actually elapsed since the geometry last ran, which under the
             // Performance stride is several physics ticks rather than one. Every filter and
@@ -489,18 +463,12 @@ namespace WingCommand
             float roeScale = RoeRules.SpacingScale(RoeRules.Current);
             float threatScale = ThreatSpacingScale(leader, dt);
             spacing *= threatScale > 1.001f ? Mathf.Max(roeScale, threatScale) : roeScale;
+            spacing *= FormationSolver.SharedFlightSpacing(member.Siblings, leader);
 
             EaseSlotLocal(shape, spacing, turnRate, dt);
 
             GlobalPosition slotPos = SlotPosition(leader, leaderState, spacing, dt,
                                                   out Vector3 offset);
-            if (slotVelocityLeader == leader && dt > 0f)
-                slotVelocity = Vector3.Lerp(slotVelocity,
-                    Vector3.ClampMagnitude((offset - previousSlotOffset) / dt, WingTuning.SlotVelocityLimit),
-                    1f - Mathf.Exp(-dt / WingTuning.SlotVelocitySmoothing));
-            else slotVelocity = Vector3.zero;
-            previousSlotOffset = offset;
-            slotVelocityLeader = leader;
 
             Vector3 toSlot = slotPos - aircraft.GlobalPosition();
             float distance = toSlot.magnitude;
@@ -568,7 +536,7 @@ namespace WingCommand
             // to shoot at than a parade slot and leaves room to react. Eased, because a
             // stepped change moves every slot at once and the autopilot chases the jump.
             float combatSpreadTarget =
-                WingBrain.SmartFormation && leaderMissileThreat
+                WingFidelity.SmartFormation && leaderMissileThreat
                     ? CombatSpreadBackScale : 1f;
             combatSpread = Mathf.Lerp(combatSpread, combatSpreadTarget,
                 1f - Mathf.Exp(-dt / CombatSpreadEaseSeconds));
@@ -583,7 +551,7 @@ namespace WingCommand
             // smoothedSlotLocal lerp below carries the cross-under, and separation plus
             // path-cut avoidance keep it clear of the leader. Symmetric shapes already
             // split the turn, so they are left alone.
-            if (RoeRules.Current != WingRoe.Hold && WingBrain.SmartFormation && mirrorSign != 0 &&
+            if (RoeRules.Current != WingRoe.Hold && WingFidelity.SmartFormation && mirrorSign != 0 &&
                 (shape == FormationShape.EchelonRight || shape == FormationShape.EchelonLeft) &&
                 (int)Mathf.Sign(desiredSlotLocal.x) == mirrorSign)
             {
@@ -611,9 +579,8 @@ namespace WingCommand
         }
 
         /// <summary>
-        /// Turn the settled leader-local slot into a world position: rotate it onto the
-        /// leader's track, lead the leader's motion, then apply separation, path-cut
-        /// avoidance and the terrain floor.
+        /// Move the leader-relative slot continuously onto the filtered flight frame,
+        /// then apply separation, path-cut avoidance and the terrain floor.
         /// </summary>
         private GlobalPosition SlotPosition(Aircraft leader, LeaderState leaderState,
                                             float spacing, float dt, out Vector3 offset)
@@ -624,28 +591,37 @@ namespace WingCommand
             // three dimensions so a climb carries the diamond with it, then rolled about
             // that track by the leader's bank once the wingman is close enough that a
             // banked slot is not a destination through the ground.
-            offset = FormationSolver.WorldOffset(
-                leader.rb != null && leader.rb.velocity.sqrMagnitude > 1f
-                    ? leader.rb.velocity.normalized : leaderState.Track,
-                smoothedSlotLocal, FormationBank(),
+            Vector3 desiredOffset = FormationSolver.WorldOffset(
+                leaderState.Track, smoothedSlotLocal, FormationBank(leaderState),
                 velocityPlane: true);
 
-            // The slot hangs off the leader's current position plus its formation offset, so
-            // it is always behind the leader — the leader is the front of the formation. Only
-            // the leader's vertical motion is led: without it a climbing or diving leader drags
-            // every slot up or down behind it and the wingmen perpetually trail the altitude.
-            // The along-track lag a fast leader would otherwise open is closed by the throttle's
-            // own speed lead (FixedWingFormation.Throttle), not by moving the slot forward.
-            //
-            // The climb rate is the *filtered* one. Read straight off the rigidbody it was the
-            // one leader signal reaching the geometry raw, and a full second of gain on an
-            // unfiltered vertical velocity moves this destination up and down with every pitch
-            // twitch of the leader — the vertical twin of the roll-rate leak that TrackLeader's
-            // whole comment block exists to explain.
-            Vector3 predictedMotion = Vector3.up * leaderState.ClimbRate;
-            GlobalPosition slotPos = leader.GlobalPosition()
-                                     + predictedMotion * SlotVerticalLeadSeconds
-                                     + offset;
+            if (slotVelocityLeader != leader)
+            {
+                smoothedSlotOffset = desiredOffset;
+                slotVelocity = Vector3.zero;
+                slotVelocityLeader = leader;
+            }
+            else
+            {
+                // Follow a continuous curve in leader-relative space. The curve's
+                // own derivative supplies feed-forward, so a bank twitch cannot
+                // move the slot instantly and also produce a huge velocity spike.
+                float speedLimit = WingTuning.SlotVelocityLimit / Mathf.Sqrt(3f);
+                FormationTracking.DampedAxis(smoothedSlotOffset.x, slotVelocity.x, desiredOffset.x,
+                    FormationTracking.SlotResponseSeconds, speedLimit, dt,
+                    out smoothedSlotOffset.x, out slotVelocity.x);
+                FormationTracking.DampedAxis(smoothedSlotOffset.y, slotVelocity.y, desiredOffset.y,
+                    FormationTracking.SlotResponseSeconds, speedLimit, dt,
+                    out smoothedSlotOffset.y, out slotVelocity.y);
+                FormationTracking.DampedAxis(smoothedSlotOffset.z, slotVelocity.z, desiredOffset.z,
+                    FormationTracking.SlotResponseSeconds, speedLimit, dt,
+                    out smoothedSlotOffset.z, out slotVelocity.z);
+            }
+            offset = smoothedSlotOffset;
+
+            // Steering already follows the leader's climb angle; adding vertical velocity
+            // here made the slot bounce. Along-track prediction belongs to throttle control.
+            GlobalPosition slotPos = leader.GlobalPosition() + offset;
 
             // Separation keeps wingmen out of each other during a rejoin, and path-cut
             // avoidance keeps them out of the leader's nose.
@@ -683,12 +659,12 @@ namespace WingCommand
         /// <summary>
         /// A common leader-relative bank for every fixed-wing slot, faded near terrain.
         /// </summary>
-        private float FormationBank()
+        private float FormationBank(LeaderState leaderState)
         {
             if (WingRegistry.IsRotary(aircraft) || Leader == null) return 0f;
             // All slots must use the same rotation. Scaling each by its own error
             // moved neighboring aircraft onto intersecting targets during player rolls.
-            return FormationCollision.SlotBank(FixedWingFormation.BankOf(Leader)) *
+            return FormationCollision.SlotBank(leaderState.Bank) *
                 Mathf.Clamp01(Leader.radarAlt / 150f);
         }
 
@@ -754,7 +730,7 @@ namespace WingCommand
         /// </summary>
         private GlobalPosition ApplyTerrainFloor(GlobalPosition slotPos)
         {
-            float clearance = WingBrain.TerrainClearance;
+            float clearance = WingFidelity.TerrainClearance;
             if (clearance <= 0f) return slotPos;
 
             Vector3 local = slotPos.ToLocalPosition();
@@ -762,20 +738,20 @@ namespace WingCommand
             if (Time.timeSinceLevelLoad >= nextTerrainProbe)
             {
                 nextTerrainProbe = Time.timeSinceLevelLoad +
-                                   WingBrain.Interval(TerrainProbeInterval);
+                                   WingFidelity.Interval(TerrainProbeInterval);
 
-                int cellX = Mathf.RoundToInt(local.x * 0.05f);
-                int cellZ = Mathf.RoundToInt(local.z * 0.05f);
-                int key = (cellX * 73856093) ^ (cellZ * 19349663);
+                // Keep full global coordinates: hashes can collide and local cells move
+                // when the game shifts its floating origin.
+                var key = (Mathf.RoundToInt(slotPos.x * 0.05f), Mathf.RoundToInt(slotPos.z * 0.05f));
 
                 if (!terrainFloorCache.TryGetValue(key, out float ground))
                 {
-                    ground = Datum.LocalSeaY;
+                    ground = 0f;
                     if (Physics.Raycast(new Vector3(local.x, Datum.LocalSeaY + 3000f, local.z),
                                         Vector3.down, out RaycastHit hit, 6000f,
                                         PhysicsLayers.StaticsMask))
                     {
-                        ground = Mathf.Max(ground, hit.point.y);
+                        ground = Mathf.Max(ground, hit.point.y - Datum.LocalSeaY);
                     }
 
                     if (terrainFloorCache.Count >= MaxTerrainCacheEntries)
@@ -788,9 +764,8 @@ namespace WingCommand
                 terrainFloorY = ground + clearance;
             }
 
-            if (local.y >= terrainFloorY) return slotPos;
-            local.y = terrainFloorY;
-            return local.ToGlobalPosition();
+            slotPos.y = Mathf.Max(slotPos.y, terrainFloorY);
+            return slotPos;
         }
 
         /// <summary>
@@ -808,7 +783,7 @@ namespace WingCommand
             // than inside either branch - but both readers are smart-formation behaviours,
             // so in Performance this was an engine call per member per geometry tick whose
             // answer nothing went on to read.
-            if (WingBrain.SmartFormation)
+            if (WingFidelity.SmartFormation)
             {
                 MissileWarning leaderWarning = leader.GetMissileWarningSystem();
                 leaderMissileThreat = leaderWarning != null && leaderWarning.IsWarning();
@@ -816,7 +791,7 @@ namespace WingCommand
 
             // Driven by the fidelity slider now: the reactive widen is a smart-formation
             // behaviour, and a scale of 1 is the off switch.
-            float scale = WingBrain.SmartFormation ? WingTuning.ThreatWidenScale : 1f;
+            float scale = WingFidelity.SmartFormation ? WingTuning.ThreatWidenScale : 1f;
             float target = 1f;
 
             if (scale > 1.001f)
@@ -850,52 +825,11 @@ namespace WingCommand
             if (leader != nearbyThreatLeader || now >= nextNearbyThreatRefresh)
             {
                 nearbyThreatLeader = leader;
-                nextNearbyThreatRefresh = now + WingBrain.Interval(NearbyThreatRefreshSeconds);
+                nextNearbyThreatRefresh = now + WingFidelity.Interval(NearbyThreatRefreshSeconds);
                 nearbyThreatPresent = WingWeapons.NearestThreatTo(leader, 8000f) != null;
             }
 
             return nearbyThreatPresent;
-        }
-
-
-        /// <summary>
-        /// Splash 'Em flown from the slot: hold station and work every effective store into
-        /// the designated target until it dies or the aircraft has nothing left that can
-        /// hurt it. ROE is ignored — an explicit designation is weapons authorization — and
-        /// the massed cadence is the short one the attack run used, so the loadout goes out
-        /// as a sustained volley rather than paced shots.
-        ///
-        /// Finishing does not rejoin anything. The wingman never left its slot, so the order
-        /// simply retires: the arbiter resolves back to the standing task, which is this same
-        /// state, and no switch happens at all. It used to re-enter formation with a rejoin
-        /// boost, which produced a visible surge every time a target died under an aircraft
-        /// that had been holding station the whole time.
-        /// </summary>
-        private void RunSplash()
-        {
-            if (Time.timeSinceLevelLoad - lastEngageCheck < WingBrain.Interval(EngageInterval))
-                return;
-            lastEngageCheck = Time.timeSinceLevelLoad;
-
-            Unit target = member.AssignedTarget;
-            if (target == null || target.disabled)
-            {
-                if (target != null) WingComms.Say(member, WingComms.Call.Splash, target.unitName);
-                FinishSplash();
-                return;
-            }
-
-            if (!WingWeapons.CanStillEngage(aircraft, target))
-            {
-                WingComms.Say(member, WingComms.Call.Expended);
-                FinishSplash();
-                return;
-            }
-
-            if (Time.timeSinceLevelLoad - lastFiredTime < SplashFireInterval) return;
-
-            if (WingWeapons.EngageMassed(aircraft, pilot, target, RoeRules.ExplicitOrderRange()))
-                lastFiredTime = Time.timeSinceLevelLoad;
         }
 
         /// <summary>
@@ -911,18 +845,6 @@ namespace WingCommand
             Unit jamTarget = member.AssignedTarget;
             if (jamTarget == null) return;
             WingWeapons.EngageJammer(aircraft, pilot, jamTarget);
-        }
-
-        /// <summary>
-        /// Retire a finished Splash 'Em without moving the aircraft. The directive falls
-        /// back to Formation, which resolves to the state already running — so the wingman
-        /// keeps flying the slot it is in, and the only thing that changes is that it stops
-        /// shooting.
-        /// </summary>
-        private void FinishSplash()
-        {
-            member.ClearAssignedTarget();
-            member.Complete(WingOrder.Formation);
         }
 
         /// <summary>
@@ -982,7 +904,7 @@ namespace WingCommand
                 $"({distance:F0} m out, max speed {mine:F0} vs leader {theirs:F0}) - returning to base");
 
             WingComms.Say(member, WingComms.Call.Unable);
-            member.Complete(WingOrder.ReturnToBase);
+            CompleteTask(WingOrder.ReturnToBase);
         }
 
         /// <summary>

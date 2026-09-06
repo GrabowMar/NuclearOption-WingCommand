@@ -9,28 +9,9 @@ using UnityEngine.EventSystems;
 namespace WingCommand
 {
     /// <summary>
-    /// Holds the game's keyboard off while the player is typing into a panel field.
-    ///
-    /// This is the one piece of this mod that is dangerous if it is wrong. Nuclear Option
-    /// reads the keyboard through Rewired continuously, and it does not care that a text
-    /// field has focus: without this, naming a loadout template "Strike" rolls the aircraft,
-    /// cuts the throttle and fires whatever is selected, one keystroke at a time, while the
-    /// player watches their own callsign appear in a box.
-    ///
-    /// The game solves the same problem the same way for its chat box, which disables the
-    /// Rewired keyboard on open and re-enables it a frame after close. This does the same
-    /// thing, with three differences that matter for a mod:
-    ///
-    /// <list type="bullet">
-    /// <item>It counts. Two fields on one panel must not have the first one released while
-    /// the second is still focused.</item>
-    /// <item>It restores what it found rather than forcing the keyboard back on, so it
-    /// cannot switch input back on for a game that had turned it off for its own reasons.</item>
-    /// <item>It fails safe in the opposite direction to most of this mod. Everywhere else, a
-    /// member that cannot be reached degrades to doing nothing; here, doing nothing means
-    /// the keystrokes reach the aircraft. If the guard cannot take the keyboard, the caller
-    /// is told so and the field is not offered.</item>
-    /// </list>
+    /// Disables Rewired keyboard input while panel fields are focused, using a nesting count.
+    /// Restores the prior enabled state after the last release or panel teardown.
+    /// Callers check Available before offering text entry; capture failures are logged.
     /// </summary>
     internal static class WingKeyboardGuard
     {
@@ -39,10 +20,7 @@ namespace WingCommand
         private static bool held;
 
         /// <summary>
-        /// True when the guard can actually take the keyboard on this build.
-        ///
-        /// Checked before a text field is built, not after it is focused: a rename field
-        /// that silently flies the aircraft is worse than no rename field.
+        /// Check before offering text entry so typing does not also control the aircraft.
         /// </summary>
         public static bool Available
         {
@@ -100,31 +78,12 @@ namespace WingCommand
 
             depth--;
             if (depth > 0) return;
-
-            if (!held) return;
-            held = false;
-
-            try
-            {
-                Rewired.Keyboard keyboard = Rewired.ReInput.controllers?.Keyboard;
-
-                // Restore, do not force: if the game had its own reason for the keyboard
-                // being off when the field took focus, that reason still stands.
-                if (keyboard != null) keyboard.enabled = wasEnabled;
-            }
-            catch (Exception e)
-            {
-                Plugin.Logger.LogWarning("[UI] could not restore keyboard input: " + e.Message);
-            }
+            ForceRelease();
         }
 
         /// <summary>
-        /// Force the keyboard back, whatever the count says.
-        ///
-        /// The escape hatch for the one case the counting cannot cover: a field destroyed
-        /// while focused — a page switched away from, a mission ended — never fires its
-        /// deselect, and a mod that leaves the player unable to fly is not a mod they will
-        /// keep. Called from the panel's own teardown.
+        /// Restores the captured keyboard state during panel teardown, including when
+        /// a destroyed field never sends its deselect event.
         /// </summary>
         public static void ForceRelease()
         {
@@ -146,11 +105,7 @@ namespace WingCommand
         }
 
         /// <summary>
-        /// Drop focus from whatever field currently has it.
-        ///
-        /// Used when the panel is closing something out from under the player. Deselecting
-        /// through the event system fires the field's own deselect handler, so the guard
-        /// unwinds through the normal path rather than needing the forced one.
+        /// Deselects through the event system so the field releases its keyboard capture.
         /// </summary>
         public static void Defocus()
         {

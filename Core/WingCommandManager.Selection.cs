@@ -4,6 +4,8 @@ namespace WingCommand
 {
     internal partial class WingCommandManager
     {
+        internal bool MapConsumesIconClick => mapLayer != null && mapLayer.ConsumesIconClick;
+
         internal void SelectMember(WingMember member, bool toggle)
         {
             Selection.ClickMember(member, toggle, Wing);

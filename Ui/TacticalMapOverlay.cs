@@ -96,7 +96,7 @@ namespace WingCommand
         public static void Tick(WingRegistry wing)
         {
             DynamicMap map = SceneSingleton<DynamicMap>.i;
-            if (map == null || !DynamicMap.mapMaximized)
+            if (!Plugin.Settings.MapCommandEnabled.Value || map == null || !DynamicMap.mapMaximized)
             {
                 SetVisible(false);
                 return;
@@ -104,7 +104,7 @@ namespace WingCommand
 
             if (Time.unscaledTime >= nextRefresh)
             {
-                nextRefresh = Time.unscaledTime + WingBrain.Interval(0.2f);
+                nextRefresh = Time.unscaledTime + WingFidelity.Interval(0.2f);
                 Collect(wing);
                 Sync(map);
             }

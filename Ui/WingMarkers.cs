@@ -4,8 +4,7 @@ using UnityEngine;
 namespace WingCommand
 {
     /// <summary>
-    /// What the wing looks like on the player's displays: who is a wingman, what the wing
-    /// is shooting at, and the colour each of those gets.
+    /// Wing identity and engaged targets shared by map outlines and HUD marker colours.
     ///
     /// Both the tactical map (<see cref="WingMapTint"/>) and the in-cockpit HUD
     /// (<see cref="WingHudTint"/>) draw from this, so a unit cannot be a wingman on one
@@ -55,7 +54,7 @@ namespace WingCommand
         public static void Tick(WingRegistry wing)
         {
             if (Time.unscaledTime < nextPoll) return;
-            nextPoll = Time.unscaledTime + WingBrain.Interval(TargetPollInterval);
+            nextPoll = Time.unscaledTime + WingFidelity.Interval(TargetPollInterval);
 
             CollectTargets(wing);
 
@@ -78,6 +77,10 @@ namespace WingCommand
                 foreach (Unit u in repaint) Repaint(u);
                 repaint.Clear();
             }
+
+            // Reconcile map effects as well as native paint callbacks: icon recreation
+            // and external UI refreshes must not erase persistent wing identity.
+            WingMapTint.Reassert(wing);
 
             // Members are repainted when membership changes, but the HUD marker for a
             // wingman is recoloured by the game for a second after it is created and

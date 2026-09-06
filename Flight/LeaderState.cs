@@ -22,6 +22,9 @@ namespace WingCommand
         /// <summary>The same track flattened into the horizontal plane; the formation's frame.</summary>
         public readonly Vector3 FlatTrack;
 
+        /// <summary>Velocity on the same filtered track used by slot geometry.</summary>
+        public readonly Vector3 Velocity;
+
         /// <summary>Filtered heading rate, rad/s, positive to the right, zero inside the noise band.</summary>
         public readonly float TurnRate;
 
@@ -29,20 +32,14 @@ namespace WingCommand
         public readonly float SpeedRate;
 
         /// <summary>
-        /// Filtered vertical speed, m/s, positive climbing. Filtered for the same reason
-        /// the turn rate is: it is fed forward into the slot's height over a full second,
-        /// so a raw rigidbody read puts every twitch of the leader's pitch straight into
-        /// the destination the wingman is chasing.
-        /// </summary>
-        public readonly float ClimbRate;
-
-        /// <summary>
-        /// Filtered bank, degrees, positive right wing down. The settled formation hangs
-        /// off this so a rolling leader carries the diamond with it. Live attitude is
-        /// still what MatchLeaderBank copies; this is only the geometry's copy, smoothed
-        /// so a stick twitch does not throw every slot.
+        /// Filtered bank in BankOf's signed convention (negative right wing down).
+        /// Slot geometry, bank authority and roll trim share this signal so a stick
+        /// twitch cannot bypass the filter through another control path.
         /// </summary>
         public readonly float Bank;
+
+        /// <summary>Rate of the filtered bank, in rad/s; never raw body roll noise.</summary>
+        public readonly float BankRate;
 
         /// <summary>Smoothed lever position, 0-1. Meaningless unless <see cref="ThrottleKnown"/>.</summary>
         public readonly float Throttle;
@@ -56,14 +53,15 @@ namespace WingCommand
         public readonly bool ThrottleKnown;
 
         public LeaderState(Vector3 track, Vector3 flatTrack, float turnRate, float speedRate,
-                           float climbRate, float bank, float throttle, bool throttleKnown)
+                           float bank, float bankRate, float speed, float throttle, bool throttleKnown)
         {
             Track = track;
             FlatTrack = flatTrack;
+            Velocity = track * speed;
             TurnRate = turnRate;
             SpeedRate = speedRate;
-            ClimbRate = climbRate;
             Bank = bank;
+            BankRate = bankRate;
             Throttle = throttle;
             ThrottleKnown = throttleKnown;
         }
@@ -79,5 +77,15 @@ namespace WingCommand
         public Vector3 FlatAcceleration =>
             FlatTrack * Mathf.Clamp(SpeedRate, -WingTuning.MaxCredibleAccel,
                                     WingTuning.MaxCredibleAccel);
+
+        public Quaternion Turn(float seconds) => Quaternion.AngleAxis(
+            FormationTracking.Sweep(TurnRate, seconds) * Mathf.Rad2Deg, Vector3.up);
+
+        public GlobalPosition FutureSlot(GlobalPosition leaderPosition, Vector3 offset, float seconds)
+        {
+            var point = FormationTracking.FutureSlotOffset(Velocity.x, Velocity.y, Velocity.z,
+                offset.x, offset.y, offset.z, TurnRate, seconds);
+            return leaderPosition + new Vector3(point.x, point.y, point.z);
+        }
     }
 }

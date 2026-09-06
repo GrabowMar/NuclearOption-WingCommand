@@ -240,14 +240,14 @@ namespace WingCommand
                 // resolution still read "flying the standing task" for the rest of the
                 // sortie, and a later missile break resolved back to a cargo run that
                 // restarted the drop route which had just failed.
-                member.Complete(WingDirective.Simple(WingOrder.DeliverCargo));
+                CompleteTask(WingDirective.Simple(WingOrder.DeliverCargo));
                 return;
             }
 
             WingComms.Say(member, WingComms.Call.NoDropOff);
             WingCommandManager.Instance?.Toast(
                 member.Name + " could not release its cargo at that point");
-            member.Complete(WingOrder.Formation);
+            CompleteTask(WingOrder.Formation);
         }
 
         // --------------------------------------------------------------------- egress

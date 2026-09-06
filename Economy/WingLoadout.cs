@@ -8,47 +8,6 @@ using NOAvionics.Ui;
 namespace WingCommand
 {
     /// <summary>
-    /// One aircraft's loadout decision: a saved per-pylon template, or the airframe's own
-    /// standard fit.
-    ///
-    /// This was once a three-case choice — template, role preset, or standard — but the
-    /// per-pylon editor replaced the presets outright, and a preset dimension that could
-    /// only ever hold Standard was carrying the whole role-scoring machinery behind it.
-    ///
-    /// It stays a struct rather than a bare string because every part of the mod that moves
-    /// a loadout about — the shop, delivery, the reserve, recovery, takeover — carries it by
-    /// value and never inspects it. Adding a case back reaches all of them without any of
-    /// them changing.
-    /// </summary>
-    internal readonly struct WingLoadoutChoice
-    {
-        /// <summary>
-        /// The saved template this fit came from, or null for the airframe's own fit.
-        ///
-        /// An id rather than the record itself: an in-flight aircraft, a reserve slot and a
-        /// purchase order may all outlive the template they were fitted from, and none of
-        /// them should keep it alive or follow it through a rename into something else.
-        /// </summary>
-        public readonly string TemplateId;
-
-        public WingLoadoutChoice(string templateId = null)
-        {
-            TemplateId = templateId;
-        }
-
-        public static WingLoadoutChoice Standard => new WingLoadoutChoice(null);
-
-        /// <summary>Fit from a saved template, or pass null to go back to the stock fit.</summary>
-        public WingLoadoutChoice WithTemplate(string templateId) =>
-            new WingLoadoutChoice(templateId);
-
-        public bool IsTemplate => !string.IsNullOrEmpty(TemplateId);
-
-        /// <summary>True when nothing has been chosen and the game fits its own.</summary>
-        public bool IsStandard => !IsTemplate;
-    }
-
-    /// <summary>
     /// Reads the airframe's own weapon-station data, so the pylon editor can offer real
     /// stores and a saved template can be turned into a <c>Loadout</c> the spawner accepts.
     ///
@@ -462,10 +421,23 @@ namespace WingCommand
         /// </summary>
         public static Loadout Build(AircraftDefinition definition, WingLoadoutChoice choice)
         {
+            if (choice.HasSnapshot) return BuildFromKeys(definition, choice.FittedKeys);
             if (!choice.IsTemplate) return null;
 
             LoadoutTemplateRecord template = WingLoadoutTemplates.ById(choice.TemplateId);
             return template != null ? BuildFromKeys(definition, template.MountKeys) : null;
+        }
+
+        /// <summary>Freeze the stores actually fitted, including the native standard fit.</summary>
+        internal static WingLoadoutChoice SnapshotFit(Aircraft aircraft, WingLoadoutChoice choice)
+        {
+            List<WeaponMount> weapons = aircraft?.Networkloadout?.weapons;
+            // A synchronous registration can precede Hangar's native standard-fit selection.
+            // The book retries on its next read once that loadout has been installed.
+            if (weapons == null) return choice;
+            var keys = new List<string>(weapons.Count);
+            for (int i = 0; i < weapons.Count; i++) keys.Add(StoreKey(weapons[i]));
+            return choice.Snapshot(keys);
         }
 
         /// <summary>

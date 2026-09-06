@@ -76,7 +76,7 @@ namespace WingCommand
         private const int PageCount = 4;
 
         private static MFDScreen screen;
-        private static bool tacticalPauseActive;
+        private static TacticalPauseState tacticalPause;
 
         // Indexed by Page, so adding a tab is a matter of building one more root rather
         // than adding a third parallel set of fields to every lifecycle method.
@@ -185,7 +185,8 @@ namespace WingCommand
 
         /// <summary>Map icon clicks become command selection only on the active WMC page.</summary>
         public static bool TacticalCommandModeActive =>
-            screen != null && screen.isActive && page == Page.Tactical;
+            Plugin.Settings.UseMfdPanel.Value && Plugin.Settings.MapCommandEnabled.Value &&
+            DynamicMap.mapMaximized && screen != null && screen.isActive && page == Page.Tactical;
 
         // ------------------------------------------------------------------- lifecycle
 
@@ -195,47 +196,36 @@ namespace WingCommand
         /// </summary>
         public static void Tick(WingRegistry wing)
         {
-            if (gaveUp || !GameAccess.MfdAvailable || !Plugin.Settings.UseMfdPanel.Value) return;
+            bool enabled = !gaveUp && GameAccess.MfdAvailable && Plugin.Settings.UseMfdPanel.Value;
+            bool visible = enabled && screen != null && screen.isActive && DynamicMap.mapMaximized;
+            UpdateTacticalPause(visible && Plugin.Settings.TacticalPauseInSingleplayer.Value &&
+                                GameManager.gameState == GameState.SinglePlayer);
+
+            if (!enabled)
+            {
+                if (screen != null && screen.isActive)
+                    screen.CloseScreen(screen.transform.localPosition);
+                ReleasePanelInput();
+                return;
+            }
 
             if (screen == null)
             {
+                ReleasePanelInput();
                 if (Time.unscaledTime < nextAttempt) return;
                 nextAttempt = Time.unscaledTime + 1f;
                 TryInstall();
                 return;
             }
 
-            if (!screen.isActive)
+            if (!visible)
             {
-                if (tacticalPauseActive)
-                {
-                    tacticalPauseActive = false;
-                    if (Time.timeScale < 0.5f && Time.timeScale > 0f)
-                    {
-                        Time.timeScale = 1f;
-                    }
-                }
-
                 // The screen can be closed with a list open or a name half typed — the bezel
                 // button does not ask this code first. Neither may survive into a panel the
                 // player cannot see: an open popup would still be holding the pointer, and a
                 // focused field would still be holding the keyboard off the aircraft.
-                if (WingKeyboardGuard.Captured)
-                {
-                    WingKeyboardGuard.Defocus();
-                    WingKeyboardGuard.ForceRelease();
-                }
-                AvKit.Popup.CloseAny();
+                ReleasePanelInput();
                 return;
-            }
-
-            if (Plugin.Settings.TacticalPauseInSingleplayer.Value && GameManager.gameState == GameState.SinglePlayer)
-            {
-                if (!tacticalPauseActive && Time.timeScale > 0.5f)
-                {
-                    tacticalPauseActive = true;
-                    Time.timeScale = Mathf.Clamp(Plugin.Settings.TacticalPauseScale.Value, 0f, 0.5f);
-                }
             }
 
             // The status strip is the one part of the panel that answers the pointer, and a
@@ -254,7 +244,7 @@ namespace WingCommand
             // pure garbage for numbers a reader cannot follow that fast.
             if (Time.unscaledTime >= nextRefresh)
             {
-                nextRefresh = Time.unscaledTime + WingBrain.Interval(0.2f);
+                nextRefresh = Time.unscaledTime + WingFidelity.Interval(0.2f);
                 Refresh(wing);
             }
         }
@@ -262,14 +252,8 @@ namespace WingCommand
         /// <summary>Forget the screen when the mission ends; a new one is built next time.</summary>
         public static void Reset()
         {
-            if (tacticalPauseActive)
-            {
-                tacticalPauseActive = false;
-                if (Time.timeScale < 0.5f && Time.timeScale > 0f)
-                {
-                    Time.timeScale = 1f;
-                }
-            }
+            UpdateTacticalPause(shouldPause: false);
+            ReleasePanelInput();
 
             BezelRegistry.Release(BezelRegistry.Wmc);
             screen = null;
@@ -408,6 +392,23 @@ namespace WingCommand
             gaveUp = false;
         }
 
+        private static void UpdateTacticalPause(bool shouldPause)
+        {
+            float scale = tacticalPause.Update(shouldPause, Time.timeScale,
+                                               Plugin.Settings.TacticalPauseScale.Value);
+            if (scale != Time.timeScale) Time.timeScale = scale;
+        }
+
+        private static void ReleasePanelInput()
+        {
+            if (WingKeyboardGuard.Captured)
+            {
+                WingKeyboardGuard.Defocus();
+                WingKeyboardGuard.ForceRelease();
+            }
+            AvKit.Popup.CloseAny();
+        }
+
         private static void TryInstall()
         {
             try
@@ -438,6 +439,8 @@ namespace WingCommand
                 }
 
                 MfdBezel.Bind(mfd, buttons, screens, slot, left, screen);
+                MfdPresentation.Register(screen, screen.displayPanel.transform as RectTransform,
+                    new Vector2(PanelWidth, panelHeight), buttons[slot], left);
                 Plugin.Logger.LogInfo("WMC screen installed on " + (left ? "left" : "right") +
                                       " bezel slot " + (slot + 1) + ".");
             }
@@ -463,7 +466,7 @@ namespace WingCommand
         {
             WingUi.Font = FindFont(template);
 
-            var root = new GameObject("WMC_Screen", typeof(RectTransform), typeof(Image));
+            var root = new GameObject("WMC_Screen", typeof(RectTransform));
             RectTransform rt = root.GetComponent<RectTransform>();
             rt.SetParent(template.transform.parent, worldPositionStays: false);
 
@@ -473,24 +476,24 @@ namespace WingCommand
             // VirtualMFD.showPos is Vector3.zero and MFDScreen.ShowScreen assigns it straight
             // to localPosition, so a screen has no remembered home — it is placed by its
             // parent and its anchors, and any anchoredPosition written here is overwritten
-            // the next time the panel is opened. MfdPanelDock reparents this screen into the
-            // left column, which is placement vanilla will not undo.
+            // the next time the panel is opened. Fit only our child content in vanilla;
+            // Boscali owns placement when installed.
             var templateRt = (RectTransform)template.transform;
             rt.anchorMin = templateRt.anchorMin;
             rt.anchorMax = templateRt.anchorMax;
             rt.pivot = templateRt.pivot;
             rt.localScale = templateRt.localScale;
 
-            Image bg = root.GetComponent<Image>();
+            // Native CloseScreen must hide the background along with WMC's controls.
+            var content = new GameObject("Content", typeof(RectTransform), typeof(Image));
+            RectTransform contentRt = content.GetComponent<RectTransform>();
+            contentRt.SetParent(rt, worldPositionStays: false);
+            Stretch(contentRt);
+            Image bg = content.GetComponent<Image>();
             bg.sprite = WingUi.PanelSprite();
             bg.type = Image.Type.Sliced;
             bg.color = Color.white;
             bg.raycastTarget = true;
-
-            var content = new GameObject("Content", typeof(RectTransform));
-            RectTransform contentRt = content.GetComponent<RectTransform>();
-            contentRt.SetParent(rt, worldPositionStays: false);
-            Stretch(contentRt);
 
             float y = -Pad;
             y = AddTitle(contentRt, y);
@@ -925,8 +928,9 @@ namespace WingCommand
                 {
                     for (int i = 0; i < wing.Members.Count; i++)
                     {
-                        float f = wing.Members[i].Fuel;
-                        if (f <= 0f) continue;
+                        WingMember member = wing.Members[i];
+                        if (member == null || !member.Alive || member.Aircraft == null) continue;
+                        float f = member.Fuel;
                         if (!any || f < lowest) lowest = f;
                         any = true;
                     }

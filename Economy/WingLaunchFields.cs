@@ -91,22 +91,6 @@ namespace WingCommand
             return false;
         }
 
-        /// <summary>Number of allowed airbases capable of launching this airframe.</summary>
-        public static int CountAllowedCanLaunch(FactionHQ hq, AircraftDefinition definition)
-        {
-            if (definition == null || hq == null) return 0;
-            if (WingShop.IsSurfaceDefinition(definition)) return 1;
-
-            int count = 0;
-            foreach (Airbase airbase in hq.GetAirbases())
-            {
-                if (airbase == null || airbase.disabled) continue;
-                if (!IsAllowed(airbase)) continue;
-                if (CanProduce(airbase, definition)) count++;
-            }
-            return count;
-        }
-
         /// <summary>
         /// Friendly, live fields, nearest first. The Supply pager reads this; delivery
         /// collects its own snapshot so a UI refresh cannot change a spawn decision.

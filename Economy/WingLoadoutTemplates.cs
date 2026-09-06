@@ -35,6 +35,7 @@ namespace WingCommand
             new List<LoadoutTemplateRecord>();
 
         private static bool loaded;
+        private static readonly HashSet<string> initializedAirframes = new HashSet<string>();
 
         /// <summary>Longest a template name may be, so the selector can always draw it.</summary>
         public const int MaxNameLength = 28;
@@ -131,6 +132,8 @@ namespace WingCommand
             {
                 records.Clear();
                 records.AddRange(LoadoutTemplateCodec.Decode(Plugin.Settings.LoadoutTemplates.Value));
+                initializedAirframes.UnionWith(LoadoutTemplateCodec.DecodeInitializedAirframes(
+                    Plugin.Settings.LoadoutInitializedAirframes.Value));
             }
             catch (Exception e)
             {
@@ -152,6 +155,20 @@ namespace WingCommand
             catch (Exception e)
             {
                 Plugin.Logger.LogWarning("[Loadout] templates could not be saved: " + e.Message);
+            }
+        }
+
+        private static void MarkInitialized(string key)
+        {
+            if (string.IsNullOrEmpty(key) || !initializedAirframes.Add(key)) return;
+            try
+            {
+                Plugin.Settings.LoadoutInitializedAirframes.Value =
+                    LoadoutTemplateCodec.EncodeInitializedAirframes(initializedAirframes);
+            }
+            catch (Exception e)
+            {
+                Plugin.Logger.LogWarning("[Loadout] template initialization could not be saved: " + e.Message);
             }
         }
 
@@ -253,13 +270,19 @@ namespace WingCommand
         {
             EnsureLoaded();
             if (definition == null) return;
-            if (CountFor(definition) > 0) return;
+            string key = KeyOf(definition);
+            if (key == null || initializedAirframes.Contains(key)) return;
+            if (CountFor(definition) > 0)
+            {
+                MarkInitialized(key);
+                return;
+            }
             if (WingLoadoutCatalog.PylonCount(definition) == 0) return;
 
             List<string> keys = WingLoadoutCatalog.SuggestedKeys(definition);
             if (keys == null) return;
 
-            Create(definition, "DEFAULT", keys);
+            if (Create(definition, "DEFAULT", keys) != null) MarkInitialized(key);
         }
 
         public static LoadoutTemplateRecord Duplicate(LoadoutTemplateRecord source)
@@ -284,7 +307,11 @@ namespace WingCommand
         {
             EnsureLoaded();
             if (record == null) return;
-            if (records.Remove(record)) Save();
+            if (records.Remove(record))
+            {
+                MarkInitialized(record.AirframeKey);
+                Save();
+            }
         }
 
         public static void Rename(LoadoutTemplateRecord record, string name)

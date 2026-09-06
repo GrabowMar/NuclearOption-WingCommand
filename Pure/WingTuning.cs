@@ -12,7 +12,7 @@ namespace WingCommand
     ///
     /// So they live here instead, as constants, with the reasoning that fixed each one. The
     /// remaining <see cref="WingConfig"/> entries are the ones a player has an opinion about.
-    /// Anything genuinely mode-dependent belongs in <see cref="WingBrain"/>, not here.
+    /// Anything genuinely mode-dependent belongs in <see cref="WingFidelity"/>, not here.
     /// </summary>
     internal static class WingTuning
     {
@@ -46,13 +46,6 @@ namespace WingCommand
         /// more prompt heading authority to follow aggressive player manoeuvres.
         /// </summary>
         public const float CommandAngle = 32f;
-
-        /// <summary>
-        /// Speed safety margin above airframe takeoff speed before climb-out releases to
-        /// full formation maneuvering. Gives aerodynamic control surfaces sufficient dynamic
-        /// pressure so an immediate bank does not stall the aircraft.
-        /// </summary>
-        public const float TakeoffSpeedMultiplier = 1.25f;
 
         /// <summary>
         /// Bank authority, degrees, once settled in the slot when the leader is level.
@@ -241,7 +234,7 @@ namespace WingCommand
 
         /// <summary>
         /// Reactive spacing multiplier while the widen behaviour is active. Lived in
-        /// WingBrain, which gates the behaviour but has no business holding its number.
+        /// WingFidelity, which gates the behaviour but has no business holding its number.
         /// </summary>
         public const float ThreatWidenScale = 1.45f;
 
@@ -378,14 +371,10 @@ namespace WingCommand
         /// </summary>
         public const float FixedWingAirborneAlt = 80f;
 
-        /// <summary>Distance at which a launched aircraft can safely enter station keeping.</summary>
-        public const float DepartureRendezvousDistance = 1500f;
-
         public const float LaunchSpeedMargin = 1.1f;
         public const float LaunchClearanceMinimum = 30f;
         public const float LaunchClearanceMargin = 10f;
         public const float DepartureTurnBank = 25f;
-        public const float DeparturePitch = 8f;
         public const float RejoinBankHeightSpan = 320f;
         public const float RejoinMaximumBank = 88f;
         public const float RejoinMinimumBank = 8f;
@@ -395,7 +384,6 @@ namespace WingCommand
         public const float HoldPositionGain = 1.65f;
         public const float HoldDampingGain = 1.25f;
         public const float SlotVelocityLimit = 100f;
-        public const float SlotVelocitySmoothing = 0.15f;
 
         /// <summary>
         /// How often a queued hangar order retries <c>TrySpawnAircraft</c>. Every frame

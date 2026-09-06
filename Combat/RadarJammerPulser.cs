@@ -4,12 +4,8 @@ using UnityEngine;
 namespace WingCommand
 {
     /// <summary>
-    /// Keeps a native ECM jammer active by re-deploying it at a fixed cadence.
-    ///
-    /// <c>RadarJammer.Fire</c> lasts about a tenth of a second, so a single call leaves no
-    /// lasting coverage. Both the missile-break defensive state and the standing Jam
-    /// Target order need the same "hold the jammer on" behaviour; this is that behaviour,
-    /// with its per-aircraft station resolution cached and its errors reported once.
+    /// Re-deploys ECM before its 0.1-second lifetime expires. Caches the station index
+    /// per aircraft, periodically re-resolves it after refits, and reports failures once.
     /// </summary>
     internal sealed class RadarJammerPulser
     {
@@ -83,18 +79,8 @@ namespace WingCommand
         }
 
         /// <summary>
-        /// Find the jammer station, and keep finding it.
-        ///
-        /// The resolution used to latch for the life of the aircraft, which is wrong because
-        /// the index is not stable: <c>CountermeasureManager.RegisterCountermeasure</c>
-        /// re-sorts the whole station list by display name every time a countermeasure
-        /// registers. A mid-mission rearm or refit that adds a station can therefore renumber
-        /// every index behind us, and the next pulse fires whatever now sits at the
-        /// remembered slot — dumping expendables instead of running ECM, at the one moment
-        /// the ECM was needed.
-        ///
-        /// Re-resolving on a slow cadence costs one walk of a list a few entries long, which
-        /// is nothing next to being wrong about it.
+        /// Periodically re-resolves the station: RegisterCountermeasure sorts the list by name,
+        /// so rearming can invalidate a cached index. Missing managers are retried.
         /// </summary>
         private void Resolve(Aircraft aircraft)
         {

@@ -13,7 +13,7 @@ namespace WingCommand
         private static int slicesRevision = -1;
 
         /// <summary>
-        /// The overlay wheel's ten cards.
+        /// The overlay wheel's six sectors.
         ///
         /// Rebuilt when <see cref="WingHost.Revision"/> moves rather than being a static
         /// initialiser, because the rejoin card names an order whose meaning a host profile
@@ -37,7 +37,7 @@ namespace WingCommand
                 WingHost.Current.IsSurfaceVehicle ? "ON STATION" : "REJOIN",
                 WingAction.Rejoin, "rejoin"),
             new RadialSlice(WingOrderCatalog.Label(WingOrder.Attack).ToUpperInvariant(),
-                WingHost.Current.IsSurfaceVehicle ? "PRIORITY LOCK" : "PRIORITY LOCK",
+                "PRIORITY LOCK",
                 WingAction.AttackMyTarget, "attack"),
             new RadialSlice(WingOrderCatalog.Label(WingOrder.Engage).ToUpperInvariant(),
                 WingHost.Current.IsSurfaceVehicle ? "CLOSE AIR SUPPORT" : "SEARCH & DESTROY",

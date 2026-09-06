@@ -172,7 +172,7 @@ namespace WingCommand
             // the pass below walks every weapon station and every airframe part for every
             // member, and none of the quantities it reads - fuel, ammunition, damage, cargo
             // - moves fast enough to notice the difference on a busy host.
-            nextReserveCheck = Time.timeSinceLevelLoad + WingBrain.Interval(1f);
+            nextReserveCheck = Time.timeSinceLevelLoad + WingFidelity.Interval(1f);
 
             for (int i = 0; i < members.Count; i++)
             {
@@ -363,10 +363,8 @@ namespace WingCommand
                 if (!assignedThisPass) break;
             }
 
-            // Aircraft beyond the useful simultaneous attack count remain as cover instead
-            // of queueing behind the same target and wasting the whole wing's weapons.
-            for (int i = 0; i < free.Count; i++)
-                free[i].Apply(WingOrder.Formation);
+            // Unallocated members keep their current orders. Limiting simultaneous
+            // attackers is not permission to erase another aircraft's route or RTB.
 
             return ordered;
         }

@@ -14,6 +14,23 @@ namespace WingCommand
     /// </summary>
     internal static class FormationSolver
     {
+        // A shape uses one scale. Per-slot scales can reverse trail ordering or put
+        // neighboring finger-four slots in the same place; the most cautious member
+        // sets the common spacing while each keeps its own control gains.
+        internal static float SharedFlightSpacing(IReadOnlyList<WingMember> members, Aircraft leader)
+        {
+            float scale = 0.85f;
+            bool found = false;
+            if (members != null)
+                foreach (WingMember member in members)
+                    if (member != null && member.Alive && !member.DeliveryPending && member.Leader == leader)
+                    {
+                        scale = WingFlightProfile.CombineSpacing(scale, member.FlightProfile.SpacingScale);
+                        found = true;
+                    }
+            return found ? scale : 1f;
+        }
+
         /// <summary>
         /// Cheap startup invariant check for every shape and supported slot. Geometry errors
         /// otherwise appear only in flight as two aircraft assigned the same piece of sky.
@@ -126,22 +143,6 @@ namespace WingCommand
             }
 
             return right * local.x + up * local.y + fwd * local.z;
-        }
-
-        /// <summary>
-        /// The signed lateral component of a slot, in metres: positive to the leader's
-        /// right, negative to its left.
-        ///
-        /// Turn compensation needs this separately from the full offset. In a turn a
-        /// formation flies concentric arcs about a common centre, so a wingman on the
-        /// outside must cover more ground than the leader and one on the inside less. The
-        /// correction is proportional to how far off the centreline the slot sits.
-        /// </summary>
-        public static float SlotLateral(int slot, FormationShape shape, float spacing,
-                                        float lateralScale = 1f)
-        {
-            if (slot <= 0) return 0f;
-            return FormationLayout.Slot(shape, slot).Lateral * spacing * lateralScale;
         }
 
         /// <summary>

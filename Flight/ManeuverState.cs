@@ -3,18 +3,7 @@ using UnityEngine;
 
 namespace WingCommand
 {
-    /// <summary>
-    /// Flies one scripted manoeuvre and then rejoins. Transient: it is never a resting
-    /// state, and every path out of it ends in <c>member.Complete(WingOrder.Formation)</c>.
-    ///
-    /// Two implementation styles live here. The level breaks and the wing waggle steer
-    /// through <c>AutoAim</c>, the same primitive the formation controller uses. The
-    /// aerobatic manoeuvres drive <see cref="ControlInputs"/> pitch/roll rate commands
-    /// through a per-kind phase machine, tracking progress by integrating the body rates
-    /// and confirming attitude with <see cref="FixedWingFormation.BankOf"/>. A hard radar
-    /// altitude floor and an overall timeout abort any manoeuvre wings-level rather than
-    /// letting a wingman fly a stunt into the ground.
-    /// </summary>
+    /// <summary>Native tactical turns and JSON aerobatics, bounded by entry gates, hard deck, and timeout.</summary>
     internal sealed class ManeuverState : WingPilotState
     {
         /// <summary>No manoeuvre may run longer than this before it is abandoned level.</summary>
@@ -27,6 +16,8 @@ namespace WingCommand
 
         private float startedAt;
         private int phase;
+        private float phaseStartedAt;
+        private ManeuverRecipe recipe;
         private float pitchIntegral;
         private float rollIntegral;
         private Vector3 entryForward = Vector3.forward;
@@ -60,6 +51,8 @@ namespace WingCommand
             parameters = aircraft.GetAircraftParameters();
             startedAt = Time.timeSinceLevelLoad;
             phase = 0;
+            phaseStartedAt = startedAt;
+            recipe = ManeuverCatalog.RotaryCapable(kind) ? null : ManeuverScriptLoader.Get(kind);
             pitchIntegral = 0f;
             rollIntegral = 0f;
             entryRadarAlt = aircraft.radarAlt;
@@ -81,7 +74,7 @@ namespace WingCommand
                 kind != ManeuverKind.WingWaggle &&
                 kind != ManeuverKind.NotchThreat &&
                 kind != ManeuverKind.MaskTerrain &&
-                !WingBrain.Manoeuvres)
+                !WingFidelity.Manoeuvres)
             {
                 Abort("aerobatics are off in Performance mode");
                 return;
@@ -158,12 +151,7 @@ namespace WingCommand
                 case ManeuverKind.NotchThreat: step = FlyNotch();          break;
                 case ManeuverKind.WingWaggle:  step = FlyWaggle();         break;
                 case ManeuverKind.MaskTerrain: step = FlyMaskTerrain();    break;
-                case ManeuverKind.Loop:        step = FlyLoop();           break;
-                case ManeuverKind.Immelmann:   step = FlyImmelmann();      break;
-                case ManeuverKind.SplitS:      step = FlySplitS();         break;
-                case ManeuverKind.BarrelRoll:  step = FlyBarrelRoll();     break;
-                case ManeuverKind.AileronRoll: step = FlyAileronRoll();    break;
-                default:                        step = Step.Done;          break;
+                default: step = FlyScript(); break;
             }
 
             if (step == Step.Done) Finish(unable: false, "complete");
@@ -442,240 +430,40 @@ namespace WingCommand
             return Step.Running;
         }
 
-        private Step FlyLoop()
+        private Step FlyScript()
         {
-            pitchIntegral += Mathf.Max(BodyPitchRate(), 0f) * Time.fixedDeltaTime;
-
-            if (aircraft.speed < parameters.maxSpeed * StallFraction &&
-                pitchIntegral < Mathf.PI * 1.5f)
+            if (recipe == null || aircraft.speed < parameters.maxSpeed * StallFraction)
             {
                 RecoverWingsLevel();
                 return Step.Failed;
             }
-
-            float bank = FixedWingFormation.BankOf(aircraft);
-            float rollCorrection = Mathf.Clamp(-bank * 0.04f - BodyRollRate() * 0.45f, -0.6f, 0.6f);
-
-            if (pitchIntegral < Mathf.PI)
-            {
-                // Climb into vertical: full afterburner/power and positive G pull.
-                controlInputs.throttle = 1f;
-                controlInputs.pitch = 1f;
-                controlInputs.roll = rollCorrection;
-                controlInputs.yaw = 0f;
-            }
-            else if (pitchIntegral < Mathf.PI * 1.75f)
-            {
-                // Downhill side: reduce throttle to prevent overspeeding and high-G compression.
-                controlInputs.throttle = 0.3f;
-                controlInputs.pitch = 1f;
-                controlInputs.roll = rollCorrection;
-                controlInputs.yaw = 0f;
-            }
-            else
-            {
-                // Level-off: restore throttle and taper pitch to ease smoothly into level flight.
-                float remaining = Mathf.Max(Mathf.PI * 2f - pitchIntegral, 0f);
-                float pitchRamp = Mathf.Clamp(remaining / (Mathf.PI * 0.25f), 0.1f, 1f);
-
-                controlInputs.throttle = 0.85f;
-                controlInputs.pitch = pitchRamp;
-                controlInputs.roll = Mathf.Clamp(-bank * 0.05f - BodyRollRate() * 0.5f, -1f, 1f);
-                controlInputs.yaw = 0f;
-
-                if (pitchIntegral >= Mathf.PI * 2f - 0.2f &&
-                    Mathf.Abs(aircraft.transform.forward.y) < 0.2f &&
-                    Mathf.Abs(bank) < 10f)
-                {
-                    RecoverWingsLevel();
-                    return Step.Done;
-                }
-            }
-
-            aircraft.FilterInputs();
-            return pitchIntegral >= Mathf.PI * 2f + 0.3f ? Step.Done : Step.Running;
-        }
-
-        private Step FlyImmelmann()
-        {
-            if (phase == 0)
-            {
-                // Pitch up through half-loop to inverted at apex.
-                controlInputs.throttle = 1f;
-                controlInputs.pitch = 1f;
-                float bank = FixedWingFormation.BankOf(aircraft);
-                controlInputs.roll = Mathf.Clamp(-bank * 0.035f - BodyRollRate() * 0.4f, -0.5f, 0.5f);
-                aircraft.FilterInputs();
-
-                pitchIntegral += Mathf.Max(BodyPitchRate(), 0f) * Time.fixedDeltaTime;
-
-                if (aircraft.speed < parameters.maxSpeed * StallFraction)
-                {
-                    RecoverWingsLevel();
-                    return Step.Failed;
-                }
-
-                if (pitchIntegral >= Mathf.PI - 0.3f)
-                {
-                    phase = 1;
-                    rollIntegral = 0f;
-                }
-                return Step.Running;
-            }
-
-            // Phase 1: Half a loop complete, inverted at altitude - roll upright smoothly.
-            float currentBank = FixedWingFormation.BankOf(aircraft);
-            float errorToLevel = Mathf.DeltaAngle(currentBank, 0f);
-
-            // Maintain enough nose-up elevator so the nose stays on the horizon during the roll.
-            controlInputs.throttle = 0.95f;
-            controlInputs.pitch = 0.25f;
-            controlInputs.roll = Mathf.Clamp(errorToLevel * 0.035f - BodyRollRate() * 0.45f, -1f, 1f);
-            aircraft.FilterInputs();
-
-            if (Mathf.Abs(errorToLevel) < 8f && Mathf.Abs(BodyRollRate()) < 0.25f)
-            {
-                RecoverWingsLevel();
-                return Step.Done;
-            }
-
-            return Step.Running;
-        }
-
-        private Step FlySplitS()
-        {
-            if (phase == 0)
-            {
-                // Phase 0: Roll inverted with roll-rate damping at idle power.
-                controlInputs.throttle = 0.2f;
-                controlInputs.pitch = 0f;
-
-                float bank = FixedWingFormation.BankOf(aircraft);
-                float errorToInverted = Mathf.DeltaAngle(bank, 180f);
-                controlInputs.roll = Mathf.Clamp(errorToInverted * 0.035f - BodyRollRate() * 0.4f, -1f, 1f);
-                aircraft.FilterInputs();
-
-                if (Mathf.Abs(errorToInverted) < 15f && Mathf.Abs(BodyRollRate()) < 0.5f)
-                {
-                    phase = 1;
-                    pitchIntegral = 0f;
-                }
-                return Step.Running;
-            }
-
-            if (phase == 1)
-            {
-                // Phase 1: Inverted half-loop downward.
-                controlInputs.throttle = 0.3f;
-                controlInputs.pitch = 1f;
-                controlInputs.roll = Mathf.Clamp(-BodyRollRate() * 0.45f, -0.4f, 0.4f);
-                aircraft.FilterInputs();
-
-                pitchIntegral += Mathf.Max(BodyPitchRate(), 0f) * Time.fixedDeltaTime;
-                if (pitchIntegral >= Mathf.PI - 0.35f)
-                {
-                    phase = 2;
-                }
-                return Step.Running;
-            }
-
-            // Phase 2: Pull out level, power up, and arrest descent.
+            var command = recipe.phases[phase];
+            float rollRate = BodyRollRate();
+            pitchIntegral += Mathf.Max(BodyPitchRate(), 0f) * Time.fixedDeltaTime * Mathf.Rad2Deg;
+            rollIntegral += Mathf.Abs(rollRate) * Time.fixedDeltaTime * Mathf.Rad2Deg;
+            float bankError = Mathf.DeltaAngle(FixedWingFormation.BankOf(aircraft), command.bankTarget);
             float noseY = aircraft.transform.forward.y;
-            float rollErr = Mathf.DeltaAngle(FixedWingFormation.BankOf(aircraft), 0f);
-
-            controlInputs.throttle = 1f;
-            controlInputs.pitch = Mathf.Clamp(0.5f - noseY * 1.5f, 0.1f, 1f);
-            controlInputs.roll = Mathf.Clamp(rollErr * 0.04f - BodyRollRate() * 0.45f, -1f, 1f);
+            controlInputs.throttle = command.throttle;
+            controlInputs.pitch = Mathf.Clamp(command.pitch - noseY * command.pitchLevelGain,
+                command.minPitch, command.maxPitch);
+            controlInputs.roll = Mathf.Clamp(command.roll + bankError * command.bankGain - rollRate * command.rollDamping,
+                -command.rollLimit, command.rollLimit);
+            controlInputs.yaw = 0f;
             aircraft.FilterInputs();
-
-            if (noseY >= -0.05f && Mathf.Abs(rollErr) < 8f && Mathf.Abs(BodyRollRate()) < 0.25f)
+            if (command.Complete(pitchIntegral, rollIntegral, Time.timeSinceLevelLoad - phaseStartedAt,
+                                 bankError, rollRate, noseY))
             {
-                RecoverWingsLevel();
-                return Step.Done;
-            }
-
-            return Step.Running;
-        }
-
-        private Step FlyAileronRoll()
-        {
-            controlInputs.throttle = Mathf.Clamp01(parameters.cruiseThrottle + 0.15f);
-
-            rollIntegral += Mathf.Abs(BodyRollRate()) * Time.fixedDeltaTime;
-
-            if (rollIntegral < Mathf.PI * 2f - 0.6f)
-            {
-                // Axial roll with waterline pitch bias.
-                controlInputs.pitch = 0.12f;
-                controlInputs.roll = 1f;
-            }
-            else
-            {
-                // Damped deceleration into wings level.
-                float rollError = Mathf.DeltaAngle(FixedWingFormation.BankOf(aircraft), 0f);
-                controlInputs.pitch = 0.05f;
-                controlInputs.roll = Mathf.Clamp(rollError * 0.04f - BodyRollRate() * 0.45f, -1f, 1f);
-
-                if (Mathf.Abs(rollError) < 8f && Mathf.Abs(BodyRollRate()) < 0.25f)
+                phase++;
+                pitchIntegral = rollIntegral = 0f;
+                phaseStartedAt = Time.timeSinceLevelLoad;
+                if (phase == recipe.phases.Length)
                 {
                     RecoverWingsLevel();
                     return Step.Done;
                 }
             }
-
-            aircraft.FilterInputs();
-            return rollIntegral >= Mathf.PI * 2f + 0.5f ? Step.Done : Step.Running;
-        }
-
-        private Step FlyBarrelRoll()
-        {
-            controlInputs.throttle = 1f;
-
-            if (phase == 0)
-            {
-                // Phase 0: Pitch up into initial climb.
-                controlInputs.pitch = 0.85f;
-                controlInputs.roll = 0.2f;
-                aircraft.FilterInputs();
-
-                if (aircraft.transform.forward.y > 0.22f || Time.timeSinceLevelLoad - startedAt > 0.5f)
-                {
-                    phase = 1;
-                    rollIntegral = 0f;
-                }
-                return Step.Running;
-            }
-
-            if (phase == 1)
-            {
-                // Phase 1: Coordinated corkscrew (constant positive G pitch + steady roll).
-                rollIntegral += Mathf.Abs(BodyRollRate()) * Time.fixedDeltaTime;
-                controlInputs.pitch = 0.55f;
-                controlInputs.roll = 0.8f;
-                aircraft.FilterInputs();
-
-                if (rollIntegral >= Mathf.PI * 2f - 0.5f)
-                {
-                    phase = 2;
-                }
-                return Step.Running;
-            }
-
-            // Phase 2: Smooth level-off and roll damping.
-            float rollError = Mathf.DeltaAngle(FixedWingFormation.BankOf(aircraft), 0f);
-            controlInputs.pitch = Mathf.Clamp(0.15f - aircraft.transform.forward.y * 0.5f, 0.05f, 0.4f);
-            controlInputs.roll = Mathf.Clamp(rollError * 0.04f - BodyRollRate() * 0.45f, -1f, 1f);
-            aircraft.FilterInputs();
-
-            if (Mathf.Abs(rollError) < 8f && Mathf.Abs(BodyRollRate()) < 0.25f)
-            {
-                RecoverWingsLevel();
-                return Step.Done;
-            }
-
             return Step.Running;
         }
-
         // ------------------------------------------------------------------ helpers
 
         private void RecoverWingsLevel()
@@ -701,7 +489,7 @@ namespace WingCommand
                     $"[Maneuver] {(aircraft != null ? aircraft.unitName : "?")} {kind} " +
                     (unable ? "unable" : "done") + " (" + reason + ")");
 
-            member.Complete(WingOrder.Formation);
+            CompleteTask(WingOrder.Formation);
         }
 
         private void Abort(string reason)

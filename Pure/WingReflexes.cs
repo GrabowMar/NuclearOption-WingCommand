@@ -23,7 +23,9 @@ namespace WingCommand
             WingAi.Register(new LeaderLost());
             WingAi.Register(new DeckHold());
             WingAi.Register(new LeashRecall());
+            WingAi.Register(new IdleCombatRejoin());
             WingAi.Register(new StandingTask());
+            WingInfluences.RegisterDefaults();
         }
 
         /// <summary>
@@ -39,7 +41,7 @@ namespace WingCommand
         /// on the apron. <c>IsCommandable</c> remains "alive and not pending" for automation
         /// that must not commandeer a taxiing airframe (bingo, cargo auto-run, flight lead).
         /// </summary>
-        private sealed class DeliveryHold : IWingReflex
+        private sealed class DeliveryHold : IWingReflex, IWingReflexLifecycle
         {
             public string Id => "wingcommand.delivery-hold";
             public WingReflexBand Band => WingReflexBand.Survival;
@@ -49,6 +51,8 @@ namespace WingCommand
 
             public float Score(in WingSituation s, bool incumbent) =>
                 s.DeliveryPending ? 1f : 0f;
+            public bool CanHold(in WingSituation s) => s.DeliveryPending;
+            public bool InterruptsMinimumHold => true;
         }
 
         /// <summary>
@@ -62,13 +66,16 @@ namespace WingCommand
         /// reflex it cannot be outranked by anything a future release or another plugin
         /// adds, because bands are compared before scores.
         /// </summary>
-        private sealed class MissileBreak : IWingReflex
+        private sealed class MissileBreak : IWingReflex, IWingReflexLifecycle
         {
             public string Id => "wingcommand.missile-break";
             public WingReflexBand Band => WingReflexBand.Survival;
             public string BehaviourId => WingBehaviours.MissileBreak;
             public float MinimumSeconds => WingTuning.PanicMinimumSeconds;
             public bool RequiresSmartMode => false;
+
+            public bool CanHold(in WingSituation s) => !s.DeliveryPending && s.RadarAlt >= WingTuning.PanicFloorAlt;
+            public bool InterruptsMinimumHold => false;
 
             public float Score(in WingSituation s, bool incumbent)
             {
@@ -95,13 +102,15 @@ namespace WingCommand
         /// station keeping (low and already in the slot) is left to the formation law's
         /// own ground bank cap.
         /// </summary>
-        private sealed class TerrainAbort : IWingReflex
+        private sealed class TerrainAbort : IWingReflex, IWingReflexLifecycle
         {
             public string Id => "wingcommand.terrain-abort";
             public WingReflexBand Band => WingReflexBand.Survival;
             public string BehaviourId => WingBehaviours.TerrainAbort;
             public float MinimumSeconds => 1.5f;
             public bool RequiresSmartMode => false;
+            public bool CanHold(in WingSituation s) => !s.DeliveryPending && TerrainAbortPolicy.AllowsAbort(s.Order);
+            public bool InterruptsMinimumHold => true;
 
             public float Score(in WingSituation s, bool incumbent) =>
                 TerrainAbortPolicy.ShouldAbort(
@@ -190,7 +199,7 @@ namespace WingCommand
         /// the engagement code, reading that directive, granted it autonomous-combat weapons
         /// authority from the slot with ROE bypassed entirely.
         /// </summary>
-        private sealed class LeashRecall : IWingReflex
+        private sealed class LeashRecall : IWingReflex, IWingReflexLifecycle
         {
             public string Id => "wingcommand.leash-recall";
             public WingReflexBand Band => WingReflexBand.Cohesion;
@@ -201,6 +210,9 @@ namespace WingCommand
             // forth every pass. The wide release threshold below is the other half of that.
             public float MinimumSeconds => WingTuning.LeashHoldSeconds;
             public bool RequiresSmartMode => false;
+            public bool CanHold(in WingSituation s) => !s.DeliveryPending && s.LeaderPresent &&
+                s.LeashRadius > 0f && WingOrderRules.SendsWingmanHunting(s.Order);
+            public bool InterruptsMinimumHold => false;
 
             public float Score(in WingSituation s, bool incumbent)
             {
@@ -221,6 +233,20 @@ namespace WingCommand
                 float over = (s.LeaderDistance - threshold) / s.LeashRadius;
                 return over < 0.02f ? 0.02f : over > 1f ? 1f : over;
             }
+        }
+
+        /// <summary>Regroup during a quiet fight without replacing the player's combat order.</summary>
+        private sealed class IdleCombatRejoin : IWingReflex
+        {
+            public string Id => "wingcommand.idle-combat-rejoin";
+            public WingReflexBand Band => WingReflexBand.Cohesion;
+            public string BehaviourId => WingBehaviours.Rejoin;
+            public float MinimumSeconds => 0f;
+            public bool RequiresSmartMode => false;
+            public float Score(in WingSituation s, bool incumbent) =>
+                s.LeaderPresent && !s.DeliveryPending &&
+                (s.Order == WingOrder.Engage || s.Order == WingOrder.Attack) &&
+                s.SecondsWithoutEngagement >= WingTuning.EngageIdleSeconds ? 0.25f : 0f;
         }
 
         /// <summary>

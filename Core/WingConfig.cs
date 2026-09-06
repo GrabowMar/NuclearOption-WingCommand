@@ -11,7 +11,7 @@ namespace WingCommand
         TextAndTone,
     }
 
-    /// <summary>How far the wing's own colouring reaches across the map and HUD.</summary>
+    /// <summary>How far wing outlines and HUD colouring reach across the displays.</summary>
     internal enum HighlightMode
     {
         Off,
@@ -31,7 +31,7 @@ namespace WingCommand
     /// allowed to do, and what you see of it.
     ///
     /// <see cref="Mode"/> is the one switch for cost. It gates the expensive behaviour in
-    /// <see cref="WingBrain"/> rather than asking the player to switch off manoeuvres,
+    /// <see cref="WingFidelity"/> rather than asking the player to switch off manoeuvres,
     /// jamming, deconfliction and chatter one at a time, which is what the old set did.
     /// </summary>
     internal class WingConfig
@@ -73,24 +73,18 @@ namespace WingCommand
 
         // --- Loadout ---
         public ConfigEntry<string> LoadoutTemplates { get; private set; }
+        public ConfigEntry<string> LoadoutInitializedAirframes { get; private set; }
 
         // --- UI ---
         public ConfigEntry<bool> ShowHud { get; private set; }
         public ConfigEntry<bool> UseMfdPanel { get; private set; }
         public ConfigEntry<bool> MapCommandEnabled { get; private set; }
-        public ConfigEntry<bool> FitMapToPanels { get; private set; }
         public ConfigEntry<HighlightMode> Highlight { get; private set; }
         public ConfigEntry<string> WingIconColor { get; private set; }
         public ConfigEntry<string> WingTargetColor { get; private set; }
         public ConfigEntry<bool> TacticalPauseInSingleplayer { get; private set; }
         public ConfigEntry<float> TacticalPauseScale { get; private set; }
         public ConfigEntry<bool> ExternalHitmarkerAudio { get; private set; }
-
-        // --- MFD ---
-        public ConfigEntry<float> MfdBackgroundOpacity { get; private set; }
-        public ConfigEntry<bool> MfdCheckeredGrid { get; private set; }
-        public ConfigEntry<bool> MfdCustomImageEnabled { get; private set; }
-        public ConfigEntry<string> MfdCustomImageFile { get; private set; }
 
         // --- Debug ---
         /// <summary>Carrier for the Debug category's one-line warning banner. Never read.</summary>
@@ -174,7 +168,6 @@ namespace WingCommand
             BindLoadout(c);
             BindKeys(c);
             BindUi(c);
-            BindMfd(c);
             BindDebug(c);
         }
 
@@ -290,7 +283,7 @@ namespace WingCommand
                 "shots about 12% faster than a rookie.");
             RankEffect = c.Bind("Pilot", "RankEffect", 1.0f,
                 new ConfigDescription(
-                    "Multiplier on the mechanical combat benefits of pilot rank (weapon reach and reaction cadence). Set to 0 for cosmetic progression only.",
+                    "Multiplier on pilot rank benefits (weapon reach, reaction cadence and formation control). Set to 0 for cosmetic progression only.",
                     new AcceptableValueRange<float>(0f, 2.0f)));
         }
 
@@ -316,6 +309,9 @@ namespace WingCommand
                 Advanced("Saved per-pylon loadout templates, written by the WMC LOADOUT tab. " +
                          "One record per template as airframe|id|name|store keys, records " +
                          "separated by semicolons. Clear this to delete every saved template."));
+            LoadoutInitializedAirframes = c.Bind("Loadout", "InitializedAirframes", "",
+                new ConfigDescription("Managed state: airframes whose default template has already been initialized.",
+                    null, new ConfigurationManagerAttributes { Browsable = false }));
         }
 
         private void BindKeys(ConfigFile c)
@@ -348,21 +344,14 @@ namespace WingCommand
                 "Add a WMC screen to the cockpit MFD bezel, alongside BDF/MAP/HUD.");
             MapCommandEnabled = c.Bind("UI", "MapCommands", true,
                 "Enable tactical wing selection and point tasking on the maximised map.");
-            // Same key and default as the row-layout version this replaced: renaming it
-            // would strand the old key in every existing config file.
-            FitMapToPanels = c.Bind("UI", "FitMapToPanels", true,
-                "Lay the maximised tactical map out in three columns - MFD panels on the left, " +
-                "the map enlarged in the centre, and every bezel button in one rail on the right. " +
-                "Off restores the stock centred map with a bezel column down each side.");
 
-            // Was three booleans that nobody wanted to set independently - the map and HUD
-            // tints are one decision seen from two places, and targets are a step further out.
+            // Map outlines and HUD tints share one identity setting.
             Highlight = c.Bind("UI", "Highlight", HighlightMode.WingAndTargets,
-                "How much of the wing gets its own colour. Wing tints your wingmen's icons " +
-                "and markers on both the map and the in-cockpit HUD; WingAndTargets also " +
+                "Wing outlines your wingmen's map icons and tints their in-cockpit HUD " +
+                "markers; WingAndTargets also " +
                 "marks the units they are engaging.");
             WingIconColor = c.Bind("UI", "WingMemberColor", "#39FF65",
-                Advanced("Hex colour for wingmen across the roster, tactical map and HUD. " +
+                Advanced("Hex colour for wingmen's roster markers, map outlines and HUD. " +
                          HexHelp, HexColour));
             WingTargetColor = c.Bind("UI", "WingTargetColor", "#FFB020",
                 Advanced("Hex colour for units your wing is engaging. " + HexHelp, HexColour));
@@ -374,20 +363,6 @@ namespace WingCommand
                     new AcceptableValueRange<float>(0f, 0.5f)));
             ExternalHitmarkerAudio = c.Bind("UI", "ExternalHitmarkerAudio", true,
                 "Play hitmarker audio confirmation when landing hits in 3rd-person external/orbit camera views.");
-        }
-
-        private void BindMfd(ConfigFile c)
-        {
-            MfdBackgroundOpacity = c.Bind("MFD", "BackgroundOpacity", 0.40f,
-                new ConfigDescription(
-                    "Opacity of the tactical MFD background (0.0 = fully transparent, 1.0 = solid opaque).",
-                    new AcceptableValueRange<float>(0f, 1f)));
-            MfdCheckeredGrid = c.Bind("MFD", "CheckeredGrid", false,
-                "Draw the checkered datum grid across the MFD background.");
-            MfdCustomImageEnabled = c.Bind("MFD", "CustomImageEnabled", false,
-                "Display a custom user-uploaded wallpaper image as the MFD background.");
-            MfdCustomImageFile = c.Bind("MFD", "CustomImageFile", "",
-                "Filename or path of user-uploaded wallpaper image in BepInEx/config/WingCommand/Backgrounds/.");
         }
 
         private void BindDebug(ConfigFile c)

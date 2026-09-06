@@ -5,7 +5,7 @@ using UnityEngine;
 namespace WingCommand
 {
     /// <summary>One AI aircraft under the player's command, plus the slot it holds.</summary>
-    internal class WingMember
+    internal partial class WingMember
     {
         public readonly Aircraft Aircraft;
         public readonly Pilot Pilot;
@@ -13,8 +13,11 @@ namespace WingCommand
 
         /// <summary>Distance to the assigned slot, in metres. Diagnostic only.</summary>
         public float SlotError;
+        public WingFlightProfile FlightProfile => brain.Flight;
 
-        public WingDirective Directive { get; private set; }
+        private readonly StandingOrder<WingDirective> standingOrder = new StandingOrder<WingDirective>(
+            WingDirective.Simple(WingOrder.Formation), (a, b) => a.SameIntentAs(in b));
+        public WingDirective Directive => standingOrder.Current;
         public WingOrder Order => Directive.Order;
 
         /// <summary>
@@ -54,36 +57,9 @@ namespace WingCommand
         private readonly DefensiveManeuverState defensiveState;
         private readonly ManeuverState maneuverState;
 
-        /// <summary>
-        /// What the arbiter last decided, and when it took effect. Together with
-        /// <see cref="Directive"/> these are the only two pieces of "what is this wingman
-        /// doing" state — intent and behaviour. Every temporary override used to add a third
-        /// (a bool, a set, a duplicated directive); now they are all reflexes and this is
-        /// the single record of which one is winning.
-        /// </summary>
-        private WingResolution resolution;
-        private float behaviourEnteredAt;
-
-        /// <summary>
-        /// Bumped whenever the standing directive changes. The Task behaviour has to be
-        /// re-entered when the order under it changes even though the winning reflex has
-        /// not, and comparing serials is how that is noticed.
-        /// </summary>
-        private int directiveSerial;
-        private int enteredSerial = -1;
-
-        /// <summary>
-        /// Set by a state that finished its own task. Resolution is deferred to the next
-        /// tick rather than run inline, because these calls arrive from inside
-        /// <c>FixedUpdateState</c> and switching a pilot state from within its own update is
-        /// the re-entrancy hazard <see cref="ManeuverState"/> already had to guard against
-        /// by hand.
-        /// </summary>
-        private bool resolvePending;
-
-        private float nextResolve;
-        private float lastMissileWarnAt = float.NegativeInfinity;
-        private bool everWarned;
+        private readonly WingMemberBrain brain = new WingMemberBrain();
+        private int directiveSerial => standingOrder.Revision;
+        internal int OrderRevision => directiveSerial;
 
         private readonly float joinedAt;
         private WingRegistry owner;
@@ -155,7 +131,6 @@ namespace WingCommand
             defensiveState = new DefensiveManeuverState(this);
             maneuverState = new ManeuverState(this);
             joinedAt = Time.timeSinceLevelLoad;
-            Directive = WingDirective.Simple(WingOrder.Formation);
             lastIntegrity = Integrity;
         }
 
@@ -243,15 +218,23 @@ namespace WingCommand
         /// <c>FixedUpdateState</c>, and switching a pilot state from within its own update
         /// is the re-entrancy that every self-completing state used to risk.
         /// </summary>
-        internal void Complete(WingDirective directive)
+        internal void Complete(WingDirective directive) => CompleteOrder(directive, null);
+
+        internal void CompleteFrom(WingPilotState source, WingDirective directive)
+        {
+            if (source == null || !ReferenceEquals(Pilot?.currentState, source)) return;
+            CompleteOrder(directive, source.OrderRevision);
+        }
+
+        private void CompleteOrder(WingDirective directive, int? startedRevision)
         {
             if (deliveryPending) return;
+            // Check ownership before changing either the payload or its waypoint queue.
+            if (!SetDirective(directive, startedRevision)) return;
 
             TacticalCoordinator.Release(Aircraft);
             if (directive.Order != WingOrder.MoveToPoint) waypointQueue.Clear();
-
-            SetDirective(directive);
-            resolvePending = true;
+            brain.RequestEvaluation();
         }
 
         /// <summary>Finish the current task and fall back to holding the slot.</summary>
@@ -263,533 +246,43 @@ namespace WingCommand
         /// behaviour, so bumping it for an identical order is what made a re-issued Form Up
         /// restart the formation state and fire the rejoin boost.
         /// </summary>
-        private void SetDirective(WingDirective directive)
+        private bool SetDirective(WingDirective directive, int? startedRevision = null)
         {
+            bool changed;
+            if (startedRevision.HasValue)
+            {
+                if (!standingOrder.TryComplete(startedRevision.Value, directive, out changed)) return false;
+            }
+            else changed = standingOrder.Set(directive);
+            if (!changed) return true;
             RefitPending = false;
-            if (Directive.SameIntentAs(in directive)) return;
-
-            Directive = directive;
-            directiveSerial++;
             TacticalMapOverlay.Invalidate();
+            return true;
         }
 
-        // ------------------------------------------------------------------- arbitration
-
-        /// <summary>
-        /// The one place this wingman decides what to fly. Called once per frame from the
-        /// wing's update.
-        ///
-        /// Everything that used to reach in and switch a pilot state on its own - the
-        /// missile check, the leash check, the leader-on-deck sweep, the delivery lockout -
-        /// now arrives as a reflex score and is compared against the others in one pass.
-        /// </summary>
-        public void Tick()
-        {
-            if (!Alive) return;
-            Resolve(force: false);
-        }
-
-        private void Resolve(bool force)
-        {
-            if (Pilot == null || Aircraft == null) return;
-
-            bool warned = MissileWarned;
-            float now = Time.timeSinceLevelLoad;
-
-            if (warned)
-            {
-                lastMissileWarnAt = now;
-                everWarned = true;
-            }
-
-            // Performance mode coarsens arbitration, but never while something is shooting
-            // at us: the survival band is exempt from the stride for the same reason the
-            // defensive state's own threat refresh is exempt from WingBrain.Interval.
-            if (!force && !resolvePending && !warned && !IsPanicking)
-            {
-                if (now < nextResolve) return;
-            }
-            nextResolve = now + (WingBrain.Full ? 0f : WingBrain.Interval(0.25f));
-            resolvePending = false;
-
-            // With verbose logging on, ask for the whole ladder rather than just the winner.
-            // A behaviour system whose decisions cannot be inspected is one that gets
-            // debugged by guessing, and this one is meant to be extended.
-            List<WingReflexTrace> trace = Plugin.Settings.VerboseLogging.Value
-                ? traceBuffer ??= new List<WingReflexTrace>()
-                : null;
-
-            WingSituation situation = Sample(warned, now);
-            WingResolution next = WingArbiter.Resolve(
-                in situation, resolution.ReflexId, WingBrain.Full, WingAi.Reflexes, trace);
-
-            bool behaviourChanged = !next.SameAs(in resolution);
-            bool taskNeedsReentry = next.BehaviourId == WingBehaviours.Task &&
-                                    enteredSerial != directiveSerial;
-
-            if (!behaviourChanged && !taskNeedsReentry) return;
-
-            // Coming out of a missile break. Handled here rather than in the defensive
-            // state's LeaveState for two reasons: LeaveState ran one step too late, after
-            // EnterTask had already read the stale directive and entered it, so an
-            // interrupted manoeuvre was started for a tick - radio call and all - before
-            // being pulled back; and LeaveState also fires on teardown, so a wingman being
-            // released or sent home announced itself clear of a missile on the way out.
-            if (behaviourChanged && resolution.BehaviourId == WingBehaviours.MissileBreak)
-            {
-                WingComms.Say(this, WingComms.Call.DefensiveClear);
-                RetireStaleOrder();
-            }
-
-            if (behaviourChanged) behaviourEnteredAt = now;
-            resolution = next;
-            enteredSerial = directiveSerial;
-
-            EnterBehaviour(next.BehaviourId);
-
-            if (trace != null && behaviourChanged)
-                Plugin.Logger.LogInfo($"[Wing] {Name} {next}  |  {Ladder(trace)}");
-        }
-
-        private List<WingReflexTrace> traceBuffer;
-
-        /// <summary>
-        /// The whole ladder on one line: who scored what, and who won. Reads as
-        /// <c>survival:missile-break=0.90* safety:deck-hold=0.00 task:standing-task=1.00</c>.
-        /// </summary>
-        private static string Ladder(List<WingReflexTrace> trace)
-        {
-            var sb = new System.Text.StringBuilder();
-            for (int i = 0; i < trace.Count; i++)
-            {
-                WingReflexTrace t = trace[i];
-                if (i > 0) sb.Append(' ');
-                sb.Append(t.Band).Append(':').Append(Short(t.Id))
-                  .Append('=').Append(t.Score.ToString("0.00"));
-                if (t.Won) sb.Append('*');
-            }
-            return sb.ToString();
-        }
-
-        /// <summary>Drop the owning plugin's prefix; the log line already says whose wing it is.</summary>
-        private static string Short(string id)
-        {
-            int dot = id.LastIndexOf('.');
-            return dot >= 0 && dot < id.Length - 1 ? id.Substring(dot + 1) : id;
-        }
-
-        private WingSituation Sample(bool warned, float now)
-        {
-            Aircraft leader = Leader;
-            float leaderDistance = -1f;
-            if (leader != null && !leader.disabled)
-            {
-                leaderDistance = Mathf.Sqrt(
-                    FastMath.SquareDistance(Aircraft.GlobalPosition(), leader.GlobalPosition()));
-            }
-
-            RefreshSlowSamples(now);
-
-            AircraftParameters p = Aircraft.GetAircraftParameters();
-            float takeoffSpeed = p != null ? p.takeoffSpeed : 70f;
-            bool isRotary = WingRegistry.IsRotary(Aircraft);
-
-            return new WingSituation(
-                order: Order,
-                roe: RoeRules.Current,
-                deliveryPending: deliveryPending,
-                missileWarned: warned,
-                secondsSinceMissileWarning: everWarned ? now - lastMissileWarnAt : 999f,
-                leaderOnDeck: owner != null && owner.LeaderOnDeck,
-                leaderPresent: leaderDistance >= 0f,
-                targetAlive: AssignedTarget != null && !AssignedTarget.disabled,
-                leaderDistance: leaderDistance,
-                leashRadius: Plugin.Settings != null ? Plugin.Settings.LeashDistance.Value : WingTuning.LeashRadius,
-                radarAlt: Aircraft.radarAlt,
-                memberIsSurface: IsSurface,
-                memberIsRotary: isRotary,
-                airspeed: Aircraft.speed,
-                takeoffSpeed: takeoffSpeed,
-                fuel: sampledFuel,
-                ammo: sampledAmmo,
-                integrity: sampledIntegrity,
-                secondsInBehaviour: now - behaviourEnteredAt);
-        }
-
-        private int sampledAmmo = 1;
-        private float sampledIntegrity = 1f;
-        private float sampledFuel = 1f;
-        private float nextSlowSample;
-
-        /// <summary>
-        /// The three expensive fields of the situation, refreshed on a slow timer.
-        ///
-        /// Each of them walks a collection: ammunition every weapon station, condition every
-        /// airframe part, and fuel every tank twice over — <c>Aircraft.GetFuelLevel</c> sums
-        /// capacity and level across the lot on every call. None of the three moves fast
-        /// enough to be worth that per member per frame.
-        ///
-        /// No built-in reflex reads any of them. They are sampled anyway because a
-        /// third-party one reasonably might, and an extension point that offers only the
-        /// cheap fields is a worse extension point.
-        /// </summary>
-        private void RefreshSlowSamples(float now)
-        {
-            if (now < nextSlowSample) return;
-            nextSlowSample = now + WingBrain.Interval(1f);
-
-            sampledAmmo = Ammo;
-            sampledIntegrity = Integrity;
-            sampledFuel = Fuel;
-        }
-
-        /// <summary>True when a missile is airborne and this aircraft is its target.</summary>
-        private bool MissileWarned
-        {
-            get
-            {
-                MissileWarning warning = Aircraft != null
-                    ? Aircraft.GetMissileWarningSystem()
-                    : null;
-                return warning != null && warning.IsWarning();
-            }
-        }
-
-        /// <summary>
-        /// Put the resolved behaviour on the aircraft. The only caller of
-        /// <c>Pilot.SwitchState</c> (through <see cref="SwitchTo"/>) for a commandable
-        /// wingman, which is what makes the
-        /// behaviour graph describable at all.
-        /// </summary>
-        private void EnterBehaviour(string behaviourId)
-        {
-            // A surface member takes one behaviour whatever the arbiter picked. Every case
-            // below steers through the autopilot it does not have, and the bands above Task
-            // - a missile break, a deck hold, a leash recall - would each route it into one.
-            // Where it should actually go is published through WingSurface, which reads the
-            // same directive the cases below read.
-            if (IsSurface)
-            {
-                if (WingBehaviourCatalog.TryEnter(this, WingBehaviours.Surface)) return;
-
-                WarnSurfaceUnhandled();
-                return;
-            }
-
-            switch (behaviourId)
-            {
-                case WingBehaviours.Held:
-                    EnterHeld();
-                    return;
-
-                case WingBehaviours.MissileBreak:
-                    TacticalCoordinator.Release(Aircraft);
-                    SwitchTo(defensiveState);
-                    return;
-
-                case WingBehaviours.DeckHold:
-                    EnterDeckHold();
-                    return;
-
-                case WingBehaviours.TerrainAbort:
-                    TacticalCoordinator.Release(Aircraft);
-                    SwitchTo(terrainAbortState);
-                    return;
-
-                case WingBehaviours.Rejoin:
-                    // Unconditional, unlike the Formation task above: this behaviour exists
-                    // precisely because the wingman is a long way out, so it wants the boost
-                    // whether or not it was already nominally holding a slot.
-                    WingComms.Say(this, WingComms.Call.Rejoining);
-                    SwitchTo(formationState);
-                    formationState.BoostRejoin(0f);
-                    return;
-
-                case WingBehaviours.Task:
-                    EnterTask();
-                    return;
-
-                default:
-                    // A third-party behaviour id. Registered states are looked up here; an
-                    // unknown one falls back to the standing order rather than leaving the
-                    // aircraft in whatever state it happened to be flying.
-                    if (WingBehaviourCatalog.TryEnter(this, behaviourId)) return;
-                    Plugin.Logger.LogWarning(
-                        $"[Wing] {Name}: no behaviour registered for '{behaviourId}'; flying the order instead.");
-                    EnterTask();
-                    return;
-            }
-        }
-
-        /// <summary>
-        /// Give the airframe back to whatever the game would be flying.
-        ///
-        /// The contract for <see cref="WingBehaviours.Held"/> is "hands off entirely", and
-        /// this used to implement it by returning without doing anything — correct only
-        /// because the one reflex producing it is the delivery lockout, whose aircraft was
-        /// still under the stock taxi AI and had never been taken over in the first place.
-        /// Any other reflex resolving to Held got the mod's own formation or attack state
-        /// still flying the aircraft while the log said it had been released; a third-party
-        /// one, which the catalog explicitly invites, would have hit exactly that.
-        ///
-        /// A delivery still on the apron is left strictly alone — switching a parked pilot
-        /// into a combat state is the one thing worse than not handing off.
-        /// </summary>
-        private void EnterHeld()
-        {
-            if (deliveryPending) return;
-
-            TacticalCoordinator.Release(Aircraft);
-            SwitchToCombat();
-        }
-
-        /// <summary>
-        /// Orbit overhead while the leader is on the runway, or while there is no leader to
-        /// form on at all. The standing directive is left alone - it used to be overwritten
-        /// with an OrbitHere order, which is why the panel showed an order the player had
-        /// never given.
-        /// </summary>
-        private void EnterDeckHold()
-        {
-            Aircraft leader = Leader;
-            GlobalPosition anchor = leader != null
-                ? leader.GlobalPosition()
-                : Aircraft.GlobalPosition();
-
-            // Tracking, not captured: this behaviour is entered once, and a leader that
-            // lands at one end of a runway then taxis to a hangar would otherwise leave the
-            // wing circling the touchdown point. With no leader at all there is nothing to
-            // track, so the aircraft holds where it is.
-            orbitState.SetAnchor(anchor, WingTuning.OrbitRadius, trackLeader: leader != null);
-            SwitchTo(orbitState);
-        }
-
-        /// <summary>Fly the standing order. The old Apply switch, unchanged in substance.</summary>
-        private void EnterTask()
-        {
-            switch (Directive.Order)
-            {
-                case WingOrder.Formation:
-                    // Boost only on a genuine arrival. Retiring a Splash 'Em or a Jam order
-                    // lands here on an aircraft that is already flying its slot, and it has
-                    // nothing to hurry back to.
-                    if (SwitchTo(formationState))
-                        formationState.BoostRejoin(Slot * WingTuning.RejoinStagger);
-                    break;
-
-                case WingOrder.Engage:
-                    SwitchToCombat();
-                    break;
-
-                case WingOrder.ReturnToBase:
-                    SwitchToLanding();
-                    break;
-
-                case WingOrder.FallBack:
-                    SwitchTo(fallBackState);
-                    break;
-
-                case WingOrder.OrbitHere:
-                    EnterOrbit(Directive);
-                    break;
-
-                case WingOrder.DeliverCargo:
-                    EnterCargoRun(Directive);
-                    break;
-
-                case WingOrder.LandHere:
-                    EnterLanding(Directive);
-                    break;
-
-                case WingOrder.MoveToPoint:
-                    EnterWaypoint(Directive);
-                    break;
-
-                case WingOrder.Attack:
-                case WingOrder.FireForEffect:
-                    // Splash 'Em used to hold the slot and shoot from there. That works for
-                    // a fighter with a gun or a missile already on the nose; a bomber in
-                    // formation is looking at the leader, not the target, so ShotIsValid
-                    // refused every pickle and FinishSplash sent it "back" to Form Up
-                    // without ever firing. An expend order is a run-in.
-                    EnterAttack(Directive);
-                    break;
-
-                case WingOrder.JamTarget:
-                    EnterSlotTask();
-                    break;
-
-                case WingOrder.Maneuver:
-                    maneuverState.SetManeuver(Directive.Maneuver);
-                    SwitchTo(maneuverState);
-                    break;
-            }
-        }
-
-        /// <summary>
-        /// Which extra job this wingman is working from its slot. Read by
-        /// <see cref="FormationFlyState"/> in place of the order itself, so one state stops
-        /// having to infer which of its three behaviours it is supposed to be running.
-        /// </summary>
-        public SlotTask SlotTask
-        {
-            get
-            {
-                if (AssignedTarget == null || AssignedTarget.disabled) return SlotTask.None;
-                if (Order == WingOrder.FireForEffect) return SlotTask.Splash;
-                if (Order == WingOrder.JamTarget) return SlotTask.Jam;
-                return SlotTask.None;
-            }
-        }
-
-        /// <summary>Hold over the named point, or over the leader when none was given.</summary>
-        private void EnterOrbit(WingDirective directive)
-        {
-            Aircraft leader = Leader;
-            GlobalPosition anchor = directive.HasPoint
-                ? directive.Point
-                : leader != null
-                    ? leader.GlobalPosition()
-                    : Aircraft.GlobalPosition();
-
-            orbitState.SetAnchor(anchor, WingTuning.OrbitRadius);
-            SwitchTo(orbitState);
-        }
-
-        /// <summary>
-        /// Two routes, and the difference is whether the player named a place.
-        ///
-        /// With a drop point, CargoRunState flies there and releases — the same shape as
-        /// Hold and Land, and available to any airframe carrying a load rather than only to
-        /// helicopters.
-        ///
-        /// Without one, the stock transport state configures itself in EnterState — nearest
-        /// airbase, nearest known ground enemy, landing zone search — so it remains a
-        /// complete supply-run behaviour for the cost of a state switch, and is what the
-        /// order has always done.
-        ///
-        /// Neither reports back on its own. CheckCargoRun watches the cargo station itself,
-        /// which is the only ground truth available, and either calls the delivery or gives
-        /// the airframe back.
-        /// </summary>
-        private void EnterCargoRun(WingDirective directive)
-        {
-            cargoProgress.Reset(CargoAmmo, Time.timeSinceLevelLoad);
-
-            if (directive.HasPoint)
-            {
-                cargoRunState.SetDestination(directive.Point);
-                SwitchTo(cargoRunState);
-                return;
-            }
-
-            if (Pilot.AIHeloTransportState != null)
-            {
-                SwitchTo(Pilot.AIHeloTransportState);
-                return;
-            }
-
-            // A fixed-wing transport has no stock supply route to fall back on, so say which
-            // half of the order is missing rather than silently doing nothing with a load
-            // aboard.
-            WingCommandManager.Instance?.Toast(
-                Name + " needs a drop point - it has no standard supply route");
-
-            // Complete, not Apply: this runs inside EnterTask, which runs inside
-            // EnterBehaviour, which runs inside Resolve. Apply would re-enter Resolve from
-            // the middle of itself.
-            Complete(WingOrder.Formation);
-        }
-
-        private void EnterLanding(WingDirective directive)
-        {
-            if (directive.HasPoint) landState.SetDestination(directive.Point);
-            else landState.ClearDestination();
-            SwitchTo(landState);
-        }
-
-        private void EnterWaypoint(WingDirective directive)
-        {
-            if (!directive.HasPoint)
-            {
-                // See EnterCargoRun: Apply here would recurse into Resolve.
-                Complete(WingOrder.Formation);
-                return;
-            }
-
-            waypointState.SetDestination(directive.Point);
-            SwitchTo(waypointState);
-        }
-
-        /// <summary>
-        /// Reached only if something re-applies a standing attack order. AttackTarget is the
-        /// normal entry point and sets the target first.
-        /// </summary>
-        private void EnterAttack(WingDirective directive)
-        {
-            if (AssignedTarget != null && !AssignedTarget.disabled)
-            {
-                SwitchTo(attackState);
-            }
-            else
-            {
-                // The target died. Retire the order rather than flying formation under a
-                // standing Attack directive, which would still read as explicit weapons
-                // authority to the engagement code.
-                Complete(WingOrder.Formation);
-            }
-        }
-
-        /// <summary>
-        /// Jam Target: hold the slot and work the designated unit from where we are.
-        /// Splash 'Em used to share this path and never pickled a bomber; it now flies an
-        /// attack run. FormationFlyState still reads <see cref="SlotTask"/> for jam.
-        ///
-        /// No rejoin boost. The wingman is already in its slot, so hurrying it back to a
-        /// place it has not left only produced a visible surge every time a target was
-        /// designated.
-        /// </summary>
-        private void EnterSlotTask()
-        {
-            if (AssignedTarget != null && !AssignedTarget.disabled)
-            {
-                SwitchTo(formationState);
-            }
-            else
-            {
-                Complete(WingOrder.Formation);
-            }
-        }
-
-        private Dictionary<string, PilotBaseState> extraBehaviours;
-
-        /// <summary>
-        /// The pilot state for a third-party behaviour on this wingman, built on first use
-        /// and cached for the life of the member — the same lifetime the built-in states get
-        /// from the constructor.
-        /// </summary>
-        internal PilotBaseState CachedBehaviour(string behaviourId,
-                                                Func<Aircraft, PilotBaseState> factory)
-        {
-            extraBehaviours ??= new Dictionary<string, PilotBaseState>(StringComparer.Ordinal);
-
-            if (!extraBehaviours.TryGetValue(behaviourId, out PilotBaseState state))
-            {
-                state = factory(Aircraft);
-                extraBehaviours[behaviourId] = state;
-            }
-            return state;
-        }
-
-        /// <summary>Release vanilla ownership after its pilot has completed takeoff.</summary>
+        /// <summary>Release launch ownership once safely airborne, without waiting for cruise altitude.</summary>
         internal bool ActivateWhenAirborne()
         {
             if (!deliveryPending) return false;
-            if (Aircraft == null || !Aircraft.LocalSim || Pilot == null || Pilot.flightInfo == null ||
-                !Pilot.flightInfo.HasTakenOff) return false;
+            if (!Alive || !Aircraft.LocalSim || Pilot.flightInfo == null ||
+                Time.timeSinceLevelLoad - joinedAt < 0.25f) return false;
+            bool takingOff = Pilot.currentState is AIPilotTakeoffState ||
+                             Pilot.currentState is AIHeloTakeoffState;
+            AircraftParameters parameters = Aircraft.GetAircraftParameters();
+            Vector3 airVelocity = Aircraft.rb != null ? Aircraft.rb.velocity : Vector3.zero;
+            LevelInfo level = NetworkSceneSingleton<LevelInfo>.i;
+            if (level != null) airVelocity -= level.GetWind(Aircraft.GlobalPosition());
+            if (!IsSurface && !LaunchSafety.CanHandOff(Pilot.flightInfo.HasTakenOff, takingOff,
+                WingRegistry.IsRotary(Aircraft), Aircraft.radarAlt, airVelocity.magnitude,
+                parameters != null ? parameters.takeoffSpeed : 0f)) return false;
 
+            Pilot.flightInfo.HasTakenOff = true;
             deliveryPending = false;
-            Apply(Directive);
+            WingDepartureChatter.Activated(this);
+            // Resolve the retained order without treating liftoff as a new player
+            // command or resetting the queued task's clocks.
+            brain.RequestEvaluation();
+            Resolve(force: true);
             Plugin.Logger.LogInfo("[Wing] " + Name + " vanilla takeoff handoff; flying " + Order);
             return true;
         }
@@ -1026,17 +519,17 @@ namespace WingCommand
         /// missile defence.
         /// </summary>
         public bool IsPanicking =>
-            resolution.BehaviourId == WingBehaviours.MissileBreak;
+            brain.Current.BehaviourId == WingBehaviours.MissileBreak;
 
         /// <summary>Which reflex is in control, for the panel and the debug overlay.</summary>
-        internal WingResolution Behaviour => resolution;
+        internal WingResolution Behaviour => brain.Current;
 
         /// <summary>
         /// What this wingman may shoot at, given what it is actually doing rather than what
         /// it was last told to do. The two differ whenever a reflex has the controls.
         /// </summary>
         internal OrderEngagementAuthority EngagementAuthority =>
-            OrderRoePolicy.AuthorityFor(resolution.BehaviourId, Order);
+            OrderRoePolicy.AuthorityFor(brain.Current.BehaviourId, Order);
 
         /// <summary>Fuel remaining, 0-1.</summary>
         public float Fuel => Aircraft != null ? Aircraft.GetFuelLevel() : 0f;
@@ -1116,8 +609,10 @@ namespace WingCommand
         public IReadOnlyList<GlobalPosition> Route => waypointQueue;
 
         /// <summary>Advance a route, then resolve the wing's ROE at its final endpoint.</summary>
-        internal void CompleteWaypoint()
+        internal void CompleteWaypoint(WingPilotState source)
         {
+            if (source == null || !ReferenceEquals(Pilot?.currentState, source) ||
+                source.OrderRevision != directiveSerial) return;
             if (waypointQueue.Count > 0) waypointQueue.RemoveAt(0);
 
             if (waypointQueue.Count > 0)
@@ -1185,23 +680,24 @@ namespace WingCommand
         private float engageActivityAt;
 
         /// <summary>
-        /// Give an open-ended fight an ending.
+        /// Sample activity for temporary regrouping during an open-ended fight.
         ///
         /// An <see cref="WingOrder.Engage"/> hands the wingman to the stock combat AI with no
         /// completion condition of its own, and an <see cref="WingOrder.Attack"/> whose
-        /// target has drifted out of reach keeps circling. Both should simply come home to
-        /// the formation and await the next order once there is nothing left to prosecute:
+        /// target has drifted out of reach keeps circling. Both should return to
+        /// formation while there is nothing left to prosecute:
         /// no live designated target we can still hurt, and no threat within engage range of
         /// us or the leader for <see cref="WingTuning.EngageIdleSeconds"/>.
         ///
         /// Runs on the same once-a-second housekeeping pass as <see cref="CheckReserves"/>;
-        /// the timeout is long enough that a lull between merges does not send the wing home.
+        /// the timeout bridges brief lulls. The arbiter retains the combat directive so
+        /// activity can resume it without another player order.
         /// </summary>
         internal void CheckEngageIdle()
         {
             float now = Time.timeSinceLevelLoad;
 
-            if ((Order != WingOrder.Engage && Order != WingOrder.Attack) || IsPanicking)
+            if (!IsCommandable || (Order != WingOrder.Engage && Order != WingOrder.Attack) || IsPanicking)
             {
                 engageActivityAt = now;
                 return;
@@ -1221,11 +717,8 @@ namespace WingCommand
                 return;
             }
 
-            if (now - engageActivityAt >= WingTuning.EngageIdleSeconds)
-            {
-                WingComms.Say(this, WingComms.Call.Rejoining);
-                Apply(WingOrder.Formation);
-            }
+            // The idle-combat reflex regroups temporarily. Keep the actual target/order
+            // so a newly available engagement resumes it without another player command.
         }
 
         /// <summary>
@@ -1248,97 +741,6 @@ namespace WingCommand
             if (stale) Complete(WingOrder.Formation);
         }
 
-        /// <summary>The pilot state we last put this aircraft into.</summary>
-        private PilotBaseState enteredState;
-
-        /// <summary>
-        /// Switch, unless the aircraft is already flying this exact state. Returns true when
-        /// a switch actually happened.
-        ///
-        /// The guard matters because a behaviour can be re-entered without changing: the
-        /// arbiter re-runs the standing task whenever the directive underneath it changes,
-        /// and several orders are flown by the same state. Finishing a Splash 'Em retires
-        /// the order to Formation, which is flown by the state already running — and
-        /// re-entering it ran <c>EnterState</c> again, resetting the whole leader filter
-        /// bank and arming an eight-second wide-open-throttle rejoin boost on an aircraft
-        /// that had never left its slot. That surge is exactly what the Splash 'Em work set
-        /// out to remove, and it survived two attempts at removing it.
-        ///
-        /// Tracking our own last switch is sufficient because nothing else switches a
-        /// commandable wingman; the two greps in the plan hold that line.
-        /// </summary>
-        private bool SwitchTo(PilotBaseState state)
-        {
-            if (state == null || ReferenceEquals(state, enteredState)) return false;
-
-            // The one guard that makes a surface member safe. Every built-in state, and both
-            // of the game's own AI combat states, steer through Autopilot.AutoAim - twenty
-            // of those call sites are unguarded, and a null autopilot classifies as rotary,
-            // so a hull reaching any of them is a NullReferenceException on the first fixed
-            // update. Refusing here makes all of them unreachable without touching one.
-            if (IsSurface && !enteringRegisteredBehaviour) return false;
-
-            enteredState = state;
-            Pilot.SwitchState(state);
-            return true;
-        }
-
-        // Set only while WingBehaviourCatalog is installing a registered behaviour - the one
-        // route a surface member is allowed through, because a registered state is the only
-        // kind that was written knowing there is no autopilot.
-        private bool enteringRegisteredBehaviour;
-
-        /// <summary>
-        /// Install a behaviour that came from <see cref="WingBehaviourCatalog"/>.
-        ///
-        /// Routed through <see cref="SwitchTo"/> rather than calling <c>Pilot.SwitchState</c>
-        /// directly, so a registered behaviour gets the same re-entry protection everything
-        /// else does. It previously did not, which meant re-resolving to the same registered
-        /// behaviour re-ran its EnterState every pass.
-        /// </summary>
-        internal bool SwitchToRegistered(PilotBaseState state)
-        {
-            enteringRegisteredBehaviour = true;
-            try { return SwitchTo(state); }
-            finally { enteringRegisteredBehaviour = false; }
-        }
-
-        private bool surfaceUnhandledReported;
-
-        private void WarnSurfaceUnhandled()
-        {
-            if (surfaceUnhandledReported) return;
-            surfaceUnhandledReported = true;
-
-            Plugin.Logger.LogWarning(
-                $"[Wing] {Name} has no autopilot and nothing is registered for " +
-                $"'{WingBehaviours.Surface}'. It will hold its position until a plugin " +
-                "supplies a surface behaviour.");
-        }
-
-        private void SwitchToCombat()
-        {
-            if (Pilot == null) return;
-
-            if (Pilot.AICombatState != null)
-                SwitchTo(Pilot.AICombatState);
-            else if (Pilot.AIHeloCombatState != null)
-                SwitchTo(Pilot.AIHeloCombatState);
-            else
-                Plugin.Logger.LogWarning($"[Wing] {Name} has no combat state to return to.");
-        }
-
-        private void SwitchToLanding()
-        {
-            if (Pilot == null) return;
-
-            if (Pilot.AILandingState != null)
-                SwitchTo(Pilot.AILandingState);
-            else if (Pilot.AIHeloLandingState != null)
-                SwitchTo(Pilot.AIHeloLandingState);
-            else
-                SwitchToCombat();
-        }
     }
 
 }

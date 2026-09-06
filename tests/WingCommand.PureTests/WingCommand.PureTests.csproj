@@ -9,6 +9,7 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <None Include="..\..\Assets\maneuvers.json" Link="maneuvers.json" CopyToOutputDirectory="PreserveNewest" />
     <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.11.1" />
     <PackageReference Include="xunit" Version="2.9.2" />
     <PackageReference Include="xunit.runner.visualstudio" Version="2.8.2" />
@@ -18,6 +19,12 @@
                      than referencing WingCommand.csproj, which requires the game's
                      Unity/BepInEx assemblies to be present on disk to build.">
     <Compile Include="..\..\Pure\*.cs" Link="Pure\%(Filename)%(Extension)" />
+    <Compile Include="..\..\Core\WingCommandSelection.cs" Link="Core\WingCommandSelection.cs" />
+    <Compile Include="..\..\Core\WingCommandManager.Recruit.cs" Link="Core\WingCommandManager.Recruit.cs" />
+    <Compile Include="..\..\Core\WingOrderCatalog.cs" Link="Core\WingOrderCatalog.cs" />
+    <Compile Include="..\..\Combat\TacticalCoordinator.cs" Link="Combat\TacticalCoordinator.cs" />
+    <Compile Include="..\..\Economy\HangarDepartureLane.cs" Link="Economy\HangarDepartureLane.cs" />
+    <Compile Include="..\..\Flight\HoverAssist.cs" Link="Flight\HoverAssist.cs" />
   </ItemGroup>
 
 </Project>

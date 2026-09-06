@@ -29,9 +29,12 @@
 
 Wing Command works independently of Boscali Summer. On its own, WMC fills the available
 side area beside its normal bezel button, keeping clear of the screen edges and bottom
-controls. With Boscali Summer loaded and `UI.FitMapToPanels` enabled, it uses the expanded
-avionics layout. Turning that setting off also selects the vanilla presentation.
-Wing Command does not provide a SET panel; that panel belongs to Boscali Summer.
+controls. With Boscali Summer loaded, WMC registers its panel and lets Boscali own
+the layout. Wing Command does not replace stock MFD pages, resize the map, or
+rearrange other panels and bezel buttons. SET belongs to Boscali Summer.
+
+The six-sector command wheel uses embedded PNG icons. Aerobatic routines use editable
+[JSON phase presets](Assets/README.md); tactical turns retain the native autopilot.
 
 Vanilla gives you one semi-autonomous wingman. WingCommand turns your wing into a squadron:
 
@@ -130,6 +133,10 @@ Hostile, friendly non-wing, ground and naval icons behave exactly as in stock. C
 switching tabs stops intercepting wing-icon clicks. Map moves are temporary routes — at the
 final point every wingman returns to formation.
 
+Wing icons keep the stock faction fill and gain a thin, unfilled ring with space around
+the aircraft silhouette. **Clear Targets** does not remove the ring or change WMC command selection. Selected command recipients
+also have brackets while Tactical is open. `UI/Highlight` controls the outlines.
+
 ## 📋 Orders
 
 | Order | What it does |
@@ -145,8 +152,12 @@ final point every wingman returns to formation.
 | **Return To Base** | Fly the stock pattern home, then hand the airframe back |
 | **Formation dial** | Swap between the six shapes on the fly |
 
-Orders stick. A wingman ducking a missile, hitting bingo, or recalled by the leash resumes
-the exact standing order afterward.
+Orders stick through missile defence and leash recall, including new orders issued while
+defending. Idle Attack/Engage aircraft regroup temporarily and resume when combat becomes
+available again. Automatic bingo/Winchester return, when enabled, ends the current task.
+Interrupted manoeuvres and target orders whose target has died finish by returning to formation.
+
+Holding aircraft circle in the same direction on separate radii, spaced by formation slot.
 
 **RTB completes.** Down and shut down at a friendly base, the airframe leaves the world and
 enters the three-slot wing reserve — a purchased one stays owned and relaunches free, an
@@ -193,10 +204,23 @@ warning or with hostiles near, then settles back. You don't babysit spacing.
 
 If you stay below a fixed-wing member's safe flying speed, it announces **holding wide**
 and flies a shallow circuit at formation altitude. It automatically rejoins after you
-maintain enough speed. An aircraft that overshoots flies a separated lane alongside you
-until you pass it, then eases back into its slot. The standing formation order is preserved.
+maintain enough speed. A nearby, aligned aircraft that overshoots flies a separated lane
+alongside you until you pass it, then eases back into its slot. Distant aircraft keep closing
+on a curved rendezvous path, even when ahead of you or on the opposite heading. Closure
+speed controls braking as they reach their slots. The standing formation order is preserved.
 Braking and engine-response estimates adapt per wingman from stable flight samples;
 terrain and collision avoidance retain priority over formation corrections.
+
+The minimum formation speed uses the airframe's published stall speed with a safety margin,
+converted from km/h, rather than its AI landing-approach speed. The VT-7's formation floor
+is 216 km/h; its much higher nominal landing parameter does not force it to fly past a
+slower leader. Turn authority uses the same airspeed envelope, and native flight-assist
+filtering runs once per steering command.
+
+Distance, relative closure, forward airspeed, fuel, damage, pilot experience and ROE jointly
+adjust capture effort and damping. Aircraft condition can widen the whole formation while
+each pilot retains its own control response. Smooth leader tracking filters small attitude
+changes without moving the destination abruptly.
 
 Recruited AI pilots no longer automatically eject during taxi because of ground tilt,
 body-damage notifications, or stuck timers. If native taxi navigation cannot continue,
@@ -272,6 +296,9 @@ Built on Nuclear Option's existing economy, not a separate one:
   **ANY** launches immediately from the closest checked field with a free hangar, and waits
   unpinned if every allowed pad is busy. They show as departing immediately, commandable
   once the stock takeoff has finished.
+- Queued requisitions can be cancelled before a hangar accepts them. Once a launch is
+  accepted, it stays reserved until the aircraft arrives or the native launch fails;
+  a slow door sequence does not trigger a refund while an aircraft is still on its way.
 - **Wing Reserve** holds up to three specific airframes across all types. `HOLD` pulls one
   faction airframe out of AI-accessible stock; `RELEASE` returns it. It doesn't create supply.
 - **Releasing a wingman sends it home** (`REL` on the Wing roster) — it flies the stock
@@ -317,7 +344,8 @@ including one issued while defensive. Shown as `DEFENSIVE` / `DEF`.
 - Experience comes from kills, completed sorties and engagements survived; rank rises through
   Rookie → Wingman → Veteran → Ace → Legend.
 - Rank has a small real effect — at the top, ~12% more weapon reach and off-boresight and
-  ~12% faster shot cycling. `Pilot/RankEffect = 0` keeps the record, removes the mechanic.
+  ~12% faster shot cycling, plus modest formation-control adjustments in Smart mode.
+  `Pilot/RankEffect = 0` keeps the record, removes the rank benefits.
 - Backbone only: a pregenerated pool with portraits and an assignment screen is a later
   feature. Three pilots are hand-written, the rest generated.
 
@@ -331,6 +359,11 @@ settings (`Comms/Radio`: `Off`, `Text`, `TextAndTone`). With `TextAndTone`, each
 with the game's native radio click. The mod no longer writes ordinary notices into the
 game's message boxes.
 
+Delivered wingmen report taxiing, takeoff and airborne once per phase. Departure reports
+use an idle channel with at least five seconds between them across the wing, replace stale
+phases with current ones, and yield to urgent calls. An airborne rejoin report also replaces
+the ordinary rejoining acknowledgement for that departure.
+
 ## 💀 Takeover
 
 Killed or ejected with wingmen still flying, they hold in a safe orbit and a takeover window
@@ -341,8 +374,9 @@ and host; `Engagement/TakeoverOnDeath`.
 
 ## 🗺️ HUD and map
 
-- Wingmen use a high-contrast green marker and map caret; active wing targets are amber;
-  selected members brighten without losing type or heading.
+- Wingmen use a thin green map ring; active wing targets have amber rings. Rings keep a
+  clear gap around the icon and a one-pixel stroke across map zoom levels.
+  Tactical command selection adds brackets. Native faction fills, type and heading remain visible.
 - The compact roster shows order/state and live **slot error**, and hides while the map is open.
 - On the maximised map, a line runs from every tasked wingman to its point. A Shift-queued
   route draws as a chain (current leg bright, queue dimmed, a dot per pending point); an
@@ -371,6 +405,11 @@ on a formation order.
 
 **Works with BOTE?** Yes, designed to coexist with its radial submenus.
 
+**Boscali Summer required?** No. Boscali owns MFD layout when installed.
+Standalone, the vanilla panels stay intact and
+WMC fits beside the native bezel. Wing Command does not control map wallpaper, grid,
+or background opacity; appearance stays with vanilla or the mod providing it.
+
 **Do templates cost extra?** No. A requisition is list price whatever you hang on it.
 
 **Where are templates saved?** `com.marci.wingcommand.cfg`, under `Loadout/SavedTemplates`.
@@ -388,8 +427,10 @@ AI and the cap shrinks with more players. Push past it with **OVER LIMIT** at ra
 **Charged twice for the same aircraft?** No — an RTB landing returns a purchased aircraft to
 your reserve to relaunch free.
 
-**Shaky formation — a bug?** Usually not. Check slot error: small oscillation is normal;
-climbing means the leader is asking for more than the airframe can give.
+**Shaky formation?** Wingmen use filtered leader motion and curved approaches to their
+slots. Repeated large corrections after small stick movements are a bug; report the
+airframe, formation, ROE, and slot error. A growing gap can also mean the leader exceeds
+the follower's speed or turn capability.
 
 **Newest game update?** Check the badges above for the targeted version. If the radial hook
 breaks after an update, a fallback keybind is under advanced settings until the mod is patched.
@@ -467,16 +508,12 @@ tactical rules, hotkeys, and appearance can be configured.
 | UI | `ShowWingHud` | `true` | Compact roster docked beside the tactical map |
 | UI | `UseMfdPanel` | `true` | Cockpit MFD WMC screen alongside BDF/MAP/HUD |
 | UI | `MapCommands` | `true` | Tactical wing selection and tasking on maximised map |
-| UI | `FitMapToPanels` | `true` | Three-column maximised map layout (with Boscali Summer) |
 | UI | `Highlight` | `WingAndTargets` | Roster and target tinting (`Off`, `Wing`, `WingAndTargets`) |
 | UI | `WingMemberColor` | `#39FF65` | Hex colour for wingmen across HUD and map |
 | UI | `WingTargetColor` | `#FFB020` | Hex colour for units engaged by wing |
 | UI | `TacticalPauseInSingleplayer` | `false` | Slow down game time when tactical command screen is active |
 | UI | `TacticalPauseScale` | `0.25` | Simulation time-scale during tactical pause (`0.0` = full pause) |
 | UI | `ExternalHitmarkerAudio` | `true` | Hitmarker audio confirmation in 3rd-person/orbit view |
-| MFD | `BackgroundOpacity` | `0.40` | Tactical MFD background opacity (`0.0`–`1.0`) |
-| MFD | `CheckeredGrid` | `false` | Checkered datum grid across MFD background |
-| MFD | `CustomImageEnabled` | `false` | Custom user wallpaper image as MFD background |
 | Debug | `EnableDebugActions` | `false` | Master switch for development cheats (host-only) |
 | Debug | `SpawnDebugWing` | — | F1 button: spawn a full wing of current aircraft |
 | Debug | `FreePlanePurchases` | `false` | Requisitioned aircraft cost no allocation |
@@ -484,6 +521,9 @@ tactical rules, hotkeys, and appearance can be configured.
 | Debug | `VerboseLogging` | `false` | Log state transitions and reflexes to BepInEx console |
 
 The Debug cheats are F1-only, off by default, and unsupported. Squadron size is capped at 3 wingmen by design (matching HUD and WMC layout); `DisableWingSizeLimit` bypasses this for testing. Global AI `SkillScale` / `BraveryScale`, player-specific target protection, `WingPriceGrowth`, `RecruitRange`, and `AdditionalWingReservePerType` are retired and ignored.
+
+The former `MFD/BackgroundOpacity`, `CheckeredGrid`, `CustomImageEnabled`, and
+`CustomImageFile` settings are also retired and ignored. Existing image files are untouched.
 
 ## 🔩 Implementation
 
@@ -495,16 +535,19 @@ is the game's own `HardpointSet.BlockedByOtherHardpoint`. This mod defines no we
 Private game members for the native radial integration are resolved through reflection; a
 game update that renames one is logged, with the fallback interface left available.
 
-Design notes for the *why* behind these decisions are in [docs/](docs/). Much of the mod is
+The codebase map and development guidance are in [ARCHITECTURE.md](ARCHITECTURE.md). Much of the mod is
 developed with AI coding assistance under maintainer direction, review and live flight
 testing. Contributions and test reports welcome.
 
 ## 🏗️ Building
 
-Requires the .NET 8 SDK, BepInEx 5, and a local Nuclear Option install at the Steam path in the project.
+Requires the .NET 8 SDK, BepInEx 5, a local Nuclear Option install, and the shared avionics
+sources from a `nomodkit` checkout (defaults to `../nomodkit`). Custom paths can be passed
+as `-p:GameDir="C:\path\to\Nuclear Option" -p:NomodKitDir="C:\path\to\nomodkit"`.
 
 ```powershell
 dotnet build WingCommand.csproj -c Release
+dotnet test tests/WingCommand.PureTests
 ```
 
 Release assets:
@@ -513,7 +556,7 @@ Release assets:
 nomod package --mod wingcommand
 ```
 
-→ `dist/WingCommand.dll` and `dist/WingCommand-0.9.2.zip`. Attach **`WingCommand.dll` first**
+→ `dist/WingCommand.dll` and `dist/WingCommand-<version>.zip`. Attach **`WingCommand.dll` first**
 to a GitHub release — NOMM installs the bare DLL; the ZIP is for manual installs. The package
 script reads the version from the built assembly and prints SHA-256 hashes.
 

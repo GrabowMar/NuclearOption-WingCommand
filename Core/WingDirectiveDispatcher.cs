@@ -37,18 +37,7 @@ namespace WingCommand
             this.selection = selection;
         }
 
-        public List<WingMember> Scope(bool wholeWing)
-        {
-            if (!wholeWing) return selection.Snapshot(wing);
-
-            var result = new List<WingMember>();
-            if (wing == null) return result;
-            foreach (WingMember member in wing.Members)
-            {
-                if (member != null && member.Alive) result.Add(member);
-            }
-            return result;
-        }
+        public List<WingMember> Scope(bool wholeWing) => selection.Snapshot(wing, wholeWing);
 
         public WingDispatchResult Apply(WingDirective directive, bool wholeWing)
         {
@@ -73,8 +62,10 @@ namespace WingCommand
                 return new WingDispatchResult(0,
                     WingOrderCatalog.UnavailableReason(directive.Order));
 
-            string message = ScopePrefix(wholeWing, applied) + ": " +
-                             WingOrderCatalog.Label(directive.Order);
+            string label = directive.Order == WingOrder.Maneuver
+                ? ManeuverCatalog.Label(directive.Maneuver)
+                : WingOrderCatalog.Label(directive.Order);
+            string message = ScopePrefix(wholeWing, applied) + ": " + label;
             if (skipped > 0) message += " (" + skipped + " unable)";
             return new WingDispatchResult(applied, WithQueued(message, responders), responders, directive.Order);
         }
@@ -174,29 +165,8 @@ namespace WingCommand
         }
 
         /// <summary>Send the scope through one scripted manoeuvre. Transient; it rejoins after.</summary>
-        public WingDispatchResult Maneuver(ManeuverKind kind, bool wholeWing)
-        {
-            List<WingMember> scope = Scope(wholeWing);
-            if (scope.Count == 0)
-                return new WingDispatchResult(0, EmptyScopeMessage(wholeWing));
-
-            var responders = new List<WingMember>();
-            foreach (WingMember member in scope)
-            {
-                if (!WingOrderCatalog.CanApply(member, WingOrder.Maneuver)) continue;
-                member.Apply(WingDirective.RunManeuver(kind));
-                responders.Add(member);
-            }
-
-            int applied = responders.Count;
-            int skipped = scope.Count - applied;
-            if (applied == 0)
-                return new WingDispatchResult(0,
-                    WingOrderCatalog.UnavailableReason(WingOrder.Maneuver));
-
-            string message = ScopePrefix(wholeWing, applied) + ": " + ManeuverCatalog.Label(kind);
-            return new WingDispatchResult(applied, message, responders, WingOrder.Maneuver);
-        }
+        public WingDispatchResult Maneuver(ManeuverKind kind, bool wholeWing) =>
+            Apply(WingDirective.RunManeuver(kind), wholeWing);
 
         private static Unit FirstLive(IReadOnlyList<Unit> targets)
         {
@@ -212,8 +182,6 @@ namespace WingCommand
         {
             if (wing == null || wing.Count == 0)
                 return wholeWing ? "No wingmen assigned" : "No wingmen. Requisition on SUPPLY.";
-            if (!wholeWing && selection != null && selection.IsNone)
-                return "No wingmen selected";
             return wholeWing ? "No wingmen assigned" : "No wingmen selected";
         }
 

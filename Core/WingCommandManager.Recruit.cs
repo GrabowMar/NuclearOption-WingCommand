@@ -13,9 +13,10 @@ namespace WingCommand
             public WingPilot PreferredPilot;
             public float ReadyAt;
             public float Deadline;
+            public bool DelayReported;
         }
 
-        /// <summary>How long a delivery has to taxi out and get off the ground.</summary>
+        /// <summary>How long before reporting a delayed departure without releasing it.</summary>
         private const float RecruitTimeout = 420f;
 
         private readonly List<PendingRecruit> recruitQueue = new List<PendingRecruit>();
@@ -85,15 +86,21 @@ namespace WingCommand
                     continue;
                 }
 
-                if (Time.timeSinceLevelLoad > p.Deadline)
+                if (p.Member != null && !p.Member.DeliveryPending)
                 {
-                    if (p.Member != null && Wing.Contains(p.Member))
-                        Wing.Remove(p.Member, "delivery never got airborne");
                     recruitQueue.RemoveAt(i);
-                    Toast(p.Member == null
-                        ? a.unitName + " never joined the wing - assign it from the map when airborne"
-                        : a.unitName + " never got airborne - assign it from the map when it does");
                     continue;
+                }
+
+                // A staged launch may wait longer than the old seven-minute timeout.
+                // The purchased aircraft still exists, so dropping its roster membership
+                // here would permanently lose the eventual takeoff handoff.
+                if (!p.DelayReported && Time.timeSinceLevelLoad > p.Deadline)
+                {
+                    p.DelayReported = true;
+                    recruitQueue[i] = p;
+                    Plugin.Logger.LogWarning("[Wing] " + a.unitName +
+                        " departure delayed; retaining its wing assignment until launch");
                 }
 
                 // If the immediate add had no slot, claim one as soon as another member

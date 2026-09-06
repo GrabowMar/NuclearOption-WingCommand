@@ -28,19 +28,8 @@ namespace WingCommand
         private static bool loggedRebalanceFailure;
 
         /// <summary>
-        /// Works around an unbalanced subscription in the stock combat state.
-        ///
-        /// <c>AIPilotCombatModes</c> subscribes <c>AICombat_OnMissileAlert</c> to
-        /// <c>MissileWarning.onMissileWarning</c> in its *constructor*, but unsubscribes it
-        /// in <c>LeaveState</c>. Its other three event handlers are added in
-        /// <c>EnterState</c> and so re-attach correctly; this one does not. The first time
-        /// a pilot leaves the combat state the handler is gone for good, and that AI never
-        /// reacts to a missile warning again.
-        ///
-        /// Vanilla rarely leaves the combat state, so this is mostly latent — but this mod
-        /// switches pilots in and out of it constantly, which would turn a latent bug into
-        /// a guaranteed one. Removing then re-adding normalises the invocation list to
-        /// exactly one entry, so it is a no-op on the first entry and a repair on later ones.
+        /// The stock state subscribes in its constructor but unsubscribes in LeaveState.
+        /// Remove then add on entry to restore the handler without duplicating its subscription.
         /// </summary>
         private static void RebalanceMissileAlert(AIPilotCombatModes state, Aircraft aircraft)
         {

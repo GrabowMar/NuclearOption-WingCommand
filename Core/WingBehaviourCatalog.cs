@@ -1,30 +1,21 @@
 using System;
-using System.Collections.Generic;
 
 namespace WingCommand
 {
     /// <summary>
-    /// Maps a behaviour id onto the pilot state that flies it.
-    ///
-    /// The one place that knows about both halves of the design. <see cref="WingArbiter"/>
-    /// and every reflex deal only in strings, which is what keeps them engine-free and
-    /// testable; this is where a string becomes a <c>PilotBaseState</c> and touches Unity.
-    ///
-    /// The mod's own five behaviours are handled directly in
-    /// <see cref="WingMember.EnterBehaviour"/> because they need the member's own cached
-    /// state objects. This registry exists for the other direction: a plugin that ships a
-    /// new reflex almost always needs to ship the behaviour it selects too, and without a
-    /// seam here that reflex could only ever pick from behaviours we happened to think of.
+    /// Maps third-party behaviour IDs to pilot-state factories. Each member caches its states;
+    /// built-in behaviours are handled directly by <see cref="WingMember.EnterBehaviour"/>.
     /// </summary>
     public static class WingBehaviourCatalog
     {
-        private static readonly Dictionary<string, Func<Aircraft, PilotBaseState>> factories =
-            new Dictionary<string, Func<Aircraft, PilotBaseState>>(StringComparer.Ordinal);
+        private static readonly BehaviourFactoryRegistry<Aircraft, PilotBaseState> factories =
+            new BehaviourFactoryRegistry<Aircraft, PilotBaseState>();
 
         /// <summary>
         /// Register a behaviour. The factory is handed the aircraft and called once per
-        /// wingman, the first time that wingman flies the behaviour; the state is cached
-        /// from then on, the same lifetime the built-in states get.
+        /// wingman, the first time that wingman flies this registration. Replacing an ID
+        /// starts a new registration lifetime: existing members rebuild their state when
+        /// they next resolve that behaviour, including when it is already active.
         ///
         /// It takes an <c>Aircraft</c> rather than the mod's own wingman record, which stays
         /// internal. A behaviour is a way of flying an aeroplane and the aeroplane is what it
@@ -33,15 +24,19 @@ namespace WingCommand
         /// </summary>
         public static void Register(string behaviourId, Func<Aircraft, PilotBaseState> factory)
         {
-            if (string.IsNullOrEmpty(behaviourId))
-                throw new ArgumentException("A behaviour needs an id.", nameof(behaviourId));
-            if (factory == null) throw new ArgumentNullException(nameof(factory));
-
-            factories[behaviourId] = factory;
+            factories.Register(behaviourId, factory);
+            WingAi.RestoreBehaviour(behaviourId);
         }
 
         /// <summary>Remove a behaviour. True when one was actually removed.</summary>
         public static bool Unregister(string behaviourId) => factories.Remove(behaviourId);
+
+        internal static bool IsAvailable(string behaviourId) => factories.Find(behaviourId) != null;
+
+        /// <summary>Whether this member's cached state still belongs to the live registration.</summary>
+        internal static bool IsCurrent(WingMember member, string behaviourId) =>
+            member != null && !string.IsNullOrEmpty(behaviourId) &&
+            member.HasCurrentCachedBehaviour(behaviourId, factories.Find(behaviourId));
 
         /// <summary>
         /// Switch the member onto a registered behaviour. False when nothing is registered
@@ -51,15 +46,27 @@ namespace WingCommand
         internal static bool TryEnter(WingMember member, string behaviourId)
         {
             if (member == null || string.IsNullOrEmpty(behaviourId)) return false;
-            if (!factories.TryGetValue(behaviourId, out Func<Aircraft, PilotBaseState> factory))
+            BehaviourFactoryRegistry<Aircraft, PilotBaseState>.Registration registration = factories.Find(behaviourId);
+            if (registration == null)
+            {
+                member.AcknowledgeMissingRegisteredBehaviour(behaviourId);
                 return false;
+            }
 
             try
             {
-                PilotBaseState state = member.CachedBehaviour(behaviourId, factory);
-                if (state == null) return false;
+                PilotBaseState state = member.CachedBehaviour(behaviourId, registration);
+                if (state == null)
+                {
+                    factories.RemoveIfCurrent(behaviourId, registration);
+                    member.AcknowledgeMissingRegisteredBehaviour(behaviourId);
+                    return false;
+                }
 
-                return member.SwitchToRegistered(state);
+                // An already active state is still a successfully resolved behavior.
+                // SwitchTo's false means "no transition", not "factory unavailable".
+                member.SwitchToRegistered(state);
+                return true;
             }
             catch (Exception e)
             {
@@ -68,12 +75,16 @@ namespace WingCommand
                 // throwing out of the wing's update loop.
                 Plugin.Logger.LogWarning(
                     $"[Wing] behaviour '{behaviourId}' failed to start: {e.GetType().Name} - {e.Message}");
-                Unregister(behaviourId);
+                factories.RemoveIfCurrent(behaviourId, registration);
+                // Observe that this attempt supplied no usable state. If the factory
+                // installed a successor before failing, that live registration differs
+                // from this absence and triggers the next member control update.
+                member.AcknowledgeMissingRegisteredBehaviour(behaviourId);
                 return false;
             }
         }
 
-        /// <summary>Drop every registration. Called at mission start.</summary>
+        /// <summary>Drop every registration for explicit teardown; mission changes retain factories.</summary>
         public static void Clear() => factories.Clear();
     }
 }

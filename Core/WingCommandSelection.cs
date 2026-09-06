@@ -123,25 +123,15 @@ namespace WingCommand
             stale.Clear();
         }
 
-        public List<WingMember> Snapshot(WingRegistry wing)
+        public List<WingMember> Snapshot(WingRegistry wing, bool wholeWing = false)
         {
             var result = new List<WingMember>();
             if (wing == null) return result;
 
-            if (CurrentMode == Mode.All)
-            {
-                foreach (WingMember member in wing.Members)
-                {
-                    if (member != null && member.Alive) result.Add(member);
-                }
-                return result;
-            }
-
-            Prune(wing);
+            if (!wholeWing) Prune(wing);
             foreach (WingMember member in wing.Members)
             {
-                if (member != null && member.Alive && selected.Contains(member))
-                    result.Add(member);
+                if (wholeWing ? member != null && member.Alive : Contains(member)) result.Add(member);
             }
             return result;
         }

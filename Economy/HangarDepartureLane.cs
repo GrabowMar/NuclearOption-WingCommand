@@ -12,9 +12,12 @@ namespace WingCommand
         private sealed class Departure
         {
             internal Airbase Airbase;
-            internal Vector3 SpawnPosition;
+            internal object Owner;
+            internal Transform Spawn;
             internal Aircraft Aircraft;
+            internal bool AircraftTracked;
             internal float StartedAt;
+            internal bool DelayReported;
         }
 
         private static readonly List<Departure> active = new List<Departure>();
@@ -26,33 +29,37 @@ namespace WingCommand
             return true;
         }
 
-        internal static bool Reserve(Airbase airbase, Hangar hangar)
+        internal static bool Reserve(Airbase airbase, Hangar hangar, object owner)
         {
-            if (airbase == null || !IsFree(airbase)) return false;
+            if (airbase == null || owner == null || !IsFree(airbase)) return false;
             Transform spawn = hangar?.GetSpawnTransform();
             active.Add(new Departure
             {
                 Airbase = airbase,
-                SpawnPosition = spawn != null ? spawn.position : airbase.transform.position,
+                Owner = owner,
+                Spawn = spawn != null ? spawn : airbase.transform,
                 StartedAt = Time.unscaledTime,
             });
             return true;
         }
 
-        internal static void Track(Airbase airbase, Aircraft aircraft)
+        internal static void Track(object owner, Aircraft aircraft)
         {
             for (int i = 0; i < active.Count; i++)
-                if (active[i].Airbase == airbase)
+                if (ReferenceEquals(active[i].Owner, owner))
                 {
                     active[i].Aircraft = aircraft;
+                    active[i].AircraftTracked = true;
+                    active[i].StartedAt = Time.unscaledTime;
+                    active[i].DelayReported = false;
                     return;
                 }
         }
 
-        internal static void Release(Airbase airbase)
+        internal static void Release(object owner)
         {
             for (int i = active.Count - 1; i >= 0; i--)
-                if (active[i].Airbase == airbase) active.RemoveAt(i);
+                if (ReferenceEquals(active[i].Owner, owner)) active.RemoveAt(i);
         }
 
         internal static void Tick()
@@ -61,20 +68,27 @@ namespace WingCommand
             {
                 Departure departure = active[i];
                 Aircraft aircraft = departure.Aircraft;
-                if (aircraft == null || aircraft.disabled)
+                // The owning order holds this lane while native doors are still opening.
+                // It releases a failed request; an accepted request may still spawn late.
+                if (!departure.AircraftTracked && departure.Airbase != null) continue;
+                if (aircraft == null || aircraft.disabled || departure.Airbase == null || departure.Spawn == null)
                 {
                     active.RemoveAt(i);
                     continue;
                 }
                 float clearance = Mathf.Max(120f, aircraft.maxRadius * 6f);
-                if ((aircraft.transform.position - departure.SpawnPosition).sqrMagnitude >= clearance * clearance)
+                // Follow the live pad: floating-origin shifts and moving carriers move
+                // both transforms, and must not look like a stationary plane cleared it.
+                if ((aircraft.transform.position - departure.Spawn.position).sqrMagnitude >= clearance * clearance)
                 {
                     active.RemoveAt(i);
                     continue;
                 }
-                if (Time.unscaledTime - departure.StartedAt < WingTuning.HangarDeliveryTimeout) continue;
-                Plugin.Logger.LogWarning("[Shop] departure lane timed out at " + departure.Airbase.name + "; releasing it");
-                active.RemoveAt(i);
+                if (departure.DelayReported ||
+                    Time.unscaledTime - departure.StartedAt < WingTuning.HangarDeliveryTimeout) continue;
+                departure.DelayReported = true;
+                Plugin.Logger.LogWarning("[Shop] departure lane blocked at " + departure.Airbase.name +
+                    "; retaining it until the aircraft clears the hangar");
             }
         }
 

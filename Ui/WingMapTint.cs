@@ -1,22 +1,20 @@
 using System;
+using System.Collections.Generic;
+using System.Reflection;
 using HarmonyLib;
 using UnityEngine;
 
 namespace WingCommand
 {
-    /// <summary>
-    /// Tints map icons so wingmen and the units they are engaging stand out from the rest
-    /// of the friendly force.
-    ///
-    /// <c>MapIcon.UpdateColor</c> is the single place every icon assigns its colour, so a
-    /// postfix there covers selection, deselection, faction changes and theme switches
-    /// without touching the game's own colour logic. The stock call sites only fire on
-    /// those events, so <see cref="Refresh"/> is called whenever wing membership or the
-    /// engaged set changes.
-    /// </summary>
+    /// <summary>Wing outlines and command selection, applied after native icon updates.</summary>
     internal static class WingMapTint
     {
-        /// <summary>Re-apply the tint to one unit's map icon.</summary>
+        // DynamicMap updates selectedIcons after calling the icon's colour callback.
+        // Read the icon flag so a select/deselect repaint observes the new native state.
+        private static readonly AccessTools.FieldRef<MapIcon, bool> nativeSelected =
+            AccessTools.FieldRefAccess<MapIcon, bool>("isSelected");
+
+        /// <summary>Reconcile one unit's map markings with its current roster identity.</summary>
         public static void Refresh(Unit unit)
         {
             if (unit == null) return;
@@ -31,6 +29,7 @@ namespace WingCommand
                     // directly would drop both and make a refreshed icon look subtly
                     // different from one the game repainted.
                     icon.UnitMapIcon_UpdateColor();
+                    Apply(icon);
                 }
             }
             catch (Exception e)
@@ -41,62 +40,81 @@ namespace WingCommand
         }
 
         /// <summary>
-        /// The patch itself, in its own class because the attribute has to be on a class.
-        ///
-        /// This is why map tinting never worked: the postfix lived on a method of
-        /// <c>WingMapTint</c>, which carries no class-level <c>[HarmonyPatch]</c>.
-        /// <c>PatchClassProcessor</c> returns before reading any method attribute when the
-        /// containing class is unannotated, so <c>PatchAll</c> skipped it in silence and
-        /// the wing was never coloured on the map at all.
+        /// Reattach markings after icons are created, recreated, or another UI refresh
+        /// changes their components. Does not repaint the native image or its fade state.
         /// </summary>
-        [HarmonyPatch(typeof(MapIcon), nameof(MapIcon.UpdateColor))]
+        public static void Reassert(WingRegistry wing)
+        {
+            if (SceneSingleton<DynamicMap>.i == null) return;
+            if (wing != null)
+            {
+                foreach (WingMember member in wing.Members)
+                    Reassert(member.Aircraft);
+            }
+            foreach (Unit unit in WingMarkers.EngagedTargets) Reassert(unit);
+        }
+
+        private static void Reassert(Unit unit)
+        {
+            if (unit != null && DynamicMap.TryGetMapIcon(unit, out UnitMapIcon icon))
+                Apply(icon);
+        }
+
+        private static void Apply(UnitMapIcon icon)
+        {
+            if (icon == null || icon.iconImage == null) return;
+
+            WingCommandManager manager = WingCommandManager.Instance;
+            WingMember member = icon.unit is Aircraft aircraft ? manager?.Wing.Find(aircraft) : null;
+            bool tactical = WmcScreen.TacticalCommandModeActive;
+            bool nativeSelected = IsSelected(icon);
+            bool commandSelected = manager != null && manager.Selection.Contains(member);
+
+            // Stock SelectIcon disables raycasts. A plane already in the weapon target
+            // list must still accept tactical clicks; leaving Tactical restores the stock
+            // hit behavior without selecting or deselecting any weapon targets.
+            bool isPlayer = SceneSingleton<CombatHUD>.i?.aircraft == icon.unit;
+            icon.iconImage.raycastTarget = MapSelectionPolicy.IconReceivesPointer(
+                isPlayer, nativeSelected, member != null, tactical);
+
+            HighlightMode highlight = Plugin.Settings.Highlight.Value;
+            WingMapPresentation presentation = WingMapPresentation.Resolve(
+                isWingMember: member != null,
+                isWingTarget: WingMarkers.RoleOf(icon.unit) == WingMarkers.Role.Target,
+                highlightWing: highlight != HighlightMode.Off,
+                highlightTargets: highlight == HighlightMode.WingAndTargets,
+                tacticalActive: tactical,
+                commandSelected: commandSelected);
+
+            // Never replace the faction silhouette's colour. Native target clearing,
+            // filters and theme changes repaint that Image; our separate mesh outline
+            // keeps membership visible through all of them.
+            WingMarkerBadge.Apply(icon.iconImage, presentation);
+        }
+
+        private static bool IsSelected(UnitMapIcon icon)
+        {
+            return nativeSelected(icon);
+        }
+
+        // UnselectAll/DeselectAllIcons call MapIcon.DeselectIcon -> UpdateColor, then
+        // remove native TargetMarkers. Our outline belongs to the Image, not that list.
+        // SetIcon and UpdateIcon also reconcile reused/recreated icons and command scope.
+        [HarmonyPatch]
         internal static class MapIconColorPatch
         {
+            [HarmonyTargetMethods]
+            private static IEnumerable<MethodBase> TargetMethods()
+            {
+                yield return AccessTools.Method(typeof(MapIcon), nameof(MapIcon.UpdateColor));
+                yield return AccessTools.Method(typeof(UnitMapIcon), nameof(UnitMapIcon.UnitMapIcon_UpdateColor));
+                yield return AccessTools.Method(typeof(UnitMapIcon), nameof(UnitMapIcon.SetIcon));
+                yield return AccessTools.Method(typeof(UnitMapIcon), nameof(UnitMapIcon.UpdateIcon));
+            }
             [HarmonyPostfix]
             private static void Postfix(MapIcon __instance)
             {
-                if (Plugin.Settings.Highlight.Value == HighlightMode.Off) return;
-                if (!(__instance is UnitMapIcon unitIcon) || unitIcon.iconImage == null) return;
-
-                WingMarkers.Role role = WingMarkers.RoleOf(unitIcon.unit);
-                bool commandSelected = false;
-                if (role == WingMarkers.Role.Member &&
-                    WmcScreen.TacticalCommandModeActive && unitIcon.unit is Aircraft aircraft)
-                {
-                    WingCommandManager manager = WingCommandManager.Instance;
-                    WingMember member = manager?.Wing.Find(aircraft);
-                    commandSelected = manager != null && manager.Selection.Contains(member);
-                }
-                WingMarkerBadge.ApplyCommandSelection(unitIcon.iconImage, commandSelected);
-                if (role == WingMarkers.Role.None)
-                {
-                    Unit u = unitIcon.unit;
-                    if (u != null && !u.disabled && u.definition != null)
-                    {
-                        if (GameManager.GetLocalAircraft(out Aircraft local) && local != null &&
-                            local.NetworkHQ != null && u.NetworkHQ != null && u.NetworkHQ != local.NetworkHQ)
-                        {
-                            if (u.definition.typeIdentity.radar > 0.25f || (u is Ship && u.definition.typeIdentity.air > 0.4f))
-                            {
-                                unitIcon.iconImage.color = IsSelected(unitIcon)
-                                    ? new Color(1f, 0.45f, 0.15f, 1f)
-                                    : new Color(0.95f, 0.25f, 0.2f, 0.85f);
-                            }
-                        }
-                    }
-                    return;
-                }
-
-                // Keep the game's own selected-vs-unselected contrast by brightening the
-                // selected state rather than flattening both to one colour.
-                unitIcon.iconImage.color = WingMarkers.ColorFor(
-                    role, IsSelected(unitIcon) || commandSelected);
-            }
-
-            private static bool IsSelected(UnitMapIcon icon)
-            {
-                DynamicMap map = SceneSingleton<DynamicMap>.i;
-                return map != null && map.selectedIcons.Contains(icon);
+                if (__instance is UnitMapIcon unitIcon) Apply(unitIcon);
             }
         }
 

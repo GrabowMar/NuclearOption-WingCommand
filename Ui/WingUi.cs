@@ -1,16 +1,10 @@
 global using UiButtonStyle = NOAvionics.AvButtonStyle;
 using System;
-using System.Collections.Generic;
 using NOAvionics;
 using NOAvionics.Ui;
 using TMPro;
 using UnityEngine;
-using UnityEngine.EventSystems;
 using UnityEngine.UI;
-
-// Unity invokes OnDisable by reflection.
-// IDE0051 cannot see a reflective call, so it is disabled for this file only.
-#pragma warning disable IDE0051
 
 namespace WingCommand
 {
@@ -67,17 +61,6 @@ namespace WingCommand
         public static Color Dim => AvTheme.Dim;
         public static Color Disabled => AvTheme.Disabled;
         public static Color FrameColor => AvTheme.Frame;
-
-        public static Color HeadingColor
-        {
-            get
-            {
-                Color c = Friendly;
-                return new Color(c.r * 0.88f, c.g * 0.88f, c.b * 0.88f, 1f);
-            }
-        }
-
-        public static Color PanelBackground => AvTheme.Ground;
         public static Color PanelEdge => AvTheme.Unity(AvTokens.PanelEdge);
         public static Color PanelShadow => AvTheme.Unity(AvTokens.PanelShadow);
 
@@ -122,10 +105,6 @@ namespace WingCommand
 
         public static float Heading(RectTransform parent, float y, string text, float panelWidth = AvTokens.PanelWidth) =>
             AvKit.Heading(parent, y, text, panelWidth);
-
-        public static (Image Background, TMP_Text Label) StatusChip(
-            RectTransform parent, string text, Rect rect, Color railColor, Color textColor,
-            float fontSize = FontMicro) => AvKit.StatusChip(parent, text, rect, railColor, textColor, fontSize);
 
         public static WingButton Button(RectTransform parent, string text, Rect rect, Action onClick) =>
             Button(parent, text, rect, onClick, FontBody, AvButtonStyle.Default);
@@ -184,83 +163,6 @@ namespace WingCommand
             return behaviour;
         }
 
-        public static WingButton Tab(RectTransform parent, string text, Rect rect, Action onClick) =>
-            Button(parent, text, rect, onClick, FontSmall, AvButtonStyle.Tab);
-
-        public static WingButton[] Stepper(RectTransform parent, float x, float y, float w,
-                                           out TMP_Text valueLabel, Action onPrev, Action onNext,
-                                           string tooltip = null)
-        {
-            Panel(parent, new Rect(x, y, w, RowHeight), AvTheme.SurfaceInert);
-            Outline(parent, new Rect(x, y, w, RowHeight), FrameColor);
-
-            const float arrowWidth = Space6 + Space1;
-            WingButton prev = Button(parent, "<", new Rect(x + 1f, y - 1f, arrowWidth, RowHeight - 2f),
-                                     onPrev, FontBody, AvButtonStyle.Quiet);
-            WingButton next = Button(parent, ">", new Rect(x + w - arrowWidth - 1f, y - 1f, arrowWidth, RowHeight - 2f),
-                                     onNext, FontBody, AvButtonStyle.Quiet);
-
-            valueLabel = Label(parent, "", new Rect(x + arrowWidth + Space2, y, w - (arrowWidth + Space2) * 2f, RowHeight),
-                               TextPrimary, FontSmall, FontStyles.Normal, TextAlignmentOptions.Center);
-
-            if (!string.IsNullOrEmpty(tooltip))
-            {
-                prev.WithTooltip(tooltip);
-                next.WithTooltip(tooltip);
-            }
-
-            return new[] { prev, next };
-        }
-
-        public static WingButton Pager(RectTransform parent, float y, string glyph, float panelWidth, Action onClick, string tooltip = null)
-        {
-            const float arrowWidth = 34f;
-            float x = glyph == "<" ? Pad : panelWidth - Pad - arrowWidth;
-            WingButton btn = Button(parent, glyph, new Rect(x, y, arrowWidth, RowHeight),
-                                    onClick, FontBody, AvButtonStyle.Quiet);
-            if (!string.IsNullOrEmpty(tooltip)) btn.WithTooltip(tooltip);
-            return btn;
-        }
-
-        public static TMP_Text PagerLabel(RectTransform parent, float y, float panelWidth, float arrowWidth = 34f) =>
-            AvKit.PagerLabel(parent, y, panelWidth, arrowWidth);
-
-        public struct ColumnHeader
-        {
-            public string Text;
-            public float X;
-            public float Width;
-            public bool RightAligned;
-
-            public ColumnHeader(string text, float x, float width, bool rightAligned = false)
-            {
-                Text = text;
-                X = x;
-                Width = width;
-                RightAligned = rightAligned;
-            }
-        }
-
-        public static float ColumnHeaders(RectTransform parent, float y, ColumnHeader[] columns)
-        {
-            foreach (ColumnHeader col in columns)
-            {
-                Label(parent, col.Text, new Rect(Pad + col.X, y, col.Width, Space4),
-                      Dim, FontMicro, FontStyles.Normal,
-                      col.RightAligned ? TextAlignmentOptions.Right : TextAlignmentOptions.Left);
-            }
-            return y - Space4;
-        }
-
-        public static Image ProgressBar(RectTransform parent, Rect rect, float percent, Color fillCol) =>
-            AvKit.ProgressBar(parent, rect, percent, fillCol);
-
-        public static void PipMeter(RectTransform parent, Rect rect, int filled, int total, Color activeColor, Color emptyColor) =>
-            AvKit.PipMeter(parent, rect, filled, total, activeColor, emptyColor);
-
-        public static TMP_Text StatusStrip(RectTransform parent, Rect rect, Color? railColor = null) =>
-            AvKit.StatusStrip(parent, rect, railColor);
-
         public static TMP_InputField InputField(RectTransform parent, Rect rect, int characterLimit,
                                                 Action<string> onChanged, string tooltip = null,
                                                 string placeholderText = "NAME")
@@ -272,12 +174,7 @@ namespace WingCommand
         }
 
         public static Sprite PanelSprite() => AvSprites.Panel;
-        public static Sprite CardSprite() => AvSprites.Card;
-        public static Sprite ControlSprite() => AvSprites.Control;
 
-        public static Color Unity(Rgba c) => AvTheme.Unity(c);
-        public static Rgba Rgba(Color c) => c.ToRgba();
-        public static string Truncate(string s, int max) => AvTheme.Truncate(s, max);
     }
 
     /// <summary>

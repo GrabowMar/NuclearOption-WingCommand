@@ -69,7 +69,7 @@ namespace WingCommand
             // same public call another plugin would use - a reflex of ours has no privileged
             // route in, which is the only way the public one stays working.
             WingAi.FaultReporter = (id, e) => Logger.LogError(
-                $"[Wing] reflex '{id}' threw and has been disabled for this mission: " +
+                $"[Wing] AI provider '{id}' failed and has been disabled for this mission: " +
                 $"{e.GetType().Name} - {e.Message}");
             WingReflexes.RegisterDefaults();
             WingCustomPilots.EnsurePilotsDirectory();
@@ -79,6 +79,7 @@ namespace WingCommand
             {
                 typeof(AiCombatTweak),
                 typeof(DeliveryTaxiRouteGuard),
+                typeof(HangarDeliveryCompletionPatch),
                 typeof(AiTargetDeconflictionPatch),
                 typeof(WingMapWaypointPatch),
                 typeof(WingMapSelectionPatch),
@@ -90,9 +91,6 @@ namespace WingCommand
                 typeof(WingRadialMenuPatches.AwakePatch),
                 typeof(WingMenuActionPatches),
                 typeof(WingTakeoverPatches),
-                typeof(MfdRailPatch),
-                typeof(MfdSinglePanelPatch),
-                typeof(MfdScreenChromePatch),
             };
             for (int i = 0; i < patchTypes.Length; i++)
                 harmony.PatchAll(patchTypes[i]);
@@ -111,16 +109,16 @@ namespace WingCommand
             // its own value forever. Changing a default in code therefore does nothing for
             // anyone who has already run the mod, which silently left tuning changes
             // unapplied and a feature enabled long after it was supposedly turned off.
-            // The Smart/Performance mode is resolved per mission (WingBrain.Begin); this
+            // The Smart/Performance mode is resolved per mission (WingFidelity.Begin); this
             // logs the configured mode and the derived budget for a default mission start.
             //
             // Only settings a player can actually have changed. The tuned numbers are
             // constants in WingTuning now, so logging them told a bug report nothing it
             // could not read off the version, and buried the lines that do vary.
-            WingBrain.Begin(Settings.Mode.Value);
+            WingFidelity.Begin(Settings.Mode.Value);
             Logger.LogInfo(
                 "Effective settings: " +
-                $"Mode={Settings.Mode.Value} [{WingBrain.Summary()}] " +
+                $"Mode={Settings.Mode.Value} [{WingFidelity.Summary()}] " +
                 $"Shape={WingFormation.Shape} " +
                 $"DefaultRoe={Settings.DefaultRoe.Value} " +
                 $"AutoReturnOnEmpty={Settings.AutoReturnOnEmpty.Value} " +
@@ -162,12 +160,12 @@ namespace WingCommand
                 "RadialMenuAction.AllowedOnAircraft",
                 "RadialMenuAction.TriggerAction",
                 "MapIcon.UpdateColor",
+                "UnitMapIcon.UpdateIcon",
                 "HUDUnitMarker.UpdateColor",
                 "AIPilotCombatModes.EnterState",
                 "CombatAI.ChooseHQTarget",
+                "Hangar.DoorSequenceCarrier",
                 "GameManager.FinishGame",
-                "DynamicMap.Maximize",
-                "DynamicMap.Minimize",
             };
 
             foreach (string want in expected)

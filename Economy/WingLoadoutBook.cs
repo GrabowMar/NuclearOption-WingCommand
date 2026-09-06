@@ -3,28 +3,20 @@ using System.Collections.Generic;
 namespace WingCommand
 {
     /// <summary>
-    /// Which loadout every wing aircraft is actually carrying, and which one the next
-    /// requisition of a type will carry.
-    ///
-    /// Live state is keyed by <c>Aircraft.persistentID</c>, exactly as
-    /// <see cref="WingShop"/> keys ownership and over-limit slots. A choice made for one
-    /// VT-7 belongs to that airframe and to no other, including the next VT-7 the player
-    /// buys.
-    ///
-    /// The plan is necessarily keyed by definition instead, because at the moment the
-    /// player chooses it the aircraft does not exist yet. It is a purchase order, not a
-    /// fleet setting: it is read once, when a requisition is delivered, and copied onto
-    /// that specific airframe.
-    ///
-    /// Recovery is the third case. A wingman that completes Return To Base is destroyed, so
-    /// its persistentID cannot carry anything across. Its fit moves into the concrete
-    /// <see cref="WingSupplyReserve"/> slot instead, alongside that airframe's source and
-    /// ownership, rather than into a separate per-type FIFO that can drift out of alignment.
+    /// Tracks delivered fits by persistent aircraft ID and future purchase plans by definition.
+    /// Recovery transfers the fit to its concrete <see cref="WingSupplyReserve"/> slot
+    /// because the recovered aircraft and its ID are destroyed.
     /// </summary>
     internal static class WingLoadoutBook
     {
-        private static readonly Dictionary<PersistentID, WingLoadoutChoice> aboard =
-            new Dictionary<PersistentID, WingLoadoutChoice>();
+        private sealed class FittedLoadout
+        {
+            internal WingLoadoutChoice Choice;
+            internal int CaptureAfterFrame;
+        }
+
+        private static readonly Dictionary<PersistentID, FittedLoadout> aboard =
+            new Dictionary<PersistentID, FittedLoadout>();
 
         private static readonly Dictionary<AircraftDefinition, WingLoadoutChoice> planned =
             new Dictionary<AircraftDefinition, WingLoadoutChoice>();
@@ -66,16 +58,28 @@ namespace WingCommand
         public static WingLoadoutChoice AboardOf(Aircraft aircraft)
         {
             if (aircraft == null) return WingLoadoutChoice.Standard;
-            return aboard.TryGetValue(aircraft.persistentID, out WingLoadoutChoice choice)
-                ? choice
-                : WingLoadoutChoice.Standard;
+            if (!aboard.TryGetValue(aircraft.persistentID, out FittedLoadout fitted))
+                return WingLoadoutChoice.Standard;
+            if (UnityEngine.Time.frameCount > fitted.CaptureAfterFrame &&
+                (fitted.CaptureAfterFrame >= 0 || !fitted.Choice.HasSnapshot))
+            {
+                fitted.Choice = WingLoadoutCatalog.SnapshotFit(aircraft, fitted.Choice);
+                if (fitted.Choice.HasSnapshot) fitted.CaptureAfterFrame = -1;
+            }
+            return fitted.Choice;
         }
 
         /// <summary>Record what a delivered requisition was actually fitted with.</summary>
         public static void NoteSpawned(Aircraft aircraft, WingLoadoutChoice choice)
         {
             if (aircraft == null) return;
-            aboard[aircraft.persistentID] = choice;
+            // Native registration runs before Hangar finishes choosing its standard fit.
+            // Even a non-null loadout can still be a placeholder during this callback.
+            aboard[aircraft.persistentID] = new FittedLoadout
+            {
+                Choice = choice,
+                CaptureAfterFrame = UnityEngine.Time.frameCount,
+            };
         }
 
         public static void Forget(Aircraft aircraft)

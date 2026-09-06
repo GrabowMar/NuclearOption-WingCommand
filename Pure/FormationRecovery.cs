@@ -16,7 +16,7 @@ namespace WingCommand
         private float burstRemaining, burstCooldown, reportElapsed;
 
         public bool UpdateMode(float leaderSpeed, float minimumSpeed, float gap, float spacing, float dt,
-                               bool allowSlowLeader = true)
+                               bool allowSlowLeader = true, bool allowOvershoot = true)
         {
             dt = Clamp(dt, 0f, 0.5f);
             var previous = Mode;
@@ -25,15 +25,37 @@ namespace WingCommand
             if (slowTime >= WingTuning.FormationSlowEntrySeconds) Mode = FormationRecoveryMode.SlowLeader;
             else if (Mode == FormationRecoveryMode.SlowLeader &&
                      (!allowSlowLeader || readyTime >= WingTuning.FormationSlowExitSeconds))
-                Mode = gap < -spacing ? FormationRecoveryMode.Overshoot : FormationRecoveryMode.Station;
-            else if (Mode == FormationRecoveryMode.Station && gap < -Math.Max(spacing, WingTuning.FormationOvershootEntry))
+                Mode = allowOvershoot && gap < -spacing ? FormationRecoveryMode.Overshoot : FormationRecoveryMode.Station;
+            else if (Mode == FormationRecoveryMode.Station && allowOvershoot &&
+                     gap < -Math.Max(spacing, WingTuning.FormationOvershootEntry))
                 Mode = FormationRecoveryMode.Overshoot;
-            else if (Mode == FormationRecoveryMode.Overshoot && gap > spacing * 0.5f)
+            else if (Mode == FormationRecoveryMode.Overshoot && (!allowOvershoot || gap > spacing * 0.5f))
                 Mode = FormationRecoveryMode.Station;
             Blend = Move(Blend, Mode == FormationRecoveryMode.Station ? 0f : 1f,
                 dt / WingTuning.FormationRecoveryBlendSeconds);
             return previous != Mode;
         }
+
+        // Braking beside the leader is useful only after joining its flight path.
+        // A negative along-track projection alone also describes a distant aircraft
+        // on the other side of the airfield, or flying directly towards the leader.
+        public static bool CanYieldAhead(float distance, float crossTrack, float alignment,
+            float leaderSpeed, float minimumSpeed, float spacing, bool alreadyYielding = false) =>
+            distance <= Math.Max(WingTuning.CaptureDistance * 2f, spacing * 4f) * (alreadyYielding ? 1.5f : 1f) &&
+            Math.Abs(crossTrack) <= spacing * (alreadyYielding ? 4f : 2f) &&
+            alignment >= (alreadyYielding ? 0.6f : 0.8f) &&
+            leaderSpeed >= minimumSpeed + 3f;
+
+        public static float HoldingRadius(float speed, float spacing) =>
+            Math.Max(spacing * 1.5f, speed * speed /
+                (9.81f * (float)Math.Tan(WingTuning.FormationRecoveryBank * Math.PI / 180d)));
+
+        // For a circuit whose center is moving, solve |leaderVelocity + q*course|
+        // = flyingSpeed. Adding a fixed tangent then normalizing changes the
+        // relative course and lets the moving center walk away from the orbit.
+        public static float CirculationSpeed(float leaderAlongCourse, float leaderSpeed, float flyingSpeed) =>
+            Math.Max(0f, -leaderAlongCourse + (float)Math.Sqrt(Math.Max(0f,
+                leaderAlongCourse * leaderAlongCourse + flyingSpeed * flyingSpeed - leaderSpeed * leaderSpeed)));
 
         // Only stable, level flight at a settled throttle can identify drag. Reject
         // discontinuities and reset across manoeuvres; never learn from a collision.

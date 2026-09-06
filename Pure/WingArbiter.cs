@@ -21,11 +21,12 @@ namespace WingCommand
 
         /// <summary>
         /// Whether this is the same decision as the one already in force. Compared on the
-        /// reflex rather than the behaviour: two reflexes can legitimately fly the same
-        /// behaviour, and the transition between them is still worth logging.
+        /// reflex and behaviour: different reflexes can fly the same behaviour, and an
+        /// extension can change its behaviour while retaining its reflex identity.
         /// </summary>
         public bool SameAs(in WingResolution other) =>
-            string.Equals(ReflexId, other.ReflexId, StringComparison.Ordinal);
+            string.Equals(ReflexId, other.ReflexId, StringComparison.Ordinal) &&
+            string.Equals(BehaviourId, other.BehaviourId, StringComparison.Ordinal);
 
         public override string ToString() =>
             ReflexId + " (" + Band + " " + Score.ToString("0.00") + ") -> " + BehaviourId;
@@ -87,75 +88,68 @@ namespace WingCommand
             trace?.Clear();
             if (reflexes == null || reflexes.Count == 0) return Fallback;
 
-            IWingReflex incumbent = Find(reflexes, activeReflexId);
-            bool held = incumbent != null &&
-                        incumbent.MinimumSeconds > 0f &&
-                        situation.SecondsInBehaviour < incumbent.MinimumSeconds &&
-                        Eligible(incumbent, smartMode);
-
-            IWingReflex winner = null;
+            WingAi.ReflexSnapshot incumbent = default, winner = default;
+            bool hasIncumbent = false, hasWinner = false, held = false;
             float winningScore = 0f;
             WingReflexBand winningBand = WingReflexBand.Task;
+            bool winnerInterruptsHold = false;
 
-            // Reflexes arrive sorted by band, so the first band that produces a score is the
-            // answer and everything after it can be skipped - except when a trace was asked
-            // for, where the whole ladder is the point.
+            // Evaluate the complete set. Rank explicitly by band, score and stable Id;
+            // callers and extensions do not have to preserve registry insertion order.
             for (int i = 0; i < reflexes.Count; i++)
             {
-                IWingReflex reflex = reflexes[i];
-
-                if (winner != null && reflex.Band > winningBand && trace == null) break;
-                if (!Eligible(reflex, smartMode)) continue;
-
-                bool sticky = incumbent != null &&
-                              string.Equals(reflex.Id, incumbent.Id, StringComparison.Ordinal);
+                if (!WingAi.TrySnapshot(reflexes[i], out WingAi.ReflexSnapshot reflex)) continue;
+                if (!smartMode && reflex.RequiresSmartMode) continue;
+                bool sticky = string.Equals(reflex.Id, activeReflexId, StringComparison.Ordinal);
+                if (sticky)
+                {
+                    incumbent = reflex;
+                    hasIncumbent = true;
+                    held = reflex.MinimumSeconds > 0f && situation.SecondsInBehaviour < reflex.MinimumSeconds &&
+                        WingAi.CanHold(in reflex, in situation);
+                }
 
                 // Hysteresis is the reflex's own business: it is told whether it is the one
                 // in control and widens its own release threshold accordingly. The arbiter
                 // deliberately adds no incumbency bonus of its own - a blanket bonus cannot
                 // express "recall at the leash, release at half of it", and having both
                 // mechanisms would be two ways to tune one behaviour.
-                float score = WingAi.SafeScore(reflex, in situation, sticky);
+                float score = WingAi.SafeScore(in reflex, in situation, sticky);
+                bool interruptsHold = score > 0f && WingAi.InterruptsHold(in reflex);
+                if (WingAi.IsFaulted(in reflex)) score = 0f;
 
                 trace?.Add(new WingReflexTrace(reflex.Id, reflex.Band, score, won: false));
 
                 if (score <= 0f) continue;
-                if (winner != null && reflex.Band > winningBand) continue;
+                if (hasWinner && reflex.Band > winningBand) continue;
 
-                if (winner == null || score > winningScore)
+                if (!hasWinner || reflex.Band < winningBand || score > winningScore ||
+                    (score == winningScore && string.CompareOrdinal(reflex.Id, winner.Id) < 0))
                 {
                     winner = reflex;
+                    hasWinner = true;
                     winningScore = score;
                     winningBand = reflex.Band;
+                    winnerInterruptsHold = interruptsHold;
                 }
             }
 
-            // A minimum hold survives anything in its own band or below it, and nothing in a
-            // stronger one. Holding against a lower band would make the hold immunity, which
-            // is exactly the failure the bands exist to prevent.
-            if (held && (winner == null || winner.Band >= incumbent.Band))
+            // A score/lifecycle fault may have disabled the incumbent during this pass.
+            held = held && !WingAi.IsFaulted(in incumbent);
+            bool emergency = hasWinner && hasIncumbent && winner.Band <= incumbent.Band &&
+                             winnerInterruptsHold;
+            if (held && !emergency && (!hasWinner || winner.Band >= incumbent.Band))
+            {
                 winner = incumbent;
+                hasWinner = true;
+            }
 
-            if (winner == null) return Fallback;
+            if (!hasWinner) return Fallback;
 
             MarkWinner(trace, winner.Id);
 
-            float reported = ReferenceEquals(winner, incumbent) && held ? 1f : winningScore;
+            float reported = hasIncumbent && ReferenceEquals(winner.Source, incumbent.Source) && held ? 1f : winningScore;
             return new WingResolution(winner.BehaviourId, winner.Id, winner.Band, reported);
-        }
-
-        private static bool Eligible(IWingReflex reflex, bool smartMode) =>
-            smartMode || !reflex.RequiresSmartMode;
-
-        private static IWingReflex Find(IReadOnlyList<IWingReflex> reflexes, string id)
-        {
-            if (string.IsNullOrEmpty(id)) return null;
-
-            for (int i = 0; i < reflexes.Count; i++)
-            {
-                if (string.Equals(reflexes[i].Id, id, StringComparison.Ordinal)) return reflexes[i];
-            }
-            return null;
         }
 
         private static void MarkWinner(List<WingReflexTrace> trace, string id)

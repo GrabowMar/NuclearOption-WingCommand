@@ -4,14 +4,8 @@ using UnityEngine;
 namespace WingCommand
 {
     /// <summary>
-    /// Wingman radio calls, written into the dedicated squadron subtitle surface.
-    ///
-    /// Until now the only way to tell what the wing was doing was to read the BepInEx
-    /// log, which is a poor way to command a flight. Spoken radio gets a speaker identity
-    /// and a separately styled line; debug actions alone retain the legacy message feed.
-    ///
-    /// Calls are rate-limited per member per kind: a wingman that is repeatedly defending
-    /// should say so once, not once per engagement tick.
+    /// Routes squadron calls to subtitles with speaker identity.
+    /// Rate limits are per member and call kind to suppress repeated engagement chatter.
     /// </summary>
     internal static class WingComms
     {
@@ -61,6 +55,10 @@ namespace WingCommand
             ManeuverDone,
             BreakCall,
             SlowLeader,
+            Taxiing,
+            Departing,
+            Airborne,
+            AirborneRejoining,
         }
 
         /// <summary>
@@ -108,7 +106,8 @@ namespace WingCommand
             if (Plugin.Settings.Radio.Value == ChatterLevel.Off || member == null) return;
 
             // Performance mode keeps only the calls a commander actually needs to hear.
-            if (!WingBrain.RichChatter && !Critical(call)) return;
+            if (!WingFidelity.RichChatter && !Critical(call)) return;
+            if (call == Call.Rejoining && WingDepartureChatter.ReportingLiftoff(member)) return;
 
             var key = new SpeechKey(member, call);
             if (lastSpoken.TryGetValue(key, out float last) &&
@@ -136,7 +135,7 @@ namespace WingCommand
             if (Plugin.Settings.Radio.Value == ChatterLevel.Off || members == null) return;
 
             // Order acknowledgements are flavour, not information - dropped in Performance mode.
-            if (!WingBrain.RichChatter) return;
+            if (!WingFidelity.RichChatter) return;
 
             var ordered = new List<WingMember>();
             for (int i = 0; i < members.Count; i++)
@@ -216,11 +215,15 @@ namespace WingCommand
             WingChatterHud.Tick();
 
             if (Plugin.Settings.Radio.Value == ChatterLevel.Off || wing == null)
+            {
+                WingDepartureChatter.Tick(wing, speechAllowed: false);
                 return;
+            }
 
             CheckLeaderThreats(wing);
+            WingDepartureChatter.Tick(wing, speechAllowed: WingFidelity.RichChatter);
 
-            if (!WingBrain.RichChatter)
+            if (!WingFidelity.RichChatter)
                 return;
 
             float now = Time.unscaledTime;
@@ -295,6 +298,7 @@ namespace WingCommand
             lastSpoken.Clear();
             nextBanterCheck = 0f;
             nextThreatCheck = 0f;
+            WingDepartureChatter.Reset();
             WingChatterHud.Reset();
         }
 

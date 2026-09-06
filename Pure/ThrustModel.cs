@@ -1,5 +1,3 @@
-using System;
-
 namespace WingCommand
 {
     /// <summary>
@@ -35,13 +33,6 @@ namespace WingCommand
 
             float ratio = speed / maxSpeed;
             return Clamp01(ratio * ratio);
-        }
-
-        /// <summary>The speed <paramref name="throttle"/> eventually settles at in level flight.</summary>
-        public static float SpeedAtThrottle(float throttle, float maxSpeed)
-        {
-            if (maxSpeed <= 0f) return 0f;
-            return maxSpeed * (float)Math.Sqrt(Clamp01(throttle));
         }
 
         /// <summary>

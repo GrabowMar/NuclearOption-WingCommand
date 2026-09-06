@@ -93,18 +93,6 @@ namespace WingCommand
             return total;
         }
 
-        public static int TotalOwnedCount
-        {
-            get
-            {
-                int total = 0;
-                for (int i = 0; i < slots.Count; i++)
-                    if (slots[i].Source == Source.Owned && !slots[i].ReservedForPurchase)
-                        total++;
-                return total;
-            }
-        }
-
         public static int FactionStockOf(AircraftDefinition definition) =>
             hq != null && definition != null ? hq.GetUnitSupply(definition) : 0;
 
