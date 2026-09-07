@@ -62,6 +62,46 @@ namespace WingCommand
     }
 
     /// <summary>
+    /// Helicopters never enter inbound taxi: <c>AIHeloLandingState</c> ejects on the pad.
+    /// A parked jet's landing state does the same after ten seconds on the ground. For a
+    /// refit that eject is fatal — <see cref="WingMember.CompleteRefit"/> needs a living
+    /// seated pilot. For RTB it is the disembark we want, so this only suppresses the
+    /// stock eject while a refit is waiting on the pad.
+    /// </summary>
+    [HarmonyPatch(typeof(Aircraft), nameof(Aircraft.StartEjectionSequence))]
+    internal static class WingRefitEjectPatch
+    {
+#pragma warning disable IDE0051
+        [HarmonyPrefix]
+        private static bool Prefix(Aircraft __instance)
+        {
+            if (__instance == null) return true;
+
+            WingRegistry wing = WingCommandManager.Instance?.Wing;
+            if (wing == null) return true;
+
+            WingMember member = wing.Find(__instance);
+            bool ours = member != null || WingDeparture.Contains(__instance);
+            Pilot pilot = WingRegistry.PrimaryPilot(__instance);
+            bool hasTakenOff = pilot != null && pilot.flightInfo != null &&
+                               pilot.flightInfo.HasTakenOff;
+            bool refit = member != null && member.RefitPending;
+            if (!TaxiRewritePolicy.ShouldSuppressEjection(ours, refit, hasTakenOff))
+                return true;
+
+            if (pilot != null && !(pilot.currentState is PilotParkedState) &&
+                pilot.parkedState != null)
+                pilot.SwitchState(pilot.parkedState);
+
+            Plugin.LogVerbose(
+                "[Recovery] " + __instance.unitName +
+                " held in the seat for refit; stock eject skipped");
+            return false;
+        }
+#pragma warning restore IDE0051
+    }
+
+    /// <summary>
     /// Give back a takeoff slot whenever a wingman leaves taxi by any route other than
     /// starting its takeoff run.
     ///

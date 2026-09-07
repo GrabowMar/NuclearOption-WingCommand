@@ -30,6 +30,24 @@ namespace WingCommand
             ours && enteringTaxi && hasTakenOff;
 
         /// <summary>
+        /// Whether a stock post-landing eject should be skipped so a refit can rearm
+        /// in the seat. Helicopters never enter inbound taxi — they eject on the pad —
+        /// and a parked jet's landing state ejects after ten seconds on the ground.
+        /// Return-to-base wants that eject: it is the disembark, not a combat loss.
+        /// </summary>
+        public static bool ShouldSuppressEjection(bool ours, bool refitPending, bool hasTakenOff) =>
+            ours && refitPending && hasTakenOff;
+
+        /// <summary>
+        /// Prune must not write off a wingman that is down at a friendly field under RTB
+        /// or refit. An eject there is the stock disembark, and a settlement that has not
+        /// yet been staged would otherwise mark the squadron pilot lost.
+        /// </summary>
+        public static bool HoldsDeath(bool pendingSettlement, bool atFriendlyBase,
+                                      bool rtbOrRefit) =>
+            pendingSettlement || (atFriendlyBase && rtbOrRefit);
+
+        /// <summary>
         /// Whether leaving a departure state should give back the runway slot.
         ///
         /// Neither <c>AIPilotTaxiState.LeaveState</c> nor <c>AIPilotTakeoffState.LeaveState</c>

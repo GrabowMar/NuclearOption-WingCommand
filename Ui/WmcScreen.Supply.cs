@@ -891,11 +891,11 @@ namespace WingCommand
         }
 
         /// <summary>
-        /// Choose what the next one of these flies with: the game's standard player-start
-        /// fit, or a template.
+        /// Choose what the next one of these flies with: the player's current default
+        /// for this airframe this mission, or a saved template.
         ///
-        /// The standard fit is always first and always available, because it mirrors the
-        /// game's per-airframe player-start preset even before they open LOADOUT.
+        /// The standard fit is always first and always available — it is the same loadout
+        /// the game applies when the player starts in that aircraft.
         /// </summary>
         private static void OpenShopTemplatePicker()
         {
@@ -913,7 +913,7 @@ namespace WingCommand
             var ids = new List<string>(mine.Count + 1) { null };
             popupEntries.Clear();
             popupEntries.Add(new AvKit.PopupEntry(
-                "STANDARD FIT", "game-start preset", !planned.IsTemplate));
+                "STANDARD FIT", "player default this mission", !planned.IsTemplate));
 
             for (int i = 0; i < mine.Count; i++)
             {

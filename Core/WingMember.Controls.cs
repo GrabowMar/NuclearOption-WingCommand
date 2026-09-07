@@ -151,6 +151,7 @@ namespace WingCommand
                     break;
 
                 case WingOrder.OrbitHere:
+                case WingOrder.StandDown:
                     EnterOrbit(Directive);
                     break;
 

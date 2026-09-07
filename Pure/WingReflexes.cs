@@ -156,6 +156,7 @@ namespace WingCommand
                     case WingOrder.MoveToPoint:
                     case WingOrder.SeekAndDestroy:
                     case WingOrder.OrbitHere:
+                    case WingOrder.StandDown:
                         return 0f;
                     default:
                         return 1f;

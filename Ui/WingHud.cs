@@ -543,6 +543,7 @@ namespace WingCommand
                     case WingOrder.SeekAndDestroy: return "S&D";
                     case WingOrder.JamTarget:   return "JAM";
                     case WingOrder.Maneuver:    return "MNVR";
+                    case WingOrder.StandDown:   return "WAIT";
                     default:                    return "FORM";
                 }
             }

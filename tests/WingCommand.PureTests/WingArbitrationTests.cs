@@ -28,6 +28,7 @@ namespace WingCommand.PureTests
                      {
                          WingOrder.ReturnToBase, WingOrder.MoveToPoint,
                          WingOrder.SeekAndDestroy, WingOrder.OrbitHere,
+                         WingOrder.StandDown,
                      })
             {
                 var s = new WingSituation(order: order, leaderDistance: 9000f, leashRadius: 5000f,

@@ -223,28 +223,33 @@ namespace WingCommand
         }
 
         /// <summary>
-        /// Where to run to: the nearest friendly airbase, else a ship, else simply a long
-        /// way down the retreat axis. Something is always returned — a fall-back order that
-        /// silently does nothing because no airbase was found is worse than one that runs
-        /// in a sensible direction.
+        /// Nearest friendly airbase, else ship, else a standoff along <paramref name="away"/>.
+        /// Shared with Stand Down so both orders loiter in the same kind of place.
         /// </summary>
-        private GlobalPosition ChooseRally(Vector3 away)
+        internal static GlobalPosition FriendlyLoiterPoint(Aircraft aircraft, Vector3 away)
         {
+            if (aircraft == null) return default;
             FactionHQ hq = aircraft.NetworkHQ;
             float standoff = WingTuning.FallBackStandoff;
+            Vector3 lift = Vector3.up * EgressAltitude;
 
             if (hq != null)
             {
                 Airbase airbase = hq.GetNearestAirbase(aircraft.transform.position);
                 if (airbase != null)
-                    return airbase.transform.GlobalPosition() + Vector3.up * EgressAltitude;
+                    return airbase.transform.GlobalPosition() + lift;
 
-                if (hq.TryGetNearestShip(aircraft.GlobalPosition(), out Ship ship, out float _) && ship != null)
-                    return ship.GlobalPosition() + Vector3.up * EgressAltitude;
+                if (hq.TryGetNearestShip(aircraft.GlobalPosition(), out Ship ship, out float _) &&
+                    ship != null)
+                    return ship.GlobalPosition() + lift;
             }
 
-            return aircraft.GlobalPosition() + away * standoff;
+            away.y = 0f;
+            if (away.sqrMagnitude < 0.0001f) away = Vector3.forward;
+            return aircraft.GlobalPosition() + away.normalized * standoff + lift;
         }
+
+        private GlobalPosition ChooseRally(Vector3 away) => FriendlyLoiterPoint(aircraft, away);
 
         // -------------------------------------------------------------------- flares
 

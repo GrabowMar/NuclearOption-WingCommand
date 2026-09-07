@@ -62,6 +62,9 @@ namespace WingCommand
                 return new WingDispatchResult(0,
                     WingOrderCatalog.UnavailableReason(directive.Order));
 
+            if (directive.Order == WingOrder.Engage)
+                RoeRules.EnsureFree(wing);
+
             string label = directive.Order == WingOrder.Maneuver
                 ? ManeuverCatalog.Label(directive.Maneuver)
                 : WingOrderCatalog.Label(directive.Order);

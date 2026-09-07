@@ -66,6 +66,7 @@ namespace WingCommand
         private readonly List<WingDirective> taskQueue = new List<WingDirective>();
         private bool applyKeepsQueue;
         private float moveAltitude;
+        private float moveSpeed;
         private bool deliveryPending;
 
         private readonly CargoProgressTracker cargoProgress = new CargoProgressTracker();
@@ -91,6 +92,12 @@ namespace WingCommand
             Apply(WingOrder.ReturnToBase);
             RefitPending = true;
         }
+
+        /// <summary>
+        /// Drop the refit flag so recovery can settle the airframe as a normal RTB.
+        /// Used when the stock landing eject already emptied the seat.
+        /// </summary>
+        internal void AbandonRefit() => RefitPending = false;
 
         /// <summary>
         /// Replenish where the aircraft is parked, then hand it back to the departure lane.
@@ -246,6 +253,15 @@ namespace WingCommand
         /// </summary>
         public void Apply(WingDirective directive)
         {
+            if (directive.Order == WingOrder.StandDown && !directive.HasPoint && Aircraft != null)
+            {
+                Vector3 away = Aircraft.transform != null
+                    ? -Aircraft.transform.forward
+                    : Vector3.forward;
+                directive = WingDirective.AtPoint(
+                    WingOrder.StandDown, FallBackState.FriendlyLoiterPoint(Aircraft, away));
+            }
+
             // A hangar-delivered aircraft belongs to the roster immediately, but the stock
             // taxi/launch state must own it until it is airborne. Record the standing order
             // anyway so ActivateWhenAirborne can fly it instead of defaulting to Form Up.
@@ -664,13 +680,15 @@ namespace WingCommand
 
         /// <summary>
         /// Issue a tactical-map task, replacing or appending to this member's route.
-        /// Shift-click uses <paramref name="append"/> so Hold, Attack and Move share one queue.
+        /// Shift-click appends only when this member is already flying the same kind of
+        /// map task. A Move never queues behind Attack/Hold — it replaces them.
         /// </summary>
         public void IssueMapTask(WingDirective directive, bool append)
         {
             if (!Alive) return;
 
-            if (!append)
+            bool sameKind = append && Order == directive.Order && MapOrderPolicy.CanFollowOn(Order);
+            if (!sameKind)
             {
                 taskQueue.Clear();
                 taskQueue.Add(directive);
@@ -681,18 +699,7 @@ namespace WingCommand
             }
 
             if (taskQueue.Count == 0)
-            {
-                if (MapOrderPolicy.CanFollowOn(Order))
-                    taskQueue.Add(Directive);
-                else
-                {
-                    taskQueue.Add(directive);
-                    applyKeepsQueue = true;
-                    Apply(directive);
-                    applyKeepsQueue = false;
-                    return;
-                }
-            }
+                taskQueue.Add(Directive);
 
             taskQueue.Add(directive);
             TacticalMapOverlay.Invalidate();
@@ -712,6 +719,15 @@ namespace WingCommand
         public void SetMoveAltitude(float altitude)
         {
             moveAltitude = altitude;
+        }
+
+        public float MoveSpeed => moveSpeed;
+
+        public float ResolvedMoveSpeed => MapOrderPolicy.StepMoveSpeed(moveSpeed, 0);
+
+        public void SetMoveSpeed(float speed)
+        {
+            moveSpeed = speed;
         }
 
         /// <summary>
@@ -734,6 +750,7 @@ namespace WingCommand
                 taskQueue.Clear();
                 engageActivityAt = Time.timeSinceLevelLoad;
                 Complete(WingOrderRules.PointTaskCompletion(Order));
+                RoeRules.EnsureFree(owner);
                 return;
             }
 
@@ -802,6 +819,7 @@ namespace WingCommand
                 case WingOrder.MoveToPoint:
                 case WingOrder.SeekAndDestroy:
                 case WingOrder.Maneuver:
+                case WingOrder.StandDown:
                     return;
             }
 

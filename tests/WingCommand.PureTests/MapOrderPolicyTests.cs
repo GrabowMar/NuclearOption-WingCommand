@@ -74,12 +74,8 @@ namespace WingCommand.PureTests
         }
 
         [Fact]
-        public void AltScrollStepsMoveAltitudeAndClamps()
+        public void HeightAndSpeedButtonsStepAndClamp()
         {
-            Assert.Equal(1, MapOrderPolicy.ScrollSign(0.1f));
-            Assert.Equal(-1, MapOrderPolicy.ScrollSign(-0.1f));
-            Assert.Equal(0, MapOrderPolicy.ScrollSign(0f));
-
             float start = MapOrderPolicy.DefaultMoveAltitude(rotary: false);
             Assert.Equal(start + WingTuning.MoveAltitudeStepFixed,
                 MapOrderPolicy.StepMoveAltitude(0f, 1, rotary: false));
@@ -87,6 +83,24 @@ namespace WingCommand.PureTests
                 MapOrderPolicy.StepMoveAltitude(WingTuning.MoveAltitudeMaxFixed, 1, rotary: false));
             Assert.Equal(WingTuning.MoveAltitudeMinRotary,
                 MapOrderPolicy.StepMoveAltitude(WingTuning.MoveAltitudeMinRotary, -1, rotary: true));
+
+            Assert.Equal(WingTuning.MoveSpeedDefault,
+                MapOrderPolicy.StepMoveSpeed(0f, 0));
+            Assert.Equal(WingTuning.MoveSpeedMin,
+                MapOrderPolicy.StepMoveSpeed(WingTuning.MoveSpeedMin, -1));
+            Assert.Equal(WingTuning.MoveSpeedMax,
+                MapOrderPolicy.StepMoveSpeed(WingTuning.MoveSpeedMax, 1));
+            Assert.Equal(WingTuning.MoveSpeedDefault - WingTuning.MoveSpeedStep,
+                MapOrderPolicy.StepMoveSpeed(0f, -1));
+        }
+
+        [Fact]
+        public void ShiftMoveDoesNotQueueBehindADifferentOrderKind()
+        {
+            Assert.False(MapOrderPolicy.CanFollowOn(WingOrder.Formation));
+            Assert.True(MapOrderPolicy.CanFollowOn(WingOrder.MoveToPoint));
+            Assert.False(MapOrderPolicy.ArmsOnMap(WingOrder.StandDown));
+            Assert.False(MapOrderPolicy.ArmsOnMap(WingOrder.Engage));
         }
 
         [Fact]

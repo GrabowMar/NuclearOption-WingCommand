@@ -467,5 +467,17 @@ namespace WingCommand
         public const float MoveAltitudeMaxFixed = 8000f;
         public const float MoveAltitudeMinRotary = 25f;
         public const float MoveAltitudeMaxRotary = 3000f;
+
+        /// <summary>Default Move throttle / speed fraction. 1 is full.</summary>
+        public const float MoveSpeedDefault = 1f;
+        public const float MoveSpeedStep = 0.15f;
+        public const float MoveSpeedMin = 0.4f;
+        public const float MoveSpeedMax = 1f;
+
+        /// <summary>AutoAim effort for a tactical-map Move. Higher than the old 1.8 wander.</summary>
+        public const float MoveEffort = 2.2f;
+
+        /// <summary>Bank cap for Move, short of formation's inversion-safe ceiling.</summary>
+        public const float MoveBank = 75f;
     }
 }

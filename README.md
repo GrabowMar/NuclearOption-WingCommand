@@ -129,8 +129,8 @@ Wing Command
 | Left-click Attack Target with no designation | Arm Attack for a map target |
 | Right-click the map with an order armed | Issue that order at the point, or at the clicked hostile for Attack |
 | Right-click the map with no order armed | Send the selection there (`MOVE` marker) |
-| Shift-right-click | Queue that order (any armed order, or another Move) |
-| Alt+scroll with no order armed | Change Move altitude |
+| Shift-right-click | Queue that order (Move only appends to an existing Move; otherwise it replaces) |
+| H+ / H- / S+ / S- | Change Move altitude and speed |
 | Click the armed button again / Escape | Cancel the armed order |
 
 Left-click on hostile, friendly non-wing, ground and naval icons behaves as in stock.
@@ -150,13 +150,14 @@ also have brackets while Tactical is open. `UI/Highlight` controls the outlines.
 | **Form Up** | Close on assigned slots and hold station on you |
 | **Attack Target** | Hit your locked target immediately, or arm the button and right-click a hostile on the map. Radial sends everyone; scoped WMC distributes contacts and may hold surplus back as cover |
 | **Splash 'Em** | Every selected wingman pours its whole loadout into one target until it's dead or they're dry. WMC only — not a quick call |
-| **Engage** | Hunt within the configured leash, return if they stray |
+| **Engage** | Hunt within the configured leash, return if they stray. Sets ROE to FREE |
 | **Seek & Destroy** | Fly to a marked map area, then begin autonomous engagement under the current ROE |
 | **Disengage** | Break on separated headings, countermeasure, egress, then form up |
 | **Hold Here** | CAP a point while still applying ROE |
 | **Deliver Cargo** | Fly cargo to a chosen point, drop it, report, rejoin |
 | **Land Here** | Set compatible helicopters down near the point |
 | **Refit** | Return to base, replenish fuel and stores, take off again, then rejoin |
+| **Stand Down** | Cancel the current task and loiter near friendly airbases or ships |
 | **Roster RTB** | On an individual roster row, dismiss a wingman home; its plane and pilot return to their pools after recovery |
 | **Formation dial** | Swap between the six shapes on the fly |
 
@@ -167,11 +168,10 @@ Interrupted manoeuvres and target orders whose target has died finish by returni
 
 Holding aircraft circle in the same direction on separate radii, spaced by formation slot.
 
-**Roster RTB completes.** Down and shut down at a friendly base, the dismissed airframe leaves
-the world and enters the three-slot wing reserve — a purchased one stays owned and relaunches
-free, an assigned mission airframe becomes a held slot. Its pilot returns to the squadron pool
-at the same settlement, so neither can be reused during the flight home. Set
-`Engagement/RtbReturnsToReserve = false` to leave recovered aircraft parked.
+**Roster RTB completes.** Down and shut down at a friendly base, the pilot leaves the cockpit
+(not scored as a death), the airframe returns to faction stock, allocation spent on a
+purchased aircraft is refunded, and the squadron pilot returns to the pool. Set
+`Engagement/RtbReturnsToReserve = false` to park on the apron instead of despawning.
 
 **Splash 'Em vs Attack.** Attack is measured — spread designations, a useful-attacker cap,
 surplus held as cover, seconds between launches. Splash 'Em drops all of that: one target,
@@ -249,12 +249,12 @@ so two purchases never occupy the same strip; Supply reports a jammed field befo
 spends allocation. Nothing is moved once it exists, and no ground steering is overridden:
 WingCommand chooses the pose and then gets out of the way.
 
-Return To Base, dismissal and refit all fly the stock approach home. The one stock transition
-that is rewritten is the taxi a wingman is given *after* it lands — that run looks for a
-service point and ejects the pilot on the apron, so an inbound wingman is parked instead and
-recovered into stock. Refit replenishes the aircraft where it stands and launches it again
-from that pose. WingCommand gives back its own runway queue entries whenever a departure ends
-without taking off, so an interrupted launch cannot jam the strip for the rest of the mission.
+Return To Base, dismissal and refit all fly the stock approach home. After landing, RTB
+disembarks immediately and returns the airframe through the game's own Returned path, so it
+is not scored as a kill. Refit parks on the pad, skips that eject, replenishes, and launches
+again from that pose. WingCommand gives back its own runway queue entries whenever a departure
+ends without taking off, so an interrupted launch cannot jam the strip for the rest of the
+mission.
 
 With verbose logging enabled, instability triggers an eight-second diagnostic burst at
 five samples per second, with a thirty-second interval between burst starts. The
@@ -292,16 +292,17 @@ next requisition flies with.
 - Name it in **NAME** (flight controls are held off while typing). Saved to config, survives
   restarts, up to eight per airframe.
 
-**Flying one:** the **FIT** row on Supply picks the game's player-start preset for that
-aircraft or a saved template.
+**Flying one:** the **FIT** row on Supply picks **STANDARD FIT** — the player's current
+default for that airframe this mission, the same loadout the game applies when you start in
+it — or a saved template.
 
 - Equipment is fitted at aircraft creation, so one already airborne can't be refitted — the
   **Wing** tab shows what each carries.
 - An active mission aircraft assigned from the map flies **as found** and can't be refitted.
-- RTB keeps the fit: a recovered airframe re-launches with what it came home with; a
-  template chosen afterward applies to the next *new* airframe, and Supply says which you'll get.
+- STANDARD is re-read at requisition time, so a change in the aircraft menu applies to the
+  next new airframe. A template chosen on Supply applies instead of STANDARD.
 - Deleting a template doesn't disturb anything flying it; a purchase order pointing at a
-  deleted template falls back to the standard fit.
+  deleted template falls back to STANDARD.
 - Loadouts don't change price. A requisition is list price.
 
 **Cargo:** a transport carries whatever cargo pod is on its cargo pylon. **Deliver Cargo
@@ -333,12 +334,13 @@ Built on Nuclear Option's existing economy, not a separate one:
 - **Wing Reserve** holds up to three specific airframes across all types. `HOLD` pulls one
   faction airframe out of AI-accessible stock; `RELEASE` returns it. It doesn't create supply.
 - **Releasing a wingman sends it home** (`REL` on the Wing roster) — it flies the stock
-  pattern back, stops counting against the squadron limit immediately, and its airframe is
-  credited back on landing.
-- A paid requisition is marked owned and returns to the reserve on RTB to relaunch free.
-  Recovered active assignments return as ordinary held reserve, charged normally next time.
+  pattern back, stops counting against the squadron limit immediately, and on landing the
+  airframe returns to faction stock, the pilot returns to the pool, and purchase allocation
+  is refunded.
+- A paid requisition is refunded on RTB rather than held as a free relaunch. Manual
+  **HOLD** / **RELEASE** on Supply still parks faction stock in the three-slot reserve.
 - Every purchase and assignment previews its fee. Credits and supply move only after
-  recruitment or spawn succeeds.
+  recruitment or spawn succeeds. The 25% map-assignment fee is not refunded on RTB.
 
 **Squadron capacity.** Missions cap airborne faction AI, and the cap shrinks per friendly
 player — single-player often leaves zero room. Supply shows it as `SQUADRON active / limit`.
@@ -455,8 +457,8 @@ recruit lists hide incompatible types.
 **Bought an aircraft but the squadron's at its limit — scammed?** No. Missions cap airborne
 AI and the cap shrinks with more players. Push past it with **OVER LIMIT** at rank 3.
 
-**Charged twice for the same aircraft?** No — an RTB landing returns a purchased aircraft to
-your reserve to relaunch free.
+**Charged twice for the same aircraft?** No — an RTB landing refunds the allocation spent on
+that airframe and returns it to faction stock. Requisitioning it again is a new purchase.
 
 **Shaky formation?** Wingmen use filtered leader motion and curved approaches to their
 slots. Repeated large corrections after small stick movements are a bug; report the
@@ -522,7 +524,7 @@ tactical rules, hotkeys, and appearance can be configured.
 | Engagement | `BingoFuel` | `0.15` | Auto-return fuel fraction (`0.05`–`0.40`) |
 | Engagement | `LeashDistance` | `5000` | Max pursuit distance in metres before breaking off and rejoining (`2000`–`15000`) |
 | Engagement | `MaxWingmenPerTarget` | `2` | Maximum wingmen allowed to focus-fire the same target (`1`–`4`) |
-| Engagement | `RtbReturnsToReserve` | `true` | Recovered airframes return to wing reserve |
+| Engagement | `RtbReturnsToReserve` | `true` | RTB despawns, refunds purchase allocation, returns pilot and airframe |
 | Engagement | `TakeoverOnDeath` | `true` | Offer a surviving wing aircraft after pilot loss |
 | Comms | `Radio` | `TextAndTone` | Squadron radio traffic (`Off`, `Text`, `TextAndTone`) |
 | Pilot | `PilotProgression` | `true` | Pilots keep a record, rank and small skill effect |

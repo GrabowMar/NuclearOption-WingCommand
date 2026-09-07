@@ -27,6 +27,7 @@ namespace WingCommand
                 case WingOrder.JamTarget:    return "Jam";
                 case WingOrder.Maneuver:     return "Manoeuvre";
                 case WingOrder.SeekAndDestroy: return "Seek and Destroy";
+                case WingOrder.StandDown:    return "Stand Down";
                 default:                     return order.ToString();
             }
         }
@@ -51,6 +52,7 @@ namespace WingCommand
                 case WingOrder.JamTarget:    return "JAM";
                 case WingOrder.Maneuver:     return "MNVR";
                 case WingOrder.SeekAndDestroy: return "S&D";
+                case WingOrder.StandDown:    return "WAIT";
                 default:                     return order.ToString().ToUpperInvariant();
             }
         }

@@ -78,5 +78,16 @@ namespace WingCommand.PureTests
             Assert.Equal("Attack Target", WingOrderCatalog.Label(WingOrder.Attack));
             Assert.Equal("ATK TGT", WingOrderCatalog.ShortLabel(WingOrder.Attack));
         }
+
+        [Fact]
+        public void StandDown_IsALoiterNotAMapPointTask()
+        {
+            Assert.Equal("Stand Down", WingOrderCatalog.Label(WingOrder.StandDown));
+            Assert.Equal("WAIT", WingOrderCatalog.ShortLabel(WingOrder.StandDown));
+            Assert.False(WingOrderCatalog.NeedsPoint(WingOrder.StandDown));
+            Assert.False(WingOrderCatalog.TakesPoint(WingOrder.StandDown));
+            Assert.Equal(OrderEngagementAuthority.StandingRoe,
+                OrderRoePolicy.Authority(WingOrder.StandDown));
+        }
     }
 }

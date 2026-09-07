@@ -154,7 +154,7 @@ namespace WingCommand
                 ReleaseCapacity();
                 Status = State.Committed;
                 activeTransactions.Remove(this);
-                NoteDelivery(aircraft, OverLimit, Loadout);
+                NoteDelivery(aircraft, OverLimit, Loadout, Price);
                 return true;
             }
 
@@ -234,6 +234,7 @@ namespace WingCommand
             activeTransactions.Clear();
             listedDefinitions.Clear();
             purchasedAircraft.Clear();
+            purchasePrice.Clear();
             overLimitAircraft.Clear();
             capacityReservations.Reset();
             ExceedLimit = false;
@@ -405,6 +406,9 @@ namespace WingCommand
         private static readonly HashSet<PersistentID> purchasedAircraft =
             new HashSet<PersistentID>();
 
+        private static readonly Dictionary<PersistentID, float> purchasePrice =
+            new Dictionary<PersistentID, float>();
+
         // Over-cap airframes the player has bought and still has flying.
         //
         // Counted this way, rather than as how far the faction's own aircraft count exceeds
@@ -439,11 +443,13 @@ namespace WingCommand
             !UnitRegistry.TryGetUnit(id, out Unit unit) || unit == null || unit.disabled;
 
         /// <summary>Record a delivered requisition and, when applicable, its over-cap slot.</summary>
-        public static void NoteDelivery(Aircraft aircraft, bool overLimit, WingLoadoutChoice loadout)
+        public static void NoteDelivery(Aircraft aircraft, bool overLimit, WingLoadoutChoice loadout,
+                                        float paid)
         {
             if (aircraft == null) return;
 
             purchasedAircraft.Add(aircraft.persistentID);
+            purchasePrice[aircraft.persistentID] = Mathf.Max(0f, paid);
             if (overLimit) overLimitAircraft.Add(aircraft.persistentID);
 
             // The airframe now exists, so the purchase order becomes a fact about this one
@@ -459,8 +465,16 @@ namespace WingCommand
         internal static bool TakePurchased(PersistentID id)
         {
             overLimitAircraft.Remove(id);
+            purchasePrice.Remove(id);
             return purchasedAircraft.Remove(id);
         }
+
+        /// <summary>Allocation actually charged for this airframe, or zero if it was free.</summary>
+        public static float PaidFor(PersistentID id) =>
+            purchasePrice.TryGetValue(id, out float paid) ? paid : 0f;
+
+        public static float PaidFor(Aircraft aircraft) =>
+            aircraft != null ? PaidFor(aircraft.persistentID) : 0f;
 
         /// <summary>Read ownership without transferring it out of the live aircraft.</summary>
         public static bool IsPurchased(Aircraft aircraft) =>

@@ -368,7 +368,7 @@ namespace WingCommand
         private static bool IsMarkerOrder(WingOrder order) =>
             order == WingOrder.OrbitHere || order == WingOrder.LandHere ||
             order == WingOrder.MoveToPoint || order == WingOrder.SeekAndDestroy ||
-            order == WingOrder.DeliverCargo;
+            order == WingOrder.DeliverCargo || order == WingOrder.StandDown;
 
         private static bool TryRoutePoint(WingDirective task, out GlobalPosition point)
         {

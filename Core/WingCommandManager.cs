@@ -230,6 +230,7 @@ namespace WingCommand
         AttackMyTarget,
         CycleRoe,
         JamMyTarget,
+        StandDown,
     }
 
     internal struct RadialSlice

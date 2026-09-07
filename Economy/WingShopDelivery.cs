@@ -68,6 +68,9 @@ namespace WingCommand
                     reason = "Delivery transaction could not be committed";
                     return false;
                 }
+                float fuel = WingShop.SpawnFuelFor(definition);
+                RememberSpawnFuel(spawned, fuel);
+                ApplySpawnFuel(spawned, fuel);
                 WingCommandManager.Instance?.QueueRecruit(spawned, transaction.Pilot);
                 return true;
             }
@@ -136,17 +139,55 @@ namespace WingCommand
             new Dictionary<AircraftDefinition, bool>();
 
         /// <summary>
-        /// The preset the game would have picked for itself, chosen safely.
-        ///
-        /// Index one is what <c>Aircraft.OnStartClient</c> reaches for, so it is the right
-        /// answer where it exists; anything shorter falls back to the first preset rather
-        /// than letting the engine index past the end of the array.
+        /// The live player-default fit, falling back to the airframe's game-start preset.
+        /// Shared with <see cref="WingLoadoutCatalog.Build"/> so hangar and runway spawn
+        /// cannot disagree about STANDARD.
         /// </summary>
-        private static Loadout DefaultLoadout(AircraftDefinition definition)
+        private static Loadout DefaultLoadout(AircraftDefinition definition) =>
+            WingLoadoutCatalog.ClonePlayerDefault(definition);
+
+        private sealed class PendingFuel
         {
-            List<Loadout> loadouts = definition?.aircraftParameters?.loadouts;
-            if (loadouts == null || loadouts.Count == 0) return null;
-            return loadouts.Count > 1 ? loadouts[1] : loadouts[0];
+            public Aircraft Aircraft;
+            public float Fuel;
+            public float Until;
+        }
+
+        private static readonly List<PendingFuel> pendingFuel = new List<PendingFuel>();
+
+        private static void RememberSpawnFuel(Aircraft aircraft, float fuel)
+        {
+            if (aircraft == null) return;
+            pendingFuel.Add(new PendingFuel
+            {
+                Aircraft = aircraft,
+                Fuel = Mathf.Clamp01(fuel),
+                Until = Time.unscaledTime + 3f,
+            });
+        }
+
+        private static void TickSpawnFuel()
+        {
+            float now = Time.unscaledTime;
+            for (int i = pendingFuel.Count - 1; i >= 0; i--)
+            {
+                PendingFuel apply = pendingFuel[i];
+                if (apply.Aircraft == null || now > apply.Until)
+                {
+                    pendingFuel.RemoveAt(i);
+                    continue;
+                }
+                ApplySpawnFuel(apply.Aircraft, apply.Fuel);
+            }
+        }
+
+        private static void ApplySpawnFuel(Aircraft aircraft, float fuel)
+        {
+            if (aircraft == null) return;
+            fuel = Mathf.Clamp01(fuel);
+            foreach (FuelTank tank in aircraft.GetFuelTanks())
+                if (tank != null) tank.Refuel(fuel);
+            aircraft.NetworkfuelLevel = fuel;
         }
 
         // ------------------------------------------------------------------ pending order
@@ -723,6 +764,9 @@ namespace WingCommand
 
             try { aircraft.SetLiveryKey(order.Livery); } catch { }
 
+            RememberSpawnFuel(aircraft, order.Fuel);
+            ApplySpawnFuel(aircraft, order.Fuel);
+
             // The wing takes the aircraft onto its roster now and takes command of it later,
             // once LaunchSafety says the stock departure is complete. Until then the
             // DeliveryHold reflex keeps every hand off the controls.
@@ -766,6 +810,7 @@ namespace WingCommand
         /// </summary>
         public static void Tick()
         {
+            TickSpawnFuel();
             HangarDepartureLane.Tick();
 
             for (int i = pending.Count - 1; i >= 0; i--)
@@ -899,6 +944,7 @@ namespace WingCommand
 
         public static void Reset()
         {
+            pendingFuel.Clear();
             HangarDepartureLane.Reset();
             WingAirfield.Reset();
             for (int i = 0; i < pending.Count; i++)

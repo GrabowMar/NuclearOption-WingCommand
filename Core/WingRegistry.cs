@@ -430,7 +430,7 @@ namespace WingCommand
             {
                 WingMember m = members[i];
                 if (m.Alive) continue;
-                if (WingRecovery.IsPending(m)) continue;
+                if (WingRecovery.HoldsDeath(m)) continue;
 
                 if (Plugin.Settings.VerboseLogging.Value)
                     Plugin.LogVerbose("[Wing] lost " + m.Name + ": " + LostReason(m));
@@ -695,8 +695,9 @@ namespace WingCommand
 
             HangarDepartureLane.Release(member);
 
-            // Recovery releases the crew only after the airframe has been credited and its
-            // network object is gone. WingRecovery owns that final, idempotent settlement.
+            // The airframe is about to leave the world as a successful return, not a
+            // combat loss. Retire here while the aircraft id is still readable.
+            WingPilotRoster.Retire(member, survived: true);
             TacticalCoordinator.Release(member.Aircraft);
             WingMarkers.Repaint(member.Aircraft);
         }

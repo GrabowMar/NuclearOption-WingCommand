@@ -410,8 +410,10 @@ namespace WingCommand
         // --------------------------------------------------------------------- build
 
         /// <summary>
-        /// Turn a choice into a spawnable loadout. The standard choice copies the same
-        /// per-airframe preset a player receives when starting the game.
+        /// Turn a choice into a spawnable loadout. The standard choice copies the live
+        /// player default for this mission — the same fit <c>LoadoutSelector.LoadDefaults</c>
+        /// applies when the player starts — and falls back to the airframe's game-start
+        /// preset when that has not been written yet.
         ///
         /// Null is a last-resort fallback: an airframe with no readable starting preset,
         /// or a template that has since been deleted, lets the native spawner choose its
@@ -420,11 +422,49 @@ namespace WingCommand
         /// </summary>
         public static Loadout Build(AircraftDefinition definition, WingLoadoutChoice choice)
         {
-            if (choice.HasSnapshot) return BuildFromKeys(definition, choice.FittedKeys);
-            if (!choice.IsTemplate) return CloneLoadout(GameStartLoadout(definition));
+            if (choice.HasSnapshot) return GuardNativeFallback(definition, BuildFromKeys(definition, choice.FittedKeys));
+            if (!choice.IsTemplate) return ClonePlayerDefault(definition);
 
             LoadoutTemplateRecord template = WingLoadoutTemplates.ById(choice.TemplateId);
-            return template != null ? BuildFromKeys(definition, template.MountKeys) : null;
+            return template != null
+                ? GuardNativeFallback(definition, BuildFromKeys(definition, template.MountKeys))
+                : null;
+        }
+
+        /// <summary>
+        /// A clone of the player's current default fit for this airframe, or the game-start
+        /// preset when they have not customised it this session.
+        /// </summary>
+        internal static Loadout ClonePlayerDefault(AircraftDefinition definition)
+        {
+            if (definition == null) return null;
+            if (GameManager.aircraftCustomization != null &&
+                GameManager.aircraftCustomization.TryGetValue(definition, out AircraftCustomization custom) &&
+                custom?.loadout?.weapons != null && custom.loadout.weapons.Count > 0)
+                return CloneLoadout(custom.loadout);
+            return CloneLoadout(GameStartLoadout(definition));
+        }
+
+        /// <summary>
+        /// Native spawn substitutes <c>loadouts[1]</c> when the weapons list is missing or
+        /// empty, which puts stripped fuel tanks back. A deliberate empty fit must still
+        /// have one slot per hardpoint.
+        /// </summary>
+        private static Loadout GuardNativeFallback(AircraftDefinition definition, Loadout loadout)
+        {
+            if (loadout?.weapons != null &&
+                !RecoverySettlementPolicy.NativeLoadoutReplaces(loadout.weapons.Count))
+                return loadout;
+            return EmptyStations(definition) ?? loadout;
+        }
+
+        private static Loadout EmptyStations(AircraftDefinition definition)
+        {
+            int count = PylonCount(definition);
+            if (count <= 0) return null;
+            var weapons = new List<WeaponMount>(count);
+            for (int i = 0; i < count; i++) weapons.Add(null);
+            return new Loadout { weapons = weapons };
         }
 
         /// <summary>Freeze the stores actually fitted, including the native standard fit.</summary>
@@ -440,10 +480,9 @@ namespace WingCommand
         }
 
         /// <summary>
-        /// The stores a player receives when first starting with this airframe: the fit in
-        /// <c>AircraftParameters.loadouts[1]</c>. This deliberately ignores later saved
-        /// player customisation, so STANDARD always means the game's original player
-        /// preset. Index 0 is not that preset: the game reserves it for something else.
+        /// The stores the player currently has as their default for this airframe: the live
+        /// <c>GameManager.aircraftCustomization</c> fit when one exists, otherwise the
+        /// game-start preset in <c>AircraftParameters.loadouts[1]</c>.
         ///
         /// Returned in pylon order, matching <c>WeaponManager.hardpointSets</c> exactly
         /// as <see cref="BuildFromKeys"/> expects. Null when the airframe declares no
@@ -452,7 +491,7 @@ namespace WingCommand
         /// </summary>
         public static List<string> SuggestedKeys(AircraftDefinition definition)
         {
-            Loadout suggested = GameStartLoadout(definition);
+            Loadout suggested = ClonePlayerDefault(definition);
             if (suggested?.weapons == null) return null;
 
             var keys = new List<string>(suggested.weapons.Count);
@@ -462,9 +501,9 @@ namespace WingCommand
         }
 
         /// <summary>
-        /// Resolve the original player preset built into an airframe. Saved player
-        /// customisations are intentionally excluded: a wingman ordered as STANDARD must
-        /// carry the fit this airframe gives a player at game start.
+        /// Resolve the original player preset built into an airframe, used when the
+        /// session has no live customisation yet. Index 0 is not that preset: the game
+        /// reserves it for something else.
         /// </summary>
         private static Loadout GameStartLoadout(AircraftDefinition definition)
         {

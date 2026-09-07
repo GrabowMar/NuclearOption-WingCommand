@@ -36,6 +36,14 @@ namespace WingCommand
 
         public static WingRoe Next(WingRoe roe) => (WingRoe)(((int)roe + 1) % 3);
 
+        /// <summary>Engage always opens the wing to FREE. No-ops if it is already FREE.</summary>
+        public static void EnsureFree(WingRegistry wing)
+        {
+            if (wing == null || wing.Roe == WingRoe.Free) return;
+            wing.Roe = WingRoe.Free;
+            WingCommandManager.Instance?.Toast("ROE: FREE");
+        }
+
         /// <summary>
         /// The wing's current rules of engagement.
         ///

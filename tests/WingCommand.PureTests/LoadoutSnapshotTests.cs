@@ -7,11 +7,13 @@ namespace WingCommand.PureTests
     public class LoadoutSnapshotTests
     {
         [Fact]
-        public void DefaultInitializationSurvivesAnEmptyTemplateStoreAndRestart()
+        public void OldInitializedAirframeConfigStillDecodes()
         {
+            // DEFAULT templates are no longer auto-seeded, but a leftover config value
+            // from an earlier version must not throw if something still reads the codec.
             var initialized = new HashSet<string> { "jet;with|delimiters,%", "helo" };
             string saved = LoadoutTemplateCodec.EncodeInitializedAirframes(initialized);
-            Assert.Empty(LoadoutTemplateCodec.Decode("")); // The last template was deleted.
+            Assert.Empty(LoadoutTemplateCodec.Decode(""));
             var reloaded = LoadoutTemplateCodec.DecodeInitializedAirframes(saved);
             Assert.True(initialized.SetEquals(reloaded));
         }

@@ -60,6 +60,32 @@ namespace WingCommand.PureTests
             Assert.False(TaxiRewritePolicy.ShouldDrainQueue(ours: false, leavingDeparture: true,
                                                             enteringTakeoff: false));
         }
+
+        [Fact]
+        public void RefitSuppressesTheStockPadEject()
+        {
+            // Helicopters eject on the pad and a parked jet ejects after ten seconds.
+            // Refit has to keep the pilot in the seat; RTB wants that eject as disembark.
+            Assert.True(TaxiRewritePolicy.ShouldSuppressEjection(ours: true, refitPending: true,
+                                                                 hasTakenOff: true));
+            Assert.False(TaxiRewritePolicy.ShouldSuppressEjection(ours: true, refitPending: false,
+                                                                  hasTakenOff: true));
+            Assert.False(TaxiRewritePolicy.ShouldSuppressEjection(ours: false, refitPending: true,
+                                                                  hasTakenOff: true));
+        }
+
+        [Fact]
+        public void AnEjectAtBaseUnderRtbIsNotACombatLoss()
+        {
+            Assert.True(TaxiRewritePolicy.HoldsDeath(pendingSettlement: true, atFriendlyBase: false,
+                                                     rtbOrRefit: false));
+            Assert.True(TaxiRewritePolicy.HoldsDeath(pendingSettlement: false, atFriendlyBase: true,
+                                                     rtbOrRefit: true));
+            Assert.False(TaxiRewritePolicy.HoldsDeath(pendingSettlement: false, atFriendlyBase: false,
+                                                      rtbOrRefit: true));
+            Assert.False(TaxiRewritePolicy.HoldsDeath(pendingSettlement: false, atFriendlyBase: true,
+                                                      rtbOrRefit: false));
+        }
     }
 
     public class SupplyCompensationTests
@@ -93,6 +119,32 @@ namespace WingCommand.PureTests
         public void ALargerDebitIsRestoredInFull()
         {
             Assert.Equal(3, SupplyCompensation.Delta(before: 10, after: 7));
+        }
+    }
+
+    public class RecoverySettlementPolicyTests
+    {
+        [Fact]
+        public void DespawnFollowsTheReserveSetting()
+        {
+            Assert.True(RecoverySettlementPolicy.ShouldDespawn(true));
+            Assert.False(RecoverySettlementPolicy.ShouldDespawn(false));
+        }
+
+        [Fact]
+        public void OnlyAPaidPurchaseIsRefunded()
+        {
+            Assert.True(RecoverySettlementPolicy.ShouldRefund(purchased: true, paid: 1500f));
+            Assert.False(RecoverySettlementPolicy.ShouldRefund(purchased: true, paid: 0f));
+            Assert.False(RecoverySettlementPolicy.ShouldRefund(purchased: false, paid: 1500f));
+        }
+
+        [Fact]
+        public void AnEmptyWeaponsListIsReplacedByTheNativeFactoryFit()
+        {
+            Assert.True(RecoverySettlementPolicy.NativeLoadoutReplaces(0));
+            Assert.False(RecoverySettlementPolicy.NativeLoadoutReplaces(1));
+            Assert.False(RecoverySettlementPolicy.NativeLoadoutReplaces(6));
         }
     }
 }

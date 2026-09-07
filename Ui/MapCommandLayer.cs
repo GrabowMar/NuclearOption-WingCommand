@@ -26,10 +26,13 @@ namespace WingCommand
         private WingOrder armedOrder;
         private int armedFrame;
         private float moveAltitude;
+        private float moveSpeed;
         private readonly MapPointGesture pointGesture = new MapPointGesture();
 
         /// <summary>Commanded Move height, metres AGL. Zero means each airframe's default.</summary>
         public float MoveAltitude => moveAltitude;
+        /// <summary>Commanded Move speed fraction. Zero means full.</summary>
+        public float MoveSpeed => moveSpeed;
 
         public bool PointArmed => pointArmed;
         public WingOrder ArmedOrder => armedOrder;
@@ -59,8 +62,8 @@ namespace WingCommand
                 if (pendingRecruit.Count > 0 && Time.unscaledTime <= recruitConfirmationUntil)
                     return "CONFIRM ASSIGNMENT: " + pendingRecruit.Count + " AIRCRAFT · " +
                            Mathf.RoundToInt(pendingRecruitCost) + " FUNDS";
-                return "Right-click moves at " + FormatAltitude(moveAltitude) +
-                       ". Alt+scroll altitude. Shift queues. Left-click an order to arm it.";
+                return "Right-click moves at " + FormatAltitude(moveAltitude) + " · " +
+                       FormatSpeed(moveSpeed) + ". H+/H- height, S+/S- speed. Shift queues.";
             }
         }
 
@@ -81,7 +84,6 @@ namespace WingCommand
             }
 
             pointGesture.Update(Time.frameCount, Input.GetMouseButton(0));
-            HandleMoveAltitudeScroll();
 
             DynamicMap map = SceneSingleton<DynamicMap>.i;
             if (map == null) return;
@@ -149,6 +151,7 @@ namespace WingCommand
             MapPicker.Disarm(MapPicker.WingPoint);
             pointArmed = false;
             moveAltitude = 0f;
+            moveSpeed = 0f;
             pointGesture.Reset();
             recruited.Clear();
             pendingRecruit.Clear();
@@ -218,30 +221,33 @@ namespace WingCommand
             manager.IssueMove(point, append);
         }
 
-        private void HandleMoveAltitudeScroll()
+        public void StepMoveHeight(int sign)
         {
-            if (!MapOrderPolicy.IsMoveTool(pointArmed)) return;
-            if (!Input.GetKey(KeyCode.LeftAlt) && !Input.GetKey(KeyCode.RightAlt)) return;
-
-            int sign = MapOrderPolicy.ScrollSign(Input.mouseScrollDelta.y);
-            if (sign == 0) return;
-
             WingCommandManager manager = WingCommandManager.Instance;
-            Aircraft leader = manager?.Wing.Leader;
-            bool rotary = WingRegistry.IsRotary(leader);
+            bool rotary = WingRegistry.IsRotary(manager?.Wing.Leader);
             moveAltitude = MapOrderPolicy.StepMoveAltitude(moveAltitude, sign, rotary);
-
-            if (manager != null)
-            {
-                foreach (WingMember member in manager.Commands.Scope(wholeWing: false))
-                {
-                    if (member == null || !member.Alive) continue;
-                    if (member.Order != WingOrder.MoveToPoint && !HasQueuedMove(member)) continue;
-                    member.SetMoveAltitude(moveAltitude);
-                }
-            }
-
+            ApplyMoveTuning(altitude: true, speed: false);
             Toast("Move altitude " + FormatAltitude(moveAltitude));
+        }
+
+        public void StepMoveSpeed(int sign)
+        {
+            moveSpeed = MapOrderPolicy.StepMoveSpeed(moveSpeed, sign);
+            ApplyMoveTuning(altitude: false, speed: true);
+            Toast("Move speed " + FormatSpeed(moveSpeed));
+        }
+
+        private void ApplyMoveTuning(bool altitude, bool speed)
+        {
+            WingCommandManager manager = WingCommandManager.Instance;
+            if (manager == null) return;
+            foreach (WingMember member in manager.Commands.Scope(wholeWing: false))
+            {
+                if (member == null || !member.Alive) continue;
+                if (member.Order != WingOrder.MoveToPoint && !HasQueuedMove(member)) continue;
+                if (altitude) member.SetMoveAltitude(moveAltitude);
+                if (speed) member.SetMoveSpeed(moveSpeed);
+            }
         }
 
         private static bool HasQueuedMove(WingMember member)
@@ -254,25 +260,18 @@ namespace WingCommand
             return false;
         }
 
-        internal static bool SuppressMapZoom
-        {
-            get
-            {
-                if (!Plugin.Settings.MapCommandEnabled.Value || !DynamicMap.mapMaximized ||
-                    !WmcScreen.TacticalCommandModeActive) return false;
-                if (!Input.GetKey(KeyCode.LeftAlt) && !Input.GetKey(KeyCode.RightAlt))
-                    return false;
-                WingCommandManager manager = WingCommandManager.Instance;
-                return manager != null && MapOrderPolicy.IsMoveTool(manager.MapOrderArmed);
-            }
-        }
-
         private static string FormatAltitude(float altitude)
         {
             WingCommandManager manager = WingCommandManager.Instance;
             bool rotary = WingRegistry.IsRotary(manager?.Wing.Leader);
             float metres = MapOrderPolicy.StepMoveAltitude(altitude, 0, rotary);
             return Mathf.RoundToInt(metres) + " m";
+        }
+
+        private static string FormatSpeed(float speed)
+        {
+            float frac = MapOrderPolicy.StepMoveSpeed(speed, 0);
+            return Mathf.RoundToInt(frac * 100f) + "%";
         }
 
         private static MapPointerKind PointerKind(Unit target)
@@ -479,13 +478,6 @@ namespace WingCommand
         {
             return !MapCommandLayer.ShouldConsumeNativeRightClick();
         }
-    }
-
-    [HarmonyPatch(typeof(DynamicMap), nameof(DynamicMap.SetZoomLevel))]
-    internal static class WingMapAltitudeZoomPatch
-    {
-        [HarmonyPrefix]
-        private static bool Prefix() => !MapCommandLayer.SuppressMapZoom;
     }
 
     /// <summary>Claim wing-icon clicks only while WMC is explicitly in tactical mode.</summary>

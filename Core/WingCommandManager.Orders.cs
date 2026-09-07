@@ -26,6 +26,10 @@ namespace WingCommand
                     Show(Commands.Apply(WingDirective.Simple(WingOrder.Engage), wholeWing));
                     break;
 
+                case WingAction.StandDown:
+                    Show(Commands.Apply(WingDirective.Simple(WingOrder.StandDown), wholeWing));
+                    break;
+
                 case WingAction.Refit:
                 {
                     // Refit is a workflow rather than a standing order, so it is dispatched
@@ -104,17 +108,30 @@ namespace WingCommand
         internal void IssueMove(GlobalPosition point, bool append)
         {
             float altitude = mapLayer != null ? mapLayer.MoveAltitude : 0f;
+            float speed = mapLayer != null ? mapLayer.MoveSpeed : 0f;
             List<WingMember> scope = Commands.Scope(wholeWing: false);
             var responders = new List<WingMember>();
             foreach (WingMember member in scope)
             {
                 if (member == null || !member.Alive) continue;
-                member.IssueMapTask(WingDirective.AtPoint(WingOrder.MoveToPoint, point), append);
+                bool appendThis = append && member.Order == WingOrder.MoveToPoint;
+                member.IssueMapTask(WingDirective.AtPoint(WingOrder.MoveToPoint, point), appendThis);
                 member.SetMoveAltitude(altitude);
+                member.SetMoveSpeed(speed);
                 responders.Add(member);
             }
 
             AcknowledgeMapIssue(responders, WingOrder.MoveToPoint, append);
+        }
+
+        internal void StepMoveHeight(int sign)
+        {
+            mapLayer?.StepMoveHeight(sign);
+        }
+
+        internal void StepMoveSpeed(int sign)
+        {
+            mapLayer?.StepMoveSpeed(sign);
         }
 
         internal void AttackUnit(Unit target, bool append = false)

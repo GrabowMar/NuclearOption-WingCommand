@@ -58,19 +58,30 @@ namespace WingCommand
             }
 
             float cruise = CruiseAltitude;
+            bool moving = member.Order == WingOrder.MoveToPoint;
+            float speedFrac = moving ? member.ResolvedMoveSpeed : 1f;
+            Vector3 lead = Vector3.zero;
+            if (delta.sqrMagnitude > 1f)
+            {
+                float maxSpeed = aircraft.GetAircraftParameters().maxSpeed;
+                lead = delta.normalized * (maxSpeed * speedFrac);
+            }
+
             if (!WingRegistry.IsRotary(aircraft))
             {
-                controlInputs.throttle = 1f;
+                controlInputs.throttle = speedFrac;
                 aircraft.autopilot.AutoAim(
                     destination: targetPoint + Vector3.up * cruise,
                     aimVelocity: true,
                     ignoreCollisions: false,
                     runwayAlign: false,
-                    effort: 1.8f,
-                    bankAllowed: AutopilotMath.PursuitBank(),
-                    followTerrain: true,
+                    effort: moving ? WingTuning.MoveEffort : 1.8f,
+                    bankAllowed: moving
+                        ? Mathf.Min(WingTuning.MoveBank, FixedWingFormation.MaxSafeBank)
+                        : AutopilotMath.PursuitBank(),
+                    followTerrain: !moving,
                     altitudeHold: AutopilotMath.CruiseHold(aircraft, cruise),
-                    targetVelocity: Vector3.zero);
+                    targetVelocity: lead);
                 return;
             }
 
@@ -78,8 +89,8 @@ namespace WingCommand
                 destination: targetPoint + Vector3.up * cruise,
                 altitudeHold: AutopilotMath.RotaryAgl(aircraft, cruise),
                 aimDirection: Vector3.zero,
-                targetVelocity: Vector3.zero,
-                followTerrain: true);
+                targetVelocity: lead,
+                followTerrain: !moving);
         }
     }
 }

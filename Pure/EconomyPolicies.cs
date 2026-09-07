@@ -116,9 +116,30 @@ namespace WingCommand
         /// <summary>
         /// Whether an airframe being recovered or stored can enter the wing reserve.
         /// Owned airframes are exempt from faction hold capacity because the player paid for them.
+        /// Manual HOLD still uses this; RTB no longer auto-stores.
         /// </summary>
         public static bool CanStoreAirframe(bool owned, int currentCount, int factionStockCapacity) =>
             owned || currentCount < factionStockCapacity;
+    }
+
+    /// <summary>
+    /// How a completed Return To Base settles: despawn vs park, and whether purchase
+    /// allocation is given back. Recruitment fees are not a purchase and never refund.
+    /// </summary>
+    internal static class RecoverySettlementPolicy
+    {
+        /// <summary>Despawn through the game's Returned path when the setting is on.</summary>
+        public static bool ShouldDespawn(bool rtbReturnsToReserve) => rtbReturnsToReserve;
+
+        /// <summary>Give back the allocation actually charged for this airframe.</summary>
+        public static bool ShouldRefund(bool purchased, float paid) => purchased && paid > 0f;
+
+        /// <summary>
+        /// Native <c>OnStartClient</c> substitutes <c>loadouts[1]</c> when the weapons
+        /// list is missing or empty, which puts stripped fuel tanks back. A deliberate
+        /// empty fit must still have one slot per hardpoint.
+        /// </summary>
+        public static bool NativeLoadoutReplaces(int weaponCount) => weaponCount <= 0;
     }
 
     /// <summary>

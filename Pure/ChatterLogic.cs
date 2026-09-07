@@ -243,6 +243,12 @@ namespace WingCommand
                         new[] { "Copy. Watch this.", "On it. Hold my drink." },
                         new[] { "Understood. Beginning the manoeuvre.", "Copy. Executing." },
                         new[] { "Manoeuvre received. Showtime.", "Copy. Being theatrical." });
+                case "STANDDOWN":
+                    return Pick(persona, seed,
+                        new[] { "Roger. Standing down. Holding near friendlies.", "Copy. Cancelling and loitering." },
+                        new[] { "Copy. I'll hang out over friendly ground.", "Standing down. Call if you need me." },
+                        new[] { "Understood. Task cancelled. Holding nearby.", "Copy. Loitering over friendly territory." },
+                        new[] { "Standing down. I'll keep the coffee warm.", "Copy. Out of the fight, still in the air." });
                 default:
                     return Pick(persona, seed,
                         new[] { "Roger.", "Copy." },
@@ -348,6 +354,12 @@ namespace WingCommand
                         new[] { wingmen + ", follow me through it.", wingmen + ", try to keep up." },
                         new[] { wingmen + ", begin the manoeuvre.", wingmen + ", execute together." },
                         new[] { wingmen + ", airshow formation. Go.", wingmen + ", be theatrical." });
+                case "STANDDOWN":
+                    return Pick(persona, seed,
+                        new[] { wingmen + ", stand down. Hold over friendlies.", wingmen + ", cancel and loiter." },
+                        new[] { wingmen + ", task cancelled. Hang near friendly ground.", wingmen + ", out of the fight. Hold nearby." },
+                        new[] { wingmen + ", stand down together. Loiter.", wingmen + ", cancel orders. Hold over friendly territory." },
+                        new[] { wingmen + ", coffee break over friendly airspace.", wingmen + ", we're parked in the cheap seats." });
                 default:
                     return Pick(persona, seed,
                         new[] { wingmen + ", copy. Move together.", wingmen + ", acknowledge. Let's move." },

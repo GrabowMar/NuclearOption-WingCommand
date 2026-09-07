@@ -6,16 +6,18 @@ using UnityEngine;
 namespace WingCommand
 {
     /// <summary>
-    /// Settles Return To Base as an idempotent sequence: capture facts, credit exactly one
-    /// inventory destination, confirm network destruction, then release ownership and roster
-    /// tracking. A failed stage remains pending and is retried instead of losing the aircraft
-    /// between unrelated mutations.
+    /// Settles Return To Base as an idempotent sequence: capture facts, disembark without
+    /// scoring a death, credit stock through the game's Returned path, refund purchase
+    /// allocation, then release the squadron pilot back to the pool. A failed stage remains
+    /// pending and is retried instead of losing the aircraft between unrelated mutations.
     /// </summary>
     internal static class WingRecovery
     {
         private const float GroundHeight = 5f;
         private const float StoppedSpeed = 3f;
         private const float RetrySeconds = 1f;
+        private const float TouchdownHeight = 2f;
+        private const float TouchdownSpeed = 1f;
 
         private sealed class Settlement
         {
@@ -34,15 +36,17 @@ namespace WingCommand
             public FactionHQ Hq;
             public string Name;
             public bool Owned;
+            public float Paid;
             public bool LoadoutKnown;
             public WingLoadoutChoice Loadout;
-            public bool InventoryCredited;
-            public bool StoredInReserve;
-            public bool DestroyConfirmed;
+            public bool Disembarked;
+            public bool InventoryReturned;
+            public bool Refunded;
             public bool OwnershipTransferred;
             public bool RosterReleased;
             public bool Completed;
             public bool SortieNoted;
+            public float RefundedAmount;
             public float RetryAt;
         }
 
@@ -53,17 +57,49 @@ namespace WingCommand
             if (wing == null) return;
 
             foreach (WingMember member in wing.Members)
-                if (member.RefitPending && IsDown(member)) member.CompleteRefit();
-
-            if (!Plugin.Settings.RtbReturnsToReserve.Value)
             {
-                // Recovery is switched off, so nothing is credited or despawned. Released
-                // aircraft still have to stop being tracked once they are down, or the
-                // squadron count would go on excusing capacity they are still occupying.
+                if (!member.RefitPending || !IsHome(member)) continue;
+                if (CanTurnAround(member) && IsDown(member))
+                {
+                    member.CompleteRefit();
+                    continue;
+                }
+                if (SeatEmpty(member))
+                {
+                    member.AbandonRefit();
+                    WingCommandManager.Instance?.Toast(
+                        member.Name + " could not turn around - recovering instead");
+                }
+            }
+
+            bool despawn = RecoverySettlementPolicy.ShouldDespawn(
+                Plugin.Settings.RtbReturnsToReserve.Value);
+
+            if (!despawn)
+            {
+                // Recovery is switched off, so nothing is credited or despawned. The crew
+                // still leaves the seat and returns to the pool, or the squadron count would
+                // go on excusing capacity they are no longer flying.
+                for (int i = wing.Count - 1; i >= 0; i--)
+                {
+                    WingMember member = wing.Members[i];
+                    if (member == null || member.RefitPending ||
+                        member.Order != WingOrder.ReturnToBase) continue;
+                    if (!IsHome(member)) continue;
+                    Disembark(member.Aircraft);
+                    wing.Recover(member);
+                }
+
                 WingDeparture.Prune();
                 IReadOnlyList<WingDeparture.Departing> landed = WingDeparture.Outbound;
                 for (int i = landed.Count - 1; i >= 0; i--)
-                    if (IsHome(landed[i].Aircraft)) WingDeparture.Forget(landed[i]);
+                {
+                    WingDeparture.Departing departing = landed[i];
+                    if (!IsHome(departing.Aircraft)) continue;
+                    Disembark(departing.Aircraft);
+                    WingPilotRoster.Retire(departing.AircraftId, survived: true);
+                    WingDeparture.Forget(departing);
+                }
                 return;
             }
 
@@ -113,6 +149,23 @@ namespace WingCommand
             return false;
         }
 
+        /// <summary>
+        /// Whether prune should leave this member alone. Covers a settlement already
+        /// staged and the one-frame gap where they are down at base under RTB/refit
+        /// but the settlement has not begun yet.
+        /// </summary>
+        public static bool HoldsDeath(WingMember member)
+        {
+            if (member == null) return false;
+            bool atBase = IsHome(member);
+            bool rtbOrRefit = member.RefitPending || member.Order == WingOrder.ReturnToBase;
+            return LandingHoldsDeath(IsPending(member), atBase, rtbOrRefit);
+        }
+
+        internal static bool LandingHoldsDeath(bool pendingSettlement, bool atFriendlyBase,
+                                               bool rtbOrRefit) =>
+            TaxiRewritePolicy.HoldsDeath(pendingSettlement, atFriendlyBase, rtbOrRefit);
+
         private static bool IsPending(WingDeparture.Departing departing)
         {
             if (departing == null) return false;
@@ -136,6 +189,7 @@ namespace WingCommand
                 Hq = aircraft != null ? aircraft.NetworkHQ : null,
                 Name = member.Name,
                 Owned = WingShop.IsPurchased(aircraft),
+                Paid = WingShop.PaidFor(aircraft),
                 Loadout = member.Loadout,
                 LoadoutKnown = member.LoadoutKnown,
             };
@@ -161,6 +215,7 @@ namespace WingCommand
                 Hq = aircraft != null ? aircraft.NetworkHQ : null,
                 Name = departing.Name,
                 Owned = departing.Owned,
+                Paid = WingShop.PaidFor(departing.AircraftId),
                 Loadout = departing.Loadout,
                 LoadoutKnown = departing.LoadoutKnown,
             };
@@ -179,22 +234,20 @@ namespace WingCommand
                     settlement.SortieNoted = true;
                 }
 
-                if (!settlement.InventoryCredited && !CreditInventory(settlement))
+                if (!settlement.Disembarked)
                 {
-                    Retry(settlement, "no inventory destination available");
-                    return;
+                    Disembark(settlement.Aircraft);
+                    settlement.Disembarked = true;
                 }
 
-                // Retire the pilot and release native state while the aircraft reference is
-                // still valid. If destruction then fails, this settlement remains the durable
-                // owner of the aircraft and retries instead of abandoning an untracked frame.
+                // Retire the pilot while the aircraft reference is still valid. If the
+                // native return then fails, this settlement remains the durable owner and
+                // retries instead of abandoning an untracked frame.
                 if (!settlement.RosterReleased)
                 {
+                    WingPilotRoster.Retire(settlement.AircraftId, survived: true);
                     if (settlement.Member == null || settlement.Wing == null)
                     {
-                        // A released aircraft left the roster when the player dismissed it,
-                        // so there is nothing to retire here. Its native state was already
-                        // handed back at that point.
                         settlement.RosterReleased = true;
                     }
                     else
@@ -209,33 +262,47 @@ namespace WingCommand
                     }
                 }
 
-                if (!settlement.DestroyConfirmed)
+                if (!settlement.Refunded)
+                {
+                    if (RecoverySettlementPolicy.ShouldRefund(settlement.Owned, settlement.Paid) &&
+                        GameManager.GetLocalPlayer(out Player player) && player != null)
+                    {
+                        player.AddAllocation(settlement.Paid);
+                        settlement.RefundedAmount = settlement.Paid;
+                    }
+                    settlement.Refunded = true;
+                }
+
+                if (!settlement.InventoryReturned)
                 {
                     if (settlement.Aircraft == null ||
                         !UnitRegistry.TryGetUnit(settlement.AircraftId, out Unit tracked) ||
                         tracked == null)
                     {
-                        settlement.DestroyConfirmed = true;
+                        settlement.InventoryReturned = true;
                     }
                     else
                     {
-                        NetworkManagerNuclearOption.i.ServerObjectManager.Destroy(
-                            settlement.Aircraft.Identity,
-                            !settlement.Aircraft.Identity.IsSceneObject);
-                        // Treat the network registry as confirmation, not a void method
-                        // returning. If destruction is deferred, retain and retry the staged
-                        // settlement without transferring ownership in the meantime.
-                        if (UnitRegistry.TryGetUnit(settlement.AircraftId, out tracked) &&
-                            tracked != null)
+                        try
                         {
-                            Retry(settlement, "waiting for network destruction confirmation");
+                            settlement.Aircraft.ReturnToInventory();
+                        }
+                        catch (Exception e)
+                        {
+                            Retry(settlement, "ReturnToInventory - " + e.Message);
                             return;
                         }
-                        settlement.DestroyConfirmed = true;
+
+                        if (UnitRegistry.TryGetUnit(settlement.AircraftId, out tracked) &&
+                            tracked != null && !tracked.disabled)
+                        {
+                            Retry(settlement, "waiting for native return confirmation");
+                            return;
+                        }
+                        settlement.InventoryReturned = true;
                     }
                 }
 
-                // Ownership transfers only after inventory credit and network destruction.
                 if (!settlement.OwnershipTransferred)
                 {
                     if (settlement.Owned) WingShop.TakePurchased(settlement.AircraftId);
@@ -244,21 +311,15 @@ namespace WingCommand
 
                 WingLoadoutBook.Forget(settlement.AircraftId);
 
-                int stock = settlement.Hq != null && settlement.Definition != null
-                    ? settlement.Hq.GetUnitSupply(settlement.Definition)
-                    : 0;
                 settlement.Completed = true;
                 WingDeparture.Forget(settlement.Departing);
-                WingCommandManager.Instance?.Toast(settlement.StoredInReserve
-                    ? settlement.Name + " recovered to wing reserve (" + WingSupplyReserve.Count +
-                      "/" + WingSupplyReserve.Capacity + ")"
-                    : settlement.Name + " recovered to faction stock - wing reserve full");
+                WingCommandManager.Instance?.Toast(ToastFor(settlement));
                 Plugin.LogVerbose(
                     "[Recovery] " + settlement.Name + " recovered at base; " +
                     (settlement.Definition != null ? settlement.Definition.unitName : "airframe") +
-                    (settlement.StoredInReserve
-                        ? " stored in wing reserve"
-                        : " faction stock now " + stock));
+                    (settlement.RefundedAmount > 0f
+                        ? " refunded " + Mathf.RoundToInt(settlement.RefundedAmount)
+                        : " returned to faction stock"));
             }
             catch (Exception e)
             {
@@ -266,39 +327,12 @@ namespace WingCommand
             }
         }
 
-        private static bool CreditInventory(Settlement settlement)
+        private static string ToastFor(Settlement settlement)
         {
-            if (settlement.Definition == null) return false;
-
-            if (WingSupplyReserve.StoreRecovered(
-                    settlement.Definition, settlement.Owned,
-                    settlement.LoadoutKnown, settlement.Loadout, settlement))
-            {
-                settlement.StoredInReserve = true;
-                settlement.InventoryCredited = true;
-                return true;
-            }
-
-            if (settlement.Hq == null) return false;
-
-            int before = settlement.Hq.GetUnitSupply(settlement.Definition);
-            try
-            {
-                // ModifyUnitSupply rather than AddSupplyUnit: the latter diverts a positive
-                // amount to whichever player has an outstanding reserve request for the type
-                // and returns without touching supply, which would leave the count unchanged
-                // — and this settlement retries until the count actually rises, so it would
-                // never finish. A recovered airframe belongs to the faction that paid for it.
-                settlement.Hq.ModifyUnitSupply(settlement.Definition, 1);
-            }
-            finally
-            {
-                // If AddSupplyUnit changed the count and then threw, the settlement is still
-                // credited and must not repeat that side effect on the next retry.
-                settlement.InventoryCredited =
-                    settlement.Hq.GetUnitSupply(settlement.Definition) > before;
-            }
-            return settlement.InventoryCredited;
+            if (settlement.RefundedAmount > 0f)
+                return settlement.Name + " recovered - " +
+                       Mathf.RoundToInt(settlement.RefundedAmount) + " allocation returned";
+            return settlement.Name + " recovered to faction stock";
         }
 
         private static void Retry(Settlement settlement, string reason)
@@ -306,6 +340,25 @@ namespace WingCommand
             settlement.RetryAt = Time.unscaledTime + RetrySeconds;
             Plugin.Logger.LogWarning(
                 "[Recovery] " + settlement.Name + " settlement pending: " + reason);
+        }
+
+        private static bool CanTurnAround(WingMember member) =>
+            member != null && !SeatEmpty(member);
+
+        private static bool SeatEmpty(WingMember member)
+        {
+            if (member?.Pilot == null) return true;
+            return member.Pilot.dead || member.Pilot.ejected;
+        }
+
+        internal static void Disembark(Aircraft aircraft)
+        {
+            if (aircraft == null) return;
+            Pilot pilot = WingRegistry.PrimaryPilot(aircraft);
+            if (pilot != null && !(pilot.currentState is PilotParkedState) &&
+                pilot.parkedState != null)
+                pilot.SwitchState(pilot.parkedState);
+            if (!aircraft.HasEjected()) aircraft.StartEjectionSequence();
         }
 
         private static bool IsHome(WingMember member) =>
@@ -316,7 +369,7 @@ namespace WingCommand
         /// <see cref="IsHome"/> asks.
         ///
         /// A recovery only has to know that an aircraft has arrived, because the next thing
-        /// that happens to it is being despawned. A refit has to know it is <i>down</i>: it
+        /// that happens to it is being returned. A refit has to know it is <i>down</i>: it
         /// replenishes and then launches again, and the five-metre arrival window admits a
         /// helicopter still two seconds above the pad and descending at walking pace, or a
         /// jet rolling out at speed. Refitting there would rearm an aircraft in mid-air, or
@@ -332,10 +385,7 @@ namespace WingCommand
             return aircraft.radarAlt <= TouchdownHeight && aircraft.speed <= TouchdownSpeed;
         }
 
-        private const float TouchdownHeight = 2f;
-        private const float TouchdownSpeed = 1f;
-
-        private static bool IsHome(Aircraft aircraft)
+        internal static bool IsHome(Aircraft aircraft)
         {
             if (aircraft == null || aircraft.disabled) return false;
             if (!aircraft.IsServer || !aircraft.LocalSim) return false;

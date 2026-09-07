@@ -100,6 +100,7 @@ namespace WingCommand
                 typeof(WingMenuActionPatches),
                 typeof(WingTakeoverPatches),
                 typeof(WingInboundTaxiPatch),
+                typeof(WingRefitEjectPatch),
                 typeof(WingTakeoffQueuePatch),
                 typeof(HangarDeliveryCompletionPatch),
             };

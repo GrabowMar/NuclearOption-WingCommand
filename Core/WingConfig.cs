@@ -73,7 +73,6 @@ namespace WingCommand
 
         // --- Loadout ---
         public ConfigEntry<string> LoadoutTemplates { get; private set; }
-        public ConfigEntry<string> LoadoutInitializedAirframes { get; private set; }
 
         // --- UI ---
         public ConfigEntry<bool> ShowHud { get; private set; }
@@ -213,10 +212,10 @@ namespace WingCommand
                 "Wingmen return to base on their own once out of ammunition or down to " +
                 "bingo fuel, instead of holding station empty.");
             RtbReturnsToReserve = c.Bind("Engagement", "RtbReturnsToReserve", true,
-                "A wingman that completes a Return To Base order hands its airframe back to " +
-                "the faction's stock and leaves the world, instead of parking on the apron " +
-                "and being written off. Host or single-player only. Turn this off for " +
-                "missions that expect recovered aircraft to stay where they landed.");
+                "A wingman that completes a Return To Base order leaves the cockpit, " +
+                "returns its airframe to faction stock, refunds the allocation spent on it, " +
+                "and puts its pilot back in the squadron pool. Turn this off to park on the " +
+                "apron instead of despawning. Host or single-player only.");
             TakeoverOnDeath = c.Bind("Engagement", "TakeoverOnDeath", true,
                 "When your pilot dies or ejects, offer control of a surviving aircraft in " +
                 "your wing. Host or single-player only; mission failures unrelated to the " +
@@ -308,10 +307,8 @@ namespace WingCommand
             LoadoutTemplates = c.Bind("Loadout", "SavedTemplates", "",
                 Advanced("Saved per-pylon loadout templates, written by the WMC LOADOUT tab. " +
                          "One record per template as airframe|id|name|store keys, records " +
-                         "separated by semicolons. Clear this to delete every saved template."));
-            LoadoutInitializedAirframes = c.Bind("Loadout", "InitializedAirframes", "",
-                new ConfigDescription("Managed state: airframes whose default template has already been initialized.",
-                    null, new ConfigurationManagerAttributes { Browsable = false }));
+                         "separated by semicolons. Clear this to delete every saved template. " +
+                         "STANDARD FIT is the live player default for this mission and is not stored here."));
         }
 
         private void BindKeys(ConfigFile c)

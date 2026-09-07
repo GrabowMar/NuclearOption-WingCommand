@@ -188,6 +188,24 @@ namespace WingCommand
             GridButton(parent, "Refit", Pad + w + Gap, y, w,
                        () => Order(WingAction.Refit))
                 .WithTooltip("REFIT - land at base, refill fuel and ammunition, then relaunch and rejoin.");
+            GridButton(parent, "Stand Down", Pad + (w + Gap) * 2f, y, w,
+                       () => Order(WingAction.StandDown))
+                .WithTooltip(OrderHint.StandDown);
+            y -= RowHeight + Gap;
+
+            float tuneW = (PanelWidth - Pad * 2f - Gap * 3f) / 4f;
+            GridButton(parent, "H+", Pad, y, tuneW,
+                       () => WingCommandManager.Instance?.StepMoveHeight(1))
+                .WithTooltip(OrderHint.HeightUp);
+            GridButton(parent, "H-", Pad + tuneW + Gap, y, tuneW,
+                       () => WingCommandManager.Instance?.StepMoveHeight(-1))
+                .WithTooltip(OrderHint.HeightDown);
+            GridButton(parent, "S+", Pad + (tuneW + Gap) * 2f, y, tuneW,
+                       () => WingCommandManager.Instance?.StepMoveSpeed(1))
+                .WithTooltip(OrderHint.SpeedUp);
+            GridButton(parent, "S-", Pad + (tuneW + Gap) * 3f, y, tuneW,
+                       () => WingCommandManager.Instance?.StepMoveSpeed(-1))
+                .WithTooltip(OrderHint.SpeedDown);
             y -= RowHeight + Gap;
 
             y = AddFormationAndDoctrine(parent, y);
@@ -359,7 +377,7 @@ namespace WingCommand
                 "Expends ordnance freely; use it to finish something, not to open on it.";
 
             public const string Engage =
-                "ENGAGE - hunt independently within the rules of engagement. The wingman " +
+                "ENGAGE - hunt independently. Sets rules of engagement to FREE. The wingman " +
                 "picks its own targets and does not come back until told to.";
 
             public const string SeekAndDestroy =
@@ -384,6 +402,26 @@ namespace WingCommand
                 "LAND HERE - then right-click the map. Puts a rotary wingman on the ground " +
                 "at that spot rather than routing it to an airbase. Shift-right-click queues.";
 
+            public const string StandDown =
+                "STAND DOWN - cancel the current task and loiter near the nearest friendly " +
+                "airbase or ship. Does not land and does not rejoin until ordered.";
+
+            public const string HeightUp =
+                "HEIGHT + - raise Move altitude. Applies to the next map Move and to " +
+                "selected wingmen already moving.";
+
+            public const string HeightDown =
+                "HEIGHT - - lower Move altitude. Applies to the next map Move and to " +
+                "selected wingmen already moving.";
+
+            public const string SpeedUp =
+                "SPEED + - raise Move speed. Applies to the next map Move and to selected " +
+                "wingmen already moving.";
+
+            public const string SpeedDown =
+                "SPEED - - lower Move speed. Applies to the next map Move and to selected " +
+                "wingmen already moving.";
+
             public const string SelectAll =
                 "Put every wingman in the command scope, so the next order goes to the " +
                 "whole flight.";
@@ -406,8 +444,8 @@ namespace WingCommand
                 "chosen on LOADOUT and flies out to join the wing.";
 
             public const string Fit =
-                "What the next one of these launches with: its standard fit, or one of the " +
-                "templates you have built for it on LOADOUT.";
+                "What the next one of these launches with: your current player default for " +
+                "this airframe, or one of the templates you have built for it on LOADOUT.";
 
             public const string OverLimit =
                 "Permission to requisition past the mission's AI aircraft cap, at a " +

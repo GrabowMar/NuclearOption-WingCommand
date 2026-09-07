@@ -31,6 +31,12 @@ namespace WingCommand
         /// label tables.
         /// </summary>
         SeekAndDestroy,
+
+        /// <summary>
+        /// Cancel the standing task and loiter near friendly territory. Appended so host
+        /// profiles that address orders by enum value keep their existing masks.
+        /// </summary>
+        StandDown,
     }
 
     /// <summary>The scripted manoeuvres a wingman can be told to fly on command.</summary>
@@ -219,25 +225,29 @@ namespace WingCommand
         public static float DefaultMoveAltitude(bool rotary) =>
             rotary ? WingTuning.MoveAltitudeRotary : WingTuning.MoveAltitudeFixed;
 
-        public static int ScrollSign(float scrollDelta)
+        public static float StepMoveAltitude(float currentOrZero, int sign, bool rotary)
         {
-            if (scrollDelta > 0.01f) return 1;
-            if (scrollDelta < -0.01f) return -1;
-            return 0;
-        }
-
-        public static float StepMoveAltitude(float currentOrZero, int scrollSign, bool rotary)
-        {
-            if (scrollSign == 0)
-                return currentOrZero > 0f ? currentOrZero : DefaultMoveAltitude(rotary);
-
             float current = currentOrZero > 0f ? currentOrZero : DefaultMoveAltitude(rotary);
+            if (sign == 0) return current;
+
             float step = rotary ? WingTuning.MoveAltitudeStepRotary : WingTuning.MoveAltitudeStepFixed;
             float min = rotary ? WingTuning.MoveAltitudeMinRotary : WingTuning.MoveAltitudeMinFixed;
             float max = rotary ? WingTuning.MoveAltitudeMaxRotary : WingTuning.MoveAltitudeMaxFixed;
-            float next = current + scrollSign * step;
+            float next = current + sign * step;
             if (next < min) return min;
             if (next > max) return max;
+            return next;
+        }
+
+        public static float DefaultMoveSpeed() => WingTuning.MoveSpeedDefault;
+
+        public static float StepMoveSpeed(float currentOrZero, int sign)
+        {
+            float current = currentOrZero > 0f ? currentOrZero : DefaultMoveSpeed();
+            if (sign == 0) return current;
+            float next = current + sign * WingTuning.MoveSpeedStep;
+            if (next < WingTuning.MoveSpeedMin) return WingTuning.MoveSpeedMin;
+            if (next > WingTuning.MoveSpeedMax) return WingTuning.MoveSpeedMax;
             return next;
         }
 
@@ -305,6 +315,7 @@ namespace WingCommand
             {
                 case WingOrder.Formation:
                 case WingOrder.OrbitHere:
+                case WingOrder.StandDown:
                     return OrderEngagementAuthority.StandingRoe;
 
                 case WingOrder.Attack:

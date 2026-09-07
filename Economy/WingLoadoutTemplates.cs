@@ -35,7 +35,6 @@ namespace WingCommand
             new List<LoadoutTemplateRecord>();
 
         private static bool loaded;
-        private static readonly HashSet<string> initializedAirframes = new HashSet<string>();
 
         /// <summary>Longest a template name may be, so the selector can always draw it.</summary>
         public const int MaxNameLength = 28;
@@ -132,8 +131,6 @@ namespace WingCommand
             {
                 records.Clear();
                 records.AddRange(LoadoutTemplateCodec.Decode(Plugin.Settings.LoadoutTemplates.Value));
-                initializedAirframes.UnionWith(LoadoutTemplateCodec.DecodeInitializedAirframes(
-                    Plugin.Settings.LoadoutInitializedAirframes.Value));
             }
             catch (Exception e)
             {
@@ -155,20 +152,6 @@ namespace WingCommand
             catch (Exception e)
             {
                 Plugin.Logger.LogWarning("[Loadout] templates could not be saved: " + e.Message);
-            }
-        }
-
-        private static void MarkInitialized(string key)
-        {
-            if (string.IsNullOrEmpty(key) || !initializedAirframes.Add(key)) return;
-            try
-            {
-                Plugin.Settings.LoadoutInitializedAirframes.Value =
-                    LoadoutTemplateCodec.EncodeInitializedAirframes(initializedAirframes);
-            }
-            catch (Exception e)
-            {
-                Plugin.Logger.LogWarning("[Loadout] template initialization could not be saved: " + e.Message);
             }
         }
 
@@ -257,34 +240,6 @@ namespace WingCommand
             return record;
         }
 
-        /// <summary>
-        /// Give this airframe a starting template if it has none, seeded from the same
-        /// per-airframe preset the game gives a player at start — see
-        /// <see cref="WingLoadoutCatalog.SuggestedKeys"/>.
-        ///
-        /// Only ever fires while the airframe has zero templates. A player who deletes
-        /// the seeded one, or edits it into something else, has made a choice this must
-        /// not undo the next time the LOADOUT tab refreshes.
-        /// </summary>
-        public static void EnsureDefault(AircraftDefinition definition)
-        {
-            EnsureLoaded();
-            if (definition == null) return;
-            string key = KeyOf(definition);
-            if (key == null || initializedAirframes.Contains(key)) return;
-            if (CountFor(definition) > 0)
-            {
-                MarkInitialized(key);
-                return;
-            }
-            if (WingLoadoutCatalog.PylonCount(definition) == 0) return;
-
-            List<string> keys = WingLoadoutCatalog.SuggestedKeys(definition);
-            if (keys == null) return;
-
-            if (Create(definition, "DEFAULT", keys) != null) MarkInitialized(key);
-        }
-
         public static LoadoutTemplateRecord Duplicate(LoadoutTemplateRecord source)
         {
             EnsureLoaded();
@@ -307,11 +262,7 @@ namespace WingCommand
         {
             EnsureLoaded();
             if (record == null) return;
-            if (records.Remove(record))
-            {
-                MarkInitialized(record.AirframeKey);
-                Save();
-            }
+            if (records.Remove(record)) Save();
         }
 
         public static void Rename(LoadoutTemplateRecord record, string name)
