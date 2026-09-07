@@ -68,7 +68,7 @@ namespace WingCommand
 
             if (Plugin.Settings.VerboseLogging.Value)
             {
-                Plugin.Logger.LogInfo(
+                Plugin.LogVerbose(
                     $"[Wing] {aircraft.unitName} falling back, breaking {fan:F0} deg off the threat axis");
             }
         }

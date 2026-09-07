@@ -24,7 +24,11 @@ namespace WingCommand.PureTests
         public void ANewRouteOrReturnOrderImmediatelyReleasesACohesionMinimumHold()
         {
             WingReflexes.RegisterDefaults();
-            foreach (WingOrder order in new[] { WingOrder.ReturnToBase, WingOrder.MoveToPoint, WingOrder.OrbitHere })
+            foreach (WingOrder order in new[]
+                     {
+                         WingOrder.ReturnToBase, WingOrder.MoveToPoint,
+                         WingOrder.SeekAndDestroy, WingOrder.OrbitHere,
+                     })
             {
                 var s = new WingSituation(order: order, leaderDistance: 9000f, leashRadius: 5000f,
                     secondsInBehaviour: 0.1f);
@@ -62,12 +66,24 @@ namespace WingCommand.PureTests
         [Theory]
         [InlineData(WingOrder.ReturnToBase)]
         [InlineData(WingOrder.MoveToPoint)]
+        [InlineData(WingOrder.SeekAndDestroy)]
         [InlineData(WingOrder.Attack)]
         [InlineData(WingOrder.OrbitHere)]
         public void LandingTheLeaderDoesNotInterruptIndependentTasks(WingOrder order)
         {
             WingReflexes.RegisterDefaults();
             var s = new WingSituation(order: order, targetAlive: true, leaderOnDeck: true);
+            Assert.Equal(WingBehaviours.Task,
+                WingArbiter.Resolve(in s, null, true, WingAi.Reflexes).BehaviourId);
+        }
+
+        [Theory]
+        [InlineData(WingOrder.MoveToPoint)]
+        [InlineData(WingOrder.SeekAndDestroy)]
+        public void PointTasksContinueWhenTheLeaderIsLost(WingOrder order)
+        {
+            WingReflexes.RegisterDefaults();
+            var s = new WingSituation(order: order, leaderPresent: false);
             Assert.Equal(WingBehaviours.Task,
                 WingArbiter.Resolve(in s, null, true, WingAi.Reflexes).BehaviourId);
         }

@@ -259,8 +259,8 @@ namespace WingCommand
 
         /// <summary>
         /// Give this airframe a starting template if it has none, seeded from the same
-        /// fit the base game itself suggests to a player who has never customised that
-        /// aircraft type — see <see cref="WingLoadoutCatalog.SuggestedKeys"/>.
+        /// per-airframe preset the game gives a player at start — see
+        /// <see cref="WingLoadoutCatalog.SuggestedKeys"/>.
         ///
         /// Only ever fires while the airframe has zero templates. A player who deletes
         /// the seeded one, or edits it into something else, has made a choice this must

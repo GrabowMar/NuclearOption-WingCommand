@@ -339,9 +339,7 @@ namespace WingCommand
 
             if (airframeSilhouette != null)
             {
-                Sprite planeSprite = definition?.mapIcon != null ? definition.mapIcon
-                    : definition?.friendlyIcon != null ? definition.friendlyIcon
-                    : IconFactory.Get("airframe");
+                Sprite planeSprite = IconFactory.Aircraft(definition);
                 airframeSilhouette.sprite = planeSprite;
             }
 

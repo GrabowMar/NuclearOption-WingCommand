@@ -105,7 +105,7 @@ namespace WingCommand
 
             WingComms.Say(member, WingComms.Call.Maneuvering, ManeuverCatalog.Label(kind));
             if (Plugin.Settings.VerboseLogging.Value)
-                Plugin.Logger.LogInfo(
+                Plugin.LogVerbose(
                     $"[Maneuver] {aircraft.unitName} -> {kind} " +
                     $"(alt {aircraft.radarAlt:F0} m, speed {aircraft.speed:F0} m/s)");
         }
@@ -485,7 +485,7 @@ namespace WingCommand
             WingComms.Say(member, WingComms.Call.ManeuverDone);
 
             if (Plugin.Settings.VerboseLogging.Value)
-                Plugin.Logger.LogInfo(
+                Plugin.LogVerbose(
                     $"[Maneuver] {(aircraft != null ? aircraft.unitName : "?")} {kind} " +
                     (unable ? "unable" : "done") + " (" + reason + ")");
 

@@ -239,18 +239,10 @@ namespace WingCommand
         {
             y = Heading(parent, y, "LAUNCH FROM");
 
-            const float arrowW = 28f;
-            float pagerX = PanelWidth - Pad - arrowW * 2f - 36f;
-            launchPrevButton = WingUi.Button(parent, "<", new Rect(pagerX, y, arrowW, RowHeight),
-                                             FontMicro, UiButtonStyle.Quiet, () => TurnLaunchPage(-1));
-            launchPageLabel = Label(parent, "", new Rect(pagerX + arrowW, y, 36f, RowHeight),
-                                    Dim(), FontMicro, FontStyles.Normal, TextAlignmentOptions.Center);
-            launchNextButton = WingUi.Button(parent, ">", new Rect(pagerX + arrowW + 36f, y, arrowW, RowHeight),
-                                             FontMicro, UiButtonStyle.Quiet, () => TurnLaunchPage(1));
-            launchPrevButton.gameObject.SetActive(false);
-            launchPageLabel.gameObject.SetActive(false);
-            launchNextButton.gameObject.SetActive(false);
+            launchPager = HeaderPager(parent, y - Space1, () => TurnLaunchPage(-1), () => TurnLaunchPage(1),
+                                      out launchPrevButton, out launchPageLabel, out launchNextButton);
 
+            float pagerX = PanelWidth - Pad - HeaderPagerWidth;
             float modeW = (pagerX - Pad - Gap * 2f) * 0.5f;
             launchNearestButton = WingUi.Button(
                 parent, "ONLY NEAREST", new Rect(Pad, y, modeW, RowHeight),
@@ -329,19 +321,8 @@ namespace WingCommand
             launchNearestButton?.SetLatched(nearest);
             launchAnyButton?.SetLatched(!nearest);
 
-            if (launchPageLabel != null)
-            {
-                bool multiPage = pages > 1;
-                launchPrevButton?.gameObject.SetActive(multiPage);
-                launchNextButton?.gameObject.SetActive(multiPage);
-                launchPageLabel.gameObject.SetActive(multiPage);
-                if (multiPage)
-                {
-                    launchPageLabel.text = (launchPage + 1) + "/" + pages;
-                    launchPrevButton?.SetEnabled(launchPage > 0);
-                    launchNextButton?.SetEnabled(launchPage < pages - 1);
-                }
-            }
+            RefreshHeaderPager(launchPager, launchPrevButton, launchPageLabel, launchNextButton,
+                               launchPage, pages);
 
             int first = launchPage * LaunchRowsPerPage;
             for (int i = 0; i < launchRows.Count; i++)
@@ -364,7 +345,7 @@ namespace WingCommand
         /// <summary>
         /// Hand an airframe back to the faction pool, on the second press.
         ///
-        /// The same arm-then-confirm the roster's REL and the assignment fee use. Releasing
+        /// The same arm-then-confirm the roster's RTB and the assignment fee use. Releasing
         /// is not undoable from this panel — the AI may spend the airframe the moment it is
         /// back in the pool — and it sat one button-width from HOLD, which does the
         /// opposite.
@@ -463,20 +444,15 @@ namespace WingCommand
             shopTemplatePopup = new AvKit.Popup(parent, PanelWidth);
 
             y = Heading(parent, y, "AIRFRAME REQUISITION");
+            float shopGridTop = y;
+            y = AddShopGrid(parent, shopGridTop);
 
-            const float arrowW = 28f;
-            float pagerX = PanelWidth - Pad - arrowW * 2f - 36f;
-            shopPrevButton = WingUi.Button(parent, "<", new Rect(pagerX, y, arrowW, RowHeight),
-                                           FontMicro, UiButtonStyle.Quiet, () => TurnPage(-1));
-            shopPageLabel = Label(parent, "", new Rect(pagerX + arrowW, y, 36f, RowHeight),
-                                  Dim(), FontMicro, FontStyles.Normal, TextAlignmentOptions.Center);
-            shopNextButton = WingUi.Button(parent, ">", new Rect(pagerX + arrowW + 36f, y, arrowW, RowHeight),
-                                           FontMicro, UiButtonStyle.Quiet, () => TurnPage(1));
-            shopPrevButton.gameObject.SetActive(false);
-            shopPageLabel.gameObject.SetActive(false);
-            shopNextButton.gameObject.SetActive(false);
-
-            y = AddShopGrid(parent, y);
+            // The pager is deliberately built after the tiles, so its compact title-line
+            // controls keep their pointer and draw priority at the grid boundary.
+            shopPager = HeaderPager(parent, shopGridTop + Space5,
+                                    () => TurnPage(-1), () => TurnPage(1),
+                                    out shopPrevButton, out shopPageLabel, out shopNextButton);
+            shopPager.SetAsLastSibling();
             y -= Gap;
 
             // The detail line gets the full width to itself. It used to share a row with the
@@ -524,6 +500,7 @@ namespace WingCommand
             y -= LineHeight + Space1;
 
             y = AddLaunchFrom(parent, y);
+            y = AddDispatchBrief(parent, y);
 
             // REQUISITION is the reason this page exists and is drawn as such; the
             // over-limit permission beside it is a modifier on that purchase and reads a
@@ -541,6 +518,38 @@ namespace WingCommand
                                  .WithTooltip(OrderHint.Requisition);
             y -= RowHeight + Gap;
             return y;
+        }
+
+        /// <summary>
+        /// A compact confirmation rail immediately above requisition. It keeps the selected
+        /// aircraft, pilot, fit, and permit outcome together without reserving a tall card
+        /// for details already visible in the controls above.
+        /// </summary>
+        private static float AddDispatchBrief(RectTransform parent, float y)
+        {
+            const float height = 64f;
+            const float iconSize = 42f;
+            float w = PanelWidth - Pad * 2f;
+            float textX = Pad + Space3;
+            float iconX = Pad + w - iconSize - Space2;
+            float textW = iconX - textX - Space2;
+
+            var (_, rail) = WingUi.TacticalCard(parent, new Rect(Pad, y, w, height), WingUi.RailCyan);
+            supplyDispatchRail = rail;
+
+            Label(parent, "DISPATCH", new Rect(textX, y - Space2, textW, LineHeight),
+                  WingUi.RailCyan, FontMicro, FontStyles.Bold, TextAlignmentOptions.Left);
+            supplyDispatchAirframeLabel = Label(parent, "", new Rect(textX, y - 26f, textW, LineHeight),
+                                                Friendly(), FontSmall, FontStyles.Bold,
+                                                TextAlignmentOptions.Left);
+            supplyDispatchStateLabel = Label(parent, "", new Rect(textX, y - 44f, textW, LineHeight),
+                                             Dim(), FontMicro, FontStyles.Normal,
+                                             TextAlignmentOptions.Left);
+            supplyDispatchStateLabel.overflowMode = TextOverflowModes.Ellipsis;
+
+            supplyDispatchIcon = AddSprite(parent, "DispatchAirframeIcon", IconFactory.Get("airframe"),
+                                            new Rect(iconX, y - Space2, iconSize, iconSize), Dim());
+            return y - height - Gap;
         }
 
         private static float AddShopGrid(RectTransform parent, float y)
@@ -568,11 +577,6 @@ namespace WingCommand
             IReadOnlyList<WingShop.Offer> offers = WingShop.Catalogue();
             int pages = Mathf.Max(1, Mathf.CeilToInt(offers.Count / (float)ShopGridCapacity));
             shopPage = Mathf.Clamp(shopPage + direction, 0, pages - 1);
-            int first = shopPage * ShopGridCapacity;
-            if (first < offers.Count)
-            {
-                selectedOffer = offers[first].Definition;
-            }
             RefreshShop();
         }
 
@@ -648,20 +652,7 @@ namespace WingCommand
             if (shopPage >= pages) shopPage = pages - 1;
             if (shopPage < 0) shopPage = 0;
 
-            if (shopPageLabel != null)
-            {
-                bool multiPage = pages > 1;
-                shopPrevButton?.gameObject.SetActive(multiPage);
-                shopNextButton?.gameObject.SetActive(multiPage);
-                shopPageLabel.gameObject.SetActive(multiPage);
-
-                if (multiPage)
-                {
-                    shopPageLabel.text = $"{shopPage + 1}/{pages}";
-                    shopPrevButton?.SetEnabled(shopPage > 0);
-                    shopNextButton?.SetEnabled(shopPage < pages - 1);
-                }
-            }
+            RefreshHeaderPager(shopPager, shopPrevButton, shopPageLabel, shopNextButton, shopPage, pages);
 
             int first = shopPage * ShopGridCapacity;
 
@@ -788,6 +779,78 @@ namespace WingCommand
             requisitionButton?.WithTooltip(quote.CanBuy
                 ? OrderHint.Requisition
                 : "Cannot requisition — " + quote.Reason);
+            RefreshDispatchBrief(quote);
+        }
+
+        /// <summary>
+        /// Repaint the lower confirmation card from the same live choices that drive the
+        /// purchase button. It deliberately repeats the outcome rather than every price
+        /// breakdown above: at the commit point the useful questions are who flies, what
+        /// fit they carry, how they launch, and whether the order can leave now.
+        /// </summary>
+        private static void RefreshDispatchBrief(WingShop.PurchaseQuote quote)
+        {
+            if (supplyDispatchAirframeLabel == null) return;
+
+            if (selectedOffer == null)
+            {
+                supplyDispatchAirframeLabel.text = "NO AIRFRAME SELECTED";
+                supplyDispatchStateLabel.text = "SELECT AN AIRFRAME TO PREPARE A DISPATCH.";
+                supplyDispatchAirframeLabel.color = Dim();
+                supplyDispatchStateLabel.color = Dim();
+                if (supplyDispatchRail != null) supplyDispatchRail.color = Dim();
+                if (supplyDispatchIcon != null)
+                {
+                    supplyDispatchIcon.sprite = IconFactory.Get("airframe");
+                    supplyDispatchIcon.color = Dim();
+                }
+                return;
+            }
+
+            string designation = !string.IsNullOrEmpty(selectedOffer.code)
+                ? selectedOffer.code + "  " + AvTheme.Truncate(selectedOffer.unitName, 16)
+                : AvTheme.Truncate(selectedOffer.unitName, 21);
+
+            WingPilot pilot = WingPilotRoster.Selected;
+            string pilotName = pilot == null
+                ? "AUTO"
+                : AvTheme.Truncate(pilot.Callsign, 12);
+
+            WingLoadoutChoice fit = WingLoadoutBook.PlannedFor(selectedOffer);
+            bool fromReserve = WingSupplyReserve.PeekLoadout(selectedOffer,
+                                                              out WingLoadoutChoice recoveredFit);
+            if (fromReserve) fit = recoveredFit;
+
+            string fuel = fromReserve
+                ? "AS RECOVERED"
+                : WingShop.FullFuel
+                    ? "FULL FUEL"
+                    : "FUEL " + Mathf.RoundToInt(WingTuning.PartialFuelLevel * 100f) + "%";
+            string fitLabel = fromReserve
+                ? "RESERVE FIT"
+                : AvTheme.Truncate(WingLoadoutCatalog.Label(fit), 16).ToUpperInvariant();
+
+            supplyDispatchAirframeLabel.text = designation + "  ·  " + pilotName;
+            supplyDispatchStateLabel.text = quote.CanBuy
+                ? "ALLOWED  ·  " + fitLabel + "  ·  " + fuel
+                : "BLOCKED — " +
+                  (string.IsNullOrEmpty(quote.Reason)
+                      ? "requirements not met."
+                      : AvTheme.Truncate(quote.Reason, 38));
+
+            bool ready = quote.CanBuy;
+            supplyDispatchAirframeLabel.color = ready ? Friendly() : Warning();
+            supplyDispatchStateLabel.color = ready ? Green() : Warning();
+            if (supplyDispatchRail != null)
+                supplyDispatchRail.color = ready
+                    ? fromReserve ? WingUi.RailCyan : WingUi.RailEmerald
+                    : Warning();
+
+            if (supplyDispatchIcon != null)
+            {
+                supplyDispatchIcon.sprite = IconFactory.Aircraft(selectedOffer);
+                supplyDispatchIcon.color = ready ? Friendly() : Dim();
+            }
         }
 
         /// <summary>
@@ -828,10 +891,11 @@ namespace WingCommand
         }
 
         /// <summary>
-        /// Choose what the next one of these flies with: the standard fit, or a template.
+        /// Choose what the next one of these flies with: the game's standard player-start
+        /// fit, or a template.
         ///
-        /// The standard fit is always first and always available, because it is the answer
-        /// for a player who has never opened LOADOUT and the one fit no airframe can refuse.
+        /// The standard fit is always first and always available, because it mirrors the
+        /// game's per-airframe player-start preset even before they open LOADOUT.
         /// </summary>
         private static void OpenShopTemplatePicker()
         {
@@ -849,7 +913,7 @@ namespace WingCommand
             var ids = new List<string>(mine.Count + 1) { null };
             popupEntries.Clear();
             popupEntries.Add(new AvKit.PopupEntry(
-                "STANDARD FIT", "as issued", !planned.IsTemplate));
+                "STANDARD FIT", "game-start preset", !planned.IsTemplate));
 
             for (int i = 0; i < mine.Count; i++)
             {
@@ -987,9 +1051,7 @@ namespace WingCommand
                 bool selected = selectedOffer == offer.Definition;
                 bool canSpawn = WingLaunchFields.CanAnyAllowedLaunch(hq, offer.Definition);
 
-                Sprite sprite = offer.Definition.mapIcon != null ? offer.Definition.mapIcon
-                              : offer.Definition.friendlyIcon != null ? offer.Definition.friendlyIcon
-                              : IconFactory.Get("airframe");
+                Sprite sprite = IconFactory.Aircraft(offer.Definition);
                 icon.sprite = sprite;
                 icon.color = selected ? Color.white : (canSpawn ? (affordable ? Color.white : Dim()) : Dim());
 
@@ -1019,7 +1081,9 @@ namespace WingCommand
                 }
                 rail.color = selected ? Green() : Color.clear;
 
-                string spawnNotice = !canSpawn ? " | [!] No selected launch base can spawn this aircraft" : "";
+                string spawnNotice = " | " + WingHangarStock.AirframeLaunchText(offer.Definition, allowedOnly: true);
+                if (!canSpawn)
+                    spawnNotice = " | [!] " + WingHangarStock.AirframeLaunchText(offer.Definition, allowedOnly: false);
                 string costNotice = owned > 0 ? "FREE (" + owned + " owned in reserve)" : "Cost: " + Grouped(cost);
                 hit.WithTooltip(offer.Name + " — " + costNotice + " | Stock: " + offer.Stock + spawnNotice);
                 hit.SetRowHighlight(fill, selected ? WingUi.CardFillSelected : WingUi.CardFill, WingUi.CardFillHover);
@@ -1082,6 +1146,8 @@ namespace WingCommand
                 bool allowed = WingLaunchFields.IsAllowed(airbase);
                 bool hasAirframe = selectedOffer != null;
                 bool canProduce = hasAirframe && WingLaunchFields.CanProduce(airbase, selectedOffer);
+                bool jammed = allowed && (!hasAirframe || canProduce) &&
+                              HangarDepartureLane.IsJammed(airbase);
 
                 LaunchBaseStatus state = LaunchBaseStatusPolicy.Evaluate(allowed, canProduce, hasAirframe);
                 string badge = LaunchBaseStatusPolicy.BadgeText(state);
@@ -1090,7 +1156,7 @@ namespace WingCommand
                 check.SetText(allowed ? "X" : "");
 
                 name.text = AvTheme.Truncate(WingLaunchFields.DisplayName(airbase), 26);
-                status.text = badge;
+                status.text = jammed ? "JAMMED" : badge;
 
                 switch (state)
                 {
@@ -1117,6 +1183,17 @@ namespace WingCommand
                     selectedOffer != null ? selectedOffer.unitName : null,
                     allowed,
                     canProduce);
+                string stock = WingHangarStock.FieldStockText(airbase);
+                if (!string.IsNullOrEmpty(stock)) tooltip += " — " + stock;
+                if (jammed)
+                {
+                    status.color = Warning();
+                    name.color = Warning();
+                    tooltip = WingLaunchFields.DisplayName(airbase) +
+                        " — Runway queue blocked by an aircraft that is no longer departing. " +
+                        "Choose another launch base or Any.";
+                    if (!string.IsNullOrEmpty(stock)) tooltip += " — " + stock;
+                }
                 hit.WithTooltip(tooltip);
                 check.WithTooltip(tooltip);
             }

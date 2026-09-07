@@ -29,6 +29,16 @@ namespace WingCommand
         internal static new ManualLogSource Logger { get; private set; }
         internal static WingConfig Settings { get; private set; }
 
+        /// <summary>
+        /// Diagnostic <c>LogInfo</c> that is silent unless <c>Debug/VerboseLogging</c> is on.
+        /// Errors, warnings, and the one startup loaded line stay on <see cref="Logger"/>.
+        /// </summary>
+        internal static void LogVerbose(string message)
+        {
+            if (Settings == null || !Settings.VerboseLogging.Value) return;
+            Logger?.LogInfo(message);
+        }
+
         private Harmony harmony;
 
         private void Awake()
@@ -41,7 +51,7 @@ namespace WingCommand
             // always valid; pointing the host at the config directory is what lets a player
             // drop their own avionics.avss beside it and retune every panel in both mods
             // without a rebuild. Both plugins configure the same path on purpose.
-            AvStyleHost.Configure(BepInEx.Paths.ConfigPath, Logger.LogInfo, Logger.LogWarning);
+            AvStyleHost.Configure(BepInEx.Paths.ConfigPath, LogVerbose, Logger.LogWarning);
 
             // The retired keys these warnings described are no longer bound at all, so an
             // old configuration file simply carries dead lines that BepInEx drops on its
@@ -78,8 +88,6 @@ namespace WingCommand
             Type[] patchTypes =
             {
                 typeof(AiCombatTweak),
-                typeof(DeliveryTaxiRouteGuard),
-                typeof(HangarDeliveryCompletionPatch),
                 typeof(AiTargetDeconflictionPatch),
                 typeof(WingMapWaypointPatch),
                 typeof(WingMapSelectionPatch),
@@ -91,6 +99,9 @@ namespace WingCommand
                 typeof(WingRadialMenuPatches.AwakePatch),
                 typeof(WingMenuActionPatches),
                 typeof(WingTakeoverPatches),
+                typeof(WingInboundTaxiPatch),
+                typeof(WingTakeoffQueuePatch),
+                typeof(HangarDeliveryCompletionPatch),
             };
             for (int i = 0; i < patchTypes.Length; i++)
                 harmony.PatchAll(patchTypes[i]);
@@ -116,7 +127,7 @@ namespace WingCommand
             // constants in WingTuning now, so logging them told a bug report nothing it
             // could not read off the version, and buried the lines that do vary.
             WingFidelity.Begin(Settings.Mode.Value);
-            Logger.LogInfo(
+            LogVerbose(
                 "Effective settings: " +
                 $"Mode={Settings.Mode.Value} [{WingFidelity.Summary()}] " +
                 $"Shape={WingFormation.Shape} " +
@@ -149,7 +160,7 @@ namespace WingCommand
             }
 
             names.Sort(System.StringComparer.Ordinal);
-            Logger.LogInfo($"Harmony patched {names.Count} method(s): {string.Join(", ", names.ToArray())}");
+            LogVerbose($"Harmony patched {names.Count} method(s): {string.Join(", ", names.ToArray())}");
 
             // Named so a future game update that moves one of these is reported as a
             // missing patch rather than as a feature that silently stopped working.
@@ -164,8 +175,13 @@ namespace WingCommand
                 "HUDUnitMarker.UpdateColor",
                 "AIPilotCombatModes.EnterState",
                 "CombatAI.ChooseHQTarget",
-                "Hangar.DoorSequenceCarrier",
                 "GameManager.FinishGame",
+                // The airfield pair. Both rewrite Pilot.SwitchState and nothing else; a
+                // game update that moves this method must be noticed, because losing them
+                // silently means a landed wingman ejects on the apron and every runway it
+                // queued for stays jammed for the mission.
+                "Pilot.SwitchState",
+                "Hangar.DoorSequenceCarrier",
             };
 
             foreach (string want in expected)

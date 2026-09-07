@@ -39,7 +39,7 @@ namespace WingCommand
                 // Not worth a warning per line. Radio chatter is cosmetic, and the subtitle
                 // carries the actual information either way.
                 unavailable = true;
-                Plugin.Logger.LogInfo(
+                Plugin.LogVerbose(
                     "[Comms] radio click unavailable; chatter will be silent: " + e.Message);
             }
         }

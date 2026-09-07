@@ -43,6 +43,13 @@ namespace WingCommand
         public static WingDirective AtPoint(WingOrder order, GlobalPosition point) =>
             new WingDirective(order, null, point, true);
 
+        /// <summary>
+        /// A point task with a different terminal action from a normal Move: when the
+        /// point is reached, the member begins autonomous combat rather than reforming.
+        /// </summary>
+        public static WingDirective SeekAndDestroy(GlobalPosition point) =>
+            AtPoint(WingOrder.SeekAndDestroy, point);
+
         /// <summary>Fly one scripted manoeuvre. Carries no target or point.</summary>
         public static WingDirective RunManeuver(ManeuverKind kind) =>
             new WingDirective(WingOrder.Maneuver, null, default(GlobalPosition), false, kind);

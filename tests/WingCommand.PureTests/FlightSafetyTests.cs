@@ -6,6 +6,17 @@ namespace WingCommand.PureTests
     [Collection("Runtime state")]
     public class FlightSafetyTests
     {
+        [Theory]
+        [InlineData(0f, false)]
+        [InlineData(5f, false)]
+        [InlineData(7.9f, false)]
+        [InlineData(25f, true)]
+        public void TaxiingAircraftAreNotTerrainAborts(float radarAlt, bool expected)
+        {
+            Assert.Equal(expected, TerrainAbortPolicy.ShouldAbort(
+                radarAlt, 600f, WingOrder.Formation, incumbent: false, deliveryPending: false));
+        }
+
         [Fact]
         public void TerrainRecoveryPreemptsMissileHoldButEvasionStillHoldsThroughWarningGaps()
         {

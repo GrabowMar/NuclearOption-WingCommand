@@ -73,7 +73,7 @@ namespace WingCommand
             catch { /* Numeric shortcuts still make the prompt usable if the map is absent. */ }
 
             Build();
-            Plugin.Logger.LogInfo($"[Takeover] leader lost; offering {CandidateCount()} aircraft");
+            Plugin.LogVerbose($"[Takeover] leader lost; offering {CandidateCount()} aircraft");
             return true;
         }
 
@@ -87,7 +87,7 @@ namespace WingCommand
         public static void MarkDefeatSuppressed()
         {
             defeatSuppressed = true;
-            Plugin.Logger.LogInfo("[Takeover] delayed player-loss defeat while a wing aircraft is available");
+            Plugin.LogVerbose("[Takeover] delayed player-loss defeat while a wing aircraft is available");
         }
 
         public static void Tick()
@@ -139,7 +139,7 @@ namespace WingCommand
         {
             if (!active) return;
             Close();
-            Plugin.Logger.LogInfo("[Takeover] player acquired " + leader.unitName + " through the normal game flow");
+            Plugin.LogVerbose("[Takeover] player acquired " + leader.unitName + " through the normal game flow");
         }
 
         // ------------------------------------------------------------------------ panel
@@ -448,12 +448,14 @@ namespace WingCommand
                 // Remove the AI source without DisableUnit: reporting it as destroyed would
                 // create a false kill, score event and supply loss. The replacement already
                 // occupies the same position and represents the same one airframe.
+                // This path never switches the original pilot state, so the state-change
+                // prefix cannot return a taxi slot on its behalf.
                 NetworkManagerNuclearOption.i.ServerObjectManager.Destroy(
                     target.Identity, !target.Identity.IsSceneObject);
 
                 Close();
                 WingCommandManager.Instance?.Toast("Replacement aircraft ready: " + replacement.unitName);
-                Plugin.Logger.LogInfo("[Takeover] spawned player copy of " + target.unitName +
+                Plugin.LogVerbose("[Takeover] spawned player copy of " + target.unitName +
                                       " and removed the AI source");
             }
             catch (Exception ex)
@@ -533,7 +535,7 @@ namespace WingCommand
 
             oldWing?.DisbandAll(reason);
             WingCommandManager.Instance?.Toast(reason);
-            Plugin.Logger.LogInfo("[Takeover] " + reason);
+            Plugin.LogVerbose("[Takeover] " + reason);
 
             if (finishDefeat) GameManager.FinishGame(GameResolution.Defeat);
         }

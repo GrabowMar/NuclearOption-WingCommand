@@ -20,6 +20,9 @@ namespace WingCommand
         // control the player cannot act on took a third of a page that now has pylons to
         // draw.
         private static TMP_Text loadoutStatusLabel;
+        private static TMP_Text loadoutProfileTitle;
+        private static Image loadoutProfileRail;
+        private static Image loadoutProfileIcon;
         private static TMP_Text templateLabel;
         private static TMP_Text liveryLabel;
         private static TMP_InputField templateNameField;
@@ -36,13 +39,14 @@ namespace WingCommand
         private static TMP_Text pylonPageLabel;
         private static readonly List<PylonRow> pylonRows = new List<PylonRow>();
 
-        private const int AirframeGridRows = 5;
+        private const int AirframeGridRows = 4;
         private const int AirframeGridCols = 4;
-        private const int AirframeGridCapacity = AirframeGridRows * AirframeGridCols; // 20
+        private const int AirframeGridCapacity = AirframeGridRows * AirframeGridCols; // 16
         private const float AirframeTileHeight = 36f;
         private const float AirframeTileGap = 4f;
 
         private static int airframePage;
+        private static RectTransform airframePager;
         private static WingButton airframePrevButton;
         private static WingButton airframeNextButton;
         private static TMP_Text airframePageLabel;
@@ -71,10 +75,10 @@ namespace WingCommand
         private static int pylonPage;
 
         /// <summary>
-        /// Pylons drawn at once. Seven: allows 5 full rows of airframe icons at the top while
-        /// keeping hardpoints visible without vertical panel overflow.
+        /// Pylons drawn at once. Six keeps the editor dense without reserving a visibly empty
+        /// seventh row for the common five-station airframe.
         /// </summary>
-        private const int PylonRowsPerPage = 7;
+        private const int PylonRowsPerPage = 6;
 
         // ----------------------------------------------------------------- loadout page
 
@@ -97,21 +101,16 @@ namespace WingCommand
             loadoutPopup = new AvKit.Popup(parent, PanelWidth);
 
             y = Heading(parent, y, "AIRFRAME");
+            float airframeGridTop = y;
+            y = AddAirframeGrid(parent, airframeGridTop);
 
-            const float arrowW = 20f;
-            float pagerX = PanelWidth - Pad - arrowW * 2f - 36f;
-            airframePrevButton = WingUi.Button(parent, "<", new Rect(pagerX, y + Space5, arrowW, RowHeight - 4f),
-                                               FontMicro, UiButtonStyle.Quiet, () => TurnAirframePage(-1));
-            airframePageLabel = Label(parent, "", new Rect(pagerX + arrowW, y + Space5, 36f, RowHeight - 4f),
-                                      Dim(), FontMicro, FontStyles.Normal, TextAlignmentOptions.Center);
-            airframeNextButton = WingUi.Button(parent, ">", new Rect(pagerX + arrowW + 36f, y + Space5, arrowW, RowHeight - 4f),
-                                               FontMicro, UiButtonStyle.Quiet, () => TurnAirframePage(1));
-            airframePrevButton.gameObject.SetActive(false);
-            airframePageLabel.gameObject.SetActive(false);
-            airframeNextButton.gameObject.SetActive(false);
-
-            y = AddAirframeGrid(parent, y);
-            y -= Gap;
+            // Build after the tile grid so a multi-page pager is the topmost sibling at the
+            // shared heading edge. This prevents the first row's last tile from swallowing
+            // the arrows when the canvas rounds a shared border onto the same pixel.
+            airframePager = HeaderPager(parent, airframeGridTop + Space5,
+                                        () => TurnAirframePage(-1), () => TurnAirframePage(1),
+                                        out airframePrevButton, out airframePageLabel, out airframeNextButton);
+            airframePager.SetAsLastSibling();
 
             y = Heading(parent, y, "TEMPLATE");
 
@@ -200,17 +199,40 @@ namespace WingCommand
             pylonNextButton = Pager(parent, y, ">", () => TurnPylonPage(1));
             y -= RowHeight + Gap;
 
-            templateSummaryLabel = Label(parent, "",
-                                         new Rect(Pad, y, PanelWidth - Pad * 2f, LineHeight),
-                                         Dim(), FontMicro, FontStyles.Normal,
-                                         TextAlignmentOptions.Left);
-            y -= LineHeight + Space1;
+            return AddLoadoutProfile(parent, y);
+        }
 
-            loadoutStatusLabel = Label(parent, "",
-                                       new Rect(Pad, y, PanelWidth - Pad * 2f, LineHeight),
+        /// <summary>
+        /// Give the aggregate fit a real surface below its individual pylon rows. The
+        /// previous two loose hint lines left this tab's inherited vertical slack looking
+        /// accidental; the card makes mass, role, and next-step feedback scannable at the
+        /// point where a player has just finished editing the stations.
+        /// </summary>
+        private static float AddLoadoutProfile(RectTransform parent, float y)
+        {
+            const float height = 96f;
+            const float iconSize = 58f;
+            float w = PanelWidth - Pad * 2f;
+            float textX = Pad + Space3;
+            float iconX = Pad + w - iconSize - Space2;
+            float textW = iconX - textX - Space2;
+
+            var (_, rail) = WingUi.TacticalCard(parent, new Rect(Pad, y, w, height), WingUi.RailCyan);
+            loadoutProfileRail = rail;
+            loadoutProfileTitle = Label(parent, "LOADOUT PROFILE", new Rect(textX, y - Space2, textW, LineHeight),
+                                        WingUi.RailCyan, FontMicro, FontStyles.Bold,
+                                        TextAlignmentOptions.Left);
+            templateSummaryLabel = Label(parent, "", new Rect(textX, y - 28f, textW, LineHeight),
+                                         Dim(), FontSmall, FontStyles.Normal,
+                                         TextAlignmentOptions.Left);
+            loadoutStatusLabel = Label(parent, "", new Rect(textX, y - 50f, textW, 30f),
                                        Dim(), FontMicro, FontStyles.Normal,
-                                       TextAlignmentOptions.Left);
-            return y - (LineHeight + Space1);
+                                       TextAlignmentOptions.TopLeft);
+            loadoutStatusLabel.enableWordWrapping = true;
+            loadoutStatusLabel.overflowMode = TextOverflowModes.Ellipsis;
+            loadoutProfileIcon = AddSprite(parent, "LoadoutProfileAirframe", IconFactory.Get("airframe"),
+                                           new Rect(iconX, y - Space3, iconSize, iconSize), Dim());
+            return y - height - Gap;
         }
 
         /// <summary>Where the pylon list starts, so a popup can be dropped onto a row.</summary>
@@ -237,8 +259,8 @@ namespace WingCommand
         /// <summary>
         /// Every airframe in the catalogue gets a starting template, not just the one on
         /// screen — a player paging through the grid should find every plane already
-        /// carrying the fit the game itself would have suggested, not just the ones they
-        /// happened to open the editor on first.
+        /// carrying its game-start player preset, not just the ones they happened to open
+        /// the editor on first.
         ///
         /// Cheap to call on every refresh: <see cref="WingLoadoutTemplates.EnsureDefault"/>
         /// bails immediately once an airframe has a template of its own.
@@ -263,15 +285,7 @@ namespace WingCommand
             IReadOnlyList<WingShop.Offer> offers = WingShop.LoadoutCatalogue();
             int pages = Mathf.Max(1, Mathf.CeilToInt(offers.Count / (float)AirframeGridCapacity));
             airframePage = Mathf.Clamp(airframePage + direction, 0, pages - 1);
-            int first = airframePage * AirframeGridCapacity;
-            if (first < offers.Count)
-            {
-                SelectAirframe(offers[first].Definition);
-            }
-            else
-            {
-                RefreshLoadoutPage();
-            }
+            RefreshLoadoutPage();
         }
 
         private static float AddAirframeGrid(RectTransform parent, float y)
@@ -303,18 +317,9 @@ namespace WingCommand
 
             int pages = Mathf.Max(1, Mathf.CeilToInt(offers.Count / (float)AirframeGridCapacity));
 
-            // Ensure the active airframe's page is showing
-            if (selectedOffer != null)
-            {
-                for (int i = 0; i < offers.Count; i++)
-                {
-                    if (offers[i].Definition == selectedOffer)
-                    {
-                        airframePage = i / AirframeGridCapacity;
-                        break;
-                    }
-                }
-            }
+            // Browsing the catalogue must not change the airframe being edited. A selected
+            // tile is highlighted only when it is on this page; its template remains in the
+            // detail area until the player explicitly clicks another tile.
             airframePage = Mathf.Clamp(airframePage, 0, pages - 1);
 
             int first = airframePage * AirframeGridCapacity;
@@ -332,20 +337,8 @@ namespace WingCommand
                 }
             }
 
-            if (airframePageLabel != null)
-            {
-                bool multiPage = pages > 1;
-                airframePrevButton?.gameObject.SetActive(multiPage);
-                airframeNextButton?.gameObject.SetActive(multiPage);
-                airframePageLabel.gameObject.SetActive(multiPage);
-
-                if (multiPage)
-                {
-                    airframePageLabel.text = $"{airframePage + 1}/{pages}";
-                    airframePrevButton?.SetEnabled(airframePage > 0);
-                    airframeNextButton?.SetEnabled(airframePage < pages - 1);
-                }
-            }
+            RefreshHeaderPager(airframePager, airframePrevButton, airframePageLabel, airframeNextButton,
+                               airframePage, pages);
         }
 
         // -------------------------------------------------------------- template editing
@@ -550,8 +543,11 @@ namespace WingCommand
             }
         }
 
-        private static void TurnPylonPage(int direction) =>
+        private static void TurnPylonPage(int direction)
+        {
             pylonPage = Mathf.Max(0, pylonPage + direction);
+            RefreshLoadoutPage();
+        }
 
         /// <summary>
         /// Put a store on a pylon, and on its mirror.
@@ -725,11 +721,15 @@ namespace WingCommand
         /// </summary>
         private static void RefreshTemplateSummary(LoadoutTemplateRecord template)
         {
+            RefreshLoadoutProfileChrome(template);
             if (templateSummaryLabel == null) return;
 
             if (template == null)
             {
-                templateSummaryLabel.text = "";
+                templateSummaryLabel.text = selectedOffer == null
+                    ? "NO AIRFRAME SELECTED"
+                    : "NO SAVED TEMPLATE  ·  STANDARD FIT ONLY";
+                templateSummaryLabel.color = selectedOffer == null ? Dim() : Warning();
                 return;
             }
 
@@ -763,6 +763,50 @@ namespace WingCommand
             templateSummaryLabel.color = fitted == 0 ? Warning() : Dim();
         }
 
+        /// <summary>
+        /// Keep the loadout profile's title, rail, and silhouette in lock-step with the
+        /// selected airframe. This is intentionally separate from the mass calculation so
+        /// the card remains useful when station data or a saved template is unavailable.
+        /// </summary>
+        private static void RefreshLoadoutProfileChrome(LoadoutTemplateRecord template)
+        {
+            if (selectedOffer == null)
+            {
+                if (loadoutProfileTitle != null)
+                {
+                    loadoutProfileTitle.text = "LOADOUT PROFILE  ·  NO AIRFRAME";
+                    loadoutProfileTitle.color = Dim();
+                }
+                if (loadoutProfileRail != null) loadoutProfileRail.color = Dim();
+                if (loadoutProfileIcon != null)
+                {
+                    loadoutProfileIcon.sprite = IconFactory.Get("airframe");
+                    loadoutProfileIcon.color = Dim();
+                }
+                return;
+            }
+
+            string designation = !string.IsNullOrEmpty(selectedOffer.code)
+                ? selectedOffer.code
+                : AvTheme.Truncate(selectedOffer.unitName, 12);
+            string templateName = template != null
+                ? AvTheme.Truncate(template.Name, 14).ToUpperInvariant()
+                : "NO TEMPLATE";
+
+            if (loadoutProfileTitle != null)
+            {
+                loadoutProfileTitle.text = "LOADOUT PROFILE  ·  " + designation + "  ·  " + templateName;
+                loadoutProfileTitle.color = template != null ? WingUi.RailCyan : Warning();
+            }
+            if (loadoutProfileRail != null)
+                loadoutProfileRail.color = template != null ? WingUi.RailEmerald : Warning();
+            if (loadoutProfileIcon != null)
+            {
+                loadoutProfileIcon.sprite = IconFactory.Aircraft(selectedOffer);
+                loadoutProfileIcon.color = template != null ? Friendly() : Dim();
+            }
+        }
+
         private static void RefreshPylonRows(LoadoutTemplateRecord template)
         {
             int pages = Mathf.Max(1, Mathf.CeilToInt(visiblePylons.Count /
@@ -770,11 +814,9 @@ namespace WingCommand
             pylonPage = Mathf.Clamp(pylonPage, 0, pages - 1);
 
             if (pylonPageLabel != null)
-            {
                 pylonPageLabel.text = visiblePylons.Count == 0
-                    ? "no readable hardpoints"
-                    : "pylon page " + (pylonPage + 1) + " of " + pages;
-            }
+                    ? "NO READABLE HARDPOINTS"
+                    : PageSummary(visiblePylons.Count, pylonPage, pages, "PYLON", "PYLONS");
 
             bool hasPylons = visiblePylons.Count > 0;
             if (pylonEmptyCard != null) pylonEmptyCard.gameObject.SetActive(!hasPylons);
@@ -978,9 +1020,7 @@ namespace WingCommand
 
                 if (!go.activeSelf) go.SetActive(true);
 
-                Sprite sprite = def.mapIcon != null ? def.mapIcon
-                              : def.friendlyIcon != null ? def.friendlyIcon
-                              : IconFactory.Get("airframe");
+                Sprite sprite = IconFactory.Aircraft(def);
                 icon.sprite = sprite;
                 icon.color = selected ? Color.white : Dim();
 

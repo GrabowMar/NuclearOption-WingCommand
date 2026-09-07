@@ -312,7 +312,7 @@ namespace WingCommand
             int blocked = ClearBlockedMounts(definition, profile, weapons);
 
             if (anyUnknown)
-                Plugin.Logger.LogInfo(
+                Plugin.LogVerbose(
                     "[Loadout] a saved template for " + SafeName(definition) +
                     " names stores this build does not have; those pylons launch empty.");
 
@@ -410,19 +410,18 @@ namespace WingCommand
         // --------------------------------------------------------------------- build
 
         /// <summary>
-        /// Turn a choice into a spawnable loadout, or null to let the game fit the
-        /// airframe's own standard equipment.
+        /// Turn a choice into a spawnable loadout. The standard choice copies the same
+        /// per-airframe preset a player receives when starting the game.
         ///
-        /// Null is returned for more than a stock choice: an airframe whose station data
-        /// could not be read, and a template that has since been deleted, both resolve to
-        /// the stock fit. An unarmed wingman is a worse outcome than an unfulfilled
-        /// preference — it flies to the wing, reads as Winchester and turns straight round
-        /// for home.
+        /// Null is a last-resort fallback: an airframe with no readable starting preset,
+        /// or a template that has since been deleted, lets the native spawner choose its
+        /// own fit. An unarmed wingman is a worse outcome than an unfulfilled preference
+        /// — it flies to the wing, reads as Winchester and turns straight round for home.
         /// </summary>
         public static Loadout Build(AircraftDefinition definition, WingLoadoutChoice choice)
         {
             if (choice.HasSnapshot) return BuildFromKeys(definition, choice.FittedKeys);
-            if (!choice.IsTemplate) return null;
+            if (!choice.IsTemplate) return CloneLoadout(GameStartLoadout(definition));
 
             LoadoutTemplateRecord template = WingLoadoutTemplates.ById(choice.TemplateId);
             return template != null ? BuildFromKeys(definition, template.MountKeys) : null;
@@ -432,7 +431,7 @@ namespace WingCommand
         internal static WingLoadoutChoice SnapshotFit(Aircraft aircraft, WingLoadoutChoice choice)
         {
             List<WeaponMount> weapons = aircraft?.Networkloadout?.weapons;
-            // A synchronous registration can precede Hangar's native standard-fit selection.
+            // A synchronous registration can precede Hangar completing its loadout setup.
             // The book retries on its next read once that loadout has been installed.
             if (weapons == null) return choice;
             var keys = new List<string>(weapons.Count);
@@ -441,12 +440,10 @@ namespace WingCommand
         }
 
         /// <summary>
-        /// The stores the base game itself suggests for this airframe: the fit held in
-        /// <c>AircraftParameters.loadouts[1]</c>, which is what the game's own
-        /// <c>LoadoutSelector.LoadDefaults</c> falls back to the first time a player
-        /// customises an aircraft type — before any per-player customisation exists for
-        /// it. Index 0 is not it; the game reserves that slot for something else and
-        /// reads the suggested fit from index 1.
+        /// The stores a player receives when first starting with this airframe: the fit in
+        /// <c>AircraftParameters.loadouts[1]</c>. This deliberately ignores later saved
+        /// player customisation, so STANDARD always means the game's original player
+        /// preset. Index 0 is not that preset: the game reserves it for something else.
         ///
         /// Returned in pylon order, matching <c>WeaponManager.hardpointSets</c> exactly
         /// as <see cref="BuildFromKeys"/> expects. Null when the airframe declares no
@@ -455,17 +452,40 @@ namespace WingCommand
         /// </summary>
         public static List<string> SuggestedKeys(AircraftDefinition definition)
         {
-            List<Loadout> loadouts = definition?.aircraftParameters?.loadouts;
-            if (loadouts == null || loadouts.Count == 0) return null;
-
-            int index = loadouts.Count > 1 ? 1 : 0;
-            Loadout suggested = loadouts[index];
+            Loadout suggested = GameStartLoadout(definition);
             if (suggested?.weapons == null) return null;
 
             var keys = new List<string>(suggested.weapons.Count);
             for (int i = 0; i < suggested.weapons.Count; i++)
                 keys.Add(StoreKey(suggested.weapons[i]));
             return keys;
+        }
+
+        /// <summary>
+        /// Resolve the original player preset built into an airframe. Saved player
+        /// customisations are intentionally excluded: a wingman ordered as STANDARD must
+        /// carry the fit this airframe gives a player at game start.
+        /// </summary>
+        private static Loadout GameStartLoadout(AircraftDefinition definition)
+        {
+            if (definition == null) return null;
+
+            List<Loadout> loadouts = definition.aircraftParameters?.loadouts;
+            if (loadouts == null || loadouts.Count == 0) return null;
+
+            // Match LoadoutSelector.LoadDefaults' first-time fallback. The single-entry fallback keeps an
+            // incomplete workshop airframe launchable instead of indexing past its data.
+            return loadouts[loadouts.Count > 1 ? 1 : 0];
+        }
+
+        /// <summary>
+        /// A spawned aircraft owns its mutable Loadout container. WeaponMount definitions
+        /// are immutable assets and can safely be shared; the list itself must not be.
+        /// </summary>
+        private static Loadout CloneLoadout(Loadout source)
+        {
+            if (source?.weapons == null) return null;
+            return new Loadout { weapons = new List<WeaponMount>(source.weapons) };
         }
 
         // ------------------------------------------------------------------ profiling
@@ -569,7 +589,7 @@ namespace WingCommand
             if (roleDataSeen || blindProfilesLogged) return;
 
             blindProfilesLogged = true;
-            Plugin.Logger.LogInfo(
+            Plugin.LogVerbose(
                 "[Loadout] no stock weapon-role data could be read from " +
                 SafeName(definition) + "'s hardpoints; that airframe offers the standard fit only.");
         }

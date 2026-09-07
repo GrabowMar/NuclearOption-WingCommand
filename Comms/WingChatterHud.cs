@@ -18,6 +18,7 @@ namespace WingCommand
             public string Identity;
             public string Context;
             public string Message;
+            public Sprite AirframeIcon;
             public bool Urgent;
             public float QueuedAt;
         }
@@ -36,12 +37,13 @@ namespace WingCommand
         private static CanvasGroup group;
         private static TMP_Text identityLabel;
         private static TMP_Text contextLabel;
+        private static Image contextIcon;
         private static TMP_Text messageLabel;
 
         public static bool IsIdle => current == null && queue.Count == 0;
 
         public static void Enqueue(string identity, string context, string message,
-                                   bool urgent = false)
+                                   Sprite airframeIcon, bool urgent = false)
         {
             if (string.IsNullOrWhiteSpace(identity) || string.IsNullOrWhiteSpace(message)) return;
 
@@ -50,6 +52,7 @@ namespace WingCommand
                 Identity = identity.Trim(),
                 Context = context?.Trim() ?? string.Empty,
                 Message = message.Trim(),
+                AirframeIcon = airframeIcon,
                 Urgent = urgent,
                 QueuedAt = Time.unscaledTime,
             };
@@ -128,6 +131,7 @@ namespace WingCommand
             group = null;
             identityLabel = null;
             contextLabel = null;
+            contextIcon = null;
             messageLabel = null;
         }
 
@@ -148,6 +152,14 @@ namespace WingCommand
 
             identityLabel.text = current.Identity;
             contextLabel.text = current.Context;
+            if (contextIcon != null)
+            {
+                contextIcon.sprite = current.AirframeIcon != null
+                    ? current.AirframeIcon
+                    : IconFactory.Get("airframe");
+                contextIcon.color = current.Urgent ? WingUi.Warning : Cyan(0.78f);
+                PositionContextIcon();
+            }
             messageLabel.text = "<<  " + current.Message + "  >>";
             identityLabel.color = current.Urgent ? WingUi.Warning : Cyan();
             contextLabel.color = current.Urgent ? WingUi.Warning.WithAlpha(0.75f) : Cyan(0.62f);
@@ -198,7 +210,15 @@ namespace WingCommand
             identityLabel = WingUi.Label(card, "", new Rect(0f, -1f, 900f, 22f),
                 cyan, AvTokens.FontLead, FontStyles.Bold, TextAlignmentOptions.Center);
             identityLabel.characterSpacing = 0.8f;
-            contextLabel = WingUi.Label(card, "", new Rect(0f, -21f, 900f, 16f),
+
+            var iconObject = new GameObject("AircraftIcon", typeof(RectTransform), typeof(Image));
+            RectTransform iconRect = iconObject.GetComponent<RectTransform>();
+            iconRect.SetParent(card, worldPositionStays: false);
+            contextIcon = iconObject.GetComponent<Image>();
+            contextIcon.preserveAspect = true;
+            contextIcon.raycastTarget = false;
+
+            contextLabel = WingUi.Label(card, "", new Rect(ContextGroupShift, -21f, 900f, 16f),
                 Cyan(0.62f), AvTokens.FontMicro, FontStyles.Normal, TextAlignmentOptions.Center);
             contextLabel.characterSpacing = 1.8f;
             messageLabel = WingUi.Label(card, "", new Rect(0f, -42f, 900f, 30f),
@@ -209,6 +229,28 @@ namespace WingCommand
 
             canvasRoot.SetActive(false);
         }
+
+        /// <summary>
+        /// Pair the speaker's aircraft silhouette with the existing centred context text
+        /// without reverting to the unsupported Unicode triangle that rendered as a box in
+        /// some HUD fonts. The icon is decorative here: the aircraft name remains visible
+        /// text immediately beside it.
+        /// </summary>
+        private static void PositionContextIcon()
+        {
+            if (contextIcon == null || contextLabel == null || card == null) return;
+
+            const float size = ContextIconSize;
+            const float gap = ContextIconGap;
+            float textWidth = Mathf.Min(780f, contextLabel.GetPreferredValues(contextLabel.text).x);
+            float labelCentre = (card.rect.width + size + gap) * 0.5f;
+            float x = labelCentre - textWidth * 0.5f - gap - size;
+            WingUi.Place(contextIcon.rectTransform, new Rect(x, -21f, size, size));
+        }
+
+        private const float ContextIconSize = 16f;
+        private const float ContextIconGap = 6f;
+        private const float ContextGroupShift = (ContextIconSize + ContextIconGap) * 0.5f;
 
         private static Color Cyan(float alpha = 1f) => AvTheme.RailInfo.WithAlpha(alpha);
 

@@ -21,7 +21,10 @@ namespace WingCommand
             if (!Alive) return;
             // Launch ownership is a flight lifecycle transition. Do it before arbitration,
             // independently of the recruitment/UI queue's housekeeping pass.
-            if (deliveryPending) ActivateWhenAirborne();
+            if (deliveryPending)
+            {
+                ActivateWhenAirborne();
+            }
             Resolve(force: false);
         }
 
@@ -29,6 +32,9 @@ namespace WingCommand
         private void Resolve(bool force)
         {
             if (Pilot == null || Aircraft == null) return;
+            // Recovery owns a refit waiting on the ground for its departure lane. Keep
+            // that parked hold through reflex changes; a new directive cancels the refit.
+            if (RefitPending && Pilot.currentState is PilotParkedState) return;
             bool warned = MissileWarned;
             float now = Time.timeSinceLevelLoad;
             bool controlLost = !deliveryPending &&
@@ -47,7 +53,8 @@ namespace WingCommand
                     WingComms.Say(this, WingComms.Call.JammingOff);
                 else if (AssignedTarget != null)
                     WingComms.Say(this, WingComms.Call.Splash, AssignedTarget.unitName);
-                Complete(WingOrder.Formation);
+                if (!TryAdvanceQueue(directiveSerial))
+                    Complete(WingOrder.Formation);
             }
 
             List<WingReflexTrace> trace = Plugin.Settings.VerboseLogging.Value
@@ -74,7 +81,7 @@ namespace WingCommand
             brain.Commit(in decision, now);
             if (decision.NeedsControlUpdate) EnterBehaviour(decision.Resolution.BehaviourId);
             if (trace != null && decision.BehaviourChanged)
-                Plugin.Logger.LogInfo($"[Wing] {Name} {brain.Current}  |  {Ladder(trace)}");
+                Plugin.LogVerbose($"[Wing] {Name} {brain.Current}  |  {Ladder(trace)}");
         }
 
         private List<WingReflexTrace> traceBuffer;

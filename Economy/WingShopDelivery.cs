@@ -1,6 +1,5 @@
 using System;
 using System.Collections.Generic;
-using NuclearOption.Networking;
 using NuclearOption.SavedMission;
 using UnityEngine;
 
@@ -9,25 +8,38 @@ namespace WingCommand
     /// <summary>
     /// Where a purchased aircraft appears, and the spawn call itself.
     ///
-    /// Requisitioned aircraft launch from a hangar or helipad at an allowed friendly
-    /// field that stocks the airframe. Only-nearest pins to the closest of those and
-    /// queues if every pad there is busy. Any takes the closest pad that can launch
-    /// right now, and stays unpinned until one can. Surface hulls still arrive astern
-    /// of the player; they have no hangar to come from.
+    /// Three routes, because the game has three answers. A helicopter or tiltwing comes out
+    /// of a hangar or helipad exactly as the faction's own do — <c>Hangar.TrySpawnAircraft</c>
+    /// puts it on the pad and <c>AIHeloTakeoffState</c> lifts it off, and there is nothing
+    /// for this mod to improve on. A surface hull has no hangar at all and arrives astern of
+    /// the player. A fixed-wing aircraft — including the VTOL jets, which are
+    /// <c>PilotType.Plane</c> and taxi like anything else — is put on the takeoff threshold
+    /// with <c>Spawner.SpawnAircraft</c> and <c>spawningHangar</c> left null.
+    ///
+    /// That last one is the whole point of this file. Requisitioning a jet into a hangar and
+    /// letting the stock taxi state drive it out is the obvious implementation and it does
+    /// not work: a shelter faces wherever the mission author pointed it, the taxi state locks
+    /// the nosewheel for the first ten metres and then lets <c>AutoAim</c> bank toward a
+    /// taxiway join that may be a hundred metres off the nose, and the aircraft leaves the
+    /// pavement, tilts past three degrees and ejects. Spawning on the strip skips the part
+    /// the game is bad at and keeps the parts it is good at.
+    ///
+    /// Nothing here moves an aircraft after it exists. The pose is chosen before the spawn
+    /// call and never revised — see <c>docs/airfield-findings.md</c> for the eight attempts
+    /// that establish why.
     /// </summary>
     internal static class WingShopDelivery
     {
         private static readonly List<Airbase> fieldScratch = new List<Airbase>();
 
+        // ------------------------------------------------------------------- dispatch
+
         /// <summary>
-        /// Put a requisitioned airframe into the world from a hangar or helipad, or queue
-        /// it at the nearest field that can produce it.
+        /// Put a requisitioned airframe into the world, or queue it at the nearest allowed
+        /// field that can produce it.
         ///
-        /// We select a clear compatible hangar, then the native hangar API runs a
-        /// carrier's door sequence, and lets the stock AI taxi out and take off. The catch
-        /// is that the airbase call returns permission, not an aircraft — the spawn can be
-        /// several seconds away. The faction's own <c>onRegisterUnit</c> event closes that
-        /// gap. Until a hangar has actually taken the order, the roster shows QUE.
+        /// A queued order stays in <see cref="pending"/> and shows as QUE on the roster; one
+        /// a field has taken shows as DEPT until its aircraft registers.
         /// </summary>
         public static bool Deliver(WingShop.PurchaseTransaction transaction, Aircraft leader,
                                    FactionHQ hq, out string reason)
@@ -60,10 +72,10 @@ namespace WingCommand
                 return true;
             }
 
-            if (TryHangarDelivery(transaction, leader, hq, loadout, out reason)) return true;
+            if (TryFieldDelivery(transaction, leader, hq, loadout, out reason)) return true;
 
             if (string.IsNullOrEmpty(reason))
-                reason = "No hangar or helipad that can launch this airframe";
+                reason = "No field that can launch this airframe";
             return false;
         }
 
@@ -90,7 +102,54 @@ namespace WingCommand
             }
         }
 
-        // ------------------------------------------------------------------ hangar path
+        /// <summary>
+        /// Whether this airframe departs vertically from a pad rather than taxiing.
+        ///
+        /// Asked of the prefab's own <c>Pilot.pilotType</c>, because that is the field
+        /// <c>Pilot.SetStartingAiState</c> branches on — <c>Helo</c> and <c>Tiltwing</c> get
+        /// <c>AIHeloTakeoffState</c>, everything else gets <c>AIPilotTaxiState</c>. The
+        /// distinction matters most for the airframes it is easiest to get wrong: a VT-7 or
+        /// an FS-20 lands vertically and hovers, and is still <c>PilotType.Plane</c>, so it
+        /// wants a runway. <see cref="WingShop.IsRotary"/> is the fallback for a prefab with
+        /// no reachable pilot component; it agrees, by way of the autopilot type.
+        /// </summary>
+        private static bool LaunchesVertically(AircraftDefinition definition)
+        {
+            if (definition == null) return false;
+            if (verticalCache.TryGetValue(definition, out bool cached)) return cached;
+
+            bool vertical = WingShop.IsRotary(definition);
+            GameObject prefab = definition.unitPrefab;
+            if (prefab != null)
+            {
+                Pilot pilot = prefab.GetComponentInChildren<Pilot>(includeInactive: true);
+                if (pilot != null)
+                    vertical = pilot.pilotType == Pilot.PilotType.Helo ||
+                               pilot.pilotType == Pilot.PilotType.Tiltwing;
+            }
+
+            verticalCache[definition] = vertical;
+            return vertical;
+        }
+
+        private static readonly Dictionary<AircraftDefinition, bool> verticalCache =
+            new Dictionary<AircraftDefinition, bool>();
+
+        /// <summary>
+        /// The preset the game would have picked for itself, chosen safely.
+        ///
+        /// Index one is what <c>Aircraft.OnStartClient</c> reaches for, so it is the right
+        /// answer where it exists; anything shorter falls back to the first preset rather
+        /// than letting the engine index past the end of the array.
+        /// </summary>
+        private static Loadout DefaultLoadout(AircraftDefinition definition)
+        {
+            List<Loadout> loadouts = definition?.aircraftParameters?.loadouts;
+            if (loadouts == null || loadouts.Count == 0) return null;
+            return loadouts.Count > 1 ? loadouts[1] : loadouts[0];
+        }
+
+        // ------------------------------------------------------------------ pending order
 
         internal sealed class PendingDelivery
         {
@@ -99,7 +158,13 @@ namespace WingCommand
             public Loadout Loadout;
             public LiveryKey Livery;
             public float Fuel;
+
+            /// <summary>The pad that took the order. Null for a runway departure.</summary>
             public Hangar Hangar;
+
+            /// <summary>True once a field has taken the order, whichever route it took.</summary>
+            public bool Claimed;
+
             public GameObject PreviousSpawnedObject;
             public bool NativeAccepted;
             public bool NativeSequenceFinished;
@@ -110,16 +175,20 @@ namespace WingCommand
             public float ExpiresAt;
             public float NextAttemptAt;
             public bool Starting;
+
             /// <summary>
             /// True when this order must wait at <see cref="Origin"/> even if another field
             /// is idle. Any-mode orders stay unpinned (<see cref="Origin"/> may be null)
-            /// until a pad actually accepts them.
+            /// until a field actually accepts them.
             /// </summary>
             public bool Pinned;
 
+            /// <summary>Vertical departures take a pad; the rest take a runway threshold.</summary>
+            public bool Vertical;
+
             public AircraftDefinition Definition => Transaction?.Definition;
             public string AirframeName => Definition != null ? Definition.unitName : "Airframe";
-            public string StatusCode => HangarFieldPolicy.StatusCode(Hangar != null);
+            public string StatusCode => HangarFieldPolicy.StatusCode(Claimed);
             public bool CanCancel => !NativeAccepted && !Starting;
         }
 
@@ -127,8 +196,11 @@ namespace WingCommand
         private static FactionHQ watched;
 
         public static int PendingCount => pending.Count;
-        public static PendingDelivery GetPending(int index) => (index >= 0 && index < pending.Count) ? pending[index] : null;
 
+        public static PendingDelivery GetPending(int index) =>
+            (index >= 0 && index < pending.Count) ? pending[index] : null;
+
+        /// <summary>The order currently inside a hangar's native spawn call, if any.</summary>
         internal static PendingDelivery StartingAt(Hangar hangar)
         {
             for (int i = 0; i < pending.Count; i++)
@@ -141,7 +213,8 @@ namespace WingCommand
             if (order == null || !pending.Contains(order)) return false;
             if (!order.CanCancel)
             {
-                WingCommandManager.Instance?.Toast("Launch already accepted; wait for delivery before releasing");
+                WingCommandManager.Instance?.Toast(
+                    "Launch already accepted; wait for delivery before releasing");
                 return false;
             }
             FailDelivery(order, "cancelled by player");
@@ -149,18 +222,44 @@ namespace WingCommand
         }
 
         /// <summary>
-        /// Order a hangar delivery from an allowed field that stocks this airframe.
-        /// Only-nearest pins and queues at the closest such field. Any launches from the
-        /// closest free pad, or waits unpinned until one is free.
+        /// Why a requisition cannot be launched right now, or null when it can.
+        ///
+        /// Read by the shop before it takes any money, so the answer has to be about
+        /// capability rather than about this frame's occupancy — a busy field is a queue,
+        /// not a refusal.
         /// </summary>
-        private static bool TryHangarDelivery(WingShop.PurchaseTransaction transaction,
-                                              Aircraft leader, FactionHQ hq, Loadout loadout,
-                                              out string reason)
+        public static string LaunchBlockReason(FactionHQ hq, AircraftDefinition definition,
+                                               Vector3 from)
+        {
+            if (definition == null) return "No aircraft selected";
+            if (WingShop.IsSurfaceDefinition(definition)) return null;
+            if (hq == null) return "No faction";
+
+            if (NetworkSceneSingleton<Spawner>.i == null && !LaunchesVertically(definition))
+                return "The spawner is not available";
+
+            CollectFields(hq);
+            for (int i = 0; i < fieldScratch.Count; i++)
+            {
+                if (!WingLaunchFields.IsAllowed(fieldScratch[i])) continue;
+                if (CanEverProduce(fieldScratch[i], definition)) return null;
+            }
+
+            return LaunchesVertically(definition)
+                ? "No selected field has a pad that lists " + definition.unitName
+                : "No selected field has a takeoff runway and stocks " + definition.unitName;
+        }
+
+        // --------------------------------------------------------------- field selection
+
+        private static bool TryFieldDelivery(WingShop.PurchaseTransaction transaction,
+                                             Aircraft leader, FactionHQ hq, Loadout loadout,
+                                             out string reason)
         {
             reason = null;
             if (hq == null || leader == null)
             {
-                reason = "No hangar or helipad that can launch this airframe";
+                reason = "No field that can launch this airframe";
                 return false;
             }
 
@@ -185,7 +284,8 @@ namespace WingCommand
 
             if (!anyCanProduce)
             {
-                reason = "No hangar or helipad that can launch this airframe";
+                reason = LaunchBlockReason(hq, definition, from) ??
+                         "No field that can launch this airframe";
                 return false;
             }
 
@@ -195,144 +295,62 @@ namespace WingCommand
             Airbase airbase = index >= 0 ? fieldScratch[index] : null;
             if (pin && airbase == null)
             {
-                reason = "No hangar or helipad that can launch this airframe";
-                return false;
+                // Only-nearest still pins even when every pad there is busy: the order
+                // queues at that field rather than jumping to a distant one.
+                index = SelectOrigin(definition, from, HangarLaunchMode.OnlyNearest);
+                airbase = index >= 0 ? fieldScratch[index] : null;
+                if (airbase == null)
+                {
+                    reason = "No field that can launch this airframe";
+                    return false;
+                }
             }
-
-            AircraftParameters p = definition.aircraftParameters;
-            float fuel = WingShop.SpawnFuelFor(definition);
-
-            LiveryKey? livery = null;
-            int liveryIdx = WingLoadoutTemplates.GetLiveryIndex(definition);
-            List<WingLoadoutTemplates.LiveryOption> options = WingLoadoutTemplates.GetLiveries(definition, hq.faction);
-            if (liveryIdx > 0 && liveryIdx < options.Count)
-            {
-                livery = options[liveryIdx].Key;
-            }
-
-            LiveryKey finalLivery = livery.HasValue
-                ? livery.Value
-                : (p != null && hq.faction != null
-                    ? new LiveryKey(p.GetRandomLiveryForFaction(hq.faction))
-                    : leader.NetworkLiveryKey);
 
             var order = new PendingDelivery
             {
                 Transaction = transaction,
                 Origin = airbase,
                 Loadout = loadout,
-                Livery = finalLivery,
-                Fuel = fuel,
+                Livery = LiveryFor(definition, hq, leader),
+                Fuel = WingShop.SpawnFuelFor(definition),
                 RequestedAt = Time.unscaledTime,
                 ExpiresAt = Time.unscaledTime + WingTuning.HangarDeliveryTimeout,
                 Pinned = pin,
+                Vertical = LaunchesVertically(definition),
             };
 
             Watch(hq);
             pending.Add(order);
 
             if (order.Origin != null && CanLaunchNow(order.Origin, definition))
-                AttemptNativeSpawn(order);
+                Attempt(order);
             else
                 order.NextAttemptAt = Time.unscaledTime + WingTuning.HangarRetryInterval;
 
-            string fieldName = order.Origin != null ? order.Origin.name : "an allowed field";
-            Plugin.Logger.LogInfo(order.Hangar != null
-                ? "[Shop] " + definition.unitName + " ordered from a hangar at " + fieldName +
+            string fieldName = order.Origin != null
+                ? WingLaunchFields.DisplayName(order.Origin) : "an allowed field";
+            Plugin.LogVerbose(order.Claimed
+                ? "[Shop] " + definition.unitName + " ordered from " + fieldName +
                   " with the " + WingLoadoutCatalog.Label(transaction.Loadout) + " fit"
-                : "[Shop] " + definition.unitName + " queued for a hangar at " + fieldName +
-                  (pin ? " — every hangar there is busy"
-                       : " — waiting for any free allowed pad"));
+                : "[Shop] " + definition.unitName + " queued for " + fieldName +
+                  (pin ? " - it is busy" : " - waiting for any free allowed field"));
             return true;
         }
 
-        /// <summary>
-        /// One attempt to hand this order to its target airbase. The order stays in
-        /// <see cref="pending"/> either way: a claimed hangar waits on its door sequence via
-        /// <see cref="OnUnitRegistered"/>, a refused one waits here for <see cref="Tick"/> to
-        /// retry once a hangar there frees up.
-        /// </summary>
-        private static void AttemptNativeSpawn(PendingDelivery order)
+        private static LiveryKey LiveryFor(AircraftDefinition definition, FactionHQ hq,
+                                           Aircraft leader)
         {
-            if (order == null || order.Origin == null || order.Transaction == null) return;
+            LiveryKey? chosen = null;
+            int liveryIdx = WingLoadoutTemplates.GetLiveryIndex(definition);
+            List<WingLoadoutTemplates.LiveryOption> options =
+                WingLoadoutTemplates.GetLiveries(definition, hq != null ? hq.faction : null);
+            if (liveryIdx > 0 && liveryIdx < options.Count) chosen = options[liveryIdx].Key;
+            if (chosen.HasValue) return chosen.Value;
 
-            FactionHQ hq = order.Transaction.Hq;
-            AircraftDefinition definition = order.Transaction.Definition;
-            if (hq == null || definition == null) return;
-
-            Hangar selected = SelectClearHangar(order.Origin, definition);
-            if (selected == null) return;
-            if (!HangarDepartureLane.Reserve(order.Origin, selected, order)) return;
-            // Reserve the exact pad before calling native code; synchronous registration
-            // can happen inside this call, and adjacent delayed spawns need spacing too.
-            order.Hangar = selected;
-            // Native Hangar keeps this field after the last aircraft leaves. It is not
-            // evidence of a new delivery until a different aircraft replaces it.
-            order.PreviousSpawnedObject = GameAccess.GetHangarSpawnedObject(selected);
-
-            order.Starting = true;
-            Airbase.TrySpawnResult result;
-            int stockBeforeNative = hq.GetUnitSupply(definition);
-            try
-            {
-                // A null loadout makes the hangar fit the airframe's own AI weapon selection,
-                // which is what the faction's aircraft launch with. A requisition with a
-                // preset hands the field the fit the player asked for instead; the hangar
-                // arms it on the ramp exactly as it arms the faction's own aircraft.
-                result = selected.TrySpawnAircraft(null, definition, order.Livery,
-                                                       order.Loadout, order.Fuel);
-            }
-            catch (Exception e)
-            {
-                Plugin.Logger.LogWarning("[Shop] hangar delivery threw: " + e.Message);
-                result = default(Airbase.TrySpawnResult);
-            }
-            finally
-            {
-                order.NativeAccepted = order.NativeAircraftObserved ||
-                                       (selected != null && !selected.Available);
-                // Hangar.TrySpawnAircraft charges faction supply itself when player is null.
-                // The purchase transaction already reserved its exact source, so retain only
-                // that debit and compensate the hangar's otherwise duplicate charge.
-                try
-                {
-                    int stockAfterNative = hq.GetUnitSupply(definition);
-                    if (stockAfterNative < stockBeforeNative)
-                        hq.AddSupplyUnit(definition, stockBeforeNative - stockAfterNative);
-                }
-                finally { order.Starting = false; }
-            }
-
-            // TrySpawnAircraft can throw after scheduling doors (for example while
-            // charging native stock). Once the pad becomes busy it may still emit an
-            // aircraft, so retain ownership even when the return value was lost.
-            order.NativeAccepted = result.Allowed || order.NativeAircraftObserved ||
-                                   (selected != null && !selected.Available);
-            if (!order.NativeAccepted)
-            {
-                order.Hangar = null;
-                HangarDepartureLane.Release(order);
-                return;
-            }
-
-            order.Hangar = selected;
-            Plugin.Logger.LogInfo("[Shop] launch accepted: " + definition.unitName +
-                " at " + order.Origin.name + "/" + selected.name +
-                " position=" + selected.GetSpawnTransform().position.ToGlobalPosition());
-            // A hangar has now actually taken the order; give it its own door-sequence budget
-            // rather than whatever was left of the time this order spent queued.
-            order.ExpiresAt = Time.unscaledTime + WingTuning.HangarDeliveryTimeout;
-
-            // If an immediate hangar spawn produced an object on the hangar, claim it directly.
-            GameObject immediateSpawn = GameAccess.GetHangarSpawnedObject(selected);
-            if (immediateSpawn != null)
-            {
-                Aircraft direct = immediateSpawn.GetComponent<Aircraft>();
-                if (direct != null) TryClaim(direct);
-            }
-
-            // Registration can precede the native call's return and hangar field update.
-            TryClaim(order.ObservedAircraft);
+            AircraftParameters p = definition != null ? definition.aircraftParameters : null;
+            if (p != null && hq != null && hq.faction != null)
+                return new LiveryKey(p.GetRandomLiveryForFaction(hq.faction));
+            return leader != null ? leader.NetworkLiveryKey : default(LiveryKey);
         }
 
         private static void CollectFields(FactionHQ hq)
@@ -347,22 +365,46 @@ namespace WingCommand
         }
 
         private static int SelectOrigin(AircraftDefinition definition, Vector3 from,
-                                        HangarLaunchMode mode)
-        {
-            return HangarFieldPolicy.SelectOrigin(
+                                        HangarLaunchMode mode) =>
+            HangarFieldPolicy.SelectOrigin(
                 fieldScratch.Count,
                 mode,
                 i => (fieldScratch[i].transform.position - from).sqrMagnitude,
                 i => WingLaunchFields.IsAllowed(fieldScratch[i]),
                 i => CanEverProduce(fieldScratch[i], definition),
                 i => CanLaunchNow(fieldScratch[i], definition));
+
+        /// <summary>
+        /// Whether this field could ever launch the airframe.
+        ///
+        /// Stock is read from the hangars' own editor-configured type lists rather than from
+        /// <c>Airbase.GetAvailableAircraft</c>, which tracks what can launch <i>right now</i>
+        /// and therefore makes a field with a busy door look as though it cannot produce the
+        /// type at all. A fixed-wing airframe additionally needs somewhere to roll: a field
+        /// that stocks jets but has only helipads and no takeoff strip is not a launch site
+        /// for one.
+        /// </summary>
+        private static bool CanEverProduce(Airbase airbase, AircraftDefinition definition)
+        {
+            if (!WingLaunchFields.CanProduce(airbase, definition)) return false;
+            if (LaunchesVertically(definition)) return true;
+            return WingAirfield.HasTakeoffRunway(airbase, definition);
         }
 
-        /// <summary>Native hangar availability is the only dispatch gate.</summary>
-        private static bool CanLaunchNow(Airbase airbase, AircraftDefinition definition) =>
-            airbase != null && !airbase.disabled &&
-            HangarDepartureLane.IsFree(airbase) &&
-            SelectClearHangar(airbase, definition) != null;
+        /// <summary>
+        /// Whether this field can take the order this frame.
+        ///
+        /// One departure per field, not per pad. A jet is put on the takeoff threshold, and
+        /// every aircraft at a field shares that strip however many hangars it has.
+        /// </summary>
+        private static bool CanLaunchNow(Airbase airbase, AircraftDefinition definition)
+        {
+            if (airbase == null || airbase.disabled) return false;
+            if (!HangarDepartureLane.IsFree(airbase)) return false;
+            return LaunchesVertically(definition)
+                ? SelectClearHangar(airbase, definition) != null
+                : WingAirfield.HasTakeoffRunway(airbase, definition);
+        }
 
         private static Hangar SelectClearHangar(Airbase airbase, AircraftDefinition definition)
         {
@@ -375,7 +417,8 @@ namespace WingCommand
                 Hangar hangar = hangars[i];
                 if (hangar == null || hangar.Disabled) continue;
                 if (!hangar.Available) continue;
-                if (!hangar.CanSpawnAircraft(definition)) continue;
+                if (!hangar.CanSpawnAircraft(WingHangarStock.NativeDefinition(hangar, definition)))
+                    continue;
                 if (HangarClaimedByPending(hangar)) continue;
                 return hangar;
             }
@@ -404,18 +447,204 @@ namespace WingCommand
             return false;
         }
 
+        // ------------------------------------------------------------------ spawn attempt
+
+        private static void Attempt(PendingDelivery order)
+        {
+            if (order?.Origin == null || order.Transaction == null) return;
+            if (order.Vertical) AttemptPadSpawn(order);
+            else AttemptRunwaySpawn(order);
+        }
+
         /// <summary>
-        /// Whether this field has a hangar or helipad that stocks the airframe, regardless
-        /// of whether that pad is free this frame.
+        /// Put a fixed-wing requisition on the takeoff threshold.
         ///
-        /// <c>Airbase.GetAvailableAircraft</c> tracks what can launch <i>right now</i>, so
-        /// a busy door sequence made the nearest field look unable to produce the type and
-        /// the order either jumped to a farther idle pad or spawned in the circuit. The
-        /// hangar's own type list is the editor-configured stock and does not blink off
-        /// while the pad is occupied.
+        /// <c>spawningHangar</c> is deliberately null. It is a SyncVar that makes every
+        /// client snap the aircraft's transform and rigidbody onto the named pad in
+        /// <c>OnStartClient</c>, so pointing it at a hangar the aircraft is not standing in
+        /// teleports it there for everyone but the host.
         /// </summary>
-        private static bool CanEverProduce(Airbase airbase, AircraftDefinition definition) =>
-            WingLaunchFields.CanProduce(airbase, definition);
+        private static void AttemptRunwaySpawn(PendingDelivery order)
+        {
+            FactionHQ hq = order.Transaction.Hq;
+            AircraftDefinition definition = order.Transaction.Definition;
+            if (hq == null || definition == null) return;
+
+            Spawner spawner = NetworkSceneSingleton<Spawner>.i;
+            GameObject prefab = definition.unitPrefab;
+            if (spawner == null || prefab == null)
+            {
+                Plugin.Logger.LogWarning("[Shop] no spawner or prefab for " + definition.unitName);
+                return;
+            }
+
+            Aircraft leader = WingCommandManager.Instance?.Wing?.Leader;
+            Vector3 from = leader != null
+                ? leader.transform.position : order.Origin.transform.position;
+
+            if (!WingAirfield.TryBuildLaunchPose(order.Origin, definition, from,
+                                                 out WingAirfield.LaunchPose pose))
+                return;
+
+            // Aircraft.OnStartClient substitutes aircraftParameters.loadouts[1] for a null or
+            // empty loadout, by hardcoded index and with no bounds check. A hangar spawn is
+            // saved from that by the weapon selection the pad runs afterwards; this path is
+            // not, so an airframe with fewer than two presets would throw inside the spawn.
+            Loadout loadout = order.Loadout ?? DefaultLoadout(definition);
+
+            // The threshold, not the field centre: the lane is released when the aircraft has
+            // moved clear of where it was put down, and a field centre can be further from
+            // its own runway than that clearance.
+            if (!HangarDepartureLane.Reserve(order.Origin, pose.Threshold, order)) return;
+
+            order.Starting = true;
+            Aircraft spawned;
+            try
+            {
+                spawned = spawner.SpawnAircraft(
+                    player: null,
+                    prefab: prefab,
+                    loadout: loadout,
+                    fuelLevel: order.Fuel,
+                    livery: order.Livery,
+                    globalPosition: pose.Position,
+                    rotation: pose.Rotation,
+                    startingVel: pose.Velocity,
+                    spawningHangar: null,
+                    HQ: hq,
+                    uniqueName: "WingCommand_" + Guid.NewGuid().ToString("N").Substring(0, 8),
+                    skill: leader != null ? leader.skill : 1f,
+                    bravery: leader != null ? leader.bravery : 0.5f);
+            }
+            catch (Exception e)
+            {
+                Plugin.Logger.LogError("[Shop] runway spawn failed: " + e);
+                spawned = null;
+            }
+            finally
+            {
+                order.Starting = false;
+            }
+
+            if (spawned == null)
+            {
+                HangarDepartureLane.Release(order);
+                return;
+            }
+
+            order.NativeAccepted = true;
+            order.NativeAircraftObserved = true;
+            order.ObservedAircraft = spawned;
+            order.Claimed = true;
+
+            // ServerObjectManager.Spawn runs OnStartServer and OnStartClient synchronously, so
+            // the pilot is already in AIPilotTaxiState on this line — there is nothing to
+            // correct here and no point looking. What the watch is for is the question that
+            // cannot be answered yet: whether the stock taxi state, given a few seconds and a
+            // physics step or two, actually gets this aircraft moving.
+            WingAirfield.WatchLaunch(spawned, pose);
+            HangarDepartureLane.Track(order, spawned);
+
+            Plugin.LogVerbose(
+                "[Shop] " + definition.unitName + " launched from " +
+                WingLaunchFields.DisplayName(order.Origin) + "/" +
+                pose.Runway.GetName(pose.Reverse) + " at " + pose.Position +
+                " (spawningHangar=null)");
+
+            Claim(order, spawned);
+        }
+
+        /// <summary>
+        /// Hand a vertical departure to a pad and let the stock door sequence run.
+        ///
+        /// The order stays in <see cref="pending"/> either way: a claimed pad waits on its
+        /// doors via <see cref="OnUnitRegistered"/>, a refused one waits for <see cref="Tick"/>
+        /// to retry once a pad frees up.
+        /// </summary>
+        private static void AttemptPadSpawn(PendingDelivery order)
+        {
+            FactionHQ hq = order.Transaction.Hq;
+            AircraftDefinition definition = order.Transaction.Definition;
+            if (hq == null || definition == null) return;
+
+            Hangar selected = SelectClearHangar(order.Origin, definition);
+            if (selected == null) return;
+            if (!HangarDepartureLane.Reserve(order.Origin, selected, order)) return;
+
+            // Reserve the exact pad before calling native code; registration can happen
+            // synchronously inside that call.
+            order.Hangar = selected;
+            // Native Hangar keeps this field after the last aircraft leaves. It is not
+            // evidence of a new delivery until a different aircraft replaces it.
+            order.PreviousSpawnedObject = GameAccess.GetHangarSpawnedObject(selected);
+
+            order.Starting = true;
+            Airbase.TrySpawnResult result;
+            int stockBeforeNative = hq.GetUnitSupply(definition);
+            try
+            {
+                result = selected.TrySpawnAircraft(null, definition, order.Livery,
+                                                   order.Loadout, order.Fuel);
+            }
+            catch (Exception e)
+            {
+                Plugin.Logger.LogWarning("[Shop] hangar delivery threw: " + e.Message);
+                result = default(Airbase.TrySpawnResult);
+            }
+            finally
+            {
+                // TrySpawnAircraft charges faction supply itself when the player argument is
+                // null. The purchase transaction has already reserved its exact source, so
+                // retain that debit and compensate the hangar's otherwise duplicate charge.
+                //
+                // ModifyUnitSupply, deliberately, not AddSupplyUnit: the latter looks for a
+                // player with an outstanding reserve request for this airframe first and
+                // hands them the aircraft instead of restoring the count, returning before
+                // it touches supply at all. That is right for an airframe genuinely coming
+                // back into stock and wrong for undoing a double charge, which would then
+                // both give a stranger a free plane and leave the faction one short.
+                try
+                {
+                    int give = SupplyCompensation.Delta(stockBeforeNative,
+                                                        hq.GetUnitSupply(definition));
+                    if (give > 0) hq.ModifyUnitSupply(definition, give);
+                }
+                finally { order.Starting = false; }
+            }
+
+            // TrySpawnAircraft can throw after scheduling doors. Once the pad becomes busy it
+            // may still emit an aircraft, so retain ownership even if the return value was
+            // lost to the exception.
+            order.NativeAccepted = result.Allowed || order.NativeAircraftObserved ||
+                                   (selected != null && !selected.Available);
+            if (!order.NativeAccepted)
+            {
+                order.Hangar = null;
+                HangarDepartureLane.Release(order);
+                return;
+            }
+
+            order.Claimed = true;
+            Plugin.LogVerbose("[Shop] launch accepted: " + definition.unitName +
+                " at " + WingLaunchFields.DisplayName(order.Origin) + "/" + selected.name +
+                " position=" + selected.GetSpawnTransform().position.ToGlobalPosition());
+
+            // A pad has now actually taken the order; give it its own door-sequence budget
+            // rather than whatever was left of the time this order spent queued.
+            order.ExpiresAt = Time.unscaledTime + WingTuning.HangarDeliveryTimeout;
+
+            GameObject immediateSpawn = GameAccess.GetHangarSpawnedObject(selected);
+            if (immediateSpawn != null)
+            {
+                Aircraft direct = immediateSpawn.GetComponent<Aircraft>();
+                if (direct != null) TryClaim(direct);
+            }
+
+            // Registration can precede the native call's return and the hangar field update.
+            TryClaim(order.ObservedAircraft);
+        }
+
+        // ------------------------------------------------------------------------- claim
 
         private static void Watch(FactionHQ hq)
         {
@@ -425,7 +654,7 @@ namespace WingCommand
             if (watched != null) watched.onRegisterUnit += OnUnitRegistered;
         }
 
-        /// <summary>Claim only the aircraft emitted by the native hangar that accepted the order.</summary>
+        /// <summary>Claim only the aircraft emitted by the pad that accepted the order.</summary>
         private static void OnUnitRegistered(Unit unit)
         {
             if (!(unit is Aircraft aircraft)) return;
@@ -435,6 +664,7 @@ namespace WingCommand
             for (int i = 0; i < pending.Count; i++)
             {
                 PendingDelivery order = pending[i];
+                if (!order.Vertical) continue;
                 if (order.Transaction.Definition != aircraft.definition ||
                     order.Transaction.Hq != aircraft.NetworkHQ ||
                     aircraft.gameObject == order.PreviousSpawnedObject)
@@ -450,7 +680,8 @@ namespace WingCommand
 
         private static void TryClaim(Aircraft aircraft)
         {
-            if (aircraft == null || aircraft.Player != null || aircraft.NetworkspawningHangar == null)
+            if (aircraft == null || aircraft.Player != null ||
+                aircraft.NetworkspawningHangar == null)
                 return;
 
             PendingDelivery match = null;
@@ -473,51 +704,70 @@ namespace WingCommand
             if (matches != 1 || match == null) return;
 
             HangarDepartureLane.Track(match, aircraft);
-            pending.Remove(match);
+            Claim(match, aircraft);
+        }
+
+        /// <summary>Settle the purchase and hand the airframe to the wing's recruit queue.</summary>
+        private static void Claim(PendingDelivery order, Aircraft aircraft)
+        {
+            if (order == null || aircraft == null) return;
+            pending.Remove(order);
             if (pending.Count == 0) Watch(null);
 
-            if (!match.Transaction.Commit(aircraft))
+            if (!order.Transaction.Commit(aircraft))
             {
                 Plugin.Logger.LogError("[Shop] " + aircraft.unitName +
-                    " spawned from hangar but purchase commit failed; not recruiting");
+                    " spawned but the purchase commit failed; not recruiting");
                 return;
             }
-            try { aircraft.SetLiveryKey(match.Livery); } catch { }
-            WingCommandManager.Instance?.QueueRecruit(aircraft, match.Transaction?.Pilot);
-            Plugin.Logger.LogInfo("[Shop] " + aircraft.unitName +
-                                  " registered from " + match.Origin.name +
+
+            try { aircraft.SetLiveryKey(order.Livery); } catch { }
+
+            // The wing takes the aircraft onto its roster now and takes command of it later,
+            // once LaunchSafety says the stock departure is complete. Until then the
+            // DeliveryHold reflex keeps every hand off the controls.
+            WingCommandManager.Instance?.QueueRecruit(aircraft, order.Transaction?.Pilot);
+            WingMember member = WingCommandManager.Instance?.Wing?.Find(aircraft);
+            if (member != null) HangarDepartureLane.Transfer(order, member);
+
+            Plugin.LogVerbose("[Shop] " + aircraft.unitName + " registered from " +
+                                  WingLaunchFields.DisplayName(order.Origin) +
                                   "; handed to wing recruit queue");
         }
 
         private static bool Matches(PendingDelivery order, Aircraft aircraft)
         {
-            if (order == null || order.Starting || order.Hangar == null ||
+            if (order == null || !order.Vertical || order.Starting || order.Hangar == null ||
                 order.Transaction == null || aircraft == null)
                 return false;
             if (order.Transaction.Definition != aircraft.definition) return false;
             if (aircraft.NetworkHQ != order.Transaction.Hq) return false;
             if (aircraft.gameObject == order.PreviousSpawnedObject) return false;
+
             GameObject spawnedObject = GameAccess.GetHangarSpawnedObject(order.Hangar);
             if (spawnedObject != null && spawnedObject == aircraft.gameObject) return true;
             if (aircraft.NetworkspawningHangar != order.Hangar) return false;
             if (Time.unscaledTime + 0.01f < order.RequestedAt) return false;
 
             Transform spawn = order.Hangar.GetSpawnTransform();
-            return spawn == null || (aircraft.transform.position - spawn.position).sqrMagnitude <=
-                   1000f * 1000f;
+            return spawn == null ||
+                   (aircraft.transform.position - spawn.position).sqrMagnitude <= 1000f * 1000f;
         }
 
+        // -------------------------------------------------------------------------- tick
+
         /// <summary>
-        /// Advance every open order: retry a queued one against its target airbase, and write
+        /// Advance every open order: retry a queued one against its target field, and write
         /// off ones that can never arrive, so nothing waits forever.
         ///
-        /// Oldest-first, since <see cref="pending"/> is append-order: when a hangar frees up,
-        /// whichever purchase queued for it first gets it, the same way a real flight line
-        /// works through a backlog rather than serving whoever asks last.
+        /// Oldest-first, since <see cref="pending"/> is append-order: when a field frees up,
+        /// whichever purchase queued for it first gets it, the way a flight line works
+        /// through a backlog rather than serving whoever asks last.
         /// </summary>
         public static void Tick()
         {
             HangarDepartureLane.Tick();
+
             for (int i = pending.Count - 1; i >= 0; i--)
             {
                 PendingDelivery order = pending[i];
@@ -526,56 +776,51 @@ namespace WingCommand
                     TryClaim(order.ObservedAircraft);
                     if (!pending.Contains(order)) continue;
                 }
-                if (order.Hangar != null)
-                {
-                    GameObject spawnedObject = GameAccess.GetHangarSpawnedObject(order.Hangar);
-                    if (spawnedObject != null)
-                    {
-                        Aircraft direct = spawnedObject.GetComponent<Aircraft>();
-                        if (direct != null && Matches(order, direct))
-                        {
-                            order.NativeAircraftObserved = true;
-                            order.ObservedAircraft = direct;
-                            TryClaim(direct);
-                            continue;
-                        }
-                    }
-                }
+                if (order.Hangar == null) continue;
+
+                GameObject spawnedObject = GameAccess.GetHangarSpawnedObject(order.Hangar);
+                if (spawnedObject == null) continue;
+                Aircraft direct = spawnedObject.GetComponent<Aircraft>();
+                if (direct == null || !Matches(order, direct)) continue;
+
+                order.NativeAircraftObserved = true;
+                order.ObservedAircraft = direct;
+                TryClaim(direct);
             }
 
             for (int i = pending.Count - 1; i >= 0; i--)
             {
                 PendingDelivery order = pending[i];
                 if (order.NativeAccepted && HangarFieldPolicy.CanRefundDelivery(
-                    order.NativeAccepted, order.NativeSequenceFinished,
-                    order.Hangar == null, order.NativeAircraftObserved))
+                        order.NativeAccepted, order.NativeSequenceFinished,
+                        order.Vertical && order.Hangar == null, order.NativeAircraftObserved))
                 {
-                    FailDelivery(order, order.Hangar == null
+                    FailDelivery(order, order.Hangar == null && order.Vertical
                         ? "launch hangar was destroyed"
                         : "native launch ended without producing an aircraft");
                     continue;
                 }
-                if (order.Hangar != null || order.Starting) continue;
+                if (order.Claimed || order.Starting) continue;
 
                 bool stillPossible = order.Pinned
                     ? CanEverProduce(order.Origin, order.Transaction.Definition)
                     : AnyAllowedCanProduce(order);
                 if (stillPossible) continue;
 
-                string where = order.Origin != null ? order.Origin.name : "allowed fields";
                 Plugin.Logger.LogWarning(
-                    "[Shop] " + order.Transaction.Definition.unitName + " - " +
-                    where + " can no longer produce it");
-                FailDelivery(order, "airbase can no longer produce this aircraft");
+                    "[Shop] " + order.AirframeName + " - " +
+                    (order.Origin != null ? WingLaunchFields.DisplayName(order.Origin) : "allowed fields") +
+                    " can no longer produce it");
+                FailDelivery(order, "field can no longer produce this aircraft");
             }
 
-            // FIFO retry: oldest queued order first. Occupancy-gated and throttled so a
-            // busy hangar is not hammered every frame.
+            // FIFO retry: oldest queued order first, occupancy-gated and throttled so a busy
+            // field is not hammered every frame.
             float now = Time.unscaledTime;
             for (int i = 0; i < pending.Count; i++)
             {
                 PendingDelivery order = pending[i];
-                if (order.Hangar != null || order.Starting) continue;
+                if (order.Claimed || order.Starting) continue;
                 if (now < order.NextAttemptAt) continue;
 
                 AircraftDefinition definition = order.Transaction.Definition;
@@ -599,11 +844,11 @@ namespace WingCommand
                     continue;
                 }
 
-                AttemptNativeSpawn(order);
-                // Immediate registration removes the current order from pending.
-                // Visit the next oldest order instead of skipping its shifted index.
+                Attempt(order);
+                // An immediate claim removes the current order from pending. Visit the next
+                // oldest order instead of skipping its shifted index.
                 if (!pending.Contains(order)) { i--; continue; }
-                if (order.Hangar == null)
+                if (!order.Claimed)
                 {
                     if (!order.Pinned) order.Origin = null;
                     order.NextAttemptAt = Time.unscaledTime + WingTuning.HangarRetryInterval;
@@ -619,18 +864,17 @@ namespace WingCommand
                     if (now < order.ExpiresAt || order.DelayReported) continue;
                     order.DelayReported = true;
                     Plugin.Logger.LogWarning(
-                        "[Shop] hangar delivery of " +
-                        order.Transaction.Definition.unitName +
+                        "[Shop] delivery of " + order.AirframeName +
                         " is delayed; retaining the order until the native launch completes");
-                    WingCommandManager.Instance?.Toast(order.AirframeName + " launch delayed; still awaiting delivery");
+                    WingCommandManager.Instance?.Toast(
+                        order.AirframeName + " launch delayed; still awaiting delivery");
                     continue;
                 }
 
                 if (now < order.RequestedAt + WingTuning.HangarDeliveryTimeout) continue;
                 Plugin.Logger.LogWarning(
-                    "[Shop] hangar delivery of " +
-                    order.Transaction.Definition.unitName + " waited too long for a pad");
-                FailDelivery(order, "hangar delivery timed out");
+                    "[Shop] delivery of " + order.AirframeName + " waited too long for a field");
+                FailDelivery(order, "delivery timed out");
             }
 
             if (pending.Count == 0 && watched != null) Watch(null);
@@ -638,12 +882,15 @@ namespace WingCommand
 
         private static void FailDelivery(PendingDelivery order, string reason)
         {
-            if (!HangarFieldPolicy.CanRefundDelivery(order.NativeAccepted,
-                order.NativeSequenceFinished, order.Hangar == null, order.NativeAircraftObserved)) return;
+            if (!HangarFieldPolicy.CanRefundDelivery(
+                    order.NativeAccepted, order.NativeSequenceFinished,
+                    order.Vertical && order.Hangar == null, order.NativeAircraftObserved))
+                return;
+
             HangarDepartureLane.Release(order);
             bool restored = order.Transaction.Rollback(reason);
             WingCommandManager.Instance?.Toast(
-                order.Transaction.Definition.unitName +
+                order.AirframeName +
                 (restored
                     ? " delivery failed - funds and stock restored"
                     : " delivery failed - refund is retrying"));
@@ -653,11 +900,12 @@ namespace WingCommand
         public static void Reset()
         {
             HangarDepartureLane.Reset();
-            DeliveryTaxiRouteGuard.Reset();
+            WingAirfield.Reset();
             for (int i = 0; i < pending.Count; i++)
                 pending[i].Transaction?.Rollback("mission reset");
             pending.Clear();
             fieldScratch.Clear();
+            verticalCache.Clear();
             Watch(null);
             WingLaunchFields.Reset();
         }
@@ -685,31 +933,14 @@ namespace WingCommand
                                   out Vector3 velocity))
                 return null;
 
-            AircraftParameters p = definition.aircraftParameters;
-            float fuel = WingShop.SpawnFuelFor(definition);
-
-            LiveryKey? livery = null;
-            int liveryIdx = WingLoadoutTemplates.GetLiveryIndex(definition);
-            List<WingLoadoutTemplates.LiveryOption> options = WingLoadoutTemplates.GetLiveries(definition, hq != null ? hq.faction : null);
-            if (liveryIdx > 0 && liveryIdx < options.Count)
-            {
-                livery = options[liveryIdx].Key;
-            }
-
-            LiveryKey finalLivery = livery.HasValue
-                ? livery.Value
-                : (p != null && hq != null && hq.faction != null
-                    ? new LiveryKey(p.GetRandomLiveryForFaction(hq.faction))
-                    : leader.NetworkLiveryKey);
-
             try
             {
                 return spawner.SpawnAircraft(
                     player: null,
                     prefab: prefab,
                     loadout: loadout,
-                    fuelLevel: fuel,
-                    livery: finalLivery,
+                    fuelLevel: WingShop.SpawnFuelFor(definition),
+                    livery: LiveryFor(definition, hq, leader),
                     globalPosition: position.ToGlobalPosition(),
                     rotation: rotation,
                     startingVel: velocity,
@@ -744,7 +975,6 @@ namespace WingCommand
             forward.Normalize();
 
             float astern = WingFormation.SlotSpacing * WingTuning.SurfaceSpacingScale;
-
             position = leader.transform.position - forward * astern;
             rotation = Quaternion.LookRotation(forward, Vector3.up);
 

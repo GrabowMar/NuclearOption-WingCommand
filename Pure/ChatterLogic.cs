@@ -219,6 +219,18 @@ namespace WingCommand
                         new[] { "Moving. I'll get there first.", "Copy. Pushing to the point." },
                         new[] { "Understood. En route.", "Copy. Proceeding to the waypoint." },
                         new[] { "Waypoint received. Off I go.", "Copy. Moving." });
+                case "SEEKANDDESTROY":
+                    return Pick(persona, seed,
+                        new[] { "Roger. Proceeding to the search area.", "Copy. Seek and destroy." },
+                        new[] { "Copy. I'll find something to ruin.", "Heading in. I'll take it from there." },
+                        new[] { "Understood. Moving to the search area.", "Copy. I'll engage on arrival." },
+                        new[] { "Search area received. Let's see what breaks first.", "Copy. Going hunting." });
+                case "REFIT":
+                    return Pick(persona, seed,
+                        new[] { "Roger. Returning for refit.", "Copy. Heading home to rearm." },
+                        new[] { "Copy. I want a full rack when I get back.", "Refit run. See you shortly." },
+                        new[] { "Understood. Returning to refit.", "Copy. Replenishing and rejoining." },
+                        new[] { "Copy. Time to meet the ground crew again.", "Refit it is. I'll be back." });
                 case "JAMTARGET":
                     return Pick(persona, seed,
                         new[] { "Roger. Jammer coming up.", "Copy. Working their radar." },
@@ -312,6 +324,18 @@ namespace WingCommand
                         new[] { wingmen + ", push to the point.", wingmen + ", with me. Let's move." },
                         new[] { wingmen + ", take spacing. En route.", wingmen + ", proceed to the waypoint." },
                         new[] { wingmen + ", another waypoint. Come along.", wingmen + ", sightseeing formation. Move." });
+                case "SEEKANDDESTROY":
+                    return Pick(persona, seed,
+                        new[] { wingmen + ", move to the search area. Engage on arrival.", wingmen + ", seek and destroy. Move out." },
+                        new[] { wingmen + ", let's go hunting.", wingmen + ", push to the area and find something." },
+                        new[] { wingmen + ", take spacing to the search area.", wingmen + ", proceed, then engage at will." },
+                        new[] { wingmen + ", go find trouble.", wingmen + ", search area first. Mayhem second." });
+                case "REFIT":
+                    return Pick(persona, seed,
+                        new[] { wingmen + ", turn for home. Refit and rejoin.", wingmen + ", back to base for refit." },
+                        new[] { wingmen + ", let's get rearmed.", wingmen + ", race you to the ground crew." },
+                        new[] { wingmen + ", return for refit in sequence.", wingmen + ", head home; we'll rejoin when ready." },
+                        new[] { wingmen + ", paperwork and rearming. Wonderful.", wingmen + ", off to see the ground crew." });
                 case "JAMTARGET":
                     return Pick(persona, seed,
                         new[] { wingmen + ", jammers up. Screen the target.", wingmen + ", work their radar." },

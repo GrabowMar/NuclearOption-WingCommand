@@ -18,7 +18,7 @@ namespace WingCommand
     /// update that renames a field degrades to "native radial unavailable" rather than
     /// throwing every frame.
     /// </summary>
-    internal static class GameAccess
+    internal static partial class GameAccess
     {
         // RadialMenuMain
         private static AccessTools.FieldRef<RadialMenuMain, RadialMenuAction[]> actionsMainRef;

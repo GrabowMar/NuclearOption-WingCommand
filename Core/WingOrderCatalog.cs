@@ -15,7 +15,7 @@ namespace WingCommand
             switch (order)
             {
                 case WingOrder.Formation:    return "Form Up";
-                case WingOrder.Attack:       return "Attack";
+                case WingOrder.Attack:       return "Attack Target";
                 case WingOrder.FireForEffect: return "Splash 'Em";
                 case WingOrder.Engage:       return "Engage";
                 case WingOrder.OrbitHere:    return "Hold";
@@ -26,6 +26,7 @@ namespace WingCommand
                 case WingOrder.MoveToPoint:  return "Move";
                 case WingOrder.JamTarget:    return "Jam";
                 case WingOrder.Maneuver:     return "Manoeuvre";
+                case WingOrder.SeekAndDestroy: return "Seek and Destroy";
                 default:                     return order.ToString();
             }
         }
@@ -38,7 +39,7 @@ namespace WingCommand
             switch (order)
             {
                 case WingOrder.Formation:    return "FORM";
-                case WingOrder.Attack:       return "ATTACK";
+                case WingOrder.Attack:       return "ATK TGT";
                 case WingOrder.FireForEffect: return "SPLASH";
                 case WingOrder.Engage:       return "ENGAGE";
                 case WingOrder.OrbitHere:    return "HOLD";
@@ -49,6 +50,7 @@ namespace WingCommand
                 case WingOrder.MoveToPoint:  return "MOVE";
                 case WingOrder.JamTarget:    return "JAM";
                 case WingOrder.Maneuver:     return "MNVR";
+                case WingOrder.SeekAndDestroy: return "S&D";
                 default:                     return order.ToString().ToUpperInvariant();
             }
         }
@@ -61,11 +63,11 @@ namespace WingCommand
         /// transport behaviour will go and find somewhere itself.
         /// </summary>
         public static bool NeedsPoint(WingOrder order) =>
-            order == WingOrder.OrbitHere || order == WingOrder.LandHere;
+            order == WingOrder.OrbitHere || order == WingOrder.LandHere ||
+            order == WingOrder.SeekAndDestroy;
 
-        /// <summary>Orders the map cursor may be armed for.</summary>
-        public static bool TakesPoint(WingOrder order) =>
-            NeedsPoint(order) || order == WingOrder.DeliverCargo;
+        /// <summary>Orders the map cursor may be armed for a coordinate.</summary>
+        public static bool TakesPoint(WingOrder order) => MapOrderPolicy.PlacesPoint(order);
 
         public static bool CanApply(WingMember member, WingOrder order)
         {
@@ -75,6 +77,7 @@ namespace WingCommand
             if (member.DeliveryPending && !WingOrderRules.CanQueueWhilePending(order)) return false;
             if (order == WingOrder.DeliverCargo) return member.CanDeliverCargo;
             if (order == WingOrder.LandHere) return member.CanLandInPlace;
+            if (order == WingOrder.SeekAndDestroy && member.IsSurface) return false;
             if (order == WingOrder.JamTarget)
                 return WingFidelity.Jamming && member.CanJam;
             if (order == WingOrder.Maneuver) return WingFidelity.Manoeuvres && !member.IsPanicking;
@@ -101,6 +104,7 @@ namespace WingCommand
             if (order == WingOrder.DeliverCargo) return "No selected wingman is carrying cargo";
             if (order == WingOrder.FireForEffect) return "No selected wingman can prosecute that target";
             if (order == WingOrder.LandHere) return "Land is available to rotary aircraft only";
+            if (order == WingOrder.SeekAndDestroy) return "Seek and Destroy is available to aircraft only";
             if (order == WingOrder.JamTarget)
                 return WingFidelity.Jamming
                     ? "No selected wingman has a jammer pod"

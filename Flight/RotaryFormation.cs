@@ -69,7 +69,7 @@ namespace WingCommand
         /// <paramref name="horizontalError"/>.
         /// </summary>
         public static Mode Fly(Aircraft aircraft, Aircraft leader, GlobalPosition slotPos,
-                               Vector3 toSlot, float distance, float slotStack, float spacing,
+                               Vector3 toSlot, float distance, float spacing,
                                Mode previous, LeaderState leaderState, out float horizontalError)
         {
             Vector3 heading = leader.transform.forward;
@@ -118,8 +118,8 @@ namespace WingCommand
             // gets back out of the mode it needs speed to leave.
             HoverAssist.Release(aircraft);
 
-            Cruise(aircraft, leader, toSlotFlat, flat, slotDir, heading, leaderVel,
-                   leaderVelFlat, spacing, slotStack, onStation, leaderState);
+            Cruise(aircraft, leader, slotPos, toSlotFlat, flat, slotDir, heading, leaderVel,
+                   leaderVelFlat, spacing, onStation, leaderState);
             return Mode.Cruise;
         }
 
@@ -127,10 +127,11 @@ namespace WingCommand
         /// Cruising leader: demand the leader's velocity plus a correction toward the slot,
         /// and hand that to the autopilot as a direction of travel and a power setting.
         /// </summary>
-        private static void Cruise(Aircraft aircraft, Aircraft leader, Vector3 toSlotFlat,
+        private static void Cruise(Aircraft aircraft, Aircraft leader, GlobalPosition slotPos,
+                                   Vector3 toSlotFlat,
                                    float flat, Vector3 slotDir, Vector3 heading,
                                    Vector3 leaderVel, Vector3 leaderVelFlat,
-                                   float spacing, float slotStack, bool onStation,
+                                   float spacing, bool onStation,
                                    LeaderState leaderState)
         {
             // --- The commanded velocity. ---
@@ -174,13 +175,15 @@ namespace WingCommand
                               + aircraft.transform.forward * 20f
                               - moveDir * powerDistance;
 
-            // altitudeHold is a height above ground here, so it must describe where the slot
-            // sits above terrain, led by the leader's vertical speed so a climb is followed.
-            AircraftParameters p = aircraft.GetAircraftParameters();
-            float agl = Mathf.Clamp(
-                Mathf.Max(p.minimumRadarAlt,
-                          leader.radarAlt + slotStack + leaderVel.y * AltitudeLeadSeconds),
-                25f, 3000f);
+            // AutoAim's rotary terrain-following path ignores destination.y.  Turn the
+            // terrain-floored world slot into a local AGL command instead, otherwise a
+            // lower echelon can receive only its raw negative stack offset and fly into a
+            // hillside. Lead climbs, but never pre-emptively lead a descent through terrain.
+            float desiredAgl = RotaryAltitudePolicy.SlotAgl(
+                aircraft.GlobalPosition().y, aircraft.radarAlt, slotPos.y,
+                WingFidelity.TerrainClearance);
+            desiredAgl += Mathf.Max(0f, leaderVel.y) * AltitudeLeadSeconds;
+            float agl = AutopilotMath.RotaryAgl(aircraft, desiredAgl);
 
             // Nose: hold the leader's heading on station; otherwise let the helicopter point
             // where it is going.

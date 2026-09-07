@@ -25,11 +25,20 @@ namespace WingCommand
         private bool pointArmed;
         private WingOrder armedOrder;
         private int armedFrame;
+        private float moveAltitude;
         private readonly MapPointGesture pointGesture = new MapPointGesture();
+
+        /// <summary>Commanded Move height, metres AGL. Zero means each airframe's default.</summary>
+        public float MoveAltitude => moveAltitude;
 
         public bool PointArmed => pointArmed;
         public WingOrder ArmedOrder => armedOrder;
-        internal bool ConsumesIconClick => pointArmed || pointGesture.ConsumesClick(Time.frameCount);
+        /// <summary>
+        /// Left-click still selects wing icons while an order is armed. Placement moved to
+        /// right-click, so the held left gesture is only consumed when a leftover press
+        /// actually belongs to this layer.
+        /// </summary>
+        internal bool ConsumesIconClick => pointGesture.ConsumesClick(Time.frameCount);
 
         /// <summary>
         /// True while <see cref="Status"/> is reporting something rather than repeating the
@@ -44,16 +53,14 @@ namespace WingCommand
             get
             {
                 if (pointArmed)
-                    return WingOrderCatalog.Label(armedOrder).ToUpperInvariant() + " ARMED - CLICK MAP" +
-                           (armedOrder == WingOrder.DeliverCargo
-                               ? ", OR PRESS AGAIN FOR THE STANDARD ROUTE"
-                               : "");
+                    return MapOrderPolicy.ArmPrompt(armedOrder);
                 if (MapPicker.IsBusy && !MapPicker.IsOwner(MapPicker.WingPoint))
                     return MapPicker.Prompt ?? "MAP BUSY";
                 if (pendingRecruit.Count > 0 && Time.unscaledTime <= recruitConfirmationUntil)
                     return "CONFIRM ASSIGNMENT: " + pendingRecruit.Count + " AIRCRAFT · " +
                            Mathf.RoundToInt(pendingRecruitCost) + " FUNDS";
-                return "Select a row or wing icon; right-click moves; Shift queues points.";
+                return "Right-click moves at " + FormatAltitude(moveAltitude) +
+                       ". Alt+scroll altitude. Shift queues. Left-click an order to arm it.";
             }
         }
 
@@ -74,12 +81,13 @@ namespace WingCommand
             }
 
             pointGesture.Update(Time.frameCount, Input.GetMouseButton(0));
+            HandleMoveAltitudeScroll();
 
             DynamicMap map = SceneSingleton<DynamicMap>.i;
             if (map == null) return;
 
-            // Cancelling an armed point with right-click must not also create a waypoint.
-            if (pointArmed) HandlePointOrder(map);
+            // An armed order owns the next right-click. Unarmed, that click is a move.
+            if (pointArmed) HandleArmedOrder(map);
             else HandleWaypointInput(map);
         }
 
@@ -90,9 +98,31 @@ namespace WingCommand
                 Toast("Map commands are disabled");
                 return;
             }
-            if (!WingOrderCatalog.TakesPoint(order)) return;
-            string prompt = WingOrderCatalog.Label(order).ToUpperInvariant() + " ARMED · CLICK MAP";
-            if (!MapPicker.TryArm(MapPicker.WingPoint, MapPicker.GestureLeft, prompt))
+            if (!MapOrderPolicy.ArmsOnMap(order)) return;
+
+            // Do not acknowledge an arm we cannot keep. Before this guard, pressing Hold
+            // while the map or its Tactical page was closing set pointArmed for a frame,
+            // then Update silently cleared it. That reads exactly like a map click was
+            // ignored. A map command is useful only while this layer can receive the
+            // follow-up click, so reject it at the boundary with an actionable reason.
+            if (!DynamicMap.mapMaximized)
+            {
+                Toast("Open the tactical map to place " + WingOrderCatalog.Label(order));
+                return;
+            }
+            if (!WmcScreen.TacticalCommandModeActive)
+            {
+                Toast("Open WMC TACTICAL to place " + WingOrderCatalog.Label(order));
+                return;
+            }
+            if (SceneSingleton<DynamicMap>.i == null)
+            {
+                Toast("Tactical map unavailable");
+                return;
+            }
+
+            string prompt = MapOrderPolicy.ArmPrompt(order);
+            if (!MapPicker.TryArm(MapPicker.WingPoint, MapPicker.GestureRight, prompt))
             {
                 Toast(MapPicker.Prompt ?? "Map is busy");
                 return;
@@ -101,7 +131,9 @@ namespace WingCommand
             pointArmed = true;
             armedOrder = order;
             armedFrame = Time.frameCount;
-            Toast(WingOrderCatalog.Label(order) + " armed - click a point on the map");
+            Toast(MapOrderPolicy.PicksTarget(order)
+                ? WingOrderCatalog.Label(order) + " armed - right-click a hostile on the map"
+                : WingOrderCatalog.Label(order) + " armed - right-click a point on the map");
         }
 
         public void CancelPointOrder(bool notify)
@@ -109,13 +141,14 @@ namespace WingCommand
             if (!pointArmed) return;
             pointArmed = false;
             MapPicker.Disarm(MapPicker.WingPoint);
-            if (notify) Toast("Point order cancelled");
+            if (notify) Toast("Order cancelled");
         }
 
         public void Reset()
         {
             MapPicker.Disarm(MapPicker.WingPoint);
             pointArmed = false;
+            moveAltitude = 0f;
             pointGesture.Reset();
             recruited.Clear();
             pendingRecruit.Clear();
@@ -124,7 +157,7 @@ namespace WingCommand
             TacticalMapOverlay.Reset();
         }
 
-        private void HandlePointOrder(DynamicMap map)
+        private void HandleArmedOrder(DynamicMap map)
         {
             if (!pointArmed) return;
 
@@ -134,22 +167,41 @@ namespace WingCommand
                 return;
             }
 
-            if (Input.GetKeyDown(KeyCode.Escape) || Input.GetMouseButtonDown(1))
+            if (Input.GetKeyDown(KeyCode.Escape))
             {
-                pointGesture.Consume(Time.frameCount, Input.GetMouseButton(0));
                 CancelPointOrder(notify: true);
                 return;
             }
 
-            // Do not consume the WMC button press that armed the command.
-            if (Time.frameCount <= armedFrame + 1 || !Input.GetMouseButtonDown(0)) return;
-            if (!TryGetMapPointer(map, out GlobalPosition point, out _)) return;
+            // The WMC button that armed this order is a left-click. The follow-up is a
+            // right-click, so the arming press cannot also place the order. The one-frame
+            // skip still drops a right-click that lands in the same frame as the arm.
+            if (Time.frameCount <= armedFrame + 1 || !Input.GetMouseButtonDown(1)) return;
+            if (!TryGetMapPointer(map, out GlobalPosition point, out Unit target)) return;
 
-            WingOrder order = armedOrder;
-            pointGesture.Consume(Time.frameCount, Input.GetMouseButton(0));
-            pointArmed = false;
-            MapPicker.Disarm(MapPicker.WingPoint);
-            WingCommandManager.Instance?.IssuePointOrder(order, point);
+            MapPointerKind pointer = PointerKind(target);
+            bool shift = Input.GetKey(KeyCode.LeftShift) || Input.GetKey(KeyCode.RightShift);
+            MapClickIntent intent = MapOrderPolicy.ResolveRightClick(true, armedOrder, pointer, shift);
+            WingCommandManager manager = WingCommandManager.Instance;
+
+            switch (intent)
+            {
+                case MapClickIntent.PlacePoint:
+                    manager?.IssuePointOrder(armedOrder, point, append: false);
+                    break;
+                case MapClickIntent.QueuePlacePoint:
+                    manager?.IssuePointOrder(armedOrder, point, append: true);
+                    break;
+                case MapClickIntent.AttackTarget:
+                    manager?.AttackUnit(target, append: false);
+                    break;
+                case MapClickIntent.QueueAttackTarget:
+                    manager?.AttackUnit(target, append: true);
+                    break;
+                case MapClickIntent.NeedTarget:
+                    Toast("Right-click a hostile on the map");
+                    break;
+            }
         }
 
         private void HandleWaypointInput(DynamicMap map)
@@ -160,39 +212,75 @@ namespace WingCommand
 
             WingCommandManager manager = WingCommandManager.Instance;
             if (manager == null) return;
-
-            // Right-clicking a hostile is an attack, not a move.
-            //
-            // The gesture already meant "selection, go there", and on top of an enemy icon
-            // that is nearly always the long way of saying "selection, kill that" — the
-            // wingmen would fly to the contact's last known position and then need a second
-            // order to do anything about it. Checked before the cursor is resolved to a
-            // ground point so the two readings of the same click cannot both fire.
-            if (!TryGetMapPointer(map, out GlobalPosition point, out Unit target)) return;
-            if (target != null && !target.disabled &&
-                DynamicMap.GetFactionMode(target.NetworkHQ) == FactionMode.Enemy)
-            {
-                manager.AttackUnit(target);
-                return;
-            }
-
-            List<WingMember> scope = manager.Commands.Scope(wholeWing: false);
-            if (scope.Count == 0) return;
+            if (!TryGetMapPointer(map, out GlobalPosition point, out _)) return;
 
             bool append = Input.GetKey(KeyCode.LeftShift) || Input.GetKey(KeyCode.RightShift);
-            int moved = 0;
-            foreach (WingMember member in scope)
+            manager.IssueMove(point, append);
+        }
+
+        private void HandleMoveAltitudeScroll()
+        {
+            if (!MapOrderPolicy.IsMoveTool(pointArmed)) return;
+            if (!Input.GetKey(KeyCode.LeftAlt) && !Input.GetKey(KeyCode.RightAlt)) return;
+
+            int sign = MapOrderPolicy.ScrollSign(Input.mouseScrollDelta.y);
+            if (sign == 0) return;
+
+            WingCommandManager manager = WingCommandManager.Instance;
+            Aircraft leader = manager?.Wing.Leader;
+            bool rotary = WingRegistry.IsRotary(leader);
+            moveAltitude = MapOrderPolicy.StepMoveAltitude(moveAltitude, sign, rotary);
+
+            if (manager != null)
             {
-                if (member == null || !member.Alive) continue;
-                member.IssueWaypoint(point, append);
-                moved++;
+                foreach (WingMember member in manager.Commands.Scope(wholeWing: false))
+                {
+                    if (member == null || !member.Alive) continue;
+                    if (member.Order != WingOrder.MoveToPoint && !HasQueuedMove(member)) continue;
+                    member.SetMoveAltitude(moveAltitude);
+                }
             }
 
-            if (moved > 0)
+            Toast("Move altitude " + FormatAltitude(moveAltitude));
+        }
+
+        private static bool HasQueuedMove(WingMember member)
+        {
+            IReadOnlyList<WingDirective> route = member.Route;
+            for (int i = 0; i < route.Count; i++)
             {
-                manager.Toast((append ? "Queued point for " : "Moving ") + moved +
-                              " selected wingman" + (moved == 1 ? "" : "men"));
+                if (route[i].Order == WingOrder.MoveToPoint) return true;
             }
+            return false;
+        }
+
+        internal static bool SuppressMapZoom
+        {
+            get
+            {
+                if (!Plugin.Settings.MapCommandEnabled.Value || !DynamicMap.mapMaximized ||
+                    !WmcScreen.TacticalCommandModeActive) return false;
+                if (!Input.GetKey(KeyCode.LeftAlt) && !Input.GetKey(KeyCode.RightAlt))
+                    return false;
+                WingCommandManager manager = WingCommandManager.Instance;
+                return manager != null && MapOrderPolicy.IsMoveTool(manager.MapOrderArmed);
+            }
+        }
+
+        private static string FormatAltitude(float altitude)
+        {
+            WingCommandManager manager = WingCommandManager.Instance;
+            bool rotary = WingRegistry.IsRotary(manager?.Wing.Leader);
+            float metres = MapOrderPolicy.StepMoveAltitude(altitude, 0, rotary);
+            return Mathf.RoundToInt(metres) + " m";
+        }
+
+        private static MapPointerKind PointerKind(Unit target)
+        {
+            if (target == null || target.disabled) return MapPointerKind.Empty;
+            return DynamicMap.GetFactionMode(target.NetworkHQ) == FactionMode.Enemy
+                ? MapPointerKind.Enemy
+                : MapPointerKind.Other;
         }
 
         /// <summary>
@@ -213,7 +301,12 @@ namespace WingCommand
             if (map == null) return false;
             if (!map.TryGetCursorCoordinates(out point)) return false;
             EventSystem events = EventSystem.current;
-            if (events == null) return false;
+            // The coordinate conversion above is the authoritative map hit-test. An
+            // EventSystem is only needed to discover foreground UI and map icons; it can
+            // be absent for a frame while the tactical display is rebuilding. In that
+            // window a valid Hold/S&D point must still be placeable rather than appearing
+            // to eat the click.
+            if (events == null) return true;
 
             var pointer = new PointerEventData(events) { position = Input.mousePosition };
             var hits = new List<RaycastResult>();
@@ -244,8 +337,8 @@ namespace WingCommand
         }
 
         /// <summary>
-        /// The stock map consumes right-click for ICommandable units. When a tactical wing
-        /// scope is selected (including ALL), reserve that gesture for aircraft waypoints.
+        /// The stock map consumes right-click for ICommandable units. While Tactical is
+        /// open, that gesture belongs to the armed WMC order, or to a move if none is armed.
         /// </summary>
         internal static bool ShouldConsumeNativeRightClick()
         {
@@ -257,7 +350,7 @@ namespace WingCommand
 
             WingCommandManager manager = WingCommandManager.Instance;
             return manager != null &&
-                   (manager.MapConsumesIconClick || manager.Commands.Scope(wholeWing: false).Count > 0);
+                   (manager.MapOrderArmed || manager.Commands.Scope(wholeWing: false).Count > 0);
         }
 
         /// <summary>
@@ -386,6 +479,13 @@ namespace WingCommand
         {
             return !MapCommandLayer.ShouldConsumeNativeRightClick();
         }
+    }
+
+    [HarmonyPatch(typeof(DynamicMap), nameof(DynamicMap.SetZoomLevel))]
+    internal static class WingMapAltitudeZoomPatch
+    {
+        [HarmonyPrefix]
+        private static bool Prefix() => !MapCommandLayer.SuppressMapZoom;
     }
 
     /// <summary>Claim wing-icon clicks only while WMC is explicitly in tactical mode.</summary>

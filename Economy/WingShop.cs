@@ -310,12 +310,17 @@ namespace WingCommand
             definition != null && !IsFlyableAircraft(definition);
 
         /// <summary>
-        /// Whether this definition may be offered at all.
+        /// Whether this definition may be offered on Supply or Loadout at all.
         ///
-        /// See <see cref="IsSurfaceDefinition"/> above for the distinction it rests on.
+        /// See <see cref="IsSurfaceDefinition"/> for the flyable vs surface split.
+        /// Event placeholders such as the April Fools "???" UFO are excluded even
+        /// though they carry an autopilot.
         /// </summary>
         public static bool IsCommandableUnit(AircraftDefinition definition) =>
-            IsFlyableAircraft(definition) || WingHost.Current.AllowSurfaceWingmen;
+            definition != null
+            && !AirframeCatalogPolicy.IsHiddenFromPanels(
+                definition.unitName, definition.code, definition.jsonKey)
+            && (IsFlyableAircraft(definition) || WingHost.Current.AllowSurfaceWingmen);
 
         /// <summary>True when this definition's prefab is armed with an autopilot — i.e. it is an aircraft, not a ship or vehicle.</summary>
         public static bool IsFlyableAircraft(AircraftDefinition definition)
@@ -658,6 +663,9 @@ namespace WingCommand
                     return Denied("No launch base selected");
                 if (!WingLaunchFields.CanAnyAllowedLaunch(hq, definition))
                     return Denied("No selected base can launch " + definition.unitName);
+                string launchBlock = WingShopDelivery.LaunchBlockReason(hq, definition,
+                    leader.transform.position);
+                if (launchBlock != null) return Denied(launchBlock);
             }
 
             declared = hq.AircraftSupply.ContainsKey(definition);
@@ -719,7 +727,8 @@ namespace WingCommand
                     Pilot pilot = WingRegistry.PrimaryPilot(candidate);
                     if (pilot != null)
                     {
-                        PilotBaseState landing = (PilotBaseState)pilot.AILandingState ?? pilot.AIHeloLandingState;
+                        PilotBaseState landing =
+                            (PilotBaseState)pilot.AILandingState ?? pilot.AIHeloLandingState;
                         if (landing != null) pilot.SwitchState(landing);
                     }
                     WingDeparture.Begin(candidate);
@@ -743,7 +752,7 @@ namespace WingCommand
             bool alreadyOwned = quote.Source == WingSupplyReserve.Source.Owned;
             bool debugFree = Plugin.Settings.CheatFreePurchases;
 
-            Plugin.Logger.LogInfo(
+            Plugin.LogVerbose(
                 $"[Shop] requisitioned {definition.unitName} for {quote.Price:F0}" +
                 $" [{WingLoadoutCatalog.Label(quote.Loadout)}]" +
                 (alreadyOwned ? " (owned reserve)" :

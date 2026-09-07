@@ -88,7 +88,7 @@ Settings live in `BepInEx/config/com.marci.wingcommand.cfg`. Edit them in-game w
 1. **Load a mission** as host or single-player.
 2. **Get a wing.** **WMC → Supply**: select friendly AI on the map and press **Assign Selected** (once for the price, again to confirm), or requisition fresh airframes from the catalogue.
 3. **Take control.** **WMC → Tactical**: click a wing icon or roster row to select one, Shift-click to add, **Select All** for everyone.
-4. **Order.** Try **Hold Here** — the cursor arms, click the map.
+4. **Order.** Try **Hold Here** — the button highlights, then right-click the map.
 5. **Kit them out.** Build a template on **WMC → Loadout**, pick it in the **FIT** row on **Supply** before requisitioning.
 6. **Or the radial.** Open the normal radial menu → **Wing Command** for instant whole-wing orders.
 
@@ -100,8 +100,8 @@ Fixed-wing and rotary can't share a formation; the shop and recruit lists filter
 
 ```text
 Wing Command
-├─ Combat: Attack My Target · Engage · Splash 'Em · Disengage
-├─ Flight & Tasking: Form Up · Hold Position · Return To Base
+├─ Combat: Attack Target · Engage · Splash 'Em · Disengage
+├─ Flight & Tasking: Form Up · Hold Position
 │  └─ Special Tasking: Jam Target · Deliver Cargo · Land Here
 ├─ Formation: Echelon Right · Line Abreast · Trail · Combat Spread · Finger Four · Vic
 ├─ Rules Of Engagement: Defend · Escort · Free
@@ -124,14 +124,20 @@ Wing Command
 | Click a wing icon | Select just that wingman |
 | Shift-click another icon / roster row | Add or remove it |
 | **Select All** | Command the whole wing |
-| Press Hold / Land / Deliver Cargo, then click the map | Order that spot |
-| Right-click the map with wingmen selected | Send them there (`MOVE` marker) |
-| Shift-right-click | Queue another waypoint |
-| Right-click again / Escape | Cancel the armed order |
+| Left-click Hold Here / Seek & Destroy / Land / Cargo | Arm that order (button stays highlighted) |
+| Left-click Attack Target with contacts designated | Attack them immediately; Attack stays armed |
+| Left-click Attack Target with no designation | Arm Attack for a map target |
+| Right-click the map with an order armed | Issue that order at the point, or at the clicked hostile for Attack |
+| Right-click the map with no order armed | Send the selection there (`MOVE` marker) |
+| Shift-right-click | Queue that order (any armed order, or another Move) |
+| Alt+scroll with no order armed | Change Move altitude |
+| Click the armed button again / Escape | Cancel the armed order |
 
-Hostile, friendly non-wing, ground and naval icons behave exactly as in stock. Closing WMC or
-switching tabs stops intercepting wing-icon clicks. Map moves are temporary routes — at the
-final point every wingman returns to formation.
+Left-click on hostile, friendly non-wing, ground and naval icons behaves as in stock.
+Right-click is the wing order: the armed WMC command, or a move if none is armed. Closing
+WMC or switching tabs stops intercepting wing-icon clicks. Map moves are temporary routes —
+at the final point every wingman returns to formation. **Seek & Destroy** instead begins
+autonomous engagement after reaching its marked area.
 
 Wing icons keep the stock faction fill and gain a thin, unfilled ring with space around
 the aircraft silhouette. **Clear Targets** does not remove the ring or change WMC command selection. Selected command recipients
@@ -142,14 +148,16 @@ also have brackets while Tactical is open. `UI/Highlight` controls the outlines.
 | Order | What it does |
 |---|---|
 | **Form Up** | Close on assigned slots and hold station on you |
-| **Attack My Target** | Hit your locked target. Radial sends everyone; scoped WMC distributes contacts and may hold surplus back as cover |
+| **Attack Target** | Hit your locked target immediately, or arm the button and right-click a hostile on the map. Radial sends everyone; scoped WMC distributes contacts and may hold surplus back as cover |
 | **Splash 'Em** | Every selected wingman pours its whole loadout into one target until it's dead or they're dry. WMC only — not a quick call |
 | **Engage** | Hunt within the configured leash, return if they stray |
+| **Seek & Destroy** | Fly to a marked map area, then begin autonomous engagement under the current ROE |
 | **Disengage** | Break on separated headings, countermeasure, egress, then form up |
 | **Hold Here** | CAP a point while still applying ROE |
 | **Deliver Cargo** | Fly cargo to a chosen point, drop it, report, rejoin |
 | **Land Here** | Set compatible helicopters down near the point |
-| **Return To Base** | Fly the stock pattern home, then hand the airframe back |
+| **Refit** | Return to base, replenish fuel and stores, take off again, then rejoin |
+| **Roster RTB** | On an individual roster row, dismiss a wingman home; its plane and pilot return to their pools after recovery |
 | **Formation dial** | Swap between the six shapes on the fly |
 
 Orders stick through missile defence and leash recall, including new orders issued while
@@ -159,10 +167,11 @@ Interrupted manoeuvres and target orders whose target has died finish by returni
 
 Holding aircraft circle in the same direction on separate radii, spaced by formation slot.
 
-**RTB completes.** Down and shut down at a friendly base, the airframe leaves the world and
-enters the three-slot wing reserve — a purchased one stays owned and relaunches free, an
-assigned mission airframe becomes a held slot. Set `Engagement/RtbReturnsToReserve = false`
-to leave recovered aircraft parked.
+**Roster RTB completes.** Down and shut down at a friendly base, the dismissed airframe leaves
+the world and enters the three-slot wing reserve — a purchased one stays owned and relaunches
+free, an assigned mission airframe becomes a held slot. Its pilot returns to the squadron pool
+at the same settlement, so neither can be reused during the flight home. Set
+`Engagement/RtbReturnsToReserve = false` to leave recovered aircraft parked.
 
 **Splash 'Em vs Attack.** Attack is measured — spread designations, a useful-attacker cap,
 surplus held as cover, seconds between launches. Splash 'Em drops all of that: one target,
@@ -232,10 +241,20 @@ each pilot retains its own control response. Smooth leader tracking filters smal
 changes, responds faster to large turns and roll reversals, and keeps slot motion continuous.
 Hard maneuvers still respect each airframe's turning and speed limits.
 
-Recruited AI pilots no longer automatically eject during taxi because of ground tilt,
-body-damage notifications, or stuck timers. If native taxi navigation cannot continue,
-they stop with the pilot aboard; this does not repair an obstructed route. Player ejection
-and emergency ejection outside the taxi AI remain available.
+Requisitioned fixed-wing aircraft — VTOL jets included, since the game still taxis them —
+are placed on the takeoff threshold of the nearest allowed field that stocks the airframe,
+and depart under the game's own taxi and takeoff states. Helicopters and tiltwings come out
+of a hangar or helipad exactly as the faction's own do. One departure at a time per field,
+so two purchases never occupy the same strip; Supply reports a jammed field before a purchase
+spends allocation. Nothing is moved once it exists, and no ground steering is overridden:
+WingCommand chooses the pose and then gets out of the way.
+
+Return To Base, dismissal and refit all fly the stock approach home. The one stock transition
+that is rewritten is the taxi a wingman is given *after* it lands — that run looks for a
+service point and ejects the pilot on the apron, so an inbound wingman is parked instead and
+recovered into stock. Refit replenishes the aircraft where it stands and launches it again
+from that pose. WingCommand gives back its own runway queue entries whenever a departure ends
+without taking off, so an interrupted launch cannot jam the strip for the rest of the mission.
 
 With verbose logging enabled, instability triggers an eight-second diagnostic burst at
 five samples per second, with a thirty-second interval between burst starts. The
@@ -273,7 +292,8 @@ next requisition flies with.
 - Name it in **NAME** (flight controls are held off while typing). Saved to config, survives
   restarts, up to eight per airframe.
 
-**Flying one:** the **FIT** row on Supply picks the standard fit or a saved template.
+**Flying one:** the **FIT** row on Supply picks the game's player-start preset for that
+aircraft or a saved template.
 
 - Equipment is fitted at aircraft creation, so one already airborne can't be refitted — the
   **Wing** tab shows what each carries.
@@ -285,7 +305,7 @@ next requisition flies with.
 - Loadouts don't change price. A requisition is list price.
 
 **Cargo:** a transport carries whatever cargo pod is on its cargo pylon. **Deliver Cargo
-takes a drop point** — press it, click the map, same as Hold/Land; helicopters set the load
+takes a drop point** — press it, right-click the map, same as Hold/Land; helicopters set the load
 down there, fixed-wing run in and release over it. Press it again while armed to give up the
 point and use the game's own supply route. Either way the run finishes: the wingman calls
 the delivery when the cargo leaves and rejoins when empty; one that can't drop says so and

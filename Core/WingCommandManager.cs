@@ -16,6 +16,7 @@ namespace WingCommand
     /// .Recruit.cs (delivery queue), .Orders.cs (action dispatch) and .Selection.cs (roster
     /// selection).
     /// </summary>
+    [DefaultExecutionOrder(10000)]
     internal partial class WingCommandManager : MonoBehaviour
     {
         internal static WingCommandManager Instance { get; private set; }
@@ -46,6 +47,11 @@ namespace WingCommand
             WingFormation.SlotSpacing = Plugin.Settings.FormationSpacing.Value;
         }
 
+        private void FixedUpdate()
+        {
+            if (InPlayableState()) WingAirfield.Tick();
+        }
+
         private void Update()
         {
             if (!InPlayableState())
@@ -62,6 +68,7 @@ namespace WingCommand
                 TacticalCoordinator.Reset();
                 WingMarkers.Reset();
                 WingShopDelivery.Reset();
+                WingAirfield.Reset();
                 WingShop.Reset();
                 WingRecruitment.Reset();
                 WingPilotRoster.Reset();
@@ -98,7 +105,7 @@ namespace WingCommand
                 // Factories are plugin registrations and survive missions. Their aircraft
                 // states live on WingMember and disappear with the old roster.
                 WingAi.ResetFaults();
-                Plugin.Logger.LogInfo("[WingFidelity] mission start - " + WingFidelity.Summary());
+                Plugin.LogVerbose("[WingFidelity] mission start - " + WingFidelity.Summary());
             }
             resetForNonPlayableState = false;
 
@@ -171,8 +178,7 @@ namespace WingCommand
         internal void Toast(string message)
         {
             if (string.IsNullOrWhiteSpace(message)) return;
-            if (Plugin.Settings.VerboseLogging.Value)
-                Plugin.Logger.LogInfo("[Wing] " + message);
+            Plugin.LogVerbose("[Wing] " + message);
         }
 
         /// <summary>The only mod messages intentionally allowed into the old game feed.</summary>

@@ -1,5 +1,6 @@
 using Xunit;
 
+// UnityEngine.Vector3 is shared, and lives in GameTypeStubs.cs.
 // Native hover and nozzle ownership is stubbed; the complete production transition
 // is linked so a stale native hover flag cannot hide a retained downward nozzle.
 namespace WingCommand
@@ -16,11 +17,16 @@ namespace WingCommand
     internal sealed class ControlInputs
     {
         public float customAxis1;
+        public float throttle;
+        public float brake;
+        public float yaw;
+        public float pitch;
+        public float roll;
     }
 
     internal sealed class SwivelDuctSystem { }
     internal sealed class DuctedThrustSystem { }
-    internal readonly struct GlobalPosition { }
+    internal readonly partial struct GlobalPosition { }
     internal sealed class Autopilot
     {
         public void Hover(GlobalPosition destination, float altitudeHold,

@@ -9,9 +9,18 @@ namespace WingCommand
         {
             if (nativeTakeoffComplete) return true;
             if (!inTakeoffState) return false;
-            // Clear the runway/helipad before formation can request a turn.
-            return rotary ? altitude >= 5f :
-                altitude >= 8f && takeoffSpeed > 0f && speed >= takeoffSpeed * WingTuning.LaunchSpeedMargin;
+
+            // AIHeloTakeoffState still owns the collective and the protected vertical
+            // departure until it marks the flight airborne. Releasing it at five metres
+            // replaces that climb with a potentially distant formation command; its first
+            // turn can immediately send the helicopter into nearby terrain. Fixed-wing
+            // takeoff has a runway-clearance gate, but rotary aircraft must wait for their
+            // native completion signal.
+            if (rotary) return false;
+
+            // Clear the runway before formation can request a turn.
+            return altitude >= 8f && takeoffSpeed > 0f &&
+                speed >= takeoffSpeed * WingTuning.LaunchSpeedMargin;
         }
 
         public static float RejoinBankLimit(float altitude, float speed, float takeoffSpeed)

@@ -22,5 +22,28 @@ namespace WingCommand.PureTests
 
             Assert.Equal(first.Opening, wrapped.Opening);
         }
+
+        [Fact]
+        public void EveryOrderHasARadioAcknowledgementLine()
+        {
+            foreach (WingOrder order in System.Enum.GetValues(typeof(WingOrder)))
+            {
+                string line = ChatterDialogue.Acknowledge(
+                    ChatterPersona.Professional, order.ToString(), seed: 0);
+                Assert.False(string.IsNullOrWhiteSpace(line));
+            }
+        }
+
+        [Fact]
+        public void RefitHasItsOwnRadioAcknowledgementLine()
+        {
+            string single = ChatterDialogue.Acknowledge(
+                ChatterPersona.Professional, "REFIT", seed: 0);
+            string group = ChatterDialogue.GroupAcknowledge(
+                ChatterPersona.Professional, "REFIT", "Two", seed: 0);
+
+            Assert.False(string.IsNullOrWhiteSpace(single));
+            Assert.False(string.IsNullOrWhiteSpace(group));
+        }
     }
 }

@@ -180,12 +180,11 @@ namespace WingCommand
                     Aircraft spawnedAircraft = spawner.SpawnAircraft(
                         player: null,
                         prefab: prefab,
-                        // Null, not the leader's Loadout instance. Aircraft initialisation
-                        // substitutes the airframe's own standard loadout when this is
-                        // null, whereas handing over the leader's object shares one mutable
-                        // loadout across every aircraft — which left the spawned wing with
-                        // no usable ammunition and sent all of them straight home Winchester.
-                        loadout: null,
+                        // Build creates a fresh copy of this airframe's game-start preset
+                        // on every pass. Sharing the leader's mutable Loadout object across
+                        // the wing left every aircraft with no usable ammunition.
+                        loadout: WingLoadoutCatalog.Build(
+                            leader.definition, WingLoadoutChoice.Standard),
                         fuelLevel: 1f,
                         livery: leader.NetworkLiveryKey,
                         globalPosition: p.Global,
@@ -257,7 +256,7 @@ namespace WingCommand
         {
             WingCommandManager.Instance?.DebugToast(message);
             if (Plugin.Settings.VerboseLogging.Value)
-                Plugin.Logger.LogInfo("[Debug] " + message);
+                Plugin.LogVerbose("[Debug] " + message);
         }
     }
 }

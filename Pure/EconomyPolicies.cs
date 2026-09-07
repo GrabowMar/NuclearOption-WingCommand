@@ -3,50 +3,6 @@ using System.Collections.Generic;
 
 namespace WingCommand
 {
-    /// <summary>Taxiway corner, braking and recovery rules for a native departure route.</summary>
-    internal static class TaxiRoutePolicy
-    {
-        internal const float WaypointRadius = 3f;
-        internal const float MaximumSpeed = 12f;
-
-        // Heavy aircraft need room for their longer wheelbase, but even their
-        // corridor stays below the stock 20 m waypoint skip threshold.
-        internal static float CornerRadius(float aircraftRadius) =>
-            Math.Max(WaypointRadius, Math.Min(10f, Math.Max(0f, aircraftRadius) * 0.3f));
-
-        // Horizontal offsets: aircraft -> waypoint, then waypoint -> next. Heading
-        // alone is never permission to skip a corner on another taxiway.
-        internal static bool CanAdvance(float toX, float toZ, float nextX, float nextZ,
-            float radius = WaypointRadius)
-        {
-            if (toX * toX + toZ * toZ <= radius * radius) return true;
-            float lengthSq = nextX * nextX + nextZ * nextZ;
-            if (lengthSq < 0.01f) return false;
-            float along = -toX * nextX - toZ * nextZ;
-            float cross = toX * nextZ - toZ * nextX;
-            return along >= 0f && cross * cross <= radius * radius * lengthSq;
-        }
-
-        internal static float SpeedLimit(float distance, float cornerAngle, float headingError,
-            float radius = WaypointRadius)
-        {
-            float cornerSpeed = Math.Max(3.5f, MaximumSpeed / (1f + Math.Abs(cornerAngle) * 0.045f));
-            // Begin braking before the corner at 1.5 m/s² rather than turning at the
-            // stock 20-30 m/s taxi speed, especially hazardous for heavy airframes.
-            float approach = (float)Math.Sqrt(cornerSpeed * cornerSpeed +
-                3f * Math.Max(0f, distance - radius * 2f));
-            float alignment = MaximumSpeed / (1f + Math.Abs(headingError) * 0.045f);
-            return Math.Max(3.5f, Math.Min(MaximumSpeed, Math.Min(approach, alignment)));
-        }
-
-        internal static bool ShouldRebuild(bool waiting, bool hasRoute, bool offNetwork,
-            float stoppedSeconds, float movingSeconds, float sinceRebuild,
-            float destinationDistance = float.PositiveInfinity) =>
-            !waiting && movingSeconds >= 12f && sinceRebuild >= 5f &&
-            destinationDistance > 20f &&
-            (!hasRoute || offNetwork || stoppedSeconds >= 8f);
-    }
-
     /// <summary>Idempotent reverse-order compensation for a transaction's completed effects.</summary>
     internal sealed class RollbackJournal
     {
@@ -269,5 +225,102 @@ namespace WingCommand
                 ? " — Can launch " + airframeName + " [ALLOWED]"
                 : " — Can launch " + airframeName + " [BLOCKED - click to allow]");
         }
+    }
+
+    /// <summary>
+    /// Labels and matching for the hangar prefab stock lists the game serializes as
+    /// <c>Hangar.availableAircraft</c>. Pad codes are the building <c>UnitDefinition.code</c>
+    /// values the native airbase info panel already uses.
+    /// </summary>
+    internal static class HangarStockPolicy
+    {
+        public static string PadLabel(string code)
+        {
+            if (string.IsNullOrEmpty(code)) return "pad";
+            switch (code)
+            {
+                case "HPAD": return "helipad";
+                case "REV": return "revetment";
+                case "HGR-M": return "hangar";
+                case "HGR-H": return "shelter";
+                case "SHP": return "ship";
+                default: return code;
+            }
+        }
+
+        public static bool SameAirframe(string jsonKey, string unitName,
+                                        string otherKey, string otherName)
+        {
+            if (!string.IsNullOrEmpty(jsonKey) && jsonKey == otherKey) return true;
+            return !string.IsNullOrEmpty(unitName) && unitName == otherName;
+        }
+
+        public static string FormatPadStock(string padLabel, IList<string> aircraftCodes)
+        {
+            if (string.IsNullOrEmpty(padLabel)) padLabel = "pad";
+            if (aircraftCodes == null || aircraftCodes.Count == 0) return padLabel + ": —";
+            return padLabel + ": " + JoinLimited(aircraftCodes, 8);
+        }
+
+        public static string FormatFieldStock(IList<string> padSummaries)
+        {
+            if (padSummaries == null || padSummaries.Count == 0) return "";
+            var sb = new System.Text.StringBuilder();
+            for (int i = 0; i < padSummaries.Count; i++)
+            {
+                if (string.IsNullOrEmpty(padSummaries[i])) continue;
+                if (sb.Length > 0) sb.Append(" | ");
+                sb.Append(padSummaries[i]);
+            }
+            return sb.ToString();
+        }
+
+        public static string FormatLaunchSites(IList<string> fieldSummaries)
+        {
+            if (fieldSummaries == null || fieldSummaries.Count == 0)
+                return "No hangar or helipad lists this airframe";
+            return "Launch: " + JoinLimited(fieldSummaries, 6);
+        }
+
+        public static string JoinLimited(IList<string> values, int max)
+        {
+            if (values == null || values.Count == 0) return "";
+            if (max < 1) max = 1;
+            var sb = new System.Text.StringBuilder();
+            int shown = Math.Min(values.Count, max);
+            for (int i = 0; i < shown; i++)
+            {
+                if (i > 0) sb.Append(", ");
+                sb.Append(values[i]);
+            }
+            int extra = values.Count - shown;
+            if (extra > 0) sb.Append(" +").Append(extra);
+            return sb.ToString();
+        }
+    }
+
+    /// <summary>
+    /// Encyclopedia entries that must not appear on the Supply or Loadout panels.
+    /// The April Fools UFO is named "???" (dev key "UFO") and is not a squadron airframe.
+    /// </summary>
+    internal static class AirframeCatalogPolicy
+    {
+        public static bool IsHiddenFromPanels(string unitName, string code = null, string jsonKey = null) =>
+            IsQuestionMarkPlaceholder(unitName)
+            || IsQuestionMarkPlaceholder(code)
+            || IsQuestionMarkPlaceholder(jsonKey)
+            || MatchesKey(jsonKey, "UFO");
+
+        public static bool IsQuestionMarkPlaceholder(string value)
+        {
+            if (string.IsNullOrEmpty(value)) return false;
+            for (int i = 0; i < value.Length; i++)
+                if (value[i] != '?') return false;
+            return true;
+        }
+
+        private static bool MatchesKey(string value, string key) =>
+            !string.IsNullOrEmpty(value)
+            && string.Equals(value, key, StringComparison.OrdinalIgnoreCase);
     }
 }

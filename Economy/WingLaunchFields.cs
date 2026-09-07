@@ -55,20 +55,7 @@ namespace WingCommand
         public static bool CanProduce(Airbase airbase, AircraftDefinition definition)
         {
             if (airbase == null || airbase.disabled || definition == null) return false;
-            IList<Hangar> hangars = airbase.hangars;
-            if (hangars == null) return false;
-
-            for (int i = 0; i < hangars.Count; i++)
-            {
-                Hangar hangar = hangars[i];
-                if (hangar == null || hangar.Disabled) continue;
-                AircraftDefinition[] types = hangar.GetAvailableAircraft();
-                if (types == null) continue;
-                for (int j = 0; j < types.Length; j++)
-                    if (types[j] == definition) return true;
-            }
-
-            return false;
+            return WingHangarStock.FieldLists(airbase, definition);
         }
 
         /// <summary>
@@ -101,6 +88,7 @@ namespace WingCommand
             listingDistSq.Clear();
             if (hq == null) return;
 
+            WingHangarStock.Refresh(hq);
             foreach (Airbase airbase in hq.GetAirbases())
             {
                 if (airbase == null || airbase.disabled) continue;
@@ -140,6 +128,7 @@ namespace WingCommand
             denied.Clear();
             listing.Clear();
             listingDistSq.Clear();
+            WingHangarStock.Reset();
         }
     }
 }

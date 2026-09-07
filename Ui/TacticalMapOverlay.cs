@@ -191,6 +191,18 @@ namespace WingCommand
                     continue;
                 }
 
+                IReadOnlyList<WingDirective> route = member.Route;
+                if (route.Count > 0)
+                {
+                    for (int i = 0; i < route.Count; i++)
+                    {
+                        WingDirective task = route[i];
+                        if (task.HasPoint && IsMarkerOrder(task.Order))
+                            Add(task.Order, task.Point);
+                    }
+                    continue;
+                }
+
                 WingDirective directive = member.Directive;
                 if (!directive.HasPoint || !IsMarkerOrder(directive.Order)) continue;
 
@@ -234,21 +246,20 @@ namespace WingCommand
 
                 // A route is drawn as a chain, so a Shift-queued sequence reads as an order
                 // of march rather than as several unrelated destinations.
-                if (member.Order == WingOrder.MoveToPoint && member.WaypointCount > 0)
+                IReadOnlyList<WingDirective> route = member.Route;
+                if (route.Count > 0)
                 {
-                    IReadOnlyList<GlobalPosition> route = member.Route;
                     for (int i = 0; i < route.Count; i++)
                     {
+                        if (!TryRoutePoint(route[i], out GlobalPosition to)) continue;
                         legs.Add(new Leg
                         {
                             From = from,
-                            To = route[i],
-                            // Only the leg being flown is at full strength; the rest of the
-                            // queue is visibly pending.
+                            To = to,
                             Color = i == 0 ? color : color.WithAlpha(color.a * QueuedAlpha),
                             Node = i < route.Count - 1,
                         });
-                        from = route[i];
+                        from = to;
                     }
                     continue;
                 }
@@ -327,10 +338,18 @@ namespace WingCommand
                 markers[i].Icon.sprite = IconFactory.Get(
                     group.Order == WingOrder.LandHere ? "land" :
                     group.Order == WingOrder.MoveToPoint ? "move" :
+                    group.Order == WingOrder.SeekAndDestroy ? "engage" :
                     group.Order == WingOrder.DeliverCargo ? "cargo" :
                     group.Order == WingOrder.ReturnToBase ? "rtb" : "orbit");
-                markers[i].Label.text = WingOrderCatalog.Label(group.Order).ToUpperInvariant() +
-                                        (group.Count > 1 ? " · " + group.Count : "");
+                string label = WingOrderCatalog.Label(group.Order).ToUpperInvariant();
+                if (group.Order == WingOrder.MoveToPoint)
+                {
+                    WingCommandManager mgr = WingCommandManager.Instance;
+                    label += " · " + Mathf.RoundToInt(
+                        MapOrderPolicy.StepMoveAltitude(mgr != null ? mgr.MapMoveAltitude : 0f, 0,
+                            WingRegistry.IsRotary(mgr?.Wing.Leader))) + "M";
+                }
+                markers[i].Label.text = label + (group.Count > 1 ? " · " + group.Count : "");
             }
         }
 
@@ -348,7 +367,27 @@ namespace WingCommand
 
         private static bool IsMarkerOrder(WingOrder order) =>
             order == WingOrder.OrbitHere || order == WingOrder.LandHere ||
-            order == WingOrder.MoveToPoint || order == WingOrder.DeliverCargo;
+            order == WingOrder.MoveToPoint || order == WingOrder.SeekAndDestroy ||
+            order == WingOrder.DeliverCargo;
+
+        private static bool TryRoutePoint(WingDirective task, out GlobalPosition point)
+        {
+            if (task.HasPoint)
+            {
+                point = task.Point;
+                return true;
+            }
+
+            Unit target = task.Target;
+            if (target != null && !target.disabled)
+            {
+                point = target.GlobalPosition();
+                return true;
+            }
+
+            point = default;
+            return false;
+        }
 
         private static Marker Create(DynamicMap map)
         {

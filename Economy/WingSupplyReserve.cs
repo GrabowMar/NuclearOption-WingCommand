@@ -127,7 +127,7 @@ namespace WingCommand
 
             hq.AddSupplyUnit(definition, -1);
             slots.Add(new Slot(definition, Source.Held, false, WingLoadoutChoice.Standard));
-            Plugin.Logger.LogInfo(
+            Plugin.LogVerbose(
                 "[Reserve] held " + definition.unitName + " for the wing (" +
                 Count + "/" + Capacity + ")");
             return true;
@@ -159,7 +159,7 @@ namespace WingCommand
             wasOwned = slot.Source == Source.Owned;
             hq.AddSupplyUnit(definition, 1);
 
-            Plugin.Logger.LogInfo(
+            Plugin.LogVerbose(
                 "[Reserve] returned " + definition.unitName + " to faction stock (" +
                 Count + "/" + Capacity + ")");
             return true;
@@ -182,7 +182,7 @@ namespace WingCommand
 
             slots.Add(new Slot(definition, owned ? Source.Owned : Source.Held,
                                loadoutKnown, loadout, recoveryToken));
-            Plugin.Logger.LogInfo(
+            Plugin.LogVerbose(
                 "[Reserve] recovered " + definition.unitName +
                 (owned ? " (owned)" : "") + " into reserve (" + Count + " held)");
             return true;

@@ -5,6 +5,9 @@ namespace WingCommand
     internal partial class WingCommandManager
     {
         internal bool MapConsumesIconClick => mapLayer != null && mapLayer.ConsumesIconClick;
+        internal bool MapOrderArmed => mapLayer != null && mapLayer.PointArmed;
+        internal WingOrder ArmedMapOrder => mapLayer != null ? mapLayer.ArmedOrder : default;
+        internal float MapMoveAltitude => mapLayer != null ? mapLayer.MoveAltitude : 0f;
 
         internal void SelectMember(WingMember member, bool toggle)
         {

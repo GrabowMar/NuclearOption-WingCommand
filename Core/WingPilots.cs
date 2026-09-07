@@ -300,8 +300,19 @@ namespace WingCommand
         public static void Retire(WingMember member, bool survived)
         {
             if (member == null || member.Aircraft == null) return;
+            Retire(member.Aircraft.persistentID, survived);
+        }
 
-            PersistentID id = member.Aircraft.persistentID;
+        /// <summary>
+        /// Settle a pilot assignment by its durable aircraft id.
+        ///
+        /// A dismissed wingman leaves the active roster before it reaches home, so recovery
+        /// cannot rely on a <see cref="WingMember"/> still existing. Keeping the assignment
+        /// reserved until this method is called means the same pilot cannot be put into a
+        /// second aircraft while the first is still flying its return leg.
+        /// </summary>
+        internal static void Retire(PersistentID id, bool survived)
+        {
             if (!assigned.TryGetValue(id, out WingPilot pilot)) return;
             assigned.Remove(id);
 
@@ -319,7 +330,7 @@ namespace WingCommand
             WingCommandManager.Instance?.Toast(
                 pilot.Callsign + " (" + pilot.Name + ") was lost - " + RankName(pilot.Rank) +
                 ", " + pilot.Kills + " kill(s)");
-            Plugin.Logger.LogInfo(
+            Plugin.LogVerbose(
                 "[Pilot] " + pilot.Callsign + " lost after " + pilot.Sorties + " sortie(s), " +
                 pilot.Xp + " XP");
         }
@@ -413,7 +424,7 @@ namespace WingCommand
             pilot.Xp += xp;
 
             if (Plugin.Settings.VerboseLogging.Value)
-                Plugin.Logger.LogInfo(
+                Plugin.LogVerbose(
                     "[Pilot] " + pilot.Callsign + " +" + xp + " XP (" + reason + ")");
 
             if (pilot.Rank == before) return;

@@ -163,6 +163,7 @@ namespace WingCommand
                     break;
 
                 case WingOrder.MoveToPoint:
+                case WingOrder.SeekAndDestroy:
                     EnterWaypoint(Directive);
                     break;
 
@@ -445,13 +446,38 @@ namespace WingCommand
                 Plugin.Logger.LogWarning($"[Wing] {Name} has no combat state to return to.");
         }
 
+        /// <summary>
+        /// Fly the stock approach home.
+        ///
+        /// The whole of Return To Base, deliberately. Both stock landing states pick their
+        /// own airbase, fly their own pattern and put the aircraft on a runway or a vertical
+        /// landing point; a hand-flown approach would be a worse one, and it is the taxi
+        /// that follows touchdown — not the approach — that this mod has to intercept.
+        /// </summary>
         private void SwitchToLanding()
         {
             if (Pilot == null) return;
 
             if (Pilot.AILandingState != null)
+            {
+                // AIPilotLandingState.EnterState searches for a runway synchronously and,
+                // finding none it can use, ejects the pilot and clears the pilot state
+                // outright. An order to go home must not be a way to destroy the aircraft,
+                // so the same query is asked first and the order refused if it fails.
+                if (!WingAirfield.HasLandingRunway(Aircraft))
+                {
+                    WingCommandManager.Instance?.Toast(
+                        Name + " has no reachable landing runway - holding station");
+                    Plugin.Logger.LogWarning(
+                        "[Wing] " + Name + " cannot RTB: no friendly field has a runway it can land on");
+                    Complete(WingOrder.Formation);
+                    return;
+                }
                 SwitchTo(Pilot.AILandingState);
-            else if (Pilot.AIHeloLandingState != null)
+                return;
+            }
+
+            if (Pilot.AIHeloLandingState != null)
                 SwitchTo(Pilot.AIHeloLandingState);
             else
                 SwitchToCombat();

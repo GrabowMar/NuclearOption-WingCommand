@@ -44,6 +44,22 @@ namespace WingCommand
         }
     }
 
+    /// <summary>
+    /// Converts a world-height formation slot into the above-ground hold used by the
+    /// helicopter autopilot.  The native rotary controller ignores destination height
+    /// while terrain-following, so carrying the slot floor through this value is what
+    /// prevents a low formation element from descending into terrain.
+    /// </summary>
+    internal static class RotaryAltitudePolicy
+    {
+        public static float SlotAgl(float ownAltitude, float ownRadarAltitude,
+                                    float slotAltitude, float terrainClearance)
+        {
+            float groundAltitude = ownAltitude - System.Math.Max(0f, ownRadarAltitude);
+            return System.Math.Max(terrainClearance, slotAltitude - groundAltitude);
+        }
+    }
+
     /// <summary>A timeout whose clock restarts whenever a decreasing quantity progresses.</summary>
     internal sealed class CargoProgressTracker
     {
@@ -84,6 +100,9 @@ namespace WingCommand
         {
             if (deliveryPending) return false;
             if (!AllowsAbort(order)) return false;
+            // On the apron radarAlt is ~0, which would otherwise look like a 50 m
+            // terrain threat and yank a taxiing aircraft into a pull-up.
+            if (radarAlt < 8f) return false;
 
             float alt = incumbent ? AbortReleaseAlt : AbortAlt;
             float range = incumbent ? ReleaseRange : GrabRange;

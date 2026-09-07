@@ -44,7 +44,7 @@ namespace WingCommand
             if (radius <= 0f) radius = WingTuning.OrbitRadius;
 
             if (Plugin.Settings.VerboseLogging.Value)
-                Plugin.Logger.LogInfo($"[Wing] {aircraft.unitName} orbiting at {radius:F0} m");
+                Plugin.LogVerbose($"[Wing] {aircraft.unitName} orbiting at {radius:F0} m");
         }
 
         public override void LeaveState()
@@ -66,6 +66,15 @@ namespace WingCommand
             }
 
             OrbitSteering.Fly(aircraft, controlInputs, anchor, radius, member.Slot);
+
+            if (member.HasFollowOn)
+            {
+                Vector3 delta = anchor - aircraft.GlobalPosition();
+                delta.y = 0f;
+                float arrival = Mathf.Max(140f, aircraft.speed * 1.5f);
+                if (delta.sqrMagnitude <= arrival * arrival)
+                    member.CompleteHoldForQueue(OrderRevision);
+            }
 
             // Nothing here touches attitude or throttle, so holding the ring and shooting
             // from it never compete.

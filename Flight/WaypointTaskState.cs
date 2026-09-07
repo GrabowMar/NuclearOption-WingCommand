@@ -11,8 +11,13 @@ namespace WingCommand
     {
         internal override bool RestartOnOrderChange => false;
         private const float ArrivalRadius = 140f;
-        private const float FixedCruiseAltitude = 700f;
-        private const float RotaryCruiseAltitude = 180f;
+
+        private float CruiseAltitude =>
+            member.Order == WingOrder.MoveToPoint
+                ? member.ResolvedMoveAltitude
+                : (WingRegistry.IsRotary(aircraft)
+                    ? WingTuning.MoveAltitudeRotary
+                    : WingTuning.MoveAltitudeFixed);
 
         private GlobalPosition targetPoint;
 
@@ -52,25 +57,26 @@ namespace WingCommand
                 return;
             }
 
+            float cruise = CruiseAltitude;
             if (!WingRegistry.IsRotary(aircraft))
             {
                 controlInputs.throttle = 1f;
                 aircraft.autopilot.AutoAim(
-                    destination: targetPoint + Vector3.up * FixedCruiseAltitude,
+                    destination: targetPoint + Vector3.up * cruise,
                     aimVelocity: true,
                     ignoreCollisions: false,
                     runwayAlign: false,
                     effort: 1.8f,
                     bankAllowed: AutopilotMath.PursuitBank(),
                     followTerrain: true,
-                    altitudeHold: AutopilotMath.CruiseHold(aircraft, FixedCruiseAltitude),
+                    altitudeHold: AutopilotMath.CruiseHold(aircraft, cruise),
                     targetVelocity: Vector3.zero);
                 return;
             }
 
             aircraft.autopilot.AutoAim(
-                destination: targetPoint + Vector3.up * RotaryCruiseAltitude,
-                altitudeHold: AutopilotMath.RotaryAgl(aircraft, RotaryCruiseAltitude),
+                destination: targetPoint + Vector3.up * cruise,
+                altitudeHold: AutopilotMath.RotaryAgl(aircraft, cruise),
                 aimDirection: Vector3.zero,
                 targetVelocity: Vector3.zero,
                 followTerrain: true);

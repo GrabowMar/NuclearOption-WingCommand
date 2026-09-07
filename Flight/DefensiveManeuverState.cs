@@ -48,7 +48,7 @@ namespace WingCommand
 
             if (Plugin.Settings.VerboseLogging.Value)
             {
-                Plugin.Logger.LogInfo(
+                Plugin.LogVerbose(
                     $"[Panic] {aircraft.unitName} defensive against " +
                     (threat != null ? threat.unitName + " (" + detail + ")" : "missile warning"));
             }

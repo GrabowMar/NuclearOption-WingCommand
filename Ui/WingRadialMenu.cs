@@ -124,7 +124,7 @@ namespace WingCommand
         private static void Trace(bool openingRoot, string what)
         {
             string line = "[Radial] " + (openingRoot ? "root" : "rebuild") + ": " + what;
-            if (traced.Add(line)) Plugin.Logger.LogInfo(line);
+            if (traced.Add(line)) Plugin.LogVerbose(line);
         }
 
         private static bool SharesAnyEntry(RadialMenuAction[] a, RadialMenuAction[] b)
@@ -172,8 +172,8 @@ namespace WingCommand
                      () => WingOrderCatalog.IsOfferable(WingOrder.Engage)),
                 Leaf(WingOrderCatalog.Label(WingOrder.FallBack), WingAction.FallBack, "fallback",
                      () => WingOrderCatalog.IsOfferable(WingOrder.FallBack)),
-                Leaf(WingOrderCatalog.Label(WingOrder.ReturnToBase), WingAction.ReturnToBase, "rtb",
-                     () => WingOrderCatalog.IsOfferable(WingOrder.ReturnToBase)),
+                Leaf(WingOrderCatalog.Label(WingOrder.FireForEffect), WingAction.FireForEffect, "attack",
+                     () => WingOrderCatalog.IsOfferable(WingOrder.FireForEffect)),
                 Icon(WingMenuAction.Create("More Orders", _ => ShowSecondaryMenu()), "tasking"),
             };
 
@@ -215,7 +215,7 @@ namespace WingCommand
                 FormationShape captured = shape;
                 WingMenuAction entry = WingMenuAction.Create(FormationShapes.Pretty(captured), _ =>
                 {
-                    Plugin.Logger.LogInfo($"[FormationChange] {WingFormation.Shape} -> {captured}");
+                    Plugin.LogVerbose($"[FormationChange] {WingFormation.Shape} -> {captured}");
                     WingFormation.Shape = captured;
                     Mgr?.Toast("Formation: " + FormationShapes.Pretty(captured));
                     RestoreStockWheel();

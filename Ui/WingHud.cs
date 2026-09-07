@@ -427,12 +427,10 @@ namespace WingCommand
                 if (!go.activeSelf) go.SetActive(true);
 
                 Aircraft aircraft = member.Aircraft;
+                icon.sprite = IconFactory.Aircraft(aircraft != null ? aircraft.definition : null);
                 if (bound != member)
                 {
                     bound = member;
-                    icon.sprite = aircraft != null && aircraft.definition != null
-                        ? aircraft.definition.friendlyIcon
-                        : null;
                     identity.text = member.Slot + "  " +
                                     (aircraft != null && aircraft.definition != null
                                         ? aircraft.definition.code
@@ -542,6 +540,7 @@ namespace WingCommand
                     case WingOrder.LandHere:    return "LAND";
                     case WingOrder.Attack:      return "ATK";
                     case WingOrder.FireForEffect: return "SPLASH";
+                    case WingOrder.SeekAndDestroy: return "S&D";
                     case WingOrder.JamTarget:   return "JAM";
                     case WingOrder.Maneuver:    return "MNVR";
                     default:                    return "FORM";

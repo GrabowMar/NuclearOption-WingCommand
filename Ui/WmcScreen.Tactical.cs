@@ -133,47 +133,58 @@ namespace WingCommand
         /// The scoped orders, grouped by what the player is trying to accomplish.
         ///
         /// Target work comes first, autonomous combat follows, and point orders stay
-        /// together. RTB and Refit share a final row for recovery or immediate turnaround.
+        /// together. RTB belongs on an individual aircraft's roster row: it dismisses that
+        /// airframe from the active wing and returns its crew and airframe after recovery.
         /// </summary>
         private static float AddActions(RectTransform parent, float y)
         {
             y = Heading(parent, y, "ORDERS - SELECTED SCOPE");
             float w = (PanelWidth - Pad * 2f - Gap * 2f) / 3f;
 
-            // Short labels that read as a set — Attack / Splash / Engage / Disengage —
-            // instead of the old jokey "Splash 'Em" sitting next to plain "Attack". The
-            // full sentence for each still lands on the status strip on hover.
-            y = Triple(parent, y, w,
-                "Form Up", OrderHint.Rejoin, () => Order(WingAction.Rejoin),
-                "Attack", OrderHint.Attack, () => Order(WingAction.AttackMyTarget),
-                "Splash", OrderHint.FireForEffect, () => Order(WingAction.FireForEffect));
+            // Short labels that read as a set — Attack Target / Splash / Engage / Seek &
+            // Destroy — while the status strip carries the detail that does not fit on a
+            // compact command button.
+            GridButton(parent, "Form Up", Pad, y, w,
+                       () => Order(WingAction.Rejoin)).WithTooltip(OrderHint.Rejoin);
+            attackButton = GridButton(parent, "Attack Target", Pad + w + Gap, y, w,
+                                      () => WingCommandManager.Instance?.SelectMapOrder(WingOrder.Attack),
+                                      UiButtonStyle.Toggle)
+                           .WithTooltip(OrderHint.Attack);
+            GridButton(parent, "Splash", Pad + (w + Gap) * 2f, y, w,
+                       () => Order(WingAction.FireForEffect)).WithTooltip(OrderHint.FireForEffect);
+            y -= RowHeight + Gap;
 
             GridButton(parent, "Engage", Pad, y, w,
                        () => Order(WingAction.Engage)).WithTooltip(OrderHint.Engage);
-            GridButton(parent, "Disengage", Pad + w + Gap, y, w,
+            seekAndDestroyButton = GridButton(parent, "Seek & Destroy", Pad + w + Gap, y, w,
+                                              () => WingCommandManager.Instance?.SelectMapOrder(WingOrder.SeekAndDestroy),
+                                              UiButtonStyle.Toggle)
+                                  .WithTooltip(OrderHint.SeekAndDestroy);
+            GridButton(parent, "Disengage", Pad + (w + Gap) * 2f, y, w,
                        () => Order(WingAction.FallBack)).WithTooltip(OrderHint.Disengage);
-            jamButton = GridButton(parent, "Jam", Pad + (w + Gap) * 2f, y, w,
-                                   () => Order(WingAction.JamMyTarget))
-                        .WithTooltip(OrderHint.Jam);
             y -= RowHeight + Gap;
 
-            GridButton(parent, "Hold", Pad, y, w,
-                       () => WingCommandManager.Instance?.ArmPointOrder(WingOrder.OrbitHere))
-                .WithTooltip(OrderHint.HoldHere);
+            holdHereButton = GridButton(parent, "Hold Here", Pad, y, w,
+                                        () => WingCommandManager.Instance?.SelectMapOrder(WingOrder.OrbitHere),
+                                        UiButtonStyle.Toggle)
+                             .WithTooltip(OrderHint.HoldHere);
+
+            jamButton = GridButton(parent, "Jam", Pad + w + Gap, y, w,
+                                   () => Order(WingAction.JamMyTarget))
+                        .WithTooltip(OrderHint.Jam);
 
             // Deliver Cargo arms a drop point, and says on the status line that pressing it
             // again falls back to the stock supply route.
-            cargoButton = GridButton(parent, "Cargo", Pad + w + Gap, y, w,
-                                     () => WingCommandManager.Instance?.RequestCargoRun())
+            cargoButton = GridButton(parent, "Cargo", Pad + (w + Gap) * 2f, y, w,
+                                     () => WingCommandManager.Instance?.SelectMapOrder(WingOrder.DeliverCargo),
+                                     UiButtonStyle.Toggle)
                           .WithTooltip(OrderHint.DeliverCargo);
-            landButton = GridButton(parent, "Land", Pad + (w + Gap) * 2f, y, w,
-                                    () => WingCommandManager.Instance?.ArmPointOrder(WingOrder.LandHere))
-                         .WithTooltip(OrderHint.LandHere);
             y -= RowHeight + Gap;
 
-            GridButton(parent, "RTB", Pad, y, w,
-                       () => Order(WingAction.ReturnToBase))
-                .WithTooltip(OrderHint.ReturnToBase);
+            landButton = GridButton(parent, "Land", Pad, y, w,
+                                    () => WingCommandManager.Instance?.SelectMapOrder(WingOrder.LandHere),
+                                    UiButtonStyle.Toggle)
+                         .WithTooltip(OrderHint.LandHere);
             GridButton(parent, "Refit", Pad + w + Gap, y, w,
                        () => Order(WingAction.Refit))
                 .WithTooltip("REFIT - land at base, refill fuel and ammunition, then relaunch and rejoin.");
@@ -189,7 +200,6 @@ namespace WingCommand
         private static TMP_Text doctrineRulesLabel;
         private static TMP_Text doctrineWeaponsLabel;
         private static WingButton[] formationButtons;
-        private static WingButton[] maneuverButtons;
         private static float formationRadarCenterY;
         private static readonly List<RectTransform> formationWingmenDots = new List<RectTransform>();
         private static readonly List<Image> formationVectorLines = new List<Image>();
@@ -310,36 +320,7 @@ namespace WingCommand
 
             int rows = Mathf.CeilToInt(FormationShapes.All.Length / (float)cols);
             y -= rows * btnH + (rows - 1) * Gap + Space2;
-
-            // --- Combat manoeuvres: transient moves flown once, then the wing rejoins ---
-            y -= Space1;
-            Label(parent, "COMBAT MANOEUVRES",
-                  new Rect(Pad, y, w, Space4),
-                  Dim(), FontMicro, FontStyles.Bold, TextAlignmentOptions.Left);
-            y -= Space4 + Space1;
-
-            const int maneuverCols = 5;
-            float maneuverBtnW = (w - (maneuverCols - 1) * Gap) / maneuverCols;
-            maneuverButtons = new WingButton[ManeuverCatalog.All.Length];
-
-            for (int i = 0; i < ManeuverCatalog.All.Length; i++)
-            {
-                ManeuverKind kind = ManeuverCatalog.All[i];
-                int col = i % maneuverCols;
-                int row = i / maneuverCols;
-                float bx = Pad + col * (maneuverBtnW + Gap);
-                float by = y - row * (btnH + Gap);
-
-                maneuverButtons[i] = WingUi.Button(
-                    parent, ManeuverCatalog.ShortLabel(kind),
-                    new Rect(bx, by, maneuverBtnW, btnH),
-                    FontMicro,
-                    () => WingCommandManager.Instance?.ExecuteManeuver(kind, wholeWing: false))
-                    .WithTooltip(ManeuverCatalog.Label(kind) + " - the selected wingmen fly this, then rejoin.");
-            }
-
-            int maneuverRows = Mathf.CeilToInt(ManeuverCatalog.All.Length / (float)maneuverCols);
-            return y - (maneuverRows * btnH + (maneuverRows - 1) * Gap + Space2);
+            return y;
         }
 
         private static void SetFormationShape(FormationShape shape)
@@ -369,8 +350,9 @@ namespace WingCommand
                 "attack, hold or route the selected wingmen are flying.";
 
             public const string Attack =
-                "ATTACK - send the selection after the target you have locked. Targets are " +
-                "shared out across the scope so several wingmen do not chase one contact.";
+                "ATTACK TARGET - if you have contacts designated, sends the selection after " +
+                "them immediately. The button stays armed: right-click a hostile on the map " +
+                "to focus that target instead. Shift-right-click queues another.";
 
             public const string FireForEffect =
                 "SPLASH - empty everything that will bear on your locked target. " +
@@ -380,33 +362,35 @@ namespace WingCommand
                 "ENGAGE - hunt independently within the rules of engagement. The wingman " +
                 "picks its own targets and does not come back until told to.";
 
+            public const string SeekAndDestroy =
+                "SEEK & DESTROY - then right-click the map. The selection flies to that " +
+                "point, then begins hunting independently under the current rules of engagement. " +
+                "Shift-right-click queues another.";
+
             public const string Disengage =
                 "DISENGAGE - break contact and run for the nearest friendly base or ship, " +
                 "defending itself on the way. Not a landing order.";
 
             public const string HoldHere =
-                "HOLD HERE - then click the map. The selection orbits that point and " +
-                "defends itself, but starts nothing.";
-
-            public const string ReturnToBase =
-                "RETURN TO BASE - fly home and land. The airframe and its fit go back into " +
-                "the wing reserve, ready to be requisitioned again.";
+                "HOLD HERE - then right-click the map. The selection orbits that point and " +
+                "defends itself, but starts nothing. Shift-right-click queues the next order.";
 
             public const string DeliverCargo =
-                "DELIVER CARGO - then click a drop point, or press again to use the stock " +
-                "supply route. Only wingmen actually carrying a load can take this.";
+                "DELIVER CARGO - then right-click a drop point, or press again to use the " +
+                "stock supply route. Shift-right-click queues another drop. Only wingmen " +
+                "actually carrying a load can take this.";
 
             public const string LandHere =
-                "LAND HERE - then click the map. Puts a rotary wingman on the ground at " +
-                "that spot rather than routing it to an airbase.";
+                "LAND HERE - then right-click the map. Puts a rotary wingman on the ground " +
+                "at that spot rather than routing it to an airbase. Shift-right-click queues.";
 
             public const string SelectAll =
                 "Put every wingman in the command scope, so the next order goes to the " +
                 "whole flight.";
 
-            public const string Release =
-                "Discharge this wingman from the wing for good. It flies home, gives its " +
-                "airframe back and stops using a squadron slot. Press once to arm, again " +
+            public const string ReturnToBase =
+                "RTB - dismiss this wingman from the active flight. It flies home; after " +
+                "recovery, both its airframe and pilot return to their pools. Press twice " +
                 "to confirm.";
 
             public const string Roe =
@@ -455,6 +439,8 @@ namespace WingCommand
         private static void TurnRosterPage(int direction)
         {
             rosterPage = Mathf.Max(0, rosterPage + direction);
+            WingRegistry wing = Wing();
+            if (wing != null) RefreshTactical(wing);
         }
 
 
@@ -483,18 +469,29 @@ namespace WingCommand
                 bool canCargo = false;
                 bool canLand = false;
                 bool canJam = false;
+                bool canSeekAndDestroy = false;
                 foreach (WingMember member in scope)
                 {
                     canCargo |= WingOrderCatalog.CanApply(member, WingOrder.DeliverCargo);
                     canLand |= WingOrderCatalog.CanApply(member, WingOrder.LandHere);
                     canJam |= WingOrderCatalog.CanApply(member, WingOrder.JamTarget);
+                    canSeekAndDestroy |= WingOrderCatalog.CanApply(member, WingOrder.SeekAndDestroy);
                 }
                 cargoButton?.SetEnabled(canCargo);
                 landButton?.SetEnabled(canLand && WingRegistry.IsRotary(wing.Leader));
+                seekAndDestroyButton?.SetEnabled(canSeekAndDestroy);
 
                 // Jam needs a jam-capable wingman in scope. The manoeuvre controls live on
                 // the radial wheel, keeping this page focused on persistent orders.
                 jamButton?.SetEnabled(canJam);
+
+                bool armed = manager.MapOrderArmed;
+                WingOrder armedOrder = manager.ArmedMapOrder;
+                attackButton?.SetLatched(armed && armedOrder == WingOrder.Attack);
+                holdHereButton?.SetLatched(armed && armedOrder == WingOrder.OrbitHere);
+                seekAndDestroyButton?.SetLatched(armed && armedOrder == WingOrder.SeekAndDestroy);
+                cargoButton?.SetLatched(armed && armedOrder == WingOrder.DeliverCargo);
+                landButton?.SetLatched(armed && armedOrder == WingOrder.LandHere);
             }
 
             // The map has first claim on this line: an armed point order or a pending
@@ -522,17 +519,6 @@ namespace WingCommand
                     {
                         formationButtons[i].SetLatched(FormationShapes.All[i] == shape);
                     }
-                }
-            }
-
-            // Manoeuvres are gated on the host profile: in Performance mode the whole set
-            // is unavailable, the same gate the radial wheel uses to grey its slices.
-            if (maneuverButtons != null)
-            {
-                for (int i = 0; i < maneuverButtons.Length; i++)
-                {
-                    if (maneuverButtons[i] != null)
-                        maneuverButtons[i].SetEnabled(WingFidelity.Manoeuvres);
                 }
             }
 
@@ -649,11 +635,8 @@ namespace WingCommand
             int pages = Mathf.Max(1, Mathf.CeilToInt(totalCount / (float)RosterRowsPerPage));
             rosterPage = Mathf.Clamp(rosterPage, 0, pages - 1);
             if (rosterPageLabel != null)
-                rosterPageLabel.text = empty
-                    ? ""
-                    : pages == 1
-                        ? totalCount + (totalCount == 1 ? " wingman" : " wingmen")
-                        : "flight page " + (rosterPage + 1) + " of " + pages;
+                rosterPageLabel.text = PageSummary(totalCount, rosterPage, pages,
+                                                    "WINGMAN", "WINGMEN");
 
             rosterPrevButton?.SetEnabled(rosterPage > 0);
             rosterNextButton?.SetEnabled(rosterPage < pages - 1);
@@ -720,7 +703,7 @@ namespace WingCommand
             private WingShopDelivery.PendingDelivery boundPending;
 
             /// <summary>
-            /// Which wingman, if any, has had its REL pressed once and is waiting to have it
+            /// Which wingman, if any, has had its RTB pressed once and is waiting to have it
             /// pressed again.
             ///
             /// Static, so arming one row disarms every other: two rows both offering to
@@ -791,11 +774,11 @@ namespace WingCommand
                              .WithTooltip("Flight lead - the rest of the wing formates on this " +
                                           "wingman while it takes your orders. Press again to release.");
 
-                // REL discharges a wingman for good.
-                release = WingUi.Button(rt, "REL",
+                // RTB dismisses a wingman from the active flight and sends it home.
+                release = WingUi.Button(rt, "RTB",
                                         new Rect(releaseX, -1f, releaseWidth, RowHeight - 2f),
                                         FontSmall, UiButtonStyle.Danger, ConfirmRelease)
-                                .WithTooltip(OrderHint.Release);
+                                .WithTooltip(OrderHint.ReturnToBase);
             }
 
             private void ToggleLead()
@@ -803,7 +786,7 @@ namespace WingCommand
                 if (bound != null) WingCommandManager.Instance?.ToggleFlightLead(bound);
             }
 
-            /// <summary>Arm on the first press, discharge on the second.</summary>
+            /// <summary>Arm on the first press, then send the selected wingman home.</summary>
             private void ConfirmRelease()
             {
                 if (bound != null)
@@ -818,7 +801,7 @@ namespace WingCommand
 
                     memberRelease.Arm(bound);
                     WingCommandManager.Instance?.Toast(
-                        "Press REL again to release " + bound.Name + " from the wing");
+                        "Press RTB again to send " + bound.Name + " home from the wing");
                     return;
                 }
 
@@ -841,7 +824,7 @@ namespace WingCommand
 
                     pendingRelease.Arm(boundPending);
                     WingCommandManager.Instance?.Toast(
-                        "Press REL again to cancel requisition of " + boundPending.AirframeName);
+                        "Press CXL again to cancel requisition of " + boundPending.AirframeName);
                 }
             }
 
@@ -856,9 +839,9 @@ namespace WingCommand
 
                 bool armed = memberRelease.IsArmedFor(m);
                 release?.SetEnabled(true);
-                release?.WithTooltip(OrderHint.Release);
+                release?.WithTooltip(OrderHint.ReturnToBase);
                 release?.SetLatched(armed);
-                release?.SetText(armed ? "SURE?" : "REL");
+                release?.SetText(armed ? "SURE?" : "RTB");
 
                 lead?.SetLatched(m.IsFlightLead);
 
@@ -915,10 +898,11 @@ namespace WingCommand
                 if (!canCancel && pendingRelease.IsArmedFor(p)) pendingRelease.Clear();
                 bool armed = canCancel && pendingRelease.IsArmedFor(p);
                 release?.SetEnabled(canCancel);
-                release?.WithTooltip(canCancel ? OrderHint.Release :
-                    "Launch already accepted; wait for delivery before releasing");
+                release?.WithTooltip(canCancel ? "CANCEL - cancel this pending requisition. " +
+                    "Press once to arm, again to confirm." :
+                    "Launch already accepted; wait for delivery before cancelling");
                 release?.SetLatched(armed);
-                release?.SetText(canCancel ? (armed ? "SURE?" : "REL") : "DEPT");
+                release?.SetText(canCancel ? (armed ? "SURE?" : "CXL") : "DEPT");
 
                 lead?.SetLatched(false);
 

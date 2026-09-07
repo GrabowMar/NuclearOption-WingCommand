@@ -62,7 +62,7 @@ namespace WingCommand
             if (price > 0f) player.AddAllocation(-price);
             paidAircraft.Add(aircraft.persistentID);
 
-            Plugin.Logger.LogInfo(
+            Plugin.LogVerbose(
                 $"[Recruit] assigned {aircraft.unitName} for {price:F0} allocation");
             return true;
         }

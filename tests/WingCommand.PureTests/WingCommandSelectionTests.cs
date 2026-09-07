@@ -12,6 +12,7 @@ namespace WingCommand
         public bool CanDeliverCargo { get; set; }
         public bool CanLandInPlace { get; set; }
         public bool CanJam { get; set; }
+        public bool IsSurface { get; set; }
     }
 
     internal sealed partial class WingRegistry

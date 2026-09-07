@@ -12,6 +12,10 @@ namespace WingCommand
         /// </summary>
         internal void Execute(WingAction action, bool wholeWing)
         {
+            // Immediate WMC/radial orders are not map tools. Drop any armed map order so
+            // the next right-click is a move rather than the leftover Hold or Attack.
+            CancelMapOrder(notify: false);
+
             switch (action)
             {
                 case WingAction.Rejoin:
@@ -23,10 +27,27 @@ namespace WingCommand
                     break;
 
                 case WingAction.Refit:
+                {
+                    // Refit is a workflow rather than a standing order, so it is dispatched
+                    // directly instead of through the directive dispatcher — but it is still
+                    // a player command, and gets the same radio acknowledgement as one.
+                    refitScratch.Clear();
                     foreach (WingMember member in Commands.Scope(wholeWing))
-                        if (member.IsCommandable && !member.IsSurface) member.RequestRefit();
-                    Toast("Refit: land, replenish and relaunch");
+                    {
+                        if (!member.IsCommandable || member.IsSurface) continue;
+                        member.RequestRefit();
+                        refitScratch.Add(member);
+                    }
+
+                    if (refitScratch.Count == 0)
+                    {
+                        Toast("No selected wingman can be refitted");
+                        break;
+                    }
+
+                    WingComms.AcknowledgeRefit(refitScratch);
                     break;
+                }
 
                 case WingAction.ReturnToBase:
                     Show(Commands.Apply(WingDirective.Simple(WingOrder.ReturnToBase), wholeWing));
@@ -75,79 +96,125 @@ namespace WingCommand
             }
         }
 
-        internal void IssuePointOrder(WingOrder order, GlobalPosition point)
+        internal void IssuePointOrder(WingOrder order, GlobalPosition point, bool append = false)
         {
-            Show(Commands.Apply(WingDirective.AtPoint(order, point), wholeWing: false));
+            IssueMapTask(WingDirective.AtPoint(order, point), order, append);
+        }
+
+        internal void IssueMove(GlobalPosition point, bool append)
+        {
+            float altitude = mapLayer != null ? mapLayer.MoveAltitude : 0f;
+            List<WingMember> scope = Commands.Scope(wholeWing: false);
+            var responders = new List<WingMember>();
+            foreach (WingMember member in scope)
+            {
+                if (member == null || !member.Alive) continue;
+                member.IssueMapTask(WingDirective.AtPoint(WingOrder.MoveToPoint, point), append);
+                member.SetMoveAltitude(altitude);
+                responders.Add(member);
+            }
+
+            AcknowledgeMapIssue(responders, WingOrder.MoveToPoint, append);
+        }
+
+        internal void AttackUnit(Unit target, bool append = false)
+        {
+            if (target == null || target.disabled) return;
+            IssueMapTask(WingDirective.Attack(target), WingOrder.Attack, append);
+        }
+
+        private void IssueMapTask(WingDirective directive, WingOrder order, bool append)
+        {
+            List<WingMember> scope = Commands.Scope(wholeWing: false);
+            var responders = new List<WingMember>();
+            foreach (WingMember member in scope)
+            {
+                if (member == null || !member.Alive) continue;
+                if (!WingOrderCatalog.CanApply(member, order)) continue;
+                member.IssueMapTask(directive, append);
+                responders.Add(member);
+            }
+
+            AcknowledgeMapIssue(responders, order, append);
+        }
+
+        private void AcknowledgeMapIssue(List<WingMember> responders, WingOrder order, bool append)
+        {
+            if (responders.Count == 0)
+            {
+                Toast(WingOrderCatalog.UnavailableReason(order));
+                return;
+            }
+
+            WingComms.Acknowledge(responders, order);
+            if (!append) return;
+            int n = responders.Count;
+            Toast("Queued " + WingOrderCatalog.Label(order) + " for " + n +
+                  " selected wingman" + (n == 1 ? "" : "men"));
         }
 
         /// <summary>Send a command scope through one scripted manoeuvre, then rejoin.</summary>
         internal void ExecuteManeuver(ManeuverKind kind, bool wholeWing)
         {
+            CancelMapOrder(notify: false);
             Show(Commands.Maneuver(kind, wholeWing));
         }
 
+        private static readonly List<WingMember> refitScratch = new List<WingMember>();
+
         /// <summary>
-        /// Send the current command scope after one named unit, from the map.
-        ///
-        /// Unlike <see cref="WingAction.AttackMyTarget"/> this does not go through the
-        /// player's own lock list — the target is whatever was pointed at on the map, which
-        /// the player may never have designated in the cockpit at all.
-        ///
-        /// <c>forceAll</c>, unlike the WMC Attack button. That button caps attackers at the
-        /// useful number and leaves the surplus as cover, which is right for a considered
-        /// order given from a panel. This is the gesture that used to mean "everything I
-        /// have selected, go there", so it has to mean "everything I have selected, hit
-        /// that" — capping it would take the aircraft that missed the cut and quietly put
-        /// them back on Form Up, which is a worse outcome than the move it replaced.
+        /// Left-click a WMC map order: arm it (highlighted) so the next map right-click
+        /// applies it. Attack is the exception that also fires immediately when the player
+        /// already has targets designated.
         /// </summary>
-        internal void AttackUnit(Unit target)
-        {
-            if (target == null || target.disabled) return;
-            mapAttackScratch.Clear();
-            mapAttackScratch.Add(target);
-            Show(Commands.Attack(mapAttackScratch, wholeWing: false, forceAll: true));
-        }
-
-        private static readonly List<Unit> mapAttackScratch = new List<Unit>();
-
-        internal void ArmPointOrder(WingOrder order)
+        internal void SelectMapOrder(WingOrder order)
         {
             if (Selection.IsNone)
             {
                 Toast("No wingmen selected");
                 return;
             }
-            mapLayer?.ArmPointOrder(order);
+
+            bool alreadyArmed = mapLayer != null && mapLayer.PointArmed &&
+                                mapLayer.ArmedOrder == order;
+            MapOrderButtonIntent intent = MapOrderPolicy.ResolveButton(
+                order, alreadyArmed, CurrentPlayerTargets().Count > 0);
+
+            switch (intent)
+            {
+                case MapOrderButtonIntent.Disarm:
+                    CancelMapOrder(notify: true);
+                    return;
+
+                case MapOrderButtonIntent.CargoFallback:
+                    CancelMapOrder(notify: false);
+                    Show(Commands.Apply(WingDirective.Simple(WingOrder.DeliverCargo),
+                                        wholeWing: false));
+                    return;
+
+                case MapOrderButtonIntent.ExecuteAndArm:
+                    Show(Commands.Attack(CurrentPlayerTargets(), wholeWing: false,
+                                         forceAll: false));
+                    mapLayer?.ArmPointOrder(order);
+                    return;
+
+                case MapOrderButtonIntent.Arm:
+                    mapLayer?.ArmPointOrder(order);
+                    return;
+            }
         }
+
+        internal void ArmPointOrder(WingOrder order) => SelectMapOrder(order);
+
+        internal void CancelMapOrder(bool notify) => mapLayer?.CancelPointOrder(notify);
 
         /// <summary>
         /// Deliver Cargo, which is the one order with two useful shapes.
         ///
-        /// The first press arms a drop point, because "put it there" is the thing the order
-        /// could not previously express. Pressing again while armed gives up the point and
-        /// runs the stock supply route instead, which is what the order has always done and
-        /// is still the right answer when the player does not care where it goes. The status
-        /// line says so while the cursor is armed.
+        /// The first press arms a drop point. Pressing again while armed gives up the
+        /// point and runs the stock supply route instead.
         /// </summary>
-        internal void RequestCargoRun()
-        {
-            if (Selection.IsNone)
-            {
-                Toast("No wingmen selected");
-                return;
-            }
-
-            if (mapLayer != null && mapLayer.PointArmed &&
-                mapLayer.ArmedOrder == WingOrder.DeliverCargo)
-            {
-                mapLayer.CancelPointOrder(notify: false);
-                Show(Commands.Apply(WingDirective.Simple(WingOrder.DeliverCargo),
-                                    wholeWing: false));
-                return;
-            }
-
-            mapLayer?.ArmPointOrder(WingOrder.DeliverCargo);
-        }
+        internal void RequestCargoRun() => SelectMapOrder(WingOrder.DeliverCargo);
 
         private void Show(WingDispatchResult result)
         {

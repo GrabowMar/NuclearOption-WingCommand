@@ -5,9 +5,7 @@ using Xunit;
 // queue under test is the same source that runs in the plugin.
 namespace WingCommand
 {
-    internal sealed class WingPilot { }
-    internal sealed class Pilot { }
-
+    // WingPilot and Pilot are shared, and live in GameTypeStubs.cs.
     internal partial class Aircraft
     {
         public bool LocalSim = true;

@@ -272,7 +272,7 @@ namespace WingCommand
                     Vector3.Cross(Vector3.up, leaderState.FlatTrack));
                 if (memory.Recovery.Mode != FormationRecoveryMode.Station)
                     memory.LaneSide = FormationRecovery.LaneSide(lateral, spacing, memory.Slot);
-                Plugin.Logger.LogInfo($"[Formation] {aircraft.unitName} id={aircraft.GetInstanceID()} mode={memory.Recovery.Mode}" +
+                Plugin.LogVerbose($"[Formation] {aircraft.unitName} id={aircraft.GetInstanceID()} mode={memory.Recovery.Mode}" +
                     $" range={horizontalDistance:F0}m gap={gapFlat:F0}m cross={crossTrack:F0}m" +
                     $" leaderSpeed={leaderAlongSpeed:F1}m/s minimum={minimumSpeed:F1}m/s");
                 if (memory.Recovery.Mode == FormationRecoveryMode.SlowLeader)
@@ -907,13 +907,14 @@ namespace WingCommand
         private static void ReportCapture(Aircraft aircraft, ControlInputs controls, FlightMemory memory,
             float distance, float spacing, GlobalPosition aim, float bankAllowed, string mode)
         {
+            if (Plugin.Settings == null || !Plugin.Settings.VerboseLogging.Value) return;
             bool joining = distance > Mathf.Max(WingTuning.CaptureDistance, spacing * 2f);
             if (memory.FlightSeconds < memory.NextCaptureReport || (memory.CaptureReported && !joining)) return;
             memory.CaptureReported = true;
             memory.NextCaptureReport = memory.FlightSeconds + 20f;
             Vector3 direction = aim - aircraft.GlobalPosition();
             AircraftParameters p = aircraft.GetAircraftParameters();
-            Plugin.Logger.LogInfo($"[FormationCapture] id={aircraft.GetInstanceID()} slot={memory.Slot} mode={mode}" +
+            Plugin.LogVerbose($"[FormationCapture] id={aircraft.GetInstanceID()} slot={memory.Slot} mode={mode}" +
                 $" decision={memory.Member.Behaviour.ReflexId}->{memory.Member.Behaviour.BehaviourId}" +
                 $" pilotState={memory.Member.Pilot?.currentState?.GetType().Name}" +
                 $" range={distance:F0}m speed={aircraft.speed:F1}m/s air={memory.Airspeed:F1}m/s" +
@@ -927,9 +928,10 @@ namespace WingCommand
 
         private static void ReportControl(Aircraft aircraft, ControlInputs controls, FlightMemory memory, string mode)
         {
+            if (Plugin.Settings == null || !Plugin.Settings.VerboseLogging.Value) return;
             float minimum = memory.MinimumAirspeed;
             float urgency = aircraft.autopilot.GetTerrainWarningSystem()?.urgency ?? 0f;
-            Plugin.Logger.LogInfo($"[FormationControl] t={Time.timeSinceLevelLoad:F2} id={aircraft.GetInstanceID()} " +
+            Plugin.LogVerbose($"[FormationControl] t={Time.timeSinceLevelLoad:F2} id={aircraft.GetInstanceID()} " +
                 $"mode={mode} blend={memory.Recovery.Blend:F2} pitch={controls.pitch:F3} roll={controls.roll:F3} " +
                 $"throttle={controls.throttle:F3} airspeed={memory.Airspeed:F1} margin={memory.Airspeed - minimum:F1} " +
                 $"terrain={urgency:F2} braking={memory.Recovery.Braking:F2} response={memory.Recovery.ResponseSeconds:F2}" +
@@ -948,6 +950,7 @@ namespace WingCommand
                                    Aim aim, float commandAngle, float bankAllowed,
                                    float leaderClimb, ThrottleState throttle)
         {
+            if (Plugin.Settings == null || !Plugin.Settings.VerboseLogging.Value) return;
             float correction = aim.Correction;
             float maxCorrection = aim.MaxCorrection;
             float lookAhead = aim.LookAhead;
@@ -976,7 +979,7 @@ namespace WingCommand
             float rollRate = Vector3.Dot(aircraft.rb.angularVelocity, aircraft.transform.forward)
                              * Mathf.Rad2Deg;
 
-            Plugin.Logger.LogInfo(
+            Plugin.LogVerbose(
                 $"[Formation] {aircraft.unitName} id={aircraft.GetInstanceID()} shape={WingFormation.Shape}: error {distance:F0} m, " +
                 $"gap {throttle.Gap:F0} m, closing {throttle.Closing:F0} m/s, " +
                 $"speed {aircraft.speed:F0} -> {throttle.DesiredSpeed:F0} m/s, thr {throttle.Throttle:F2}, " +

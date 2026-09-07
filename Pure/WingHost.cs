@@ -110,7 +110,7 @@ namespace WingCommand
     {
         // The number of WingOrder members. A table longer than this was built against a
         // different Wing Command, which Validate refuses rather than silently truncating.
-        private const int OrderCount = 12;
+        private const int OrderCount = 13;
 
         /// <summary>
         /// The aircraft this profile describes, compared by reference only.

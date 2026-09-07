@@ -8,7 +8,7 @@ namespace WingCommand
     /// The stock <c>AIHeloTransportState</c> is a complete supply behaviour, but it picks
     /// its own destination — nearest airbase, nearest known ground enemy — so it can never
     /// answer "put it <em>there</em>". That is the whole ask, and it is the same shape as
-    /// Hold and Land: arm the cursor, click a point, watch the marker.
+    /// Hold and Land: arm the order, right-click a point, watch the marker.
     ///
     /// Fixed-wing aircraft are included deliberately. Nothing about a cargo station is
     /// rotary-specific; a transport aircraft with a load runs in over the point and releases
@@ -95,7 +95,7 @@ namespace WingCommand
             WingComms.Say(member, WingComms.Call.Delivering);
 
             if (Plugin.Settings.VerboseLogging.Value)
-                Plugin.Logger.LogInfo(
+                Plugin.LogVerbose(
                     $"[Cargo] {aircraft.unitName} running {cargoProgress.LastAmount} load(s) to the drop point");
         }
 

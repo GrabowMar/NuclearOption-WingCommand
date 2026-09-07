@@ -41,3 +41,12 @@ docs/
 
 # AI agent instructions
 CLAUDE.md
+
+# Local debug dumps and binaries
+.dll-backup/
+*.dll
+*.pdb
+*.exe
+*.log
+TestResults/
+*.trx

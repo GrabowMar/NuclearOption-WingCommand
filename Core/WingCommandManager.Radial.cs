@@ -45,9 +45,9 @@ namespace WingCommand
             new RadialSlice(WingOrderCatalog.Label(WingOrder.FallBack).ToUpperInvariant(),
                 WingHost.Current.IsSurfaceVehicle ? "BREAK CONTACT" : "DEFENSIVE BREAK",
                 WingAction.FallBack, "fallback"),
-            new RadialSlice(WingOrderCatalog.Label(WingOrder.ReturnToBase).ToUpperInvariant(),
-                WingHost.Current.IsSurfaceVehicle ? "WITHDRAW" : "RTB RECOVERY",
-                WingAction.ReturnToBase, "rtb"),
+            new RadialSlice(WingOrderCatalog.Label(WingOrder.FireForEffect).ToUpperInvariant(),
+                "FULL SALVO ON LOCK",
+                WingAction.FireForEffect, "attack"),
             new RadialSlice("CYCLE ROE", "RULES OF ENGAGEMENT", WingAction.CycleRoe, "posture"),
         };
 

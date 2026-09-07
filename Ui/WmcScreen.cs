@@ -50,6 +50,10 @@ namespace WingCommand
 
         private const float GutterWidth = 62f;
         private const float ArrowWidth = 34f;
+        private const float HeaderPagerArrowWidth = Space6 + Space1;
+        private const float HeaderPagerLabelWidth = 40f;
+        private const float HeaderPagerWidth = HeaderPagerArrowWidth * 2f + HeaderPagerLabelWidth;
+        private const float HeaderPagerHeight = Space5;
 
         private const float StatusStripHeight = AvTokens.StatusStripHeight;
         private const string HoverPrompt = "Hover a control to see what it does.";
@@ -63,7 +67,7 @@ namespace WingCommand
         /// available. A larger configured wing still pages.
         /// </summary>
         private const int RosterRowsPerPage = 3;
-        private const int SquadronRowsPerPage = 9;
+        private const int SquadronRowsPerPage = 6;
 
         private enum Page
         {
@@ -116,6 +120,9 @@ namespace WingCommand
         private static WingButton cargoButton;
         private static WingButton landButton;
         private static WingButton jamButton;
+        private static WingButton seekAndDestroyButton;
+        private static WingButton attackButton;
+        private static WingButton holdHereButton;
         private static readonly WingButton[] preferenceButtons =
             new WingButton[WingWeaponPreferences.All.Length];
 
@@ -152,6 +159,11 @@ namespace WingCommand
         private static TMP_Text supplyPilotStatusLabel;
         private static WingButton supplyPilotPrev;
         private static WingButton supplyPilotNext;
+        private static Image supplyDispatchRail;
+        private static Image supplyDispatchIcon;
+        private static TMP_Text supplyDispatchAirframeLabel;
+        private static TMP_Text supplyDispatchStateLabel;
+        private static RectTransform shopPager;
         private static TMP_Text shopPageLabel;
         private static WingButton shopPrevButton;
         private static WingButton shopNextButton;
@@ -171,6 +183,7 @@ namespace WingCommand
         private static WingButton launchNearestButton;
         private static WingButton launchAnyButton;
         private static readonly List<LaunchBaseRow> launchRows = new List<LaunchBaseRow>();
+        private static RectTransform launchPager;
         private static TMP_Text launchPageLabel;
         private static WingButton launchPrevButton;
         private static WingButton launchNextButton;
@@ -285,7 +298,6 @@ namespace WingCommand
             doctrineRulesLabel = null;
             doctrineWeaponsLabel = null;
             formationButtons = null;
-            maneuverButtons = null;
             formationWingmenDots.Clear();
             formationVectorLines.Clear();
             rosterPageLabel = null;
@@ -303,6 +315,11 @@ namespace WingCommand
             supplyPilotStatusLabel = null;
             supplyPilotPrev = null;
             supplyPilotNext = null;
+            supplyDispatchRail = null;
+            supplyDispatchIcon = null;
+            supplyDispatchAirframeLabel = null;
+            supplyDispatchStateLabel = null;
+            shopPager = null;
             shopPageLabel = null;
             shopPrevButton = null;
             shopNextButton = null;
@@ -317,6 +334,7 @@ namespace WingCommand
             requisitionButton = null;
             launchNearestButton = null;
             launchAnyButton = null;
+            launchPager = null;
             launchPageLabel = null;
             launchPrevButton = null;
             launchNextButton = null;
@@ -330,15 +348,22 @@ namespace WingCommand
             cargoButton = null;
             landButton = null;
             jamButton = null;
+            seekAndDestroyButton = null;
+            attackButton = null;
+            holdHereButton = null;
 
             for (int i = 0; i < preferenceButtons.Length; i++) preferenceButtons[i] = null;
 
             pylonRows.Clear();
             airframeTiles.Clear();
+            airframePager = null;
             airframePrevButton = null;
             airframeNextButton = null;
             airframePageLabel = null;
             loadoutStatusLabel = null;
+            loadoutProfileTitle = null;
+            loadoutProfileRail = null;
+            loadoutProfileIcon = null;
             templateLabel = null;
             templateNameField = null;
             templateSummaryLabel = null;
@@ -441,7 +466,7 @@ namespace WingCommand
                 MfdBezel.Bind(mfd, buttons, screens, slot, left, screen);
                 MfdPresentation.Register(screen, screen.displayPanel.transform as RectTransform,
                     new Vector2(PanelWidth, panelHeight), buttons[slot], left);
-                Plugin.Logger.LogInfo("WMC screen installed on " + (left ? "left" : "right") +
+                Plugin.LogVerbose("WMC screen installed on " + (left ? "left" : "right") +
                                       " bezel slot " + (slot + 1) + ".");
             }
             catch (Exception e)
@@ -746,7 +771,7 @@ namespace WingCommand
         // Four columns, not seven. WPN duplicated the weapon row in the engagement block,
         // SLOT ERR was a formed-up indicator the WING tab already carries, and squeezing
         // both in clipped their two-word headers and drove the fuel/ammo readout into the
-        // REL button. What is left is what a glance at the flight actually asks: who, doing
+        // RTB button. What is left is what a glance at the flight actually asks: who, doing
         // what, with how much fuel and ammo. Every header is one word so none of them wrap.
         private static readonly Column[] RosterColumns =
         {
@@ -791,13 +816,90 @@ namespace WingCommand
                   Dim(), FontMicro, FontStyles.Normal, TextAlignmentOptions.Center);
 
         /// <summary>
+        /// A compact page control that shares a header row with a catalogue or launch-mode
+        /// selector. It deliberately uses the same inset quiet arrows as steppers while the
+        /// full-width footer pager remains reserved for scrolling a list below it.
+        /// </summary>
+        private static RectTransform HeaderPager(RectTransform parent, float y, Action onPrevious,
+                                                 Action onNext, out WingButton previous,
+                                                 out TMP_Text label, out WingButton next)
+        {
+            float x = PanelWidth - Pad - HeaderPagerWidth;
+            var go = new GameObject("HeaderPager", typeof(RectTransform));
+            var root = go.GetComponent<RectTransform>();
+            root.SetParent(parent, worldPositionStays: false);
+            Place(root, new Rect(x, y, HeaderPagerWidth, HeaderPagerHeight));
+
+            Panel(root, new Rect(0f, 0f, HeaderPagerWidth, HeaderPagerHeight), RowColor());
+            Outline(root, new Rect(0f, 0f, HeaderPagerWidth, HeaderPagerHeight), FrameColor());
+
+            previous = WingUi.Button(root, "<",
+                                     new Rect(1f, -1f, HeaderPagerArrowWidth, HeaderPagerHeight - 2f),
+                                     FontBody, UiButtonStyle.Quiet, onPrevious)
+                             .WithTooltip("Show the previous page.");
+            label = Label(root, "", new Rect(HeaderPagerArrowWidth, 0f,
+                                               HeaderPagerLabelWidth, HeaderPagerHeight),
+                          Dim(), FontMicro, FontStyles.Normal, TextAlignmentOptions.Center);
+            next = WingUi.Button(root, ">",
+                                 new Rect(HeaderPagerWidth - HeaderPagerArrowWidth - 1f,
+                                          -1f, HeaderPagerArrowWidth, HeaderPagerHeight - 2f),
+                                 FontBody, UiButtonStyle.Quiet, onNext)
+                         .WithTooltip("Show the next page.");
+
+            root.gameObject.SetActive(false);
+            return root;
+        }
+
+        /// <summary>Apply one consistent edge state and compact fraction to a header pager.</summary>
+        private static void RefreshHeaderPager(RectTransform pager, WingButton previous, TMP_Text label,
+                                               WingButton next, int page, int pageCount)
+        {
+            bool multiPage = pageCount > 1;
+            pager?.gameObject.SetActive(multiPage);
+            previous?.gameObject.SetActive(multiPage);
+            next?.gameObject.SetActive(multiPage);
+            if (label == null) return;
+
+            label.gameObject.SetActive(multiPage);
+
+            if (!multiPage)
+            {
+                label.text = string.Empty;
+                return;
+            }
+
+            label.text = PageFraction(page, pageCount);
+            previous?.SetEnabled(page > 0);
+            next?.SetEnabled(page < pageCount - 1);
+        }
+
+        private static string PageFraction(int page, int pageCount) =>
+            (page + 1) + " / " + pageCount;
+
+        /// <summary>Shared text treatment for the three full-width list footers.</summary>
+        private static string PageSummary(int count, int page, int pageCount,
+                                          string singular, string plural)
+        {
+            if (count <= 0) return string.Empty;
+
+            string noun = count == 1 ? singular : plural;
+            return pageCount == 1
+                ? count + " " + noun
+                : "PAGE " + PageFraction(page, pageCount) + "  ·  " + count + " " + noun;
+        }
+
+        /// <summary>
         /// One cell of the order grid. Carries the panel's body size now that the order
         /// names are single words — the ten-pixel type this used to need was a symptom of
         /// labels like "Deliver Cargo" fighting a third of the panel for room.
         /// </summary>
         private static WingButton GridButton(RectTransform parent, string text, float x, float y,
                                              float w, Action onClick) =>
-            WingUi.Button(parent, text, new Rect(x, y, w, RowHeight), FontSmall, onClick);
+            GridButton(parent, text, x, y, w, onClick, UiButtonStyle.Default);
+
+        private static WingButton GridButton(RectTransform parent, string text, float x, float y,
+                                             float w, Action onClick, UiButtonStyle style) =>
+            WingUi.Button(parent, text, new Rect(x, y, w, RowHeight), FontSmall, style, onClick);
 
         /// <summary>
         /// The panel's one feedback channel, given a place of its own on every page.
@@ -873,19 +975,6 @@ namespace WingCommand
         private static TMP_Text Hint(RectTransform parent, float y, string text) =>
             Label(parent, text, new Rect(Pad, y, PanelWidth - Pad * 2f, LineHeight),
                   Dim(), FontMicro, FontStyles.Normal, TextAlignmentOptions.Left);
-
-        private static float Triple(RectTransform parent, float y, float w,
-                                    string leftText, string leftHint, Action leftAction,
-                                    string middleText, string middleHint, Action middleAction,
-                                    string rightText, string rightHint, Action rightAction)
-        {
-            GridButton(parent, leftText, Pad, y, w, leftAction).WithTooltip(leftHint);
-            GridButton(parent, middleText, Pad + w + Gap, y, w, middleAction)
-                .WithTooltip(middleHint);
-            GridButton(parent, rightText, Pad + (w + Gap) * 2f, y, w, rightAction)
-                .WithTooltip(rightHint);
-            return y - (RowHeight + Gap);
-        }
 
         /// <summary>
         /// The data bar and the two display metrics.
@@ -1016,8 +1105,12 @@ namespace WingCommand
                 next = Pager(parent, y, ">", () => Turn(1));
             }
 
-            private static void Turn(int direction) =>
+            private static void Turn(int direction)
+            {
                 inspectPage = Mathf.Max(0, inspectPage + direction);
+                WingRegistry wing = Wing();
+                if (wing != null) RefreshWingPage(wing);
+            }
 
             /// <summary>Clamp against the live list and return the first visible index.</summary>
             public int Refresh(int count)
@@ -1025,14 +1118,8 @@ namespace WingCommand
                 int pages = Mathf.Max(1, Mathf.CeilToInt(count / (float)SquadronRowsPerPage));
                 inspectPage = Mathf.Clamp(inspectPage, 0, pages - 1);
 
-                // Nothing to page through reads better as a blank strip than as
-                // "page 1 of 1"; a single page keeps the count but drops the arrows.
                 if (label != null)
-                    label.text = count == 0
-                        ? ""
-                        : pages == 1
-                            ? count + (count == 1 ? " pilot" : " pilots")
-                            : "squadron page " + (inspectPage + 1) + " of " + pages;
+                    label.text = PageSummary(count, inspectPage, pages, "PILOT", "PILOTS");
 
                 prev?.SetEnabled(inspectPage > 0);
                 next?.SetEnabled(inspectPage < pages - 1);
@@ -1130,7 +1217,7 @@ namespace WingCommand
         /// Press once to arm, press again to confirm — the panel's one idiom for a control
         /// that cannot be taken back.
         ///
-        /// Held per control rather than globally, so arming the roster's REL does not also
+        /// Held per control rather than globally, so arming the roster's RTB does not also
         /// arm the reserve's RELEASE. The subject is carried alongside the timer because
         /// what was armed matters as much as when: selecting a different airframe between
         /// the two presses has to disarm, or the confirmation belongs to something the

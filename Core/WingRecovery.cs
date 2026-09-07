@@ -53,7 +53,7 @@ namespace WingCommand
             if (wing == null) return;
 
             foreach (WingMember member in wing.Members)
-                if (member.RefitPending && IsHome(member)) member.CompleteRefit();
+                if (member.RefitPending && IsDown(member)) member.CompleteRefit();
 
             if (!Plugin.Settings.RtbReturnsToReserve.Value)
             {
@@ -253,7 +253,7 @@ namespace WingCommand
                     ? settlement.Name + " recovered to wing reserve (" + WingSupplyReserve.Count +
                       "/" + WingSupplyReserve.Capacity + ")"
                     : settlement.Name + " recovered to faction stock - wing reserve full");
-                Plugin.Logger.LogInfo(
+                Plugin.LogVerbose(
                     "[Recovery] " + settlement.Name + " recovered at base; " +
                     (settlement.Definition != null ? settlement.Definition.unitName : "airframe") +
                     (settlement.StoredInReserve
@@ -284,7 +284,12 @@ namespace WingCommand
             int before = settlement.Hq.GetUnitSupply(settlement.Definition);
             try
             {
-                settlement.Hq.AddSupplyUnit(settlement.Definition, 1);
+                // ModifyUnitSupply rather than AddSupplyUnit: the latter diverts a positive
+                // amount to whichever player has an outstanding reserve request for the type
+                // and returns without touching supply, which would leave the count unchanged
+                // — and this settlement retries until the count actually rises, so it would
+                // never finish. A recovered airframe belongs to the faction that paid for it.
+                settlement.Hq.ModifyUnitSupply(settlement.Definition, 1);
             }
             finally
             {
@@ -305,6 +310,30 @@ namespace WingCommand
 
         private static bool IsHome(WingMember member) =>
             member != null && IsHome(member.Aircraft);
+
+        /// <summary>
+        /// Actually on the ground and stopped, which is a stricter question than
+        /// <see cref="IsHome"/> asks.
+        ///
+        /// A recovery only has to know that an aircraft has arrived, because the next thing
+        /// that happens to it is being despawned. A refit has to know it is <i>down</i>: it
+        /// replenishes and then launches again, and the five-metre arrival window admits a
+        /// helicopter still two seconds above the pad and descending at walking pace, or a
+        /// jet rolling out at speed. Refitting there would rearm an aircraft in mid-air, or
+        /// send one back down the runway it is still braking on.
+        ///
+        /// Waiting is safe: a landed wingman is parked, and the stock parked state holds
+        /// full brake below one metre of radar altitude, so it does stop.
+        /// </summary>
+        private static bool IsDown(WingMember member)
+        {
+            if (member == null || !IsHome(member)) return false;
+            Aircraft aircraft = member.Aircraft;
+            return aircraft.radarAlt <= TouchdownHeight && aircraft.speed <= TouchdownSpeed;
+        }
+
+        private const float TouchdownHeight = 2f;
+        private const float TouchdownSpeed = 1f;
 
         private static bool IsHome(Aircraft aircraft)
         {

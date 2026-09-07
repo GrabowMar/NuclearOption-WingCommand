@@ -62,10 +62,11 @@ namespace WingCommand
         }
 
         /// <summary>
-        /// Calls a commander needs to hear even in Performance mode. Everything else -
-        /// order acks, engaging/splash/covering colour, rejoining status,
-        /// the delivery lifecycle, manoeuvre and jam chatter - is dropped there.
-        /// Losses go through <see cref="ReportLoss"/> and are never gated by this.
+        /// Calls a commander needs to hear even in Performance mode. Order acknowledgements
+        /// are delivered separately because a command needs a positive confirmation; this
+        /// gate drops the remaining colour/status traffic — engaging, splash, covering,
+        /// rejoining, delivery, manoeuvre and jam chatter. Losses go through
+        /// <see cref="ReportLoss"/> and are never gated by this.
         /// </summary>
         private static bool Critical(Call call)
         {
@@ -81,6 +82,10 @@ namespace WingCommand
                 case Call.DefensiveClear:
                 case Call.NoDropOff:
                 case Call.BreakCall:
+                // The roster's RTB button removes the aircraft from active command and
+                // SendHome uses Detached as its acknowledgement. Keep that confirmation
+                // audible in Performance mode just like all other explicit orders.
+                case Call.Detached:
                     return true;
                 default:
                     return false;
@@ -130,12 +135,21 @@ namespace WingCommand
         /// answers for itself; a group uses its lowest-numbered member as element lead and
         /// names the other responders in one line instead of filling the queue with roll call.
         /// </summary>
-        public static void Acknowledge(IReadOnlyList<WingMember> members, WingOrder order)
+        public static void Acknowledge(IReadOnlyList<WingMember> members, WingOrder order) =>
+            Acknowledge(members, order.ToString(), order);
+
+        /// <summary>
+        /// Refit is a recovery workflow rather than a standing <see cref="WingOrder"/>, but
+        /// it is still a player command and therefore receives the same positive radio
+        /// acknowledgement as every other order.
+        /// </summary>
+        public static void AcknowledgeRefit(IReadOnlyList<WingMember> members) =>
+            Acknowledge(members, "REFIT", order: null);
+
+        private static void Acknowledge(IReadOnlyList<WingMember> members, string orderName,
+                                        WingOrder? order)
         {
             if (Plugin.Settings.Radio.Value == ChatterLevel.Off || members == null) return;
-
-            // Order acknowledgements are flavour, not information - dropped in Performance mode.
-            if (!WingFidelity.RichChatter) return;
 
             var ordered = new List<WingMember>();
             for (int i = 0; i < members.Count; i++)
@@ -147,7 +161,7 @@ namespace WingCommand
             if (ordered.Count > 1)
             {
                 string groupPhrase = ChatterDialogue.GroupAcknowledge(
-                    Persona(lead), order.ToString(), OtherNumbers(ordered),
+                    Persona(lead), orderName, OtherNumbers(ordered),
                     Random.Range(0, int.MaxValue));
                 Broadcast(lead, groupPhrase, urgent: false);
                 return;
@@ -168,7 +182,7 @@ namespace WingCommand
                     Random.Range(0, int.MaxValue));
             else
                 phrase = ChatterDialogue.Acknowledge(
-                    Persona(lead), order.ToString(), Random.Range(0, int.MaxValue));
+                    Persona(lead), orderName, Random.Range(0, int.MaxValue));
 
             Broadcast(lead, phrase, urgent: false);
         }
@@ -394,7 +408,11 @@ namespace WingCommand
         private static void Broadcast(WingMember member, string line, bool urgent)
         {
             if (member == null || string.IsNullOrWhiteSpace(line)) return;
-            WingChatterHud.Enqueue(Identity(member), Context(member), line, urgent);
+            Aircraft aircraft = member.Aircraft;
+            WingChatterHud.Enqueue(Identity(member), Context(member), line,
+                                   IconFactory.Aircraft(aircraft != null
+                                       ? aircraft.definition
+                                       : null), urgent);
         }
 
         private static string Identity(WingMember member)
@@ -409,7 +427,7 @@ namespace WingCommand
             string aircraft = member != null && !string.IsNullOrWhiteSpace(member.Name)
                 ? member.Name.ToUpperInvariant()
                 : "AIRCRAFT UNKNOWN";
-            return "▲ WING " + (member.Slot + 1) + "  //  " + aircraft;
+            return "WING " + (member.Slot + 1) + "  //  " + aircraft;
         }
 
         private static string OtherNumbers(List<WingMember> ordered)

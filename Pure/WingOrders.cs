@@ -22,6 +22,15 @@ namespace WingCommand
 
         /// <summary>Fly one scripted manoeuvre, then rejoin. Transient: never a resting state.</summary>
         Maneuver,
+
+        /// <summary>
+        /// Fly to a player-marked map point, then hand the aircraft to autonomous combat.
+        ///
+        /// Appended deliberately: host profiles address orders by their enum value, so
+        /// inserting this among the existing orders would reinterpret their masks and
+        /// label tables.
+        /// </summary>
+        SeekAndDestroy,
     }
 
     /// <summary>The scripted manoeuvres a wingman can be told to fly on command.</summary>
@@ -108,6 +117,162 @@ namespace WingCommand
         /// </summary>
         public static bool CanQueueWhilePending(WingOrder order) =>
             order != WingOrder.Maneuver;
+
+        /// <summary>
+        /// The standing order to take after a one-point ingress ends. Ordinary map moves
+        /// are temporary and reform; Seek and Destroy is deliberately a move followed by
+        /// autonomous combat.
+        /// </summary>
+        public static WingOrder PointTaskCompletion(WingOrder order) =>
+            order == WingOrder.SeekAndDestroy ? WingOrder.Engage : WingOrder.Formation;
+    }
+
+    /// <summary>
+    /// What a map pointer is sitting on, from Wing Command's point of view.
+    /// </summary>
+    internal enum MapPointerKind
+    {
+        Empty,
+        Enemy,
+        Other,
+    }
+
+    /// <summary>What a tactical-map right-click should do.</summary>
+    internal enum MapClickIntent
+    {
+        Move,
+        QueueMove,
+        PlacePoint,
+        QueuePlacePoint,
+        AttackTarget,
+        QueueAttackTarget,
+        NeedTarget,
+        Ignore,
+    }
+
+    /// <summary>What a WMC order-button press should do.</summary>
+    internal enum MapOrderButtonIntent
+    {
+        Arm,
+        Disarm,
+        ExecuteAndArm,
+        CargoFallback,
+        Ignore,
+    }
+
+    /// <summary>
+    /// Tactical map order UX: left-click arms a highlighted WMC order, right-click
+    /// applies it. With nothing armed, right-click is a move.
+    /// </summary>
+    internal static class MapOrderPolicy
+    {
+        /// <summary>Orders the WMC grid can arm as the next map right-click.</summary>
+        public static bool ArmsOnMap(WingOrder order) =>
+            PlacesPoint(order) || PicksTarget(order);
+
+        /// <summary>Armed orders that consume a map coordinate.</summary>
+        public static bool PlacesPoint(WingOrder order) =>
+            order == WingOrder.OrbitHere ||
+            order == WingOrder.LandHere ||
+            order == WingOrder.SeekAndDestroy ||
+            order == WingOrder.DeliverCargo;
+
+        /// <summary>Armed orders that consume a hostile under the cursor.</summary>
+        public static bool PicksTarget(WingOrder order) =>
+            order == WingOrder.Attack;
+
+        /// <summary>
+        /// Standing orders a Shift-queued map task can wait behind. Open-ended holds still
+        /// qualify: arriving at the orbit with more to do advances the queue rather than
+        /// CAP-ing forever.
+        /// </summary>
+        public static bool CanFollowOn(WingOrder order) =>
+            order == WingOrder.MoveToPoint ||
+            order == WingOrder.SeekAndDestroy ||
+            order == WingOrder.OrbitHere ||
+            order == WingOrder.LandHere ||
+            order == WingOrder.DeliverCargo ||
+            order == WingOrder.Attack ||
+            order == WingOrder.FireForEffect ||
+            order == WingOrder.JamTarget;
+
+        public static MapClickIntent ResolveRightClick(bool orderArmed, WingOrder armedOrder,
+                                                       MapPointerKind pointer, bool shift)
+        {
+            if (!orderArmed)
+                return shift ? MapClickIntent.QueueMove : MapClickIntent.Move;
+
+            if (PicksTarget(armedOrder))
+            {
+                if (pointer != MapPointerKind.Enemy) return MapClickIntent.NeedTarget;
+                return shift ? MapClickIntent.QueueAttackTarget : MapClickIntent.AttackTarget;
+            }
+
+            if (PlacesPoint(armedOrder))
+                return shift ? MapClickIntent.QueuePlacePoint : MapClickIntent.PlacePoint;
+
+            return MapClickIntent.Ignore;
+        }
+
+        public static bool IsMoveTool(bool orderArmed) => !orderArmed;
+
+        public static float DefaultMoveAltitude(bool rotary) =>
+            rotary ? WingTuning.MoveAltitudeRotary : WingTuning.MoveAltitudeFixed;
+
+        public static int ScrollSign(float scrollDelta)
+        {
+            if (scrollDelta > 0.01f) return 1;
+            if (scrollDelta < -0.01f) return -1;
+            return 0;
+        }
+
+        public static float StepMoveAltitude(float currentOrZero, int scrollSign, bool rotary)
+        {
+            if (scrollSign == 0)
+                return currentOrZero > 0f ? currentOrZero : DefaultMoveAltitude(rotary);
+
+            float current = currentOrZero > 0f ? currentOrZero : DefaultMoveAltitude(rotary);
+            float step = rotary ? WingTuning.MoveAltitudeStepRotary : WingTuning.MoveAltitudeStepFixed;
+            float min = rotary ? WingTuning.MoveAltitudeMinRotary : WingTuning.MoveAltitudeMinFixed;
+            float max = rotary ? WingTuning.MoveAltitudeMaxRotary : WingTuning.MoveAltitudeMaxFixed;
+            float next = current + scrollSign * step;
+            if (next < min) return min;
+            if (next > max) return max;
+            return next;
+        }
+
+        public static MapOrderButtonIntent ResolveButton(WingOrder order, bool alreadyArmedWithThis,
+                                                         bool hasPlayerTargets)
+        {
+            if (!ArmsOnMap(order)) return MapOrderButtonIntent.Ignore;
+
+            if (alreadyArmedWithThis)
+            {
+                return order == WingOrder.DeliverCargo
+                    ? MapOrderButtonIntent.CargoFallback
+                    : MapOrderButtonIntent.Disarm;
+            }
+
+            if (order == WingOrder.Attack && hasPlayerTargets)
+                return MapOrderButtonIntent.ExecuteAndArm;
+
+            return MapOrderButtonIntent.Arm;
+        }
+
+        public static string ArmPrompt(WingOrder order)
+        {
+            if (order == WingOrder.Attack)
+                return "ATTACK TARGET ARMED · RIGHT-CLICK A HOSTILE · SHIFT QUEUES";
+            if (order == WingOrder.DeliverCargo)
+                return "DELIVER CARGO ARMED · RIGHT-CLICK MAP · SHIFT QUEUES, OR PRESS AGAIN FOR THE STANDARD ROUTE";
+            if (order == WingOrder.OrbitHere)
+                return "HOLD HERE ARMED · RIGHT-CLICK MAP · SHIFT QUEUES";
+            if (order == WingOrder.SeekAndDestroy)
+                return "SEEK & DESTROY ARMED · RIGHT-CLICK MAP · SHIFT QUEUES";
+            if (order == WingOrder.LandHere)
+                return "LAND ARMED · RIGHT-CLICK MAP · SHIFT QUEUES";
+            return "ARMED · RIGHT-CLICK MAP · SHIFT QUEUES";
+        }
     }
 
     /// <summary>Pure precedence table shared by runtime code and tests.</summary>

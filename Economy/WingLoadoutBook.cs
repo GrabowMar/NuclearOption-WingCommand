@@ -73,7 +73,7 @@ namespace WingCommand
         public static void NoteSpawned(Aircraft aircraft, WingLoadoutChoice choice)
         {
             if (aircraft == null) return;
-            // Native registration runs before Hangar finishes choosing its standard fit.
+            // Native registration can run before Hangar finishes installing the fit.
             // Even a non-null loadout can still be a placeholder during this callback.
             aboard[aircraft.persistentID] = new FittedLoadout
             {

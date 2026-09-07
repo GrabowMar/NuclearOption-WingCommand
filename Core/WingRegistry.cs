@@ -139,6 +139,8 @@ namespace WingCommand
         {
             if (member == null || newLeader == null || !members.Remove(member)) return false;
 
+            HangarDepartureLane.Release(member);
+
             // The player is now in that seat, so its pilot goes back on the squadron list
             // rather than being written off with the AI airframe that is about to be removed.
             WingPilotRoster.Retire(member, survived: true);
@@ -431,7 +433,7 @@ namespace WingCommand
                 if (WingRecovery.IsPending(m)) continue;
 
                 if (Plugin.Settings.VerboseLogging.Value)
-                    Plugin.Logger.LogInfo("[Wing] lost " + m.Name + ": " + LostReason(m));
+                    Plugin.LogVerbose("[Wing] lost " + m.Name + ": " + LostReason(m));
 
                 WingComms.ReportLoss(m, members);
 
@@ -439,6 +441,9 @@ namespace WingCommand
                 // by WingRecovery a moment earlier and never reaches here.
                 WingPilotRoster.Retire(m, survived: false);
                 WingLoadoutBook.Forget(m.Aircraft);
+                // An ejected pilot can leave a live airframe in the taxi queue without
+                // another state transition. Clean it up while ownership is still known.
+                HangarDepartureLane.Release(m);
                 TacticalCoordinator.Release(m.Aircraft);
                 members.RemoveAt(i);
             }
@@ -644,7 +649,7 @@ namespace WingCommand
 
             WingCommandManager.Instance?.Toast(
                 recruit.unitName + " is much slower than you - it will fall behind");
-            Plugin.Logger.LogInfo(
+            Plugin.LogVerbose(
                 $"[Wing] {recruit.unitName} max speed {mine:F0} vs leader {leader:F0} - cannot hold station");
         }
 
@@ -658,13 +663,21 @@ namespace WingCommand
         {
             if (member == null) return;
             Aircraft released = member.Aircraft;
+            bool awaitingNativeDeparture = member.DeliveryPending;
 
-            // Sign off before retiring the pilot, not after. Retire clears the seat
-            // assignment, and a sign-off from an aircraft with nobody assigned to it comes
-            // out as an anonymous slot number instead of the pilot the player knows.
+            // Sign off while the crew record is still attached, then immediately free the
+            // command slot. Unlike the old "release" behaviour, the crew must remain
+            // assigned during the homebound leg: otherwise the same pilot can launch in a
+            // second aircraft before the first one has recovered.
             member.SendHome(reason);
-            WingPilotRoster.Retire(member, survived: true);
             members.Remove(member);
+
+            // A delivery that has not taken off cannot be sent home. Its native taxi/launch
+            // state keeps owning it, so there is no recovery settlement to complete later;
+            // preserve the old cancellation behaviour by releasing the crew immediately.
+            if (awaitingNativeDeparture)
+                WingPilotRoster.Retire(member, survived: true);
+
             WingMarkers.Repaint(released);
         }
 
@@ -680,7 +693,10 @@ namespace WingCommand
         {
             if (member == null || !members.Remove(member)) return;
 
-            WingPilotRoster.Retire(member, survived: true);
+            HangarDepartureLane.Release(member);
+
+            // Recovery releases the crew only after the airframe has been credited and its
+            // network object is gone. WingRecovery owns that final, idempotent settlement.
             TacticalCoordinator.Release(member.Aircraft);
             WingMarkers.Repaint(member.Aircraft);
         }

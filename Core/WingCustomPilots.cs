@@ -29,7 +29,7 @@ namespace WingCommand
                 if (!Directory.Exists(dir))
                 {
                     Directory.CreateDirectory(dir);
-                    Plugin.Logger.LogInfo("[CustomPilots] Created Pilots directory at " + dir);
+                    Plugin.LogVerbose("[CustomPilots] Created Pilots directory at " + dir);
                 }
 
                 string[] jsonFiles = Directory.GetFiles(dir, "*.json", SearchOption.TopDirectoryOnly);
@@ -37,7 +37,7 @@ namespace WingCommand
                 {
                     string samplePath = Path.Combine(dir, "sample_pilots.json");
                     File.WriteAllText(samplePath, CustomPilotCodec.SampleJson());
-                    Plugin.Logger.LogInfo("[CustomPilots] Wrote sample_pilots.json to " + samplePath);
+                    Plugin.LogVerbose("[CustomPilots] Wrote sample_pilots.json to " + samplePath);
                 }
             }
             catch (Exception e)
@@ -136,7 +136,7 @@ namespace WingCommand
                 }
             }
 
-            Plugin.Logger.LogInfo(
+            Plugin.LogVerbose(
                 $"[CustomPilots] Loaded {pilots.Count} pilot(s), {chattersCount} chatter(s) across {allFiles.Count} file(s)");
             return pilots;
         }

@@ -450,5 +450,22 @@ namespace WingCommand
         /// </summary>
         public const float RankEffect = 1f;
 
+        // ------------------------------------------------------------------ map move
+        //
+        // Tactical-map Move flies at a commanded height rather than the terrain click's own
+        // elevation. Alt+scroll steps that height while the Move tool is selected.
+
+        /// <summary>Default Move cruise height for fixed-wing aircraft, metres AGL.</summary>
+        public const float MoveAltitudeFixed = 700f;
+
+        /// <summary>Default Move cruise height for rotary aircraft, metres AGL.</summary>
+        public const float MoveAltitudeRotary = 180f;
+
+        public const float MoveAltitudeStepFixed = 250f;
+        public const float MoveAltitudeStepRotary = 50f;
+        public const float MoveAltitudeMinFixed = 100f;
+        public const float MoveAltitudeMaxFixed = 8000f;
+        public const float MoveAltitudeMinRotary = 25f;
+        public const float MoveAltitudeMaxRotary = 3000f;
     }
 }

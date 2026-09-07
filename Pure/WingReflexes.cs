@@ -154,6 +154,7 @@ namespace WingCommand
                     case WingOrder.LandHere:
                     case WingOrder.DeliverCargo:
                     case WingOrder.MoveToPoint:
+                    case WingOrder.SeekAndDestroy:
                     case WingOrder.OrbitHere:
                         return 0f;
                     default:

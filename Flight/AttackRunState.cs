@@ -41,7 +41,7 @@ namespace WingCommand
             if (Plugin.Settings.VerboseLogging.Value)
             {
                 Unit target = member.AssignedTarget;
-                Plugin.Logger.LogInfo(
+                Plugin.LogVerbose(
                     $"[Attack] {aircraft.unitName} running in on " +
                     (target != null ? target.unitName : "(no target)"));
             }

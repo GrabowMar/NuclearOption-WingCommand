@@ -63,7 +63,9 @@ namespace WingCommand
 
         private readonly float joinedAt;
         private WingRegistry owner;
-        private readonly List<GlobalPosition> waypointQueue = new List<GlobalPosition>();
+        private readonly List<WingDirective> taskQueue = new List<WingDirective>();
+        private bool applyKeepsQueue;
+        private float moveAltitude;
         private bool deliveryPending;
 
         private readonly CargoProgressTracker cargoProgress = new CargoProgressTracker();
@@ -75,28 +77,96 @@ namespace WingCommand
         public bool DeliveryPending => deliveryPending;
         public bool RefitPending { get; private set; }
 
+        /// <summary>
+        /// Land at base, replenish, and launch again — one order rather than a dismissal
+        /// and a fresh requisition, so the airframe and its pilot are kept.
+        ///
+        /// Expressed as an ordinary Return To Base with a flag on top. The homebound leg is
+        /// then identical to any other RTB, and <see cref="WingRecovery"/> is the one place
+        /// that has to know the difference: it settles a plain RTB into stock and instead
+        /// calls <see cref="CompleteRefit"/> on this one.
+        /// </summary>
         public void RequestRefit()
         {
             Apply(WingOrder.ReturnToBase);
             RefitPending = true;
         }
 
+        /// <summary>
+        /// Replenish where the aircraft is parked, then hand it back to the departure lane.
+        ///
+        /// Nothing here moves the airframe. It is already stopped on its field's pavement
+        /// after the stock landing, and that pose is a legitimate place to start a taxi from
+        /// — see <see cref="BeginRefitDeparture"/> for why it cannot be a takeoff instead.
+        /// </summary>
         public void CompleteRefit()
         {
             if (!RefitPending || Pilot == null || Pilot.dead || Pilot.ejected) return;
+
             foreach (FuelTank tank in Aircraft.GetFuelTanks())
                 if (tank != null) tank.Refuel(1f);
             Aircraft.NetworkfuelLevel = Aircraft.GetFuelLevel();
+
+            // RpcRearm indexes this array by station, so it must cover every station on the
+            // airframe even where the entry is a zero.
             var ammunition = new int[Aircraft.weaponStations.Count];
             for (int i = 0; i < ammunition.Length; i++)
             {
-                var station = Aircraft.weaponStations[i];
+                WeaponStation station = Aircraft.weaponStations[i];
                 ammunition[i] = Mathf.Max(0, station.FullAmmo - station.GetAmmoTotal());
             }
             Aircraft.RpcRearm(new RearmEventArgs { Rearmer = Aircraft, Stations = ammunition });
+
             WingPilotRoster.NoteSortie(Aircraft);
             SetDirective(WingDirective.Simple(WingOrder.Formation));
             RefitPending = false;
+            BeginRefitDeparture();
+        }
+
+        /// <summary>
+        /// Send a replenished wingman back up from where it is parked.
+        ///
+        /// A fresh <c>AIPilotTaxiState</c> from the current pose, not a takeoff: entering
+        /// <c>AIPilotTakeoffState</c> anywhere <c>Runway.AircraftOnRunway</c> is false makes
+        /// the stock state firewall the throttle and aim three hundred metres down the
+        /// runway heading from wherever it happens to be, which from an apron is a cut
+        /// across the grass ending in a twelve-second stuck timer and an ejection.
+        ///
+        /// Taxi is also the reason <c>HasTakenOff</c> has to go back to false first: its
+        /// <c>SearchForAirbase</c> reads that flag to decide whether it is going to the
+        /// runway or to a service point, and a sortie has already set it.
+        ///
+        /// Nothing is moved. The aircraft is on its field's pavement, having taxied or
+        /// rolled there itself, and that is a pose the stock taxi state can start from.
+        /// </summary>
+        private void BeginRefitDeparture()
+        {
+            if (Pilot == null || Aircraft == null || !Alive) return;
+
+            Airbase field = WingAirfield.FieldUnder(Aircraft);
+            if (field != null) HangarDepartureLane.Reserve(field, Aircraft.transform, this);
+
+            // The approach that brought it here registered it as landing and never took it
+            // off that list. Leave it there and the strip it is about to launch from refuses
+            // every takeoff, including this one.
+            WingAirfield.DrainLandingList(Aircraft);
+
+            Pilot.flightInfo.HasTakenOff = false;
+            deliveryPending = true;
+
+            if (WingRegistry.IsRotary(Aircraft))
+            {
+                Pilot.AIHeloTakeoffState = new AIHeloTakeoffState();
+                Pilot.SwitchState(Pilot.AIHeloTakeoffState);
+            }
+            else
+            {
+                Pilot.AITaxiState = new AIPilotTaxiState();
+                Pilot.SwitchState(Pilot.AITaxiState);
+            }
+
+            Plugin.LogVerbose("[Wing] " + Name + " refitted; relaunching from " +
+                                  (field != null ? WingLaunchFields.DisplayName(field) : "its field"));
         }
 
         /// <summary>
@@ -182,8 +252,7 @@ namespace WingCommand
             if (deliveryPending)
             {
                 if (!WingOrderRules.CanQueueWhilePending(directive.Order)) return;
-                if (directive.Order != WingOrder.MoveToPoint)
-                    waypointQueue.Clear();
+                if (!applyKeepsQueue) taskQueue.Clear();
                 SetDirective(directive);
                 return;
             }
@@ -195,8 +264,7 @@ namespace WingCommand
 
             TacticalCoordinator.Release(Aircraft);
 
-            if (directive.Order != WingOrder.MoveToPoint)
-                waypointQueue.Clear();
+            if (!applyKeepsQueue) taskQueue.Clear();
 
             // Start the idle clock fresh whenever an open-ended fight order is issued, so the
             // rest-state timeout is measured from the order rather than from the last one.
@@ -223,6 +291,7 @@ namespace WingCommand
         internal void CompleteFrom(WingPilotState source, WingDirective directive)
         {
             if (source == null || !ReferenceEquals(Pilot?.currentState, source)) return;
+            if (TryAdvanceQueue(source.OrderRevision)) return;
             CompleteOrder(directive, source.OrderRevision);
         }
 
@@ -233,7 +302,7 @@ namespace WingCommand
             if (!SetDirective(directive, startedRevision)) return;
 
             TacticalCoordinator.Release(Aircraft);
-            if (directive.Order != WingOrder.MoveToPoint) waypointQueue.Clear();
+            if (!applyKeepsQueue) taskQueue.Clear();
             brain.RequestEvaluation();
         }
 
@@ -278,12 +347,14 @@ namespace WingCommand
 
             Pilot.flightInfo.HasTakenOff = true;
             deliveryPending = false;
+            // A refit holds its field's departure lane from the apron to liftoff.
+            HangarDepartureLane.Release(this);
             WingDepartureChatter.Activated(this);
             // Resolve the retained order without treating liftoff as a new player
             // command or resetting the queued task's clocks.
             brain.RequestEvaluation();
             Resolve(force: true);
-            Plugin.Logger.LogInfo("[Wing] " + Name + " vanilla takeoff handoff; flying " + Order);
+            Plugin.LogVerbose("[Wing] " + Name + " vanilla takeoff handoff; flying " + Order);
             return true;
         }
 
@@ -447,6 +518,7 @@ namespace WingCommand
         /// </summary>
         public void ReleaseToCombat(string reason)
         {
+            HangarDepartureLane.Release(this);
             if (deliveryPending)
             {
                 // The aircraft is still under the airbase's taxi/launch AI. Removing it from
@@ -457,7 +529,7 @@ namespace WingCommand
             }
 
             if (Plugin.Settings.VerboseLogging.Value)
-                Plugin.Logger.LogInfo($"[Wing] {Name} releasing to combat AI: {reason}");
+                Plugin.LogVerbose($"[Wing] {Name} releasing to combat AI: {reason}");
 
             // A release is a teardown, not a decision: this member is leaving the roster and
             // will not be ticked again, so the handoff is unconditional rather than
@@ -480,6 +552,7 @@ namespace WingCommand
         /// </summary>
         public void SendHome(string reason)
         {
+            HangarDepartureLane.Release(this);
             if (deliveryPending)
             {
                 // Still under the airbase's own taxi/launch AI, and not airborne to be sent
@@ -490,7 +563,7 @@ namespace WingCommand
             }
 
             if (Plugin.Settings.VerboseLogging.Value)
-                Plugin.Logger.LogInfo($"[Wing] {Name} released and sent home: {reason}");
+                Plugin.LogVerbose($"[Wing] {Name} released and sent home: {reason}");
 
             TacticalCoordinator.Release(Aircraft);
             SetDirective(WingDirective.Simple(WingOrder.ReturnToBase));
@@ -589,47 +662,122 @@ namespace WingCommand
         /// </summary>
         public void ClearAssignedTarget() => SetDirective(Directive.WithoutTarget());
 
-        /// <summary>Issue a tactical-map move, replacing or appending to this member's route.</summary>
-        public void IssueWaypoint(GlobalPosition point, bool append)
+        /// <summary>
+        /// Issue a tactical-map task, replacing or appending to this member's route.
+        /// Shift-click uses <paramref name="append"/> so Hold, Attack and Move share one queue.
+        /// </summary>
+        public void IssueMapTask(WingDirective directive, bool append)
         {
             if (!Alive) return;
-            if (!append) waypointQueue.Clear();
-            waypointQueue.Add(point);
 
-            Apply(WingDirective.AtPoint(WingOrder.MoveToPoint, waypointQueue[0]));
+            if (!append)
+            {
+                taskQueue.Clear();
+                taskQueue.Add(directive);
+                applyKeepsQueue = true;
+                Apply(directive);
+                applyKeepsQueue = false;
+                return;
+            }
+
+            if (taskQueue.Count == 0)
+            {
+                if (MapOrderPolicy.CanFollowOn(Order))
+                    taskQueue.Add(Directive);
+                else
+                {
+                    taskQueue.Add(directive);
+                    applyKeepsQueue = true;
+                    Apply(directive);
+                    applyKeepsQueue = false;
+                    return;
+                }
+            }
+
+            taskQueue.Add(directive);
+            TacticalMapOverlay.Invalidate();
         }
 
-        public int WaypointCount => waypointQueue.Count;
+        public int WaypointCount => taskQueue.Count;
+        public bool HasFollowOn => taskQueue.Count > 1;
+
+        /// <summary>
+        /// Commanded Move height, metres AGL. Zero means the airframe default.
+        /// </summary>
+        public float MoveAltitude => moveAltitude;
+
+        public float ResolvedMoveAltitude =>
+            MapOrderPolicy.StepMoveAltitude(moveAltitude, 0, WingRegistry.IsRotary(Aircraft));
+
+        public void SetMoveAltitude(float altitude)
+        {
+            moveAltitude = altitude;
+        }
 
         /// <summary>
         /// The route this member is flying, current leg first. Read by the tactical map to
         /// draw the queue; the list is the live queue, so callers must not hold on to it
         /// across a <see cref="CompleteWaypoint"/>.
         /// </summary>
-        public IReadOnlyList<GlobalPosition> Route => waypointQueue;
+        public IReadOnlyList<WingDirective> Route => taskQueue;
 
         /// <summary>Advance a route, then resolve the wing's ROE at its final endpoint.</summary>
         internal void CompleteWaypoint(WingPilotState source)
         {
             if (source == null || !ReferenceEquals(Pilot?.currentState, source) ||
                 source.OrderRevision != directiveSerial) return;
-            if (waypointQueue.Count > 0) waypointQueue.RemoveAt(0);
 
-            if (waypointQueue.Count > 0)
+            // Seek and Destroy's endpoint means "start looking for targets" when it is the
+            // last task. A Shift-queued follow-on runs instead of that hand-off.
+            if (Order == WingOrder.SeekAndDestroy && !HasFollowOn)
             {
-                GlobalPosition next = waypointQueue[0];
-                waypointState.SetDestination(next);
-
-                // Called from inside the waypoint state's own update, so the next leg is
-                // recorded as intent and entered on the next tick rather than switching the
-                // state from within itself.
-                Complete(WingDirective.AtPoint(WingOrder.MoveToPoint, next));
+                taskQueue.Clear();
+                engageActivityAt = Time.timeSinceLevelLoad;
+                Complete(WingOrderRules.PointTaskCompletion(Order));
                 return;
             }
+
+            if (TryAdvanceQueue(source.OrderRevision)) return;
 
             // A map move is temporary. Completion returns to formation for every ROE;
             // weapons-free permission is not permission to invent an Engage order.
             Complete(WingOrder.Formation);
+        }
+
+        /// <summary>
+        /// Hold is open-ended, so a queued follow-on only starts once the aircraft has
+        /// actually reached the orbit. Called from the orbit controller on arrival.
+        /// </summary>
+        internal void CompleteHoldForQueue(int orbitRevision)
+        {
+            if (Order != WingOrder.OrbitHere || !HasFollowOn) return;
+            if (orbitRevision != directiveSerial) return;
+            TryAdvanceQueue(orbitRevision);
+        }
+
+        /// <summary>
+        /// Pop the finished head of the route and stand up the next task. Returns false
+        /// when nothing remains, so the caller can fall back to Form Up / Engage.
+        /// </summary>
+        internal bool TryAdvanceQueue(int startedRevision)
+        {
+            if (taskQueue.Count == 0) return false;
+            taskQueue.RemoveAt(0);
+            if (taskQueue.Count == 0) return false;
+
+            WingDirective next = taskQueue[0];
+            applyKeepsQueue = true;
+            bool applied = SetDirective(next, startedRevision);
+            applyKeepsQueue = false;
+            if (!applied) return false;
+
+            if (next.Order == WingOrder.Engage || next.Order == WingOrder.Attack)
+                engageActivityAt = Time.timeSinceLevelLoad;
+
+            TacticalCoordinator.Release(Aircraft);
+            brain.RequestEvaluation();
+            TacticalMapOverlay.Invalidate();
+            return true;
         }
 
         /// <summary>
@@ -652,6 +800,7 @@ namespace WingCommand
                 case WingOrder.DeliverCargo:
                 case WingOrder.FallBack:
                 case WingOrder.MoveToPoint:
+                case WingOrder.SeekAndDestroy:
                 case WingOrder.Maneuver:
                     return;
             }
@@ -738,7 +887,8 @@ namespace WingCommand
                          (WingOrderRules.CarriesTarget(Directive.Order) &&
                           (Directive.Target == null || Directive.Target.disabled));
 
-            if (stale) Complete(WingOrder.Formation);
+            if (stale && !TryAdvanceQueue(directiveSerial))
+                Complete(WingOrder.Formation);
         }
 
     }

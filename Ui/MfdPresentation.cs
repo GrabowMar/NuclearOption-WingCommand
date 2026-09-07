@@ -9,6 +9,7 @@ namespace WingCommand
     {
         private static MFDScreen screen;
         private static RectTransform surface, bezel;
+        private static Canvas lift;
         private static Vector2 size;
         private static bool left;
         private static readonly Vector3[] corners = new Vector3[4];
@@ -33,11 +34,22 @@ namespace WingCommand
         public static void Tick()
         {
             // Never write another screen's transforms, and never compete with Boscali.
-            if (BoscaliLoaded || screen == null || !screen.isActive ||
-                surface == null || bezel == null || !DynamicMap.mapMaximized) return;
+            if (screen == null || surface == null) return;
+
             DynamicMap map = SceneSingleton<DynamicMap>.i;
+            bool overMaximizedMap = !BoscaliLoaded && screen.isActive && bezel != null &&
+                                    DynamicMap.mapMaximized;
+            if (!overMaximizedMap)
+            {
+                // Back on the cockpit MFD the panel sorts with its own bezel again.
+                if (lift != null) lift.overrideSorting = false;
+                return;
+            }
+
             var canvas = map?.maximizedMapCanvas?.transform as RectTransform;
             if (canvas == null) return;
+
+            LiftAboveKillFeed(map);
 
             bezel.GetWorldCorners(corners);
             float bezelLeft = float.PositiveInfinity, bezelRight = float.NegativeInfinity;
@@ -67,8 +79,43 @@ namespace WingCommand
                 fit.Scale * root.InverseTransformVector(canvas.TransformVector(Vector3.up)).magnitude, 1f);
         }
 
+        /// <summary>
+        /// The maximized map draws on its own canvas and the native kill feed on another, so
+        /// sibling order cannot decide which of the two lands in front — over-eager kill-feed
+        /// lines were painting across the panel. Give the panel an explicit sorting canvas one
+        /// step above the feed while the two share the screen. Graphics register with their
+        /// nearest canvas, so this nested canvas also needs its own GraphicRaycaster to keep
+        /// the panel interactive; the map's raycaster no longer sees these controls.
+        /// </summary>
+        private static void LiftAboveKillFeed(DynamicMap map)
+        {
+            if (lift == null)
+            {
+                lift = surface.gameObject.GetComponent<Canvas>()
+                       ?? surface.gameObject.AddComponent<Canvas>();
+                Canvas host = map != null ? map.maximizedMapCanvas : null;
+                if (host != null) lift.additionalShaderChannels = host.additionalShaderChannels;
+                if (surface.GetComponent<GraphicRaycaster>() == null)
+                    surface.gameObject.AddComponent<GraphicRaycaster>();
+            }
+
+            var feed = SceneSingleton<MessageUI>.i;
+            Canvas feedCanvas = feed != null ? feed.GetComponentInParent<Canvas>() : null;
+            int feedOrder = feedCanvas != null ? feedCanvas.sortingOrder : 0;
+
+            // Also clear the map's own order: the panel lives inside that canvas, so anything
+            // below it would sink the panel beneath the map it is meant to sit on.
+            Canvas mapCanvas = map != null ? map.maximizedMapCanvas : null;
+            int mapOrder = mapCanvas != null ? mapCanvas.sortingOrder : 0;
+
+            lift.overrideSorting = true;
+            lift.sortingOrder = Mathf.Max(feedOrder, mapOrder) + 1;
+        }
+
         public static void Reset()
         {
+            if (lift != null) lift.overrideSorting = false;
+            lift = null;
             screen = null;
             surface = bezel = null;
         }

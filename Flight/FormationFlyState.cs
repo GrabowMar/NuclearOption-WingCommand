@@ -366,7 +366,7 @@ namespace WingCommand
             lastGeometryTime = 0f;
 
             if (Plugin.Settings.VerboseLogging.Value)
-                Plugin.Logger.LogInfo($"[Formation] {aircraft.unitName} entering slot {member.Slot}");
+                Plugin.LogVerbose($"[Formation] {aircraft.unitName} entering slot {member.Slot}");
         }
 
         public override void LeaveState()
@@ -482,8 +482,7 @@ namespace WingCommand
 
             EaseSlotLocal(shape, spacing, turnRate, dt);
 
-            GlobalPosition slotPos = SlotPosition(leader, leaderState, spacing, dt,
-                                                  out Vector3 offset);
+            GlobalPosition slotPos = SlotPosition(leader, leaderState, spacing, dt);
 
             Vector3 toSlot = slotPos - aircraft.GlobalPosition();
             float distance = toSlot.magnitude;
@@ -510,7 +509,7 @@ namespace WingCommand
                 int threatId = collisionThreat != null ? collisionThreat.GetInstanceID() : 0;
                 if (threatId != collisionThreatId)
                 {
-                    Plugin.Logger.LogInfo("[Formation] " + aircraft.unitName + " id=" + aircraft.GetInstanceID() +
+                    Plugin.LogVerbose("[Formation] " + aircraft.unitName + " id=" + aircraft.GetInstanceID() +
                         (threatId == 0 ? " collision avoidance clear; resuming slot" :
                         " collision avoidance priority: neighbor=" + threatId + " predicted miss=" + predictedMiss.ToString("F0") + " m"));
                     collisionThreatId = threatId;
@@ -519,7 +518,7 @@ namespace WingCommand
             else
             {
                 RotaryFormation.Mode mode = RotaryFormation.Fly(
-                    aircraft, leader, slotPos, toSlot, distance, offset.y, spacing,
+                    aircraft, leader, slotPos, toSlot, distance, spacing,
                     lastRotaryMode, leaderState, out float horizontalError);
 
                 ReportRotaryMode(mode, distance, horizontalError);
@@ -598,7 +597,7 @@ namespace WingCommand
         /// then apply separation, path-cut avoidance and the terrain floor.
         /// </summary>
         private GlobalPosition SlotPosition(Aircraft leader, LeaderState leaderState,
-                                            float spacing, float dt, out Vector3 offset)
+                                            float spacing, float dt)
         {
             // The frame the slots hang off is the leader's *track*, not its nose. Sideslip
             // and yaw wobble swing the nose several degrees either side of the flight path,
@@ -632,11 +631,9 @@ namespace WingCommand
                     FormationTracking.SlotResponseSeconds, speedLimit, dt,
                     out smoothedSlotOffset.z, out slotVelocity.z);
             }
-            offset = smoothedSlotOffset;
-
             // Steering already follows the leader's climb angle; adding vertical velocity
             // here made the slot bounce. Along-track prediction belongs to throttle control.
-            GlobalPosition slotPos = leader.GlobalPosition() + offset;
+            GlobalPosition slotPos = leader.GlobalPosition() + smoothedSlotOffset;
 
             // Separation keeps wingmen out of each other during a rejoin, and path-cut
             // avoidance keeps them out of the leader's nose.
@@ -736,7 +733,7 @@ namespace WingCommand
             lastRotaryReport = Time.timeSinceLevelLoad;
 
             Aircraft leader = Leader;
-            Plugin.Logger.LogInfo(
+            Plugin.LogVerbose(
                 $"[Rotary] {aircraft.unitName} slot {member.Slot}: {mode}, " +
                 $"error {distance:F0} m (flat {horizontalError:F0}), " +
                 $"own speed {aircraft.speed:F0}, " +
@@ -943,7 +940,7 @@ namespace WingCommand
 
             losingGroundSince = 0f;
 
-            Plugin.Logger.LogInfo(
+            Plugin.LogVerbose(
                 $"[Wing] {aircraft.unitName} cannot hold station " +
                 $"({distance:F0} m out, max speed {mine:F0} vs leader {theirs:F0}) - returning to base");
 

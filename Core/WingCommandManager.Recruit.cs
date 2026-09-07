@@ -40,14 +40,14 @@ namespace WingCommand
 
             if (member != null)
             {
-                Plugin.Logger.LogInfo("[Wing] " + aircraft.unitName +
+                Plugin.LogVerbose("[Wing] " + aircraft.unitName +
                                       " rostered slot " + member.Slot +
                                       ", awaiting airborne activation");
             }
             else
             {
                 Pilot pilot = WingRegistry.PrimaryPilot(aircraft);
-                Plugin.Logger.LogInfo(
+                Plugin.LogVerbose(
                     "[Wing] " + aircraft.unitName + " bought but not yet rostered" +
                     " (LocalSim=" + aircraft.LocalSim +
                     ", room=" + WingRegistry.HasRoom(Wing.Count) +
@@ -112,7 +112,7 @@ namespace WingCommand
                     {
                         p.Member = Wing.Add(a, deferCommand: true, preferredPilot: p.PreferredPilot);
                         if (p.Member != null)
-                            Plugin.Logger.LogInfo("[Wing] " + a.unitName +
+                            Plugin.LogVerbose("[Wing] " + a.unitName +
                                                   " rostered slot " + p.Member.Slot +
                                                   " after wait, awaiting airborne activation");
                     }

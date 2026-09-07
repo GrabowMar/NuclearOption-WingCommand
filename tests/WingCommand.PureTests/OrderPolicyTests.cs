@@ -52,5 +52,31 @@ namespace WingCommand.PureTests
                 Assert.False(WingOrderRules.TargetTaskComplete(order, targetAlive: false, deliveryPending: false));
             }
         }
+
+        [Fact]
+        public void SeekAndDestroy_IsAMapPointTaskUntilItHandsOffToEngage()
+        {
+            Assert.True(WingOrderCatalog.NeedsPoint(WingOrder.SeekAndDestroy));
+            Assert.True(WingOrderCatalog.TakesPoint(WingOrder.SeekAndDestroy));
+            Assert.False(WingOrderRules.CarriesTarget(WingOrder.SeekAndDestroy));
+            Assert.False(WingOrderRules.SendsWingmanHunting(WingOrder.SeekAndDestroy));
+            Assert.Equal(OrderEngagementAuthority.DefensiveOnly,
+                OrderRoePolicy.Authority(WingOrder.SeekAndDestroy));
+            Assert.Equal(WingOrder.Engage,
+                WingOrderRules.PointTaskCompletion(WingOrder.SeekAndDestroy));
+            Assert.Equal(WingOrder.Formation,
+                WingOrderRules.PointTaskCompletion(WingOrder.MoveToPoint));
+            Assert.Equal("Seek and Destroy", WingOrderCatalog.Label(WingOrder.SeekAndDestroy));
+
+            var surface = new WingMember { IsSurface = true };
+            Assert.False(WingOrderCatalog.CanApply(surface, WingOrder.SeekAndDestroy));
+        }
+
+        [Fact]
+        public void AttackOrder_IsPresentedAsAttackTargetWithoutChangingItsApiIdentity()
+        {
+            Assert.Equal("Attack Target", WingOrderCatalog.Label(WingOrder.Attack));
+            Assert.Equal("ATK TGT", WingOrderCatalog.ShortLabel(WingOrder.Attack));
+        }
     }
 }
