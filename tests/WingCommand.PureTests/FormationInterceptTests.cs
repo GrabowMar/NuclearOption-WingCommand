@@ -165,6 +165,21 @@ namespace WingCommand.PureTests
             Assert.True(controls.Airbrake);
         }
 
+        [Theory]
+        [InlineData(400f, 30f)]
+        [InlineData(1000f, 50f)]
+        [InlineData(5000f, 100f)]
+        public void CaptureUsesFullPowerEvenAboveTheDampedSpeedTarget(float distance, float closing)
+        {
+            var controls = Resolve(distance: distance, closing: closing, speedError: -2f, throttle: 0.4f);
+            Assert.Equal(1f, controls.Throttle);
+            Assert.False(controls.Airbrake);
+            Assert.Equal(0.4f, Resolve(distance: distance, closing: closing, speedError: -2f,
+                throttle: 0.4f, terrainWarning: true).Throttle);
+            Assert.Equal(0.4f, Resolve(distance: 200f, closing: 0f, speedError: -2f,
+                throttle: 0.4f).Throttle);
+        }
+
         [Fact]
         public void BrakingHysteresisAvoidsChatterAndReleasesBeforeCoSpeed()
         {

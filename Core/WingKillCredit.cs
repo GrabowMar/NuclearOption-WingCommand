@@ -3,24 +3,12 @@ using UnityEngine;
 
 namespace WingCommand
 {
-    /// <summary>
-    /// Works out which wingman to credit when something they were shooting at dies.
-    ///
-    /// Nuclear Option's own scoring is not exposed to a plugin in a form that names the
-    /// killer of an arbitrary unit, so this infers it from what the mod already knows: the
-    /// shots it told a wingman to take. A contact that a wingman fired on and that stops
-    /// existing within the credit window is counted as that wingman's.
-    ///
-    /// It is an inference, and it is worth being plain about what it can get wrong. A
-    /// target finished off by the player or by friendly AI moments after a wingman shot at
-    /// it is credited to the wingman, and a unit that despawns rather than dies looks the
-    /// same as one destroyed. Both err towards generosity, which is the right direction for
-    /// a flavour statistic driving a deliberately small rank effect — and neither can
-    /// double-count, because a target is only ever credited once.
-    /// </summary>
+ /// <summary>Infers kill credit from recent wingman shots; native scoring does not expose arbitrary
+ /// killers. Despawns and friendly finishing shots may count. Each target is credited once. ponytail:
+ /// shot-window heuristic; use native killer attribution if it becomes available.</summary>
     internal static class WingKillCredit
     {
-        /// <summary>How long after a shot a target's death still counts as that pilot's.</summary>
+     /// <summary>Seconds after a shot during which target disappearance earns credit.</summary>
         private const float CreditWindow = 25f;
 
         private sealed class PendingCredit
@@ -39,7 +27,7 @@ namespace WingCommand
             nextTick = 0f;
         }
 
-        /// <summary>Remember that this aircraft has just fired on this target.</summary>
+     /// <summary>Record a wingman's shot at a target.</summary>
         public static void NoteShot(Aircraft shooter, Unit target)
         {
             if (!Plugin.Settings.PilotProgression.Value) return;
@@ -51,8 +39,7 @@ namespace WingCommand
             {
                 if (pending[i].Shooter != shooter || pending[i].Target != target) continue;
 
-                // Re-attacking the same contact extends the claim rather than queueing a
-                // second one, so a long engagement cannot pay out twice.
+                // Extend the existing claim so repeated attacks cannot award duplicate kills.
                 pending[i].ExpiresAt = expires;
                 return;
             }
@@ -65,11 +52,8 @@ namespace WingCommand
             });
         }
 
-        /// <summary>
-        /// Settle outstanding claims. Throttled: this walks a short list looking for a
-        /// state change that takes seconds, and there is nothing to gain from doing it at
-        /// frame rate.
-        /// </summary>
+     /// <summary>Settle shot claims periodically; target disappearance does not need a frame-rate
+     /// scan.</summary>
         public static void Tick()
         {
             if (pending.Count == 0 || Time.timeSinceLevelLoad < nextTick) return;
@@ -92,11 +76,12 @@ namespace WingCommand
                 Aircraft shooter = credit.Shooter;
                 pending.RemoveAt(i);
 
-                // Drop every other outstanding claim on the same contact: one dead unit is
-                // one kill, however many wingmen were shooting at it.
+                // Remove competing claims so one target awards one kill.
                 for (int j = pending.Count - 1; j >= 0; j--)
                 {
-                    if (pending[j].Target == victim) pending.RemoveAt(j);
+                    if (!ReferenceEquals(pending[j].Target, victim)) continue;
+                    pending.RemoveAt(j);
+                    if (j < i) i--;
                 }
 
                 WingPilotRoster.NoteKill(shooter, victim);

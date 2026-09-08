@@ -53,45 +53,5 @@ namespace WingCommand.PureTests
             Assert.Equal(new[] { member }, selection.Snapshot(wing));
         }
 
-        [Fact]
-        public void PointOrderOwnsHeldClickAndItsReleaseInEitherUpdateOrder()
-        {
-            var gesture = new MapPointGesture();
-            gesture.Consume(frame: 10, leftButtonHeld: true);
-            for (int frame = 10; frame <= 15; frame++)
-            {
-                gesture.Update(frame, leftButtonHeld: true);
-                Assert.True(gesture.ConsumesClick(frame));
-            }
-
-            // EventSystem may deliver release before the manager gets its Update.
-            Assert.True(gesture.ConsumesClick(16));
-            gesture.Update(frame: 16, leftButtonHeld: false);
-            // Or after it. The release frame is consumed in either case.
-            Assert.True(gesture.ConsumesClick(16));
-            gesture.Update(frame: 17, leftButtonHeld: false);
-            Assert.False(gesture.ConsumesClick(17));
-        }
-
-        [Fact]
-        public void CancelGestureWithoutAHeldMouseDoesNotBlockTheNextClick()
-        {
-            var gesture = new MapPointGesture();
-            gesture.Consume(frame: 20, leftButtonHeld: false);
-            Assert.True(gesture.ConsumesClick(20));
-            gesture.Update(frame: 21, leftButtonHeld: false);
-            Assert.False(gesture.ConsumesClick(21));
-        }
-
-        [Fact]
-        public void ClosingOrDisablingMapClearsHeldGestureOwnership()
-        {
-            var gesture = new MapPointGesture();
-            gesture.Consume(frame: 30, leftButtonHeld: true);
-            gesture.Reset();
-            Assert.False(gesture.ConsumesClick(30));
-            gesture.Update(frame: 31, leftButtonHeld: false);
-            Assert.False(gesture.ConsumesClick(31));
-        }
     }
 }

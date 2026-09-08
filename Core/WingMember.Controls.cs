@@ -6,26 +6,18 @@ namespace WingCommand
 {
     internal partial class WingMember
     {
-        /// <summary>
-        /// Put the resolved behaviour on the aircraft. The only caller of
-        /// <c>Pilot.SwitchState</c> (through <see cref="SwitchTo"/>) for a commandable
-        /// wingman, which is what makes the
-        /// behaviour graph describable at all.
-        /// </summary>
+     /// <summary>Apply the resolved behaviour through the shared state-switch path for commandable
+     /// members.</summary>
         private void EnterBehaviour(string behaviourId)
         {
-            // A surface member takes one behaviour whatever the arbiter picked. Every case
-            // below steers through the autopilot it does not have, and the bands above Task
-            // - a missile break, a deck hold, a leash recall - would each route it into one.
-            // Where it should actually go is published through WingSurface, which reads the
-            // same directive the cases below read.
+            // Surface members require their registered behaviour because built-ins assume an autopilot.
+            // WingSurface publishes their directive destination.
             if (IsSurface)
             {
                 if (WingBehaviourCatalog.TryEnter(this, WingBehaviours.Surface)) return;
 
-                // A removed surface extension has no aircraft autopilot fallback.
-                // Stop only the pilot state we installed; native/other-owner state stays
-                // untouched. Pilot.SwitchState(null) is the game's own idle transition.
+                // When a surface extension disappears, idle only the state we installed; preserve
+                // native or other-owner control.
                 if (enteredState != null && ReferenceEquals(Pilot.currentState, enteredState))
                     Pilot.SwitchState(null);
                 enteredState = null;
@@ -54,9 +46,7 @@ namespace WingCommand
                     return;
 
                 case WingBehaviours.Rejoin:
-                    // Unconditional, unlike the Formation task above: this behaviour exists
-                    // precisely because the wingman is a long way out, so it wants the boost
-                    // whether or not it was already nominally holding a slot.
+                    // Leash recall needs rejoin boost even if formation was already active.
                     WingComms.Say(this, WingComms.Call.Rejoining);
                     SwitchTo(formationState);
                     formationState.BoostRejoin(0f);
@@ -67,14 +57,11 @@ namespace WingCommand
                     return;
 
                 default:
-                    // A third-party behaviour id. Registered states are looked up here; an
-                    // unknown one falls back to the standing order rather than leaving the
-                    // aircraft in whatever state it happened to be flying.
+                    // Resolve extension IDs through the catalog; fall back to the standing task if
+                    // unavailable.
                     if (WingBehaviourCatalog.TryEnter(this, behaviourId)) return;
-                    // A missing/faulted extension cannot keep winning while its fallback
-                    // silently flies a different task or ignores later payload changes.
-                    // A failed factory may have installed its own successor. Keep that
-                    // reflex eligible for a fresh attempt on the next tick.
+                    // Reflect extension failure in the brain's owner. Retry next tick if the factory
+                    // installed a successor before failing.
                     brain.FallBackToTask(Time.timeSinceLevelLoad,
                         rejectUnavailable: !WingBehaviourCatalog.IsAvailable(behaviourId));
                     EnterTask();
@@ -82,20 +69,8 @@ namespace WingCommand
             }
         }
 
-        /// <summary>
-        /// Give the airframe back to whatever the game would be flying.
-        ///
-        /// The contract for <see cref="WingBehaviours.Held"/> is "hands off entirely", and
-        /// this used to implement it by returning without doing anything — correct only
-        /// because the one reflex producing it is the delivery lockout, whose aircraft was
-        /// still under the stock taxi AI and had never been taken over in the first place.
-        /// Any other reflex resolving to Held got the mod's own formation or attack state
-        /// still flying the aircraft while the log said it had been released; a third-party
-        /// one, which the catalog explicitly invites, would have hit exactly that.
-        ///
-        /// A delivery still on the apron is left strictly alone — switching a parked pilot
-        /// into a combat state is the one thing worse than not handing off.
-        /// </summary>
+     /// <summary>Release mod flight control to native AI. Leave pending apron deliveries untouched;
+     /// switching them to combat would interrupt taxi.</summary>
         private void EnterHeld()
         {
             if (deliveryPending) return;
@@ -104,12 +79,8 @@ namespace WingCommand
             SwitchToCombat();
         }
 
-        /// <summary>
-        /// Orbit overhead while the leader is on the runway, or while there is no leader to
-        /// form on at all. The standing directive is left alone - it used to be overwritten
-        /// with an OrbitHere order, which is why the panel showed an order the player had
-        /// never given.
-        /// </summary>
+     /// <summary>Orbit above a grounded or missing leader without changing the standing
+     /// directive.</summary>
         private void EnterDeckHold()
         {
             Aircraft leader = Leader;
@@ -117,23 +88,20 @@ namespace WingCommand
                 ? leader.GlobalPosition()
                 : Aircraft.GlobalPosition();
 
-            // Tracking, not captured: this behaviour is entered once, and a leader that
-            // lands at one end of a runway then taxis to a hangar would otherwise leave the
-            // wing circling the touchdown point. With no leader at all there is nothing to
-            // track, so the aircraft holds where it is.
+            // Track a taxiing leader instead of freezing its touchdown position; without a leader, hold
+            // here.
             orbitState.SetAnchor(anchor, WingTuning.OrbitRadius, trackLeader: leader != null);
             SwitchTo(orbitState);
         }
 
-        /// <summary>Fly the standing order. The old Apply switch, unchanged in substance.</summary>
+     /// <summary>Enter the state for the standing directive.</summary>
         private void EnterTask()
         {
             switch (Directive.Order)
             {
                 case WingOrder.Formation:
-                    // Boost only on a genuine arrival. Retiring a Splash 'Em or a Jam order
-                    // lands here on an aircraft that is already flying its slot, and it has
-                    // nothing to hurry back to.
+                    // Boost only after a real transition into formation, not a payload change while
+                    // already in the slot.
                     if (SwitchTo(formationState))
                         formationState.BoostRejoin(Slot * WingTuning.RejoinStagger);
                     break;
@@ -170,11 +138,7 @@ namespace WingCommand
 
                 case WingOrder.Attack:
                 case WingOrder.FireForEffect:
-                    // Splash 'Em used to hold the slot and shoot from there. That works for
-                    // a fighter with a gun or a missile already on the nose; a bomber in
-                    // formation is looking at the leader, not the target, so ShotIsValid
-                    // refused every pickle and FinishSplash sent it "back" to Form Up
-                    // without ever firing. An expend order is a run-in.
+                    // Splash needs an attack run so bombers can reach a valid release geometry.
                     EnterAttack(Directive);
                     break;
 
@@ -189,11 +153,8 @@ namespace WingCommand
             }
         }
 
-        /// <summary>
-        /// Which extra job this wingman is working from its slot. Read by
-        /// <see cref="FormationFlyState"/> in place of the order itself, so one state stops
-        /// having to infer which of its three behaviours it is supposed to be running.
-        /// </summary>
+     /// <summary>Additional station-keeping job, read by FormationFlyState independently of the
+     /// standing order.</summary>
         public SlotTask SlotTask
         {
             get
@@ -204,7 +165,7 @@ namespace WingCommand
             }
         }
 
-        /// <summary>Hold over the named point, or over the leader when none was given.</summary>
+     /// <summary>Orbit the directive point, or the leader if no point was supplied.</summary>
         private void EnterOrbit(WingDirective directive)
         {
             Aircraft leader = Leader;
@@ -218,22 +179,9 @@ namespace WingCommand
             SwitchTo(orbitState);
         }
 
-        /// <summary>
-        /// Two routes, and the difference is whether the player named a place.
-        ///
-        /// With a drop point, CargoRunState flies there and releases — the same shape as
-        /// Hold and Land, and available to any airframe carrying a load rather than only to
-        /// helicopters.
-        ///
-        /// Without one, the stock transport state configures itself in EnterState — nearest
-        /// airbase, nearest known ground enemy, landing zone search — so it remains a
-        /// complete supply-run behaviour for the cost of a state switch, and is what the
-        /// order has always done.
-        ///
-        /// Neither reports back on its own. CheckCargoRun watches the cargo station itself,
-        /// which is the only ground truth available, and either calls the delivery or gives
-        /// the airframe back.
-        /// </summary>
+     /// <summary>With a point, CargoRunState flies and drops any loaded airframe. Without one, use
+     /// native transport's supply-route search. CheckCargoRun confirms delivery from ammunition changes
+     /// and handles timeout.</summary>
         private void EnterCargoRun(WingDirective directive)
         {
             cargoProgress.Reset(CargoAmmo, Time.timeSinceLevelLoad);
@@ -251,15 +199,12 @@ namespace WingCommand
                 return;
             }
 
-            // A fixed-wing transport has no stock supply route to fall back on, so say which
-            // half of the order is missing rather than silently doing nothing with a load
-            // aboard.
+            // Report the missing drop point when fixed-wing transport has no native supply-route
+            // fallback.
             WingCommandManager.Instance?.Toast(
                 Name + " needs a drop point - it has no standard supply route");
 
-            // Complete, not Apply: this runs inside EnterTask, which runs inside
-            // EnterBehaviour, which runs inside Resolve. Apply would re-enter Resolve from
-            // the middle of itself.
+            // Complete defers resolution; Apply would recurse through EnterTask into Resolve.
             Complete(WingOrder.Formation);
         }
 
@@ -274,7 +219,7 @@ namespace WingCommand
         {
             if (!directive.HasPoint)
             {
-                // See EnterCargoRun: Apply here would recurse into Resolve.
+                // Defer resolution here to avoid re-entering Resolve.
                 Complete(WingOrder.Formation);
                 return;
             }
@@ -283,10 +228,7 @@ namespace WingCommand
             SwitchTo(waypointState);
         }
 
-        /// <summary>
-        /// Reached only if something re-applies a standing attack order. AttackTarget is the
-        /// normal entry point and sets the target first.
-        /// </summary>
+     /// <summary>Enter or re-enter the attack state using the directive's target.</summary>
         private void EnterAttack(WingDirective directive)
         {
             if (AssignedTarget != null && !AssignedTarget.disabled)
@@ -295,22 +237,14 @@ namespace WingCommand
             }
             else
             {
-                // The target died. Retire the order rather than flying formation under a
-                // standing Attack directive, which would still read as explicit weapons
-                // authority to the engagement code.
+                // Retire a dead designation so formation flight cannot retain explicit attack
+                // authority.
                 Complete(WingOrder.Formation);
             }
         }
 
-        /// <summary>
-        /// Jam Target: hold the slot and work the designated unit from where we are.
-        /// Splash 'Em used to share this path and never pickled a bomber; it now flies an
-        /// attack run. FormationFlyState still reads <see cref="SlotTask"/> for jam.
-        ///
-        /// No rejoin boost. The wingman is already in its slot, so hurrying it back to a
-        /// place it has not left only produced a visible surge every time a target was
-        /// designated.
-        /// </summary>
+     /// <summary>Hold formation and jam the designation via SlotTask. Do not trigger rejoin boost for
+     /// an aircraft already in its slot.</summary>
         private void EnterSlotTask()
         {
             if (AssignedTarget != null && !AssignedTarget.disabled)
@@ -325,11 +259,8 @@ namespace WingCommand
 
         private BehaviourStateCache<Aircraft, PilotBaseState> extraBehaviours;
 
-        /// <summary>
-        /// The pilot state for a third-party behaviour on this wingman, built on first use
-        /// and cached for this registration's lifetime. Replacing or re-registering an ID
-        /// builds a fresh state without sharing controller memory between aircraft.
-        /// </summary>
+     /// <summary>Build extension state on first use and cache it per member and registration lifetime;
+     /// replacement creates fresh controller memory.</summary>
         internal PilotBaseState CachedBehaviour(string behaviourId,
             BehaviourFactoryRegistry<Aircraft, PilotBaseState>.Registration registration)
         {
@@ -351,25 +282,12 @@ namespace WingCommand
             extraBehaviours.ObserveMissing(behaviourId);
         }
 
-        /// <summary>The pilot state we last put this aircraft into.</summary>
+     /// <summary>Last pilot state installed by this member.</summary>
         private PilotBaseState enteredState;
 
-        /// <summary>
-        /// Switch, unless the aircraft is already flying this exact state. Returns true when
-        /// a switch actually happened.
-        ///
-        /// The guard matters because a behaviour can be re-entered without changing: the
-        /// arbiter re-runs the standing task whenever the directive underneath it changes,
-        /// and several orders are flown by the same state. Finishing a Splash 'Em retires
-        /// the order to Formation, which is flown by the state already running — and
-        /// re-entering it ran <c>EnterState</c> again, resetting the whole leader filter
-        /// bank and arming an eight-second wide-open-throttle rejoin boost on an aircraft
-        /// that had never left its slot. That surge is exactly what the Splash 'Em work set
-        /// out to remove, and it survived two attempts at removing it.
-        ///
-        /// Compare with the live pilot state: native initialization and delegated states
-        /// can transition independently of the last behaviour we entered.
-        /// </summary>
+     /// <summary>Switch only when the live pilot state differs; return true on transition. Re-entering
+     /// a shared state resets filters and timers, while native or delegated transitions may change it
+     /// independently.</summary>
         private bool SwitchTo(PilotBaseState state)
         {
             if (state == null) return false;
@@ -380,8 +298,8 @@ namespace WingCommand
                 {
                     if (active.RestartOnOrderChange && active.OrderRevision != directiveSerial)
                     {
-                        // Native SwitchState is idempotent on the same instance. A
-                        // retasked maneuver/cargo/landing needs fresh phases and timers.
+                        // Restart phases and timers for retasked manoeuvres, cargo runs, and landings;
+                        // native SwitchState skips identical instances.
                         Pilot.SwitchStateNew(state);
                         return true;
                     }
@@ -390,11 +308,7 @@ namespace WingCommand
                 return false;
             }
 
-            // The one guard that makes a surface member safe. Every built-in state, and both
-            // of the game's own AI combat states, steer through Autopilot.AutoAim - twenty
-            // of those call sites are unguarded, and a null autopilot classifies as rotary,
-            // so a hull reaching any of them is a NullReferenceException on the first fixed
-            // update. Refusing here makes all of them unreachable without touching one.
+            // Reject built-in flight states for surface members; their steering requires an autopilot.
             if (IsSurface && !enteringRegisteredBehaviour) return false;
 
             Pilot.SwitchState(state);
@@ -402,19 +316,11 @@ namespace WingCommand
             return true;
         }
 
-        // Set only while WingBehaviourCatalog is installing a registered behaviour - the one
-        // route a surface member is allowed through, because a registered state is the only
-        // kind that was written knowing there is no autopilot.
+        // Allow surface entry only while installing a registered behaviour designed for that vehicle.
         private bool enteringRegisteredBehaviour;
 
-        /// <summary>
-        /// Install a behaviour that came from <see cref="WingBehaviourCatalog"/>.
-        ///
-        /// Routed through <see cref="SwitchTo"/> rather than calling <c>Pilot.SwitchState</c>
-        /// directly, so a registered behaviour gets the same re-entry protection everything
-        /// else does. It previously did not, which meant re-resolving to the same registered
-        /// behaviour re-ran its EnterState every pass.
-        /// </summary>
+     /// <summary>Install catalog state through SwitchTo so repeated resolution preserves re-entry
+     /// protection.</summary>
         internal bool SwitchToRegistered(PilotBaseState state)
         {
             enteringRegisteredBehaviour = true;
@@ -447,24 +353,24 @@ namespace WingCommand
                 Plugin.Logger.LogWarning($"[Wing] {Name} has no combat state to return to.");
         }
 
-        /// <summary>
-        /// Fly the stock approach home.
-        ///
-        /// The whole of Return To Base, deliberately. Both stock landing states pick their
-        /// own airbase, fly their own pattern and put the aircraft on a runway or a vertical
-        /// landing point; a hand-flown approach would be a worse one, and it is the taxi
-        /// that follows touchdown — not the approach — that this mod has to intercept.
-        /// </summary>
+     /// <summary>Delegate RTB approach and runway or pad selection to native landing states; recovery
+     /// handles touchdown and taxi.</summary>
         private void SwitchToLanding()
         {
             if (Pilot == null) return;
 
+            // Prefer native vertical landing for rotary/hovering airframes, even when a modded pilot
+            // also has a runway state.
+            if (WingRegistry.IsRotary(Aircraft) && Pilot.AIHeloLandingState != null)
+            {
+                SwitchTo(Pilot.AIHeloLandingState);
+                return;
+            }
+
             if (Pilot.AILandingState != null)
             {
-                // AIPilotLandingState.EnterState searches for a runway synchronously and,
-                // finding none it can use, ejects the pilot and clears the pilot state
-                // outright. An order to go home must not be a way to destroy the aircraft,
-                // so the same query is asked first and the order refused if it fails.
+                // Check runway availability before entering native landing, which otherwise ejects
+                // immediately when no runway is usable.
                 if (!WingAirfield.HasLandingRunway(Aircraft))
                 {
                     WingCommandManager.Instance?.Toast(

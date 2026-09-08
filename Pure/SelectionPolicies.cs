@@ -36,34 +36,6 @@ namespace WingCommand
         }
     }
 
-    /// <summary>A point placed on mouse-down owns that gesture through the mouse-up callback.</summary>
-    internal sealed class MapPointGesture
-    {
-        private bool waitingForRelease;
-        private int consumedFrame = -1;
-
-        public void Consume(int frame, bool leftButtonHeld)
-        {
-            consumedFrame = frame;
-            waitingForRelease = leftButtonHeld;
-        }
-
-        public void Update(int frame, bool leftButtonHeld)
-        {
-            if (!waitingForRelease || leftButtonHeld) return;
-            waitingForRelease = false;
-            consumedFrame = frame;
-        }
-
-        public bool ConsumesClick(int frame) => waitingForRelease || consumedFrame == frame;
-
-        public void Reset()
-        {
-            waitingForRelease = false;
-            consumedFrame = -1;
-        }
-    }
-
     /// <summary>
     /// Pure selection rules for cycling and automatically advancing pilots in the squadron roster.
     /// </summary>

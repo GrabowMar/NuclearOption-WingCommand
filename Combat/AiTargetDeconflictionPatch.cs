@@ -4,13 +4,9 @@ using UnityEngine;
 
 namespace WingCommand
 {
-    /// <summary>
-    /// Adds reservation pressure to the stock target search for all locally simulated AI.
-    /// The original opportunity/threat calculation remains authoritative; this only breaks
-    /// the pathological tie where several pilots independently select the same best target.
-    /// A player remains a valid target, but each existing commitment makes another AI choose
-    /// a similarly useful unclaimed contact instead of dog-piling the human.
-    /// </summary>
+ /// <summary>Adds reservation pressure to native target scores so locally simulated AI spread across
+ /// comparable targets. Stock opportunity and threat scores still govern selection, including player
+ /// targets.</summary>
     [HarmonyPatch(typeof(CombatAI), nameof(CombatAI.ChooseHQTarget))]
     internal static class AiTargetDeconflictionPatch
     {
@@ -82,8 +78,7 @@ namespace WingCommand
                 return;
             }
 
-            // Preserve the stock bravery escape gate. Deconfliction should change who an AI
-            // fights, not make a timid aircraft accept a threat the base game rejected.
+            // Keep the stock bravery gate so deconfliction cannot admit a rejected threat.
             if (bestOpportunity * bravery * 2f < 0.35f &&
                 aircraft.NetworkHQ.GetAircraftThreat(bestTarget.persistentID) >
                     bestOpportunity * bravery * 2f &&

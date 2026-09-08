@@ -3,10 +3,7 @@ using System.Collections.Generic;
 
 namespace WingCommand
 {
-    /// <summary>
-    /// A pilot's radio manner. This is deliberately separate from rank and combat skill:
-    /// future story work can change what a pilot says without changing how the aircraft flies.
-    /// </summary>
+ /// <summary>Pilot radio style, independent of rank and flight skill.</summary>
     internal enum ChatterPersona
     {
         Professional,
@@ -15,7 +12,7 @@ namespace WingCommand
         Dry,
     }
 
-    /// <summary>A rare bit of ambient flight banter, optionally answered by another pilot.</summary>
+ /// <summary>Ambient flight line with an optional pilot reply.</summary>
     internal readonly struct ChatterExchange
     {
         public readonly string Opening;
@@ -33,15 +30,10 @@ namespace WingCommand
         }
     }
 
-    /// <summary>
-    /// Presentation and line-selection logic with no Unity dependency, so it can be tested
-    /// without loading the game. Plot context can later be added beside persona and event.
-    /// </summary>
+ /// <summary>Engine-free radio presentation and dialogue selection.</summary>
     internal static class ChatterDialogue
     {
-        // Static data keeps the ambient path allocation-free. The references are phrased as
-        // things pilots in this world might actually say, rather than breaking character to
-        // name another game.
+        // Keep ambient dialogue in static data and within the pilots' world.
         private static readonly ChatterExchange[] ambient =
         {
             new ChatterExchange("If the sky turns orange, I'm blaming the briefing officer.",
@@ -88,9 +80,8 @@ namespace WingCommand
             new ChatterExchange("My flight manual calls this an edge case.",
                                 "We're flying along the edge, so that checks out."),
 
-            // Pilot-specific seam. A null tag means "any pilot"; a named tag makes the
-            // exchange eligible only while that person is actually airborne. ReplyTag can
-            // independently require a particular second pilot.
+            // Null tags allow any eligible pilot; named speaker and reply tags independently require
+            // those pilots airborne.
             new ChatterExchange("Clean picture. Let's keep it that way.",
                                 speakerTag: "COBALT"),
             new ChatterExchange("If it's below the weather, it belongs to me.",
@@ -130,7 +121,7 @@ namespace WingCommand
             int start = Index(seed, total);
             if (repliesAllowed || AmbientAt(start).Reply == null) return AmbientAt(start);
 
-            // A lone wingman gets a line that does not hang as an unanswered question.
+            // For solo flight, select a line that needs no reply.
             for (int offset = 1; offset < total; offset++)
             {
                 ChatterExchange candidate = AmbientAt(start + offset);
@@ -258,11 +249,8 @@ namespace WingCommand
             }
         }
 
-        /// <summary>
-        /// One lead pilot acknowledges for a multi-aircraft element. The other tactical
-        /// numbers are spoken in the line, which keeps the radio readable while still
-        /// confirming exactly who accepted the order.
-        /// </summary>
+     /// <summary>Let one element lead acknowledge accepted tactical numbers in a single readable
+     /// transmission.</summary>
         public static string GroupAcknowledge(ChatterPersona persona, string order,
                                               string others, int seed)
         {
@@ -426,8 +414,7 @@ namespace WingCommand
                     new[] { "Airborne. Coming to you.", "Off the ground. Catching up." },
                     new[] { "Airborne. Moving into formation.", "Off the ground. Joining up." },
                     new[] { "Airborne. Room for one more?", "Off the ground. Coming to join you." });
-                // A released wingman signs off exactly as one ordered home does: it is
-                // the same thing happening to it, arrived at from the other direction.
+                // Use the RTB sign-off for released aircraft returning home.
                 case "DETACHED": return Acknowledge(persona, "RETURNTOBASE", seed);
                 case "FALLINGBACK": return Pick(seed, "Breaking off. Falling back.",
                                                        "Disengaging and opening the distance.");
@@ -445,6 +432,12 @@ namespace WingCommand
                                  "All weapons on " + subject + ".");
                 case "EXPENDED": return Pick(seed, "Rounds complete. Off target.",
                                                     "Expended. Coming off target.");
+                case "OUTOFAMMO": return Pick(persona, seed,
+                    new[] { "Winchester. Forming back up.", "Ammo's gone. Rejoining formation." },
+                    new[] { "Winchester. Coming back to the wing.", "Bone dry. Forming up on you." },
+                    new[] { "Winchester. Returning to formation.", "Empty. Rejoining." },
+                    new[] { "Winchester. Nothing left but harsh language. Forming up.",
+                            "Out of ammunition. Tucking back in." });
                 case "DOWN": return Pick(seed, "On the deck.", "Down safely.");
                 case "UNABLE": return "Unable to keep up. Returning to base.";
                 case "SLOWLEADER": return "Leader too slow for close formation. Holding wide until you accelerate.";

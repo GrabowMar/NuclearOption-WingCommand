@@ -4,7 +4,7 @@ namespace WingCommand
 {
     internal partial class WingCommandManager
     {
-        // Radial menu state
+        // Standalone radial state.
         private bool radialOpen;
         private Vector2 radialDelta;
         private int hoveredSlice = -1;
@@ -12,14 +12,8 @@ namespace WingCommand
         private static RadialSlice[] slices;
         private static int slicesRevision = -1;
 
-        /// <summary>
-        /// The overlay wheel's six sectors.
-        ///
-        /// Rebuilt when <see cref="WingHost.Revision"/> moves rather than being a static
-        /// initialiser, because the rejoin card names an order whose meaning a host profile
-        /// can change - "FORM UP" is not what the wing does above a moving warship - and a
-        /// once-per-process array would keep showing the aircraft wording forever.
-        /// </summary>
+     /// <summary>Six overlay sectors, rebuilt on WingHost.Revision changes so host-specific order
+     /// labels stay current.</summary>
         private static RadialSlice[] Slices
         {
             get
@@ -53,11 +47,8 @@ namespace WingCommand
 
         private float lastSliceSelectTime;
 
-        /// <summary>
-        /// The mod's own wheel, opened by the optional key. Independent of the slice on the
-        /// game's wheel: binding a key adds a second way in rather than turning the first
-        /// one off, so an unbound key is now the only thing this checks.
-        /// </summary>
+     /// <summary>Handle the optional standalone wheel key independently of native radial
+     /// integration.</summary>
         private void HandleRadialInput()
         {
             KeyCode key = Plugin.Settings.RadialKey.Value;
@@ -67,7 +58,7 @@ namespace WingCommand
                 return;
             }
 
-            // Right-click while radial is open cancels immediately
+            // Right-click cancels the open radial.
             if (radialOpen && Input.GetMouseButtonDown(1))
             {
                 CloseRadial(apply: false);
@@ -99,11 +90,8 @@ namespace WingCommand
             }
         }
 
-        /// <summary>
-        /// In flight the cursor is captured for mouse-look, so <c>Input.mousePosition</c>
-        /// does not move. The game's own wheel integrates the Rewired look axes instead;
-        /// this mirrors that exactly, including the decay term.
-        /// </summary>
+     /// <summary>Integrate Rewired look axes with native decay; captured flight cursors do not move
+     /// Input.mousePosition.</summary>
         private void AccumulateRadialDelta()
         {
             Rewired.Player p = GameManager.playerInput;
@@ -157,7 +145,7 @@ namespace WingCommand
                 Execute(WingAction.CycleRoe);
         }
 
-        /// <summary>Same angle convention the stock wheel uses: index 0 at the top, clockwise.</summary>
+     /// <summary>Native wheel angles: top is index 0, increasing clockwise.</summary>
         private int SliceFromDelta()
         {
             if (radialDelta.sqrMagnitude > 0.08f)
@@ -172,7 +160,7 @@ namespace WingCommand
                 return Mathf.Clamp(Mathf.FloorToInt(angle / per), 0, Slices.Length - 1);
             }
 
-            // In deadzone: latch previous selection for 1.2s so stopping mouse drag doesn't drop selection!
+            // Retain selection for 1.2 seconds in the deadzone after mouse motion stops.
             if (hoveredSlice >= 0 && (Time.unscaledTime - lastSliceSelectTime) < 1.2f)
             {
                 return hoveredSlice;

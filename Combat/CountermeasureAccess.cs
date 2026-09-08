@@ -5,10 +5,8 @@ using System.Reflection;
 
 namespace WingCommand
 {
-    /// <summary>
-    /// The one reflected boundary for native countermeasure stations. It is capability-
-    /// checked at plugin startup and fails closed when a game update moves the private field.
-    /// </summary>
+ /// <summary>Caches native countermeasure reflection at startup; disables access if the private field
+ /// changes.</summary>
     internal static class CountermeasureAccess
     {
         private static readonly Dictionary<Type, MethodInfo> firstCountermeasureMethods =
@@ -32,25 +30,9 @@ namespace WingCommand
                     "Countermeasure station access unavailable; panic ECM support is disabled.");
         }
 
-        /// <summary>
-        /// The station holding an <i>expendable</i> that answers this seeker — chaff for a
-        /// radar missile, flares for an infrared one.
-        ///
-        /// This exists because <c>CountermeasureManager.ChooseCountermeasure</c> cannot be
-        /// trusted with the question. It returns the first station whose threat types
-        /// contain the seeker, walking a list the game keeps sorted by display name — and
-        /// <c>RadarJammer.GetThreatTypes()</c> returns exactly the same
-        /// <c>{ "ARH", "SARH" }</c> that <c>ChaffEjector.GetThreatTypes()</c> does. On an
-        /// aircraft carrying both, which one it picks is decided by alphabetical order.
-        ///
-        /// When it picks the jammer, the defensive state holds the dispense trigger on a
-        /// jammer station and no chaff is ever released at a radar missile, while
-        /// <see cref="RadarJammerPulser"/> is separately driving the same station. That is
-        /// the reason a wingman could beam a SARH shot correctly and still take it.
-        ///
-        /// Skipping every non-expendable is the whole fix: the jammer is driven on its own
-        /// cadence by the pulser and has no business being the selected dispenser.
-        /// </summary>
+     /// <summary>Finds chaff or flares for the seeker, excluding jammers. Native selection sorts by
+     /// display name and may choose ECM instead of chaff because both advertise ARH/SARH support.
+     /// RadarJammerPulser drives ECM separately.</summary>
         public static bool TryFindExpendable(CountermeasureManager manager, string seekerType,
                                              out int index, out string reason)
         {
@@ -129,11 +111,8 @@ namespace WingCommand
             }
         }
 
-        /// <summary>
-        /// The countermeasure a station holds. <c>GetFirstCountermeasure</c> is public on the
-        /// station, but the station type itself is private, so the call is reflected and the
-        /// resolved method cached per type.
-        /// </summary>
+     /// <summary>Invokes the public GetFirstCountermeasure method on its private station type; caches
+     /// the method per type.</summary>
         private static Countermeasure FirstCountermeasure(object station)
         {
             if (station == null) return null;

@@ -16,18 +16,16 @@ namespace WingCommand
 
         public static HorizontalCommand Horizontal(Vector2 toSlot, Vector2 ownVelocity,
             Vector2 slotVelocity, Vector2 forward, Vector2 rendezvous, Vector2 arrivalVelocity,
-            float distance, float spacing, float lookAhead, float speed,
-            float acquisition, float aggression, float damping, float holdBlend)
+            float distance, float lookAhead, float speed,
+            float acquisition, float aggression, float damping)
         {
             float limit = lookAhead * (float)Math.Tan(WingTuning.CommandAngle * Math.PI / 180d);
             Vector2 cross = toSlot - forward * Vector2.Dot(toSlot, forward);
             Vector2 drift = ownVelocity - slotVelocity;
             drift -= forward * Vector2.Dot(drift, forward);
-            float zoneScale = 1f - holdBlend * 0.5f;
-            float inner = spacing * 0.025f * zoneScale;
-            float outer = spacing * 0.18f * zoneScale;
-            float ramp = Smooth01((cross.Length() - inner) / Math.Max(0.001f, outer - inner));
-            Vector2 correction = cross * (1.35f * aggression * ramp) - drift * (5f * damping);
+            // Filtered slot motion already removes twitch noise. Keep position
+            // correction proportional so small movements do not wait for a dead zone.
+            Vector2 correction = cross * (1.35f * aggression) - drift * (5f * damping);
             if (correction.LengthSquared() > limit * limit)
                 correction = Vector2.Normalize(correction) * limit;
             float travelTime = Math.Max(0.1f, distance / Math.Max(speed, 50f));

@@ -4,30 +4,13 @@ using NuclearOption.SavedMission;
 
 namespace WingCommand
 {
-    /// <summary>
-    /// The player's saved loadout templates: which stores go on which pylons, per airframe,
-    /// kept across missions and across restarts.
-    ///
-    /// This is the one piece of wing state that is deliberately not per-mission. A template
-    /// is a decision about how the player likes to fly a VT-7, not a fact about the sortie
-    /// they are flying now, so it lives in the BepInEx config alongside every other
-    /// preference rather than in the tables <see cref="WingShop.Reset"/> clears. Everything
-    /// else about a loadout — what a specific airframe is carrying, what the next
-    /// requisition will carry — stays in <see cref="WingLoadoutBook"/> and still dies with
-    /// the mission.
-    ///
-    /// Templates are keyed by <c>AircraftDefinition.jsonKey</c> and hold stable store
-    /// identities, never prefab references: a config file outlives any number of game
-    /// updates, and the whole store has to survive an identity it no longer recognises.
-    /// </summary>
+ /// <summary>Persists per-airframe pylon templates in BepInEx config across missions and restarts. Use
+ /// stable definition/store keys, never prefab references. Mission-specific fitted and planned loadouts
+ /// belong in WingLoadoutBook.</summary>
     internal static class WingLoadoutTemplates
     {
-        /// <summary>
-        /// Every template, in creation order, across all airframes.
-        ///
-        /// One flat list rather than a dictionary of lists: it is written out as one string,
-        /// read back as one string, and never grows past what a person will type names for.
-        /// </summary>
+     /// <summary>All templates in creation order, stored as a small flat list for
+     /// serialization.</summary>
         private static readonly List<LoadoutTemplateRecord> records =
             new List<LoadoutTemplateRecord>();
 
@@ -36,10 +19,10 @@ namespace WingCommand
 
         private static bool loaded;
 
-        /// <summary>Longest a template name may be, so the selector can always draw it.</summary>
+     /// <summary>Template-name length limit for selector display.</summary>
         public const int MaxNameLength = 28;
 
-        /// <summary>How many templates one airframe may have, so the popup never pages.</summary>
+     /// <summary>Per-airframe template limit to avoid popup pagination.</summary>
         public const int MaxPerAirframe = 8;
 
         private static readonly Dictionary<string, int> airframeLiveryIndices =
@@ -96,7 +79,7 @@ namespace WingCommand
             }
             catch
             {
-                // Fall back to aircraftParameters.liveries
+                // Try aircraftParameters.liveries next.
             }
 
             AircraftParameters p = definition.aircraftParameters;
@@ -113,15 +96,10 @@ namespace WingCommand
             return list;
         }
 
-        // ------------------------------------------------------------------- lifecycle
+        // Template lifecycle.
 
-        /// <summary>
-        /// Read the config value once.
-        ///
-        /// Not called from <c>Reset</c>: templates outlive the mission, and re-reading on
-        /// every mission end would quietly discard a template made during the last one if
-        /// the write had not landed yet.
-        /// </summary>
+     /// <summary>Load config once, outside mission Reset, so mission changes cannot discard unsaved
+     /// template edits.</summary>
         private static void EnsureLoaded()
         {
             if (loaded) return;
@@ -134,8 +112,8 @@ namespace WingCommand
             }
             catch (Exception e)
             {
-                // A config value that cannot be read at all is worth one line and an empty
-                // list. The codec already drops individual bad records on its own.
+                // On a wholly unreadable value, log once and clear the list; the codec handles
+                // individual invalid records.
                 records.Clear();
                 Plugin.Logger.LogWarning(
                     "[Loadout] saved templates could not be read and have been ignored: " +
@@ -155,9 +133,9 @@ namespace WingCommand
             }
         }
 
-        // ---------------------------------------------------------------------- queries
+        // Template queries.
 
-        /// <summary>The templates saved for one airframe, oldest first.</summary>
+     /// <summary>This airframe's templates in creation order.</summary>
         public static IReadOnlyList<LoadoutTemplateRecord> For(AircraftDefinition definition)
         {
             EnsureLoaded();
@@ -200,13 +178,8 @@ namespace WingCommand
             return null;
         }
 
-        /// <summary>
-        /// The name to print for a template id.
-        ///
-        /// A template the player has since deleted, or one saved for a different install,
-        /// still has to render as something: a purchase order or a recovered airframe can
-        /// outlive the template it was fitted from.
-        /// </summary>
+     /// <summary>Resolve a template name with a fallback for deleted or unavailable IDs; purchases and
+     /// recovered fits may outlive templates.</summary>
         public static string NameOf(string id)
         {
             LoadoutTemplateRecord record = ById(id);
@@ -217,14 +190,10 @@ namespace WingCommand
 
         public static bool Exists(string id) => ById(id) != null;
 
-        // ----------------------------------------------------------------- mutation
+        // Template editing.
 
-        /// <summary>
-        /// Add a template for an airframe, initialized with the given store keys.
-        ///
-        /// Returns null when the airframe cannot be keyed or the per-airframe cap is
-        /// reached, so the caller can say why rather than silently doing nothing.
-        /// </summary>
+     /// <summary>Create a template from store keys; return null when the airframe lacks a key or has
+     /// reached its template limit.</summary>
         public static LoadoutTemplateRecord Create(AircraftDefinition definition, string name,
                                                    IEnumerable<string> mountKeys)
         {
@@ -277,7 +246,7 @@ namespace WingCommand
             Save();
         }
 
-        /// <summary>Set one pylon's store, or clear it with a null key.</summary>
+     /// <summary>Set the pylon's store key; null clears it.</summary>
         public static void SetMount(LoadoutTemplateRecord record, int pylon, string key)
         {
             EnsureLoaded();
@@ -288,14 +257,9 @@ namespace WingCommand
             Save();
         }
 
-        // --------------------------------------------------------------------- naming
+        // Template naming.
 
-        /// <summary>
-        /// A name for a template the player has not named yet.
-        ///
-        /// Numbered per airframe rather than globally, because the selector only ever shows
-        /// one airframe's templates and "TEMPLATE 7" among three of them reads as a bug.
-        /// </summary>
+     /// <summary>Generate the next default template name within this airframe's list.</summary>
         public static string NextDefaultName(AircraftDefinition definition)
         {
             EnsureLoaded();
@@ -318,12 +282,8 @@ namespace WingCommand
             return false;
         }
 
-        /// <summary>
-        /// Trim a name to something the panel can draw and the config can hold.
-        ///
-        /// The delimiters are escaped by the codec rather than stripped here, so a name is
-        /// only ever shortened, never silently rewritten into different characters.
-        /// </summary>
+     /// <summary>Trim names to display/storage limits. Leave delimiter escaping to the codec so
+     /// characters are not silently substituted.</summary>
         private static string Clean(string name)
         {
             if (string.IsNullOrEmpty(name)) return "TEMPLATE";
@@ -340,13 +300,8 @@ namespace WingCommand
             return string.IsNullOrEmpty(key) ? null : key;
         }
 
-        /// <summary>
-        /// A short unique id.
-        ///
-        /// Not the name: names are edited, and a purchase order or a recovered airframe
-        /// holding a template id must not follow a rename into a different template or lose
-        /// track of the one it was fitted from.
-        /// </summary>
+     /// <summary>Generate a stable unique ID independent of editable names, preserving purchase and
+     /// recovered-fit references across renames.</summary>
         private static string NewId()
         {
             for (int attempt = 0; attempt < 64; attempt++)

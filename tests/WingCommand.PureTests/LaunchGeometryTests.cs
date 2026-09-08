@@ -79,6 +79,40 @@ namespace WingCommand.PureTests
         }
 
         [Fact]
+        public void ARecentlyUsedStripKeepsItsOperatingHeading()
+        {
+            // GetDistance locks the heading for thirty seconds after LastUsed. The nearer
+            // end is the airborne leader in the log that put a Brawler on 04 while the
+            // field was still launching 22 — that lock is what takeoff will honour, so
+            // the spawn has to honour it too.
+            Assert.Equal(30f, LaunchGeometry.OperatingDirectionHold, 3);
+            Assert.True(LaunchGeometry.OperatingDirectionLocked(0f));
+            Assert.True(LaunchGeometry.OperatingDirectionLocked(29.9f));
+            Assert.False(LaunchGeometry.OperatingDirectionLocked(30f));
+            Assert.False(LaunchGeometry.OperatingDirectionLocked(100f));
+
+            // End is much closer, but the strip is operating forwards.
+            Assert.False(LaunchGeometry.PreferReverse(
+                distanceToStart: 100f, distanceToEnd: 1f, reversable: true,
+                operatingLocked: true, currentlyReversed: false));
+            // Start is much closer, but the strip is operating in reverse.
+            Assert.True(LaunchGeometry.PreferReverse(
+                distanceToStart: 1f, distanceToEnd: 100f, reversable: true,
+                operatingLocked: true, currentlyReversed: true));
+        }
+
+        [Fact]
+        public void AStaleStripFallsBackToTheNearerEnd()
+        {
+            Assert.True(LaunchGeometry.PreferReverse(
+                distanceToStart: 100f, distanceToEnd: 1f, reversable: true,
+                operatingLocked: false, currentlyReversed: false));
+            Assert.False(LaunchGeometry.PreferReverse(
+                distanceToStart: 1f, distanceToEnd: 100f, reversable: true,
+                operatingLocked: false, currentlyReversed: true));
+        }
+
+        [Fact]
         public void ARunwayMustBeTakeoffCapableLevelAndLongEnough()
         {
             float run = LaunchGeometry.TakeoffRun(takeoffSpeed: 70f);
@@ -102,6 +136,26 @@ namespace WingCommand.PureTests
             Assert.False(LaunchGeometry.IsUsable(true, LaunchGeometry.MinimumRunwayLength + 10f,
                                                  heavy, true));
             Assert.True(LaunchGeometry.IsUsable(true, heavy * 2f, heavy, true));
+        }
+
+        [Fact]
+        public void ACatapultDeckSkipsTheSlopeAndLengthTests()
+        {
+            float fast = LaunchGeometry.TakeoffRun(takeoffSpeed: 95f);
+
+            // A real carrier deck strip is flagged for takeoff but short - the AssaultCarrier's
+            // are 84 m and 158 m - and under way it does not read as level. As a land strip it
+            // is refused twice over.
+            Assert.False(LaunchGeometry.IsUsable(true, 158f, fast, level: false));
+            Assert.False(LaunchGeometry.IsUsable(true, 84f, fast, level: true));
+
+            // With a catapult the game's own takeoff flag is trusted: both deck strips launch.
+            Assert.True(LaunchGeometry.IsUsable(true, 158f, fast, level: false, catapult: true));
+            Assert.True(LaunchGeometry.IsUsable(true, 84f, fast, level: true, catapult: true));
+
+            // A helipad is not a runway - Takeoff is false - so the catapult flag on it is
+            // still not a launch site.
+            Assert.False(LaunchGeometry.IsUsable(false, 158f, fast, level: true, catapult: true));
         }
 
         [Fact]

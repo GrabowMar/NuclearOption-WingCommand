@@ -61,12 +61,21 @@ namespace WingCommand
         /// <c>Airbase.GetTakeoffRunway</c> deliberately ignores occupancy and length beyond
         /// the caller's own minimum, so the caller has to supply the judgement. A sloped or
         /// short strip is refused here rather than discovered at rotation speed.
+        ///
+        /// A carrier deck is the exception. Its catapult strips are short by design - the
+        /// AssaultCarrier's are 84 m and 158 m - and under way the deck rarely reads as
+        /// level, but the catapult supplies the energy a ground roll would. The game flags
+        /// those strips for takeoff itself and the stock AI launches from them, so for a
+        /// catapult that flag is trusted outright: no slope test, no length floor. A land
+        /// helipad is excluded by the same flag being false on it.
         /// </summary>
         public static bool IsUsable(bool takeoff, float runwayLength, float takeoffRun,
-                                    bool level)
+                                    bool level, bool catapult = false)
         {
-            if (!takeoff || !level) return false;
+            if (!takeoff) return false;
+            if (catapult) return true;
             if (runwayLength < MinimumRunwayLength) return false;
+            if (!level) return false;
             return runwayLength >= Math.Max(0f, takeoffRun) + MaximumThresholdOffset;
         }
 
@@ -86,17 +95,45 @@ namespace WingCommand
         private const float NominalTakeoffAcceleration = 4f;
 
         /// <summary>
-        /// Which end of a reversible strip to launch from: the nearer one, as the stock
-        /// takeoff and taxi states both choose it.
+        /// How long a strip keeps the heading it last launched or landed on.
         ///
-        /// Kept separate from the engine call so that the tie — a field whose two ends are
-        /// equidistant — resolves the same way every time rather than on float noise.
+        /// Matches <c>Runway.GetDistance</c>: within this window the stock taxi and
+        /// takeoff states ignore which end is nearer and reuse <c>CurrentlyOperatingReversed</c>.
+        /// A spawn that picks the other end in that window is then handed a takeoff state
+        /// still locked to the first heading, which on a short island strip is a drive
+        /// off the threshold into the water.
+        /// </summary>
+        public const float OperatingDirectionHold = 30f;
+
+        /// <summary>
+        /// Whether the strip is still locked to the heading of its last use.
+        /// </summary>
+        public static bool OperatingDirectionLocked(float secondsSinceLastUsed) =>
+            secondsSinceLastUsed < OperatingDirectionHold;
+
+        /// <summary>
+        /// Which end of a reversible strip to launch from.
+        ///
+        /// A recently used strip keeps that heading, matching <c>Runway.GetDistance</c>.
+        /// Otherwise the nearer end wins, and a dead tie resolves the same way every time
+        /// rather than on float noise.
         /// </summary>
         public static bool PreferReverse(float distanceToStart, float distanceToEnd,
                                          bool reversable)
         {
             if (!reversable) return false;
             return distanceToEnd < distanceToStart;
+        }
+
+        /// <summary>
+        /// Which end to launch from, honouring a live operating-direction lock.
+        /// </summary>
+        public static bool PreferReverse(float distanceToStart, float distanceToEnd,
+                                         bool reversable, bool operatingLocked,
+                                         bool currentlyReversed)
+        {
+            if (operatingLocked) return currentlyReversed;
+            return PreferReverse(distanceToStart, distanceToEnd, reversable);
         }
 
         /// <summary>

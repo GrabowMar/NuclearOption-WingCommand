@@ -27,7 +27,6 @@ namespace WingCommand
         private int armedFrame;
         private float moveAltitude;
         private float moveSpeed;
-        private readonly MapPointGesture pointGesture = new MapPointGesture();
 
         /// <summary>Commanded Move height, metres AGL. Zero means each airframe's default.</summary>
         public float MoveAltitude => moveAltitude;
@@ -36,13 +35,6 @@ namespace WingCommand
 
         public bool PointArmed => pointArmed;
         public WingOrder ArmedOrder => armedOrder;
-        /// <summary>
-        /// Left-click still selects wing icons while an order is armed. Placement moved to
-        /// right-click, so the held left gesture is only consumed when a leftover press
-        /// actually belongs to this layer.
-        /// </summary>
-        internal bool ConsumesIconClick => pointGesture.ConsumesClick(Time.frameCount);
-
         /// <summary>
         /// True while <see cref="Status"/> is reporting something rather than repeating the
         /// standing instructions. The WMC status line uses it to decide whether that line is
@@ -79,11 +71,8 @@ namespace WingCommand
                 !WmcScreen.TacticalCommandModeActive)
             {
                 CancelPointOrder(notify: false);
-                pointGesture.Reset();
                 return;
             }
-
-            pointGesture.Update(Time.frameCount, Input.GetMouseButton(0));
 
             DynamicMap map = SceneSingleton<DynamicMap>.i;
             if (map == null) return;
@@ -152,7 +141,6 @@ namespace WingCommand
             pointArmed = false;
             moveAltitude = 0f;
             moveSpeed = 0f;
-            pointGesture.Reset();
             recruited.Clear();
             pendingRecruit.Clear();
             recruitConfirmationUntil = 0f;
@@ -494,9 +482,6 @@ namespace WingCommand
             WingCommandManager manager = WingCommandManager.Instance;
             if (manager == null) return true;
 
-            // The EventSystem click runs on release, which may be several frames after
-            // the point was placed. The entire held gesture belongs to the point command.
-            if (manager.MapConsumesIconClick) return false;
             if (!(__instance.unit is Aircraft aircraft)) return true;
 
             WingMember member = manager.Wing.Find(aircraft);

@@ -452,16 +452,13 @@ namespace WingCommand
                 "surcharge. Changes nothing while the squadron still has room.";
 
             public const string FullFuel =
-                "Requisitions launch with full tanks. Switch it off to launch them at " +
-                "half fuel instead - lighter and more agile, but they call bingo sooner.";
+                "Fuel each requisition launches with, as a share of full tanks - steps " +
+                "25 / 50 / 75 / 100%. Less fuel is lighter and more agile but calls bingo " +
+                "sooner; 100% is completely full even for an airframe that ships short.";
 
             public const string AssignSelected =
                 "Conscript the friendly AI aircraft selected on the map into your wing. " +
                 "Press twice to confirm the fee.";
-
-            public const string ReserveRelease =
-                "Give this airframe back to the faction pool. Press once to arm, again to " +
-                "confirm.";
 
             public const string Jam =
                 "JAM - the selected wingmen hold their formation slot and run their jammer " +

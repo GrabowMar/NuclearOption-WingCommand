@@ -4,7 +4,6 @@ namespace WingCommand
 {
     internal partial class WingCommandManager
     {
-        internal bool MapConsumesIconClick => mapLayer != null && mapLayer.ConsumesIconClick;
         internal bool MapOrderArmed => mapLayer != null && mapLayer.PointArmed;
         internal WingOrder ArmedMapOrder => mapLayer != null ? mapLayer.ArmedOrder : default;
         internal float MapMoveAltitude => mapLayer != null ? mapLayer.MoveAltitude : 0f;
@@ -16,12 +15,7 @@ namespace WingCommand
                 WingMarkers.Repaint(candidate.Aircraft);
         }
 
-        /// <summary>
-        /// Set which weapons the current command scope reaches for first.
-        ///
-        /// Scoped like an order rather than held wing-wide, so a mixed flight can be split
-        /// between the air and the ground without changing anyone's rules of engagement.
-        /// </summary>
+     /// <summary>Set weapon preference for the current command scope without changing ROE.</summary>
         internal void SetWeaponPreference(WingWeaponPreference preference)
         {
             List<WingMember> scope = Commands.Scope(wholeWing: false);
@@ -39,10 +33,8 @@ namespace WingCommand
                   WingWeaponPreferences.Label(preference));
         }
 
-        /// <summary>
-        /// The preference shared by the current scope, or null when they disagree. The
-        /// selector uses this to decide which button to light.
-        /// </summary>
+     /// <summary>Shared scope preference, or null for mixed preferences; determines selector
+     /// highlighting.</summary>
         internal WingWeaponPreference? ScopeWeaponPreference()
         {
             List<WingMember> scope = Commands.Scope(wholeWing: false);
@@ -62,7 +54,7 @@ namespace WingCommand
             foreach (WingMember member in Wing.Members) WingMarkers.Repaint(member.Aircraft);
         }
 
-        /// <summary>Drop one member back to the stock AI. Used by the map panel.</summary>
+     /// <summary>Release a map-selected member to native AI.</summary>
         internal void RemoveMember(WingMember member)
         {
             if (member == null) return;
@@ -71,10 +63,8 @@ namespace WingCommand
             Toast(name + " released - returning to base");
         }
 
-        /// <summary>
-        /// Grant or revoke temporary flight lead. Pressing it on the current lead, or on a
-        /// second wingman, hands it over cleanly - there is only ever one lead.
-        /// </summary>
+     /// <summary>Toggle temporary flight lead, transferring from any previous lead so at most one
+     /// remains.</summary>
         internal void ToggleFlightLead(WingMember member)
         {
             if (member == null) return;
@@ -91,7 +81,7 @@ namespace WingCommand
                 : "Cannot make " + member.Name + " lead: " + reason);
         }
 
-        /// <summary>Assign the current map selection to the wing. Used by the map panel.</summary>
+     /// <summary>Recruit the current map selection.</summary>
         internal void AddSelectedFromMap()
         {
             mapLayer?.AddSelected();

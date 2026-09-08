@@ -56,19 +56,16 @@ namespace WingCommand
             return t;
         }
 
-        private const float StatusHeaderHeight = 24f;
-        private const float StatusRowHeight = 30f;
-        private const float StatusPanelWidth = 210f;
+        private const float StatusHeaderHeight = 42f;
+        private const float StatusRowHeight = 36f;
+        private const float StatusPanelWidth = 230f;
         private const float StatusMapGap = 0f;
         private const float StatusBackdropOutsideFeather = 18f;
         private const float StatusBackdropInnerFeather = 12f;
         private const float StatusBackdropSeamOverlap = 18f;
         private const int StatusBackdropTextureSize = 80;
 
-        // Three type sizes, named and reused everywhere, rather than a different number per
-        // label. The strip previously ran a 14 px callsign against a 9 px state code, a
-        // contrast wider than anything in the game's own symbology, which is a large part of
-        // why it read as a separate overlay rather than as part of the HUD.
+        // Reuse the game's type scale, with readable supporting detail below each identity.
 
         /// <summary>The strip's own heading.</summary>
         private const float HeaderText = AvTokens.FontSmall;
@@ -77,12 +74,13 @@ namespace WingCommand
         private const float PrimaryText = AvTokens.FontLead;
 
         /// <summary>Order code and other supporting detail.</summary>
-        private const float SecondaryText = AvTokens.FontMicro;
+        private const float SecondaryText = AvTokens.FontSmall;
 
         private static float statusWidth = StatusPanelWidth;
 
         private static RectTransform statusRoot;
         private static TMP_Text statusTitle;
+        private static TMP_Text statusSummary;
         private static CombatHUD statusHud;
         private static Canvas statusCanvas;
         private static Sprite statusBackdropSprite;
@@ -140,6 +138,7 @@ namespace WingCommand
             if (statusRoot != null) Object.Destroy(statusRoot.gameObject);
             statusRoot = null;
             statusTitle = null;
+            statusSummary = null;
             statusHud = null;
             statusCanvas = null;
             statusRows.Clear();
@@ -173,8 +172,11 @@ namespace WingCommand
             CreateStatusBackdrop(statusRoot, map);
 
             statusTitle = WingUi.Label(statusRoot, "", new Rect(7f, -2f, statusWidth - 14f, 20f),
-                                       AvTheme.Accent.WithAlpha(0.90f), HeaderText, FontStyles.Normal,
+                                       AvTheme.Accent, HeaderText, FontStyles.Bold,
                                        TextAlignmentOptions.Left);
+            statusSummary = WingUi.Label(statusRoot, "", new Rect(7f, -21f, statusWidth - 14f, 16f),
+                                         WingUi.TextPrimary, SecondaryText, FontStyles.Normal,
+                                         TextAlignmentOptions.Left);
             PositionStatusPanel(map);
         }
 
@@ -335,9 +337,11 @@ namespace WingCommand
 
         private static void RefreshStatusPanel(WingRegistry wing)
         {
-            statusTitle.text = "WING " + wing.Count + "  ·  " +
-                               FormationShapes.Pretty(WingFormation.Shape).ToUpperInvariant() +
-                               "  ·  " + wing.Roe.ToString().ToUpperInvariant();
+            statusTitle.text = "WING  /  " + wing.Count;
+            statusTitle.color = AvTheme.Accent;
+            statusSummary.text = FormationShapes.Pretty(WingFormation.Shape).ToUpperInvariant() +
+                                 "  ·  " + wing.Roe.ToString().ToUpperInvariant();
+            statusSummary.color = WingUi.TextPrimary;
 
             while (statusRows.Count < wing.Count)
                 statusRows.Add(new StatusRow(statusRoot, statusRows.Count));
@@ -346,7 +350,7 @@ namespace WingCommand
             {
                 if (i < wing.Count)
                 {
-                    statusRows[i].Place(i, wing.Count);
+                    statusRows[i].Place(i);
                     statusRows[i].Bind(wing.Members[i], wing.Leader);
                 }
                 else statusRows[i].Hide();
@@ -368,13 +372,13 @@ namespace WingCommand
             statusRoot.anchorMin = statusRoot.anchorMax = new Vector2(0.5f, 0.5f);
             statusRoot.pivot = Vector2.zero;
 
-            // This is the roster's only placement: docked to the minimap's right edge and
-            // sharing its baseline. It grows upward, so membership changes never move the
-            // seam or detach the two surfaces.
+            // Zero offsets dock beside the minimap. Read settings each tick for live F1 edits.
             Vector3 worldBottomRight = mapRect.TransformPoint(
                 new Vector3(mapRect.rect.xMax, mapRect.rect.yMin, 0f));
             Vector3 position = map.hudMapAnchor.InverseTransformPoint(worldBottomRight)
                              + Vector3.right * StatusMapGap;
+            if (Plugin.Settings != null)
+                position += new Vector3(Plugin.Settings.WingHudX.Value, Plugin.Settings.WingHudY.Value, 0f);
 
             statusRoot.localPosition = position;
             statusRoot.localRotation = Quaternion.identity;
@@ -400,26 +404,26 @@ namespace WingCommand
                 rect.SetParent(parent, worldPositionStays: false);
 
                 icon = StatusIcon(rect, new Rect(7f, -6f, 18f, 18f));
-                identity = WingUi.Label(rect, "", new Rect(32f, -2f, 92f, 17f),
+                identity = WingUi.Label(rect, "", new Rect(32f, -2f, 104f, 17f),
                                         WingMarkers.MemberColor, PrimaryText, FontStyles.Normal,
                                         TextAlignmentOptions.Left);
-                state = WingUi.Label(rect, "", new Rect(32f, -17f, 118f, 13f),
-                                     WingMarkers.MemberColor.WithAlpha(0.62f), SecondaryText,
+                state = WingUi.Label(rect, "", new Rect(32f, -19f, 190f, 16f),
+                                     WingUi.TextPrimary, SecondaryText,
                                      FontStyles.Normal, TextAlignmentOptions.Left);
-                distance = WingUi.Label(rect, "", new Rect(126f, -3f, 76f, 16f),
-                                        WingMarkers.MemberColor.WithAlpha(0.78f), PrimaryText,
+                distance = WingUi.Label(rect, "", new Rect(142f, -3f, 80f, 16f),
+                                        WingUi.TextPrimary, PrimaryText,
                                         FontStyles.Normal, TextAlignmentOptions.Right);
-                rangeCue = StatusIcon(rect, new Rect(32f, -27f, 168f, 1f));
+                rangeCue = StatusIcon(rect, new Rect(32f, -34f, 190f, 1f));
             }
 
-            public void Place(int index, int count)
+            public void Place(int index)
             {
                 WingUi.Place(rect, new Rect(
                     0f,
                     -StatusHeaderHeight - index * StatusRowHeight,
                     statusWidth,
                     StatusRowHeight));
-                cueWidth = 168f;
+                cueWidth = 190f;
             }
 
             public void Bind(WingMember member, Aircraft leader)
@@ -458,8 +462,9 @@ namespace WingCommand
                     : lowStores ? AvTheme.Warning : WingMarkers.MemberColor;
                 icon.color = color;
                 identity.color = color;
-                state.color = color.WithAlpha(0.62f);
-                distance.color = color.WithAlpha(0.78f);
+                state.color = lowStores || damaged || !member.Alive || member.IsPanicking
+                    ? color : WingUi.TextPrimary;
+                distance.color = WingUi.TextPrimary;
                 rangeCue.color = color.WithAlpha(0.34f);
             }
 
@@ -483,9 +488,7 @@ namespace WingCommand
             /// The order abbreviation, plus the weapon preference when it is not the
             /// default.
             ///
-            /// Appended rather than given a column of its own: the strip is docked against
-            /// the minimap and cannot grow sideways, and AUTO is both the default and the
-            /// common case — so an ordinary flight reads exactly as it did before.
+            /// Keep the default AUTO implicit so the second line is reserved for useful detail.
             /// </summary>
             private static string StateText(WingMember member)
             {

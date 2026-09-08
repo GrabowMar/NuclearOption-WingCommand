@@ -7,10 +7,8 @@ using NOAvionics.Ui;
 
 namespace WingCommand
 {
-    /// <summary>
-    /// Dedicated radio subtitle surface. It stays frameless and clear of the game's legacy
-    /// message boxes while giving speaker, aircraft context and dialogue distinct weight.
-    /// </summary>
+ /// <summary>Frameless radio subtitles with separate speaker, aircraft, and dialogue styling, clear of
+ /// native message boxes.</summary>
     internal static class WingChatterHud
     {
         private sealed class Transmission
@@ -64,8 +62,7 @@ namespace WingCommand
 
             if (queue.Count >= MaxQueued)
             {
-                // Preserve danger calls. Routine chatter is cosmetic and may be discarded
-                // when the radio is already busy.
+                // Drop routine chatter when busy; preserve urgent calls.
                 if (!urgent) return;
                 queue.RemoveAt(queue.Count - 1);
             }
@@ -112,8 +109,7 @@ namespace WingCommand
             else if (elapsed > fadeOutAt) group.alpha = Mathf.Clamp01((currentDuration - elapsed) / FadeOut);
             else group.alpha = 1f;
 
-            // A small settle-in movement gives the card the clipped radio-subtitle feel
-            // without making it swim around during combat.
+            // Keep subtitle entry motion brief and small.
             float enter = Mathf.Clamp01(elapsed / FadeIn);
             card.anchoredPosition = new Vector2(0f, Mathf.Lerp(-20f, -26f, enter));
         }
@@ -145,9 +141,7 @@ namespace WingCommand
             currentAt = Time.unscaledTime;
             currentDuration = Mathf.Clamp(2.35f + current.Message.Length * 0.018f, 2.65f, 4.1f);
 
-            // Voiced here rather than at Enqueue: a queued line may wait several seconds
-            // behind the flight ahead of it, and a click that arrives before its own
-            // subtitle belongs to nothing the player can read.
+            // Play the click when the subtitle appears; queued lines may wait seconds.
             WingRadioAudio.Transmission();
 
             identityLabel.text = current.Identity;
@@ -230,12 +224,8 @@ namespace WingCommand
             canvasRoot.SetActive(false);
         }
 
-        /// <summary>
-        /// Pair the speaker's aircraft silhouette with the existing centred context text
-        /// without reverting to the unsupported Unicode triangle that rendered as a box in
-        /// some HUD fonts. The icon is decorative here: the aircraft name remains visible
-        /// text immediately beside it.
-        /// </summary>
+     /// <summary>Position a decorative aircraft sprite beside the readable name. Avoid Unicode
+     /// silhouettes unsupported by some HUD fonts.</summary>
         private static void PositionContextIcon()
         {
             if (contextIcon == null || contextLabel == null || card == null) return;

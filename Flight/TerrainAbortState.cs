@@ -2,7 +2,7 @@ using UnityEngine;
 
 namespace WingCommand
 {
-    /// <summary>Post-airborne pull-up used only when an actively controlled wingman is near terrain.</summary>
+ /// <summary>Pull up near terrain only after this airborne wingman is under mod control.</summary>
     internal sealed class TerrainAbortState : WingPilotState
     {
         private const float LookAhead = 800f;

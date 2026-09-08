@@ -2,54 +2,37 @@ using UnityEngine;
 
 namespace WingCommand
 {
-    /// <summary>
-    /// Everything the formation knows about how the leader is moving, filtered once by
-    /// <see cref="FormationFlyState"/> and handed to whichever flight model is flying.
-    ///
-    /// It is one type rather than a handful of loose parameters for the reason the turn
-    /// rate had to be filtered in the first place: these signals are only correct
-    /// *together*. The track, the heading rate and the speed rate are all differentiated
-    /// from the same smoothed leader velocity over the same tick, and deriving any one of
-    /// them separately - from the nose direction, from the rigidbody's angular velocity, or
-    /// from a raw velocity delta - is what previously let them disagree about which way and
-    /// how fast the leader was actually going.
-    /// </summary>
+ /// <summary>Consistent filtered leader motion from FormationFlyState, shared by both flight models so
+ /// geometry and speed control use the same track and sampling interval.</summary>
     internal readonly struct LeaderState
     {
-        /// <summary>Smoothed direction of travel. The steering reference.</summary>
+     /// <summary>Filtered travel direction for steering.</summary>
         public readonly Vector3 Track;
 
-        /// <summary>The same track flattened into the horizontal plane; the formation's frame.</summary>
+     /// <summary>Horizontal travel direction defining the formation frame.</summary>
         public readonly Vector3 FlatTrack;
 
-        /// <summary>Velocity on the same filtered track used by slot geometry.</summary>
+     /// <summary>Velocity along the filtered slot-frame track.</summary>
         public readonly Vector3 Velocity;
 
-        /// <summary>Filtered heading rate, rad/s, positive to the right, zero inside the noise band.</summary>
+     /// <summary>Filtered heading rate in rad/s, positive right and zero within the deadband.</summary>
         public readonly float TurnRate;
 
-        /// <summary>Filtered rate of change of the leader's speed, m/s². Signed.</summary>
+     /// <summary>Signed filtered acceleration in m/s².</summary>
         public readonly float SpeedRate;
 
-        /// <summary>
-        /// Filtered bank in BankOf's signed convention (negative right wing down).
-        /// Slot geometry, bank authority and roll trim share this signal so a stick
-        /// twitch cannot bypass the filter through another control path.
-        /// </summary>
+     /// <summary>Filtered BankOf angle, negative for right wing down; shared by slot geometry, bank
+     /// authority, and roll trim.</summary>
         public readonly float Bank;
 
-        /// <summary>Rate of the filtered bank, in rad/s; never raw body roll noise.</summary>
+     /// <summary>Derivative of filtered bank in rad/s, excluding raw body-rate noise.</summary>
         public readonly float BankRate;
 
-        /// <summary>Smoothed lever position, 0-1. Meaningless unless <see cref="ThrottleKnown"/>.</summary>
+     /// <summary>Smoothed throttle fraction, 0-1; valid only when ThrottleKnown.</summary>
         public readonly float Throttle;
 
-        /// <summary>
-        /// Whether the leader's control inputs could be read at all. It matters that this is
-        /// a separate flag: a missing <c>ControlInputs</c> read as a throttle of zero would
-        /// be indistinguishable from a leader that has genuinely chopped to idle, and the
-        /// anticipation would answer it by pulling the whole wing's power to nothing.
-        /// </summary>
+     /// <summary>Whether leader controls were readable. Keep absence separate from idle so failed reads
+     /// cannot pull the whole wing's power down.</summary>
         public readonly bool ThrottleKnown;
 
         public LeaderState(Vector3 track, Vector3 flatTrack, float turnRate, float speedRate,
@@ -66,14 +49,11 @@ namespace WingCommand
             ThrottleKnown = throttleKnown;
         }
 
-        /// <summary>The leader's speed <paramref name="leadSeconds"/> from now.</summary>
+     /// <summary>Predict leader speed after leadSeconds.</summary>
         public float PredictedSpeed(float speed, float leadSeconds) =>
             ThrustModel.PredictSpeed(speed, SpeedRate, leadSeconds, WingTuning.MaxCredibleAccel);
 
-        /// <summary>
-        /// The leader's acceleration as a horizontal vector, for the rotary model - which
-        /// commands a velocity rather than a speed and so needs the direction with it.
-        /// </summary>
+     /// <summary>Horizontal acceleration vector for rotary velocity control.</summary>
         public Vector3 FlatAcceleration =>
             FlatTrack * Mathf.Clamp(SpeedRate, -WingTuning.MaxCredibleAccel,
                                     WingTuning.MaxCredibleAccel);
@@ -81,11 +61,5 @@ namespace WingCommand
         public Quaternion Turn(float seconds) => Quaternion.AngleAxis(
             FormationTracking.Sweep(TurnRate, seconds) * Mathf.Rad2Deg, Vector3.up);
 
-        public GlobalPosition FutureSlot(GlobalPosition leaderPosition, Vector3 offset, float seconds)
-        {
-            var point = FormationTracking.FutureSlotOffset(Velocity.x, Velocity.y, Velocity.z,
-                offset.x, offset.y, offset.z, TurnRate, seconds);
-            return leaderPosition + new Vector3(point.x, point.y, point.z);
-        }
     }
 }

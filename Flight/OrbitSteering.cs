@@ -2,23 +2,17 @@ using UnityEngine;
 
 namespace WingCommand
 {
-    /// <summary>
-    /// Steers fixed-wing and rotary aircraft around an anchor using their native autopilots.
-    /// </summary>
+ /// <summary>Native fixed-wing and rotary steering around an orbit anchor.</summary>
     internal static class OrbitSteering
     {
-        /// <summary>Height above the anchor that fixed-wing aircraft hold, in metres.</summary>
+     /// <summary>Fixed-wing orbit height above anchor, in metres.</summary>
         private const float FixedWingAltitude = 1500f;
 
-        /// <summary>Height above the anchor that rotary aircraft hold, in metres.</summary>
+     /// <summary>Rotary orbit height above anchor, in metres.</summary>
         private const float RotaryAltitude = 250f;
 
-        /// <summary>
-        /// Steer one aircraft around <paramref name="anchor"/>.
-        /// </summary>
-        /// <param name="slot">
-        /// Roster slot selects a separate holding radius; every aircraft turns the same way.
-        /// </param>
+     /// <summary>Steer an aircraft around anchor.</summary> <param name="slot">Selects a separate orbit
+     /// radius; all members turn in the same direction.</param>
         public static void Fly(Aircraft aircraft, ControlInputs controls,
                                GlobalPosition anchor, float radius, int slot)
         {
@@ -31,10 +25,8 @@ namespace WingCommand
             var aim = OrbitGeometry.AimOffset(fromAnchor.x, fromAnchor.z, radius, slot, spacing);
             Vector3 ring = new Vector3(aim.x, 0f, aim.z);
 
-            // A host profile may raise the ring - a wing overwatching a warship wants
-            // separation from the ship's own mast and missiles. Only fixed-wing takes it:
-            // the rotary figure is tied to RotaryAgl and terrain following, and a
-            // helicopter told to orbit at jet height is outside what that autopilot holds.
+            // Apply host overwatch height only to fixed-wing rings. Rotary height remains within its
+            // terrain-following AGL policy.
             float overwatch = WingHost.Current.OverwatchAltitude;
             float altitude = rotary
                 ? RotaryAltitude
@@ -52,7 +44,7 @@ namespace WingCommand
                 return;
             }
 
-            // Cruise power. Orbiting is a holding pattern, not a race.
+            // Use cruise throttle for holding patterns.
             controls.throttle = Mathf.Clamp01(aircraft.GetAircraftParameters().cruiseThrottle);
 
             aircraft.autopilot.AutoAim(

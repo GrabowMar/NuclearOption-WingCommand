@@ -32,7 +32,6 @@ namespace WingCommand
         public const float FormationRecoveryHeading = 30f;
         public const float FormationInitialBraking = 2f;
         public const float FormationBankRiseRate = 30f;
-        public const float FormationTrimRate = 0.5f;
         public const float FormationBurstSeconds = 8f;
         public const float FormationBurstCooldown = 30f;
         public const float FormationBurstInterval = 0.2f;
@@ -62,10 +61,7 @@ namespace WingCommand
         /// </summary>
         public const float PursuitBank = 58f;
 
-        /// <summary>
-        /// Height below which bank match and pursuit authority yield to a climb.
-        /// Raised to 280 m so descending aircraft have enough altitude margin to arrest sink rate.
-        /// </summary>
+        /// <summary>Height below which bank matching yields to terrain clearance.</summary>
         public const float BankMatchFloor = 280f;
 
         /// <summary>
@@ -139,14 +135,6 @@ namespace WingCommand
 
         /// <summary>Seconds of rejoin boost per slot index, so a wing does not converge as one mass.</summary>
         public const float RejoinStagger = 1.2f;
-
-        /// <summary>
-        /// How much of the leader's bank a settled wingman copies outright. Blending with the
-        /// autopilot's own roll rather than overriding it is what keeps the turn stable; the
-        /// controller disengages the term past a hard bank limit and near the ground.
-        /// Raised to 0.45 for tighter bank matching during player turns.
-        /// </summary>
-        public const float BankMatchBlend = 0.45f;
 
         /// <summary>
         /// Slot-spacing multipliers by rules of engagement. Hold (0.7) pulls the wing into a
@@ -355,13 +343,16 @@ namespace WingCommand
         public const float BingoFuel = 0.15f;
 
         /// <summary>
-        /// Fuel fraction a requisition launches with when full tanks are switched off.
+        /// Fuel fills a requisition can be set to launch with, as fractions of full tanks.
         ///
-        /// Half tanks rather than a token amount: enough to fly the mission a wingman is
-        /// being bought for, while still being light enough to matter for a rotary or a
-        /// short-field launch — which is the only reason to ask for less than full.
+        /// A hard fraction of capacity, not the airframe's own default: 1.0 means completely
+        /// full even for a definition that ships deliberately short. Less fuel is lighter and
+        /// more agile but calls bingo sooner. Cycled from the Supply tab.
         /// </summary>
-        public const float PartialFuelLevel = 0.5f;
+        public static readonly float[] SpawnFuelSteps = { 0.25f, 0.5f, 0.75f, 1f };
+
+        /// <summary>The fuel fill a requisition uses until the player changes it: full tanks.</summary>
+        public const float DefaultSpawnFuel = 1f;
 
         // ------------------------------------------------------------------ delivery
 

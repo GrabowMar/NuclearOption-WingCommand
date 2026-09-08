@@ -7,31 +7,23 @@ using UnityEngine.UI;
 
 namespace WingCommand
 {
-    /// <summary>
-    /// Cached reflection accessors for the private members the radial-menu integration
-    /// needs.
-    ///
-    /// The usual approach here is an assembly publicizer, but this machine's application
-    /// control policy blocks the publicizer's MSBuild task from loading, so the members
-    /// are reached through Harmony's <c>AccessTools</c> instead. Everything is resolved
-    /// once at startup and reported through <see cref="Available"/>, so a future game
-    /// update that renames a field degrades to "native radial unavailable" rather than
-    /// throwing every frame.
-    /// </summary>
+ /// <summary>Caches private radial and MFD access through Harmony AccessTools. Local application policy
+ /// blocks publicizer tasks. Resolve at startup and disable unavailable integrations instead of
+ /// throwing each frame.</summary>
     internal static partial class GameAccess
     {
-        // RadialMenuMain
+        // Native radial fields.
         private static AccessTools.FieldRef<RadialMenuMain, RadialMenuAction[]> actionsMainRef;
         private static AccessTools.FieldRef<RadialMenuMain, Aircraft> menuAircraftRef;
         private static MethodInfo setupMainMethod;
 
-        // VirtualMFD
+        // Native MFD fields.
         private static AccessTools.FieldRef<VirtualMFD, List<Button>> leftButtonsRef;
         private static AccessTools.FieldRef<VirtualMFD, List<Button>> rightButtonsRef;
         private static AccessTools.FieldRef<VirtualMFD, List<MFDScreen>> leftScreensRef;
         private static AccessTools.FieldRef<VirtualMFD, List<MFDScreen>> rightScreensRef;
 
-        // RadialMenuAction
+        // Native action fields.
         private static AccessTools.FieldRef<RadialMenuAction, RadialMenuAction.ActionType> actionTypeRef;
         private static AccessTools.FieldRef<RadialMenuAction, Sprite> iconSpriteRef;
         private static AccessTools.FieldRef<RadialMenuAction, Sprite> backgroundSpriteRef;
@@ -39,31 +31,28 @@ namespace WingCommand
         private static AccessTools.FieldRef<RadialMenuAction, Color> bgActiveRef;
         private static AccessTools.FieldRef<RadialMenuAction, Image> iconImageRef;
 
-        /// <summary>True when every member resolved. False disables native radial integration.</summary>
+     /// <summary>Whether all required native radial members resolved.</summary>
         public static bool Available { get; private set; }
 
         public static string UnavailableReason { get; private set; }
 
-        /// <summary>True when the VirtualMFD internals resolved, enabling the WMC screen.</summary>
+     /// <summary>Whether native MFD internals resolved for the WMC screen.</summary>
         public static bool MfdAvailable { get; private set; }
 
-        // Where a landing aircraft is actually going. Both stock landing states keep their
-        // destination private, and it is the only honest source for it: Return To Base
-        // hands off to the game's own state, which picks its own airbase, so anything the
-        // mod computed itself would be a guess that disagrees with the aircraft whenever
-        // the nearest base is not the one it chose.
+        // Read the native landing state's chosen airbase; a guessed nearest base may differ from the
+        // actual destination.
         private static AccessTools.FieldRef<AIPilotLandingState, Airbase> landingAirbaseRef;
         private static AccessTools.FieldRef<AIHeloLandingState, Airbase.VerticalLandingPoint>
             heloLandingPointRef;
 
-        /// <summary>True when a landing aircraft's destination can be read.</summary>
+     /// <summary>Whether native landing destinations are readable.</summary>
         public static bool LandingDestinationAvailable { get; private set; }
 
-        // The hangar's spawned prefab is private. Delivery claims it immediately after
-        // TrySpawnAircraft rather than waiting for the unit-registry walk.
+        // Read the private spawned prefab immediately after TrySpawnAircraft, before registry
+        // discovery.
         private static AccessTools.FieldRef<Hangar, GameObject> hangarSpawnedObjectRef;
 
-        /// <summary>True when a hangar's spawned object can be read.</summary>
+     /// <summary>Whether the hangar's spawned object is readable.</summary>
         public static bool HangarSpawnAvailable { get; private set; }
 
         public static void Initialise()
@@ -84,8 +73,7 @@ namespace WingCommand
 
                 Available = true;
 
-                // The MFD panel is a separate, optional feature: if these do not resolve
-                // the radial still works, so failure is tracked on its own flag.
+                // Track optional MFD resolution separately so failure leaves the radial available.
                 try
                 {
                     leftButtonsRef  = Field<VirtualMFD, List<Button>>("leftButtons");
@@ -102,8 +90,7 @@ namespace WingCommand
                         "). WMC will be unavailable.");
                 }
 
-                // Cosmetic on its own: without it the map simply draws no line for a
-                // wingman that is on its way home.
+                // If landing reflection fails, omit the RTB map line.
                 try
                 {
                     landingAirbaseRef = Field<AIPilotLandingState, Airbase>("airbase");
@@ -155,7 +142,7 @@ namespace WingCommand
             return member;
         }
 
-        // ------------------------------------------------------------ RadialMenuMain
+        // Radial accessors.
 
         public static RadialMenuAction[] GetActionsMain(RadialMenuMain menu) => actionsMainRef(menu);
 
@@ -166,24 +153,17 @@ namespace WingCommand
 
         public static void SetupMain(RadialMenuMain menu) => setupMainMethod.Invoke(menu, null);
 
-        // --------------------------------------------------------------- VirtualMFD
+        // MFD accessors.
 
         public static List<Button> GetLeftButtons(VirtualMFD mfd) => leftButtonsRef(mfd);
         public static List<Button> GetRightButtons(VirtualMFD mfd) => rightButtonsRef(mfd);
         public static List<MFDScreen> GetLeftScreens(VirtualMFD mfd) => leftScreensRef(mfd);
         public static List<MFDScreen> GetRightScreens(VirtualMFD mfd) => rightScreensRef(mfd);
 
-        // ------------------------------------------------------------------- landing
+        // Landing accessors.
 
-        /// <summary>
-        /// Where an aircraft that is currently landing is going, if it has picked somewhere.
-        ///
-        /// Both stock landing states settle on their destination inside their own update,
-        /// so this returns false for the first moments after the order is given as well as
-        /// on any build where the fields did not resolve. Callers draw nothing rather than
-        /// falling back to a guessed airbase — a line to the wrong base is worse than no
-        /// line, because the map is the thing the player would use to check.
-        /// </summary>
+     /// <summary>Read the native landing destination. Return false until the state chooses one or if
+     /// reflection is unavailable; callers should omit the line rather than guess a base.</summary>
         public static bool TryGetLandingDestination(Pilot pilot, out GlobalPosition destination)
         {
             destination = default;
@@ -216,10 +196,7 @@ namespace WingCommand
             return false;
         }
 
-        /// <summary>
-        /// Attempts to read the runway assigned to an aircraft currently landing, including
-        /// its start, end, and nominal approach direction.
-        /// </summary>
+     /// <summary>Read the assigned landing runway's endpoints and nominal approach direction.</summary>
         public static bool TryGetLandingRunway(Pilot pilot, out GlobalPosition start, out GlobalPosition end, out Vector3 approachDir)
         {
             start = default;
@@ -263,7 +240,7 @@ namespace WingCommand
             catch { return null; }
         }
 
-        // ---------------------------------------------------------- RadialMenuAction
+        // Radial action accessors.
 
         public static void SetActionType(RadialMenuAction action, RadialMenuAction.ActionType type) =>
             actionTypeRef(action) = type;
@@ -273,10 +250,8 @@ namespace WingCommand
         public static void SetIconSprite(RadialMenuAction action, Sprite sprite) =>
             iconSpriteRef(action) = sprite;
 
-        /// <summary>
-        /// Copy sprites and colours from a stock action. Runtime-created ScriptableObjects
-        /// have null sprites and fully transparent colours, which would draw nothing.
-        /// </summary>
+     /// <summary>Copy native sprites and colours; newly created actions otherwise have null sprites and
+     /// transparent colours.</summary>
         public static void CopyAppearance(RadialMenuAction target, RadialMenuAction template)
         {
             if (target == null || template == null) return;

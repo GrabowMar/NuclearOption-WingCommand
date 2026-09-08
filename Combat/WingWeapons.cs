@@ -3,38 +3,23 @@ using UnityEngine;
 
 namespace WingCommand
 {
-    /// <summary>
-    /// Fires a wingman's weapons at a chosen target without taking over its flying.
-    ///
-    /// This is what lets a Defensive wingman shoot while never leaving its slot: the
-    /// formation controller keeps owning attitude and throttle, and this only touches the
-    /// weapon manager. It reuses the exact sequence the stock AI uses in
-    /// <c>AIPilotCombatModes</c> — select station, replace the target list, notify, fire —
-    /// rather than inventing a parallel firing path.
-    /// </summary>
+ /// <summary>Fires through the stock select-target-notify-fire sequence while leaving attitude and
+ /// throttle to the flight controller.</summary>
     internal static class WingWeapons
     {
-        /// <summary>
-        /// How long this aircraft waits between shots.
-        ///
-        /// The configured interval, shortened slightly for an experienced pilot. This is
-        /// the "reaction" half of the rank effect and the only place the cadence is read,
-        /// so every firing path — formation, orbit and attack run — inherits it.
-        /// </summary>
+     /// <summary>Shared shot interval for formation, orbit, and attack runs, shortened by pilot
+     /// experience.</summary>
         public static float FireInterval(Aircraft aircraft) =>
             WingTuning.FireInterval * WingPilotRoster.ReactionScale(aircraft);
 
-        /// <summary>
-        /// The weapon preference standing for this aircraft, or Auto when it is not a
-        /// commandable member of the player's wing.
-        /// </summary>
+     /// <summary>This member's weapon preference, or Auto if the aircraft is not commandable.</summary>
         private static WingWeaponPreference PreferenceOf(Aircraft aircraft)
         {
             WingMember member = WingCommandManager.Instance?.Wing?.Find(aircraft);
             return member != null ? member.WeaponPreference : WingWeaponPreference.Auto;
         }
 
-        /// <summary>What a wingman is currently allowed to shoot at.</summary>
+     /// <summary>Permitted target classes.</summary>
         internal enum Allow
         {
             None,
@@ -44,9 +29,7 @@ namespace WingCommand
             GroundOnly,
         }
 
-        /// <summary>
-        /// Try to engage the highest-value permitted target. Returns true if it fired.
-        /// </summary>
+     /// <summary>Engage the highest-value allowed target; return true if fired.</summary>
         public static bool Engage(Aircraft aircraft, Pilot pilot, Allow allow, float maxRange)
         {
             if (aircraft == null || !aircraft.LocalSim || pilot == null || allow == Allow.None) return false;
@@ -54,7 +37,7 @@ namespace WingCommand
             WeaponManager wm = aircraft.weaponManager;
             if (wm == null) return false;
 
-            // Never interrupt a salvo already in progress.
+            // Let an active salvo finish.
             WeaponStation current = wm.currentWeaponStation;
             if (current != null && current.SalvoInProgress) return false;
 
@@ -74,15 +57,8 @@ namespace WingCommand
             return true;
         }
 
-        /// <summary>
-        /// Whether this shot is actually worth taking, using the weapon's own stated
-        /// requirements.
-        ///
-        /// Without this a wingman fires on every engagement tick the moment anything
-        /// hostile is loosely in range, and empties its entire loadout in a few seconds.
-        /// The stock AI gates the same way — minimum range, alignment to the nose, and a
-        /// cooldown between launches.
-        /// </summary>
+     /// <summary>Checks the weapon's shot envelope. Callers enforce cadence separately to prevent
+     /// firing on every engagement tick.</summary>
         private static bool ShotIsValid(Aircraft aircraft, WeaponStation station, Unit target)
         {
             WeaponInfo info = station.WeaponInfo;
@@ -90,10 +66,8 @@ namespace WingCommand
 
             TargetRequirements req = info.targetRequirements;
 
-            // An experienced pilot gets slightly more out of the same weapon: a little more
-            // reach and a little more off-boresight tolerance. The scale is never below one,
-            // so rank can only ever widen this envelope — a low-ranked pilot shoots exactly
-            // as the mod always made them shoot.
+            // Experience may widen range and off-boresight tolerance; the scale never reduces the base
+            // envelope.
             float envelope = WingPilotRoster.EnvelopeScale(aircraft);
 
             float distance = FastMath.Distance(target.GlobalPosition(), aircraft.GlobalPosition());
@@ -103,13 +77,10 @@ namespace WingCommand
             if (req.minAltitude > 0f && aircraft.radarAlt < req.minAltitude) return false;
             if (req.maxAltitude > 0f && aircraft.radarAlt > req.maxAltitude * envelope) return false;
 
-            // Bombs and glide bombs are pickled, not aimed like a missile. The nose check
-            // is a seeker cone: a bomber on a run-in is looking at a point above the
-            // target, so the target sits below the boresight and every drop was refused.
+            // Bomb targets lie below the run-in boresight, so skip the missile seeker-cone check.
             if (info.bomb || info.glideBomb) return true;
 
-            // Alignment: the target has to be somewhere near the nose. minAlignment is the
-            // widest off-boresight angle the weapon accepts.
+            // minAlignment is the maximum permitted off-boresight angle.
             if (req.minAlignment > 0f)
             {
                 Vector3 toTarget = target.GlobalPosition() - aircraft.GlobalPosition();
@@ -120,29 +91,12 @@ namespace WingCommand
             return true;
         }
 
-        /// <summary>
-        /// Fire at one specific unit, chosen by the player rather than by the wingman.
-        /// Returns true if it fired.
-        /// </summary>
+     /// <summary>Engage the player's designated unit; return true if fired.</summary>
         public static bool EngageSpecific(Aircraft aircraft, Pilot pilot, Unit target, float maxRange) =>
             EngageDesignated(aircraft, pilot, target, maxRange, massed: false);
 
-        /// <summary>
-        /// Put everything that can hurt this target into it, without the wing-wide
-        /// concurrency cap.
-        ///
-        /// This is the Splash 'Em order's shooting, and the only place in the mod that
-        /// deliberately skips <see cref="TacticalCoordinator"/>. Massed fire on one
-        /// designation is the entire point of the order, so the reservation that normally
-        /// stops a four-ship spending four missiles on a two-missile target is exactly what
-        /// has to be suspended — the player has asked for that.
-        ///
-        /// What is <em>not</em> suspended is the weapon/target matching. A station still has
-        /// to be effective against this class of target and the shot still has to be inside
-        /// the weapon's own stated envelope, so a wingman works down through its missiles,
-        /// then its rockets, then its gun as each runs dry, rather than throwing anti-air
-        /// missiles at a tank. "Everything it has" means everything that can do the job.
-        /// </summary>
+     /// <summary>Splash 'Em bypasses TacticalCoordinator's firing cap for massed fire. Stations must
+     /// still match the target and pass their shot envelopes.</summary>
         public static bool EngageMassed(Aircraft aircraft, Pilot pilot, Unit target, float maxRange) =>
             EngageDesignated(aircraft, pilot, target, maxRange, massed: true);
 
@@ -162,9 +116,7 @@ namespace WingCommand
                 > maxRange * maxRange)
                 return false;
 
-            // Splash 'Em walks every effective store at the target, interleaved. A measured
-            // Attack order still massed some fire but respects the wing-wide cap, so a
-            // four-ship does not spend four missiles on a target that needed one or two.
+            // Splash interleaves effective stores; measured Attack retains the wing-wide firing cap.
             if (massed)
             {
                 WeaponStation station = MassedStationFor(aircraft, target, current);
@@ -186,7 +138,7 @@ namespace WingCommand
             return true;
         }
 
-        /// <summary>The shared select-and-fire sequence for offensive shots.</summary>
+     /// <summary>Select, target, notify, and fire an offensive station.</summary>
         private static void FireStation(Aircraft aircraft, Pilot pilot, Unit target,
                                         WeaponManager wm, WeaponStation station)
         {
@@ -219,12 +171,8 @@ namespace WingCommand
             }
         }
 
-        /// <summary>
-        /// The station a Splash 'Em run fires next: the most effective ready store that can
-        /// actually take the shot right now, rotated past the one just fired so a volley
-        /// interleaves missiles, rockets and gun instead of emptying one store before the
-        /// next is touched. The store just fired is only reused when nothing else can fire.
-        /// </summary>
+     /// <summary>Choose the most effective ready station that can fire now, preferring a different
+     /// station from the last shot. Reuse the previous one only if no alternative can fire.</summary>
         private static WeaponStation MassedStationFor(Aircraft aircraft, Unit target,
                                                       WeaponStation justFired)
         {
@@ -236,11 +184,8 @@ namespace WingCommand
             return pick ?? BestStationFor(aircraft, targetClass, WingWeaponPreference.Auto, target);
         }
 
-        /// <summary>
-        /// The station a measured Attack order uses against a designated unit. The player's
-        /// weapon preference still weighs in here; Splash 'Em, which expends everything, is
-        /// served by <see cref="MassedStationFor"/> instead.
-        /// </summary>
+     /// <summary>Choose a station for measured Attack using weapon preference. Splash uses
+     /// MassedStationFor to cycle stores.</summary>
         private static WeaponStation DesignatedStationFor(Aircraft aircraft, Unit target)
         {
             bool isAir = target.definition != null && target.definition.typeIdentity.air > 0.5f;
@@ -248,14 +193,8 @@ namespace WingCommand
             return BestStationFor(aircraft, targetClass, PreferenceOf(aircraft), target);
         }
 
-        /// <summary>
-        /// Whether this aircraft still carries anything effective against a target.
-        ///
-        /// Read by the Splash 'Em run to know when it has genuinely finished, rather than
-        /// circling a survivor with nothing left that can touch it. It ignores a station's
-        /// cooldown and range: those only pause a shot for a moment, and the run must wait
-        /// for them rather than read them as "out of ammunition" and go home early.
-        /// </summary>
+     /// <summary>Whether any remaining store can damage the target. Ignore temporary cooldown and range
+     /// limits so Splash does not mistake a delayed shot for an empty loadout.</summary>
         public static bool CanStillEngage(Aircraft aircraft, Unit target)
         {
             if (aircraft == null || target == null || target.disabled) return false;
@@ -276,11 +215,8 @@ namespace WingCommand
             return false;
         }
 
-        /// <summary>
-        /// Height a bomber wants above a surface target so its bombs clear their own
-        /// min-altitude gate. Fighters with only missiles or guns return zero and keep the
-        /// attack-run default.
-        /// </summary>
+     /// <summary>Required height above a surface target to clear bomb release limits. Return zero for
+     /// missile/gun-only loadouts to use the default attack height.</summary>
         public static float BombReleaseFloor(Aircraft aircraft, Unit target)
         {
             if (aircraft == null || aircraft.weaponStations == null || target == null) return 0f;
@@ -303,26 +239,12 @@ namespace WingCommand
             return floor;
         }
 
-        /// <summary>
-        /// True when this airframe is carrying a jammer <i>weapon</i> — a pod whose
-        /// <c>WeaponInfo.jammer</c> flag is set, typically the stock <c>JammingPod</c>.
-        ///
-        /// Self-protection ECM (<c>RadarJammer</c>, a countermeasure) is a different thing
-        /// and does not count. Almost every combat aircraft has one, and using it as the
-        /// gate made the Jam order available to the whole wing, then applied <c>Unit.Jam</c>
-        /// as a cheat that never touched a pod.
-        /// </summary>
+     /// <summary>Whether a weapon station carries a jammer pod. Self-protection RadarJammer
+     /// countermeasures do not qualify for the Jam order.</summary>
         public static bool HasJammer(Aircraft aircraft) => JammerStation(aircraft) != null;
 
-        /// <summary>
-        /// Run the aircraft's jammer pod against a designated unit, using the same
-        /// select-and-fire sequence every other shot in this file uses.
-        ///
-        /// The stock <c>JammingPod</c> is what actually blinds the target: <c>SetTarget</c>
-        /// plus <c>Fire</c> lets its own range falloff, power and <c>FixedUpdate</c> tick
-        /// drive <c>Unit.Jam</c>. Calling <c>Unit.Jam</c> from here with a hardcoded amount
-        /// was how every wingman jammed at any range without carrying a pod.
-        /// </summary>
+     /// <summary>Fire the jammer pod at the designation. The native pod controls jamming range, power,
+     /// and updates.</summary>
         public static bool EngageJammer(Aircraft aircraft, Pilot pilot, Unit target)
         {
             if (aircraft == null || pilot == null || target == null || target.disabled)
@@ -371,16 +293,9 @@ namespace WingCommand
             return null;
         }
 
-        /// <summary>
-        /// Let go of one cargo load, using the same station-select-and-fire sequence every
-        /// other shot in this file uses.
-        ///
-        /// There is no target list: a cargo station drops what it is carrying where the
-        /// aircraft is. Whether the stock station answers <c>Fire</c> on the ground is not
-        /// something a plugin build can prove, so the caller watches the station's own
-        /// ammunition for the answer and falls back to the stock transport behaviour if
-        /// nothing moves.
-        /// </summary>
+     /// <summary>Release one cargo load through the native station. Ground release requires runtime
+     /// confirmation: the caller checks ammunition changes and falls back to native transport if
+     /// nothing drops.</summary>
         public static bool ReleaseCargo(Aircraft aircraft, Pilot pilot)
         {
             if (aircraft == null || pilot == null || aircraft.weaponStations == null) return false;
@@ -409,9 +324,7 @@ namespace WingCommand
             return true;
         }
 
-        /// <summary>
-        /// Shoot down inbound missiles using the game's own intercept target search.
-        /// </summary>
+     /// <summary>Intercept inbound missiles through the native target search.</summary>
         public static bool InterceptMissiles(Aircraft aircraft, Pilot pilot, Aircraft protectee)
         {
             if (aircraft == null || !aircraft.LocalSim || pilot == null || aircraft.weaponManager == null ||
@@ -421,11 +334,8 @@ namespace WingCommand
             WeaponManager wm = aircraft.weaponManager;
             if (wm.currentWeaponStation != null && wm.currentWeaponStation.SalvoInProgress) return false;
 
-            // The intercept search anchors on a concrete inbound missile. Passing null used
-            // to return zero targets immediately — CombatAI.LookForMissileTargets bails when
-            // the anchor has no known position — so a wingman under a missile warning never
-            // fired a single defensive shot. The anchor is the missile threatening whichever
-            // aircraft the rules of engagement chose to defend (us or the leader).
+            // Anchor the native search on a known inbound threatening the chosen protectee; a null
+            // anchor returns no targets.
             MissileWarning warning = protectee.GetMissileWarningSystem();
             if (warning == null || !warning.IsWarning())
                 return false;
@@ -433,8 +343,8 @@ namespace WingCommand
             Missile incoming = ChooseIncoming(warning, protectee, aircraft, out WeaponStation station);
             if (incoming == null) return false;
 
-            // Confirm the native target search before claiming anything. Repeated failed
-            // searches used to renew a reservation forever and deny another wingman a shot.
+            // Confirm a native search result before claiming, so failed searches cannot keep renewing a
+            // reservation.
             interceptTargets.Clear();
             int found = CombatAI.LookForMissileTargets(aircraft, incoming, station, interceptTargets);
             if (found <= 0 || !interceptTargets.Contains(incoming) ||
@@ -447,9 +357,8 @@ namespace WingCommand
             wm.currentWeaponStation = station;
             List<Unit> targets = wm.GetTargetList();
             targets.Clear();
-            // The native helper finds targets for missile weapons, including nearby
-            // aircraft and surface units. Defensive fire may engage only this inbound;
-            // copying the whole result would start an offensive salvo under Hold ROE.
+            // Fire only at this inbound; the native result can include aircraft and surface targets
+            // forbidden under Hold.
             targets.Add(incoming);
             interceptTargets.Clear();
             wm.TargetListChanged();
@@ -457,7 +366,7 @@ namespace WingCommand
             return true;
         }
 
-        // ------------------------------------------------------------------ selection
+        // Target selection.
 
         private enum TargetClass { Air, Surface, Missile }
 
@@ -470,13 +379,11 @@ namespace WingCommand
             bool wantAir = allow == Allow.AirOnly || allow == Allow.AirAndGround;
             bool wantGround = allow == Allow.GroundOnly || allow == Allow.AirAndGround;
 
-            // The preference biases which kind of contact is worth breaking off for. It
-            // deliberately does not clear wantAir/wantGround: a wingman told to prefer
-            // air-to-air still shoots the tank in front of it rather than nothing.
+            // Bias target classes without excluding alternatives when the preferred class is
+            // unavailable.
             WingWeaponPreference preference = PreferenceOf(aircraft);
 
-            // Most contacts can use the preferred station. Only inspect alternatives
-            // when that station cannot take the concrete shot.
+            // Search other stations only when the preferred one cannot take this shot.
             WeaponStation airStation = wantAir
                 ? BestStationFor(aircraft, TargetClass.Air, preference) : null;
             WeaponStation groundStation = wantGround
@@ -490,8 +397,7 @@ namespace WingCommand
             GlobalPosition from = aircraft.GlobalPosition();
             FactionHQ hq = aircraft.NetworkHQ;
 
-            // Spatial query rather than a scan of every unit in the mission. This is the
-            // same grid the game's own proximity checks use.
+            // Use the native spatial grid to avoid scanning every mission unit.
             scratch.Clear();
             BattlefieldGrid.GetUnitsInRangeNonAlloc(from, maxRange, scratch);
 
@@ -499,7 +405,7 @@ namespace WingCommand
             {
                 Unit unit = scratch[i];
                 if (unit == null || unit.disabled || unit == aircraft || unit.definition == null) continue;
-                if (unit.NetworkHQ == null || unit.NetworkHQ == hq) continue;   // friendly or neutral
+                if (unit.NetworkHQ == null || unit.NetworkHQ == hq) continue;   // Skip friendly and neutral units.
 
                 TypeIdentity id = unit.definition.typeIdentity;
                 bool isAir = id.air > 0.5f;
@@ -515,8 +421,7 @@ namespace WingCommand
                     if (candidate == null) continue;
                 }
 
-                // The game's own weapon/target matching, so a wingman does not try to take
-                // a tank with an anti-air missile.
+                // Use native effectiveness to reject mismatched weapons and targets.
                 float score = candidate.WeaponInfo.effectiveness.OpportunityAgainst(id);
                 if (score <= 0f) continue;
 
@@ -528,14 +433,13 @@ namespace WingCommand
                 if (TacticalCoordinator.CountClaims(unit, aircraft) >= needed) continue;
                 int committed = TacticalCoordinator.CountCommitments(unit, aircraft);
 
-                // Effectiveness first, then range and reservation pressure. The old loop
-                // used effectiveness alone, so equal contacts all resolved to whichever
-                // BattlefieldGrid happened to enumerate first for every wingman.
+                // Weight effectiveness by range and reservations so equal contacts do not all resolve
+                // by grid enumeration order.
                 score *= Mathf.Lerp(1f, 0.35f, Mathf.Clamp01(distance / weaponRange));
                 score /= 1f + committed * WingTuning.TargetSaturationPenalty;
                 score *= ClassBias(preference, isAir);
 
-                // Preserve scarce guided munitions for high-threat / high-value targets
+                // Reserve guided munitions for valuable or threatening targets.
                 if (candidate.WeaponInfo != null &&
                     (candidate.WeaponInfo.missile || candidate.WeaponInfo.laserGuided || candidate.WeaponInfo.glideBomb))
                 {
@@ -564,14 +468,8 @@ namespace WingCommand
             return best;
         }
 
-        /// <summary>
-        /// How much the player's weapon preference favours this class of contact.
-        ///
-        /// A multiplier rather than a filter, and a mild one: the preferred class has to be
-        /// clearly worse before the other is chosen, but it can still be chosen. The damped
-        /// side is never zero, so a preference can reorder targets and can never empty the
-        /// list.
-        /// </summary>
+     /// <summary>Soft target-class preference. Both weights remain positive, so preference reorders
+     /// candidates without excluding them.</summary>
         private static float ClassBias(WingWeaponPreference preference, bool isAir)
         {
             switch (preference)
@@ -582,7 +480,8 @@ namespace WingCommand
             }
         }
 
-        /// <summary>Closest-time unclaimed, tracked missile that a ready station can engage.</summary>
+     /// <summary>Choose the unclaimed tracked inbound with the shortest time to impact that a ready
+     /// station can engage.</summary>
         private static Missile ChooseIncoming(MissileWarning warning, Aircraft protectee,
                                               Aircraft interceptor, out WeaponStation station)
         {
@@ -622,7 +521,7 @@ namespace WingCommand
             return best;
         }
 
-        /// <summary>Total remaining guided munitions (missiles, laser-guided bombs, glide bombs).</summary>
+     /// <summary>Remaining missiles, laser-guided bombs, and glide bombs.</summary>
         public static int GetGuidedAmmo(Aircraft aircraft)
         {
             if (aircraft == null || aircraft.weaponStations == null) return 0;
@@ -648,7 +547,7 @@ namespace WingCommand
             return Mathf.Clamp(estimated, 1, maxWingmen);
         }
 
-        /// <summary>Estimated useful concurrent shooters from a particular aircraft.</summary>
+     /// <summary>Estimate useful simultaneous shooters for this aircraft and target.</summary>
         public static int RecommendedAttackers(Aircraft aircraft, Unit target)
         {
             if (aircraft == null || target == null || target.definition == null) return 1;
@@ -660,21 +559,13 @@ namespace WingCommand
             return RequiredAttackers(station, target);
         }
 
-        /// <summary>Reused across calls so target search allocates nothing per tick.</summary>
+     /// <summary>Reuse target-search storage to avoid per-tick allocation.</summary>
         private static readonly List<Unit> scratch = new List<Unit>(64);
         private static readonly List<Unit> interceptTargets = new List<Unit>();
 
-        /// <summary>
-        /// The ready station this aircraft should use against a class of target.
-        ///
-        /// Effectiveness still decides, as it always has. The player's preference only
-        /// reweights stations that are already valid for this target class, so the choice
-        /// stays inside the same set the stock ranking would have picked from — and an
-        /// aircraft whose preferred stores are empty, unready or absent simply gets the
-        /// most effective station it has, exactly as before.
-        /// When a target is supplied, reject unusable shots before ranking; a preferred
-        /// weapon outside its envelope must not hide another station that can fire now.
-        /// </summary>
+     /// <summary>Rank ready stations by effectiveness and preference. For a specific target, reject
+     /// invalid shots first so an out-of-envelope preferred weapon cannot hide one that can
+     /// fire.</summary>
         private static WeaponStation BestStationFor(Aircraft aircraft, TargetClass targetClass) =>
             BestStationFor(aircraft, targetClass, PreferenceOf(aircraft));
 
@@ -723,17 +614,8 @@ namespace WingCommand
             return best;
         }
 
-        /// <summary>
-        /// The preference's weighting of one already-valid station.
-        ///
-        /// Missile defence is deliberately excluded: shooting down an inbound missile is
-        /// the most time-critical thing a wingman does, and there is no sense in which the
-        /// player wanting the gun used on trucks should change which interceptor it picks.
-        ///
-        /// The close-in weighting reads reach from the weapon's own stated maximum range,
-        /// so "the gun end of the loadout" needs no list of weapon names to identify: on
-        /// every airframe it is simply the shortest-ranged store that can take the shot.
-        /// </summary>
+     /// <summary>Weight valid stations by preference, excluding missile defence. Close-in preference
+     /// uses weapon range rather than weapon names.</summary>
         private static float StationBias(WingWeaponPreference preference, WeaponStation station,
                                          TargetClass targetClass)
         {
@@ -743,29 +625,19 @@ namespace WingCommand
 
             float reach = Mathf.Max(station.WeaponInfo.targetRequirements.maxRange, 1f);
 
-            // 2x at gun range, tapering to no advantage by the time a store reaches out
-            // past ten kilometres. A short-ranged store therefore wins a close contest but
-            // never displaces a weapon that is several times more effective.
+            // Short-range stores get up to 2x weight, tapering to 1x at 10 km; effectiveness still
+            // governs large differences.
             return Mathf.Lerp(2f, 1f, Mathf.Clamp01(reach / 10000f));
         }
 
-        /// <summary>True when the aircraft carries anything able to engage missiles.</summary>
+     /// <summary>Whether any carried weapon can engage missiles.</summary>
         public static bool HasMissileDefence(Aircraft aircraft)
         {
             return aircraft != null && BestStationFor(aircraft, TargetClass.Missile) != null;
         }
 
-        /// <summary>
-        /// The enemy aircraft most threatening a given aircraft, or null.
-        ///
-        /// Used by the Cover Me order, which is the whole difference between it and plain
-        /// formation flight: a covering wingman shoots at what is hunting the player, not
-        /// at whatever happens to be nearest to itself.
-        ///
-        /// Aircraft behind the protectee score better than aircraft ahead of it at the same
-        /// range, because that is where a gun or a heater comes from and it is the half of
-        /// the sky the player can least see.
-        /// </summary>
+     /// <summary>Choose the most threatening enemy aircraft, or null. Rear-hemisphere contacts receive
+     /// a distance advantage to favour threats behind the protectee.</summary>
         public static Unit NearestThreatTo(Aircraft protectee, float range)
         {
             if (protectee == null) return null;
@@ -789,8 +661,7 @@ namespace WingCommand
                 float distanceSq = toThreat.sqrMagnitude;
                 if (distanceSq > rangeSq) continue;
 
-                // Halve the effective distance for anything in the rear hemisphere, so a
-                // trailer is preferred over a head-on contact at the same range.
+                // Halve effective distance for rear-hemisphere contacts.
                 float score = distanceSq;
                 if (Vector3.Dot(toThreat, facing) < 0f) score *= 0.5f;
 
@@ -803,5 +674,38 @@ namespace WingCommand
             return best;
         }
 
+     /// <summary>Choose the nearest live enemy within radius of near that remaining stores can damage.
+     /// Different HQs are hostile. Return null when no usable target or ordnance remains.</summary>
+        public static Unit NextExpendTarget(Aircraft aircraft, GlobalPosition near,
+                                            float radius, Unit exclude)
+        {
+            if (aircraft == null) return null;
+
+            FactionHQ hq = aircraft.NetworkHQ;
+            float radiusSq = radius * radius;
+
+            Unit best = null;
+            float bestSq = float.MaxValue;
+
+            List<Unit> all = UnitRegistry.allUnits;
+            for (int i = 0; i < all.Count; i++)
+            {
+                Unit u = all[i];
+                if (u == null || u.disabled || ReferenceEquals(u, exclude) ||
+                    ReferenceEquals(u, aircraft))
+                    continue;
+                // No HQ means neutral; matching HQ means friendly.
+                if (u.NetworkHQ == null || u.NetworkHQ == hq) continue;
+
+                float d = (u.GlobalPosition() - near).sqrMagnitude;
+                if (d > radiusSq || d >= bestSq) continue;
+                if (!CanStillEngage(aircraft, u)) continue;
+
+                bestSq = d;
+                best = u;
+            }
+
+            return best;
+        }
     }
 }

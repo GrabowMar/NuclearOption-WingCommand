@@ -33,7 +33,7 @@ namespace WingCommand
 
         public static void Tick()
         {
-            // Never write another screen's transforms, and never compete with Boscali.
+            // Boscali owns both layout and sorting when loaded.
             if (screen == null || surface == null) return;
 
             DynamicMap map = SceneSingleton<DynamicMap>.i;
@@ -63,8 +63,8 @@ namespace WingCommand
             var mapRect = map.transform as RectTransform;
             float center = mapRect == null ? viewport.center.y :
                 canvas.InverseTransformPoint(mapRect.TransformPoint(mapRect.rect.center)).y;
-            // Reserve the native clock/feed and, while spectating, the spawn controls.
-            float bottom = SceneSingleton<CombatHUD>.i?.aircraft != null ? 26f : 120f;
+            // Always reserve spawn-control clearance so entering/leaving a plane keeps the same scale.
+            const float bottom = 120f;
             var fit = MfdPresentationRules.FitBesideBezel(size.x, size.y, left,
                 viewport.xMin + 8f, viewport.xMax - 8f,
                 viewport.yMin + bottom, viewport.yMax - 26f, bezelLeft, bezelRight, 8f, center);

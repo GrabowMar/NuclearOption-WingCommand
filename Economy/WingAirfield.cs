@@ -3,41 +3,19 @@ using UnityEngine;
 
 namespace WingCommand
 {
-    /// <summary>
-    /// Runway lookup and the launch pose, plus the watchdog that gets a delivery rolling.
-    ///
-    /// A fixed-wing requisition is placed on the takeoff strip and left to the stock AI, but
-    /// "left to it" needs one guard. <c>AIPilotTaxiState</c> steers from
-    /// <c>PathfindingAgent.GetSteerpoint</c>, and that returns nothing at all when its
-    /// waypoint list is empty — on which frame the taxi state zeroes the throttle and
-    /// returns <i>before</i> the twelve-metre test that would have handed the aircraft to
-    /// takeoff. Thirty seconds under one metre per second later its stuck timer fires and
-    /// the pilot ejects on the runway. A field whose taxi network does not reach its own
-    /// threshold puts every delivery into exactly that hole.
-    ///
-    /// So the transition is not left to chance: once the aircraft is verifiably on the
-    /// runway and pointing down it, this hands it to <c>AIPilotTakeoffState</c> itself.
-    /// That is the one pose the stock takeoff state is safe to enter from — it is the pose
-    /// its own hold-short logic would have entered from — and entering it anywhere else is
-    /// what turns a delivery into a grass cut. Nothing here moves an aircraft.
-    /// </summary>
+ /// <summary>Builds runway launch poses and watches stalled native taxi. Missing pathfinder waypoints
+ /// can prevent the native taxi-to-takeoff transition and eventually eject the pilot. After verifying
+ /// runway position and alignment, hand off to native takeoff without moving the aircraft.</summary>
     internal static class WingAirfield
     {
-        /// <summary>
-        /// How long the stock taxi state gets to make its own move first.
-        ///
-        /// On a healthy field it needs a single tick: the aircraft is put down inside the
-        /// twelve metres at which taxi queues for takeoff and switches states itself. Six
-        /// seconds is therefore not a wait, it is unambiguous evidence that the pathfinder
-        /// gave taxi nothing to steer with — and it is a fifth of the thirty-second stuck
-        /// timer that would otherwise end in an ejection on the runway.
-        /// </summary>
+     /// <summary>Seconds allowed for native taxi before intervening, well before its stuck timer ejects
+     /// the pilot.</summary>
         private const float TaxiGrace = 6f;
 
-        /// <summary>Speed under which a taxiing delivery counts as not having got going.</summary>
+     /// <summary>Maximum speed considered a stalled taxi departure.</summary>
         private const float StalledSpeed = 1.5f;
 
-        /// <summary>Radius within which an aircraft is considered to be at a field.</summary>
+     /// <summary>Distance defining field proximity.</summary>
         private const float FieldRadius = 4000f;
 
         private sealed class Launch
@@ -53,18 +31,14 @@ namespace WingCommand
 
         private static readonly List<Launch> launches = new List<Launch>();
 
-        /// <summary>The pose a requisition is spawned at, and the strip it belongs to.</summary>
+     /// <summary>Spawn pose and its departure runway.</summary>
         internal struct LaunchPose
         {
             public Airbase.Runway Runway;
             public bool Reverse;
 
-            /// <summary>
-            /// The threshold the aircraft is placed at. Held as a transform rather than a
-            /// point so that the departure lane measures its clearance against the live
-            /// strip: a floating-origin shift or a moving carrier deck moves both, and a
-            /// stationary aircraft must not read as one that has cleared the spot.
-            /// </summary>
+         /// <summary>Live threshold transform for lane clearance, accounting for floating-origin shifts
+         /// and carrier motion.</summary>
             public Transform Threshold;
 
             public GlobalPosition Position;
@@ -72,20 +46,13 @@ namespace WingCommand
             public Vector3 Velocity;
         }
 
-        // ------------------------------------------------------------------ runway choice
+        // Runway selection.
 
-        /// <summary>
-        /// The strip at this field best placed to launch the airframe, or false when it has
-        /// none.
-        ///
-        /// <c>Airbase.GetTakeoffRunway</c> would be the obvious call and is deliberately not
-        /// used: it takes an <c>Aircraft</c>, and there is no aircraft yet — that is the
-        /// whole point of asking. It also calls <c>SetUsageDirection</c>, which claims the
-        /// strip as a side effect of a question. This walks the same array against the same
-        /// criteria from a position instead.
-        /// </summary>
+     /// <summary>Find a suitable launch strip before an aircraft exists, without GetTakeoffRunway's
+     /// direction-claim side effect. Match native direction rules: retain recent usage heading,
+     /// otherwise choose the end nearest the field.</summary>
         internal static bool TryFindTakeoffRunway(Airbase airbase, AircraftDefinition definition,
-                                                  Vector3 from, out Airbase.Runway runway,
+                                                  out Airbase.Runway runway,
                                                   out bool reverse)
         {
             runway = null;
@@ -95,41 +62,96 @@ namespace WingCommand
             AircraftParameters parameters = definition != null ? definition.aircraftParameters : null;
             float run = LaunchGeometry.TakeoffRun(parameters != null ? parameters.takeoffSpeed : 0f);
 
-            float best = float.MaxValue;
+            // Carrier catapults bypass land-runway length and slope checks.
+            bool catapult = airbase.AttachedAirbase;
+            Transform from = airbase.transform;
+
+            // Choose the nearest land strip or the longest carrier strip.
+            float best = catapult ? float.MinValue : float.MaxValue;
             for (int i = 0; i < airbase.runways.Length; i++)
             {
                 Airbase.Runway candidate = airbase.runways[i];
                 if (candidate == null || candidate.Start == null || candidate.End == null) continue;
                 if (!LaunchGeometry.IsUsable(candidate.Takeoff, candidate.Length, run,
-                                             candidate.IsLevel()))
+                                             candidate.IsLevel(), catapult))
                     continue;
 
-                float toStart = (candidate.Start.position - from).sqrMagnitude;
-                float toEnd = (candidate.End.position - from).sqrMagnitude;
-                bool useReverse = LaunchGeometry.PreferReverse(toStart, toEnd, candidate.Reversable);
-                float distance = useReverse ? toEnd : toStart;
-                if (distance >= best) continue;
+                float toStart = (candidate.Start.position - from.position).sqrMagnitude;
+                float toEnd = (candidate.End.position - from.position).sqrMagnitude;
+                bool locked = LaunchGeometry.OperatingDirectionLocked(
+                    Time.timeSinceLevelLoad - candidate.LastUsed);
+                Airbase.Runway.RunwayDistanceResult measured = candidate.GetDistance(from);
+                bool useReverse = LaunchGeometry.PreferReverse(
+                    toStart, toEnd, candidate.Reversable, locked, measured.Reverse);
 
-                best = distance;
+                if (catapult)
+                {
+                    if (candidate.Length <= best) continue;
+                    best = candidate.Length;
+                }
+                else
+                {
+                    if (measured.Distance >= best) continue;
+                    best = measured.Distance;
+                }
                 runway = candidate;
                 reverse = useReverse;
             }
 
+            if (catapult && runway == null) LogCarrierRunwayMiss(airbase, definition, run);
+
             return runway != null;
         }
 
-        /// <summary>Whether this field could launch the airframe on a strip at all.</summary>
+     /// <summary>Log each carrier's runway rejection once per session under VerboseLogging; legitimate
+     /// launch limits are not release-log warnings.</summary>
+        private static readonly HashSet<int> carrierMissLogged = new HashSet<int>();
+
+        private static void LogCarrierRunwayMiss(Airbase airbase, AircraftDefinition definition,
+                                                 float run)
+        {
+            if (airbase == null || Plugin.Settings == null ||
+                !Plugin.Settings.VerboseLogging.Value ||
+                !carrierMissLogged.Add(airbase.GetInstanceID()))
+                return;
+
+            var sb = new System.Text.StringBuilder();
+            sb.Append("[Carrier] ").Append(airbase.name)
+              .Append(" has no usable takeoff strip for ")
+              .Append(definition != null ? definition.unitName : "?")
+              .Append(" (need >= ").Append(LaunchGeometry.MinimumRunwayLength.ToString("0"))
+              .Append("m, roll ").Append(run.ToString("0")).Append("m). runways=")
+              .Append(airbase.runways != null ? airbase.runways.Length : 0);
+
+            if (airbase.runways != null)
+            {
+                for (int i = 0; i < airbase.runways.Length; i++)
+                {
+                    Airbase.Runway r = airbase.runways[i];
+                    if (r == null) { sb.Append(" [").Append(i).Append(":null]"); continue; }
+                    sb.Append(" [").Append(i)
+                      .Append(" takeoff=").Append(r.Takeoff)
+                      .Append(" landing=").Append(r.Landing)
+                      .Append(" len=").Append(r.Length.ToString("0"))
+                      .Append(" level=").Append(r.Start != null && r.End != null && r.IsLevel())
+                      .Append(" ends=").Append(r.Start != null && r.End != null)
+                      .Append("]");
+                }
+            }
+
+            Airbase.VerticalLandingPoint[] vls = airbase.verticalLandingPoints;
+            sb.Append(" verticalLandingPoints=").Append(vls != null ? vls.Length : 0);
+
+            Plugin.LogVerbose(sb.ToString());
+        }
+
+     /// <summary>Whether this field has a compatible takeoff strip.</summary>
         internal static bool HasTakeoffRunway(Airbase airbase, AircraftDefinition definition) =>
             airbase != null &&
-            TryFindTakeoffRunway(airbase, definition, airbase.transform.position, out _, out _);
+            TryFindTakeoffRunway(airbase, definition, out _, out _);
 
-        /// <summary>
-        /// Whether this aircraft has somewhere it can actually land.
-        ///
-        /// The same query <c>AIPilotLandingState</c> builds for itself, asked before the
-        /// state is entered rather than after — because when that search fails the state
-        /// does not report it, it ejects the pilot and sets the pilot state to null.
-        /// </summary>
+     /// <summary>Preflight the native landing-runway search; entering landing with no usable runway
+     /// ejects the pilot instead of reporting failure.</summary>
         internal static bool HasLandingRunway(Aircraft aircraft)
         {
             if (aircraft == null || aircraft.NetworkHQ == null) return false;
@@ -157,26 +179,16 @@ namespace WingCommand
             return airbase != null && airbase.RequestLanding(aircraft, query).HasValue;
         }
 
-        // -------------------------------------------------------------------- launch pose
+        // Launch placement.
 
-        /// <summary>
-        /// Where to put a requisitioned aircraft so that it starts its sortie on the runway
-        /// rather than inside a shelter facing the wrong way.
-        ///
-        /// The arithmetic is the game's own, from <c>Hangar.SpawnAircraft</c>: the airframe's
-        /// <c>spawnOffset</c> lifted along the pad's up and pushed along its forward, and the
-        /// definition's <c>restRotation</c> applied on top so the model sits on its gear.
-        /// The threshold stands in for the pad, with one difference that matters — a saved
-        /// runway's <c>Start</c> and <c>End</c> are bare transforms carrying position only,
-        /// so their rotation is meaningless and the heading has to come from
-        /// <c>GetDirection</c>.
-        /// </summary>
+     /// <summary>Build a runway spawn using native spawnOffset and restRotation conventions. Runway
+     /// endpoint rotations are not meaningful; derive heading from GetDirection.</summary>
         internal static bool TryBuildLaunchPose(Airbase airbase, AircraftDefinition definition,
-                                                Vector3 from, out LaunchPose pose)
+                                                out LaunchPose pose)
         {
             pose = default(LaunchPose);
             if (definition == null) return false;
-            if (!TryFindTakeoffRunway(airbase, definition, from, out Airbase.Runway runway,
+            if (!TryFindTakeoffRunway(airbase, definition, out Airbase.Runway runway,
                                       out bool reverse))
                 return false;
 
@@ -189,22 +201,21 @@ namespace WingCommand
 
             float along = LaunchGeometry.ThresholdOffset(definition.length, definition.width);
 
-            // Height comes from the threshold rather than from a raycast: the transform is
-            // on the paved surface by construction, and the strip is level or it would not
-            // have passed IsUsable. The vertical term is not decoration — Aircraft.
-            // SpawnedInPosition derives radarAlt as (ground distance - spawnOffset.y), and
-            // SetStartingAiState reads radarAlt > spawnOffset.y + 1 to decide whether this
-            // aircraft is flying. Lift it by exactly spawnOffset.y and radarAlt comes out at
-            // zero, which is what puts the pilot into taxi instead of into combat.
-            //
-            // spawnOffset.z is deliberately NOT applied. It is how far forward of a hangar's
-            // pad marker that airframe sits, and the along-track offset above is already the
-            // complete answer to the same question for a runway. Adding both would push a
-            // large airframe past the twelve metres inside which the stock taxi state hands
-            // off to takeoff, which is the entire point of capping the offset.
-            Vector3 position = threshold.position
-                             + Vector3.up * definition.spawnOffset.y
-                             + direction * along;
+            // Use threshold height plus spawnOffset.y so native radar altitude classifies the aircraft
+            // as grounded. Along-track placement already supplies the forward offset; adding
+            // spawnOffset.z could exceed taxi's 12 m takeoff-handoff window.
+            Vector3 groundPlane = threshold.position + direction * along;
+            Vector3 position = groundPlane + Vector3.up * definition.spawnOffset.y;
+
+            // Correct custom-airbase endpoint height against nearby pavement hits. Reject distant roof
+            // or sea hits so the correction cannot worsen placement.
+            if (Physics.Raycast(groundPlane + Vector3.up * 200f, Vector3.down,
+                                out RaycastHit ground, 400f, PhysicsLayers.StaticsMask,
+                                QueryTriggerInteraction.Ignore) &&
+                Mathf.Abs(ground.point.y - threshold.position.y) <= 15f)
+            {
+                position.y = ground.point.y + definition.spawnOffset.y;
+            }
 
             pose.Runway = runway;
             pose.Reverse = reverse;
@@ -212,18 +223,48 @@ namespace WingCommand
             pose.Position = position.ToGlobalPosition();
             pose.Rotation = Quaternion.LookRotation(direction, Vector3.up) *
                             Quaternion.Euler(definition.restRotation);
-            // A carrier deck is moving. Matching it is the difference between a delivery
-            // that is stationary relative to the ship and one that is thrown off the stern.
+            // Match runway velocity to keep carrier spawns stationary relative to the deck.
             pose.Velocity = runway.GetVelocity();
+            // Claim the spawn heading so native takeoff's runway query honours the same 30-second
+            // direction lock.
+            runway.SetUsageDirection(reverse);
+
+            Plugin.LogVerbose(
+                "[Airfield] " + definition.unitName + " pose on " +
+                runway.GetName(reverse) + ": len=" + runway.Length.ToString("0") +
+                " level=" + runway.IsLevel() +
+                " thresholdY=" + threshold.position.y.ToString("0.0") +
+                " spawnY=" + position.y.ToString("0.0"));
             return true;
         }
 
-        // ------------------------------------------------------------------- launch watch
+     /// <summary>Check the fixed launch pose for aircraft or wrecks before another delivery spawns into
+     /// an uncleared predecessor.</summary>
+        internal static bool LaunchSpotBlocked(GlobalPosition pose, AircraftDefinition definition,
+                                               out string blocker)
+        {
+            blocker = null;
+            float clear = Mathf.Max(
+                definition != null ? Mathf.Max(definition.length, definition.width) : 0f, 14f);
+            float clearSq = clear * clear;
 
-        /// <summary>
-        /// Start watching a delivery that was placed on a runway, so the departure can be
-        /// confirmed on a later physics step rather than assumed on the spawn line.
-        /// </summary>
+            List<Aircraft> all = UnitRegistry.allAircraft;
+            for (int i = 0; i < all.Count; i++)
+            {
+                Aircraft a = all[i];
+                if (a == null) continue;
+                if ((pose - a.GlobalPosition()).sqrMagnitude > clearSq) continue;
+                // Ignore airborne traffic above the ground-spawn clearance.
+                if (!a.disabled && a.radarAlt > 15f) continue;
+                blocker = a.disabled ? a.unitName + " (wreck)" : a.unitName;
+                return true;
+            }
+            return false;
+        }
+
+        // Departure monitoring.
+
+     /// <summary>Watch runway placement until later physics updates confirm departure.</summary>
         internal static void WatchLaunch(Aircraft aircraft, in LaunchPose pose)
         {
             if (aircraft == null || pose.Runway == null) return;
@@ -263,8 +304,7 @@ namespace WingCommand
                     continue;
                 }
 
-                // Airborne, or already rolling under the stock takeoff state: the delivery
-                // has left and the wing's own handoff owns it from here.
+                // Once native takeoff is confirmed, the wing owns the airborne handoff.
                 if (pilot.flightInfo != null && pilot.flightInfo.HasTakenOff)
                 {
                     Release(launch, i);
@@ -277,8 +317,7 @@ namespace WingCommand
                     continue;
                 }
 
-                // Anything other than taxi means someone else — a player takeover, a
-                // recovery, an ejection — now owns the aircraft.
+                // Stop intervening when taxi is no longer the active owner.
                 if (!(pilot.currentState is AIPilotTaxiState))
                 {
                     Release(launch, i);
@@ -292,8 +331,8 @@ namespace WingCommand
                                         launch.Runway.GetDirection(launch.Reverse).normalized);
                 if (!LaunchGeometry.OnRunway(launch.Runway.AircraftOnRunway(aircraft), dot))
                 {
-                    // Not where the pose said it would be. Leave it to the stock AI rather
-                    // than firewalling the throttle at whatever it is actually pointing at.
+                    // Do not force takeoff from a displaced or misaligned pose; leave control to native
+                    // AI.
                     if (!launch.Warned)
                     {
                         launch.Warned = true;
@@ -305,30 +344,24 @@ namespace WingCommand
                     continue;
                 }
 
-                // On the strip, aligned, and the stock taxi has not got it moving. Take the
-                // transition it was going to make anyway. Queue first so that any other
-                // aircraft asking for this runway holds short instead of rolling into us.
+                // Queue the aligned, stalled runway aircraft before entering takeoff so other traffic
+                // holds short.
                 if (!launch.Queued)
                 {
                     launch.Runway.QueueTakeoff(aircraft);
                     launch.Queued = true;
                 }
 
-                // IsAvailableForTakeoff, not ClearForTakeoff. The latter ignores its own
-                // checkCrossing argument and recurses into every crossing runway
-                // unconditionally, and crossings are recorded on both strips — so two
-                // runways that cross each other call each other until the stack runs out.
+                // Use IsAvailableForTakeoff. ClearForTakeoff ignores checkCrossing and can recurse
+                // indefinitely through mutually crossing strips.
                 if (!launch.Runway.IsAvailableForTakeoff(aircraft)) continue;
 
                 pilot.AITakeoffState = new AIPilotTakeoffState();
                 pilot.SwitchState(pilot.AITakeoffState);
                 Report(launch, "handed to takeoff on " + launch.Runway.GetName(launch.Reverse));
 
-                // The takeoff state owns the slot now, and gives it back itself — either
-                // immediately in RegisterStartTakeoff on a strip that allows simultaneous
-                // departures, or at RegisterTakeoffLeftRunway once it is airborne on one
-                // that does not. Popping our own entry here would hand the runway to the
-                // next aircraft while this one is still accelerating down it.
+                // Native takeoff now releases the queue at its appropriate launch phase. Dequeuing here
+                // would admit traffic while this aircraft is still accelerating.
                 launch.Queued = false;
                 Release(launch, i);
             }
@@ -340,13 +373,8 @@ namespace WingCommand
             launches.Clear();
         }
 
-        /// <summary>
-        /// Drop a watch, giving back the runway slot it took.
-        ///
-        /// Neither stock taxi nor stock takeoff dequeues on the way out, so a delivery that
-        /// is abandoned between the two would leave its runway — and every runway crossing
-        /// it — permanently held against the rest of the mission.
-        /// </summary>
+     /// <summary>Release the launch watch and its runway claim; native taxi/takeoff do not dequeue on
+     /// interrupted exit.</summary>
         private static void Release(Launch launch, int index)
         {
             if (launch.Queued && launch.Runway != null && launch.Aircraft != null)
@@ -367,14 +395,9 @@ namespace WingCommand
             Plugin.LogVerbose("[Airfield] " + launch.Aircraft.unitName + " " + what);
         }
 
-        /// <summary>
-        /// Take an aircraft out of every takeoff queue at its field.
-        ///
-        /// <c>Runway.DequeueTakeoff</c> only pops the head, and only when the head is the
-        /// aircraft named or an entry that has already been destroyed — so this is safe to
-        /// call on an aircraft that was never queued, and on one queued behind somebody
-        /// else it correctly does nothing rather than jumping the line.
-        /// </summary>
+     /// <summary>Try native dequeue on every field runway. It removes only this aircraft at the head,
+     /// or destroyed head entries; it does not remove this aircraft from behind another live
+     /// entry.</summary>
         internal static void DrainTakeoffQueue(Aircraft aircraft)
         {
             if (aircraft == null) return;
@@ -389,17 +412,9 @@ namespace WingCommand
             }
         }
 
-        /// <summary>
-        /// Take an aircraft off every landing list at its field.
-        ///
-        /// <c>AIPilotLandingState</c> registers the arrival but only deregisters it on two
-        /// of its exits, and <c>LeaveState</c> does not deregister at all — so a wingman
-        /// taken out of the landing state by anything else stays on the list. A runway with
-        /// a non-empty landing list refuses every takeoff, and <c>MonitorLandings</c> only
-        /// drops entries whose aircraft has been destroyed. That self-heals for an RTB,
-        /// which is despawned moments later, and does not for a refit, which stays on the
-        /// field and would jam the strip it is about to launch from.
-        /// </summary>
+     /// <summary>Remove completed landing claims. Native LeaveState can retain live aircraft on the
+     /// landing list, blocking takeoff indefinitely after refit; despawn only self-clears plain
+     /// RTB.</summary>
         internal static void DrainLandingList(Aircraft aircraft)
         {
             if (aircraft == null) return;
@@ -413,12 +428,10 @@ namespace WingCommand
             }
         }
 
-        // ------------------------------------------------------------------------ lookup
+        // Field lookup.
 
-        /// <summary>
-        /// The friendly field an aircraft is standing at, for a refit that has to relaunch
-        /// from wherever the stock landing left it.
-        /// </summary>
+     /// <summary>Find the friendly field beneath the aircraft for relaunch after native
+     /// landing.</summary>
         internal static Airbase FieldUnder(Aircraft aircraft)
         {
             if (aircraft == null) return null;

@@ -7,9 +7,7 @@ using Random = UnityEngine.Random;
 
 namespace WingCommand
 {
-    /// <summary>
-    /// File discovery, sample generation, and loading for custom pilots and chatter.
-    /// </summary>
+ /// <summary>Discovers custom pilot files, creates samples, and loads pilots and chatter.</summary>
     internal static class WingCustomPilots
     {
         public static string PilotsDirectory =>
@@ -18,9 +16,7 @@ namespace WingCommand
         private static readonly Dictionary<string, List<string>> customEvents =
             new Dictionary<string, List<string>>(StringComparer.OrdinalIgnoreCase);
 
-        /// <summary>
-        /// Ensures the Pilots folder exists, creating it and writing sample_pilots.json if empty.
-        /// </summary>
+     /// <summary>Create the Pilots directory and seed sample_pilots.json when empty.</summary>
         public static void EnsurePilotsDirectory()
         {
             try
@@ -46,9 +42,7 @@ namespace WingCommand
             }
         }
 
-        /// <summary>
-        /// Open the Pilots folder in Windows Explorer.
-        /// </summary>
+     /// <summary>Show the Pilots directory in Windows Explorer.</summary>
         public static void OpenFolder()
         {
             EnsurePilotsDirectory();
@@ -69,9 +63,8 @@ namespace WingCommand
             }
         }
 
-        /// <summary>
-        /// Scan the Pilots folder, load all custom pilots and chatters, and return the pilots list.
-        /// </summary>
+     /// <summary>Load custom pilots and chatter from the Pilots directory, returning pilots and chatter
+     /// count.</summary>
         public static List<CustomPilotRecord> LoadAllCustomPilots(out int chattersCount)
         {
             EnsurePilotsDirectory();
@@ -141,9 +134,7 @@ namespace WingCommand
             return pilots;
         }
 
-        /// <summary>
-        /// Scan the Pilots folder and import all custom pilots and chatters.
-        /// </summary>
+     /// <summary>Import all discovered pilots and chatter.</summary>
         public static int ImportAll(out int chattersCount, out string message)
         {
             List<CustomPilotRecord> pilots = LoadAllCustomPilots(out chattersCount);
@@ -188,9 +179,7 @@ namespace WingCommand
             lines.Add(text);
         }
 
-        /// <summary>
-        /// Check if a custom event phrase exists for this pilot and event.
-        /// </summary>
+     /// <summary>Try to resolve a custom phrase for this pilot and event.</summary>
         public static bool TryGetEventLine(string tag, string eventName, string detail, out string phrase)
         {
             phrase = null;

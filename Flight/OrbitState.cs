@@ -2,11 +2,8 @@ using UnityEngine;
 
 namespace WingCommand
 {
-    /// <summary>
-    /// Hold a circle over a fixed point until recalled.
-    ///
-    /// Explicit holds keep their commanded anchor; deck holds track the leader.
-    /// </summary>
+ /// <summary>Orbit until recalled: fixed anchors for explicit holds, moving leader anchors for deck
+ /// holds.</summary>
     internal class OrbitState : WingPilotState
     {
         internal override bool RestartOnOrderChange => false;
@@ -14,9 +11,7 @@ namespace WingCommand
         private float radius;
         private const float EngageInterval = 0.35f;
 
-        /// <summary>
-        /// Shares formation weapons handling so active behaviours can suppress fire.
-        /// </summary>
+     /// <summary>Shared station-keeping weapons handler respects active behaviour authority.</summary>
         private readonly SlotEngagement engagement = new SlotEngagement(EngageInterval);
 
         public OrbitState(WingMember member) : base(member)
@@ -24,12 +19,10 @@ namespace WingCommand
             stateDisplayName = "orbiting";
         }
 
-        /// <summary>
-        /// Deck holds track the leader while it taxis; explicit Hold orders keep a fixed anchor.
-        /// </summary>
+     /// <summary>Track a taxiing leader only for deck holds; explicit holds remain fixed.</summary>
         private bool followLeader;
 
-        /// <summary>Set the point to hold over. Call before switching to this state.</summary>
+     /// <summary>Set anchor, radius, and optional leader tracking before entry.</summary>
         public void SetAnchor(GlobalPosition point, float orbitRadius, bool trackLeader = false)
         {
             anchor = point;
@@ -76,8 +69,7 @@ namespace WingCommand
                     member.CompleteHoldForQueue(OrderRevision);
             }
 
-            // Nothing here touches attitude or throttle, so holding the ring and shooting
-            // from it never compete.
+            // Weapons handling leaves orbit attitude and throttle untouched.
             engagement.Run(member, aircraft, pilot, member.Leader);
         }
     }

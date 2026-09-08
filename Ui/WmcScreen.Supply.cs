@@ -491,7 +491,7 @@ namespace WingCommand
             // template picker it changes the launch of.
             fullFuelButton = WingUi.Button(
                 parent, "", new Rect(Pad + fitGutter + fitButtonWidth + Gap, y, fuelWidth, RowHeight),
-                FontSmall, UiButtonStyle.Quiet, ToggleFullFuel)
+                FontSmall, UiButtonStyle.Quiet, CycleSpawnFuel)
                 .WithTooltip(OrderHint.FullFuel);
             y -= RowHeight + Space1;
 
@@ -605,18 +605,17 @@ namespace WingCommand
         }
 
         /// <summary>
-        /// Choose whether the next requisition launches with full tanks or half.
+        /// Step the fuel the next requisition launches with: 25 / 50 / 75 / 100%, wrapping.
         ///
-        /// It applies to the launch, not to the price, so it can be flipped between
+        /// It applies to the launch, not to the price, so it can be changed between
         /// purchases and affects only the ones made after it.
         /// </summary>
-        private static void ToggleFullFuel()
+        private static void CycleSpawnFuel()
         {
-            WingShop.FullFuel = !WingShop.FullFuel;
-            WingCommandManager.Instance?.Toast(WingShop.FullFuel
-                ? "Requisitions launch with full fuel"
-                : "Requisitions launch with " +
-                  Mathf.RoundToInt(WingTuning.PartialFuelLevel * 100f) + "% fuel");
+            WingShop.CycleSpawnFuel();
+            WingCommandManager.Instance?.Toast(
+                "Requisitions launch with " +
+                Mathf.RoundToInt(WingShop.SpawnFuelLevel * 100f) + "% fuel");
         }
 
         private static void RequisitionSelected()
@@ -702,12 +701,11 @@ namespace WingCommand
 
             if (fullFuelButton != null)
             {
-                // The label is the whole state: full, or the partial percentage. It never
-                // latches — the value is in the words, and a permanently-lit toggle on the
-                // default choice would read louder than the setting deserves.
-                fullFuelButton.SetText(WingShop.FullFuel
-                    ? "FUEL  FULL"
-                    : "FUEL  " + Mathf.RoundToInt(WingTuning.PartialFuelLevel * 100f) + "%");
+                // The label is the whole state: the chosen percentage. It never latches —
+                // the value is in the words, and a permanently-lit stepper would read
+                // louder than the setting deserves.
+                fullFuelButton.SetText(
+                    "FUEL  " + Mathf.RoundToInt(WingShop.SpawnFuelLevel * 100f) + "%");
                 fullFuelButton.SetLatched(false);
                 fullFuelButton.SetEnabled(true);
             }
@@ -823,9 +821,7 @@ namespace WingCommand
 
             string fuel = fromReserve
                 ? "AS RECOVERED"
-                : WingShop.FullFuel
-                    ? "FULL FUEL"
-                    : "FUEL " + Mathf.RoundToInt(WingTuning.PartialFuelLevel * 100f) + "%";
+                : "FUEL " + Mathf.RoundToInt(WingShop.SpawnFuelLevel * 100f) + "%";
             string fitLabel = fromReserve
                 ? "RESERVE FIT"
                 : AvTheme.Truncate(WingLoadoutCatalog.Label(fit), 16).ToUpperInvariant();
@@ -956,7 +952,11 @@ namespace WingCommand
             string text = "SQUADRON " + squadron.Active + " / " + squadron.Limit +
                           "   (AI POOL)";
             if (Plugin.Settings.CheatNoWingLimit)
-                text += "  ·  WING NO LIMIT DOES NOT BYPASS THIS CAP";
+            {
+                supplySquadronLabel.text = text + "  ·  WING NO LIMIT - CAP WAIVED";
+                supplySquadronLabel.color = Warning();
+                return;
+            }
 
             if (!squadron.AtCapacity)
             {

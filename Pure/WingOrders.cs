@@ -220,8 +220,6 @@ namespace WingCommand
             return MapClickIntent.Ignore;
         }
 
-        public static bool IsMoveTool(bool orderArmed) => !orderArmed;
-
         public static float DefaultMoveAltitude(bool rotary) =>
             rotary ? WingTuning.MoveAltitudeRotary : WingTuning.MoveAltitudeFixed;
 

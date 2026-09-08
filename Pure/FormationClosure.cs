@@ -3,7 +3,7 @@ using System.Numerics;
 
 namespace WingCommand
 {
-    /// <summary>Finite braking distance, pursuit power, and hysteretic speed-brake authority.</summary>
+ /// <summary>Braking-distance limits, pursuit throttle, and speed-brake hysteresis.</summary>
     internal static class FormationClosure
     {
         internal readonly struct Controls
@@ -29,7 +29,7 @@ namespace WingCommand
             float distance = toSlot.Length();
             if (distance < 1f || intercept.Gap.LengthSquared() < 1f) return stationSpeed;
             float reserve = Math.Max(30f, spacing * 0.5f);
-            // Use the real gap for energy, never the distant predicted aim point.
+            // Compute braking energy from actual gap, not the predicted distant aim point.
             float closure = SafeClosure(distance - reserve, braking, responseSeconds);
             Vector2 desired = intercept.ArrivalVelocity + Vector2.Normalize(intercept.Gap) * closure;
             float pursuit = Math.Min(maxSpeed, desired.Length());
@@ -48,8 +48,8 @@ namespace WingCommand
             float reserve = Math.Max(30f, spacing * 0.5f);
             float safeClosure = SafeClosure(distance - reserve, braking, responseSeconds);
             bool overspeed = closing > safeClosure + (wasBraking ? -3f : 3f);
-            // Brakes release while closure is still positive, allowing engine spool
-            // before co-airspeed. Separate on/off thresholds avoid actuator chatter.
+            // Release brakes before closure reaches zero to allow spool-up; separate thresholds prevent
+            // chatter.
             float loadedMinimum = LoadedMinimum(minimumAirspeed, bankDegrees);
             bool canShedEnergy = allowBraking && !terrainWarning && radarAltitude > 250f &&
                 Math.Abs(bankDegrees) < 50f && verticalSpeed < 5f &&
@@ -57,16 +57,18 @@ namespace WingCommand
             bool brake = canShedEnergy &&
                 closing > (wasBraking ? 6f : 10f) && speedError < (wasBraking ? -3f : -8f) && overspeed;
 
-            if (allowPursuit && distance > 1500f && alignment > 0.65f &&
-                speedError > 3f && closing < safeClosure - 5f && !terrainWarning)
+            // Prioritise capture until the braking envelope, allowing for slight overshoot from engine
+            // lag.
+            if (allowPursuit && distance > WingTuning.CaptureDistance && alignment > 0.65f &&
+                closing < safeClosure && !terrainWarning)
                 throttle = 1f;
             if (canShedEnergy && overspeed && closing > 6f && speedError < -3f)
                 throttle = Math.Min(throttle, 0.1f);
             if (brake) throttle = 0f;
-            // Energy protection has the final say over both arrival and braking.
+            // Minimum-energy protection overrides arrival and braking demands.
             if (airspeed < loadedMinimum) return new Controls(1f, false);
-            // Native Airbrake.Update deploys on EXACT zero throttle. Positive idle
-            // retracts fitted brakes; ControlInputs.brake is the wheel brake.
+            // Exact zero throttle deploys native airbrakes; positive idle retracts them.
+            // ControlInputs.brake operates wheel brakes.
             return new Controls(brake ? 0f : Math.Max(0.01f, Math.Min(1f, throttle)), brake);
         }
     }

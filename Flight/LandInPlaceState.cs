@@ -2,30 +2,19 @@ using UnityEngine;
 
 namespace WingCommand
 {
-    /// <summary>
-    /// Set a helicopter down where it is.
-    ///
-    /// Distinct from Return To Base, which uses the stock <c>AIHeloLandingState</c> and
-    /// always routes to an airbase. This is for putting an aircraft on the ground here —
-    /// behind a ridge, beside a position — and there is no stock state for it.
-    ///
-    /// <c>Autopilot.Hover</c> does the work: it is a proper position hold with a clamped
-    /// positional term, a derivative term, collective from altitude error and yaw from the
-    /// aim direction, and it is what the stock landing and transport states use to sit
-    /// precisely on a point. Feeding it a descending altitude walks the aircraft down;
-    /// there is nothing else to write.
-    /// </summary>
+ /// <summary>Land at a local or designated point instead of routing to a base. Native Hover holds
+ /// position while a decreasing altitude command descends to the surface.</summary>
     internal class LandInPlaceState : WingPilotState
     {
         private enum Phase { Transit, Settle, Descend, Down }
 
-        /// <summary>Descent rate, in metres per second.</summary>
+     /// <summary>Commanded descent rate in metres per second.</summary>
         private const float DescentRate = 3f;
 
-        /// <summary>Radar altitude at which the aircraft is considered down.</summary>
+     /// <summary>Radar-altitude touchdown threshold.</summary>
         private const float TouchdownAlt = 1.5f;
 
-        /// <summary>Ground speed below which the aircraft is allowed to start descending.</summary>
+     /// <summary>Maximum ground speed before descent begins.</summary>
         private const float SettleSpeed = 6f;
 
         private const float TransitAltitude = 120f;
@@ -59,16 +48,13 @@ namespace WingCommand
 
         public override void EnterState(Pilot pilot)
         {
-            // This state configures its own gear (down, unless it will hover-and-search
-            // first) and keeps whatever hover regime it arrived with - so it binds the
-            // controls directly rather than through BeginFlight.
+            // Bind controls directly because this state manages gear and preserves hover during
+            // landing/search.
             BindControls(pilot);
             aircraft.SetGear(deployed: !hasRequestedSpot);
 
-            // Anchor at the ground beneath the aircraft, not at the aircraft itself.
-            // Hover adds altitudeHold to the destination's own height difference, so with
-            // the anchor on the deck the held height IS the altitudeHold argument, and
-            // winding it down to zero is the descent.
+            // Anchor to ground elevation so reducing Hover altitudeHold commands actual descent to the
+            // surface.
             bool safe = hasRequestedSpot && TryFindLandingSpot(requestedSpot, out spot);
             if (!safe)
             {
@@ -108,8 +94,7 @@ namespace WingCommand
 
             if (phase == Phase.Down)
             {
-                // Stay put. Collective at zero with the brake on, so it does not creep or
-                // get nudged back into the air by its own rotor wash.
+                // Hold brakes and zero collective after touchdown to prevent creeping or relaunch.
                 controlInputs.throttle = 0f;
                 controlInputs.brake = 1f;
                 return;
@@ -154,9 +139,8 @@ namespace WingCommand
 
         private void Transit()
         {
-            // Transit is flown, not hovered. Holding the hovering configuration across the
-            // cruise out to the spot would stop a thrust-vectoring aircraft ever getting
-            // there.
+            // Release hover during transit so vectoring aircraft can accelerate toward the landing
+            // spot.
             HoverAssist.Release(aircraft);
 
             aircraft.autopilot.AutoAim(
@@ -174,7 +158,8 @@ namespace WingCommand
             return delta.magnitude;
         }
 
-        /// <summary>Choose the nearest reasonably flat static surface around a map click.</summary>
+     /// <summary>Find the nearest reasonably level static landing surface around the requested
+     /// point.</summary>
         private static bool TryFindLandingSpot(GlobalPosition requested, out GlobalPosition result)
         {
             Vector3 centre = requested.ToLocalPosition();

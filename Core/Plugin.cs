@@ -8,31 +8,25 @@ using HarmonyLib;
 using NOAvionics.Ui;
 using UnityEngine;
 
-// Unity invokes Awake and OnDestroy by reflection.
-// IDE0051 cannot see a reflective call, so it is disabled for this file only.
+// Unity calls Awake and OnDestroy by reflection, so suppress IDE0051 in this file.
 #pragma warning disable IDE0051
 
 namespace WingCommand
 {
-    /// <summary>
-    /// Entry point. Owns configuration, applies Harmony patches, and keeps a single
-    /// persistent manager object alive for the lifetime of the process.
-    /// </summary>
+ /// <summary>Initialises configuration and Harmony patches, and owns the persistent manager.</summary>
     [BepInPlugin(PluginGuid, PluginName, PluginVersion)]
     public class Plugin : BaseUnityPlugin
     {
         public const string PluginGuid = "com.marci.wingcommand";
         public const string PluginName = "Wing Command";
-        public const string PluginVersion = "0.9.4";
+        public const string PluginVersion = "0.9.2";
 
         internal static Plugin Instance { get; private set; }
         internal static new ManualLogSource Logger { get; private set; }
         internal static WingConfig Settings { get; private set; }
 
-        /// <summary>
-        /// Diagnostic <c>LogInfo</c> that is silent unless <c>Debug/VerboseLogging</c> is on.
-        /// Errors, warnings, and the one startup loaded line stay on <see cref="Logger"/>.
-        /// </summary>
+     /// <summary>Log diagnostics only when Debug/VerboseLogging is enabled. Keep errors, warnings, and
+     /// the startup message on Logger.</summary>
         internal static void LogVerbose(string message)
         {
             if (Settings == null || !Settings.VerboseLogging.Value) return;
@@ -47,37 +41,30 @@ namespace WingCommand
             Logger = base.Logger;
             Settings = new WingConfig(Config);
 
-            // The panels' look lives in a stylesheet, not in literals. The embedded copy is
-            // always valid; pointing the host at the config directory is what lets a player
-            // drop their own avionics.avss beside it and retune every panel in both mods
-            // without a rebuild. Both plugins configure the same path on purpose.
+            // Both plugins load avionics.avss from the same config directory, with an embedded fallback
+            // for missing overrides.
             AvStyleHost.Configure(BepInEx.Paths.ConfigPath, LogVerbose, Logger.LogWarning);
 
-            // The retired keys these warnings described are no longer bound at all, so an
-            // old configuration file simply carries dead lines that BepInEx drops on its
-            // next save. Warning about a setting the player can no longer see was worse
-            // than silence: it named keys that had already stopped existing.
-            if (Settings.CheatFreePurchases || Settings.CheatNoWingLimit)
+            
+            if (Settings.CheatFreePurchases || Settings.CheatNoWingLimit || Settings.CheatBypassRank)
             {
                 Logger.LogWarning(
                     "Unsafe Debug cheats are enabled: " +
                     $"FreePlanePurchases={Settings.CheatFreePurchases}, " +
-                    $"DisableWingSizeLimit={Settings.CheatNoWingLimit}. " +
+                    $"DisableWingSizeLimit={Settings.CheatNoWingLimit}, " +
+                    $"BypassRankRequirement={Settings.CheatBypassRank}. " +
                     "These options may break mission balance, UI, formations or the mod itself.");
             }
 
             if (!FormationSolver.ValidateGeometry(WingFormation.MaxWingSize, out string geometryProblem))
                 Logger.LogError("Formation geometry validation failed: " + geometryProblem);
 
-            // Resolve reflection accessors before patching: the radial patches consult
-            // GameAccess.Available and quietly stand down if the game layout has moved.
+            // Resolve reflection before patches consult GameAccess.Available.
             GameAccess.Initialise();
             WingHudTint.Initialise();
             CountermeasureAccess.Initialise();
 
-            // The behaviour ladder. Registered before anything can tick, and through the
-            // same public call another plugin would use - a reflex of ours has no privileged
-            // route in, which is the only way the public one stays working.
+            // Register built-in behaviours through the public API before the first tick.
             WingAi.FaultReporter = (id, e) => Logger.LogError(
                 $"[Wing] AI provider '{id}' failed and has been disabled for this mission: " +
                 $"{e.GetType().Name} - {e.Message}");
@@ -115,18 +102,9 @@ namespace WingCommand
 
             Logger.LogInfo($"{PluginName} {PluginVersion} loaded.");
 
-            // Log what is actually in force, not what the defaults say.
-            //
-            // BepInEx only applies a default to a *new* key: an existing config file keeps
-            // its own value forever. Changing a default in code therefore does nothing for
-            // anyone who has already run the mod, which silently left tuning changes
-            // unapplied and a feature enabled long after it was supposedly turned off.
-            // The Smart/Performance mode is resolved per mission (WingFidelity.Begin); this
-            // logs the configured mode and the derived budget for a default mission start.
-            //
-            // Only settings a player can actually have changed. The tuned numbers are
-            // constants in WingTuning now, so logging them told a bug report nothing it
-            // could not read off the version, and buried the lines that do vary.
+            // Log effective player settings: existing BepInEx values override new defaults. Resolve the
+            // initial fidelity budget here; mission start snapshots it again. Tuning constants are
+            // identified by the plugin version.
             WingFidelity.Begin(Settings.Mode.Value);
             LogVerbose(
                 "Effective settings: " +
@@ -142,15 +120,8 @@ namespace WingCommand
                 $"Highlight={Settings.Highlight.Value}");
         }
 
-        /// <summary>
-        /// Report what Harmony actually patched.
-        ///
-        /// A patch class with no class-level <c>[HarmonyPatch]</c> is skipped in total
-        /// silence: <c>PatchClassProcessor</c> returns before it looks at a single method
-        /// attribute. Map tinting shipped that way and did nothing for weeks, with no
-        /// error anywhere to say so. Listing the patched methods at startup turns that
-        /// failure from invisible into a line in the log.
-        /// </summary>
+     /// <summary>Log patched methods at startup. Harmony silently skips classes missing a class-level
+     /// HarmonyPatch attribute.</summary>
         private void ReportPatches()
         {
             var patched = new List<MethodBase>(harmony.GetPatchedMethods());
@@ -163,8 +134,7 @@ namespace WingCommand
             names.Sort(System.StringComparer.Ordinal);
             LogVerbose($"Harmony patched {names.Count} method(s): {string.Join(", ", names.ToArray())}");
 
-            // Named so a future game update that moves one of these is reported as a
-            // missing patch rather than as a feature that silently stopped working.
+            // Name expected patches so game API changes produce missing-patch diagnostics.
             string[] expected =
             {
                 "RadialMenuMain.OpenMenu",
@@ -177,10 +147,8 @@ namespace WingCommand
                 "AIPilotCombatModes.EnterState",
                 "CombatAI.ChooseHQTarget",
                 "GameManager.FinishGame",
-                // The airfield pair. Both rewrite Pilot.SwitchState and nothing else; a
-                // game update that moves this method must be noticed, because losing them
-                // silently means a landed wingman ejects on the apron and every runway it
-                // queued for stays jammed for the mission.
+                // Both airfield patches depend on Pilot.SwitchState; losing them breaks apron pilot
+                // retention and runway cleanup.
                 "Pilot.SwitchState",
                 "Hangar.DoorSequenceCarrier",
             };

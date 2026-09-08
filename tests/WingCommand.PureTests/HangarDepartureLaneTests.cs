@@ -38,7 +38,7 @@ namespace WingCommand
         public static string DisplayName(Airbase airbase) => airbase?.name ?? "FIELD";
     }
 
-    internal static class Plugin
+    internal static partial class Plugin
     {
         internal static readonly TestLogger Logger = new TestLogger();
         internal static void LogVerbose(string message) { }

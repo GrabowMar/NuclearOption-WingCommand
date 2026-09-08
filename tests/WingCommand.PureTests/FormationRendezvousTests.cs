@@ -100,7 +100,7 @@ namespace WingCommand.PureTests
                 var guidance = FormationGuidance.Horizontal(new Vector2(gx, gz), new Vector2(vx, vz),
                     new Vector2(0f, leaderSpeed), Vector2.UnitY,
                     intercept.Gap, intercept.ArrivalVelocity,
-                    distance, spacing, baseline, speed, blend, aggression, damping, 0f);
+                    distance, baseline, speed, blend, aggression, damping);
                 float ax = guidance.Aim.X, az = guidance.Aim.Y;
                 if (recovery.Blend > 0f)
                 {

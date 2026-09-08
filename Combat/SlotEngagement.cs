@@ -2,14 +2,11 @@ using UnityEngine;
 
 namespace WingCommand
 {
-    /// <summary>
-    /// Weapons handling for station-keeping states; never changes attitude or throttle.
-    /// Each state owns an instance for its firing cadence. Authority follows the active
-    /// behaviour and explicit target, rather than the standing order alone.
-    /// </summary>
+ /// <summary>Handles station-keeping weapons without changing flight controls. Each state owns its
+ /// cadence; active behaviour and target determine firing authority.</summary>
     internal sealed class SlotEngagement
     {
-        /// <summary>Seconds between reconsiderations. Scaled by the mode, like every other periodic check.</summary>
+     /// <summary>Seconds between checks, scaled by fidelity mode.</summary>
         private readonly float checkInterval;
 
         private float lastCheck;
@@ -20,24 +17,18 @@ namespace WingCommand
             this.checkInterval = checkInterval;
         }
 
-        /// <summary>
-        /// Consider taking a shot. Returns true when one was taken, so a caller can log or
-        /// pace against it.
-        /// </summary>
+     /// <summary>Attempt a shot; return true if fired.</summary>
         public bool Run(WingMember member, Aircraft aircraft, Pilot pilot, Aircraft leader)
         {
             if (Time.timeSinceLevelLoad - lastCheck < WingFidelity.Interval(checkInterval))
                 return false;
             lastCheck = Time.timeSinceLevelLoad;
 
-            // What the wingman is doing, not what it was told to do. A recalled wingman is
-            // flying its slot even though its order still reads Engage, and asking the order
-            // was how it came to be granted autonomous-combat weapons from the slot.
+            // Use active behaviour: a recalled Engage wingman must obey station-keeping weapons
+            // authority.
             OrderEngagementAuthority authority = member.EngagementAuthority;
 
-            // A weapon that passes its own checks would otherwise be fired on every tick,
-            // emptying the aircraft in seconds. The stock AI leaves five seconds between
-            // launches; this is the same idea, exposed so it can be tuned.
+            // Enforce the configured interval so repeated checks cannot empty the loadout immediately.
             bool mayFire = Time.timeSinceLevelLoad - lastFired >= WingWeapons.FireInterval(aircraft);
 
             WingRoe roe = RoeRules.Current;
@@ -56,11 +47,8 @@ namespace WingCommand
             bool coveringLeader = false;
             if (mode == StationFireMode.MissileDefence)
             {
-                // Interception paces faster than ordinary fire, but it is still behind this
-                // method's own check interval, which the mode stretches. That is deliberate:
-                // Performance mode is a cheaper, slower-witted wingman, and a late intercept
-                // is part of what it buys. Evasion is the half that keeps the squadron
-                // alive, and that runs unthrottled in DefensiveManeuverState.
+                // Interception still obeys the mode-scaled check interval. DefensiveManeuverState
+                // handles evasion without throttling.
                 fired = Time.timeSinceLevelLoad - lastFired >= 1f &&
                         WingWeapons.Engage(aircraft, pilot, WingWeapons.Allow.MissilesOnly, range);
                 if (fired) WingComms.Say(member, WingComms.Call.Defending);

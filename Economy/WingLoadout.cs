@@ -7,27 +7,12 @@ using NOAvionics.Ui;
 
 namespace WingCommand
 {
-    /// <summary>
-    /// Reads the airframe's own weapon-station data, so the pylon editor can offer real
-    /// stores and a saved template can be turned into a <c>Loadout</c> the spawner accepts.
-    ///
-    /// Nothing here is a weapon catalogue of this mod's own. Every option comes from
-    /// <c>WeaponManager.hardpointSets[i].weaponOptions</c> — the same list the game's
-    /// aircraft selection menu fills its per-hardpoint dropdowns from — and every option is
-    /// described by the same <c>WeaponInfo.effectiveness</c> figures <c>WingWeapons</c>
-    /// already uses to pick a station in flight. A template is therefore a choice among the
-    /// airframe's stock options, not a list of weapons this mod believes it ought to carry.
-    ///
-    /// The one thing that cannot be reached through a compiled reference is the route from
-    /// a <c>WeaponMount</c> prefab to the <c>WeaponStation</c> it will become, because that
-    /// member is private. It is resolved reflectively once per mount, in the same spirit as
-    /// <see cref="GameAccess"/>: if a game update moves it, <see cref="Available"/> goes
-    /// false, only the stock fit is offered, and the panel says why rather than silently
-    /// fitting the wrong weapons.
-    /// </summary>
+ /// <summary>Builds pylon options and loadouts from native hardpoint weaponOptions and effectiveness
+ /// data. Reflects private mount-to-station links once per mount; unreadable profiles fall back to the
+ /// stock fit with diagnostics.</summary>
     internal static class WingLoadoutCatalog
     {
-        /// <summary>One weapon option on one hardpoint set, with its stock role figures.</summary>
+     /// <summary>A hardpoint's native store option and role data.</summary>
         private sealed class MountInfo
         {
             public WeaponMount Mount;
@@ -39,22 +24,16 @@ namespace WingCommand
             public float MaxRange;
             public bool Cargo;
 
-            /// <summary>Rounds carried, straight off the mount. Zero where it is not a count.</summary>
+         /// <summary>Mount ammunition count; zero when not countable.</summary>
             public int Ammo;
 
-            /// <summary>Loaded mass, for the fitted-weight line under the pylon list.</summary>
+         /// <summary>Loaded store mass for fitted-weight display.</summary>
             public float Mass;
 
             public bool Armed => AntiAir > 0f || AntiSurface > 0f || AntiMissile > 0f;
         }
 
-        /// <summary>
-        /// One store the player can put on one pylon, as the editor needs to draw it.
-        ///
-        /// A projection of <see cref="MountInfo"/> rather than the thing itself: the editor
-        /// has no business holding a <c>WeaponMount</c> prefab reference, and the figures
-        /// here are the ones a row shows.
-        /// </summary>
+     /// <summary>Editor-facing store data without exposing WeaponMount prefab references.</summary>
         internal readonly struct StoreOption
         {
             public readonly string Key;
@@ -79,7 +58,7 @@ namespace WingCommand
 
             public bool IsEmpty => string.IsNullOrEmpty(Key);
 
-            /// <summary>What the store is for, in the two letters a table cell can hold.</summary>
+         /// <summary>Two-letter role label for the store table.</summary>
             public string RoleTag =>
                 Cargo ? "CGO"
                 : AntiAir <= 0f && AntiSurface <= 0f ? ""
@@ -88,71 +67,54 @@ namespace WingCommand
                 : "MLT";
         }
 
-        /// <summary>Everything known about one airframe's hardpoints, resolved once.</summary>
+     /// <summary>Cached hardpoint data for one airframe.</summary>
         private sealed class Profile
         {
             public HardpointSet[] Sets;
             public List<MountInfo>[] Options;
             public bool HasRoleData;
 
-            /// <summary>
-            /// True when at least one readable store is a cargo pod. Only the "could this
-            /// airframe's stores be read at all" check needs it — a transport whose sole
-            /// legible stores are cargo is not a blind profile, and must not be logged as one.
-            /// </summary>
+         /// <summary>Whether any readable store is cargo; cargo-only profiles still count as
+         /// successfully read.</summary>
             public bool HasCargo;
         }
 
         private static readonly Dictionary<AircraftDefinition, Profile> profiles =
             new Dictionary<AircraftDefinition, Profile>();
 
-        /// <summary>
-        /// False only when nothing has ever been read successfully.
-        ///
-        /// One airframe throwing is that airframe's problem — it offers the standard fit and
-        /// the panel says so for that aircraft. The feature is only reported as unavailable
-        /// when no airframe anywhere has yielded stock role data, which is what a game update
-        /// moving the members underneath this looks like.
-        /// </summary>
+     /// <summary>Unavailable only after probing fails without any successful role data. Individual
+     /// unreadable airframes fall back to their standard fit.</summary>
         public static bool Available => roleDataSeen || !probeFailed;
 
-        /// <summary>Drop cached prefab data when a mission ends; prefabs may be reloaded.</summary>
+     /// <summary>Clear prefab caches at mission end because assets may reload.</summary>
         public static void Reset()
         {
             profiles.Clear();
             blindProfilesLogged = false;
         }
 
-        // ------------------------------------------------------------------- queries
+        // Loadout queries.
 
-        /// <summary>Short panel label for a choice: the template's name, or <c>STANDARD</c>.</summary>
+     /// <summary>Template name or STANDARD for compact UI labels.</summary>
         public static string Label(WingLoadoutChoice choice)
         {
-            // Every readout on the panel — the shop's fit line, the wing tab's carrying
-            // column, the reserve — comes through here, so naming the template in one place
-            // names it everywhere.
+            // Centralise fit labels across shop, roster, and reserve displays.
             if (!choice.IsTemplate) return "STANDARD";
 
             return AvTheme.Truncate(WingLoadoutTemplates.NameOf(choice.TemplateId), 20)
                           .ToUpperInvariant();
         }
 
-        // ------------------------------------------------------------- pylon editing
+        // Pylon editing.
 
-        /// <summary>How many hardpoint sets this airframe declares. Zero when unreadable.</summary>
+     /// <summary>Declared hardpoint count, or zero if unreadable.</summary>
         public static int PylonCount(AircraftDefinition definition)
         {
             Profile profile = ProfileOf(definition);
             return profile?.Sets?.Length ?? 0;
         }
 
-        /// <summary>
-        /// What to call one pylon.
-        ///
-        /// The airframe names its own hardpoint sets, so the editor shows the game's names
-        /// rather than inventing "STATION 3". A symmetric pair is named once, from
-        /// <c>SymmetryName</c>, because the two are edited together.
-        /// </summary>
+     /// <summary>Use native hardpoint names; label symmetric pairs once with SymmetryName.</summary>
         public static string PylonName(AircraftDefinition definition, int index)
         {
             Profile profile = ProfileOf(definition);
@@ -169,13 +131,8 @@ namespace WingCommand
             return string.IsNullOrEmpty(name) ? "PYLON " + (index + 1) : name;
         }
 
-        /// <summary>
-        /// True when this pylon mirrors the one before it.
-        ///
-        /// The editor hides the mirror and drives it from its partner, because presenting a
-        /// left and a right wing station the player cannot arm differently as two rows is a
-        /// list twice as long that says half as much.
-        /// </summary>
+     /// <summary>Whether the pylon mirrors its predecessor and should be edited through that partner's
+     /// row.</summary>
         public static bool MirrorsPrevious(AircraftDefinition definition, int index)
         {
             Profile profile = ProfileOf(definition);
@@ -195,12 +152,8 @@ namespace WingCommand
                    profile.Sets[next].SymmetryWithPrev;
         }
 
-        /// <summary>
-        /// Every store this pylon will take, the bare pylon first.
-        ///
-        /// The empty option is a real choice, not a placeholder: an aircraft may launch with
-        /// a station left clean, and it is how the player takes weight off.
-        /// </summary>
+     /// <summary>List valid stores with the empty pylon first, allowing deliberate clean
+     /// stations.</summary>
         public static void OptionsFor(AircraftDefinition definition, int index,
                                       List<StoreOption> into)
         {
@@ -217,7 +170,7 @@ namespace WingCommand
             for (int i = 0; i < options.Count; i++) into.Add(Project(options[i]));
         }
 
-        /// <summary>The store a key stands for on one pylon, or the empty option.</summary>
+     /// <summary>Resolve a pylon's store key, falling back to the empty option.</summary>
         public static StoreOption StoreOn(AircraftDefinition definition, int index, string key)
         {
             var empty = new StoreOption(null, "— EMPTY —", 0, 0f, 0f, 0f, false);
@@ -247,14 +200,8 @@ namespace WingCommand
             return null;
         }
 
-        /// <summary>
-        /// Whether the airframe's own rules currently forbid loading this pylon.
-        ///
-        /// Asks the game, rather than reimplementing exclusion from
-        /// <c>precludingHardpointSets</c>: a conformal tank that blocks the station beneath
-        /// it is the airframe's business, and a second opinion here would only be a second
-        /// thing to keep in step with the game.
-        /// </summary>
+     /// <summary>Ask native hardpoint-exclusion rules whether this pylon is blocked by the current
+     /// fit.</summary>
         public static bool IsPylonBlocked(AircraftDefinition definition, int index,
                                           Loadout inProgress)
         {
@@ -270,22 +217,16 @@ namespace WingCommand
             }
             catch (Exception e)
             {
-                // Fail closed. Showing this station as usable would let a malformed modded
-                // exclusion rule create a fit we cannot prove the airframe accepts.
+                // Fail closed on malformed exclusion rules; do not offer a station whose fit cannot be
+                // validated.
                 Fail("checking whether " + SafeName(definition) + " pylon " + (index + 1) +
                      " is blocked failed: " + e.Message);
                 return true;
             }
         }
 
-        /// <summary>
-        /// Turn a template's store keys into a spawnable loadout.
-        ///
-        /// A key the current build does not recognise leaves that pylon empty rather than
-        /// failing the whole fit — the same trade the preset path makes, for the same
-        /// reason. Unlike a preset, an all-empty result is honoured: a player who stripped
-        /// every station meant it.
-        /// </summary>
+     /// <summary>Build a spawnable template from store keys. Unknown keys leave their pylons empty;
+     /// honour deliberate all-empty fits.</summary>
         public static Loadout BuildFromKeys(AircraftDefinition definition,
                                             IReadOnlyList<string> keys)
         {
@@ -325,15 +266,8 @@ namespace WingCommand
             return new Loadout { weapons = weapons };
         }
 
-        /// <summary>
-        /// Apply the airframe's own hardpoint-exclusion rules to a completed template.
-        ///
-        /// The editor performs the same checks for presentation, but saved config can be
-        /// stale or hand-edited and a newly selected store can block an already-filled
-        /// station. The spawn path is therefore authoritative and removes every store the
-        /// game reports as blocked. Repeating reaches a stable result when clearing one
-        /// station changes another station's answer.
-        /// </summary>
+     /// <summary>Apply native exclusion rules authoritatively before spawn, including stale or
+     /// hand-edited templates. Repeat clearing until the remaining fit is stable.</summary>
         private static int ClearBlockedMounts(AircraftDefinition definition, Profile profile,
                                               List<WeaponMount> weapons)
         {
@@ -360,8 +294,7 @@ namespace WingCommand
                     }
                     catch (Exception e)
                     {
-                        // A store whose exclusion rules throw is not safe to pass to the
-                        // spawner. Remove only that store and leave the rest of the fit.
+                        // Remove the store whose exclusion check throws; preserve the rest of the fit.
                         blocked = true;
                         Fail("validating " + SafeName(definition) + " pylon " + (i + 1) +
                              " failed: " + e.Message);
@@ -378,15 +311,8 @@ namespace WingCommand
             return removed;
         }
 
-        /// <summary>
-        /// The same fit as <see cref="BuildFromKeys"/>, into a reused loadout.
-        ///
-        /// For the editor only, which asks what a half-finished template blocks several
-        /// times a second. Never hand the result to the spawner: an aircraft keeps the
-        /// <c>Loadout</c> it was given, and two aircraft sharing one is the bug
-        /// <see cref="WingTakeover"/> and <see cref="WingShopDelivery"/> both carry warnings
-        /// about — a whole wing that launches with no ammunition.
-        /// </summary>
+     /// <summary>Fill reusable editor scratch for exclusion checks. Never spawn with this shared
+     /// mutable Loadout; each aircraft must own its container.</summary>
         public static Loadout FillScratch(AircraftDefinition definition,
                                           IReadOnlyList<string> keys)
         {
@@ -407,19 +333,11 @@ namespace WingCommand
         private static readonly Loadout scratchLoadout =
             new Loadout { weapons = new List<WeaponMount>() };
 
-        // --------------------------------------------------------------------- build
+        // Loadout construction.
 
-        /// <summary>
-        /// Turn a choice into a spawnable loadout. The standard choice copies the live
-        /// player default for this mission — the same fit <c>LoadoutSelector.LoadDefaults</c>
-        /// applies when the player starts — and falls back to the airframe's game-start
-        /// preset when that has not been written yet.
-        ///
-        /// Null is a last-resort fallback: an airframe with no readable starting preset,
-        /// or a template that has since been deleted, lets the native spawner choose its
-        /// own fit. An unarmed wingman is a worse outcome than an unfulfilled preference
-        /// — it flies to the wing, reads as Winchester and turns straight round for home.
-        /// </summary>
+     /// <summary>Build a choice using the live player default, then game-start preset for Standard.
+     /// Return null for unavailable presets or deleted templates so native spawning chooses a usable
+     /// fallback fit.</summary>
         public static Loadout Build(AircraftDefinition definition, WingLoadoutChoice choice)
         {
             if (choice.HasSnapshot) return GuardNativeFallback(definition, BuildFromKeys(definition, choice.FittedKeys));
@@ -431,10 +349,8 @@ namespace WingCommand
                 : null;
         }
 
-        /// <summary>
-        /// A clone of the player's current default fit for this airframe, or the game-start
-        /// preset when they have not customised it this session.
-        /// </summary>
+     /// <summary>Copy the live player default, falling back to the airframe's game-start
+     /// preset.</summary>
         internal static Loadout ClonePlayerDefault(AircraftDefinition definition)
         {
             if (definition == null) return null;
@@ -445,11 +361,8 @@ namespace WingCommand
             return CloneLoadout(GameStartLoadout(definition));
         }
 
-        /// <summary>
-        /// Native spawn substitutes <c>loadouts[1]</c> when the weapons list is missing or
-        /// empty, which puts stripped fuel tanks back. A deliberate empty fit must still
-        /// have one slot per hardpoint.
-        /// </summary>
+     /// <summary>Keep one entry per hardpoint for empty fits; a missing or empty list triggers native
+     /// loadouts[1] fallback and can restore removed tanks.</summary>
         private static Loadout GuardNativeFallback(AircraftDefinition definition, Loadout loadout)
         {
             if (loadout?.weapons != null &&
@@ -467,44 +380,19 @@ namespace WingCommand
             return new Loadout { weapons = weapons };
         }
 
-        /// <summary>Freeze the stores actually fitted, including the native standard fit.</summary>
+     /// <summary>Snapshot the actual fitted stores, including native Standard.</summary>
         internal static WingLoadoutChoice SnapshotFit(Aircraft aircraft, WingLoadoutChoice choice)
         {
             List<WeaponMount> weapons = aircraft?.Networkloadout?.weapons;
-            // A synchronous registration can precede Hangar completing its loadout setup.
-            // The book retries on its next read once that loadout has been installed.
+            // Hangar registration may precede loadout installation; retry the snapshot on the book's
+            // next read.
             if (weapons == null) return choice;
             var keys = new List<string>(weapons.Count);
             for (int i = 0; i < weapons.Count; i++) keys.Add(StoreKey(weapons[i]));
             return choice.Snapshot(keys);
         }
 
-        /// <summary>
-        /// The stores the player currently has as their default for this airframe: the live
-        /// <c>GameManager.aircraftCustomization</c> fit when one exists, otherwise the
-        /// game-start preset in <c>AircraftParameters.loadouts[1]</c>.
-        ///
-        /// Returned in pylon order, matching <c>WeaponManager.hardpointSets</c> exactly
-        /// as <see cref="BuildFromKeys"/> expects. Null when the airframe declares no
-        /// such loadout to copy — a workshop aircraft with an incomplete parameters
-        /// asset — so the caller can tell "nothing to seed" from "an all-empty fit".
-        /// </summary>
-        public static List<string> SuggestedKeys(AircraftDefinition definition)
-        {
-            Loadout suggested = ClonePlayerDefault(definition);
-            if (suggested?.weapons == null) return null;
-
-            var keys = new List<string>(suggested.weapons.Count);
-            for (int i = 0; i < suggested.weapons.Count; i++)
-                keys.Add(StoreKey(suggested.weapons[i]));
-            return keys;
-        }
-
-        /// <summary>
-        /// Resolve the original player preset built into an airframe, used when the
-        /// session has no live customisation yet. Index 0 is not that preset: the game
-        /// reserves it for something else.
-        /// </summary>
+     /// <summary>Read the native player-start preset at index 1, not index 0.</summary>
         private static Loadout GameStartLoadout(AircraftDefinition definition)
         {
             if (definition == null) return null;
@@ -512,22 +400,20 @@ namespace WingCommand
             List<Loadout> loadouts = definition.aircraftParameters?.loadouts;
             if (loadouts == null || loadouts.Count == 0) return null;
 
-            // Match LoadoutSelector.LoadDefaults' first-time fallback. The single-entry fallback keeps an
-            // incomplete workshop airframe launchable instead of indexing past its data.
+            // Match native first-time defaults; use index 0 only for incomplete single-entry workshop
+            // presets.
             return loadouts[loadouts.Count > 1 ? 1 : 0];
         }
 
-        /// <summary>
-        /// A spawned aircraft owns its mutable Loadout container. WeaponMount definitions
-        /// are immutable assets and can safely be shared; the list itself must not be.
-        /// </summary>
+     /// <summary>Copy each aircraft's mutable Loadout list; immutable WeaponMount assets may be
+     /// shared.</summary>
         private static Loadout CloneLoadout(Loadout source)
         {
             if (source?.weapons == null) return null;
             return new Loadout { weapons = new List<WeaponMount>(source.weapons) };
         }
 
-        // ------------------------------------------------------------------ profiling
+        // Airframe profiling.
 
         private static Profile ProfileOf(AircraftDefinition definition)
         {
@@ -572,8 +458,7 @@ namespace WingCommand
                 {
                     WeaponMount mount = available[j];
 
-                    // A null entry is the game's own "nothing on this station" choice, and
-                    // a disallowed one is event content or a store this game build has locked.
+                    // Null means an empty station; reject locked or event-only stores.
                     if (mount == null || mount.NotAllowed(includeEventContent: false)) continue;
 
                     MountInfo info;
@@ -583,8 +468,8 @@ namespace WingCommand
                     }
                     catch (Exception e)
                     {
-                        // One malformed workshop store must not hide every other store on
-                        // the aircraft. Keep profiling the rest of the hardpoint.
+                        // Skip malformed workshop stores while retaining the rest of the hardpoint
+                        // options.
                         Plugin.Logger.LogWarning(
                             "[Loadout] skipped unreadable store " + NameOf(mount) + " on " +
                             SafeName(definition) + ": " + e.Message);
@@ -615,14 +500,7 @@ namespace WingCommand
             return profile;
         }
 
-        /// <summary>
-        /// Say once, in the log, that an airframe's stores could not be read.
-        ///
-        /// Not a hard failure: a profile with no readable role data simply offers the
-        /// standard fit, which is what the aircraft would have launched with anyway. It is
-        /// worth one line, because the alternative is a Loadout panel that silently shows a
-        /// single preset and looks broken.
-        /// </summary>
+     /// <summary>Log unreadable role data once per airframe and offer its standard fit.</summary>
         private static void NoteBlindProfile(AircraftDefinition definition)
         {
             if (roleDataSeen || blindProfilesLogged) return;
@@ -633,20 +511,18 @@ namespace WingCommand
                 SafeName(definition) + "'s hardpoints; that airframe offers the standard fit only.");
         }
 
-        /// <summary>True once any airframe's stores have been read successfully.</summary>
+     /// <summary>Whether any airframe has yielded readable store data.</summary>
         private static bool roleDataSeen;
 
         private static bool blindProfilesLogged;
 
-        /// <summary>The airframe's weapon manager, read from the prefab the spawner uses.</summary>
+     /// <summary>Read hardpoint sets from the spawning prefab's weapon manager.</summary>
         private static HardpointSet[] HardpointSetsOf(AircraftDefinition definition)
         {
             GameObject prefab = definition.unitPrefab;
             if (prefab == null) return null;
 
-            // Non-generic lookup on purpose: the generic overload constrains its type
-            // argument to Component, which would make this file fail to compile if a game
-            // update ever made WeaponManager anything else.
+            // Use the non-generic lookup to avoid a compile-time Component constraint on WeaponManager.
             Component[] managers = prefab.GetComponentsInChildren(typeof(WeaponManager), true);
             if (managers == null) return null;
 
@@ -660,9 +536,9 @@ namespace WingCommand
             return null;
         }
 
-        // ----------------------------------------------------------- mount inspection
+        // Mount inspection.
 
-        /// <summary>Whether weapon stations are Unity components, checked once.</summary>
+     /// <summary>Cached check for WeaponStation deriving from Component.</summary>
         private static readonly bool StationIsComponent =
             typeof(Component).IsAssignableFrom(typeof(WeaponStation));
 
@@ -673,22 +549,18 @@ namespace WingCommand
             var info = new MountInfo
             {
                 Mount = mount,
-                // Workshop mounts normally publish jsonKey exactly like built-in mounts.
-                // A few older mods omit it; the ScriptableObject asset name is stable
-                // enough to let those stores participate in saved templates as well.
+                // Prefer jsonKey; use the asset name for older workshop stores without one.
                 Key = StoreKey(mount),
                 Label = NameOf(mount),
 
-                // Straight off the mount, which the station walk below cannot improve on.
+                // Read ammunition directly from the mount.
                 Ammo = mount.ammo,
                 Mass = mount.mass,
                 Cargo = mount.Cargo || mount.Troops,
             };
 
-            // The mount's own weapon info is the direct route to role data and covers the
-            // ordinary single-weapon store. The station walk after it is what handles a
-            // mount that carries several different weapons, and a build where this member
-            // has moved.
+            // Read ordinary weapon data directly; inspect stations for multi-weapon mounts and fallback
+            // metadata.
             WeaponInfo direct = mount.info;
             if (direct != null) Absorb(info, direct);
 
@@ -713,7 +585,7 @@ namespace WingCommand
             return info;
         }
 
-        /// <summary>Take the best figures this weapon offers into the mount's summary.</summary>
+     /// <summary>Merge this weapon's best role figures into the mount summary.</summary>
         private static void Absorb(MountInfo info, WeaponInfo weapon)
         {
             RoleIdentity role = weapon.effectiveness;
@@ -724,18 +596,14 @@ namespace WingCommand
             if (weapon.cargo || weapon.troops) info.Cargo = true;
         }
 
-        /// <summary>
-        /// The stations a mount prefab carries.
-        ///
-        /// The component search is the normal path; the reflected scan behind it covers a
-        /// mount that references its station through a field instead of parenting it.
-        /// </summary>
+     /// <summary>Find child station components, then reflect fields for mounts that reference stations
+     /// elsewhere.</summary>
         private static List<WeaponStation> StationsOf(WeaponMount mount)
         {
             stationScratch.Clear();
 
-            // Boxed to object first: a direct cast expression between WeaponMount and
-            // Component would only compile while the two are related types.
+            // Cast through object so compilation does not require WeaponMount and Component to be
+            // related.
             object boxed = mount;
             var component = boxed as Component;
 
@@ -796,7 +664,7 @@ namespace WingCommand
                 }
                 catch
                 {
-                    // A property that throws on a prefab tells us nothing; skip it.
+                    // Ignore prefab properties that throw during inspection.
                 }
 
                 if (value is WeaponStation station) into.Add(station);

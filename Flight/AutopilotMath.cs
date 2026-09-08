@@ -2,33 +2,22 @@ using UnityEngine;
 
 namespace WingCommand
 {
-    /// <summary>
-    /// The three <c>AutoAim</c> argument clamps every steering path was open-coding.
-    ///
-    /// These bounds - the fixed-wing floor at <c>maxRadius</c> and ceiling at 8 km, the
-    /// rotary floor at the airframe's <c>minimumRadarAlt</c>, the pursuit-bank cap - are
-    /// the fiddly numbers the modding notes warn about, and they were copied verbatim
-    /// across eight-plus call sites. One home means one place to get them right.
-    /// </summary>
+ /// <summary>Shared AutoAim clamps: fixed-wing altitude from maxRadius to 8 km, rotary altitude from
+ /// minimumRadarAlt, and pursuit bank below inversion.</summary>
     internal static class AutopilotMath
     {
-        /// <summary>
-        /// A held-altitude value for a fixed-wing <c>AutoAim</c>: never below the airframe's
-        /// own turn-radius floor, never above 8 km.
-        /// </summary>
+     /// <summary>Clamp fixed-wing held altitude to the airframe turn-radius floor and 8 km
+     /// ceiling.</summary>
         public static float CruiseHold(Aircraft aircraft, float desired) =>
             Mathf.Clamp(desired, aircraft.maxRadius, 8000f);
 
-        /// <summary>
-        /// A height-above-ground value for a rotary <c>AutoAim</c>: at least the airframe's
-        /// <c>minimumRadarAlt</c>, then clamped into a sensible band for the task.
-        /// </summary>
+     /// <summary>Clamp rotary AGL to the airframe minimumRadarAlt and task-specific limits.</summary>
         public static float RotaryAgl(Aircraft aircraft, float desired,
                                       float min = 25f, float max = 3000f) =>
             Mathf.Clamp(Mathf.Max(aircraft.GetAircraftParameters().minimumRadarAlt, desired),
                         min, max);
 
-        /// <summary>Bank authority for a pursuing turn, capped below inversion.</summary>
+     /// <summary>Pursuit bank limit below inversion.</summary>
         public static float PursuitBank() =>
             Mathf.Min(WingTuning.PursuitBank, FixedWingFormation.MaxSafeBank);
     }

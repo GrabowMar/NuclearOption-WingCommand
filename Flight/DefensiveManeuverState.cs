@@ -2,19 +2,11 @@ using UnityEngine;
 
 namespace WingCommand
 {
-    /// <summary>
-    /// Temporary self-preservation interrupt for a wingman under missile attack.
-    ///
-    /// This state does not replace the standing order. Formation, attack, orbit, cargo and
-    /// RTB are merely paused: the missile-break reflex outscores everything while a missile
-    /// is airborne, and the arbiter resolves straight back to the standing directive once it
-    /// stops. That distinction is what makes defensive behaviour feel reactive instead of
-    /// making the AI forget what the player told it to do.
-    /// </summary>
+ /// <summary>Temporary missile-defence flight state that preserves standing intent. Reflex arbitration
+ /// determines entry and release, then resumes the directive when appropriate.</summary>
     internal sealed class DefensiveManeuverState : WingPilotState
     {
-        // Missile evasion is safety-critical: this interval is deliberately NOT routed
-        // through WingFidelity.Interval, so Performance mode never slows the threat refresh.
+        // Do not scale safety-critical threat refresh with fidelity mode.
         private const float ThreatRefreshSeconds = 0.2f;
         private const float FixedWingRunDistance = 8000f;
         private const float RotaryRunDistance = 4000f;
@@ -22,7 +14,7 @@ namespace WingCommand
         private readonly RadarJammerPulser jammer = new RadarJammerPulser();
         private Missile threat;
 
-        /// <summary>Station holding the expendable that answers this threat, or -1.</summary>
+     /// <summary>Matching expendable station index, or -1 if unavailable.</summary>
         private int expendableIndex = -1;
         private float nextThreatRefresh;
         private bool countermeasuresActive;
@@ -34,7 +26,7 @@ namespace WingCommand
 
         public override void EnterState(Pilot pilot)
         {
-            // This is the state that most needs the energy, so the hover regime always comes off.
+            // Release hover to restore energy for missile evasion.
             BeginFlight(pilot);
 
             nextThreatRefresh = 0f;
@@ -54,17 +46,8 @@ namespace WingCommand
             }
         }
 
-        /// <summary>
-        /// The break is over — the arbiter has given the aircraft to something else.
-        ///
-        /// This state no longer decides when that happens, and no longer announces it. It
-        /// used to run its own clear timer and call back into the member to resume, which
-        /// made it both a behaviour and half of the precedence system. The reflex owns the
-        /// timing, and <see cref="WingMember"/> owns the all-clear call and the retirement of
-        /// a stale order — it can tell a real release from a teardown, and this cannot.
-        ///
-        /// So all that is left is putting the countermeasures away.
-        /// </summary>
+     /// <summary>Stop countermeasures on exit. The reflex owns release timing; WingMember handles
+     /// all-clear chatter and stale-order retirement.</summary>
         public override void LeaveState()
         {
             StopCountermeasures();
@@ -82,10 +65,8 @@ namespace WingCommand
             MissileWarning warning = aircraft.GetMissileWarningSystem();
             bool warned = warning != null && warning.IsWarning();
 
-            // Nothing to run from this instant. Stop dispensing, but keep flying the last
-            // commanded break: the reflex holds this state for a couple of seconds after the
-            // warning drops, precisely so a missile that is briefly lost and re-acquired
-            // does not get the controls handed back mid-turn.
+            // Stop dispensing without a live warning, but retain the last break while reflex hold time
+            // bridges temporary tracking gaps.
             if (!warned || threat == null || threat.disabled)
             {
                 StopCountermeasures();
@@ -113,12 +94,8 @@ namespace WingCommand
             threat = nearest;
             expendableIndex = -1;
 
-            // Resolve the dispenser ourselves rather than asking ChooseCountermeasure.
-            // ChaffEjector and RadarJammer declare the same { "ARH", "SARH" } threat types,
-            // and the game picks the first match from a list sorted by display name - so on
-            // an aircraft carrying both, whether a radar missile gets chaff or a held
-            // trigger on the jammer came down to alphabetical order. See
-            // CountermeasureAccess.TryFindExpendable.
+            // Resolve expendables explicitly; native name-sorted selection may choose RadarJammer
+            // instead of chaff for shared ARH/SARH threat types.
             if (aircraft.countermeasureManager == null) return;
 
             if (!CountermeasureAccess.TryFindExpendable(
@@ -152,17 +129,14 @@ namespace WingCommand
             Vector3 beam = Vector3.Dot(beamA, aircraft.transform.forward) >=
                            Vector3.Dot(beamB, aircraft.transform.forward) ? beamA : beamB;
 
-            // Classify the threat from the missile, not from whether an expendable station
-            // could be selected. An ECM-equipped aircraft with no chaff can legitimately get
-            // an empty ChooseCountermeasure result; treating that as an unknown seeker is the
-            // exact path that used to leave its jammer idle against a radar missile.
+            // Classify the seeker from the missile, even when no matching expendable exists, so radar
+            // threats still activate ECM.
             string seekerType = threat.GetSeekerType();
             bool infrared = seekerType == "IR";
             bool radar = seekerType == "SARH" || seekerType == "ARH";
 
-            // Radar: place the threat on the beam and descend toward clutter. IR: unload
-            // the engine, dispense flares, and open aspect away from the missile.
-            // When terminal (impact < 3s), execute a maximum-G break across the missile LOS.
+            // Radar threats use beam/clutter; IR threats reduce power and flare. Below 3 seconds to
+            // impact, break across the missile line of sight.
             bool terminal = impactTime < 3.0f;
 
             Vector3 direction;
@@ -172,7 +146,7 @@ namespace WingCommand
             }
             else if (terminal)
             {
-                // Terminal break: hard slice across threat line-of-sight to force tracking overshoot.
+                // Slice across the line of sight to force terminal tracking overshoot.
                 direction = (beam * 0.90f + away * 0.20f).normalized;
             }
             else
@@ -185,25 +159,17 @@ namespace WingCommand
             if (terminal || aircraft.radarAlt < 120f) vertical = 0.25f;
             direction = (direction + Vector3.up * vertical).normalized;
 
-            // Idle throttle on terminal IR evasion to cool engine and maximize flare effectiveness.
+            // Idle during terminal IR evasion to reduce engine heat and aid flares.
             controlInputs.throttle = infrared ? (terminal ? 0f : 0.15f) : 1f;
 
-            // Dispense only inside the useful window. The ejectors rate-limit themselves
-            // (ChaffEjector.Fire refuses inside its own ejectionInterval), so holding the
-            // trigger across the window paces the load rather than dumping it.
-            //
-            // The radar window was eight seconds of predicted time-to-impact, computed as
-            // range over closing rate. An ARH detected at thirty kilometres sits far outside
-            // that for most of its flight and only starts getting chaff once the notch is
-            // already committed, which is the wrong half of the engagement.
+            // Hold dispense only within useful threat windows; native ejectors enforce their own
+            // cadence.
             bool dispense = expendableIndex >= 0 &&
                             (infrared || impactTime < WingTuning.ChaffWindowSeconds);
             SetCountermeasures(dispense);
 
-            // RadarJammer.Fire lasts one tenth of a second. Re-deploy at a fixed cadence
-            // while a SARH/ARH threat is live; the pulser temporarily selects the jammer
-            // and restores the chaff station selected above. When the warning clears, the
-            // final pulse expires on its own.
+            // Pulse ECM during radar warnings; the pulser restores chaff selection. The final
+            // 0.1-second pulse expires after warning clearance.
             if (radar) jammer.Pulse(aircraft);
 
             bool rotary = WingRegistry.IsRotary(aircraft);
@@ -240,12 +206,8 @@ namespace WingCommand
             }
         }
 
-        /// <summary>
-        /// Hold or release the dispense trigger on the station we resolved, naming the index
-        /// explicitly rather than reusing whatever <c>activeIndex</c> happens to be. The
-        /// jammer pulser borrows that field and restores it, so reading it here was reading
-        /// a value another system owns.
-        /// </summary>
+     /// <summary>Set the dispense trigger on the resolved expendable index; activeIndex is temporarily
+     /// borrowed by the jammer pulser.</summary>
         private void SetCountermeasures(bool active)
         {
             if (aircraft == null || aircraft.countermeasureManager == null) return;

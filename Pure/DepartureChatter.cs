@@ -4,7 +4,7 @@ namespace WingCommand
 {
     internal enum DeparturePhase { None, Taxiing, Departing, Airborne }
 
-    /// <summary>One current departure report per airframe, sharing a quiet radio channel.</summary>
+ /// <summary>Keeps one current departure report per airframe on a rate-limited radio channel.</summary>
     internal sealed class DepartureChatter
     {
         internal const float ChannelSpacingSeconds = 5f;
@@ -27,7 +27,7 @@ namespace WingCommand
                 progress.Add(memberId, item = new Progress());
             if (phase <= item.Observed) return;
             item.Observed = phase;
-            // A later phase replaces an unsaid report: never announce taxi after liftoff.
+            // Replace unsaid phases with the latest so taxi cannot be announced after liftoff.
             item.Pending = phase;
             item.PendingAt = now;
         }

@@ -2,59 +2,41 @@ using UnityEngine;
 
 namespace WingCommand
 {
-    /// <summary>
-    /// Take cargo to a point the player chose on the map and put it down there.
-    ///
-    /// The stock <c>AIHeloTransportState</c> is a complete supply behaviour, but it picks
-    /// its own destination — nearest airbase, nearest known ground enemy — so it can never
-    /// answer "put it <em>there</em>". That is the whole ask, and it is the same shape as
-    /// Hold and Land: arm the order, right-click a point, watch the marker.
-    ///
-    /// Fixed-wing aircraft are included deliberately. Nothing about a cargo station is
-    /// rotary-specific; a transport aircraft with a load runs in over the point and releases
-    /// it, while a helicopter descends and sets it down. Only the stock point-less route is
-    /// helicopter-only, because that is the state's own limitation rather than ours.
-    ///
-    /// Whether a cargo station answers <c>Fire</c> is not something a plugin build can
-    /// prove, so this never assumes it worked: the station's own ammunition is the only
-    /// evidence accepted, and a run that cannot shift its load hands back to the stock
-    /// transport behaviour rather than hovering over a field for the rest of the mission.
-    /// </summary>
+ /// <summary>Delivers cargo to a map point: fixed-wing aircraft release overhead, helicopters descend.
+ /// Confirm drops through ammunition changes. If release stalls, relinquish the point and use native
+ /// transport where supported.</summary>
     internal class CargoRunState : WingPilotState
     {
         private enum Phase { Transit, Deliver, Egress }
 
-        /// <summary>Height held while flying to the drop point, in metres.</summary>
+     /// <summary>Transit height to the drop point, in metres.</summary>
         private const float TransitAltitude = 140f;
 
-        /// <summary>Height a helicopter settles to before it starts letting down.</summary>
+     /// <summary>Helicopter stabilisation height before descent.</summary>
         private const float SettleAltitude = 24f;
 
-        /// <summary>Descent rate once settled, in metres per second.</summary>
+     /// <summary>Settled descent rate in metres per second.</summary>
         private const float DescentRate = 3f;
 
-        /// <summary>Radar altitude below which a helicopter may release.</summary>
+     /// <summary>Maximum radar altitude for helicopter release.</summary>
         private const float ReleaseAltitude = 8f;
 
-        /// <summary>Height a fixed-wing aircraft makes its drop run at.</summary>
+     /// <summary>Fixed-wing drop-run height.</summary>
         private const float DropRunAltitude = 260f;
 
-        /// <summary>How close to the point counts as over it, in metres.</summary>
+     /// <summary>Distance in metres considered arrival over the point.</summary>
         private const float ArrivalRadius = 120f;
 
-        /// <summary>How close a fixed-wing release has to be to the point.</summary>
+     /// <summary>Maximum distance from the point for fixed-wing release.</summary>
         private const float DropRadius = 250f;
 
-        /// <summary>Seconds between release attempts.</summary>
+     /// <summary>Delay between cargo release attempts, in seconds.</summary>
         private const float ReleaseInterval = 1.5f;
 
-        /// <summary>
-        /// How long the delivery phase may run without the load shifting before the stock
-        /// transport behaviour is given the job instead.
-        /// </summary>
+     /// <summary>Delivery timeout before handing a stalled load to native transport.</summary>
         private const float DeliverTimeout = 45f;
 
-        /// <summary>Height climbed back to after the load is away.</summary>
+     /// <summary>Climb-out height after cargo release.</summary>
         private const float EgressAltitude = 220f;
 
         private GlobalPosition point;
@@ -69,17 +51,16 @@ namespace WingCommand
             stateDisplayName = "delivering";
         }
 
-        /// <summary>Where the load is going. Call before switching to this state.</summary>
+     /// <summary>Set the drop destination before entering this state.</summary>
         public void SetDestination(GlobalPosition destination) => point = destination;
 
         public override void EnterState(Pilot pilot)
         {
-            // Keep the hover configuration: this state lets a helicopter down onto a point.
+            // Retain hover configuration for descent to the drop point.
             BeginFlight(pilot, releaseHover: false);
 
-            // Ground level under the requested point, so a helicopter's hover height is a
-            // height above the ground rather than above sea level. Hover adds its hold to
-            // the destination's own height, exactly as the landing state relies on.
+            // Resolve ground height beneath the point; hover adds its AGL hold to destination
+            // elevation.
             point = GroundUnder(point);
 
             facing = aircraft.transform.forward;
@@ -111,16 +92,14 @@ namespace WingCommand
         {
             if (aircraft == null || aircraft.disabled) return;
 
-            // The drop point is gone - CheckStalled gave it up and the arbiter is about to
-            // hand this aircraft to the stock supply route on the next pass. Nothing left
-            // here to fly, and repeating the stall report while we wait is just noise.
+            // After abandoning the point, wait quietly for arbitration to enter the native supply
+            // route.
             if (!member.Directive.HasPoint) return;
 
             bool rotary = WingRegistry.IsRotary(aircraft);
 
-            // The load is away. WingMember.CheckCargoRun owns completing the order - it is
-            // the one place that decides a delivery happened - so this only has to fly the
-            // aircraft somewhere sensible until it does.
+            // Fly egress after unloading; WingMember.CheckCargoRun owns delivery confirmation and order
+            // completion.
             if (member.CargoAmmo <= 0) phase = Phase.Egress;
 
             switch (phase)
@@ -147,12 +126,11 @@ namespace WingCommand
             }
         }
 
-        // ------------------------------------------------------------------- transit
+        // Transit flight.
 
         private void Transit(bool rotary)
         {
-            // Both routes to the drop point are cruises. Anything left configured to hover
-            // from a previous let-down would never make the transit.
+            // Release hover for both cruise routes to the drop point.
             HoverAssist.Release(aircraft);
 
             if (rotary)
@@ -180,9 +158,9 @@ namespace WingCommand
                 targetVelocity: Vector3.zero);
         }
 
-        // ------------------------------------------------------------------- delivery
+        // Cargo release.
 
-        /// <summary>Settle over the point, let down, and release as soon as it is low enough.</summary>
+     /// <summary>Stabilise overhead, descend, and release below the altitude threshold.</summary>
         private void DeliverRotary()
         {
             hold = Mathf.Max(0f, hold - DescentRate * Time.fixedDeltaTime);
@@ -192,7 +170,7 @@ namespace WingCommand
             CheckStalled();
         }
 
-        /// <summary>Fly the point and release while overhead.</summary>
+     /// <summary>Fly over the point and release within the drop radius.</summary>
         private void DeliverFixedWing()
         {
             Transit(rotary: false);
@@ -209,14 +187,8 @@ namespace WingCommand
             WingWeapons.ReleaseCargo(aircraft, pilot);
         }
 
-        /// <summary>
-        /// Give the job to the stock transport behaviour when nothing has moved.
-        ///
-        /// This is the honest failure mode. If a cargo station does not release the way
-        /// every other station in this mod is fired, the order still has to do something,
-        /// and the stock route is what it did before drop points existed. It gives up the
-        /// chosen point, so it says so.
-        /// </summary>
+     /// <summary>Report a stalled drop and relinquish the point for native transport
+     /// fallback.</summary>
         private void CheckStalled()
         {
             cargoProgress.Observe(member.CargoAmmo, Time.timeSinceLevelLoad);
@@ -231,15 +203,8 @@ namespace WingCommand
                     "[Cargo] " + aircraft.unitName + " released nothing at the drop point; " +
                     "handing over to the stock transport state");
 
-                // Give up the drop point rather than switching state here. A cargo order
-                // without one is already defined as "go and find somewhere", and
-                // WingMember.EnterCargoRun already routes it to the stock transport state -
-                // so the hand-off travels the normal path and the arbiter knows about it.
-                //
-                // Switching directly was the last unarbitrated SwitchState in the mod: the
-                // resolution still read "flying the standing task" for the rest of the
-                // sortie, and a later missile break resolved back to a cargo run that
-                // restarted the drop route which had just failed.
+                // Clear the point through task completion so the arbiter performs the handoff and later
+                // defence resumes the correct route.
                 CompleteTask(WingDirective.Simple(WingOrder.DeliverCargo));
                 return;
             }
@@ -250,9 +215,9 @@ namespace WingCommand
             CompleteTask(WingOrder.Formation);
         }
 
-        // --------------------------------------------------------------------- egress
+        // Departure from drop.
 
-        /// <summary>Get off the deck and stay flyable until the order is completed.</summary>
+     /// <summary>Climb clear while waiting for order completion.</summary>
         private void Egress(bool rotary)
         {
             if (rotary)
@@ -269,7 +234,7 @@ namespace WingCommand
             Transit(rotary: false);
         }
 
-        // ------------------------------------------------------------------- geometry
+        // Drop geometry.
 
         private static float HorizontalDistance(GlobalPosition a, GlobalPosition b)
         {
@@ -278,10 +243,8 @@ namespace WingCommand
             return delta.magnitude;
         }
 
-        /// <summary>
-        /// The ground directly under a map click, or the click itself over water or where
-        /// nothing was hit. A map point carries no useful height of its own.
-        /// </summary>
+     /// <summary>Resolve terrain beneath the map point; use the point itself over water or on a missed
+     /// raycast.</summary>
         private static GlobalPosition GroundUnder(GlobalPosition requested)
         {
             Vector3 local = requested.ToLocalPosition();

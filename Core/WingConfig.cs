@@ -3,7 +3,7 @@ using UnityEngine;
 
 namespace WingCommand
 {
-    /// <summary>How much of the squadron radio the player wants.</summary>
+ /// <summary>Squadron radio detail preference.</summary>
     internal enum ChatterLevel
     {
         Off,
@@ -11,7 +11,7 @@ namespace WingCommand
         TextAndTone,
     }
 
-    /// <summary>How far wing outlines and HUD colouring reach across the displays.</summary>
+ /// <summary>Display scope for wing outlines and HUD tints.</summary>
     internal enum HighlightMode
     {
         Off,
@@ -19,28 +19,15 @@ namespace WingCommand
         WingAndTargets,
     }
 
-    /// <summary>
-    /// The settings a player has an opinion about, and no others.
-    ///
-    /// This list used to run to eighty-one entries. Ten were retired keys nothing read, and
-    /// fifty-three were tuned numbers with no answer to "what should I set this to?" - bank
-    /// authorities, engagement ranges, XP awards, a helicopter power constant derived from
-    /// the game's own collective formula. Those now live in <see cref="WingTuning"/> as
-    /// constants, with the reasoning attached, where they can be changed by someone who can
-    /// see the consequence. What is left is preference: how the wing flies, what it is
-    /// allowed to do, and what you see of it.
-    ///
-    /// <see cref="Mode"/> is the one switch for cost. It gates the expensive behaviour in
-    /// <see cref="WingFidelity"/> rather than asking the player to switch off manoeuvres,
-    /// jamming, deconfliction and chatter one at a time, which is what the old set did.
-    /// </summary>
+ /// <summary>Player preferences and feature permissions. Internal tuning belongs in WingTuning; Mode
+ /// selects the WingFidelity behaviour budget.</summary>
     internal class WingConfig
     {
-        // --- Formation ---
+        // Formation settings.
         public ConfigEntry<FormationShape> FormationShape { get; private set; }
         public ConfigEntry<float> FormationSpacing { get; private set; }
 
-        // --- Keys ---
+        // Key bindings.
         public ConfigEntry<KeyCode> RadialKey { get; private set; }
         public ConfigEntry<KeyCode> QuickRejoinKey { get; private set; }
         public ConfigEntry<KeyCode> QuickEngageKey { get; private set; }
@@ -48,10 +35,10 @@ namespace WingCommand
         public ConfigEntry<KeyCode> QuickAttackKey { get; private set; }
         public ConfigEntry<KeyCode> CycleRoeKey { get; private set; }
 
-        // --- AI ---
+        // AI settings.
         public ConfigEntry<WingMode> Mode { get; private set; }
 
-        // --- Engagement ---
+        // Engagement settings.
         public ConfigEntry<WingRoe> DefaultRoe { get; private set; }
         public ConfigEntry<bool> AutoReturnOnEmpty { get; private set; }
         public ConfigEntry<bool> RtbReturnsToReserve { get; private set; }
@@ -60,22 +47,24 @@ namespace WingCommand
         public ConfigEntry<int> MaxWingmenPerTarget { get; private set; }
         public ConfigEntry<float> BingoFuelThreshold { get; private set; }
 
-        // --- Comms ---
+        // Radio settings.
         public ConfigEntry<ChatterLevel> Radio { get; private set; }
 
-        // --- Pilots ---
+        // Pilot settings.
         public ConfigEntry<bool> PilotProgression { get; private set; }
         public ConfigEntry<float> RankEffect { get; private set; }
 
-        // --- Shop ---
+        // Shop settings.
         public ConfigEntry<bool> ShopEnabled { get; private set; }
         public ConfigEntry<float> RecruitmentCostPercent { get; private set; }
 
-        // --- Loadout ---
+        // Loadout persistence.
         public ConfigEntry<string> LoadoutTemplates { get; private set; }
 
-        // --- UI ---
+        // Display settings.
         public ConfigEntry<bool> ShowHud { get; private set; }
+        public ConfigEntry<int> WingHudX { get; private set; }
+        public ConfigEntry<int> WingHudY { get; private set; }
         public ConfigEntry<bool> UseMfdPanel { get; private set; }
         public ConfigEntry<bool> MapCommandEnabled { get; private set; }
         public ConfigEntry<HighlightMode> Highlight { get; private set; }
@@ -85,40 +74,31 @@ namespace WingCommand
         public ConfigEntry<float> TacticalPauseScale { get; private set; }
         public ConfigEntry<bool> ExternalHitmarkerAudio { get; private set; }
 
-        // --- Debug ---
-        /// <summary>Carrier for the Debug category's one-line warning banner. Never read.</summary>
+        // Debug controls.
+     /// <summary>Display-only carrier for the Debug warning banner; its value is unused.</summary>
         public ConfigEntry<bool> DebugWarning { get; private set; }
         public ConfigEntry<bool> EnableDebugActions { get; private set; }
 
-        /// <summary>
-        /// Carrier for the spawn action's button row in the settings window. Never read —
-        /// see its <c>CustomDrawer</c>.
-        /// </summary>
+     /// <summary>Display-only carrier for the spawn button; CustomDrawer handles the action.</summary>
         public ConfigEntry<bool> SpawnDebugWing { get; private set; }
         public ConfigEntry<bool> FreePlanePurchases { get; private set; }
         public ConfigEntry<bool> DisableWingSizeLimit { get; private set; }
+        public ConfigEntry<bool> BypassRankRequirement { get; private set; }
         public ConfigEntry<bool> VerboseLogging { get; private set; }
 
-        // The cheats read through these, never through their own entry. EnableDebugActions
-        // says "allow the development-only actions below", and used to gate only the spawn
-        // button: free purchases and the wing-size bypass took effect on their own, so the
-        // master switch was wrong about its own section. Reading the pair here rather than
-        // ANDing at each of the seven call sites is what keeps it that way.
+        // Read cheats through these accessors so EnableDebugActions gates every debug feature
+        // consistently.
         public bool CheatFreePurchases => EnableDebugActions.Value && FreePlanePurchases.Value;
         public bool CheatNoWingLimit => EnableDebugActions.Value && DisableWingSizeLimit.Value;
+        public bool CheatBypassRank => EnableDebugActions.Value && BypassRankRequirement.Value;
 
         public float BingoFuel => BingoFuelThreshold != null ? BingoFuelThreshold.Value : WingTuning.BingoFuel;
         public float RecruitmentCostRate => RecruitmentCostPercent != null ? RecruitmentCostPercent.Value : WingTuning.RecruitmentCostRate;
 
         private const string HexHelp = "Six-digit hex, with or without the leading #.";
 
-        /// <summary>
-        /// Rejects a malformed colour at bind time rather than letting it fail silently.
-        /// A typo used to reach <c>ColorUtility.TryParseHtmlString</c>, fail, and leave the
-        /// icon whatever the fallback was, with nothing anywhere to say why - so the setting
-        /// looked as though it did not work. BepInEx reverts an unacceptable value to the
-        /// default and says so in the log, which is the whole fix.
-        /// </summary>
+     /// <summary>Validate colours when binding so BepInEx logs malformed values and restores the
+     /// default.</summary>
         private sealed class HexColourValue : AcceptableValueBase
         {
             public HexColourValue() : base(typeof(string)) { }
@@ -154,10 +134,8 @@ namespace WingCommand
 
         public WingConfig(ConfigFile c)
         {
-            // Bound in this order and no other: BepInEx writes the .cfg in bind order, so
-            // reordering these silently reshuffles every existing configuration file under
-            // the player. Keys removed since the last release stay in existing files as
-            // orphaned lines, which BepInEx ignores and rewrites away on the next save.
+            // Preserve bind order because BepInEx uses it in saved configs. Removed keys remain
+            // orphaned until its next save.
             BindMode(c);
             BindFormation(c);
             BindEngagement(c);
@@ -182,8 +160,7 @@ namespace WingCommand
 
         private void BindMode(ConfigFile c)
         {
-            // The one switch most players ever touch, and the only one that trades behaviour
-            // for cost. Ordered to the top of the window.
+            // Put the shared behaviour-budget switch at the top of settings.
             Mode = c.Bind("AI", "Mode", WingMode.Smart,
                 new ConfigDescription(
                     "Smart is the full behaviour and the default. Performance is a lean " +
@@ -202,10 +179,8 @@ namespace WingCommand
                 "missile defence only; Tight prioritises threats around the formation; " +
                 "Free may shoot opportunity targets without changing orders.");
 
-            // The middle rung was renamed Escort -> Tight. A config file written before the
-            // rename holds "DefaultRoe = Escort", which no longer parses, so BepInEx has
-            // silently substituted the default above. Recover the choice from the file on
-            // disk and carry it across.
+            // Migrate Escort to Tight from the raw config; the renamed enum otherwise fails parsing and
+            // becomes Hold.
             if (DefaultRoe.Value == WingRoe.Hold && FileMentionsLegacyRoe(c, "Escort"))
                 DefaultRoe.Value = WingRoe.Tight;
             AutoReturnOnEmpty = c.Bind("Engagement", "AutoReturnOnEmpty", true,
@@ -234,11 +209,8 @@ namespace WingCommand
                     new AcceptableValueRange<float>(0.05f, 0.40f)));
         }
 
-        /// <summary>
-        /// Whether the raw config file still assigns <c>DefaultRoe</c> a value that no longer
-        /// parses. Reads the file directly because BepInEx keeps no public record of an entry
-        /// it failed to bind.
-        /// </summary>
+     /// <summary>Check the raw file for legacy ROE values; BepInEx exposes no failed-bind
+     /// record.</summary>
         private static bool FileMentionsLegacyRoe(ConfigFile c, string legacyValue)
         {
             try
@@ -262,10 +234,8 @@ namespace WingCommand
 
         private void BindComms(ConfigFile c)
         {
-            // Was two booleans, the second of which did nothing while the first was off.
-            // One ordered choice cannot be set to a combination that means nothing. New key
-            // on purpose: "true" would not parse as a ChatterLevel, and a new key is how the
-            // new default reaches installations that already have a config file.
+            // Use a new enum key because legacy booleans cannot parse as ChatterLevel; existing
+            // installations receive the new default.
             Radio = c.Bind("Comms", "Radio", ChatterLevel.TextAndTone,
                 "Squadron radio. Text shows named, pilot-specific transmissions for orders, " +
                 "engagements, defensive calls, Winchester and rejoins; TextAndTone opens " +
@@ -300,10 +270,8 @@ namespace WingCommand
 
         private void BindLoadout(ConfigFile c)
         {
-            // Written by the LOADOUT tab, not by hand, but left visible rather than hidden so
-            // a player who has made a mess of their templates can clear the value instead of
-            // hunting for where they live. The reader drops any record it cannot parse, so
-            // editing it badly costs that record and nothing else.
+            // LOADOUT writes templates, but keep the setting visible for manual reset. Parsing drops
+            // only malformed records.
             LoadoutTemplates = c.Bind("Loadout", "SavedTemplates", "",
                 Advanced("Saved per-pylon loadout templates, written by the WMC LOADOUT tab. " +
                          "One record per template as airframe|id|name|store keys, records " +
@@ -313,9 +281,7 @@ namespace WingCommand
 
         private void BindKeys(ConfigFile c)
         {
-            // Purely additive. This used to double as the opt-out from the game's own wheel,
-            // which meant a key left bound in a config silently deleted the Wing Command
-            // slice with no message anywhere - see WingCommandManager.NativeRadialActive.
+            // Optional extra wheel key; native radial availability is independent.
             RadialKey = c.Bind("Keys", "WingMenu", KeyCode.None,
                 "Optional: hold this to open Wing Command's own wheel. The Wing Command slice " +
                 "is added to the game's radial menu either way, so leave it unbound unless you " +
@@ -337,12 +303,24 @@ namespace WingCommand
             ShowHud = c.Bind("UI", "ShowWingHud", true,
                 "Draw the compact wing status readout beside the tactical map while you have " +
                 "wingmen assigned.");
+            WingHudX = c.Bind("UI", "WingHudX", 0,
+                new ConfigDescription(
+                    "Horizontal offset from the minimap in HUD units (scales with the game's UI). " +
+                    "Positive moves right; negative moves left. Applies immediately. Reset X and Y to 0 to dock beside the map.",
+                    new AcceptableValueRange<int>(-4000, 4000),
+                    new ConfigurationManagerAttributes { DispName = "Wing HUD X offset", Order = 2 }));
+            WingHudY = c.Bind("UI", "WingHudY", 0,
+                new ConfigDescription(
+                    "Vertical offset from the minimap in HUD units (scales with the game's UI). " +
+                    "Positive moves up; negative moves down. Applies immediately. Reset X and Y to 0 to dock beside the map.",
+                    new AcceptableValueRange<int>(-4000, 4000),
+                    new ConfigurationManagerAttributes { DispName = "Wing HUD Y offset", Order = 1 }));
             UseMfdPanel = c.Bind("UI", "UseMfdPanel", true,
                 "Add a WMC screen to the cockpit MFD bezel, alongside BDF/MAP/HUD.");
             MapCommandEnabled = c.Bind("UI", "MapCommands", true,
                 "Enable tactical wing selection and point tasking on the maximised map.");
 
-            // Map outlines and HUD tints share one identity setting.
+            // Share identity highlighting between map outlines and HUD tints.
             Highlight = c.Bind("UI", "Highlight", HighlightMode.WingAndTargets,
                 "Wing outlines your wingmen's map icons and tints their in-cockpit HUD " +
                 "markers; WingAndTargets also " +
@@ -364,10 +342,8 @@ namespace WingCommand
 
         private void BindDebug(ConfigFile c)
         {
-            // A display-only row. ConfigurationManager has no notion of a category header,
-            // so the way to say something once above a group is to bind an entry nobody
-            // reads and let its drawer be a sentence. Ordered above everything else in the
-            // category; the stored value is meaningless.
+            // Use a display-only entry as the category banner; ConfigurationManager has no header API.
+            // Its stored value is unused.
             DebugWarning = c.Bind("Debug", "DebugWarningBanner", false,
                 new ConfigDescription(
                     "Display only. The Debug settings are cheats: unbalanced, barely tested, " +
@@ -381,9 +357,7 @@ namespace WingCommand
                         HideDefaultButton = true,
                     }));
 
-            // Visible, where it used to be Browsable=false. The action it gates now lives in
-            // this window rather than on the WMC panel, and a switch you can only reach by
-            // hand-editing the .cfg is not a switch the button below it can tell you to flip.
+            // Expose the master switch beside the debug actions it gates.
             EnableDebugActions = c.Bind("Debug", "EnableDebugActions", false,
                 new ConfigDescription(
                     "Allow the development-only actions below. They are cheats and host-only.",
@@ -404,8 +378,7 @@ namespace WingCommand
                         Order = 30,
                         CustomDrawer = WingDebugActions.DrawSpawnButton,
 
-                        // The stored value is never read — the row is a button, and a
-                        // reset-to-default control on it would be meaningless.
+                        // The stored value is unused for this action button, so hide reset.
                         HideDefaultButton = true,
                     }));
             FreePlanePurchases = c.Bind("Debug", "FreePlanePurchases", false,
@@ -429,6 +402,18 @@ namespace WingCommand
                     {
                         DispName = "Disable wing size limit",
                         Order = 10,
+                    }));
+            BypassRankRequirement = c.Bind("Debug", "BypassRankRequirement", false,
+                new ConfigDescription(
+                    "DEBUG CHEAT: Ignore the player-rank requirement when requisitioning " +
+                    "aircraft, and the rank gate on exceeding the squadron limit. Mission " +
+                    "and mod progression are built around these gates and are not tested " +
+                    "without them.",
+                    null,
+                    new ConfigurationManagerAttributes
+                    {
+                        DispName = "Bypass rank requirement",
+                        Order = 15,
                     }));
             VerboseLogging = c.Bind("Debug", "VerboseLogging", false,
                 new ConfigDescription(

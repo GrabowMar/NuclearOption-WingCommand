@@ -11,17 +11,8 @@ using NOAvionics.Ui;
 
 namespace WingCommand
 {
-    /// <summary>
-    /// Keeps the surviving wing available after the player's pilot is lost, then replaces
-    /// the selected AI aircraft with a fresh player-controlled copy. Spawning through the
-    /// stock player path lets the game perform authority, cockpit, HUD, camera and local-sim
-    /// setup itself; no live AI aircraft is ever possessed or manually rewired.
-    ///
-    /// The prompt is drawn with <see cref="WingUi"/>, the same widgets the WMC page is built
-    /// from, on a canvas of its own. It used to be an IMGUI window with a hand-picked slate
-    /// palette and Unity's default skin, which is why it read as a debug overlay dropped on
-    /// top of the game rather than as part of it.
-    /// </summary>
+ /// <summary>Offers surviving wing aircraft after player loss, spawning a fresh player copy through the
+ /// native ownership/cockpit/HUD path. Uses WingUi cards on a dedicated canvas.</summary>
     internal static class WingTakeover
     {
         private const float PanelWidth = 720f;
@@ -32,7 +23,8 @@ namespace WingCommand
         private const float CardStride = CardHeight + CardGap;
         private const float CardsTop = 118f;
 
-        /// <summary>Cards built once; the roster can only shrink while the prompt is open.</summary>
+     /// <summary>Maximum prebuilt cards; candidates can only disappear while the prompt is
+     /// open.</summary>
         private const int MaxCards = 8;
 
         private static WingRegistry wing;
@@ -52,7 +44,7 @@ namespace WingCommand
 
         public static bool Active => active;
 
-        /// <summary>Called when the registry first notices that its leader is no longer flyable.</summary>
+     /// <summary>Open recovery when the leader becomes unflyable.</summary>
         public static bool Begin(WingRegistry registry, Aircraft previousLeader)
         {
             if (!CanOffer(registry)) return false;
@@ -62,22 +54,20 @@ namespace WingCommand
             lossPosition = previousLeader.GlobalPosition();
             active = true;
 
-            // Put the choice in the same context as the game's normal post-loss flow. The
-            // maximised tactical map also releases the cursor immediately instead of making
-            // the player wait for the stock five-second death delay before buttons work.
+            // Open the tactical map for the native post-loss context and immediate cursor access.
             try
             {
                 DynamicMap map = SceneSingleton<DynamicMap>.i;
                 if (map != null && !DynamicMap.mapMaximized) map.Maximize();
             }
-            catch { /* Numeric shortcuts still make the prompt usable if the map is absent. */ }
+            catch { /* Numeric shortcuts remain usable without the map. */ }
 
             Build();
             Plugin.LogVerbose($"[Takeover] leader lost; offering {CandidateCount()} aircraft");
             return true;
         }
 
-        /// <summary>True while the exact player-death/ejection call may safely suppress defeat.</summary>
+     /// <summary>Whether the guarded player-death/ejection call can suppress defeat.</summary>
         public static bool CanSuppressPlayerLoss()
         {
             WingCommandManager manager = WingCommandManager.Instance;
@@ -100,8 +90,7 @@ namespace WingCommand
                 return;
             }
 
-            // Immediate keyboard operation matters because death can occur while the cursor
-            // is still captured. The visible cards use the same numbers.
+            // Support numbered keyboard choices while the cursor remains captured.
             CurrentCandidates();
             for (int i = 0; i < candidates.Count && i < MaxCards; i++)
             {
@@ -120,9 +109,7 @@ namespace WingCommand
                 return;
             }
 
-            // The player may use the stock map to respawn instead of clicking our window.
-            // SetLeader handles the roster transition; this check also closes the prompt if
-            // another system changes the local aircraft first.
+            // Close the prompt if native respawn or another system changes the local aircraft first.
             if (GameManager.GetLocalAircraft(out Aircraft local) &&
                 local != null && local != lostLeader && !local.disabled)
             {
@@ -142,12 +129,10 @@ namespace WingCommand
             Plugin.LogVerbose("[Takeover] player acquired " + leader.unitName + " through the normal game flow");
         }
 
-        // ------------------------------------------------------------------------ panel
+        // Recovery panel.
 
-        /// <summary>
-        /// One offered aircraft. Built once and rebound, so the numbers can tick over
-        /// without the panel being torn down under the player's cursor.
-        /// </summary>
+     /// <summary>Reusable aircraft card; refresh values without rebuilding controls under the
+     /// cursor.</summary>
         private sealed class Card
         {
             public GameObject Root;
@@ -170,8 +155,7 @@ namespace WingCommand
 
             var canvas = canvasRoot.GetComponent<Canvas>();
             canvas.renderMode = RenderMode.ScreenSpaceOverlay;
-            // Above the map and the HUD: this is a modal choice, and anything drawn over it
-            // would be a choice the player cannot see they are making.
+            // Keep this modal choice above map and HUD.
             canvas.sortingOrder = 5000;
 
             var scaler = canvasRoot.GetComponent<CanvasScaler>();
@@ -245,8 +229,7 @@ namespace WingCommand
 
                 var card = new Card { Root = go };
 
-                // The whole card is the button; the labels sit on top of it and never take
-                // the raycast, so there is no dead area inside a clickable row.
+                // Make the whole card clickable; labels must not intercept raycasts.
                 WingUi.HitButton(rt, new Rect(0f, 0f, cardWidth, CardHeight), () =>
                 {
                     if (card.Bound != null) TakeControl(card.Bound);
@@ -277,11 +260,8 @@ namespace WingCommand
             }
         }
 
-        /// <summary>
-        /// The keyboard hint and the decline button. Both are repositioned by
-        /// <see cref="Refresh"/>, which is the only place that knows how many rows of cards
-        /// the footer has to clear.
-        /// </summary>
+     /// <summary>Build keyboard hints and decline control; Refresh positions them below the current
+     /// card rows.</summary>
         private static void BuildFooter()
         {
             footerHint = WingUi.Label(content, "[1-8]  SELECT AIRCRAFT",
@@ -382,7 +362,7 @@ namespace WingCommand
             nextRefresh = 0f;
         }
 
-        // ----------------------------------------------------------------------- offers
+        // Aircraft offers.
 
         private static void CurrentCandidates()
         {
@@ -445,11 +425,8 @@ namespace WingCommand
                 if (!wing.ReplaceWithLeader(member, replacement))
                     throw new InvalidOperationException("selected aircraft left the wing during replacement");
 
-                // Remove the AI source without DisableUnit: reporting it as destroyed would
-                // create a false kill, score event and supply loss. The replacement already
-                // occupies the same position and represents the same one airframe.
-                // This path never switches the original pilot state, so the state-change
-                // prefix cannot return a taxi slot on its behalf.
+                // Destroy the replaced AI object without DisableUnit to avoid false kill and supply
+                // loss. No state switch occurs, so this path must handle taxi cleanup itself.
                 NetworkManagerNuclearOption.i.ServerObjectManager.Destroy(
                     target.Identity, !target.Identity.IsSceneObject);
 
@@ -463,9 +440,8 @@ namespace WingCommand
                 Plugin.Logger.LogError("[Takeover] aircraft replacement failed: " + ex);
                 WingCommandManager.Instance?.Toast("Aircraft replacement failed; see LogOutput.log");
 
-                // SpawnAircraft commits player ownership during the spawn callback. If a
-                // later cleanup step fails, keep that valid player aircraft and only ensure
-                // the old AI source can no longer receive wing orders.
+                // Player ownership commits in the spawn callback. After later cleanup failure, retain
+                // the valid replacement and remove old AI commandability.
                 if (wing != null && replacement != null &&
                     GameManager.GetLocalAircraft(out Aircraft current) && current == replacement)
                 {
@@ -492,11 +468,8 @@ namespace WingCommand
             return false;
         }
 
-        /// <summary>
-        /// Loadout owns a mutable list, so give the spawned aircraft a new container while
-        /// reusing the immutable WeaponMount definitions. Sharing the original Loadout
-        /// object lets either aircraft's initialization mutate the other's equipment.
-        /// </summary>
+     /// <summary>Copy the mutable Loadout container while sharing immutable WeaponMount definitions so
+     /// aircraft initialisation cannot alter each other's equipment.</summary>
         private static Loadout CloneLoadout(Loadout source)
         {
             if (source == null) return null;
@@ -540,7 +513,7 @@ namespace WingCommand
             if (finishDefeat) GameManager.FinishGame(GameResolution.Defeat);
         }
 
-        /// <summary>Dismiss the prompt and drop everything it was holding.</summary>
+     /// <summary>Close the prompt and release its references.</summary>
         private static void Close()
         {
             active = false;
@@ -565,11 +538,8 @@ namespace WingCommand
         }
     }
 
-    /// <summary>
-    /// Narrow defeat interception: the guard is raised only around the two vanilla methods
-    /// that call FinishGame because the local player was killed or ejected. Objective and
-    /// scripted defeats reach FinishGame without the guard and are never affected.
-    /// </summary>
+ /// <summary>Suppress defeat only inside the native local-player death/ejection calls. Objective and
+ /// scripted defeats remain unguarded.</summary>
     [HarmonyPatch]
     internal static class WingTakeoverPatches
     {

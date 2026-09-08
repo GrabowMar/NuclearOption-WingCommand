@@ -5,42 +5,17 @@ using UnityEngine;
 
 namespace WingCommand
 {
-    /// <summary>
-    /// Where a purchased aircraft appears, and the spawn call itself.
-    ///
-    /// Three routes, because the game has three answers. A helicopter or tiltwing comes out
-    /// of a hangar or helipad exactly as the faction's own do — <c>Hangar.TrySpawnAircraft</c>
-    /// puts it on the pad and <c>AIHeloTakeoffState</c> lifts it off, and there is nothing
-    /// for this mod to improve on. A surface hull has no hangar at all and arrives astern of
-    /// the player. A fixed-wing aircraft — including the VTOL jets, which are
-    /// <c>PilotType.Plane</c> and taxi like anything else — is put on the takeoff threshold
-    /// with <c>Spawner.SpawnAircraft</c> and <c>spawningHangar</c> left null.
-    ///
-    /// That last one is the whole point of this file. Requisitioning a jet into a hangar and
-    /// letting the stock taxi state drive it out is the obvious implementation and it does
-    /// not work: a shelter faces wherever the mission author pointed it, the taxi state locks
-    /// the nosewheel for the first ten metres and then lets <c>AutoAim</c> bank toward a
-    /// taxiway join that may be a hundred metres off the nose, and the aircraft leaves the
-    /// pavement, tilts past three degrees and ejects. Spawning on the strip skips the part
-    /// the game is bad at and keeps the parts it is good at.
-    ///
-    /// Nothing here moves an aircraft after it exists. The pose is chosen before the spawn
-    /// call and never revised — see <c>docs/airfield-findings.md</c> for the eight attempts
-    /// that establish why.
-    /// </summary>
+ /// <summary>Spawns vertical aircraft through native pads, surface units astern of the player, and
+ /// runway aircraft at the threshold with no spawningHangar. Threshold placement avoids unreliable
+ /// shelter taxi; native AI owns movement after spawn.</summary>
     internal static class WingShopDelivery
     {
         private static readonly List<Airbase> fieldScratch = new List<Airbase>();
 
-        // ------------------------------------------------------------------- dispatch
+        // Delivery dispatch.
 
-        /// <summary>
-        /// Put a requisitioned airframe into the world, or queue it at the nearest allowed
-        /// field that can produce it.
-        ///
-        /// A queued order stays in <see cref="pending"/> and shows as QUE on the roster; one
-        /// a field has taken shows as DEPT until its aircraft registers.
-        /// </summary>
+     /// <summary>Spawn or queue the purchase at an eligible field. Pending orders show QUE; accepted
+     /// field departures show DEPT until registration.</summary>
         public static bool Deliver(WingShop.PurchaseTransaction transaction, Aircraft leader,
                                    FactionHQ hq, out string reason)
         {
@@ -82,14 +57,8 @@ namespace WingCommand
             return false;
         }
 
-        /// <summary>
-        /// Fit the chosen preset, never letting a bad fit stop a delivery.
-        ///
-        /// A null result means "use the airframe's own standard equipment", which is both
-        /// the Standard preset's meaning and the safe answer to every failure. A requisition
-        /// that refused to arrive because a preset could not be built would be a far worse
-        /// outcome than one that arrives configured as the faction's own aircraft are.
-        /// </summary>
+     /// <summary>Build the requested fit, returning null on failure so native spawning can use standard
+     /// equipment without blocking delivery.</summary>
         private static Loadout BuildLoadout(AircraftDefinition definition, WingLoadoutChoice choice)
         {
             try
@@ -105,44 +74,65 @@ namespace WingCommand
             }
         }
 
-        /// <summary>
-        /// Whether this airframe departs vertically from a pad rather than taxiing.
-        ///
-        /// Asked of the prefab's own <c>Pilot.pilotType</c>, because that is the field
-        /// <c>Pilot.SetStartingAiState</c> branches on — <c>Helo</c> and <c>Tiltwing</c> get
-        /// <c>AIHeloTakeoffState</c>, everything else gets <c>AIPilotTaxiState</c>. The
-        /// distinction matters most for the airframes it is easiest to get wrong: a VT-7 or
-        /// an FS-20 lands vertically and hovers, and is still <c>PilotType.Plane</c>, so it
-        /// wants a runway. <see cref="WingShop.IsRotary"/> is the fallback for a prefab with
-        /// no reachable pilot component; it agrees, by way of the autopilot type.
-        /// </summary>
+     /// <summary>Classify departure from prefab autopilot: helos/tiltwings use pads unless all relevant
+     /// seats identify a plane-typed VTOL. Inspect every Pilot so a gunner cannot misclassify the
+     /// airframe; plane autopilots use runways.</summary>
         private static bool LaunchesVertically(AircraftDefinition definition)
         {
             if (definition == null) return false;
             if (verticalCache.TryGetValue(definition, out bool cached)) return cached;
 
-            bool vertical = WingShop.IsRotary(definition);
+            bool rotary = WingShop.IsRotary(definition);
+            bool vertical = rotary;
+
             GameObject prefab = definition.unitPrefab;
-            if (prefab != null)
+            Pilot.PilotType? flightType = null;
+            if (rotary && prefab != null)
             {
-                Pilot pilot = prefab.GetComponentInChildren<Pilot>(includeInactive: true);
-                if (pilot != null)
-                    vertical = pilot.pilotType == Pilot.PilotType.Helo ||
-                               pilot.pilotType == Pilot.PilotType.Tiltwing;
+                bool anyVerticalSeat = false;
+                bool anyPlaneSeat = false;
+                foreach (Pilot pilot in prefab.GetComponentsInChildren<Pilot>(includeInactive: true))
+                {
+                    if (pilot == null) continue;
+                    flightType ??= pilot.pilotType;
+                    if (pilot.pilotType == Pilot.PilotType.Helo ||
+                        pilot.pilotType == Pilot.PilotType.Tiltwing ||
+                        pilot.pilotType == Pilot.PilotType.VTOL)
+                        anyVerticalSeat = true;
+                    else if (pilot.pilotType == Pilot.PilotType.Plane)
+                        anyPlaneSeat = true;
+                }
+
+                // Use runway departure only when a Plane seat exists and no seat reports vertical
+                // flight.
+                if (!anyVerticalSeat && anyPlaneSeat) vertical = false;
             }
 
             verticalCache[definition] = vertical;
+
+            if (verticalLogged.Add(definition) && Plugin.Settings != null &&
+                Plugin.Settings.VerboseLogging.Value)
+            {
+                Autopilot ap = prefab != null
+                    ? prefab.GetComponentInChildren<Autopilot>(includeInactive: true) : null;
+                Plugin.LogVerbose(
+                    "[Shop] " + definition.unitName + " launch mode=" +
+                    (vertical ? "pad" : "runway") + " (rotary=" + rotary +
+                    " autopilot=" + (ap != null ? ap.GetType().Name : "none") +
+                    " pilotType=" + (flightType.HasValue ? flightType.Value.ToString() : "none") + ")");
+            }
+
             return vertical;
         }
+
+        private static readonly HashSet<AircraftDefinition> verticalLogged =
+            new HashSet<AircraftDefinition>();
 
         private static readonly Dictionary<AircraftDefinition, bool> verticalCache =
             new Dictionary<AircraftDefinition, bool>();
 
-        /// <summary>
-        /// The live player-default fit, falling back to the airframe's game-start preset.
-        /// Shared with <see cref="WingLoadoutCatalog.Build"/> so hangar and runway spawn
-        /// cannot disagree about STANDARD.
-        /// </summary>
+     /// <summary>Shared live player-default fit with game-start fallback, keeping pad and runway
+     /// STANDARD equipment consistent.</summary>
         private static Loadout DefaultLoadout(AircraftDefinition definition) =>
             WingLoadoutCatalog.ClonePlayerDefault(definition);
 
@@ -190,7 +180,7 @@ namespace WingCommand
             aircraft.NetworkfuelLevel = fuel;
         }
 
-        // ------------------------------------------------------------------ pending order
+        // Pending deliveries.
 
         internal sealed class PendingDelivery
         {
@@ -200,10 +190,10 @@ namespace WingCommand
             public LiveryKey Livery;
             public float Fuel;
 
-            /// <summary>The pad that took the order. Null for a runway departure.</summary>
+         /// <summary>Accepting pad, or null for runway launch.</summary>
             public Hangar Hangar;
 
-            /// <summary>True once a field has taken the order, whichever route it took.</summary>
+         /// <summary>Whether a field has accepted this order.</summary>
             public bool Claimed;
 
             public GameObject PreviousSpawnedObject;
@@ -217,14 +207,11 @@ namespace WingCommand
             public float NextAttemptAt;
             public bool Starting;
 
-            /// <summary>
-            /// True when this order must wait at <see cref="Origin"/> even if another field
-            /// is idle. Any-mode orders stay unpinned (<see cref="Origin"/> may be null)
-            /// until a field actually accepts them.
-            /// </summary>
+         /// <summary>Whether the order must wait at Origin. Any-mode orders remain unpinned until a
+         /// field accepts them.</summary>
             public bool Pinned;
 
-            /// <summary>Vertical departures take a pad; the rest take a runway threshold.</summary>
+         /// <summary>Whether departure uses a vertical pad instead of a runway threshold.</summary>
             public bool Vertical;
 
             public AircraftDefinition Definition => Transaction?.Definition;
@@ -241,7 +228,7 @@ namespace WingCommand
         public static PendingDelivery GetPending(int index) =>
             (index >= 0 && index < pending.Count) ? pending[index] : null;
 
-        /// <summary>The order currently inside a hangar's native spawn call, if any.</summary>
+     /// <summary>Order currently executing this hangar's native spawn call, if any.</summary>
         internal static PendingDelivery StartingAt(Hangar hangar)
         {
             for (int i = 0; i < pending.Count; i++)
@@ -262,13 +249,8 @@ namespace WingCommand
             return true;
         }
 
-        /// <summary>
-        /// Why a requisition cannot be launched right now, or null when it can.
-        ///
-        /// Read by the shop before it takes any money, so the answer has to be about
-        /// capability rather than about this frame's occupancy — a busy field is a queue,
-        /// not a refusal.
-        /// </summary>
+     /// <summary>Capability-based launch refusal, or null. Check before charging; temporary field
+     /// occupancy should queue rather than reject a purchase.</summary>
         public static string LaunchBlockReason(FactionHQ hq, AircraftDefinition definition,
                                                Vector3 from)
         {
@@ -291,7 +273,7 @@ namespace WingCommand
                 : "No selected field has a takeoff runway and stocks " + definition.unitName;
         }
 
-        // --------------------------------------------------------------- field selection
+        // Launch-field selection.
 
         private static bool TryFieldDelivery(WingShop.PurchaseTransaction transaction,
                                              Aircraft leader, FactionHQ hq, Loadout loadout,
@@ -336,8 +318,7 @@ namespace WingCommand
             Airbase airbase = index >= 0 ? fieldScratch[index] : null;
             if (pin && airbase == null)
             {
-                // Only-nearest still pins even when every pad there is busy: the order
-                // queues at that field rather than jumping to a distant one.
+                // OnlyNearest pins to the nearest field even while busy.
                 index = SelectOrigin(definition, from, HangarLaunchMode.OnlyNearest);
                 airbase = index >= 0 ? fieldScratch[index] : null;
                 if (airbase == null)
@@ -415,16 +396,8 @@ namespace WingCommand
                 i => CanEverProduce(fieldScratch[i], definition),
                 i => CanLaunchNow(fieldScratch[i], definition));
 
-        /// <summary>
-        /// Whether this field could ever launch the airframe.
-        ///
-        /// Stock is read from the hangars' own editor-configured type lists rather than from
-        /// <c>Airbase.GetAvailableAircraft</c>, which tracks what can launch <i>right now</i>
-        /// and therefore makes a field with a busy door look as though it cannot produce the
-        /// type at all. A fixed-wing airframe additionally needs somewhere to roll: a field
-        /// that stocks jets but has only helipads and no takeoff strip is not a launch site
-        /// for one.
-        /// </summary>
+     /// <summary>Check serialized hangar type support independent of current occupancy. Fixed-wing
+     /// departures also require a takeoff strip.</summary>
         private static bool CanEverProduce(Airbase airbase, AircraftDefinition definition)
         {
             if (!WingLaunchFields.CanProduce(airbase, definition)) return false;
@@ -432,12 +405,8 @@ namespace WingCommand
             return WingAirfield.HasTakeoffRunway(airbase, definition);
         }
 
-        /// <summary>
-        /// Whether this field can take the order this frame.
-        ///
-        /// One departure per field, not per pad. A jet is put on the takeoff threshold, and
-        /// every aircraft at a field shares that strip however many hangars it has.
-        /// </summary>
+     /// <summary>Whether this field can accept a departure now; reserve per field because its hangars
+     /// share runways.</summary>
         private static bool CanLaunchNow(Airbase airbase, AircraftDefinition definition)
         {
             if (airbase == null || airbase.disabled) return false;
@@ -488,7 +457,7 @@ namespace WingCommand
             return false;
         }
 
-        // ------------------------------------------------------------------ spawn attempt
+        // Spawn attempts.
 
         private static void Attempt(PendingDelivery order)
         {
@@ -497,14 +466,8 @@ namespace WingCommand
             else AttemptRunwaySpawn(order);
         }
 
-        /// <summary>
-        /// Put a fixed-wing requisition on the takeoff threshold.
-        ///
-        /// <c>spawningHangar</c> is deliberately null. It is a SyncVar that makes every
-        /// client snap the aircraft's transform and rigidbody onto the named pad in
-        /// <c>OnStartClient</c>, so pointing it at a hangar the aircraft is not standing in
-        /// teleports it there for everyone but the host.
-        /// </summary>
+     /// <summary>Spawn runway aircraft with spawningHangar=null. A non-null SyncVar makes clients snap
+     /// the aircraft back onto that hangar's pad.</summary>
         private static void AttemptRunwaySpawn(PendingDelivery order)
         {
             FactionHQ hq = order.Transaction.Hq;
@@ -520,22 +483,26 @@ namespace WingCommand
             }
 
             Aircraft leader = WingCommandManager.Instance?.Wing?.Leader;
-            Vector3 from = leader != null
-                ? leader.transform.position : order.Origin.transform.position;
 
-            if (!WingAirfield.TryBuildLaunchPose(order.Origin, definition, from,
+            if (!WingAirfield.TryBuildLaunchPose(order.Origin, definition,
                                                  out WingAirfield.LaunchPose pose))
                 return;
 
-            // Aircraft.OnStartClient substitutes aircraftParameters.loadouts[1] for a null or
-            // empty loadout, by hardcoded index and with no bounds check. A hangar spawn is
-            // saved from that by the weapon selection the pad runs afterwards; this path is
-            // not, so an airframe with fewer than two presets would throw inside the spawn.
+            // Wait for the fixed threshold pose to clear before spawning into a stalled aircraft or
+            // wreck.
+            if (WingAirfield.LaunchSpotBlocked(pose.Position, definition, out string blocker))
+            {
+                Plugin.LogVerbose("[Shop] " + definition.unitName + " launch from " +
+                    WingLaunchFields.DisplayName(order.Origin) +
+                    " held - threshold blocked by " + blocker);
+                return;
+            }
+
+            // Supply a valid loadout because native OnStartClient blindly falls back to loadouts[1];
+            // runway spawns lack the hangar's later fitting step.
             Loadout loadout = order.Loadout ?? DefaultLoadout(definition);
 
-            // The threshold, not the field centre: the lane is released when the aircraft has
-            // moved clear of where it was put down, and a field centre can be further from
-            // its own runway than that clearance.
+            // Anchor lane clearance to the actual threshold, not a potentially distant field centre.
             if (!HangarDepartureLane.Reserve(order.Origin, pose.Threshold, order)) return;
 
             order.Starting = true;
@@ -578,11 +545,8 @@ namespace WingCommand
             order.ObservedAircraft = spawned;
             order.Claimed = true;
 
-            // ServerObjectManager.Spawn runs OnStartServer and OnStartClient synchronously, so
-            // the pilot is already in AIPilotTaxiState on this line — there is nothing to
-            // correct here and no point looking. What the watch is for is the question that
-            // cannot be answered yet: whether the stock taxi state, given a few seconds and a
-            // physics step or two, actually gets this aircraft moving.
+            // Native server/client initialisation has already set taxi synchronously. Watch later
+            // physics updates to confirm it actually moves.
             WingAirfield.WatchLaunch(spawned, pose);
             HangarDepartureLane.Track(order, spawned);
 
@@ -595,13 +559,8 @@ namespace WingCommand
             Claim(order, spawned);
         }
 
-        /// <summary>
-        /// Hand a vertical departure to a pad and let the stock door sequence run.
-        ///
-        /// The order stays in <see cref="pending"/> either way: a claimed pad waits on its
-        /// doors via <see cref="OnUnitRegistered"/>, a refused one waits for <see cref="Tick"/>
-        /// to retry once a pad frees up.
-        /// </summary>
+     /// <summary>Let native pad doors handle vertical launch. Keep accepted orders pending for
+     /// registration and refused orders pending for retry.</summary>
         private static void AttemptPadSpawn(PendingDelivery order)
         {
             FactionHQ hq = order.Transaction.Hq;
@@ -612,11 +571,9 @@ namespace WingCommand
             if (selected == null) return;
             if (!HangarDepartureLane.Reserve(order.Origin, selected, order)) return;
 
-            // Reserve the exact pad before calling native code; registration can happen
-            // synchronously inside that call.
+            // Reserve the specific pad before native code can synchronously register the aircraft.
             order.Hangar = selected;
-            // Native Hangar keeps this field after the last aircraft leaves. It is not
-            // evidence of a new delivery until a different aircraft replaces it.
+            // Ignore the hangar's retained previous spawned object until a new aircraft replaces it.
             order.PreviousSpawnedObject = GameAccess.GetHangarSpawnedObject(selected);
 
             order.Starting = true;
@@ -634,16 +591,9 @@ namespace WingCommand
             }
             finally
             {
-                // TrySpawnAircraft charges faction supply itself when the player argument is
-                // null. The purchase transaction has already reserved its exact source, so
-                // retain that debit and compensate the hangar's otherwise duplicate charge.
-                //
-                // ModifyUnitSupply, deliberately, not AddSupplyUnit: the latter looks for a
-                // player with an outstanding reserve request for this airframe first and
-                // hands them the aircraft instead of restoring the count, returning before
-                // it touches supply at all. That is right for an airframe genuinely coming
-                // back into stock and wrong for undoing a double charge, which would then
-                // both give a stranger a free plane and leave the faction one short.
+                // The transaction already debited stock; compensate native null-player spawning's
+                // duplicate debit with ModifyUnitSupply. AddSupplyUnit can instead fulfil another
+                // player's reserve request without restoring the count.
                 try
                 {
                     int give = SupplyCompensation.Delta(stockBeforeNative,
@@ -653,9 +603,8 @@ namespace WingCommand
                 finally { order.Starting = false; }
             }
 
-            // TrySpawnAircraft can throw after scheduling doors. Once the pad becomes busy it
-            // may still emit an aircraft, so retain ownership even if the return value was
-            // lost to the exception.
+            // A thrown native spawn may still have scheduled doors; retain ownership when the pad
+            // accepted or observed an aircraft.
             order.NativeAccepted = result.Allowed || order.NativeAircraftObserved ||
                                    (selected != null && !selected.Available);
             if (!order.NativeAccepted)
@@ -670,8 +619,7 @@ namespace WingCommand
                 " at " + WingLaunchFields.DisplayName(order.Origin) + "/" + selected.name +
                 " position=" + selected.GetSpawnTransform().position.ToGlobalPosition());
 
-            // A pad has now actually taken the order; give it its own door-sequence budget
-            // rather than whatever was left of the time this order spent queued.
+            // Start a fresh door-sequence timeout on acceptance, independent of time spent queued.
             order.ExpiresAt = Time.unscaledTime + WingTuning.HangarDeliveryTimeout;
 
             GameObject immediateSpawn = GameAccess.GetHangarSpawnedObject(selected);
@@ -681,11 +629,12 @@ namespace WingCommand
                 if (direct != null) TryClaim(direct);
             }
 
-            // Registration can precede the native call's return and the hangar field update.
+            // Handle registration that occurred before the native call returned or updated its hangar
+            // field.
             TryClaim(order.ObservedAircraft);
         }
 
-        // ------------------------------------------------------------------------- claim
+        // Delivery claims.
 
         private static void Watch(FactionHQ hq)
         {
@@ -695,13 +644,13 @@ namespace WingCommand
             if (watched != null) watched.onRegisterUnit += OnUnitRegistered;
         }
 
-        /// <summary>Claim only the aircraft emitted by the pad that accepted the order.</summary>
+     /// <summary>Claim only this order's accepting pad's aircraft.</summary>
         private static void OnUnitRegistered(Unit unit)
         {
             if (!(unit is Aircraft aircraft)) return;
 
-            // Bind registrations to the exact requested hangar even before its native
-            // spawnedObject field is updated. A partial spawn must never be refunded.
+            // Bind registrations to the exact requested hangar before spawnedObject updates; never
+            // refund an observed partial spawn.
             for (int i = 0; i < pending.Count; i++)
             {
                 PendingDelivery order = pending[i];
@@ -748,7 +697,7 @@ namespace WingCommand
             Claim(match, aircraft);
         }
 
-        /// <summary>Settle the purchase and hand the airframe to the wing's recruit queue.</summary>
+     /// <summary>Commit the purchase and queue the aircraft for wing recruitment.</summary>
         private static void Claim(PendingDelivery order, Aircraft aircraft)
         {
             if (order == null || aircraft == null) return;
@@ -767,9 +716,8 @@ namespace WingCommand
             RememberSpawnFuel(aircraft, order.Fuel);
             ApplySpawnFuel(aircraft, order.Fuel);
 
-            // The wing takes the aircraft onto its roster now and takes command of it later,
-            // once LaunchSafety says the stock departure is complete. Until then the
-            // DeliveryHold reflex keeps every hand off the controls.
+            // Add roster membership now; DeliveryHold retains native controls until LaunchSafety
+            // permits handoff.
             WingCommandManager.Instance?.QueueRecruit(aircraft, order.Transaction?.Pilot);
             WingMember member = WingCommandManager.Instance?.Wing?.Find(aircraft);
             if (member != null) HangarDepartureLane.Transfer(order, member);
@@ -798,16 +746,10 @@ namespace WingCommand
                    (aircraft.transform.position - spawn.position).sqrMagnitude <= 1000f * 1000f;
         }
 
-        // -------------------------------------------------------------------------- tick
+        // Delivery updates.
 
-        /// <summary>
-        /// Advance every open order: retry a queued one against its target field, and write
-        /// off ones that can never arrive, so nothing waits forever.
-        ///
-        /// Oldest-first, since <see cref="pending"/> is append-order: when a field frees up,
-        /// whichever purchase queued for it first gets it, the way a flight line works
-        /// through a backlog rather than serving whoever asks last.
-        /// </summary>
+     /// <summary>Advance pending orders oldest first, retrying eligible fields and resolving failures
+     /// that cannot produce an aircraft.</summary>
         public static void Tick()
         {
             TickSpawnFuel();
@@ -859,8 +801,7 @@ namespace WingCommand
                 FailDelivery(order, "field can no longer produce this aircraft");
             }
 
-            // FIFO retry: oldest queued order first, occupancy-gated and throttled so a busy
-            // field is not hammered every frame.
+            // Throttle FIFO retries and require field availability.
             float now = Time.unscaledTime;
             for (int i = 0; i < pending.Count; i++)
             {
@@ -890,8 +831,7 @@ namespace WingCommand
                 }
 
                 Attempt(order);
-                // An immediate claim removes the current order from pending. Visit the next
-                // oldest order instead of skipping its shifted index.
+                // Account for immediate claim removal so the shifted next order is still visited.
                 if (!pending.Contains(order)) { i--; continue; }
                 if (!order.Claimed)
                 {
@@ -956,7 +896,7 @@ namespace WingCommand
             WingLaunchFields.Reset();
         }
 
-        // ----------------------------------------------------------------- surface path
+        // Surface delivery.
 
         private static Aircraft SpawnSurface(AircraftDefinition definition, Aircraft leader,
                                              FactionHQ hq, Loadout loadout)
@@ -1003,10 +943,8 @@ namespace WingCommand
             }
         }
 
-        /// <summary>
-        /// Astern of the player, at a slot interval, on the player's own plane.
-        /// A warship cannot be delivered into a hangar and taxied onto a runway.
-        /// </summary>
+     /// <summary>Place surface units astern at slot spacing on the player's plane; they cannot use
+     /// aircraft hangars.</summary>
         private static bool SurfacePlacement(Aircraft leader, out Vector3 position,
                                              out Quaternion rotation, out Vector3 velocity)
         {
@@ -1024,8 +962,7 @@ namespace WingCommand
             position = leader.transform.position - forward * astern;
             rotation = Quaternion.LookRotation(forward, Vector3.up);
 
-            // Stationary. A hull under way from the first frame would be driving before
-            // anything has told it where to go.
+            // Spawn at rest until a surface controller supplies a task.
             velocity = Vector3.zero;
             return true;
         }

@@ -539,6 +539,7 @@ tactical rules, hotkeys, and appearance can be configured.
 | Keys | `QuickAttackTarget` | `None` | Optional hotkey: attack player's targeted contact |
 | Keys | `CycleRoe` | `None` | Optional hotkey: cycle ROE (Hold → Tight → Free) |
 | UI | `ShowWingHud` | `true` | Compact roster docked beside the tactical map |
+| UI | `WingHudX` / `WingHudY` | `0` / `0` | Live roster offsets in F1, in scaled HUD units. +X moves right, +Y moves up; negative values move left/down. Reset both to zero to dock beside the map. |
 | UI | `UseMfdPanel` | `true` | Cockpit MFD WMC screen alongside BDF/MAP/HUD |
 | UI | `MapCommands` | `true` | Tactical wing selection and tasking on maximised map |
 | UI | `Highlight` | `WingAndTargets` | Roster and target tinting (`Off`, `Wing`, `WingAndTargets`) |

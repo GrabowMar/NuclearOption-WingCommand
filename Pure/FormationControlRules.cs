@@ -4,19 +4,15 @@ namespace WingCommand
 {
     internal static class FormationControlRules
     {
-        /// <summary>
-        /// Altitude command over a horizontal steering baseline. Match vertical speed,
-        /// not the leader's flight-path angle: unlike aircraft can have very different
-        /// forward speeds. Keep the damped correction independent of pursuit distance.
-        /// </summary>
+     /// <summary>Build vertical aim over the horizontal baseline using slot climb speed, not leader
+     /// flight-path angle. Keep damping independent of pursuit distance.</summary>
         public static float VerticalAimRise(float horizontalDistance, float horizontalSpeed,
             float lookAhead, float slotClimb, float verticalCorrection) =>
             Math.Max(0f, horizontalDistance) *
             (slotClimb / Math.Max(1f, horizontalSpeed) + verticalCorrection / Math.Max(1f, lookAhead));
 
-        // AutoAim multiplies bankAllowed by altitude (up to 1.2) and its vertical
-        // factor (up to 1.2). Never amplify our requested ceiling to compensate
-        // for reductions: those reductions may be protecting a slow/low aircraft.
+        // Account for native altitude/vertical bank amplification up to 1.2 each; do not compensate
+        // protective low-speed or low-altitude reductions.
         public static float BankInput(float desiredDegrees, float radarAltitude)
         {
             float altitudeFactor = Math.Max(0.6f, Math.Min(1.2f, radarAltitude * 0.003f - 1f));
@@ -44,9 +40,8 @@ namespace WingCommand
             float length = (float)Math.Sqrt(x * x + y * y + z * z);
             if (length < 1f)
             {
-                // At exact closest approach there is no "away" vector. A lateral
-                // normal to relative velocity reverses for the other aircraft, so
-                // both choose opposite world-space escape directions without climbing.
+                // At coincident closest approach, use a relative-velocity normal so the pair chooses
+                // opposite horizontal escapes.
                 x = -relativeVz;
                 y = 0f;
                 z = relativeVx;
@@ -63,11 +58,8 @@ namespace WingCommand
             z /= length;
         }
 
-        /// <summary>
-        /// Computes a safe 3D rejoin aim direction that rotates toward the requested bearing
-        /// primarily in the horizontal plane (using bank) while strictly bounding pitch
-        /// to prevent zoom-climbs or dives into the ground.
-        /// </summary>
+     /// <summary>Rotate rejoin direction mainly through horizontal heading while bounding pitch against
+     /// zoom climbs and terrain dives.</summary>
         public static void SafeRejoinDirection(
             float curDirX, float curDirY, float curDirZ,
             float reqX, float reqY, float reqZ,
@@ -77,7 +69,7 @@ namespace WingCommand
             float radarAlt,
             out float outX, out float outY, out float outZ)
         {
-            // --- 1. Horizontal Heading (XZ plane) ---
+            // Horizontal heading.
             double curHLen = Math.Sqrt((double)curDirX * curDirX + (double)curDirZ * curDirZ);
             double chX = curHLen > 1e-6 ? curDirX / curHLen : 0.0;
             double chZ = curHLen > 1e-6 ? curDirZ / curHLen : 1.0;
@@ -88,7 +80,7 @@ namespace WingCommand
 
             if (reqHLen < 1e-4)
             {
-                // Target is directly above or below; maintain current horizontal heading.
+                // Preserve heading when the target is vertically aligned.
                 rotHX = chX;
                 rotHZ = chZ;
             }
@@ -97,12 +89,12 @@ namespace WingCommand
                 double rhX = reqX / reqHLen;
                 double rhZ = reqZ / reqHLen;
 
-                // 2D cross product (Y component) and dot product between current and requested horizontal directions.
+                // Compute signed horizontal turn from cross and dot products.
                 double crossY = chZ * rhX - chX * rhZ;
                 double dot = Math.Max(-1.0, Math.Min(1.0, chX * rhX + chZ * rhZ));
                 double angleRad = Math.Atan2(crossY, dot);
 
-                // If target is directly behind (~180°), default to a right turn if cross product is ambiguous.
+                // Choose right for an ambiguous directly rearward target.
                 if (Math.Abs(Math.Abs(angleRad) - Math.PI) < 1e-4 && Math.Abs(crossY) < 1e-4)
                 {
                     angleRad = Math.PI;
@@ -117,7 +109,7 @@ namespace WingCommand
                 rotHZ = -chX * sinA + chZ * cosA;
             }
 
-            // --- 2. Vertical Pitch (Elevation Angle) ---
+            // Vertical pitch.
             double safeReqHLen = Math.Max(1.0, reqHLen);
             double pitchRad = Math.Atan2(reqY, safeReqHLen);
             double pitchDeg = pitchRad * (180.0 / Math.PI);
@@ -125,7 +117,7 @@ namespace WingCommand
             double maxUp = Math.Max(0.0, maxPitchUpDeg);
             double maxDown = Math.Max(0.0, maxPitchDownDeg);
 
-            // Ground safety: scale down allowed descent as radar altitude drops below 250m.
+            // Reduce allowed descent below 250 m radar altitude.
             if (radarAlt < 250f)
             {
                 float floorScale = Math.Max(0f, Math.Min(1f, (radarAlt - 60f) / 190f));
@@ -134,7 +126,7 @@ namespace WingCommand
 
             pitchDeg = Math.Max(-maxDown, Math.Min(maxUp, pitchDeg));
 
-            // Low altitude floor: if below 60m radar altitude, never command a descent.
+            // Forbid commanded descent below 60 m radar altitude.
             if (radarAlt < 60f && pitchDeg < 0.0)
             {
                 pitchDeg = 0.0;
@@ -149,10 +141,8 @@ namespace WingCommand
             outZ = (float)(rotHZ * cosPitch);
         }
 
-        /// <summary>
-        /// Deceleration-limited closure demand. Ensures the closing speed never exceeds what
-        /// the remaining along-track gap can safely shed at the given deceleration rate.
-        /// </summary>
+     /// <summary>Cap closure by the speed the remaining along-track gap can shed at the supplied
+     /// deceleration.</summary>
         public static float RejoinClosure(
             float gap, float closing, float maxDecel, float aggression, float damping,
             float gapGain, float closingDamp, float maxStationClosure, float responseSeconds = 0f)
@@ -162,9 +152,8 @@ namespace WingCommand
             float overspeedCap = (float)Math.Sqrt(responseLoss * responseLoss +
                 2f * Math.Max(0f, maxDecel) * Math.Max(gap, 0f)) - responseLoss;
 
-            // When behind slot (gap > 0), overspeedCap defines the upper kinematic limit.
-            // When ahead of slot (gap <= 0), overspeedCap is 0, forbidding positive closure.
-            // Lower limit prevents aerodynamic stall / excessive negative demand.
+            // Allow bounded overspeed only behind the slot; ahead, cap positive closure at zero. Limit
+            // negative demand to avoid excessive slowing.
             return Math.Max(-maxStationClosure, Math.Min(overspeedCap, rawClosure));
         }
 
@@ -214,10 +203,10 @@ namespace WingCommand
         /// </summary>
         public static float KinematicVerticalCorrection(
             float verticalGap, float verticalDrift, float maxCorrection,
-            float positionGain, float driftDamping, float aggression, float damping, float ramp,
+            float positionGain, float driftDamping, float aggression, float damping,
             float maxDecel = 6.0f)
         {
-            float rawCorrection = (verticalGap * positionGain * aggression * ramp)
+            float rawCorrection = (verticalGap * positionGain * aggression)
                                   - (verticalDrift * driftDamping * damping);
 
             if (verticalGap > 0f)

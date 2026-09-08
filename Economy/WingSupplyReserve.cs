@@ -3,15 +3,8 @@ using NuclearOption.Networking;
 
 namespace WingCommand
 {
-    /// <summary>
-    /// Three concrete airframes held for the player's wing.
-    ///
-    /// A slot owns all facts about one airframe: its definition, whether it was already
-    /// purchased, and the loadout (if any) it carried home. Keeping those facts together is
-    /// important. Parallel per-type counters and loadout FIFOs can consume a held frame while
-    /// discarding an owned frame's fit, which quietly changes which physical aircraft the
-    /// player still owns.
-    /// </summary>
+ /// <summary>Concrete reserve airframes with definition, ownership, and fit stored together, preventing
+ /// per-type counters from mismatching owned equipment.</summary>
     internal static class WingSupplyReserve
     {
         public const int Capacity = 3;
@@ -23,7 +16,7 @@ namespace WingCommand
             Owned,
         }
 
-        /// <summary>One literal reserve airframe. Purchase reservation keeps the slot present.</summary>
+     /// <summary>One reserve airframe; purchase reservation keeps its slot occupied.</summary>
         internal sealed class Slot
         {
             internal readonly AircraftDefinition Definition;
@@ -54,7 +47,7 @@ namespace WingCommand
         public static bool IsHost => isHost;
         public static bool HasFaction => hq != null;
 
-        /// <summary>Occupied reserve capacity, including a slot reserved by a pending order.</summary>
+     /// <summary>Occupied slots, including pending purchase reservations.</summary>
         public static int Count => slots.Count;
 
         public static IReadOnlyList<AircraftDefinition> Definitions
@@ -72,7 +65,7 @@ namespace WingCommand
             }
         }
 
-        /// <summary>Launchable slots of this type; pending purchase reservations are excluded.</summary>
+     /// <summary>Unreserved launchable slots of this definition.</summary>
         public static int CountOf(AircraftDefinition definition)
         {
             if (definition == null) return 0;
@@ -109,7 +102,7 @@ namespace WingCommand
             hq = current;
         }
 
-        /// <summary>Move one selected faction airframe out of AI-accessible stock.</summary>
+     /// <summary>Hold one faction airframe outside AI-accessible stock.</summary>
         public static bool Hold(AircraftDefinition definition, out string reason)
         {
             reason = null;
@@ -133,7 +126,7 @@ namespace WingCommand
             return true;
         }
 
-        /// <summary>Return one exact, unreserved airframe to ordinary faction stock.</summary>
+     /// <summary>Return an exact unreserved airframe to faction stock.</summary>
         public static bool Release(AircraftDefinition definition, out bool wasOwned,
                                    out string reason)
         {
@@ -141,7 +134,7 @@ namespace WingCommand
             reason = null;
             if (!CanWrite(definition, out reason)) return false;
 
-            // Prefer an unpaid hold, but remove that concrete slot and its own loadout only.
+            // Prefer unpaid stock, releasing only the selected slot and its associated fit.
             int index = ReserveSlotPolicy.SelectForRelease(
                 slots.Count,
                 i => slots[i].Definition == definition,
@@ -165,7 +158,7 @@ namespace WingCommand
             return true;
         }
 
-        /// <summary>Store one recovered airframe with its ownership and fit in one slot.</summary>
+     /// <summary>Preserve a recovered airframe's definition, ownership, and fit together.</summary>
         public static bool StoreRecovered(AircraftDefinition definition, bool owned,
                                           bool loadoutKnown, WingLoadoutChoice loadout,
                                           object recoveryToken)
@@ -176,8 +169,7 @@ namespace WingCommand
                 for (int i = 0; i < slots.Count; i++)
                     if (ReferenceEquals(slots[i].RecoveryToken, recoveryToken)) return true;
             }
-            // Unpaid held stock from faction obeys the holding limit; owned planes bought by the player
-            // are always preserved in reserve so they do not have to be bought again.
+            // Apply the hold cap to unpaid stock; retain owned returns even above capacity.
             if (!ReserveSlotPolicy.CanStoreAirframe(owned, Count, Capacity)) return false;
 
             slots.Add(new Slot(definition, owned ? Source.Owned : Source.Held,
@@ -188,7 +180,7 @@ namespace WingCommand
             return true;
         }
 
-        /// <summary>Which exact slot the next requisition would consume.</summary>
+     /// <summary>Inspect the concrete slot the next purchase would consume.</summary>
         internal static bool PeekForPurchase(AircraftDefinition definition, out Slot slot)
         {
             int index = ReserveSlotPolicy.SelectForPurchase(
@@ -212,7 +204,7 @@ namespace WingCommand
             return true;
         }
 
-        /// <summary>Reserve the concrete slot without freeing capacity for another recovery.</summary>
+     /// <summary>Reserve a slot without freeing its capacity for other returns.</summary>
         internal static bool ReserveForPurchase(AircraftDefinition definition, Source expected,
                                                 out Slot slot)
         {
@@ -224,7 +216,7 @@ namespace WingCommand
             return true;
         }
 
-        /// <summary>Commit a delivered purchase by consuming exactly the reserved slot.</summary>
+     /// <summary>Consume the exact reserved slot on confirmed delivery.</summary>
         internal static bool CommitPurchase(Slot slot)
         {
             if (slot == null || !slot.ReservedForPurchase) return false;
@@ -234,7 +226,7 @@ namespace WingCommand
             return true;
         }
 
-        /// <summary>Roll back an order while preserving the slot's identity and FIFO position.</summary>
+     /// <summary>Cancel reservation without changing slot identity or FIFO order.</summary>
         internal static void CancelPurchase(Slot slot)
         {
             if (slot != null && slots.Contains(slot)) slot.ReservedForPurchase = false;
