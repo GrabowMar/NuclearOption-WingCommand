@@ -2,12 +2,8 @@ using UnityEngine;
 
 namespace WingCommand
 {
-    /// <summary>
-    /// The complete standing intent for one wingman. The old model stored only a
-    /// <see cref="WingOrder"/> and kept a target in a second field while point orders
-    /// reconstructed their destination from the leader. Keeping the payload beside the
-    /// order is what lets a directive survive defensive interruptions and scoped tasking.
-    /// </summary>
+    /// <summary>Standing order and payload kept together so intent survives defensive interruptions and
+    /// scoped commands.</summary>
     internal readonly struct WingDirective
     {
         public readonly WingOrder Order;
@@ -15,7 +11,7 @@ namespace WingCommand
         public readonly GlobalPosition Point;
         public readonly bool HasPoint;
 
-        /// <summary>Which manoeuvre to fly. Only meaningful when <see cref="Order"/> is Maneuver.</summary>
+        /// <summary>Scripted manoeuvre, used only when Order is Maneuver.</summary>
         public readonly ManeuverKind Maneuver;
 
         private WingDirective(WingOrder order, Unit target, GlobalPosition point, bool hasPoint,
@@ -33,39 +29,24 @@ namespace WingCommand
 
         public static WingDirective Attack(Unit target) => AtTarget(WingOrder.Attack, target);
 
-        /// <summary>
-        /// Any order that prosecutes a specific unit. Attack and Splash 'Em differ in
-        /// how hard they press, not in what they carry, so they share this payload.
-        /// </summary>
+        /// <summary>Create a unit-target directive shared by Attack and Splash orders.</summary>
         public static WingDirective AtTarget(WingOrder order, Unit target) =>
             new WingDirective(order, target, default(GlobalPosition), false);
 
         public static WingDirective AtPoint(WingOrder order, GlobalPosition point) =>
             new WingDirective(order, null, point, true);
 
-        /// <summary>
-        /// A point task with a different terminal action from a normal Move: when the
-        /// point is reached, the member begins autonomous combat rather than reforming.
-        /// </summary>
+        /// <summary>Create a point task that enters autonomous combat on arrival instead of
+        /// reforming.</summary>
         public static WingDirective SeekAndDestroy(GlobalPosition point) =>
             AtPoint(WingOrder.SeekAndDestroy, point);
 
-        /// <summary>Fly one scripted manoeuvre. Carries no target or point.</summary>
+        /// <summary>Create a single manoeuvre directive without a target or point.</summary>
         public static WingDirective RunManeuver(ManeuverKind kind) =>
             new WingDirective(WingOrder.Maneuver, null, default(GlobalPosition), false, kind);
 
-        public WingDirective WithoutTarget() =>
-            new WingDirective(Order, null, Point, HasPoint, Maneuver);
-
-        /// <summary>
-        /// Whether this asks for the same thing as another directive.
-        ///
-        /// Exists so re-issuing an order a wingman is already carrying out is free. The wing
-        /// re-applies Formation to every member on several paths (a partial attack order, a
-        /// leader restored after a takeover), and without this each one re-enters the
-        /// formation state: leader filters reset, and the rejoin boost fires. Ordering an
-        /// attack to half a four-ship made the other half surge and re-settle for no reason.
-        /// </summary>
+        /// <summary>Compare intent so repeated orders do not re-enter states, reset leader filters, or
+        /// restart rejoin boost.</summary>
         public bool SameIntentAs(in WingDirective other) =>
             Order == other.Order &&
             ReferenceEquals(Target, other.Target) &&
@@ -73,11 +54,8 @@ namespace WingCommand
             Maneuver == other.Maneuver &&
             (!HasPoint || SamePoint(Point, other.Point));
 
-        /// <summary>
-        /// Map points are compared with a tolerance rather than exactly: a click a metre
-        /// from the last one is the same instruction, and a float comparison on a world
-        /// coordinate would say otherwise.
-        /// </summary>
+        /// <summary>Compare map points with tolerance so nearby clicks represent the same
+        /// instruction.</summary>
         private static bool SamePoint(GlobalPosition a, GlobalPosition b) =>
             FastMath.SquareDistance(a, b) < WingTuning.SamePointMetres * WingTuning.SamePointMetres;
     }

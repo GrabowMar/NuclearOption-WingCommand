@@ -3,7 +3,7 @@ using System.Numerics;
 
 namespace WingCommand
 {
-    /// <summary>A receding-horizon rendezvous shared by navigation and the speed demand.</summary>
+    /// <summary>Shared receding-horizon rendezvous for steering and speed demand.</summary>
     internal static class FormationIntercept
     {
         internal readonly struct Plan
@@ -19,8 +19,7 @@ namespace WingCommand
         {
             float distance = toSlot.Length();
             float shortLead = Math.Min(6f, distance / Math.Max(50f, ownSpeed));
-            // Long straight pursuits need tens of seconds of lead. A turning leader
-            // is less predictable: never extrapolate more than 45 degrees of turn.
+            // Allow long straight-flight prediction but cap turn extrapolation at 45 degrees.
             float horizon = Math.Min(45f, 0.7853982f / Math.Max(0.001f, Math.Abs(turnRate)));
             float intercept = InterceptSeconds(toSlot, leaderVelocity,
                 Math.Max(ownSpeed, maximumSpeed * 0.9f), horizon);
@@ -34,8 +33,8 @@ namespace WingCommand
                 Rotate(slotVelocity, sweep), seconds);
         }
 
-        // Smallest positive solution of |gap + velocity*t| = speed*t. Work in
-        // doubles and use the stable quadratic form, including equal-speed cases.
+        // Solve the earliest positive intercept time with stable double-precision quadratic arithmetic,
+        // including equal-speed cases.
         internal static float InterceptSeconds(Vector2 gap, Vector2 velocity, float speed, float horizon)
         {
             double a = (double)velocity.X * velocity.X + (double)velocity.Y * velocity.Y - (double)speed * speed;
@@ -59,8 +58,8 @@ namespace WingCommand
                     if (t2 >= 0d) time = Math.Min(time, t2);
                 }
             }
-            // An unreachable faster leader still gets bounded lead and maximum
-            // useful pursuit power; there is no infinite or backwards aim point.
+            // Bound prediction for unreachable faster leaders; never emit infinite or rearward
+            // extrapolation.
             return (float)Math.Max(0d, Math.Min(Math.Max(0f, horizon), time));
         }
 

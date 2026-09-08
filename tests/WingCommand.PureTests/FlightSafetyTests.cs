@@ -31,13 +31,13 @@ namespace WingCommand.PureTests
 
                 var high = new WingSituation(order: WingOrder.Formation, missileWarned: false,
                     radarAlt: 500f, leaderDistance: 600f, leaderPresent: true,
-                    secondsSinceMissileWarning: 10f, secondsInBehaviour: 0.5f);
+                    secondsSinceMissileWarning: 0.2f, secondsInBehaviour: 0.5f);
                 decision = WingArbiter.Resolve(in high, "wingcommand.missile-break", true, WingAi.Reflexes);
                 Assert.Equal(WingBehaviours.MissileBreak, decision.BehaviourId);
 
                 var recovered = new WingSituation(order: WingOrder.Formation, missileWarned: false,
                     radarAlt: 500f, leaderDistance: 600f, leaderPresent: true,
-                    secondsSinceMissileWarning: 10f, secondsInBehaviour: 3f);
+                    secondsSinceMissileWarning: WingTuning.PanicClearSeconds, secondsInBehaviour: 0.8f);
                 decision = WingArbiter.Resolve(in recovered, "wingcommand.missile-break", true, WingAi.Reflexes);
                 Assert.Equal(WingBehaviours.Task, decision.BehaviourId);
             }

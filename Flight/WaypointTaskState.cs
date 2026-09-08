@@ -2,11 +2,8 @@ using UnityEngine;
 
 namespace WingCommand
 {
-    /// <summary>
-    /// Flies a wingman to one tactical-map point. The member owns a queue of these points;
-    /// this state only handles the current leg and hands completion back to the member so
-    /// Shift-click routes can advance without losing their final ROE behavior.
-    /// </summary>
+    /// <summary>Flies the current map waypoint; the member owns route advancement and terminal-order
+    /// behavior.</summary>
     internal sealed class WaypointTaskState : WingPilotState
     {
         internal override bool RestartOnOrderChange => false;
@@ -86,7 +83,8 @@ namespace WingCommand
             }
 
             aircraft.autopilot.AutoAim(
-                destination: targetPoint + Vector3.up * cruise,
+                // Non-terrain rotary AutoAim adds altitudeHold to destination.y itself.
+                destination: moving ? targetPoint : targetPoint + Vector3.up * cruise,
                 altitudeHold: AutopilotMath.RotaryAgl(aircraft, cruise),
                 aimDirection: Vector3.zero,
                 targetVelocity: lead,

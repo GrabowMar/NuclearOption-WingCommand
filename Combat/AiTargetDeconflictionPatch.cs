@@ -4,13 +4,9 @@ using UnityEngine;
 
 namespace WingCommand
 {
-    /// <summary>
-    /// Adds reservation pressure to the stock target search for all locally simulated AI.
-    /// The original opportunity/threat calculation remains authoritative; this only breaks
-    /// the pathological tie where several pilots independently select the same best target.
-    /// A player remains a valid target, but each existing commitment makes another AI choose
-    /// a similarly useful unclaimed contact instead of dog-piling the human.
-    /// </summary>
+    /// <summary>Adds reservation pressure to native target scores so locally simulated AI spread across
+    /// comparable targets. Stock opportunity and threat scores still govern selection, including player
+    /// targets.</summary>
     [HarmonyPatch(typeof(CombatAI), nameof(CombatAI.ChooseHQTarget))]
     internal static class AiTargetDeconflictionPatch
     {
@@ -20,9 +16,13 @@ namespace WingCommand
         private static void Postfix(Unit searcher, float bravery, List<WeaponStation> stationList,
                                     ref CombatAI.TargetSearchResults __result)
         {
-            if (!WingFidelity.Deconfliction) return;
+            if (!WingFidelity.Deconfliction || !Plugin.Settings.AiTargetSpreading.Value) return;
             if (!(searcher is Aircraft aircraft) || aircraft.Player != null || !aircraft.LocalSim) return;
-            if (aircraft.NetworkHQ == null || stationList == null || stationList.Count == 0) return;
+            if (aircraft.NetworkHQ == null || stationList == null || stationList.Count == 0)
+            {
+                TacticalCoordinator.NoteSelection(__result.target, aircraft, SelectionSeconds);
+                return;
+            }
 
             Unit bestTarget = null;
             WeaponStation bestStation = null;
@@ -56,6 +56,10 @@ namespace WingCommand
                     TargetRequirements requirements = station.WeaponInfo.targetRequirements;
                     if (range > requirements.maxRange * 1.2f) score *= 0.5f;
 
+                    // Reservation pressure only lowers scores. Skip capacity and roster scans when
+                    // even this unpenalised candidate cannot beat the current choice.
+                    if (score <= bestScore) continue;
+
                     int capacity = Mathf.Clamp(
                         Mathf.CeilToInt(station.WeaponInfo.CalcAttacksNeeded(candidate)), 1, 4);
                     if (candidate is Missile) capacity = 1;
@@ -77,19 +81,20 @@ namespace WingCommand
 
             if (bestTarget == null)
             {
-                if (__result.target != null)
-                    TacticalCoordinator.NoteSelection(__result.target, aircraft, SelectionSeconds);
+                TacticalCoordinator.NoteSelection(__result.target, aircraft, SelectionSeconds);
                 return;
             }
 
-            // Preserve the stock bravery escape gate. Deconfliction should change who an AI
-            // fights, not make a timid aircraft accept a threat the base game rejected.
+            // Keep the stock bravery gate so deconfliction cannot admit a rejected threat.
             if (bestOpportunity * bravery * 2f < 0.35f &&
                 aircraft.NetworkHQ.GetAircraftThreat(bestTarget.persistentID) >
                     bestOpportunity * bravery * 2f &&
                 FastMath.Distance(bestTarget.GlobalPosition(), aircraft.GlobalPosition()) >
                     bestStation.WeaponInfo.targetRequirements.maxRange * 2f)
+            {
+                TacticalCoordinator.NoteSelection(__result.target, aircraft, SelectionSeconds);
                 return;
+            }
 
             __result = new CombatAI.TargetSearchResults(
                 bestTarget, bestStation, bestOpportunity, __result.outOfAmmo);

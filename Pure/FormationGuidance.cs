@@ -3,7 +3,7 @@ using System.Numerics;
 
 namespace WingCommand
 {
-    /// <summary>The production horizontal command, before terrain and collision overrides.</summary>
+    /// <summary>Horizontal formation command before terrain and collision safety overrides.</summary>
     internal static class FormationGuidance
     {
         internal readonly struct HorizontalCommand
@@ -16,31 +16,40 @@ namespace WingCommand
 
         public static HorizontalCommand Horizontal(Vector2 toSlot, Vector2 ownVelocity,
             Vector2 slotVelocity, Vector2 forward, Vector2 rendezvous, Vector2 arrivalVelocity,
-            float distance, float spacing, float lookAhead, float speed,
-            float acquisition, float aggression, float damping, float holdBlend)
+            float distance, float lookAhead, float speed,
+            float acquisition, float aggression, float damping)
         {
             float limit = lookAhead * (float)Math.Tan(WingTuning.CommandAngle * Math.PI / 180d);
             Vector2 cross = toSlot - forward * Vector2.Dot(toSlot, forward);
             Vector2 drift = ownVelocity - slotVelocity;
             drift -= forward * Vector2.Dot(drift, forward);
-            float zoneScale = 1f - holdBlend * 0.5f;
-            float inner = spacing * 0.025f * zoneScale;
-            float outer = spacing * 0.18f * zoneScale;
-            float ramp = Smooth01((cross.Length() - inner) / Math.Max(0.001f, outer - inner));
-            Vector2 correction = cross * (1.35f * aggression * ramp) - drift * (5f * damping);
+            // Filtered slot motion handles noise; proportional correction responds to small moves
+            // without a dead zone.
+            Vector2 correction = cross * (1.35f * aggression) - drift * (5f * damping);
             if (correction.LengthSquared() > limit * limit)
                 correction = Vector2.Normalize(correction) * limit;
             float travelTime = Math.Max(0.1f, distance / Math.Max(speed, 50f));
             var capture = FormationTracking.Capture(rendezvous.X, rendezvous.Y,
                 ownVelocity.X, ownVelocity.Y, arrivalVelocity.X, arrivalVelocity.Y,
                 travelTime, lookAhead / Math.Max(ownVelocity.Length(), 50f));
+            Vector2 pursuit = new Vector2(capture.x, capture.z);
+            // Far from formation, fly directly toward the future meeting point. A Hermite
+            // departure tangent favours our existing heading and delays crossing intercepts.
+            // Fade back to the curved, velocity-matched arrival before entering formation.
+            if (rendezvous.LengthSquared() > 1f)
+                pursuit = Vector2.Lerp(pursuit, Vector2.Normalize(rendezvous) * lookAhead,
+                    FormationIntercept.LongRangeBlend(distance));
             return new HorizontalCommand(Vector2.Lerp(forward * lookAhead + correction,
-                new Vector2(capture.x, capture.z), acquisition), correction, limit);
+                pursuit, acquisition), correction, limit);
         }
 
-        // AircraftInfo uses km/h (EncyclopediaBrowser divides stallSpeed by 3.6).
-        // AircraftParameters.landingSpeed is an AI approach target, not a stall
-        // limit: the VT-7 declares 100m/s there but actually stalls at 50m/s.
+        // Spend bank authority on large course reversals, then relax it as the intercept
+        // lines up so the aircraft can recover speed. Caller retains terrain/energy limits.
+        public static float InterceptBank(float commandAngle) =>
+            Clamp(Math.Abs(commandAngle) * 2f, 8f, 60f);
+
+        // Convert published stall speed from km/h. AircraftParameters.landingSpeed is an approach
+        // target, not stall speed; the VT-7's values differ substantially.
         public static float StallAirspeed(float publishedStallKmh, float nominalLandingSpeed) =>
             publishedStallKmh > 0f && !float.IsInfinity(publishedStallKmh)
                 ? publishedStallKmh / 3.6f : Math.Max(1f, nominalLandingSpeed);
@@ -58,9 +67,8 @@ namespace WingCommand
             return Math.Max(WingTuning.RejoinMinimumBank, Math.Min(terrain, energy));
         }
 
-        // A rapid leader roll may need turn authority sooner than the calm-flight
-        // ramp permits. This only raises permission: AutoAim still chooses the
-        // demanded bank, and terrain, airspeed and pitch-down limits remain final.
+        // Permit faster bank-authority rise during rapid leader roll; native demand and terrain,
+        // airspeed, and pitch-down limits still govern.
         public static float BankRiseRate(float leaderBankRate) =>
             WingTuning.FormationBankRiseRate + 60f * Smooth01(
                 ((float)Math.Abs(leaderBankRate * 180d / Math.PI) - 15f) / 75f);

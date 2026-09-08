@@ -1,9 +1,7 @@
 namespace WingCommand
 {
-    /// <summary>
-    /// Turns a baked-opaque glyph (white silhouette on a solid field) into a white
-    /// silhouette with a transparent field, so UI tinting does not draw a square behind it.
-    /// </summary>
+    /// <summary>Removes opaque glyph backgrounds for silhouette tinting without a visible
+    /// square.</summary>
     internal static class GlyphKnockout
     {
         public const float OpaqueCornerAlpha = 0.12f;
@@ -19,10 +17,8 @@ namespace WingCommand
                 || a01 > OpaqueCornerAlpha || a11 > OpaqueCornerAlpha;
         }
 
-        /// <summary>
-        /// Flood-fills the connected edge colour to alpha 0 and lifts remaining coverage
-        /// onto white. No-op when the edges are already transparent.
-        /// </summary>
+        /// <summary>Flood transparent alpha from connected edge colour, then map remaining coverage to
+        /// white. Leave already-transparent edges unchanged.</summary>
         public static void Apply(float[] rgba, int width, int height)
         {
             if (!NeedsKnockout(rgba, width, height)) return;

@@ -5,7 +5,7 @@ namespace WingCommand
 {
     internal partial class WingCommandManager
     {
-        /// <summary>An aircraft on its way into the wing, and how long it has to get there.</summary>
+        /// <summary>Pending wing delivery and its reporting deadline.</summary>
         private struct PendingRecruit
         {
             public Aircraft Aircraft;
@@ -16,16 +16,13 @@ namespace WingCommand
             public bool DelayReported;
         }
 
-        /// <summary>How long before reporting a delayed departure without releasing it.</summary>
+        /// <summary>Seconds before reporting a delayed departure; delivery remains pending.</summary>
         private const float RecruitTimeout = 420f;
 
         private readonly List<PendingRecruit> recruitQueue = new List<PendingRecruit>();
 
-        /// <summary>
-        /// Put a delivery on the wing roster immediately, then wait to take command until the
-        /// airbase has launched it. The roster and HUD can therefore show the aircraft while
-        /// the stock taxi/door sequence still owns its controls.
-        /// </summary>
+        /// <summary>Add deliveries to the roster immediately, but let native taxi and launch AI retain
+        /// controls until airborne.</summary>
         internal void QueueRecruit(Aircraft aircraft, WingPilot preferredPilot = null)
         {
             if (aircraft == null) return;
@@ -64,15 +61,8 @@ namespace WingCommand
             });
         }
 
-        /// <summary>
-        /// Activate deliveries once they can actually hold station.
-        ///
-        /// Two waits, for two different reasons. An aircraft spawned this frame has not
-        /// finished initialising its pilot state machine, so nothing may touch it yet. And an
-        /// aircraft delivered into a hangar is parked: it has to taxi out and take off under
-        /// the stock AI first, and switching it to formation flight on the apron would strand
-        /// it there with its gear up.
-        /// </summary>
+        /// <summary>Wait for pilot initialisation and native takeoff before activating formation control;
+        /// switching a parked aircraft would strand it.</summary>
         private void FlushRecruitQueue()
         {
             for (int i = recruitQueue.Count - 1; i >= 0; i--)
@@ -92,9 +82,8 @@ namespace WingCommand
                     continue;
                 }
 
-                // A staged launch may wait longer than the old seven-minute timeout.
-                // The purchased aircraft still exists, so dropping its roster membership
-                // here would permanently lose the eventual takeoff handoff.
+                // Report long waits without dropping a purchased aircraft or losing its eventual
+                // takeoff handoff.
                 if (!p.DelayReported && Time.timeSinceLevelLoad > p.Deadline)
                 {
                     p.DelayReported = true;
@@ -103,8 +92,7 @@ namespace WingCommand
                         " departure delayed; retaining its wing assignment until launch");
                 }
 
-                // If the immediate add had no slot, claim one as soon as another member
-                // leaves. Once claimed, it stays on the roster through taxi and launch.
+                // Claim a roster slot when one opens, then retain it through taxi and launch.
                 if (p.Member == null)
                 {
                     p.Member = Wing.Find(a);
@@ -120,15 +108,14 @@ namespace WingCommand
                     if (p.Member == null) continue;
                 }
 
-                // A player may release a still-parked delivery. Do not add it back from the
-                // queue after that explicit removal.
+                // Do not re-add a delivery the player explicitly released while parked.
                 if (!Wing.Contains(p.Member))
                 {
                     recruitQueue.RemoveAt(i);
                     continue;
                 }
 
-                // Not yet flying: keep waiting while the roster already shows the member.
+                // Keep the roster entry while departure is pending.
                 if (Time.timeSinceLevelLoad < p.ReadyAt) continue;
                 if (!p.Member.ActivateWhenAirborne()) continue;
 

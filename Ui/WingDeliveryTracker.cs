@@ -3,11 +3,8 @@ using UnityEngine;
 
 namespace WingCommand
 {
-    /// <summary>
-    /// Tracks active ordnance released by wingmen to display time-of-flight countdowns
-    /// and splash confirmations in the cockpit HUD.
-    /// Non-allocating and capped to prevent runaway lists.
-    /// </summary>
+    /// <summary>Bounded, allocation-free tracking of wing ordnance for HUD flight-time and splash
+    /// readouts.</summary>
     internal static class WingDeliveryTracker
     {
         private sealed class Delivery
@@ -94,9 +91,7 @@ namespace WingCommand
             }
         }
 
-        /// <summary>
-        /// Compact HUD delivery tag for this aircraft, e.g. "AGM-98 12s" or "SPLASH".
-        /// </summary>
+        /// <summary>Compact aircraft delivery status, such as weapon/time or SPLASH.</summary>
         public static string GetDeliveryTag(Aircraft aircraft)
         {
             if (aircraft == null) return null;

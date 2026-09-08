@@ -22,10 +22,8 @@ namespace WingCommand
         }
     }
 
-    /// <summary>
-    /// Shared command entry point for WMC, map, radial and hotkeys. Interfaces decide the
-    /// scope; this class validates and applies it consistently.
-    /// </summary>
+    /// <summary>Validates and applies commands consistently across WMC, map, radial, and hotkeys; callers
+    /// choose scope.</summary>
     internal sealed class WingDirectiveDispatcher
     {
         private readonly WingRegistry wing;
@@ -94,14 +92,8 @@ namespace WingCommand
             return new WingDispatchResult(applied, WithQueued(message, responders), responders, WingOrder.Attack);
         }
 
-        /// <summary>
-        /// Put every wingman in scope onto one designation, expending.
-        ///
-        /// No distribution and no useful-attacker cap, unlike <see cref="Attack"/>. Those
-        /// exist to stop a wing wasting itself on a target that needed one missile; an
-        /// order whose entire meaning is "everyone, everything, that one" is the case they
-        /// were never meant to govern.
-        /// </summary>
+        /// <summary>Assign the entire scope to expend on one target, bypassing Attack's distribution and
+        /// useful-attacker cap.</summary>
         public WingDispatchResult FireForEffect(IReadOnlyList<Unit> targets, bool wholeWing)
         {
             List<WingMember> scope = Scope(wholeWing);
@@ -134,10 +126,8 @@ namespace WingCommand
             return new WingDispatchResult(applied, WithQueued(message, responders), responders, WingOrder.FireForEffect);
         }
 
-        /// <summary>
-        /// Put every jam-capable wingman in scope onto one designation: hold the slot,
-        /// run the jammer pod against that unit until it dies or the order is replaced.
-        /// </summary>
+        /// <summary>Assign jam-capable members to hold station and jam one target until destroyed or
+        /// superseded.</summary>
         public WingDispatchResult JamTarget(IReadOnlyList<Unit> targets, bool wholeWing)
         {
             List<WingMember> scope = Scope(wholeWing);
@@ -167,7 +157,7 @@ namespace WingCommand
             return new WingDispatchResult(applied, WithQueued(message, responders), responders, WingOrder.JamTarget);
         }
 
-        /// <summary>Send the scope through one scripted manoeuvre. Transient; it rejoins after.</summary>
+        /// <summary>Run one manoeuvre across the scope, then rejoin.</summary>
         public WingDispatchResult Maneuver(ManeuverKind kind, bool wholeWing) =>
             Apply(WingDirective.RunManeuver(kind), wholeWing);
 

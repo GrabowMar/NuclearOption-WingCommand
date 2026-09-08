@@ -1,8 +1,7 @@
 using Xunit;
 
-// UnityEngine.Vector3 is shared, and lives in GameTypeStubs.cs.
-// Native hover and nozzle ownership is stubbed; the complete production transition
-// is linked so a stale native hover flag cannot hide a retained downward nozzle.
+// Link production hover/nozzle transitions with native boundary stubs; shared Vector3 lives in
+// GameTypeStubs. Verify cleared hover flags cannot leave downward thrust.
 namespace WingCommand
 {
     internal sealed class ControlsFilter

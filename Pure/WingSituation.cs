@@ -1,92 +1,93 @@
 namespace WingCommand
 {
-    /// <summary>
-    /// Everything a reflex is allowed to know about one wingman, sampled once per
-    /// arbitration pass.
-    ///
-    /// A snapshot rather than a live reference, and engine-free by construction: a reflex
-    /// cannot reach through this to the aircraft, cannot switch a pilot state, and cannot
-    /// write anything. That is the whole safety story for third-party reflexes — the worst
-    /// a badly written one can do is return a wrong number.
-    ///
-    /// Every field is optional at the call site. Tests name only what they are exercising,
-    /// which keeps a scoring test to one readable line instead of fourteen positional
-    /// arguments of noise.
-    /// </summary>
+    /// <summary>Engine-free immutable reflex snapshot sampled once per decision, with no aircraft or
+    /// order-mutation access. Optional constructor inputs let callers specify only relevant
+    /// telemetry.</summary>
     public readonly struct WingSituation
     {
-        /// <summary>The standing order — what the player actually asked for.</summary>
+        /// <summary>Player's retained standing order.</summary>
         public readonly WingOrder Order;
 
-        /// <summary>The wing's standing weapons policy.</summary>
+        /// <summary>Standing wing ROE.</summary>
         public readonly WingRoe Roe;
 
-        /// <summary>Still under the airbase's taxi/launch AI after a hangar delivery.</summary>
+        /// <summary>Native delivery taxi/launch still owns this aircraft.</summary>
         public readonly bool DeliveryPending;
 
-        /// <summary>A missile is in the air and this aircraft is its target.</summary>
+        /// <summary>An airborne missile targets this member.</summary>
         public readonly bool MissileWarned;
 
-        /// <summary>
-        /// Seconds since the warning last read true, and 0 while it still does. The missile
-        /// break scores on this rather than on the bare flag: a warning that drops for a
-        /// tick as the missile is re-acquired must not end the break.
-        /// </summary>
+        /// <summary>Seconds since a live warning, zero while active; bridges brief tracking gaps during
+        /// defence.</summary>
         public readonly float SecondsSinceMissileWarning;
 
-        /// <summary>The leader is on the runway rather than merely low.</summary>
+        /// <summary>Leader is grounded or landing rather than merely flying low.</summary>
         public readonly bool LeaderOnDeck;
 
-        /// <summary>False when the leader is gone; several reflexes have nothing to say then.</summary>
+        /// <summary>Whether a usable leader exists.</summary>
         public readonly bool LeaderPresent;
 
-        /// <summary>The directive carries a live unit to prosecute.</summary>
+        /// <summary>Whether the directive's designated unit is alive.</summary>
         public readonly bool TargetAlive;
 
-        /// <summary>Metres to the leader. Negative when there is no leader to measure against.</summary>
+        /// <summary>Leader distance in metres; negative when unavailable.</summary>
         public readonly float LeaderDistance;
 
-        /// <summary>The leash this wingman is being held to, in metres.</summary>
+        /// <summary>Pursuit leash radius in metres.</summary>
         public readonly float LeashRadius;
 
-        /// <summary>Height above ground, metres.</summary>
+        /// <summary>Radar altitude in metres AGL.</summary>
         public readonly float RadarAlt;
 
-        /// <summary>
-        /// This wingman has no autopilot - it is a ship or a ground vehicle.
-        ///
-        /// Here because a reflex has no other way to find out: the snapshot is engine-free
-        /// by design and carries no aircraft to interrogate. A reflex that resolves a
-        /// surface member to a flying behaviour would resolve it to nothing at all.
-        /// </summary>
+        /// <summary>Member lacks an autopilot and requires surface control; exposes that capability
+        /// without live engine references.</summary>
         public readonly bool MemberIsSurface;
 
-        /// <summary>This wingman is a rotary-wing aircraft (helicopter).</summary>
+        /// <summary>Whether the member uses rotary flight control.</summary>
         public readonly bool MemberIsRotary;
 
-        /// <summary>Current forward airspeed, m/s.</summary>
+        /// <summary>Forward airspeed in m/s.</summary>
         public readonly float Airspeed;
 
-        /// <summary>Airframe rotation/takeoff airspeed, m/s.</summary>
+        /// <summary>Rotation/takeoff speed in m/s.</summary>
         public readonly float TakeoffSpeed;
 
-        /// <summary>Fuel remaining, 0-1.</summary>
+        /// <summary>Remaining fuel fraction from 0 to 1.</summary>
         public readonly float Fuel;
 
-        /// <summary>Rounds and missiles remaining across every non-cargo station.</summary>
+        /// <summary>Total non-cargo ammunition.</summary>
         public readonly int Ammo;
 
-        /// <summary>Airframe condition from the game's own part hit points, 0-1.</summary>
+        /// <summary>Native part-based integrity fraction from 0 to 1.</summary>
         public readonly float Integrity;
 
-        /// <summary>
-        /// How long the currently winning reflex has been in control. Drives the minimum-hold
-        /// rule; a reflex reads it to know whether it is being entered or sustained.
-        /// </summary>
+        /// <summary>Seconds the winning reflex has held control, used for lifecycle and minimum-hold
+        /// decisions.</summary>
         public readonly float SecondsInBehaviour;
         public readonly float SecondsWithoutEngagement;
 
-        // Keep the original constructor signature available to existing plugins.
+        /// <summary>Current native terrain warning and motion used for recovery; zero defaults keep
+        /// older providers' snapshots compatible.</summary>
+        public readonly float TerrainUrgency, VerticalSpeed, BankAngle, MinimumAirspeed;
+        public readonly bool RecoveringFromDefence;
+
+        private WingSituation(in WingSituation basis, float terrainUrgency, float verticalSpeed,
+            float bankAngle, float minimumAirspeed, bool recoveringFromDefence)
+        {
+            this = basis;
+            TerrainUrgency = terrainUrgency;
+            VerticalSpeed = verticalSpeed;
+            BankAngle = bankAngle;
+            MinimumAirspeed = minimumAirspeed;
+            RecoveringFromDefence = recoveringFromDefence;
+        }
+
+        public WingSituation WithFlightSafety(float terrainUrgency, float verticalSpeed,
+            float bankAngle, float minimumAirspeed, bool recoveringFromDefence = false) =>
+            new WingSituation(in this, terrainUrgency, verticalSpeed, bankAngle,
+                minimumAirspeed, recoveringFromDefence);
+
+        // Preserve the existing public constructor signature for plugin compatibility.
         private WingSituation(in WingSituation basis, float secondsWithoutEngagement)
         {
             this = basis;
@@ -95,16 +96,8 @@ namespace WingCommand
 
         public WingSituation WithEngagementIdle(float seconds) => new WingSituation(in this, seconds);
 
-        /// <summary>
-        /// A benign situation: airborne, leader present, nothing shooting at us.
-        ///
-        /// Explicit, and not merely a consequence of the optional parameters below. A
-        /// constructor whose arguments are all optional is <b>not</b> a parameterless one:
-        /// <c>new WingSituation()</c> zero-initialises the struct and skips every default,
-        /// which quietly produced a wingman with no leader, no fuel and no altitude. That is
-        /// the opposite of benign, and it is exactly the shape a test writes when it means
-        /// "nothing interesting is happening".
-        /// </summary>
+        /// <summary>Explicit benign default: airborne, leader present, no missile warning. Optional
+        /// arguments alone do not supply a struct's parameterless construction defaults.</summary>
         public WingSituation() : this(order: WingOrder.Formation) { }
 
         public WingSituation(
@@ -148,6 +141,8 @@ namespace WingCommand
             Integrity = integrity;
             SecondsInBehaviour = secondsInBehaviour;
             SecondsWithoutEngagement = 0f;
+            TerrainUrgency = VerticalSpeed = BankAngle = MinimumAirspeed = 0f;
+            RecoveringFromDefence = false;
         }
 
     }

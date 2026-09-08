@@ -2,48 +2,29 @@ using UnityEngine;
 
 namespace WingCommand
 {
-    /// <summary>
-    /// Where a wingman with no autopilot should be going, and how hard.
-    ///
-    /// The division of labour behind <see cref="WingBehaviours.Surface"/>. Wing Command
-    /// answers *where* — it owns the roster, the slot geometry and the standing directive,
-    /// and none of that is worth reimplementing outside. The registered behaviour answers
-    /// *how*, because that is a control loop whose gains depend entirely on what the vehicle
-    /// is: a light truck and a fleet carrier answer the helm three orders of magnitude apart,
-    /// and the plugin that knows which mod supplied the hull is the one that can tune it.
-    ///
-    /// Read this every fixed update rather than caching it. A slot moves with the leader, an
-    /// order changes under the player's hand, and a target dies.
-    /// </summary>
+    /// <summary>Publishes surface-member destination and effort from wing slots and directives. Registered
+    /// behaviours supply vehicle-specific control. Read each fixed update because leaders move, orders
+    /// change, and targets die.</summary>
     public static class WingSurface
     {
-        /// <summary>What a surface member should be doing this tick.</summary>
+        /// <summary>Surface-control task for the current tick.</summary>
         public readonly struct Task
         {
-            /// <summary>The world point to make for.</summary>
+            /// <summary>Destination in world coordinates.</summary>
             public Vector3 Destination { get; }
 
-            /// <summary>Metres from <see cref="Destination"/> at which to stop driving.</summary>
+            /// <summary>Stopping distance from Destination, in metres.</summary>
             public float ArriveRadius { get; }
 
-            /// <summary>
-            /// Hold position rather than make for anything.
-            ///
-            /// Distinct from having arrived: a held unit stays put even when the destination
-            /// moves away from it, which is what "Hold Station" means and what a wingman
-            /// with nowhere useful to go should do.
-            /// </summary>
+            /// <summary>Hold current position even if the destination moves; this is independent of
+            /// arrival.</summary>
             public bool Hold { get; }
 
-            /// <summary>
-            /// Fraction of full power this task wants, 0-1.
-            ///
-            /// Station keeping asks for less than a repositioning run so a column does not
-            /// oscillate around its slot, and the caller is free to ignore it.
-            /// </summary>
+            /// <summary>Suggested power fraction, 0-1. Station keeping uses less than repositioning to
+            /// reduce oscillation; controllers may ignore it.</summary>
             public float Effort { get; }
 
-            /// <summary>The unit this member has been told to prosecute, or null.</summary>
+            /// <summary>Explicit target, or null.</summary>
             public Unit Target { get; }
 
             public Task(Vector3 destination, float arriveRadius, bool hold, float effort, Unit target)
@@ -56,10 +37,7 @@ namespace WingCommand
             }
         }
 
-        /// <summary>
-        /// The current task for a surface wingman, or false when this aircraft is not one
-        /// under command.
-        /// </summary>
+        /// <summary>Read a commanded surface member's task; return false for other aircraft.</summary>
         public static bool TryGetTask(Aircraft aircraft, out Task task)
         {
             task = default;
@@ -82,8 +60,7 @@ namespace WingCommand
 
             switch (directive.Order)
             {
-                // A named point on the map. The wing holds it once it arrives rather than
-                // drifting off it, which is the difference between "hold" and "go".
+                // Hold the named map point after arrival.
                 case WingOrder.OrbitHere:
                 case WingOrder.LandHere:
                     return directive.HasPoint
@@ -95,9 +72,7 @@ namespace WingCommand
                         ? new Task(directive.Point.AsVector3(), StationRadius, hold: false, effort: 1f, target: null)
                         : Halt(member);
 
-                // Close to a stand-off distance and let the engagement code do the shooting.
-                // Driving all the way onto a target is how a hull ends up inside the minimum
-                // range of everything it carries.
+                // Stop at stand-off range so the hull stays outside weapon minimum ranges.
                 case WingOrder.Attack:
                 case WingOrder.FireForEffect:
                 case WingOrder.JamTarget:
@@ -105,7 +80,7 @@ namespace WingCommand
                         ? new Task(StandOff(member, target), StandOffRadius, hold: false, effort: 1f, target: target)
                         : Slot(member, target);
 
-                // Break contact: put the leader between us and whatever we were shooting at.
+                // Retreat behind the leader relative to the target.
                 case WingOrder.FallBack:
                 case WingOrder.ReturnToBase:
                     return Slot(member, null);
@@ -115,13 +90,13 @@ namespace WingCommand
             }
         }
 
-        /// <summary>Metres from a slot or waypoint at which a hull stops driving.</summary>
+        /// <summary>Stopping radius for surface slots and waypoints, in metres.</summary>
         private const float StationRadius = 150f;
 
-        /// <summary>Metres from an assigned target a hull closes to and no further.</summary>
+        /// <summary>Minimum target approach radius for surface members, in metres.</summary>
         private const float StandOffRadius = 400f;
 
-        /// <summary>How far off a target to sit while prosecuting it.</summary>
+        /// <summary>Preferred stand-off distance while attacking.</summary>
         private const float StandOffDistance = 3000f;
 
         private static Task Halt(WingMember member) =>
@@ -132,9 +107,7 @@ namespace WingCommand
             Aircraft leader = member.Leader;
             if (leader == null || leader.disabled) return Halt(member);
 
-            // The same solver the aircraft use, flattened: stack zero and a column astern.
-            // Deliberately re-derived here rather than cached on the member, because the slot
-            // is a function of where the leader is right now.
+            // Recompute the shared slot solver with zero stack and Trail geometry as the leader moves.
             Vector3 offset = FormationSolver.SlotOffset(
                 leader.transform.forward,
                 member.Slot,

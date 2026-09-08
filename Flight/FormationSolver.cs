@@ -4,17 +4,11 @@ using UnityEngine;
 
 namespace WingCommand
 {
-    /// <summary>
-    /// Turns a leader's track plus a slot index into a world offset.
-    ///
-    /// Slot numbers live in <see cref="FormationLayout"/> — this file is the engine-facing
-    /// half: metres, the velocity-plane frame a settled formation hangs off, and the
-    /// Reynolds terms that keep rejoining aircraft out of each other. Icons, hulls and
-    /// slot-picking still use the flattened frame; flight uses the banked one.
-    /// </summary>
+    /// <summary>Engine-facing slot geometry and separation using FormationLayout indices. Flight can use a
+    /// banked velocity frame; icons, surface units, and slot allocation use a flattened frame.</summary>
     internal static class FormationSolver
     {
-        /// <summary>Bounds needed by the common terrain bank limit: lateral, down, aft.</summary>
+        /// <summary>Extend lateral, downward, and aft bounds for the shared terrain bank limit.</summary>
         internal static void IncludeBankFootprint(ref Vector3 footprint, Vector3 local)
         {
             footprint.x = Mathf.Max(footprint.x, Mathf.Abs(local.x));
@@ -22,9 +16,8 @@ namespace WingCommand
             footprint.z = Mathf.Max(footprint.z, -local.z);
         }
 
-        // A shape uses one scale. Per-slot scales can reverse trail ordering or put
-        // neighboring finger-four slots in the same place; the most cautious member
-        // sets the common spacing while each keeps its own control gains.
+        // Use one shape-wide spacing scale chosen by the most cautious member; per-slot scales can
+        // reverse ordering or overlap slots.
         internal static float SharedFlightSpacing(IReadOnlyList<WingMember> members, Aircraft leader)
         {
             float scale = 0.85f;
@@ -39,18 +32,16 @@ namespace WingCommand
             return found ? scale : 1f;
         }
 
-        /// <summary>
-        /// Cheap startup invariant check for every shape and supported slot. Geometry errors
-        /// otherwise appear only in flight as two aircraft assigned the same piece of sky.
-        /// </summary>
+        /// <summary>Validate supported shapes and slots at startup to catch overlapping assignments before
+        /// flight.</summary>
         public static bool ValidateGeometry(int maxSlots, out string problem)
         {
             var report = new StringBuilder();
 
             foreach (FormationShape shape in FormationShapes.All)
             {
-                // Validate the leader as well as followers, with no vertical stack.
-                // Terrain floors and surface formations must still have safe spacing.
+                // Include the leader and zero-stack geometry so surface and terrain-flattened
+                // formations remain separated.
                 for (int turn = 0; turn <= 1; turn++)
                 {
                     var slots = new Vector3[System.Math.Max(0, maxSlots) + 1];
@@ -83,8 +74,8 @@ namespace WingCommand
             return problem.Length == 0;
         }
 
-        /// <param name="leaderForward">Leader forward vector; flattened internally.</param>
-        /// <param name="slot">1-based slot index. Slot 0 is the leader itself.</param>
+        /// <param name="leaderForward">Leader direction, flattened internally.</param> <param
+        /// name="slot">Follower index starting at 1; 0 denotes the leader.</param>
         public static Vector3 SlotOffset(
             Vector3 leaderForward, int slot, FormationShape shape, float spacing, float stack,
             float lateralScale = 1f, float backScale = 1f)
@@ -93,11 +84,8 @@ namespace WingCommand
                 SlotCoordinates(slot, shape, spacing, stack, lateralScale, backScale));
         }
 
-        /// <summary>
-        /// Slot in leader-local metres: X right, Y up, Z forward (therefore negative aft).
-        /// Keeping the transition in this frame lets shapes ease between one another while
-        /// the whole formation still rotates immediately with the leader's heading.
-        /// </summary>
+        /// <summary>Local slot coordinates in metres: X right, Y up, Z forward. Ease shapes here while
+        /// allowing the whole frame to follow leader heading.</summary>
         public static Vector3 SlotCoordinates(int slot, FormationShape shape, float spacing,
                                               float stack, float lateralScale = 1f,
                                               float backScale = 1f)
@@ -110,25 +98,13 @@ namespace WingCommand
                               -s.Back * spacing * backScale);
         }
 
-        /// <summary>
-        /// Flattened world offset: slots stay level with the horizon. Icons, hulls and
-        /// slot-picking want this — a pitched leader must not lift a ship, and a formation
-        /// glyph is a plan view.
-        /// </summary>
+        /// <summary>Flattened world offset for icons, surface units, and slot allocation; leader pitch
+        /// cannot lift these slots.</summary>
         public static Vector3 WorldOffset(Vector3 leaderForward, Vector3 local) =>
             WorldOffset(leaderForward, local, bankDeg: 0f, velocityPlane: false);
 
-        /// <summary>
-        /// Rotate leader-local slot coordinates into a world offset.
-        ///
-        /// The flattened frame (the default) was the whole formation: every slot sat in the
-        /// horizontal plane, so a climbing or rolling leader left its wingmen sliding
-        /// sideways off the photograph. The velocity-plane frame hangs the same local
-        /// offsets on the leader's track and then rolls them about that track by
-        /// <paramref name="bankDeg"/>, which is what makes a diamond roll as one piece.
-        /// Rejoin still uses the flattened frame — a banked slot two kilometres out is a
-        /// destination through the ground.
-        /// </summary>
+        /// <summary>Transform local slots using either a flat frame or the leader's velocity plane rolled
+        /// by bankDeg. Distant rejoin stays flat to avoid banked targets below terrain.</summary>
         public static Vector3 WorldOffset(Vector3 track, Vector3 local, float bankDeg,
                                           bool velocityPlane)
         {
@@ -162,31 +138,23 @@ namespace WingCommand
             return right * local.x + up * local.y + fwd * local.z;
         }
 
-        /// <summary>
-        /// Reynolds' leader-following keep-out: steer clear of the airspace directly ahead
-        /// of the leader.
-        ///
-        /// A wingman rejoining from in front converges on a slot that lies behind the
-        /// leader, and the straight path to it goes through the leader. Nothing else in the
-        /// controller prevents that, so this is what stops mid-airs on rejoin.
-        ///
-        /// Returns a lateral push, or zero when the wingman is not in the way.
-        /// </summary>
-        /// <param name="lookAhead">Length of the protected corridor ahead of the leader.</param>
-        /// <param name="corridorRadius">Half-width of that corridor.</param>
+        /// <summary>Push laterally out of the corridor ahead of the leader to prevent rejoin paths
+        /// crossing its aircraft. Return zero outside the corridor.</summary> <param
+        /// name="lookAhead">Protected corridor length.</param> <param name="corridorRadius">Protected
+        /// corridor half-width.</param>
         public static Vector3 AvoidLeaderPath(Aircraft self, Aircraft leader,
                                               float lookAhead, float corridorRadius, float strength)
         {
             if (self == null || leader == null || lookAhead <= 0f || corridorRadius <= 0f)
                 return Vector3.zero;
 
-            // Protect the leader's actual path, matching the frame used for its slots.
-            // Nose direction alone points the corridor aside during sideslip or a gust.
+            // Align the protected corridor with actual travel direction, not sideslipping nose
+            // direction.
             Vector3 forward = leader.rb != null && leader.rb.velocity.sqrMagnitude > 25f
                 ? leader.rb.velocity.normalized : leader.transform.forward;
             Vector3 toSelf = self.transform.position - leader.transform.position;
 
-            // Only the corridor *ahead* of the leader matters; behind is where slots live.
+            // Protect only the forward corridor; formation slots lie aft.
             float ahead = Vector3.Dot(toSelf, forward);
             if (ahead <= 0f || ahead > lookAhead) return Vector3.zero;
 
@@ -194,7 +162,7 @@ namespace WingCommand
             float offCentre = lateral.magnitude;
             if (offCentre > corridorRadius) return Vector3.zero;
 
-            // Push sideways out of the corridor, hardest on the centreline and closest in.
+            // Increase lateral push near the centreline and leader.
             Vector3 escape = offCentre > 0.1f
                 ? lateral / offCentre
                 : WorldOffset(forward, Vector3.left, bankDeg: 0f, velocityPlane: true);
@@ -211,14 +179,8 @@ namespace WingCommand
             return escape * (strength * urgency);
         }
 
-        /// <summary>
-        /// Reynolds separation: a repulsion vector pushing an aircraft away from nearby
-        /// wing members, weighted by inverse square distance.
-        ///
-        /// Slots are far enough apart on paper, but during a rejoin several wingmen
-        /// converge on the leader from arbitrary angles and nothing else keeps them out of
-        /// one another's way.
-        /// </summary>
+        /// <summary>Inverse-square repulsion from nearby wing members, protecting arbitrary converging
+        /// rejoin paths.</summary>
         public static Vector3 Separation(Aircraft self, IReadOnlyList<WingMember> members,
                                          float radius, float strength)
         {
@@ -246,9 +208,8 @@ namespace WingCommand
                     ? other.rb.velocity - self.rb.velocity
                     : Vector3.zero;
 
-                // Protect not only the separation now, but the closest approach in the next
-                // few seconds. Rejoining aircraft can still be far apart while already on a
-                // collision course; waiting until they are close is too late for a jet.
+                // Consider predicted closest approach so fast converging aircraft separate before they
+                // are already too close.
                 float timeToClosest = 0f;
                 float relativeSpeedSq = relativeVelocity.sqrMagnitude;
                 if (relativeSpeedSq > 1f)
@@ -268,22 +229,17 @@ namespace WingCommand
                     out float escapeX, out float escapeY, out float escapeZ);
                 Vector3 away = new Vector3(escapeX, escapeY, escapeZ);
 
-                // When low, separation must never push an aircraft down into the terrain.
+                // Never push an airborne member downward near terrain.
                 if (self.autopilot != null && self.radarAlt < 250f && away.y < 0f)
                     away.y = 0f;
 
-                // At low altitude the trailing/later element deconflicts high, matching the
-                // real tactical priority: preserve terrain awareness for the lead element
-                // and use the vertical for the aircraft responsible for separation.
-                // Airborne only. A hull sits under 300 metres permanently, so without the
-                // autopilot test every trailing ship would be given a standing push into
-                // the sky - which it cannot act on, and which corrupts the lateral
-                // component of the push it can.
+                // Near terrain, later airborne slots separate upward while the lead retains terrain
+                // awareness. Exclude surface units from vertical steering.
                 if (self.autopilot != null && self.radarAlt < 300f && selfSlot > otherMember.Slot)
                     away += Vector3.up * 0.45f;
 
-                // Bounded inverse square: urgent at a close predicted pass, but never large
-                // enough to fling a slot destination across the formation in one frame.
+                // Cap inverse-square urgency so a close predicted pass cannot fling the slot across the
+                // formation.
                 float urgency = Mathf.Min(radiusSq / Mathf.Max(distSq, 1f), 4f);
                 urgency *= 1f + (4f - timeToClosest) * 0.15f;
                 urgency *= Mathf.Clamp01(1f - Mathf.Sqrt(distSq) / radius);

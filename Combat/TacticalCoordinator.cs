@@ -3,15 +3,9 @@ using UnityEngine;
 
 namespace WingCommand
 {
-    /// <summary>
-    /// Short-lived target reservations shared by every combat path in this plugin.
-    ///
-    /// Stock AI evaluates targets independently. It accounts for missiles already in the
-    /// air, but not for the other aircraft that have just selected the same contact, so a
-    /// whole package can make the same locally-correct choice. Reservations turn those
-    /// independent decisions into a flight-level allocation without permanently locking a
-    /// target to anyone: if an aircraft cannot prosecute, its claim expires in seconds.
-    /// </summary>
+    /// <summary>Shares expiring target reservations across combat paths. Native AI accounts for missiles
+    /// in flight but not simultaneous target selections; short claims spread fire without permanently
+    /// locking targets.</summary>
     internal static class TacticalCoordinator
     {
         private sealed class Claim
@@ -35,7 +29,7 @@ namespace WingCommand
             lastPrunedFrame = -1;
         }
 
-        /// <summary>Active firing reservations; an assignment alone never consumes a shot.</summary>
+        /// <summary>Count live firing claims; target assignments do not consume shots.</summary>
         public static int CountClaims(Unit target, Aircraft except = null)
         {
             if (target == null || target.disabled) return 0;
@@ -50,7 +44,8 @@ namespace WingCommand
             return count;
         }
 
-        /// <summary>Selection pressure from shooters, native selections and explicit attack assignments.</summary>
+        /// <summary>Count firing claims, native selections, and active explicit attack
+        /// assignments.</summary>
         public static int CountCommitments(Unit target, Aircraft except = null)
         {
             if (target == null || target.disabled) return 0;
@@ -64,10 +59,9 @@ namespace WingCommand
                     if (Active(list[i])) AddOwner(list[i].Owner, except);
             }
 
-            // Active assignments discourage opportunists from piling onto an attack.
-            // A retained designation during recall/defence/taxi is not an available
-            // shooter. Actual shots above keep their short reservation independently.
-            // Assignments are never the hard cap, so assigned pilots cannot deadlock.
+            // Only active attack assignments add selection pressure. Retained targets during recall,
+            // defence, or taxi do not. Assignments never consume the hard firing cap; actual shots
+            // retain their own claims.
             WingRegistry wing = WingCommandManager.Instance?.Wing;
             if (wing != null)
             {
@@ -85,16 +79,15 @@ namespace WingCommand
             return owners.Count;
         }
 
-        /// <summary>
-        /// Record a native AI target choice for deconfliction. Selection does not prove
-        /// that the aircraft can fire yet, so it must not consume the hard firing cap.
-        /// </summary>
+        /// <summary>Record native selection pressure without consuming a firing slot; selection alone does
+        /// not prove the aircraft can shoot.</summary>
         public static void NoteSelection(Unit target, Aircraft owner, float seconds)
         {
-            if (target == null || target.disabled || owner == null || owner.disabled) return;
+            if (owner == null) return;
 
             Prune();
-            if (claims.TryGetValue(target, out List<Claim> list))
+            bool valid = target != null && !target.disabled && !owner.disabled;
+            if (valid && claims.TryGetValue(target, out List<Claim> list))
             {
                 for (int i = 0; i < list.Count; i++)
                 {
@@ -103,13 +96,14 @@ namespace WingCommand
                     return;
                 }
             }
-            AddClaim(target, owner, seconds, firing: false);
+            // Native callers replace one current target. A switch or empty search must not keep
+            // discouraging teammates from targets this pilot abandoned; existing shots still count.
+            ReleaseSelection(owner);
+            if (valid) AddClaim(target, owner, seconds, firing: false);
         }
 
-        /// <summary>
-        /// Reserve a target if its concurrency limit has room. An existing owner may renew
-        /// its own claim even while the target is full.
-        /// </summary>
+        /// <summary>Claim a firing slot below the target limit, or renew this owner's existing claim even
+        /// at capacity.</summary>
         public static bool TryClaim(Unit target, Aircraft owner, int maximum, float seconds)
         {
             if (target == null || target.disabled || owner == null || owner.disabled || maximum <= 0)
@@ -148,7 +142,12 @@ namespace WingCommand
             });
         }
 
-        public static void Release(Aircraft owner)
+        /// <summary>Abandon target selection while retaining reservations for shots already fired.</summary>
+        public static void ReleaseSelection(Aircraft owner) => Release(owner, selectionOnly: true);
+
+        public static void Release(Aircraft owner) => Release(owner, selectionOnly: false);
+
+        private static void Release(Aircraft owner, bool selectionOnly)
         {
             if (owner == null) return;
 
@@ -157,7 +156,8 @@ namespace WingCommand
                 List<Claim> list = pair.Value;
                 for (int i = list.Count - 1; i >= 0; i--)
                 {
-                    if (list[i].Owner == owner) list.RemoveAt(i);
+                    if (list[i].Owner == owner && (!selectionOnly || !list[i].Firing))
+                        list.RemoveAt(i);
                 }
             }
             Prune();
@@ -174,9 +174,8 @@ namespace WingCommand
 
         private static void Prune()
         {
-            // Target searches ask once per candidate and weapon. The global sweep only
-            // needs to run once per frame; target-local reads still check liveness and
-            // expiry so changes later in the same frame are immediately visible.
+            // Sweep globally once per frame. Target-local reads still check expiry and liveness for
+            // changes within the frame.
             if (lastPrunedFrame == Time.frameCount) return;
             lastPrunedFrame = Time.frameCount;
             float now = Time.timeSinceLevelLoad;

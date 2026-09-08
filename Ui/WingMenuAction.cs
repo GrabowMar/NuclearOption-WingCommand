@@ -4,25 +4,18 @@ using UnityEngine;
 
 namespace WingCommand
 {
-    /// <summary>
-    /// A <see cref="RadialMenuAction"/> that runs a delegate instead of one of the stock
-    /// <c>ActionType</c> cases.
-    ///
-    /// <c>RadialMenuAction.AllowedOnAircraft</c> and <c>TriggerAction</c> are not virtual,
-    /// so behaviour is injected with Harmony prefixes that dispatch to this subclass and
-    /// skip the original. This mirrors how BOTE extends the same menu, and the two coexist:
-    /// each prefix only claims instances of its own type and returns true (continue) for
-    /// everything else.
-    /// </summary>
+    /// <summary>Delegate-backed native radial action. Harmony prefixes dispatch nonvirtual
+    /// AllowedOnAircraft and TriggerAction only for this subclass, allowing other mods' action types to
+    /// coexist.</summary>
     internal class WingMenuAction : RadialMenuAction
     {
-        /// <summary>Runs when the slice is selected. Receives the player's aircraft.</summary>
+        /// <summary>Action callback receiving the player's aircraft.</summary>
         public Action<Aircraft> OnTrigger;
 
-        /// <summary>Optional gate. Null means always shown.</summary>
+        /// <summary>Optional visibility/availability predicate; null permits display.</summary>
         public Func<Aircraft, bool> OnAllowed;
 
-        /// <summary>Key into <see cref="IconFactory"/> for this entry's drawn glyph.</summary>
+        /// <summary>IconFactory glyph key.</summary>
         public string IconKey;
 
         public static WingMenuAction Create(string label, Action<Aircraft> onTrigger,
@@ -33,18 +26,14 @@ namespace WingCommand
             action.DisplayName = label;
             action.OnTrigger = onTrigger;
             action.OnAllowed = onAllowed;
-            // NavLights is a no-op in the stock TriggerAction switch, so even if a prefix
-            // ever fails to claim this instance the worst case is that nothing happens.
+            // Use native no-op NavLights as fallback if no prefix claims this action.
             GameAccess.SetActionType(action, ActionType.NavLights);
             action.weapon_number = -1;
             return action;
         }
 
-        /// <summary>
-        /// Borrow sprites and colours from a stock action so the slice renders in the
-        /// game's own style. Runtime-created ScriptableObjects have null sprites and
-        /// transparent colours, which would otherwise draw an invisible wedge.
-        /// </summary>
+        /// <summary>Copy native wedge sprites and colours because new ScriptableObjects default to
+        /// invisible appearance.</summary>
         public void CopyAppearanceFrom(RadialMenuAction template)
         {
             GameAccess.CopyAppearance(this, template);
@@ -90,12 +79,8 @@ namespace WingCommand
             return false;
         }
 
-        /// <summary>
-        /// Swapping the wheel contents destroys the slice GameObjects, but the stock
-        /// <c>FlashSelection</c> coroutine keeps calling <c>Flash()</c> on the action that
-        /// was just picked for another two seconds. Without this guard that throws a
-        /// NullReferenceException every frame after any submenu switch.
-        /// </summary>
+        /// <summary>Guard Flash after submenu replacement destroys slice objects; native FlashSelection
+        /// continues invoking the old action for two seconds.</summary>
         [HarmonyPatch(nameof(RadialMenuAction.Flash))]
         [HarmonyPrefix]
         private static bool Flash_Prefix(RadialMenuAction __instance)

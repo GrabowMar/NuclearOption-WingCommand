@@ -2,7 +2,7 @@ using System;
 
 namespace WingCommand
 {
-    /// <summary>Badge dimensions in rendered pixels, independent of the map's local scale.</summary>
+    /// <summary>Badge dimensions in screen pixels, independent of local map scale.</summary>
     internal readonly struct WingMapBadgeGeometry
     {
         public const float StrokePixels = 1f;
@@ -23,7 +23,7 @@ namespace WingCommand
             float width = FiniteSize(widthPixels);
             float height = FiniteSize(heightPixels);
             float halfDiagonal = (float)Math.Sqrt(width * width + height * height) * 0.5f;
-            // Circumscribe every heading, retaining a visible gap even at the corners.
+            // Enclose every icon heading with clearance at the corners.
             return new WingMapBadgeGeometry(Math.Max(8.5f, halfDiagonal + IconGapPixels));
         }
 

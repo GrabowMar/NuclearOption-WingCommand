@@ -1,9 +1,7 @@
 using System;
 
-// Engine types shared by more than one test file. A stub that only one test needs stays in
-// that test; anything a second test also wants lives here, because the alternative is two
-// definitions of the same type in one assembly and a compile error the first time somebody
-// links another production file.
+// Shared engine stubs used by multiple linked production tests; keep test-specific types local to avoid
+// duplicate definitions.
 namespace UnityEngine
 {
     public struct Vector3

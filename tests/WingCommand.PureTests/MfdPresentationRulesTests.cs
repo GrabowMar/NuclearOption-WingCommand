@@ -4,6 +4,17 @@ namespace WingCommand.PureTests
 {
     public class MfdPresentationRulesTests
     {
+        [Fact]
+        public void PanelGrowsToFillSpaceWithEqualOuterAndBezelMargins()
+        {
+            var fit = MfdPresentationRules.FitBesideBezel(400f, 880f, true,
+                8f, 1912f, 8f, 1072f, 456f, 506f, 8f, 540f);
+            Assert.Equal(1.1f, fit.Scale, 4);
+            Assert.Equal(8f, fit.X, 4);
+            Assert.Equal(448f, fit.X + 400f * fit.Scale, 4);
+            Assert.InRange(fit.Top, 8f + 880f * fit.Scale, 1072f);
+        }
+
         [Theory]
         [InlineData(0f, 600f)]
         [InlineData(float.NaN, 600f)]

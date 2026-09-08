@@ -4,18 +4,13 @@ using UnityEngine;
 
 namespace WingCommand
 {
-    /// <summary>Economy-backed assignment of already active faction aircraft.</summary>
+    /// <summary>Purchases command rights for active faction aircraft.</summary>
     internal static class WingRecruitment
     {
         private static readonly HashSet<PersistentID> paidAircraft = new HashSet<PersistentID>();
 
-        /// <summary>
-        /// A flat fraction of the airframe's list value, once per aircraft.
-        ///
-        /// It used to compound with wing size on top of that fraction, so the fee for the
-        /// same aircraft depended on how many wingmen you happened to have at the time and
-        /// no displayed number could be trusted twice.
-        /// </summary>
+        /// <summary>One-time assignment price as a fixed fraction of airframe list value, independent of
+        /// wing size.</summary>
         public static float PriceOf(Aircraft aircraft)
         {
             if (aircraft == null || aircraft.definition == null) return 0f;

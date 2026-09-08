@@ -1,26 +1,20 @@
 using System;
+using System.Collections.Generic;
 using BepInEx.Configuration;
 using UnityEngine;
 
 namespace WingCommand
 {
-    /// <summary>
-    /// A testing aid for formation work: spawn a full wing of the player's own aircraft,
-    /// already in their slots. It is a cheat, so it is server-side only and hidden unless
-    /// explicitly enabled in config.
-    ///
-    /// It goes through a placement solver: take the leader's position, heading and
-    /// velocity, derive each slot from it, then check the result is actually a safe piece
-    /// of sky before putting an aircraft there.
-    /// </summary>
+    /// <summary>Server-only debug spawn of a selected aircraft into verified formation slots, gated
+    /// by configuration and safe placement checks.</summary>
     internal static class WingDebugActions
     {
         private const float MinimumLeaderAltitude = 80f;
 
-        /// <summary>Metres of clearance a slot must have above terrain or sea.</summary>
+        /// <summary>Required terrain or sea clearance in metres.</summary>
         private const float TerrainClearance = 60f;
 
-        /// <summary>Where a wingman should be, and how it should be moving when it gets there.</summary>
+        /// <summary>Spawn position, attitude, and velocity for a wing slot.</summary>
         private struct Placement
         {
             public Vector3 Position;
@@ -30,15 +24,10 @@ namespace WingCommand
             public GlobalPosition Global => Position.ToGlobalPosition();
         }
 
-        // ---------------------------------------------------------------- placement
+        // Debug placement.
 
-        /// <summary>
-        /// Derive a slot from the leader's current state.
-        ///
-        /// Attitude is levelled to the leader's heading rather than copied outright: a
-        /// wingman appearing mid-barrel-roll has no way to recover, and a level start is
-        /// what the formation controller expects to take over from.
-        /// </summary>
+        /// <summary>Derive a slot from current leader motion, removing leader roll and aligning the new
+        /// aircraft with its velocity for safe entry.</summary>
         private static Placement ComputeSlot(Aircraft leader, int slot, float maxSpeed)
         {
             Vector3 forward = leader.transform.forward;
@@ -58,12 +47,8 @@ namespace WingCommand
             if (maxSpeed > 1f && velocity.magnitude > maxSpeed)
                 velocity = velocity.normalized * maxSpeed;
 
-            // Point the airframe along its velocity vector, not along the flattened
-            // heading. Arriving level while carrying a climbing or diving velocity means
-            // arriving at a large angle of attack, and the aerodynamic force that
-            // generates in a single physics step is enough to kill the pilot outright.
-            // Aligning to velocity inserts the aircraft at zero AoA, which is the only
-            // attitude that produces no transient at all.
+            // Align the nose with spawn velocity to avoid a large angle-of-attack impulse during the
+            // first physics step.
             Vector3 nose = velocity.sqrMagnitude > 100f ? velocity.normalized : forward;
 
             return new Placement
@@ -74,11 +59,8 @@ namespace WingCommand
             };
         }
 
-        /// <summary>
-        /// Push a slot up until it has real clearance. Formation offsets are relative to
-        /// the leader, so over rising ground a slot can land inside a hillside even though
-        /// the leader is comfortably clear of it.
-        /// </summary>
+        /// <summary>Raise slot placement above terrain beneath it; leader clearance alone does not protect
+        /// lower hillside slots.</summary>
         private static Vector3 ClearOfGround(Vector3 position)
         {
             if (Physics.Raycast(position + Vector3.up * 3000f, Vector3.down,
@@ -91,16 +73,9 @@ namespace WingCommand
             return position;
         }
 
-        // -------------------------------------------------------------------- spawn
+        // Debug spawning.
 
-        /// <summary>
-        /// The one warning that covers everything in the Debug category.
-        ///
-        /// It used to be stapled to each cheat's name — "Free plane purchases (PROBABLY
-        /// BREAKS MOD)", "Disable wing size limit (PROBABLY BREAKS MOD)" — which made the
-        /// names long enough to crowd their own controls and made the warning easy to stop
-        /// reading by the second time. Said once, at the top, it applies to the section.
-        /// </summary>
+        /// <summary>Draw the shared Debug-category warning once above its controls.</summary>
         public static void DrawWarning(ConfigEntryBase entry)
         {
             Color previous = GUI.color;
@@ -112,29 +87,38 @@ namespace WingCommand
             GUI.color = previous;
         }
 
-        /// <summary>
-        /// The settings-window row this action is offered from.
-        ///
-        /// It used to be a button on the WMC panel's own DEBUG section, which meant the
-        /// cockpit carried a permanently-built block of cheat UI — and a heading, and a
-        /// rule — that only exists to be pressed during development. The config window
-        /// already has a Debug category holding the other two cheats, so this is where it
-        /// belongs; the panel gets those pixels back.
-        ///
-        /// No enablement check here on purpose. <see cref="SpawnWingLikePlayer"/> guards
-        /// itself and says which precondition failed, so a pressed button always answers
-        /// rather than sometimes being inert for a reason the window cannot show.
-        /// </summary>
+        /// <summary>Draw the spawn action in ConfigurationManager. SpawnWingLikePlayer validates and
+        /// reports failed preconditions so the button always explains refusal.</summary>
         public static void DrawSpawnButton(ConfigEntryBase entry)
         {
-            if (GUILayout.Button("Spawn wing of my aircraft", GUILayout.ExpandWidth(true)))
+            if (GUILayout.Button("Spawn debug wing", GUILayout.ExpandWidth(true)))
                 SpawnWingLikePlayer(WingCommandManager.Instance?.Wing);
         }
 
-        /// <summary>
-        /// Spawn a fresh wing of the player's own aircraft type, already in their slots,
-        /// and assign them. Fills the wing up to MaxWingSize.
-        /// </summary>
+        public static void DrawAircraftSelector(ConfigEntryBase entry)
+        {
+            var setting = (ConfigEntry<string>)entry;
+            GUILayout.BeginVertical();
+            GUILayout.Label(string.IsNullOrEmpty(setting.Value)
+                ? "Current aircraft" : setting.Value);
+            if (GUILayout.Button("Use my aircraft")) setting.Value = "";
+            var aircraft = Encyclopedia.i?.aircraft;
+            if (aircraft != null)
+            {
+                var choices = new List<AircraftDefinition>();
+                foreach (AircraftDefinition definition in aircraft)
+                    if (definition != null && WingShop.IsFlyableAircraft(definition) &&
+                        WingShop.MatchesLeader(definition)) choices.Add(definition);
+                choices.Sort((a, b) => string.Compare(a.unitName, b.unitName,
+                    StringComparison.OrdinalIgnoreCase));
+                foreach (AircraftDefinition definition in choices)
+                    if (GUILayout.Button(definition.unitName)) setting.Value = definition.unitName;
+            }
+            GUILayout.EndVertical();
+        }
+
+        /// <summary>Fill the wing to MaxWingSize with new copies of the player's airframe in formation
+        /// slots.</summary>
         public static void SpawnWingLikePlayer(WingRegistry wing)
         {
             if (!Guard(wing, out string why))
@@ -152,7 +136,29 @@ namespace WingCommand
                 return;
             }
 
-            GameObject prefab = leader.definition != null ? leader.definition.unitPrefab : null;
+            AircraftDefinition definition = leader.definition;
+            string selected = Plugin.Settings.DebugSpawnAircraft.Value;
+            if (!string.IsNullOrWhiteSpace(selected))
+            {
+                definition = null;
+                var catalogue = Encyclopedia.i?.aircraft;
+                if (catalogue != null)
+                    foreach (AircraftDefinition candidate in catalogue)
+                        if (candidate != null && string.Equals(candidate.unitName, selected,
+                            StringComparison.OrdinalIgnoreCase))
+                        {
+                            definition = candidate;
+                            break;
+                        }
+                if (definition == null || !WingShop.IsFlyableAircraft(definition) ||
+                    !WingShop.MatchesLeader(definition))
+                {
+                    Toast("Selected debug aircraft is unavailable or incompatible with your aircraft");
+                    return;
+                }
+            }
+
+            GameObject prefab = definition != null ? definition.unitPrefab : null;
             if (prefab == null)
             {
                 Toast("Could not resolve the aircraft prefab");
@@ -166,7 +172,13 @@ namespace WingCommand
                 return;
             }
 
-            float maxSpeed = leader.GetAircraftParameters().maxSpeed;
+            Aircraft template = prefab.GetComponent<Aircraft>();
+            if (template == null)
+            {
+                Toast("Selected prefab has no aircraft component");
+                return;
+            }
+            float maxSpeed = template.GetAircraftParameters().maxSpeed;
             int spawned = 0;
 
             for (int slot = 1; slot <= WingFormation.MaxWingSize && wing.Count < WingFormation.MaxWingSize; slot++)
@@ -180,13 +192,12 @@ namespace WingCommand
                     Aircraft spawnedAircraft = spawner.SpawnAircraft(
                         player: null,
                         prefab: prefab,
-                        // Build creates a fresh copy of this airframe's game-start preset
-                        // on every pass. Sharing the leader's mutable Loadout object across
-                        // the wing left every aircraft with no usable ammunition.
+                        // Build a separate mutable Loadout for each aircraft; shared containers can
+                        // lose ammunition during initialisation.
                         loadout: WingLoadoutCatalog.Build(
-                            leader.definition, WingLoadoutChoice.Standard),
+                            definition, WingLoadoutChoice.Standard),
                         fuelLevel: 1f,
-                        livery: leader.NetworkLiveryKey,
+                        livery: definition == leader.definition ? leader.NetworkLiveryKey : default,
                         globalPosition: p.Global,
                         rotation: p.Rotation,
                         startingVel: p.Velocity,
@@ -198,9 +209,8 @@ namespace WingCommand
 
                     if (spawnedAircraft == null) break;
 
-                    // Recruit directly into the wing in formation. Routing through QueueRecruit
-                    // is for hangar deliveries and would mark the member with deliveryPending,
-                    // starting it in Held (DEPT) behavior for several seconds instead of FORM.
+                    // Recruit airborne debug spawns directly; the hangar queue would incorrectly impose
+                    // pending-delivery hold.
                     WingMember member = wing.Add(spawnedAircraft);
                     if (member != null) spawned++;
                 }
@@ -212,11 +222,11 @@ namespace WingCommand
             }
 
             Toast(spawned > 0
-                ? "Spawned " + spawned + " " + leader.definition.unitName + " in formation"
+                ? "Spawned " + spawned + " " + definition.unitName + " in formation"
                 : "Spawn failed - see the BepInEx log");
         }
 
-        // ---------------------------------------------------------------- internals
+        // Debug guards.
 
         private static bool Guard(WingRegistry wing, out string why)
         {
@@ -234,15 +244,14 @@ namespace WingCommand
                 return false;
             }
 
-            // Both actions write world state, which only the server may do.
+            // Require server authority for world-state changes.
             if (!wing.Leader.IsServer)
             {
                 why = "Host or single-player only";
                 return false;
             }
 
-            // Slots are relative to the leader, so a leader on the ground puts wingmen at
-            // ground level with no room to recover.
+            // Require leader altitude so relative slots have room for safe entry.
             if (wing.Leader.radarAlt < MinimumLeaderAltitude)
             {
                 why = "Climb above " + MinimumLeaderAltitude + " m first";

@@ -7,22 +7,14 @@ using NOAvionics.Ui;
 
 namespace WingCommand
 {
-    /// <summary>
-    /// Native HUD rendering for the compact wing strip, plus an IMGUI toast for
-    /// debug-only fallback messages.
-    ///
-    /// The command wheel lives in <see cref="WingRadialOverlay"/> (uGUI) and the stock
-    /// <c>RadialMenuMain</c> (via <see cref="WingRadialMenu"/>). This file used to draw
-    /// the wheel in IMGUI as well; that path is gone.
-    /// </summary>
+    /// <summary>Native compact wing HUD plus fallback debug IMGUI notices; radial rendering lives in its
+    /// own overlay/integration classes.</summary>
     internal static class WingHud
     {
         private static bool stylesReady;
         private static GUIStyle toastStyle;
 
-        // Read through UiPalette rather than restated here. The accent in particular was a
-        // hand-copied duplicate of UiTheme.Friendly's fallback, so the HUD kept the stock
-        // green even in a mission whose theme had moved off it.
+        // Read shared theme tokens so mission theme changes reach the HUD.
         private static Color Panel => AvTheme.Unity(AvTokens.HudPanel);
         private static Color Accent => AvTheme.Friendly;
 
@@ -56,33 +48,31 @@ namespace WingCommand
             return t;
         }
 
-        private const float StatusHeaderHeight = 24f;
-        private const float StatusRowHeight = 30f;
-        private const float StatusPanelWidth = 210f;
+        private const float StatusHeaderHeight = 42f;
+        private const float StatusRowHeight = 36f;
+        private const float StatusPanelWidth = 230f;
         private const float StatusMapGap = 0f;
         private const float StatusBackdropOutsideFeather = 18f;
         private const float StatusBackdropInnerFeather = 12f;
         private const float StatusBackdropSeamOverlap = 18f;
         private const int StatusBackdropTextureSize = 80;
 
-        // Three type sizes, named and reused everywhere, rather than a different number per
-        // label. The strip previously ran a 14 px callsign against a 9 px state code, a
-        // contrast wider than anything in the game's own symbology, which is a large part of
-        // why it read as a separate overlay rather than as part of the HUD.
+        // Use the game type scale for identity and supporting status text.
 
-        /// <summary>The strip's own heading.</summary>
+        /// <summary>Wing-strip heading size.</summary>
         private const float HeaderText = AvTokens.FontSmall;
 
-        /// <summary>Callsign and range: what the strip is actually read for.</summary>
+        /// <summary>Primary callsign and range size.</summary>
         private const float PrimaryText = AvTokens.FontLead;
 
-        /// <summary>Order code and other supporting detail.</summary>
-        private const float SecondaryText = AvTokens.FontMicro;
+        /// <summary>Supporting order and status size.</summary>
+        private const float SecondaryText = AvTokens.FontSmall;
 
         private static float statusWidth = StatusPanelWidth;
 
         private static RectTransform statusRoot;
         private static TMP_Text statusTitle;
+        private static TMP_Text statusSummary;
         private static CombatHUD statusHud;
         private static Canvas statusCanvas;
         private static Sprite statusBackdropSprite;
@@ -90,10 +80,8 @@ namespace WingCommand
         private static int lastStatusCount = -1;
         private static readonly List<StatusRow> statusRows = new List<StatusRow>();
 
-        /// <summary>
-        /// Build the roster inside the game's HUD canvas. This gives it the same scaling,
-        /// font rendering, theme changes and resolution handling as stock symbology.
-        /// </summary>
+        /// <summary>Build inside the native HUD canvas to inherit font, scale, theme, and resolution
+        /// behaviour.</summary>
         public static void TickStatusPanel(WingRegistry wing)
         {
             CombatHUD hud = SceneSingleton<CombatHUD>.i;
@@ -107,8 +95,7 @@ namespace WingCommand
                 return;
             }
 
-            // The HUD and its canvas are scene objects. Resolve the hierarchy only when the
-            // panel is first built or the scene supplies a different HUD instance.
+            // Resolve scene canvas hierarchy only at creation or when the HUD instance changes.
             Canvas canvas = statusRoot != null && statusHud == hud
                 ? statusCanvas
                 : hud.GetComponentInParent<Canvas>();
@@ -140,6 +127,7 @@ namespace WingCommand
             if (statusRoot != null) Object.Destroy(statusRoot.gameObject);
             statusRoot = null;
             statusTitle = null;
+            statusSummary = null;
             statusHud = null;
             statusCanvas = null;
             statusRows.Clear();
@@ -164,26 +152,24 @@ namespace WingCommand
 
             var root = new GameObject("WingCommand_Status", typeof(RectTransform));
             statusRoot = root.GetComponent<RectTransform>();
-            // The minimized map already has a dedicated HUD anchor. Sharing that parent
-            // avoids translating between the map canvas and the flight-HUD canvas, which
-            // placed the panel off-screen on screen-space-camera HUDs.
+            // Share the minimap HUD anchor to avoid cross-canvas coordinate errors on camera-space
+            // HUDs.
             statusRoot.SetParent(map.hudMapAnchor, worldPositionStays: false);
             statusRoot.SetAsLastSibling();
 
             CreateStatusBackdrop(statusRoot, map);
 
             statusTitle = WingUi.Label(statusRoot, "", new Rect(7f, -2f, statusWidth - 14f, 20f),
-                                       AvTheme.Accent.WithAlpha(0.90f), HeaderText, FontStyles.Normal,
+                                       AvTheme.Accent, HeaderText, FontStyles.Bold,
                                        TextAlignmentOptions.Left);
+            statusSummary = WingUi.Label(statusRoot, "", new Rect(7f, -21f, statusWidth - 14f, 16f),
+                                         WingUi.TextPrimary, SecondaryText, FontStyles.Normal,
+                                         TextAlignmentOptions.Left);
             PositionStatusPanel(map);
         }
 
-        /// <summary>
-        /// The minimized map is vignetted into the cockpit rather than framed by a hard
-        /// rectangle. Continue that vignette behind the roster with a soft, one-sided alpha
-        /// haze. Unlike a panel sprite, the fade crosses the roster bounds: there is no hard
-        /// top or right silhouette for the eye to read as a second card.
-        /// </summary>
+        /// <summary>Extend the minimap vignette behind the roster with a one-sided fade beyond its bounds,
+        /// avoiding a second hard-edged panel.</summary>
         private static void CreateStatusBackdrop(RectTransform parent, DynamicMap map)
         {
             var go = new GameObject("MapHaze", typeof(RectTransform), typeof(Image));
@@ -206,11 +192,8 @@ namespace WingCommand
             backdrop.raycastTarget = false;
         }
 
-        /// <summary>
-        /// Resolve the minimap's real interior colour rather than maintaining a second,
-        /// almost-but-not-quite matching HUD palette. Most map backgrounds are a white mask
-        /// tinted by the Image; others bake the dark fill into their sprite, so combine both.
-        /// </summary>
+        /// <summary>Sample the minimap fill by combining sprite colour and Image tint instead of
+        /// maintaining a separate palette.</summary>
         private static Color MinimapFill(DynamicMap map)
         {
             var fallback = new Color(0.012f, 0.030f, 0.034f, 0.80f);
@@ -228,14 +211,13 @@ namespace WingCommand
                     fill.a * spriteFill.a);
             }
 
-            // An untextured white mask or a custom material does not expose its fill through
-            // the sprite. In that case the measured value is not useful; use the stock-map
-            // fallback observed before its shader instead of drawing a bright HUD cloud.
+            // Use the measured native fallback when white masks or custom materials make sprite
+            // sampling unrepresentative.
             float luminance = fill.r * 0.2126f + fill.g * 0.7152f + fill.b * 0.0722f;
             return fill.a > 0.05f && luminance < 0.40f ? fill : fallback;
         }
 
-        /// <summary>Read one centre texel, with a GPU fallback for non-readable atlases.</summary>
+        /// <summary>Sample a centre texel, using GPU readback for non-readable atlases.</summary>
         private static bool TrySampleSpriteCentre(Sprite sprite, out Color color)
         {
             color = Color.white;
@@ -260,7 +242,7 @@ namespace WingCommand
             Texture2D sample = null;
             try
             {
-                // A zero scale maps the entire 1 px target to this atlas coordinate.
+                // Zero UV scale samples the same atlas coordinate into the 1 px target.
                 Graphics.Blit(source, target, Vector2.zero, new Vector2(u, v));
                 RenderTexture.active = target;
                 sample = new Texture2D(1, 1, TextureFormat.RGBA32, mipChain: false);
@@ -303,9 +285,8 @@ namespace WingCommand
                     float px = x + 0.5f;
                     float py = y + 0.5f;
 
-                    // The straight seam reaches full opacity where the roster begins. The
-                    // other edges start fading inside the roster and finish outside it, so
-                    // neither the top nor the right side can form a visible box outline.
+                    // Keep the join opaque while fading other edges beyond the roster to avoid a
+                    // visible box.
                     float seamAlpha = Mathf.SmoothStep(
                         0f, StatusBackdropSeamOverlap, px);
                     float rightAlpha = 1f - Mathf.SmoothStep(
@@ -335,9 +316,11 @@ namespace WingCommand
 
         private static void RefreshStatusPanel(WingRegistry wing)
         {
-            statusTitle.text = "WING " + wing.Count + "  ·  " +
-                               FormationShapes.Pretty(WingFormation.Shape).ToUpperInvariant() +
-                               "  ·  " + wing.Roe.ToString().ToUpperInvariant();
+            statusTitle.text = "WING  /  " + wing.Count;
+            statusTitle.color = AvTheme.Accent;
+            statusSummary.text = FormationShapes.Pretty(WingFormation.Shape).ToUpperInvariant() +
+                                 "  ·  " + wing.Roe.ToString().ToUpperInvariant();
+            statusSummary.color = WingUi.TextPrimary;
 
             while (statusRows.Count < wing.Count)
                 statusRows.Add(new StatusRow(statusRoot, statusRows.Count));
@@ -346,7 +329,7 @@ namespace WingCommand
             {
                 if (i < wing.Count)
                 {
-                    statusRows[i].Place(i, wing.Count);
+                    statusRows[i].Place(i);
                     statusRows[i].Bind(wing.Members[i], wing.Leader);
                 }
                 else statusRows[i].Hide();
@@ -368,13 +351,13 @@ namespace WingCommand
             statusRoot.anchorMin = statusRoot.anchorMax = new Vector2(0.5f, 0.5f);
             statusRoot.pivot = Vector2.zero;
 
-            // This is the roster's only placement: docked to the minimap's right edge and
-            // sharing its baseline. It grows upward, so membership changes never move the
-            // seam or detach the two surfaces.
+            // Dock beside the minimap by default; read offsets each tick to apply live F1 changes.
             Vector3 worldBottomRight = mapRect.TransformPoint(
                 new Vector3(mapRect.rect.xMax, mapRect.rect.yMin, 0f));
             Vector3 position = map.hudMapAnchor.InverseTransformPoint(worldBottomRight)
                              + Vector3.right * StatusMapGap;
+            if (Plugin.Settings != null)
+                position += new Vector3(Plugin.Settings.WingHudX.Value, Plugin.Settings.WingHudY.Value, 0f);
 
             statusRoot.localPosition = position;
             statusRoot.localRotation = Quaternion.identity;
@@ -400,26 +383,26 @@ namespace WingCommand
                 rect.SetParent(parent, worldPositionStays: false);
 
                 icon = StatusIcon(rect, new Rect(7f, -6f, 18f, 18f));
-                identity = WingUi.Label(rect, "", new Rect(32f, -2f, 92f, 17f),
+                identity = WingUi.Label(rect, "", new Rect(32f, -2f, 104f, 17f),
                                         WingMarkers.MemberColor, PrimaryText, FontStyles.Normal,
                                         TextAlignmentOptions.Left);
-                state = WingUi.Label(rect, "", new Rect(32f, -17f, 118f, 13f),
-                                     WingMarkers.MemberColor.WithAlpha(0.62f), SecondaryText,
+                state = WingUi.Label(rect, "", new Rect(32f, -19f, 190f, 16f),
+                                     WingUi.TextPrimary, SecondaryText,
                                      FontStyles.Normal, TextAlignmentOptions.Left);
-                distance = WingUi.Label(rect, "", new Rect(126f, -3f, 76f, 16f),
-                                        WingMarkers.MemberColor.WithAlpha(0.78f), PrimaryText,
+                distance = WingUi.Label(rect, "", new Rect(142f, -3f, 80f, 16f),
+                                        WingUi.TextPrimary, PrimaryText,
                                         FontStyles.Normal, TextAlignmentOptions.Right);
-                rangeCue = StatusIcon(rect, new Rect(32f, -27f, 168f, 1f));
+                rangeCue = StatusIcon(rect, new Rect(32f, -34f, 190f, 1f));
             }
 
-            public void Place(int index, int count)
+            public void Place(int index)
             {
                 WingUi.Place(rect, new Rect(
                     0f,
                     -StatusHeaderHeight - index * StatusRowHeight,
                     statusWidth,
                     StatusRowHeight));
-                cueWidth = 168f;
+                cueWidth = 190f;
             }
 
             public void Bind(WingMember member, Aircraft leader)
@@ -451,15 +434,15 @@ namespace WingCommand
                 bool damaged = IsDamaged(aircraft);
                 float bingo = Plugin.Settings != null ? Plugin.Settings.BingoFuel : WingTuning.BingoFuel;
                 bool lowStores = member.Fuel <= bingo || member.Ammo <= 0;
-                // Colours come from the game's theme, so the strip follows a theme change the
-                // way the rest of the HUD does.
+                // Use theme-derived status colours for consistent HUD changes.
                 Color color = !member.Alive || damaged || member.IsPanicking
                     ? AvTheme.Alert
                     : lowStores ? AvTheme.Warning : WingMarkers.MemberColor;
                 icon.color = color;
                 identity.color = color;
-                state.color = color.WithAlpha(0.62f);
-                distance.color = color.WithAlpha(0.78f);
+                state.color = lowStores || damaged || !member.Alive || member.IsPanicking
+                    ? color : WingUi.TextPrimary;
+                distance.color = WingUi.TextPrimary;
                 rangeCue.color = color.WithAlpha(0.34f);
             }
 
@@ -479,14 +462,7 @@ namespace WingCommand
                 return false;
             }
 
-            /// <summary>
-            /// The order abbreviation, plus the weapon preference when it is not the
-            /// default.
-            ///
-            /// Appended rather than given a column of its own: the strip is docked against
-            /// the minimap and cannot grow sideways, and AUTO is both the default and the
-            /// common case — so an ordinary flight reads exactly as it did before.
-            /// </summary>
+            /// <summary>Order abbreviation with non-default weapon preference; omit AUTO to keep status concise.</summary>
             private static string StateText(WingMember member)
             {
                 if (member == null) return string.Empty;
@@ -518,15 +494,11 @@ namespace WingCommand
 
             private static string OrderCode(WingMember member)
             {
-                // What it is actually doing outranks what it was told to do. Null means it
-                // is flying the order, so the order is what to name.
+                // Display active override behaviour first; null falls back to the standing order.
                 string behaviour = WingBehaviourLabels.ShortCode(member.Behaviour.BehaviourId);
                 if (behaviour != null) return behaviour;
 
-                // A host profile renames orders whose meaning changes from a non-aircraft
-                // seat. The stock codes below are deliberately terser than the catalogue's
-                // ("ENG", not "ENGAGE") because this strip is four characters wide, so this
-                // asks the profile directly rather than routing through ShortLabel.
+                // Use host short-code overrides directly; HUD space is narrower than catalogue labels.
                 string host = WingHost.Current.ShortLabelFor(member.Order);
                 if (host != null) return host;
 

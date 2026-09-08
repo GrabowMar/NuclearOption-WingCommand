@@ -3,7 +3,7 @@ using System.Text;
 
 namespace WingCommand
 {
-    /// <summary>A purchase plan, or an immutable record of an aircraft's fitted stores.</summary>
+    /// <summary>Purchase fit choice or immutable snapshot of fitted stores.</summary>
     internal readonly struct WingLoadoutChoice
     {
         public readonly string TemplateId;
@@ -31,21 +31,9 @@ namespace WingCommand
             fittedKeys == null ? this : new WingLoadoutChoice(TemplateId, fittedKeys);
     }
 
-    /// <summary>
-    /// One saved loadout template, in the only form that can be written to a config file:
-    /// strings.
-    ///
-    /// Nothing here is resolved against the game. A template is an airframe key, a name, and
-    /// one store key per hardpoint set in the order the airframe declares them — an empty
-    /// slot meaning a bare pylon, which is a legal thing for an aircraft to launch with. The
-    /// keys stay unresolved until a requisition is actually built, so a template written
-    /// against a store this game build no longer ships degrades to an empty pylon rather
-    /// than refusing to load.
-    ///
-    /// This is the same shape the game uses for its own saved loadouts: a flat ordered list
-    /// of mount identities. These are normally <c>jsonKey</c>s; older workshop stores that
-    /// omit one use a namespaced ScriptableObject asset name.
-    /// </summary>
+    /// <summary>Serializable template identity, airframe key, name, and ordered store keys. Empty keys
+    /// mean bare pylons. Resolve keys only when building; unavailable stores become empty stations. Prefer
+    /// jsonKey, with namespaced asset-name fallback for older mods.</summary>
     internal sealed class LoadoutTemplateRecord
     {
         public string Id;
@@ -69,9 +57,8 @@ namespace WingCommand
         public LoadoutTemplateRecord Copy(string newId, string newName) =>
             new LoadoutTemplateRecord(newId, AirframeKey, newName, MountKeys);
 
-        /// <summary>The key on one pylon, or null for a bare one and for a pylon this
-        /// template is too short to describe — an airframe gaining a station between
-        /// versions should leave that station empty, not throw.</summary>
+        /// <summary>Pylon key, or null for a bare or missing entry; newly added airframe stations remain
+        /// empty.</summary>
         public string KeyAt(int index) =>
             index >= 0 && index < MountKeys.Count ? MountKeys[index] : null;
 
@@ -83,26 +70,16 @@ namespace WingCommand
         }
     }
 
-    /// <summary>
-    /// Reads and writes the whole template list as one config string.
-    ///
-    /// A hand-rolled encoding rather than JSON, because the mod references no serialiser and
-    /// this payload does not justify adding one: it is a list of short strings with no
-    /// nesting. The format is <c>airframe|id|name|key1,key2,,key4</c> per record, records
-    /// separated by <c>;</c>, with the delimiters percent-escaped inside any field.
-    ///
-    /// Decoding is deliberately total. Every failure a config file can present — a truncated
-    /// string, a record with the wrong field count, a stray delimiter someone typed in by
-    /// hand — drops that one record and keeps the rest. The alternative is a panel that will
-    /// not open because one line of a text file is wrong.
-    /// </summary>
+    /// <summary>Serializes a flat template list as airframe|id|name|key1,key2,,key4 records separated by
+    /// semicolons, with percent-escaped delimiters. Malformed records are dropped independently so other
+    /// templates remain usable.</summary>
     internal static class LoadoutTemplateCodec
     {
         private const char RecordSeparator = ';';
         private const char FieldSeparator = '|';
         private const char KeySeparator = ',';
 
-        /// <summary>Fields per record: airframe, id, name, keys.</summary>
+        /// <summary>Record fields: airframe key, stable ID, name, and pylon keys.</summary>
         private const int FieldCount = 4;
 
         public static string EncodeInitializedAirframes(IEnumerable<string> keys)
@@ -135,8 +112,7 @@ namespace WingCommand
             {
                 if (record == null) continue;
 
-                // A record with no identity cannot be read back as anything, so it is
-                // dropped here rather than written out to fail decoding later.
+                // Skip records lacking identity before writing undecodable data.
                 if (string.IsNullOrEmpty(record.Id) || string.IsNullOrEmpty(record.AirframeKey))
                     continue;
 
@@ -172,8 +148,7 @@ namespace WingCommand
         {
             if (string.IsNullOrEmpty(chunk)) return null;
 
-            // Capped split: a name that somehow still holds a raw separator must not be able
-            // to shift the key list into the name's place.
+            // Limit field splitting so raw delimiters cannot shift the expected key-list position.
             string[] fields = chunk.Split(new[] { FieldSeparator }, FieldCount);
             if (fields.Length != FieldCount) return null;
 
@@ -188,8 +163,7 @@ namespace WingCommand
                 Name = Unescape(fields[2]),
             };
 
-            // An empty key field is a template with no pylons, not one pylon named "" —
-            // which is what a bare Split would produce.
+            // An empty key field means zero pylons, not one empty-name pylon.
             if (fields[3].Length > 0)
             {
                 string[] keys = fields[3].Split(KeySeparator);
@@ -203,10 +177,8 @@ namespace WingCommand
             return record;
         }
 
-        /// <summary>
-        /// Percent-escape the delimiters, and the escape character itself first, so that
-        /// unescaping cannot mistake a literal percent for the start of a sequence.
-        /// </summary>
+        /// <summary>Escape percent before delimiters so literal percent signs cannot become escape
+        /// sequences.</summary>
         private static string Escape(string value)
         {
             if (string.IsNullOrEmpty(value)) return "";
@@ -224,7 +196,7 @@ namespace WingCommand
                 .Replace(",", "%2C");
         }
 
-        /// <summary>Undo <see cref="Escape"/>, percent last for the same reason.</summary>
+        /// <summary>Decode delimiters before percent to preserve literal escape-like text.</summary>
         private static string Unescape(string value)
         {
             if (string.IsNullOrEmpty(value)) return "";

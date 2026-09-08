@@ -1,7 +1,7 @@
 using System;
 using System.Collections.Generic;
 
-// Unity's JSON serializer populates these fields by reflection.
+// Unity populates JSON fields through reflection.
 #pragma warning disable CS0649
 
 namespace WingCommand
@@ -57,7 +57,7 @@ namespace WingCommand
              until == "seconds" ? In(amount, 0.05f, 5) :
              (until == "bank" || until == "recover") && amount == 0);
 
-        // Arc progress is measured from body rates, never inferred from elapsed time.
+        // Measure arc completion from integrated body rates, not elapsed time alone.
         public bool Complete(float pitchDegrees, float rollDegrees, float seconds,
                              float bankError, float rollRate, float noseY)
         {

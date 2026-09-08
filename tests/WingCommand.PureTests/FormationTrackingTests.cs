@@ -6,6 +6,46 @@ namespace WingCommand.PureTests
     public class FormationTrackingTests
     {
         [Theory]
+        [InlineData(0f, 0f)]
+        [InlineData(200f, 0f)]
+        [InlineData(1000f, 60f)]
+        [InlineData(1000f, -60f)]
+        public void RejoinRetainsAccelerationLeadAndVerticalSpeed(float gap, float climb)
+        {
+            float baseline = FormationTracking.ApproachSpeed(0f, gap, 0f, 120f,
+                0f, 120f, 2f, 1f, 1f, 0.75f);
+            float expected = (float)Math.Sqrt(baseline * baseline + climb * climb);
+            foreach (float acceleration in new[] { -8f, 0f, 8f })
+            {
+                float lead = ThrustModel.PredictSpeed(120f, acceleration, 0.75f, 25f) - 120f;
+                float speed = FormationTracking.ApproachSpeed(0f, gap, 0f, 120f,
+                    0f, 120f, 2f, 1f, 1f, 0.75f, climb, lead);
+                Assert.InRange(Math.Abs(speed - expected - lead), 0f, 0.0001f);
+            }
+        }
+
+        [Theory]
+        [InlineData(-0.2f)]
+        [InlineData(0.2f)]
+        public void AcceleratingTurnKeepsSpeedLeadThroughPursuit(float turnRate)
+        {
+            var gap = new System.Numerics.Vector2(0f, 3000f);
+            var velocity = new System.Numerics.Vector2(0f, 120f);
+            float Pursuit(float acceleration)
+            {
+                float predicted = ThrustModel.PredictSpeed(120f, acceleration, 0.75f, 25f);
+                var future = new System.Numerics.Vector2(0f, predicted);
+                var plan = FormationIntercept.Solve(gap, future, System.Numerics.Vector2.Zero,
+                    future, 120f, 320f, turnRate);
+                Assert.InRange(plan.ArrivalVelocity.Length(), predicted - 0.001f, predicted + 0.001f);
+                return FormationClosure.PursuitSpeed(gap, velocity, plan, predicted,
+                    320f, 2f, 0.75f, 120f);
+            }
+            Assert.True(Pursuit(8f) > Pursuit(0f));
+            Assert.True(Pursuit(-8f) < Pursuit(0f));
+        }
+
+        [Theory]
         [InlineData(0f)]
         [InlineData(0.0000001f)]
         [InlineData(-0.0000001f)]
@@ -33,8 +73,8 @@ namespace WingCommand.PureTests
         [InlineData(120f)]
         public void InsideAndOutsideSlotsStayOnTheirOwnTurnRadius(float lateral)
         {
-            // Leader turns right around x=1000. The slot rotates about that same
-            // centre, including its aft offset, without adding offset velocity twice.
+            // Rotate the aft-offset slot around the leader's right-turn centre at x=1000 without
+            // double-counting offset velocity.
             var point = FormationTracking.FutureSlotOffset(0f, 0f, 100f,
                 lateral, 20f, -100f, 0.1f, 5f);
             double expectedRadius = Math.Sqrt(Math.Pow(1000f - lateral, 2) + 10000d);

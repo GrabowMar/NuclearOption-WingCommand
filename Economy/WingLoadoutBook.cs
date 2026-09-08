@@ -2,11 +2,8 @@ using System.Collections.Generic;
 
 namespace WingCommand
 {
-    /// <summary>
-    /// Tracks delivered fits by persistent aircraft ID and future purchase plans by definition.
-    /// Recovery transfers the fit to its concrete <see cref="WingSupplyReserve"/> slot
-    /// because the recovered aircraft and its ID are destroyed.
-    /// </summary>
+    /// <summary>Tracks fitted loadouts by aircraft ID and future plans by definition. Recovery moves fits
+    /// to reserve slots before aircraft IDs disappear.</summary>
     internal static class WingLoadoutBook
     {
         private sealed class FittedLoadout
@@ -27,9 +24,9 @@ namespace WingCommand
             planned.Clear();
         }
 
-        // -------------------------------------------------------------------- planning
+        // Purchase planning.
 
-        /// <summary>What the next requisition of this airframe will be fitted with.</summary>
+        /// <summary>Planned fit for the next purchase of this definition.</summary>
         public static WingLoadoutChoice PlannedFor(AircraftDefinition definition)
         {
             if (definition == null) return WingLoadoutChoice.Standard;
@@ -44,17 +41,14 @@ namespace WingCommand
             planned[definition] = choice;
         }
 
-        // ----------------------------------------------------------------------- aboard
+        // Fitted loadouts.
 
-        /// <summary>True when this mod knows what the aircraft is carrying.</summary>
+        /// <summary>Whether this aircraft has a recorded fit.</summary>
         public static bool IsKnown(Aircraft aircraft) =>
             aircraft != null && aboard.ContainsKey(aircraft.persistentID);
 
-        /// <summary>
-        /// What the aircraft is carrying. Standard for anything this mod did not fit —
-        /// including an active mission aircraft the player assigned, which arrives with
-        /// whatever the mission gave it.
-        /// </summary>
+        /// <summary>Recorded fit, or Standard for aircraft the mod did not configure, including recruited
+        /// mission aircraft.</summary>
         public static WingLoadoutChoice AboardOf(Aircraft aircraft)
         {
             if (aircraft == null) return WingLoadoutChoice.Standard;
@@ -69,12 +63,12 @@ namespace WingCommand
             return fitted.Choice;
         }
 
-        /// <summary>Record what a delivered requisition was actually fitted with.</summary>
+        /// <summary>Record a delivered aircraft's actual fit.</summary>
         public static void NoteSpawned(Aircraft aircraft, WingLoadoutChoice choice)
         {
             if (aircraft == null) return;
-            // Native registration can run before Hangar finishes installing the fit.
-            // Even a non-null loadout can still be a placeholder during this callback.
+            // Native registration may precede final hangar fitting; even a non-null loadout can be
+            // temporary.
             aboard[aircraft.persistentID] = new FittedLoadout
             {
                 Choice = choice,

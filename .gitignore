@@ -1,48 +1,45 @@
-# Build output
+# Generated build files
 bin/
 obj/
 
-# IDE
+# Editor settings and user state
 .vs/
 .idea/
 *.user
 *.suo
 
-# OS
+# Operating-system metadata
 Thumbs.db
 .DS_Store
 
-# Release archives
+# Packaged releases
 dist/
 
-# Build metadata
+# Generated build metadata
 build/
 
-# Docs
+# Local documentation
 docs/
 
-# Local AI agent skills (kept in-tree for portability, not published)
+# Unpublished local agent skills
 .opencode/
 
-# Skills were mirrored here by NTFS junctions until the repo was renamed, which
-# left them pointing at a path that no longer exists and silently unloadable. They
-# are copied into ~/.claude/skills by `nomod skills` now; the rule stays so a
-# re-created local copy is never committed.
+# Local skill copies managed by nomod skills
 .claude/skills/
 
-# nomodkit's local session archives and caches
+# Local nomodkit sessions and caches
 .nomodkit/
 
-# Local AI agent config
+# Local agent configuration
 .claude/
 
-# CI workflows
+# Excluded CI workflow files
 .github/workflows/
 
-# AI agent instructions
+# Local agent instructions
 CLAUDE.md
 
-# Local debug dumps and binaries
+# Debug artifacts, binaries, and test results
 .dll-backup/
 *.dll
 *.pdb

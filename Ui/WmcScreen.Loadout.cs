@@ -10,15 +10,10 @@ using NOAvionics.Ui;
 
 namespace WingCommand
 {
-    /// <summary>The WMC panel's LOADOUT tab: the per-pylon template editor.</summary>
+    /// <summary>LOADOUT page for persistent pylon-template editing.</summary>
     internal static partial class WmcScreen
     {
-        // --- Loadout page ---
-        //
-        // The page is a template editor now, not a picker. Nothing on it reports the flight:
-        // what a wingman in the air is carrying is fixed and is reported on WING, and a
-        // control the player cannot act on took a third of a page that now has pylons to
-        // draw.
+        // Template editing state; current airborne fits are displayed on WING.
         private static TMP_Text loadoutStatusLabel;
         private static TMP_Text loadoutProfileTitle;
         private static Image loadoutProfileRail;
@@ -41,7 +36,7 @@ namespace WingCommand
 
         private const int AirframeGridRows = 4;
         private const int AirframeGridCols = 4;
-        private const int AirframeGridCapacity = AirframeGridRows * AirframeGridCols; // 16
+        private const int AirframeGridCapacity = AirframeGridRows * AirframeGridCols; // Airframe grid capacity.
         private const float AirframeTileHeight = 36f;
         private const float AirframeTileGap = 4f;
 
@@ -52,7 +47,7 @@ namespace WingCommand
         private static TMP_Text airframePageLabel;
         private static readonly List<AirframeTile> airframeTiles = new List<AirframeTile>();
 
-        /// <summary>The list the popup is currently showing, rebuilt on each open.</summary>
+        /// <summary>Popup entries rebuilt when opened.</summary>
         private static readonly List<AvKit.PopupEntry> popupEntries =
             new List<AvKit.PopupEntry>();
 
@@ -62,40 +57,22 @@ namespace WingCommand
         private static AvKit.Popup loadoutPopup;
         private static AvKit.Popup shopTemplatePopup;
 
-        /// <summary>
-        /// Which template the editor is working on, by id.
-        ///
-        /// An id rather than the record, because the record can be deleted from underneath
-        /// this — by the delete button, or by a config edit between missions — and a stale
-        /// object reference would keep an editor open on a template that no longer exists.
-        /// </summary>
+        /// <summary>Resolve the edited template by stable ID so deletion cannot leave a stale record
+        /// active.</summary>
         private static string editingTemplateId;
 
-        /// <summary>Which page of the airframe's pylons the editor is showing.</summary>
+        /// <summary>Current pylon page for the edited airframe.</summary>
         private static int pylonPage;
 
-        /// <summary>
-        /// Pylons drawn at once. Six keeps the editor dense without reserving a visibly empty
-        /// seventh row for the common five-station airframe.
-        /// </summary>
+        /// <summary>Visible pylon rows per page, sized for common airframes without excess empty
+        /// space.</summary>
         private const int PylonRowsPerPage = 6;
 
-        // ----------------------------------------------------------------- loadout page
+        // Loadout-page construction.
 
-        /// <summary>
-        /// Where loadout templates are built: a store on every pylon, saved under a name.
-        ///
-        /// The page used to offer bulk-generated role and factory fits. Those paths proved
-        /// unreliable, so templates now start empty and every store is chosen explicitly.
-        /// The old flight list is also gone because it reported something the player could
-        /// not act on from here and the WING tab already says it.
-        ///
-        /// What is left is a workshop, and nothing on it is per-mission. A template is a
-        /// standing preference kept in the config file, and this page never touches the
-        /// aircraft in the air or the funds in the bank. Choosing which template the next
-        /// requisition of a type flies with is a purchase decision and belongs, with the
-        /// price and the stock count, on SUPPLY.
-        /// </summary>
+        /// <summary>Build persistent templates from explicit per-pylon choices without changing live
+        /// aircraft or funds. SUPPLY selects the template for a purchase; WING displays airborne
+        /// fits.</summary>
         private static float AddLoadoutPage(RectTransform parent, float y)
         {
             loadoutPopup = new AvKit.Popup(parent, PanelWidth);
@@ -104,9 +81,7 @@ namespace WingCommand
             float airframeGridTop = y;
             y = AddAirframeGrid(parent, airframeGridTop);
 
-            // Build after the tile grid so a multi-page pager is the topmost sibling at the
-            // shared heading edge. This prevents the first row's last tile from swallowing
-            // the arrows when the canvas rounds a shared border onto the same pixel.
+            // Build pager after tiles so shared-border rounding cannot let a tile intercept its arrows.
             airframePager = HeaderPager(parent, airframeGridTop + Space5,
                                         () => TurnAirframePage(-1), () => TurnAirframePage(1),
                                         out airframePrevButton, out airframePageLabel, out airframeNextButton);
@@ -117,9 +92,7 @@ namespace WingCommand
             float left = Pad + GutterWidth;
             float inner = PanelWidth - Pad - left;
 
-            // The selector, then the three things that can be done to the list it selects
-            // from: new, copy, delete. "C" and "X" were guesses at what a single glyph
-            // meant; a three-letter word is not.
+            // Group template selection with clearly labelled new, copy, and delete actions.
             const float actionWidth = WingUi.ButtonCompact;
             const float actionBlock = (actionWidth + Gap) * 3f;
 
@@ -132,8 +105,8 @@ namespace WingCommand
             templateLabel = null;
 
             float actionX = left + selectWidth + Gap;
-            templateNewButton = WingUi.Button(parent, "+", new Rect(actionX, y, actionWidth, RowHeight),
-                                              FontBody, UiButtonStyle.Default, NewTemplate)
+            templateNewButton = WingUi.Button(parent, "NEW", new Rect(actionX, y, actionWidth, RowHeight),
+                                              FontSmall, UiButtonStyle.Default, NewTemplate)
                                      .WithTooltip(LoadoutHint.New);
             templateCopyButton = WingUi.Button(parent, "COPY",
                                                new Rect(actionX + actionWidth + Gap, y,
@@ -147,10 +120,8 @@ namespace WingCommand
                                         .WithTooltip(LoadoutHint.Delete);
             y -= RowHeight + Gap;
 
-            // Renaming is only offered where the keyboard can actually be held off the
-            // aircraft. On a build where that fails the field is replaced by a readout, and
-            // templates keep the numbered names they are created with — a name is worth
-            // having, but not at the price of typing one into the flight controls.
+            // Offer rename input only when keyboard capture works; otherwise show the saved/default
+            // name without leaking typing into flight controls.
             Gutter(parent, y, "NAME");
             float nameWidth = inner;
 
@@ -202,12 +173,7 @@ namespace WingCommand
             return AddLoadoutProfile(parent, y);
         }
 
-        /// <summary>
-        /// Give the aggregate fit a real surface below its individual pylon rows. The
-        /// previous two loose hint lines left this tab's inherited vertical slack looking
-        /// accidental; the card makes mass, role, and next-step feedback scannable at the
-        /// point where a player has just finished editing the stations.
-        /// </summary>
+        /// <summary>Show aggregate mass, role, and next-step feedback below the pylon rows.</summary>
         private static float AddLoadoutProfile(RectTransform parent, float y)
         {
             const float height = 96f;
@@ -235,18 +201,17 @@ namespace WingCommand
             return y - height - Gap;
         }
 
-        /// <summary>Where the pylon list starts, so a popup can be dropped onto a row.</summary>
+        /// <summary>Pylon-list origin for row-aligned store popups.</summary>
         private static float pylonAreaY;
 
         private static readonly Column[] PylonColumns =
         {
             new Column("PYLON", Space2, 140f),
-            // Left-aligned, not right: a long store name ellipsised from the right keeps its
-            // start ("12.7mm Machine Gun…") instead of losing it ("…Machine Gun (100)").
+            // Left-align store names so ellipsis preserves their identifying prefix.
             new Column("STORE", 152f, PanelWidth - Pad * 2f - 152f - Space2),
         };
 
-        /// <summary>A fixed-height area that roster rows are laid out inside.</summary>
+        /// <summary>Create a fixed-height viewport for a page of roster rows.</summary>
         private static RectTransform RosterViewport(RectTransform parent, string name, float y, int rowCount = RosterRowsPerPage)
         {
             var area = new GameObject(name, typeof(RectTransform));
@@ -302,9 +267,8 @@ namespace WingCommand
 
             int pages = Mathf.Max(1, Mathf.CeilToInt(offers.Count / (float)AirframeGridCapacity));
 
-            // Browsing the catalogue must not change the airframe being edited. A selected
-            // tile is highlighted only when it is on this page; its template remains in the
-            // detail area until the player explicitly clicks another tile.
+            // Paging changes visible tiles, not the edited airframe; retain details until another tile
+            // is selected.
             airframePage = Mathf.Clamp(airframePage, 0, pages - 1);
 
             int first = airframePage * AirframeGridCapacity;
@@ -326,16 +290,10 @@ namespace WingCommand
                                airframePage, pages);
         }
 
-        // -------------------------------------------------------------- template editing
+        // Template editing.
 
-        /// <summary>
-        /// The template being edited, re-resolved every time it is asked for.
-        ///
-        /// Deliberately not cached. The record can vanish between one refresh and the next —
-        /// deleted here, or dropped by a config edit — and every caller on this page has to
-        /// cope with null anyway, so there is no reading of it that a stale reference makes
-        /// safer.
-        /// </summary>
+        /// <summary>Resolve the edited ID on each read; return null when its record was deleted or
+        /// invalidated.</summary>
         private static LoadoutTemplateRecord EditingTemplate()
         {
             if (selectedOffer == null) return null;
@@ -343,8 +301,7 @@ namespace WingCommand
             LoadoutTemplateRecord record = WingLoadoutTemplates.ById(editingTemplateId);
             if (record != null && record.AirframeKey == selectedOffer.jsonKey) return record;
 
-            // Fall to the airframe's first template rather than leaving the editor blank
-            // beside a list that has something in it.
+            // Fall back to the first remaining template instead of an empty editor.
             IReadOnlyList<LoadoutTemplateRecord> mine = WingLoadoutTemplates.For(selectedOffer);
             if (mine.Count == 0)
             {
@@ -372,8 +329,7 @@ namespace WingCommand
                 return;
             }
 
-            // Copied out of the scratch list the store hands back, because the popup's pick
-            // callback runs long after this method returns and that list is reused.
+            // Copy popup IDs because its callback outlives the reusable query list.
             var ids = new List<string>(mine.Count);
             popupEntries.Clear();
             for (int i = 0; i < mine.Count; i++)
@@ -473,18 +429,12 @@ namespace WingCommand
 
             WingLoadoutTemplates.Rename(template, name);
 
-            // The store trims and defaults the name, so the field is put back in step with
-            // what was actually saved rather than what was typed.
+            // Synchronise the field with the store's trimmed/defaulted saved name.
             SyncNameField();
         }
 
-        /// <summary>
-        /// Put the rename field back in step with the template it is editing.
-        ///
-        /// Called on every change of template rather than from the refresh loop: writing to
-        /// the field five times a second would move the caret out from under anyone typing
-        /// in it.
-        /// </summary>
+        /// <summary>Update rename text on template changes, not periodic refreshes, to preserve the typing
+        /// caret.</summary>
         private static void SyncNameField()
         {
             LoadoutTemplateRecord template = EditingTemplate();
@@ -504,15 +454,10 @@ namespace WingCommand
             }
         }
 
-        // ------------------------------------------------------------------ pylon list
+        // Pylon rows.
 
-        /// <summary>
-        /// The pylons the editor draws, which is not quite the airframe's list of them.
-        ///
-        /// A hardpoint set that mirrors the one before it is folded away: the two cannot be
-        /// armed differently, so showing both would double the length of the list without
-        /// adding a decision to it. The hidden one is written whenever its partner is.
-        /// </summary>
+        /// <summary>Visible pylons exclude linked mirrors; editing the shown partner writes both actual
+        /// stations.</summary>
         private static readonly List<int> visiblePylons = new List<int>();
 
         private static void RebuildVisiblePylons()
@@ -534,14 +479,8 @@ namespace WingCommand
             RefreshLoadoutPage();
         }
 
-        /// <summary>
-        /// Put a store on a pylon, and on its mirror.
-        ///
-        /// Writing the mirror here rather than at the point of building means a template's
-        /// saved keys always describe every station the aircraft actually has, so anything
-        /// reading it back — the summary line, another install — sees the real fit rather
-        /// than one wing's worth of it.
-        /// </summary>
+        /// <summary>Write store keys to the pylon and its mirror so saved templates describe the complete
+        /// fit.</summary>
         private static void SetStore(int pylon, string key)
         {
             LoadoutTemplateRecord template = EditingTemplate();
@@ -586,8 +525,7 @@ namespace WingCommand
                     option.Key == current));
             }
 
-            // Dropped onto the row it belongs to, so the list appears where the player is
-            // already looking rather than at a fixed spot on the page.
+            // Open the store list beside its pylon row.
             float rowY = pylonAreaY - RowPitch * rowIndex - RowHeight;
             loadoutPopup?.Show(new Rect(Pad, rowY, PanelWidth - Pad * 2f, 0f), popupEntries,
                                index =>
@@ -597,7 +535,7 @@ namespace WingCommand
             });
         }
 
-        /// <summary>The right-hand column of a store row: what it is and what it weighs.</summary>
+        /// <summary>Store type and mass for the row's detail column.</summary>
         private static string StoreDetail(WingLoadoutCatalog.StoreOption option)
         {
             if (option.IsEmpty) return "";
@@ -610,7 +548,7 @@ namespace WingCommand
             return ammo.Length == 0 ? tag : tag + "  " + ammo;
         }
 
-        // -------------------------------------------------------------------- refresh
+        // Loadout refresh.
 
         private static void RefreshLoadoutPage()
         {
@@ -681,8 +619,7 @@ namespace WingCommand
             templateCopyButton?.SetEnabled(template != null &&
                                            saved < WingLoadoutTemplates.MaxPerAirframe);
             templateDeleteButton?.SetEnabled(template != null);
-            // The name field is written only when the template underneath it changes, so
-            // typing is never interrupted by the refresh loop.
+            // Refresh name text only when the edited template changes.
             if (!ReferenceEquals(lastNamedTemplate, template))
             {
                 lastNamedTemplate = template;
@@ -692,17 +629,11 @@ namespace WingCommand
             RefreshTemplateSummary(template);
         }
 
-        /// <summary>The template the name field was last written for. See SyncNameField.</summary>
+        /// <summary>Template last synchronised into the name field.</summary>
         private static LoadoutTemplateRecord lastNamedTemplate;
 
-        /// <summary>
-        /// What the template adds up to: how many stations are loaded, what it weighs, and
-        /// what it is for.
-        ///
-        /// The weight is the part worth having. Every other readout on this page is about
-        /// one pylon, and the one thing a per-pylon editor makes easy to get wrong is
-        /// hanging so much off an airframe that it cannot carry it.
-        /// </summary>
+        /// <summary>Summarise loaded stations, total mass, and role so per-pylon editing exposes the whole
+        /// fit's weight.</summary>
         private static void RefreshTemplateSummary(LoadoutTemplateRecord template)
         {
             RefreshLoadoutProfileChrome(template);
@@ -747,11 +678,8 @@ namespace WingCommand
             templateSummaryLabel.color = fitted == 0 ? Warning() : Dim();
         }
 
-        /// <summary>
-        /// Keep the loadout profile's title, rail, and silhouette in lock-step with the
-        /// selected airframe. This is intentionally separate from the mass calculation so
-        /// the card remains useful when station data or a saved template is unavailable.
-        /// </summary>
+        /// <summary>Refresh selected-airframe title and silhouette even when station data or a template is
+        /// unavailable.</summary>
         private static void RefreshLoadoutProfileChrome(LoadoutTemplateRecord template)
         {
             if (selectedOffer == null)
@@ -809,11 +737,8 @@ namespace WingCommand
             pylonPrevButton?.SetEnabled(pylonPage > 0);
             pylonNextButton?.SetEnabled(pylonPage < pages - 1);
 
-            // Built once per refresh so every row asks the game the same question about the
-            // same in-progress fit, and into a scratch loadout rather than a fresh one:
-            // this runs five times a second, and the delivery path's BuildFromKeys has to
-            // keep allocating because a Loadout handed to the spawner is kept by the
-            // aircraft and must never be shared.
+            // Build one reusable scratch fit per refresh for consistent exclusion checks. Spawn
+            // loadouts remain separately allocated per aircraft.
             Loadout inProgress = template != null
                 ? WingLoadoutCatalog.FillScratch(selectedOffer, template.MountKeys)
                 : null;
@@ -844,7 +769,7 @@ namespace WingCommand
             }
         }
 
-        /// <summary>How many stations one visible row actually stands for.</summary>
+        /// <summary>Number of actual stations represented by this visible row.</summary>
         private static int MirrorCount(int pylon)
         {
             int count = 1;
@@ -893,8 +818,7 @@ namespace WingCommand
                 return;
             }
 
-            // Says where the template is actually used, because nothing on this page applies
-            // it: a player who builds one and never opens SUPPLY has changed nothing.
+            // Explain that saved templates are selected for purchase on SUPPLY.
             loadoutStatusLabel.text = "Saved — choose it on the SUPPLY tab to fly it.";
             loadoutStatusLabel.color = Friendly();
         }
@@ -914,7 +838,7 @@ namespace WingCommand
             return fitted;
         }
 
-        /// <summary>What each control on the Loadout tab says about itself on hover.</summary>
+        /// <summary>Loadout-control hover descriptions.</summary>
         private static class LoadoutHint
         {
             public const string Airframe =
@@ -1012,7 +936,7 @@ namespace WingCommand
                 code.text = AvTheme.Truncate(codeStr, 7);
                 code.color = selected ? Green() : Friendly();
 
-                name.text = AvTheme.Truncate(def.unitName, 10);
+                name.text = def.unitName;
                 name.color = selected ? Friendly() : Dim();
 
                 fill.color = selected ? WingUi.CardFillSelected : WingUi.CardFill;
@@ -1031,14 +955,8 @@ namespace WingCommand
             }
         }
 
-        /// <summary>
-        /// One pylon: what it is called, what is on it, and a click to change that.
-        ///
-        /// The whole row opens the store list, the way every other list on this panel is
-        /// selected by its row rather than by a button inside it. A blocked pylon still
-        /// draws its name — knowing the station exists and why it cannot be used is the
-        /// point — but goes inert and says so on hover.
-        /// </summary>
+        /// <summary>Clickable pylon row with native name and fitted store. Keep blocked stations visible
+        /// with a reason; permit clearing existing conflicting stores.</summary>
         private sealed class PylonRow
         {
             private readonly GameObject go;
@@ -1076,8 +994,7 @@ namespace WingCommand
             {
                 if (!go.activeSelf) go.SetActive(true);
 
-                // A mirrored pair says so, so the player is not left wondering why the list
-                // is shorter than the aircraft looks.
+                // Label mirrored pairs explicitly to explain the reduced row count.
                 name.text = mirrors > 1
                     ? AvTheme.Truncate(pylonName, 20) + "  x" + mirrors
                     : AvTheme.Truncate(pylonName, 24);
@@ -1088,9 +1005,8 @@ namespace WingCommand
                     store.color = Warning();
                     name.color = Dim();
 
-                    // A newly selected store elsewhere can block a station that was already
-                    // fitted. Keep that row actionable so the conflicting store can be
-                    // cleared instead of trapping the template in an invalid state.
+                    // Allow clearing an already-fitted blocked station so the player can repair
+                    // conflicting loadouts.
                     bool canClear = !fitted.IsEmpty;
                     hit.SetAction(canClear ? () => SetStore(pylon, null) : (Action)null);
                     hit.SetEnabled(canClear);
@@ -1101,12 +1017,12 @@ namespace WingCommand
                 }
 
                 bool empty = fitted.IsEmpty;
-                store.text = empty ? "— EMPTY —" : AvTheme.Truncate(fitted.Label, 24);
+                store.text = empty ? "— EMPTY —" : fitted.Label;
                 store.color = empty ? Dim() : Friendly();
                 name.color = Friendly();
 
                 hit.SetEnabled(true);
-                hit.WithTooltip(LoadoutHint.Pylon);
+                hit.WithTooltip(pylonName + " / " + (empty ? "Empty" : fitted.Label) + ". " + LoadoutHint.Pylon);
                 hit.SetAction(() => OpenStorePicker(pylon, rowIndex));
                 hit.SetRowHighlight(fill, WingUi.CardFill, WingUi.CardFillHover);
             }

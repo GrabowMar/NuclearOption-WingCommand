@@ -9,8 +9,8 @@ namespace WingCommand.PureTests
         [Fact]
         public void OldInitializedAirframeConfigStillDecodes()
         {
-            // DEFAULT templates are no longer auto-seeded, but a leftover config value
-            // from an earlier version must not throw if something still reads the codec.
+            // Legacy default-template metadata must still decode safely although automatic seeding is
+            // removed.
             var initialized = new HashSet<string> { "jet;with|delimiters,%", "helo" };
             string saved = LoadoutTemplateCodec.EncodeInitializedAirframes(initialized);
             Assert.Empty(LoadoutTemplateCodec.Decode(""));

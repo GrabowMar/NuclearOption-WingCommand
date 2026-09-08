@@ -3,14 +3,8 @@ using UnityEngine;
 
 namespace WingCommand
 {
-    /// <summary>
-    /// Live copy of each hangar's serialized <c>availableAircraft</c> list.
-    ///
-    /// The game does not keep a JSON catalogue of which airframes fit which pads. Each
-    /// hangar prefab carries that array, and an airbase is just the union of its hangars.
-    /// This walks the friendly fields once they exist and answers spawn questions from
-    /// those lists instead of guessing rotary-vs-jet or hangar size.
-    /// </summary>
+    /// <summary>Reads each friendly hangar's serialized availableAircraft list for actual spawn
+    /// compatibility instead of inferring it from airframe class or pad size.</summary>
     internal static class WingHangarStock
     {
         private struct Pad
@@ -72,11 +66,8 @@ namespace WingCommand
             return Lists(hangar.GetAvailableAircraft(), definition);
         }
 
-        /// <summary>
-        /// The hangar's own definition instance, which native <c>CanSpawnAircraft</c>
-        /// compares by reference. Shop catalogue entries are usually the same object;
-        /// when they are not, spawning the hangar's copy is what the pad will accept.
-        /// </summary>
+        /// <summary>Use the hangar's AircraftDefinition instance because native CanSpawnAircraft compares
+        /// by reference.</summary>
         internal static AircraftDefinition NativeDefinition(Hangar hangar, AircraftDefinition wanted)
         {
             if (hangar == null || wanted == null) return wanted;

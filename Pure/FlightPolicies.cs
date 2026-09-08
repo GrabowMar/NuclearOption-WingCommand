@@ -1,6 +1,6 @@
 namespace WingCommand
 {
-    /// <summary>Same-direction holding circles, separated radially by roster slot.</summary>
+    /// <summary>Same-direction orbit lanes separated by roster slot radius.</summary>
     internal static class OrbitGeometry
     {
         public static (float x, float z) AimOffset(float fromX, float fromZ,
@@ -11,17 +11,16 @@ namespace WingCommand
             double bearing = System.Math.Atan2(fromZ, fromX) + lookahead;
             float laneRadius = System.Math.Max(200f, radius) +
                                System.Math.Max(0, slot - 1) * System.Math.Max(0f, spacing);
-            // The aim point's radial projection is the desired holding radius. A point
-            // on the circle itself would always steer inward and cut the orbit short.
+            // Project the aim tangent onto the desired radius; aiming directly on the circle would cut
+            // inward.
             double aimRadius = laneRadius / System.Math.Cos(lookahead);
             return ((float)(System.Math.Cos(bearing) * aimRadius),
                     (float)(System.Math.Sin(bearing) * aimRadius));
         }
     }
 
-    /// <summary>
-    /// Followers use the designated lead; that lead, or a flight without one, uses the player.
-    /// </summary>
+    /// <summary>Followers use temporary flight lead; the lead and flights without one follow the
+    /// player.</summary>
     internal static class FlightLeadPolicy
     {
         public static T FormationLeader<T>(bool isThisMemberTheLead, T designatedLead,
@@ -29,7 +28,7 @@ namespace WingCommand
             (isThisMemberTheLead || designatedLead == null) ? wingLeader : designatedLead;
     }
 
-    /// <summary>Pure rotary hover transition, separated from Unity steering for tests.</summary>
+    /// <summary>Engine-free rotary hover/cruise transition policy.</summary>
     internal static class RotaryHoverPolicy
     {
         public static bool ShouldHover(bool wasHovering, float leaderHorizontalSpeed,
@@ -44,12 +43,8 @@ namespace WingCommand
         }
     }
 
-    /// <summary>
-    /// Converts a world-height formation slot into the above-ground hold used by the
-    /// helicopter autopilot.  The native rotary controller ignores destination height
-    /// while terrain-following, so carrying the slot floor through this value is what
-    /// prevents a low formation element from descending into terrain.
-    /// </summary>
+    /// <summary>Convert world slot height to rotary AGL hold because terrain-following ignores destination
+    /// height; preserve terrain clearance for low slots.</summary>
     internal static class RotaryAltitudePolicy
     {
         public static float SlotAgl(float ownAltitude, float ownRadarAltitude,
@@ -60,7 +55,7 @@ namespace WingCommand
         }
     }
 
-    /// <summary>A timeout whose clock restarts whenever a decreasing quantity progresses.</summary>
+    /// <summary>Restart timeout whenever a decreasing progress value advances.</summary>
     internal sealed class CargoProgressTracker
     {
         public int LastAmount { get; private set; }
@@ -86,7 +81,7 @@ namespace WingCommand
         public bool IsStalled(float now, float timeout) => now - LastProgressAt >= timeout;
     }
 
-    /// <summary>Terrain-abort policy for aircraft Wing Command already controls.</summary>
+    /// <summary>Terrain escape policy for aircraft already controlled by the wing.</summary>
     internal static class TerrainAbortPolicy
     {
         public const float GrabRange = 400f;
@@ -94,14 +89,39 @@ namespace WingCommand
         public const float AbortAlt = 50f;
         public const float AbortReleaseAlt = 90f;
 
+        /// <summary>Use the native five-second terrain horizon and current descent before a fixed
+        /// altitude floor becomes too late. Native warning also covers terrain ahead.</summary>
+        public static bool ImmediateDanger(float radarAlt, float verticalSpeed, float terrainUrgency) =>
+            radarAlt >= 8f && (terrainUrgency > 0f ||
+                (verticalSpeed < -5f && radarAlt < AbortAlt - verticalSpeed * 5f));
+
+        public static bool AllowsRecovery(WingOrder order) => order != WingOrder.LandHere &&
+            order != WingOrder.ReturnToBase && order != WingOrder.DeliverCargo;
+
+        public static bool AllowsRecovery(in WingSituation s, bool incumbent = false) =>
+            !s.DeliveryPending && !s.MemberIsSurface && (s.RadarAlt >= 8f || incumbent) &&
+            AllowsRecovery(s.Order);
+
+        public static bool TerrainThreat(in WingSituation s, bool incumbent) =>
+            (incumbent && s.RadarAlt < AbortReleaseAlt) ||
+            ImmediateDanger(s.RadarAlt, s.VerticalSpeed, s.TerrainUrgency) ||
+            ShouldAbort(s.RadarAlt, s.LeaderDistance, s.Order, incumbent, s.DeliveryPending);
+
+        /// <summary>Keep the existing recovery controller until a defensive exit is upright, no longer
+        /// diving, and has enough forward airspeed to turn toward a task.</summary>
+        public static bool ShouldRecover(in WingSituation s, bool incumbent) =>
+            AllowsRecovery(in s, incumbent) && (TerrainThreat(in s, incumbent) ||
+                (!s.MemberIsRotary && !s.MissileWarned && (incumbent || s.RecoveringFromDefence) &&
+                    (System.Math.Abs(s.BankAngle) > 35f || s.VerticalSpeed < -10f ||
+                     s.Airspeed < s.MinimumAirspeed)));
+
         public static bool ShouldAbort(
             float radarAlt, float leaderDistance, WingOrder order,
             bool incumbent, bool deliveryPending)
         {
             if (deliveryPending) return false;
             if (!AllowsAbort(order)) return false;
-            // On the apron radarAlt is ~0, which would otherwise look like a 50 m
-            // terrain threat and yank a taxiing aircraft into a pull-up.
+            // Exclude apron altitude from pull-up triggers so taxi keeps native ownership.
             if (radarAlt < 8f) return false;
 
             float alt = incumbent ? AbortReleaseAlt : AbortAlt;
@@ -109,9 +129,7 @@ namespace WingCommand
             return radarAlt < alt && leaderDistance > range;
         }
 
-        /// <summary>
-        /// Orders that are supposed to be low. A pull-up here would fight the task.
-        /// </summary>
+        /// <summary>Low-altitude tasks for which terrain abort would oppose the order.</summary>
         public static bool AllowsAbort(WingOrder order) =>
             order != WingOrder.LandHere &&
             order != WingOrder.ReturnToBase &&

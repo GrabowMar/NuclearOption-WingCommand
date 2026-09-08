@@ -13,7 +13,7 @@ namespace WingCommand.PureTests
         public void AllAircraftHeadingsHaveClearSpaceBetweenSilhouetteAndRing(float width, float height)
         {
             WingMapBadgeGeometry badge = WingMapBadgeGeometry.ForIcon(width, height);
-            // Rotating the aircraft cannot move even a bounding-box corner into the ring.
+            // Enclose every rotated bounding-box corner within the ring.
             float cornerRadius = (float)Math.Sqrt(width * width + height * height) / 2f;
             Assert.True(badge.InnerRadiusPixels - WingMapBadgeGeometry.FeatherPixels - cornerRadius >= 1.89f);
             Assert.True(badge.CommandHalfExtentPixels > badge.OuterRadiusPixels + 2f);
@@ -35,7 +35,7 @@ namespace WingCommand.PureTests
             WingMapBadgeGeometry reference = WingMapBadgeGeometry.ForIcon(15f, 15f);
             foreach (float mapScale in new[] { 0.1f, 0.5f, 2f, 10f })
             {
-                // Native UpdateIcon applies the inverse map scale before projection.
+                // Model native inverse zoom before screen projection.
                 float projectedIconSize = 15f / mapScale * mapScale;
                 WingMapBadgeGeometry badge = WingMapBadgeGeometry.ForIcon(projectedIconSize, projectedIconSize);
                 Assert.Equal(reference.InnerRadiusPixels, badge.InnerRadiusPixels, precision: 4);

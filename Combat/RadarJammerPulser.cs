@@ -3,20 +3,15 @@ using UnityEngine;
 
 namespace WingCommand
 {
-    /// <summary>
-    /// Re-deploys ECM before its 0.1-second lifetime expires. Caches the station index
-    /// per aircraft, periodically re-resolves it after refits, and reports failures once.
-    /// </summary>
+    /// <summary>Pulses ECM within its 0.1-second lifetime. Caches station indices, refreshes after
+    /// possible refits, and logs failures once.</summary>
     internal sealed class RadarJammerPulser
     {
-        // The jammer stays active for 0.1 s after Fire. Pulse just below that lifetime,
-        // rather than once per physics tick, for continuous coverage at a known cadence.
+        // Pulse before the 0.1-second ECM lifetime expires to maintain coverage.
         private const float PulseSeconds = 0.075f;
 
-        /// <summary>
-        /// How long a resolved station index is trusted. The list is renumbered whenever a
-        /// countermeasure registers, and there is no event to hang this off.
-        /// </summary>
+        /// <summary>Seconds before rechecking a station index; registration renumbers stations without an
+        /// event.</summary>
         private const float ResolveSeconds = 5f;
 
         private int index = -1;
@@ -25,19 +20,15 @@ namespace WingCommand
         private float nextPulse;
         private float nextResolve;
 
-        /// <summary>True once a RadarJammer station has been found on this aircraft.</summary>
+        /// <summary>Whether this aircraft has a resolved RadarJammer station.</summary>
         public bool HasJammer(Aircraft aircraft)
         {
             Resolve(aircraft);
             return index >= 0;
         }
 
-        /// <summary>
-        /// Re-deploy the jammer if the cadence allows. Temporarily selects the jammer
-        /// station and restores whatever countermeasure index was selected before, so a
-        /// separately held flare/chaff trigger keeps working. Returns true when a pulse
-        /// was actually sent this call.
-        /// </summary>
+        /// <summary>Pulses ECM when due, then restores the selected countermeasure so held chaff/flare
+        /// triggers keep working. Returns true if a pulse was sent.</summary>
         public bool Pulse(Aircraft aircraft)
         {
             CountermeasureManager manager = aircraft != null ? aircraft.countermeasureManager : null;
@@ -63,13 +54,12 @@ namespace WingCommand
             }
             finally
             {
-                // Leaving the jammer selected would silently turn a held flare/chaff
-                // trigger into a second ECM driver and stop the expendable releasing.
+                // Restore selection so a held dispense trigger releases chaff or flares, not ECM.
                 manager.activeIndex = previous;
             }
         }
 
-        /// <summary>Forget the cached resolution; call when the aircraft or its fit may have changed.</summary>
+        /// <summary>Clear the station cache after an aircraft or loadout change.</summary>
         public void Reset()
         {
             index = -1;
@@ -78,14 +68,12 @@ namespace WingCommand
             nextPulse = 0f;
         }
 
-        /// <summary>
-        /// Periodically re-resolves the station: RegisterCountermeasure sorts the list by name,
-        /// so rearming can invalidate a cached index. Missing managers are retried.
-        /// </summary>
+        /// <summary>Retry missing managers and refresh indices periodically because rearming sorts
+        /// stations by name.</summary>
         private void Resolve(Aircraft aircraft)
         {
             CountermeasureManager manager = aircraft != null ? aircraft.countermeasureManager : null;
-            if (manager == null) return;   // not latched: the manager may not exist yet
+            if (manager == null) return;   // Retry while the manager is absent.
 
             if (resolved && Time.timeSinceLevelLoad < nextResolve) return;
 

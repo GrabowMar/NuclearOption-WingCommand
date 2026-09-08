@@ -2,20 +2,13 @@ using System;
 using System.Collections.Generic;
 using UnityEngine;
 
-// Unity invokes Awake, Update and OnGUI by reflection.
-// IDE0051 cannot see a reflective call, so it is disabled for this file only.
+// Unity calls Awake, Update, and OnGUI by reflection, so suppress IDE0051 in this file.
 #pragma warning disable IDE0051
 
 namespace WingCommand
 {
-    /// <summary>
-    /// Per-frame driver: tracks the player's aircraft as formation leader, handles input,
-    /// and draws the radial menu and wing status panel.
-    ///
-    /// Split by concern across partial files: see WingCommandManager.Radial.cs (radial menu),
-    /// .Recruit.cs (delivery queue), .Orders.cs (action dispatch) and .Selection.cs (roster
-    /// selection).
-    /// </summary>
+    /// <summary>Tracks the player leader, drives per-frame updates, handles input, and renders wing UI.
+    /// Partial files separate radial input, recruitment, orders, and selection.</summary>
     [DefaultExecutionOrder(10000)]
     internal partial class WingCommandManager : MonoBehaviour
     {
@@ -28,7 +21,7 @@ namespace WingCommand
 
         internal string MapStatus => mapLayer?.Status;
 
-        /// <summary>True while the map layer has something specific to report.</summary>
+        /// <summary>Whether the map layer has an active notice.</summary>
         internal bool MapStatusIsNotice => mapLayer != null && mapLayer.HasNotice;
 
         private string toast;
@@ -56,8 +49,8 @@ namespace WingCommand
         {
             if (!InPlayableState())
             {
-                // Update continues to run in menus. Teardown is transition work, not frame
-                // work: several resets clear caches, destroy UI, or roll back transactions.
+                // Run teardown once on entering menus; resets may destroy UI, clear caches, or roll
+                // back purchases.
                 if (resetForNonPlayableState) return;
 
                 if (radialOpen) CloseRadial(apply: false);
@@ -93,40 +86,33 @@ namespace WingCommand
 
             if (resetForNonPlayableState)
             {
-                // First frame back in a mission: resolve the Smart/Performance mode for
-                // this one. Snapshotting here is what makes a mid-mission change inert
-                // until the next mission.
+                // Snapshot fidelity on mission entry; setting changes apply next mission.
                 WingFidelity.Begin(Plugin.Settings.Mode.Value);
                 WingFormation.Shape = Plugin.Settings.FormationShape.Value;
                 WingFormation.SlotSpacing = Plugin.Settings.FormationSpacing.Value;
 
-                // A reflex disabled by a fault in the last mission gets another chance in
-                // this one; a genuinely broken one faults again immediately at no real cost.
-                // Factories are plugin registrations and survive missions. Their aircraft
-                // states live on WingMember and disappear with the old roster.
+                // Retry faulted reflexes each mission. Keep factory registrations; per-aircraft states
+                // leave with the old roster.
                 WingAi.ResetFaults();
                 Plugin.LogVerbose("[WingFidelity] mission start - " + WingFidelity.Summary());
             }
             resetForNonPlayableState = false;
 
-            // The player's own aircraft is always the formation leader.
+            // Use the local player's aircraft as formation leader.
             Wing.SetLeader(GameManager.GetLocalAircraft(out Aircraft local) ? local : null);
             WingSupplyReserve.Tick();
             WingShop.Tick();
-            // Settle new aircraft and advance flight ownership before UI rendering. A
-            // broken map/panel must not strand an otherwise healthy native departure.
+            // Advance delivery and flight ownership before UI so panel failures cannot block
+            // departures.
             WingShopDelivery.Tick();
             FlushRecruitQueue();
 
-            // Before Prune, deliberately: a wingman that has completed its RTB has an
-            // ejected pilot, which Prune would otherwise report as a combat loss.
+            // Settle RTB before Prune can misclassify an ejected landing pilot as a combat loss.
             WingRecovery.Tick(Wing);
             Wing.Prune();
             Selection.Prune(Wing);
             WingTakeover.Tick();
-            // Housekeeping first - it can retire an order - then one arbitration pass that
-            // decides what every member actually flies. These used to be three separate
-            // passes whose order was the priority system.
+            // Retire completed orders before the single behaviour-arbitration pass.
             Wing.CheckReserves();
             Wing.Tick();
 
@@ -149,19 +135,8 @@ namespace WingCommand
             WingComms.Tick(Wing);
         }
 
-        /// <summary>
-        /// The native wheel is used whenever every private member it depends on resolved.
-        /// Nothing else gates it.
-        ///
-        /// It used to also require the standalone wheel's key to be unbound, on the theory
-        /// that binding a key was a deliberate opt-out. That coupling made a keybind
-        /// silently delete a whole feature: a key left bound in an existing config removed
-        /// the Wing Command slice from the game's wheel with no message anywhere, and the
-        /// only visible symptom was a stock-looking wheel — indistinguishable from the
-        /// integration being broken. A key that opens our own wheel and a slice on the
-        /// game's wheel are not mutually exclusive, so they are no longer wired to each
-        /// other; the key is now purely an *additional* way in.
-        /// </summary>
+        /// <summary>Enable the native wheel whenever reflection resolves. The standalone key adds another
+        /// entry point and does not disable integration.</summary>
         internal static bool NativeRadialActive => GameAccess.Available;
 
         private static bool InPlayableState()
@@ -170,18 +145,15 @@ namespace WingCommand
             return s == GameState.SinglePlayer || s == GameState.Multiplayer;
         }
 
-        /// <summary>
-        /// Internal gameplay notice. These remain available to verbose diagnostics but no
-        /// longer enter MessageUI: its black boxes were the obsolete second chatter/log
-        /// surface. Command state belongs on the map/WMC; pilot events belong on radio.
-        /// </summary>
+        /// <summary>Log internal notices through verbose diagnostics. Show command state on WMC/map and
+        /// pilot events on radio, avoiding duplicate MessageUI boxes.</summary>
         internal void Toast(string message)
         {
             if (string.IsNullOrWhiteSpace(message)) return;
             Plugin.LogVerbose("[Wing] " + message);
         }
 
-        /// <summary>The only mod messages intentionally allowed into the old game feed.</summary>
+        /// <summary>Debug messages permitted in the native game feed.</summary>
         internal void DebugToast(string message)
         {
             if (!Plugin.Settings.EnableDebugActions.Value || string.IsNullOrWhiteSpace(message))
@@ -199,20 +171,19 @@ namespace WingCommand
                     return;
                 }
             }
-            catch { /* fall through to the overlay */ }
+            catch { /* Use the overlay if the native feed fails. */ }
 
             toast = message;
             toastUntil = Time.unscaledTime + 3f;
         }
 
-        // --------------------------------------------------------------------- UI
+        // Fallback UI.
 
         private void OnGUI()
         {
             if (!InPlayableState()) return;
 
-            // The aircraft-recovery prompt and the radial command wheel are native uGUI;
-            // only the debug-only fallback toast still lives here.
+            // Recovery and radial UI use uGUI; this IMGUI path only renders fallback debug notices.
             if (toast != null && Time.unscaledTime < toastUntil)
                 WingHud.DrawToast(toast);
         }

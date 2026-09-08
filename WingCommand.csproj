@@ -4,11 +4,11 @@
     <TargetFramework>netstandard2.1</TargetFramework>
     <AssemblyName>WingCommand</AssemblyName>
     <RootNamespace>WingCommand</RootNamespace>
-    <Version>0.9.4</Version>
+    <Version>0.9.2.1</Version>
     <LangVersion>latest</LangVersion>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
     <DebugType>portable</DebugType>
-    <!-- Unity assemblies are not reference assemblies; silence the resulting noise. -->
+    <!-- Suppress reference-assembly warnings from Unity runtime assemblies. -->
     <NoWarn>$(NoWarn);CS0436;MSB3277</NoWarn>
     <GenerateAssemblyInfo>true</GenerateAssemblyInfo>
     <EnableNETAnalyzers>true</EnableNETAnalyzers>
@@ -32,7 +32,7 @@
            Text="Shared avionics sources not found. Set NomodKitDir to your nomodkit checkout." />
   </Target>
 
-  <!-- BepInPlugin requires a compile-time constant; keep it aligned with assembly metadata. -->
+  <!-- Keep the BepInPlugin compile-time version constant aligned with assembly metadata. -->
   <Target Name="CheckPluginVersionMatchesCsproj" BeforeTargets="CoreCompile">
     <PropertyGroup>
       <_PluginSource>$([System.IO.File]::ReadAllText('$(MSBuildProjectDirectory)/Core/Plugin.cs'))</_PluginSource>
@@ -50,9 +50,7 @@
   </ItemGroup>
 
   <ItemGroup Label="Game">
-    <!-- Private members needed by the radial integration are reached through reflection
-         in GameAccess.cs; a publicizer MSBuild task is blocked by this machine's
-         application-control policy. -->
+    <!-- Access private radial members through GameAccess reflection because application control blocks the publicizer build task. -->
     <Reference Include="Assembly-CSharp"><HintPath>$(ManagedDir)\Assembly-CSharp.dll</HintPath><Private>false</Private></Reference>
     <Reference Include="Assembly-CSharp-firstpass"><HintPath>$(ManagedDir)\Assembly-CSharp-firstpass.dll</HintPath><Private>false</Private></Reference>
     <Reference Include="Mirage"><HintPath>$(ManagedDir)\Mirage.dll</HintPath><Private>false</Private></Reference>
@@ -63,22 +61,20 @@
   <ItemGroup Label="Test project lives under tests/ and is built standalone; EnableDefaultCompileItems
                      would otherwise double-compile its sources into this plugin too.">
     <Compile Remove="tests\**\*.cs" />
-    <!-- Isolated test runs keep generated assembly metadata under ignored build/. -->
+    <!-- Exclude generated assembly metadata from isolated test runs under build/. -->
     <Compile Remove="build\**\*.cs" />
   </ItemGroup>
 
   <ItemGroup>
     <EmbeddedResource Include="Assets\Icons\*.png" LogicalName="WingCommand.Icons.%(Filename)%(Extension)" />
+    <EmbeddedResource Include="Assets\Pilots\layers.png" LogicalName="WingCommand.PilotLayers.png" />
     <EmbeddedResource Include="Assets\maneuvers.json" LogicalName="WingCommand.maneuvers.json" />
-    <!-- Engine-free avionics protocol, compiled into this plugin so Wing Command and
-         Boscali Summer can coordinate bezels and map gestures without a shared DLL. -->
+    <!-- Compile the engine-free avionics protocol into each plugin to coordinate bezels and map gestures without a shared DLL. -->
     <Compile Include="$(NomodKitDir)\shared\avionics\*.cs" Link="Avionics\%(Filename)%(Extension)"
              Exclude="$(NomodKitDir)\shared\avionics\*Tests.cs" />
     <Compile Include="$(NomodKitDir)\shared\avionics-ui\*.cs" Link="AvionicsUi\%(Filename)%(Extension)" />
 
-    <!-- The panels' look, as data. Embedded so there is always a valid default, and
-         overridable at BepInEx/config/NOAvionics/avionics.avss so it can be retuned
-         without a rebuild. Both plugins embed the same file under the same name. -->
+    <!-- Embed the shared default stylesheet; allow live overrides at BepInEx/config/NOAvionics/avionics.avss. Both plugins use the same resource name. -->
     <EmbeddedResource Include="$(NomodKitDir)\shared\avionics-ui\avionics.avss">
       <LogicalName>NOAvionics.avionics.avss</LogicalName>
     </EmbeddedResource>
@@ -88,7 +84,7 @@
     <Reference Include="UnityEngine"><HintPath>$(ManagedDir)\UnityEngine.dll</HintPath><Private>false</Private></Reference>
     <Reference Include="UnityEngine.CoreModule"><HintPath>$(ManagedDir)\UnityEngine.CoreModule.dll</HintPath><Private>false</Private></Reference>
     <Reference Include="UnityEngine.PhysicsModule"><HintPath>$(ManagedDir)\UnityEngine.PhysicsModule.dll</HintPath><Private>false</Private></Reference>
-    <!-- AudioClip, for the radio click that opens a squadron transmission. -->
+    <!-- Provide AudioClip for the click preceding squadron transmissions. -->
     <Reference Include="UnityEngine.AudioModule"><HintPath>$(ManagedDir)\UnityEngine.AudioModule.dll</HintPath><Private>false</Private></Reference>
     <Reference Include="UnityEngine.IMGUIModule"><HintPath>$(ManagedDir)\UnityEngine.IMGUIModule.dll</HintPath><Private>false</Private></Reference>
     <Reference Include="UnityEngine.InputLegacyModule"><HintPath>$(ManagedDir)\UnityEngine.InputLegacyModule.dll</HintPath><Private>false</Private></Reference>

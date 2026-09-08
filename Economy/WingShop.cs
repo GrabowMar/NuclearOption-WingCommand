@@ -5,20 +5,11 @@ using UnityEngine;
 
 namespace WingCommand
 {
-    /// <summary>
-    /// Buying wingmen: catalogue, pricing and the purchase transaction. No UI.
-    ///
-    /// The whole economy is the game's own and needs no patching. Aircraft are priced from
-    /// <c>AircraftDefinition.value</c>, the same field the player's own aircraft menu
-    /// prices from; they are paid for out of <c>Player.Allocation</c>, the same pool that
-    /// buys the player's own airframe and weapons; and they are drawn from the faction's
-    /// stock through <c>FactionHQ.AddSupplyUnit</c>, the exact call the game's reserve flow
-    /// uses. Buying a wingman therefore competes with the mission's own AI for airframes,
-    /// which is the point.
-    /// </summary>
+    /// <summary>Catalogue, pricing, and purchase transactions using native aircraft values, player
+    /// allocation, and faction supply. Purchases compete with mission AI for stock.</summary>
     internal static class WingShop
     {
-        /// <summary>One line in the shop.</summary>
+        /// <summary>One shop catalogue offer.</summary>
         internal readonly struct Offer
         {
             public readonly AircraftDefinition Definition;
@@ -35,11 +26,8 @@ namespace WingCommand
             }
         }
 
-        /// <summary>
-        /// One authoritative answer to "can this be bought now?" Shared by the button and
-        /// the mutation path so the UI cannot promise a purchase that <see cref="Buy"/>
-        /// immediately rejects for host, roster, stock, rank, squadron or funds.
-        /// </summary>
+        /// <summary>Shared purchase eligibility for UI and execution, covering host, roster, stock, rank,
+        /// squadron capacity, and funds.</summary>
         internal readonly struct PurchaseQuote
         {
             public readonly bool CanBuy;
@@ -74,13 +62,8 @@ namespace WingCommand
             }
         }
 
-        /// <summary>
-        /// Funds, stock, fit and both capacity reservations for one accepted order.
-        ///
-        /// The economy is reserved before a field is asked to spawn anything, committed only
-        /// when that exact aircraft registers, and restored by an idempotent rollback if no
-        /// aircraft arrives. This object is the single owner of every compensating action.
-        /// </summary>
+        /// <summary>Owns funds, stock, fit, and capacity reservations until the exact delivery registers.
+        /// Commit on delivery or restore through idempotent rollback.</summary>
         internal sealed class PurchaseTransaction
         {
             internal enum State { Reserving, AwaitingAircraft, RollingBack, Committed, RolledBack }
@@ -192,40 +175,30 @@ namespace WingCommand
         private static readonly HashSet<PurchaseTransaction> activeTransactions =
             new HashSet<PurchaseTransaction>();
 
-        /// <summary>
-        /// Whether the player has chosen to requisition past the mission's AI aircraft cap.
-        ///
-        /// Off by default and deliberately explicit: exceeding the cap costs several times
-        /// list price, and a surcharge that applied itself without being asked for would be
-        /// a worse deal than the one the player thought they were taking.
-        /// </summary>
+        /// <summary>Explicit opt-in to ranked, surcharged purchases beyond the mission AI cap; disabled by
+        /// default.</summary>
         public static bool ExceedLimit { get; set; }
 
-        /// <summary>
-        /// Whether a requisition launches with full tanks.
-        ///
-        /// On by default, which is the airframe's own default fuel state and the launch the
-        /// player gets today. Switching it off is a deliberate handicap — half tanks for a
-        /// lighter, more agile wingman that will call bingo sooner — so it is the choice
-        /// that has to be made, not the one that has to be undone.
-        /// </summary>
-        public static bool FullFuel { get; set; } = true;
+        /// <summary>Launch fuel as a fraction of full tank capacity, selected from SpawnFuelSteps.
+        /// Defaults to full, independent of the airframe's preset fuel.</summary>
+        public static float SpawnFuelLevel { get; private set; } = WingTuning.DefaultSpawnFuel;
 
-        /// <summary>
-        /// The fuel level a requisition of this airframe launches with.
-        ///
-        /// Full tanks means the airframe's own default rather than a hard 1.0: some
-        /// definitions ship deliberately short, and overriding that would be handing the
-        /// player more fuel than the game ever launches that aircraft with.
-        /// </summary>
-        public static float SpawnFuelFor(AircraftDefinition definition)
+        /// <summary>Cycle launch fuel to the next step, wrapping at the end.</summary>
+        public static void CycleSpawnFuel()
         {
-            AircraftParameters p = definition != null ? definition.aircraftParameters : null;
-            float full = p != null ? p.DefaultFuelLevel : 1f;
-            return FullFuel ? full : Mathf.Min(full, WingTuning.PartialFuelLevel);
+            float[] steps = WingTuning.SpawnFuelSteps;
+            if (steps == null || steps.Length == 0) return;
+            int idx = 0;
+            for (int i = 0; i < steps.Length; i++)
+                if (Mathf.Approximately(steps[i], SpawnFuelLevel)) { idx = i; break; }
+            SpawnFuelLevel = steps[(idx + 1) % steps.Length];
         }
 
-        /// <summary>Forget what was bought, and the over-limit choice, when a mission ends.</summary>
+        /// <summary>Launch fuel fraction relative to full tank capacity.</summary>
+        public static float SpawnFuelFor(AircraftDefinition definition) =>
+            Mathf.Clamp01(SpawnFuelLevel);
+
+        /// <summary>Clear mission purchase records and the over-limit preference.</summary>
         public static void Reset()
         {
             foreach (PurchaseTransaction transaction in
@@ -238,7 +211,7 @@ namespace WingCommand
             overLimitAircraft.Clear();
             capacityReservations.Reset();
             ExceedLimit = false;
-            FullFuel = true;
+            SpawnFuelLevel = WingTuning.DefaultSpawnFuel;
             squadronCachedAt = float.MinValue;
             rotaryCache.Clear();
             autopilotCache.Clear();
@@ -246,11 +219,10 @@ namespace WingCommand
             WingLoadoutCatalog.Reset();
         }
 
-        /// <summary>Retry compensations that an external game API did not accept last frame.</summary>
+        /// <summary>Retry rollback actions rejected by external game APIs.</summary>
         public static void Tick()
         {
-            // The normal case is no in-flight purchase. Avoid allocating an empty snapshot
-            // every frame; a snapshot is still required while Rollback may mutate the set.
+            // Allocate a transaction snapshot only when nonempty; rollback may mutate the live set.
             if (activeTransactions.Count == 0) return;
 
             foreach (PurchaseTransaction transaction in
@@ -259,17 +231,12 @@ namespace WingCommand
                     transaction.Rollback("retrying failed compensation");
         }
 
-        // Whether a definition is a helicopter, resolved once per airframe.
-        //
-        // Nothing on AircraftDefinition says so - there is no category field and
-        // AircraftParameters has no rotary flag - so the answer comes from the prefab's own
-        // autopilot component, which is the same thing WingRegistry.IsRotary asks of a live
-        // aircraft. Cached because the catalogue rebuilds several times a second and
-        // GetComponentInChildren on a prefab is not free.
+        // Cache rotary classification from the prefab autopilot; AircraftDefinition has no class flag
+        // and catalogue refreshes are frequent.
         private static readonly Dictionary<AircraftDefinition, bool> rotaryCache =
             new Dictionary<AircraftDefinition, bool>();
 
-        /// <summary>True when this airframe flies on rotors rather than wings.</summary>
+        /// <summary>Whether the definition uses rotary flight control.</summary>
         public static bool IsRotary(AircraftDefinition definition)
         {
             if (definition == null) return false;
@@ -289,41 +256,25 @@ namespace WingCommand
             return rotary;
         }
 
-        // Whether a definition is actually a flyable aircraft, resolved once per airframe.
-        //
-        // Blueprinter addons register ships and ground vehicles as AircraftDefinition too,
-        // but their prefabs carry no Autopilot — so a ship or tank would otherwise slip past
-        // MatchesLeader (IsRotary defaults to "rotary" when there is no autopilot) and be
-        // offered as a wingman it could never be flown as.
+        // Cache autopilot presence to distinguish aircraft from addon ships and vehicles registered as
+        // AircraftDefinition.
         private static readonly Dictionary<AircraftDefinition, bool> autopilotCache =
             new Dictionary<AircraftDefinition, bool>();
 
-        /// <summary>
-        /// Whether this definition may be offered at all.
-        ///
-        /// Ships and ground vehicles registered as AircraftDefinition by Blueprinter addons
-        /// are not flyable, and offering one to a wing that cannot command it sells an
-        /// airframe that then orbits on its own with no way to reach it. That is still the
-        /// default. A host profile that has taken responsibility for surface members - it
-        /// has a behaviour registered and the wing has stopped flying slots - lifts it.
-        /// </summary>
+        /// <summary>Whether this definition lacks aircraft flight control and represents a surface
+        /// unit.</summary>
         public static bool IsSurfaceDefinition(AircraftDefinition definition) =>
             definition != null && !IsFlyableAircraft(definition);
 
-        /// <summary>
-        /// Whether this definition may be offered on Supply or Loadout at all.
-        ///
-        /// See <see cref="IsSurfaceDefinition"/> for the flyable vs surface split.
-        /// Event placeholders such as the April Fools "???" UFO are excluded even
-        /// though they carry an autopilot.
-        /// </summary>
+        /// <summary>Whether Supply/Loadout may expose the definition under host capabilities, excluding
+        /// event placeholders even if they have autopilots.</summary>
         public static bool IsCommandableUnit(AircraftDefinition definition) =>
             definition != null
             && !AirframeCatalogPolicy.IsHiddenFromPanels(
                 definition.unitName, definition.code, definition.jsonKey)
             && (IsFlyableAircraft(definition) || WingHost.Current.AllowSurfaceWingmen);
 
-        /// <summary>True when this definition's prefab is armed with an autopilot — i.e. it is an aircraft, not a ship or vehicle.</summary>
+        /// <summary>Whether the prefab has an autopilot and can use aircraft control.</summary>
         public static bool IsFlyableAircraft(AircraftDefinition definition)
         {
             if (definition == null) return false;
@@ -337,99 +288,67 @@ namespace WingCommand
             return has;
         }
 
-        /// <summary>
-        /// Whether this airframe can join the player's formation at all.
-        ///
-        /// Rotary and fixed-wing cannot share a formation - they fly different autopilots
-        /// and differ in speed by a factor of three - and WingRegistry refuses the mix. It
-        /// used to refuse it *after* the purchase went through, so buying a helicopter as a
-        /// jet spent the money, consumed the airframe, and left the aircraft orbiting on
-        /// its own with no way to command it. The catalogue now hides what cannot be
-        /// bought, and Buy refuses it as well in case anything reaches it another way.
-        /// </summary>
+        /// <summary>Check formation compatibility before offering or buying an aircraft; reject
+        /// unsupported rotary/fixed-wing mixtures before spending stock or funds.</summary>
         public static bool MatchesLeader(AircraftDefinition definition)
         {
             Aircraft leader = WingCommandManager.Instance?.Wing?.Leader;
             if (leader == null || definition == null) return false;
 
-            // A surface host has no autopilot, so IsRotary reads it as a helicopter and the
-            // catalogue would offer helicopters only. Under overwatch nothing holds a slot,
-            // so both classes are equally able to escort a ship or a convoy.
+            // Overwatch allows both aircraft classes to escort surface leaders in separate orbits.
             if (WingHost.Current.AllowMixedAirframes) return true;
 
-            // A hull is its own class, and IsRotary cannot see that: it answers "rotary"
-            // for anything without an autopilot, which is every ship and every helicopter
-            // alike.
+            // Check surface capability separately because missing autopilots also classify as rotary.
             if (!IsFlyableAircraft(definition)) return WingHost.Current.AllowSurfaceWingmen;
 
             return IsRotary(definition) == WingRegistry.IsRotary(leader);
         }
 
-        // ------------------------------------------------------------------- pricing
+        // Aircraft pricing.
 
-        /// <summary>
-        /// What an airframe is worth: the same value the player's own aircraft menu prices
-        /// from, with nothing added.
-        ///
-        /// The price used to compound with wing size — 1000, 1500, 2250, 3375 as the wing
-        /// filled — which meant the number on a row was never the number you paid and the
-        /// panel had to print the formula to explain itself. One aircraft, one price.
-        /// </summary>
+        /// <summary>Native airframe list value without a wing-size multiplier.</summary>
         public static float PriceOf(AircraftDefinition definition) =>
             definition != null ? definition.value : 0f;
 
-        /// <summary>
-        /// What this airframe costs to requisition right now, which is list price unless the
-        /// purchase would take the faction past its AI aircraft cap. An owned airframe that
-        /// returned safely to the wing reserve has already been paid for.
-        /// </summary>
+        /// <summary>Current purchase cost, including any over-cap surcharge. Recovered owned airframes are
+        /// already paid for.</summary>
         public static float CurrentPriceOf(AircraftDefinition definition) =>
             Plugin.Settings.CheatFreePurchases ||
             WingSupplyReserve.OwnedOf(definition) > 0
                 ? 0f
                 : PriceOf(definition) * (WouldExceedLimit ? ExceedLimitMultiplier : 1f);
 
-        /// <summary>The multiplier charged for an airframe bought past the squadron cap.</summary>
+        /// <summary>Purchase-price multiplier beyond the squadron cap.</summary>
         public static float ExceedLimitMultiplier =>
             Mathf.Max(1f, WingTuning.ExceedLimitCostMultiplier);
 
-        /// <summary>Rank required before the cap may be exceeded at all.</summary>
+        /// <summary>Minimum player rank for over-cap purchases.</summary>
         public static int ExceedLimitRank => WingTuning.ExceedLimitRank;
 
-        /// <summary>How many over-cap airframes the player may have in the air at once.</summary>
+        /// <summary>Maximum simultaneous player-purchased over-cap aircraft.</summary>
         public static int ExceedLimitAllowance =>
             Mathf.Clamp(WingTuning.ExceedLimitAllowance, 1, 3);
 
-        // Full-price requisitions remain the player's airframes while they survive. This is
-        // deliberately separate from WingRecruitment's paid-assignment set: paying 25% to
-        // redirect an already active mission aircraft is not buying that airframe.
+        // Track full-price aircraft ownership separately from discounted command-right assignment of
+        // mission aircraft.
         private static readonly HashSet<PersistentID> purchasedAircraft =
             new HashSet<PersistentID>();
 
         private static readonly Dictionary<PersistentID, float> purchasePrice =
             new Dictionary<PersistentID, float>();
 
-        // Over-cap airframes the player has bought and still has flying.
-        //
-        // Counted this way, rather than as how far the faction's own aircraft count exceeds
-        // its cap, because those are different things. A mission scripts in whatever AI it
-        // likes regardless of the cap — the screenshot that prompted this had six friendly AI
-        // against a computed limit of zero — so measuring the faction's excess would have
-        // charged the player for the mission's decisions and locked the shop on exactly the
-        // missions the over-limit purchase exists to rescue.
+        // Count the player's surviving over-cap purchases, not mission-scripted excess AI, which the
+        // player did not buy.
         private static readonly HashSet<PersistentID> overLimitAircraft = new HashSet<PersistentID>();
 
-        // Bought but not yet in the world: a hangar delivery waits on the door sequence, and
-        // without this the allowance could be spent several times over in that gap.
-        // Every accepted order owns a future roster and squadron slot until its exact
-        // aircraft registers or the order rolls back. Active recruitment consults the wing
-        // count through WingRegistry.HasRoom, so it cannot steal capacity already paid for.
+        // Reserve roster and squadron capacity while deliveries are pending so purchases and active
+        // recruitment cannot spend the same slots.
         private static readonly CapacityReservations capacityReservations =
             new CapacityReservations();
 
         internal static int PendingWingSlots => capacityReservations.Wing;
 
-        /// <summary>Over-cap airframes still outstanding, counting deliveries in progress.</summary>
+        /// <summary>Live and pending player purchases using over-cap allowance.</summary>
         public static int OverLimitOutstanding
         {
             get
@@ -442,7 +361,7 @@ namespace WingCommand
         private static bool StillFlying(PersistentID id) =>
             !UnitRegistry.TryGetUnit(id, out Unit unit) || unit == null || unit.disabled;
 
-        /// <summary>Record a delivered requisition and, when applicable, its over-cap slot.</summary>
+        /// <summary>Record delivered ownership, fit, and any over-cap allocation.</summary>
         public static void NoteDelivery(Aircraft aircraft, bool overLimit, WingLoadoutChoice loadout,
                                         float paid)
         {
@@ -452,16 +371,13 @@ namespace WingCommand
             purchasePrice[aircraft.persistentID] = Mathf.Max(0f, paid);
             if (overLimit) overLimitAircraft.Add(aircraft.persistentID);
 
-            // The airframe now exists, so the purchase order becomes a fact about this one
-            // aircraft. Every later reader — the panels, the recovery path — asks the book
-            // rather than the plan, which is what keeps one VT-7's fit off the next one.
+            // Bind the delivered fit to this aircraft ID; later reads must not use the next purchase's
+            // plan.
             WingLoadoutBook.NoteSpawned(aircraft, loadout);
         }
 
-        /// <summary>
-        /// Transfer ownership information from a recovered world aircraft into the reserve.
-        /// Also release any over-cap slot immediately rather than waiting for registry prune.
-        /// </summary>
+        /// <summary>Transfer recovered aircraft ownership to reserve and free its over-cap slot
+        /// immediately.</summary>
         internal static bool TakePurchased(PersistentID id)
         {
             overLimitAircraft.Remove(id);
@@ -469,49 +385,36 @@ namespace WingCommand
             return purchasedAircraft.Remove(id);
         }
 
-        /// <summary>Allocation actually charged for this airframe, or zero if it was free.</summary>
+        /// <summary>Actual charged allocation for the aircraft; zero for free purchases.</summary>
         public static float PaidFor(PersistentID id) =>
             purchasePrice.TryGetValue(id, out float paid) ? paid : 0f;
 
         public static float PaidFor(Aircraft aircraft) =>
             aircraft != null ? PaidFor(aircraft.persistentID) : 0f;
 
-        /// <summary>Read ownership without transferring it out of the live aircraft.</summary>
+        /// <summary>Query live ownership without transferring it.</summary>
         public static bool IsPurchased(Aircraft aircraft) =>
             aircraft != null && purchasedAircraft.Contains(aircraft.persistentID);
 
-        /// <summary>Whether the local player has earned the right to exceed the cap.</summary>
+        /// <summary>Whether the local player meets the over-cap rank requirement.</summary>
         public static bool MeetsExceedLimitRank =>
-            GameManager.GetLocalPlayer(out Player player) && player != null &&
-            player.PlayerRank >= ExceedLimitRank;
+            (Plugin.Settings != null && Plugin.Settings.CheatBypassRank) ||
+            (GameManager.GetLocalPlayer(out Player player) && player != null &&
+             player.PlayerRank >= ExceedLimitRank);
 
-        /// <summary>True when the next purchase would be an over-cap one, and is allowed to be.</summary>
+        /// <summary>Whether the next allowed purchase uses over-cap capacity.</summary>
         public static bool WouldExceedLimit =>
             ExceedLimit && Squadron().WouldExceed(capacityReservations.Squadron);
 
-        /// <summary>The player's spendable allocation, or zero when there is no player.</summary>
+        /// <summary>Spendable player allocation, or zero without a player.</summary>
         public static float Allocation =>
             GameManager.GetLocalPlayer(out Player player) && player != null ? player.Allocation : 0f;
 
-        // ----------------------------------------------------------------- catalogue
+        // Shop catalogue.
 
-        /// <summary>
-        /// What can be bought right now.
-        ///
-        /// Two sources: the faction's <c>AircraftSupply</c>, which is populated from the
-        /// mission's declared stock, and the wing reserve, which holds airframes you already
-        /// own — bought, or recovered from a completed sortie. A held airframe stays
-        /// selectable even when it was the faction's last one.
-        ///
-        /// There is deliberately no third source. Offering everything in
-        /// <c>Encyclopedia.i.aircraft</c> from an invented allowance let a mission be flown
-        /// with airframes its author never put on the map, and writing a supply entry for an
-        /// airframe the faction was never given is inventing stock on the mission's behalf.
-        /// If the mission did not stock it and you do not already hold one, it is not for sale.
-        ///
-        /// Both sources are filtered the same way — mission restrictions, player rank, and
-        /// whether the airframe could join this formation at all.
-        /// </summary>
+        /// <summary>Offer only mission faction stock and concrete wing-reserve airframes, filtered by
+        /// restrictions, rank, and formation compatibility. Reserve entries remain available when faction
+        /// stock is empty; encyclopedia entries alone do not create purchasable stock.</summary>
         public static IReadOnlyList<Offer> Catalogue()
         {
             catalogue.Clear();
@@ -535,9 +438,8 @@ namespace WingCommand
                 listedDefinitions.Add(entry.Key);
             }
 
-            // A held airframe remains selectable even when it was the faction's final one.
-            // A recovered airframe of a type the mission never stocked lives only here, not
-            // in the mission's supply dictionary, so this is the only place it can be offered.
+            // Include reserve-only types even when faction stock is exhausted or the mission never
+            // declared that type.
             foreach (AircraftDefinition definition in WingSupplyReserve.Definitions)
             {
                 if (definition == null || listedDefinitions.Contains(definition)) continue;
@@ -555,10 +457,8 @@ namespace WingCommand
 
         private static readonly List<Offer> loadoutCatalogue = new List<Offer>();
 
-        /// <summary>
-        /// All commandable aircraft (both fixed-wing and rotary) available for loadout template editing.
-        /// Does not restrict to the player's current airframe class so players can configure both.
-        /// </summary>
+        /// <summary>Loadout-editing catalogue across aircraft classes, independent of the current leader's
+        /// class.</summary>
         public static IReadOnlyList<Offer> LoadoutCatalogue()
         {
             loadoutCatalogue.Clear();
@@ -589,7 +489,7 @@ namespace WingCommand
                 listedDefinitions.Add(definition);
             }
 
-            // Also include all known aircraft from encyclopedia so all modded and stock planes/helos can be edited
+            // Include known stock and modded encyclopedia airframes for template editing.
             Encyclopedia enc = Encyclopedia.i;
             if (enc != null && enc.aircraft != null)
             {
@@ -607,30 +507,30 @@ namespace WingCommand
             return loadoutCatalogue;
         }
 
-        /// <summary>Restrictions, rank and airframe class - the gates both sources share.</summary>
+        /// <summary>Shared restriction, rank, and optional leader-class filters.</summary>
         private static bool Sellable(AircraftDefinition definition, FactionHQ hq, int rank, bool matchLeader = true)
         {
             if (definition == null) return false;
 
             if (!IsCommandableUnit(definition)) return false;
 
-            // Hide what could never join the formation, rather than selling it and leaving
-            // the aircraft orphaned in the air with no way to command it.
+            // Exclude incompatible formations before a purchase can create an uncommandable aircraft.
             if (matchLeader && !MatchesLeader(definition)) return false;
 
             if (hq != null && hq.restrictedAircraft != null &&
                 hq.restrictedAircraft.Contains(definition.unitName)) return false;
 
-            if (definition.aircraftParameters != null &&
+            if (!Plugin.Settings.CheatBypassRank &&
+                definition.aircraftParameters != null &&
                 definition.aircraftParameters.rankRequired > rank) return false;
 
             return true;
         }
 
 
-        // ------------------------------------------------------------------ purchase
+        // Purchase execution.
 
-        /// <summary>Evaluate every purchase gate without changing funds, stock or capacity.</summary>
+        /// <summary>Evaluate purchase eligibility without mutating funds, stock, or capacity.</summary>
         public static PurchaseQuote Quote(AircraftDefinition definition)
         {
             WingLoadoutChoice loadout = WingLoadoutBook.PlannedFor(definition);
@@ -667,7 +567,8 @@ namespace WingCommand
                     : "Jets cannot formate on a helicopter");
             if (hq.restrictedAircraft != null && hq.restrictedAircraft.Contains(definition.unitName))
                 return Denied(definition.unitName + " is restricted in this mission");
-            if (definition.aircraftParameters != null &&
+            if (!Plugin.Settings.CheatBypassRank &&
+                definition.aircraftParameters != null &&
                 definition.aircraftParameters.rankRequired > player.PlayerRank)
                 return Denied("Requires rank " + definition.aircraftParameters.rankRequired);
 
@@ -685,9 +586,8 @@ namespace WingCommand
             declared = hq.AircraftSupply.ContainsKey(definition);
             source = WingSupplyReserve.NextSource(definition);
 
-            // An airframe the mission never stocked has no faction stock to draw on. It can
-            // still be bought back out of the wing reserve if you already hold one, which is
-            // the only way an undeclared type reaches the shop at all.
+            // Undeclared types can come only from an existing reserve slot, never invented faction
+            // stock.
             int factionStock = declared ? hq.GetUnitSupply(definition) : 0;
             stock = factionStock + WingSupplyReserve.CountOf(definition);
             if (stock <= 0) return Denied(definition.unitName + ": none left in stock");
@@ -711,11 +611,8 @@ namespace WingCommand
                                      player, hq, source, declared, autoRtbCandidate);
         }
 
-        /// <summary>
-        /// Reserve one purchase, ask the delivery system to produce it, and leave the
-        /// transaction open until the exact aircraft registers. A synchronous failure rolls
-        /// back here; a delayed timeout rolls back in <see cref="WingShopDelivery.Tick"/>.
-        /// </summary>
+        /// <summary>Reserve and request delivery, committing only when the exact aircraft registers. Roll
+        /// back synchronous failures here and delayed failures in WingShopDelivery.Tick.</summary>
         public static bool Buy(AircraftDefinition definition, out string reason, out float paid)
         {
             reason = null;
@@ -826,8 +723,7 @@ namespace WingCommand
                 }
                 else
                 {
-                    // Not in the faction's stock and not in our reserve: there is nothing to
-                    // debit. Quote() denies this case already; this is the belt to its braces.
+                    // Recheck that an actual stock source exists before debiting.
                     reason = definition.unitName + ": none left in stock";
                     transaction.Rollback(reason);
                     return false;
@@ -865,14 +761,9 @@ namespace WingCommand
             return ordinary + WingSupplyReserve.CountOf(definition);
         }
 
-        /// <summary>
-        /// How much of the mission's AI aircraft cap the faction is using.
-        ///
-        /// The limit mirrors the game's own formula in <c>FactionHQ.DeployAIAircraft</c> —
-        /// the mission's base limit, raised for each enemy player and lowered for each
-        /// friendly one. The faction's <c>activeAIAircraft</c> list is private, so the count
-        /// is taken from the unit registry: friendly aircraft with no player in them.
-        /// </summary>
+        /// <summary>Faction AI capacity using the native mission/enemy/friendly-player formula. Count
+        /// friendly non-player aircraft from the public registry because activeAIAircraft is
+        /// private.</summary>
         internal readonly struct SquadronState
         {
             public readonly int Active;
@@ -884,23 +775,18 @@ namespace WingCommand
                 Limit = limit;
             }
 
-            /// <summary>True when there is no room for one more aircraft.</summary>
+            /// <summary>Whether adding one aircraft exceeds capacity.</summary>
             public bool AtCapacity => Active + 1 > Limit;
 
-            /// <summary>Whether one more aircraft exceeds the cap after accepted orders.</summary>
+            /// <summary>Whether accepted pending orders plus another aircraft exceed capacity.</summary>
             public bool WouldExceed(int pending) => Active + Mathf.Max(0, pending) + 1 > Limit;
         }
 
         private static SquadronState cachedSquadron;
         private static float squadronCachedAt = float.MinValue;
 
-        /// <summary>
-        /// The squadron state for display, memoised for a fraction of a second.
-        ///
-        /// Counting walks every aircraft in the world and every faction's player list, and
-        /// the panel reads it once per shop row on every refresh. The authoritative overload
-        /// below is never cached, so a purchase is always checked against a live count.
-        /// </summary>
+        /// <summary>Cache squadron counts briefly for repeated UI reads. Purchase validation uses the
+        /// uncached overload for live authority.</summary>
         public static SquadronState Squadron()
         {
             if (Time.unscaledTime - squadronCachedAt < 0.25f) return cachedSquadron;
@@ -941,10 +827,7 @@ namespace WingCommand
                 if (a.NetworkHQ != hq) continue;
                 if (a.Player != null) continue;
 
-                // An aircraft the player has released is on its way home to be despawned.
-                // Counting it holds capacity against a slot that is already being given
-                // back, which is exactly the trap releasing a wingman to afford a better
-                // one used to fall into.
+                // Exclude dismissed RTB aircraft from capacity while they await recovery and despawn.
                 if (WingDeparture.Contains(a)) continue;
 
                 aiCount++;
@@ -953,16 +836,8 @@ namespace WingCommand
             return new SquadronState(aiCount, Mathf.Max(0, Mathf.FloorToInt(limit)));
         }
 
-        /// <summary>
-        /// The cap, and the terms on which it may be broken.
-        ///
-        /// A mission that leaves no room at all — single-player missions routinely compute a
-        /// limit of zero once the player's own presence is subtracted — used to make the
-        /// shop simply unusable, with the reason visible only as a toast that had already
-        /// gone by the time anyone read it. It can now be bought past, for a multiple of
-        /// list price and only at rank, which keeps it a deliberate expense rather than a
-        /// dead end.
-        /// </summary>
+        /// <summary>Validate capacity and explicit ranked over-cap purchase terms, returning the
+        /// applicable price multiplier.</summary>
         private static bool ClearedForPurchase(FactionHQ hq, out float multiplier,
                                                out string reason, out bool overLimit,
                                                out Aircraft autoRtbCandidate)
@@ -971,13 +846,21 @@ namespace WingCommand
             multiplier = 1f;
             autoRtbCandidate = null;
 
+            // The debug wing-limit bypass also waives the mission AI capacity limit.
+            if (Plugin.Settings != null && Plugin.Settings.CheatNoWingLimit)
+            {
+                overLimit = false;
+                return true;
+            }
+
             SquadronState squadron = Squadron(hq);
             overLimit = squadron.WouldExceed(capacityReservations.Squadron);
             if (!overLimit) return true;
 
             if (!ExceedLimit)
             {
-                // If over limit is not active, automatically find one friendly AI closest to an airbase and RTB it
+                // Without over-limit purchasing, select a nearby friendly AI to return home and free
+                // capacity.
                 autoRtbCandidate = FindClosestAiToAirbase(hq);
                 if (autoRtbCandidate != null)
                 {
@@ -1010,10 +893,8 @@ namespace WingCommand
             return true;
         }
 
-        /// <summary>
-        /// Finds the friendly active AI aircraft closest to any friendly airbase, to order it home
-        /// when requisitioning at capacity without exceeding limit.
-        /// </summary>
+        /// <summary>Find the active friendly AI nearest a friendly base for an at-capacity return
+        /// order.</summary>
         public static Aircraft FindClosestAiToAirbase(FactionHQ hq)
         {
             if (hq == null) return null;

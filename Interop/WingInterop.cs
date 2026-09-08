@@ -2,11 +2,8 @@ using NOAvionics;
 
 namespace WingCommand.Interop
 {
-    /// <summary>
-    /// Public, reflection-safe façade. Boscali Summer must not compile against this
-    /// assembly; it reads the same AppDomain keys via its own copy of PresenceBoard,
-    /// or probes these types by name when it wants a typed view.
-    /// </summary>
+    /// <summary>Public reflection-safe presence API. Companion plugins use shared AppDomain keys or
+    /// type-name probes instead of a compiled WingCommand dependency.</summary>
     public static class WingPresence
     {
         public static int ApiVersion => 1;
@@ -57,8 +54,8 @@ namespace WingCommand
                 changed = true;
             }
 
-            // SetInts takes its own immutable snapshot. Reuse our comparison buffer
-            // between roster changes, including replacements that preserve the count.
+            // SetInts copies an immutable snapshot; reuse the comparison buffer even for same-count
+            // roster replacements.
             if (changed) PresenceBoard.SetInts(PresenceBoard.WingMemberIds, publishedIds);
         }
 

@@ -2,39 +2,23 @@ using UnityEngine;
 
 namespace WingCommand
 {
-    /// <summary>
-    /// Emergency disengagement: scatter, flare, run, then rejoin.
-    ///
-    /// Three phases, because a retreat that is one long turn away looks like a manoeuvre
-    /// and a retreat that starts with the whole wing breaking on different headings looks
-    /// like a reaction:
-    ///
-    /// 1. <b>Break</b> — hard turn away from the threat with flares running. Each wingman
-    ///    takes a different heading, fanned by slot, so the wing scatters rather than
-    ///    wheeling as one block.
-    /// 2. <b>Egress</b> — run for the rally point at full power and low altitude.
-    /// 3. <b>Rejoin</b> — once clear, return to the leader instead of remaining in a
-    /// remote holding orbit with no obvious completion.
-    ///
-    /// The flare handling mirrors the stock AI exactly, including the
-    /// <c>countermeasureTrigger</c> check before toggling: <c>Aircraft.Countermeasures</c>
-    /// dispenses continuously while held, so it is switched off at the end of the break
-    /// rather than left running, which would empty the aircraft.
-    /// </summary>
+    /// <summary>Scatter by slot with a hard break and brief flares, egress low toward rally, then rejoin.
+    /// Native countermeasures dispense continuously while triggered, so release the trigger after the
+    /// flare phase.</summary>
     internal class FallBackState : WingPilotState
     {
         private enum Phase { Break, Egress, Hold }
 
-        /// <summary>Seconds of hard break before settling into the run.</summary>
+        /// <summary>Duration of the initial hard break, in seconds.</summary>
         private const float BreakSeconds = 4.5f;
 
-        /// <summary>Seconds of flares from the start of the break.</summary>
+        /// <summary>Flare duration from break entry, in seconds.</summary>
         private const float FlareSeconds = 3f;
 
-        /// <summary>Degrees each slot's break heading is fanned from its neighbour's.</summary>
+        /// <summary>Angular separation between slot break headings, in degrees.</summary>
         private const float ScatterSpread = 35f;
 
-        /// <summary>Altitude held during the run out, in metres above ground.</summary>
+        /// <summary>Egress altitude in metres AGL.</summary>
         private const float EgressAltitude = 200f;
 
         private Phase phase;
@@ -58,8 +42,7 @@ namespace WingCommand
             Vector3 away = AwayFromThreat();
             rally = ChooseRally(away);
 
-            // Fan the break by slot. Slot 1 goes one way, slot 2 the other, slot 3 wider
-            // again — the wing splits instead of presenting one turning formation.
+            // Alternate and widen break headings by slot to scatter the wing.
             float side = (member.Slot % 2 == 1) ? 1f : -1f;
             float fan = side * ScatterSpread * ((member.Slot + 1) / 2);
             breakDirection = Quaternion.AngleAxis(fan, Vector3.up) * away;
@@ -103,7 +86,7 @@ namespace WingCommand
                     break;
 
                 case Phase.Hold:
-                    // Advance switches state immediately; this is only a defensive guard.
+                    // Defensive completion if the phase transition has already finished.
                     CompleteTask(WingOrder.Formation);
                     break;
             }
@@ -122,9 +105,9 @@ namespace WingCommand
             }
         }
 
-        // ------------------------------------------------------------------- phases
+        // Retreat phases.
 
-        /// <summary>Hard turn away, full power, maximum bank authority.</summary>
+        /// <summary>Break away at full power with maximum permitted bank.</summary>
         private void Break()
         {
             controlInputs.throttle = 1f;
@@ -149,7 +132,7 @@ namespace WingCommand
                 targetVelocity: Vector3.zero);
         }
 
-        /// <summary>Run for the rally point, low and fast.</summary>
+        /// <summary>Fly low and fast toward rally.</summary>
         private void Egress()
         {
             controlInputs.throttle = 1f;
@@ -186,22 +169,15 @@ namespace WingCommand
         {
             float standoff = WingTuning.FallBackStandoff;
 
-            // Either far enough from the threat, or close enough to the rally point that
-            // there is nothing left to run towards.
+            // Finish once sufficiently clear of the threat or near rally.
             return FastMath.SquareDistance(aircraft.GlobalPosition(), rally) < standoff * standoff * 0.25f
                    || Time.timeSinceLevelLoad - phaseStarted > 90f;
         }
 
-        // ------------------------------------------------------------------ geometry
+        // Retreat geometry.
 
-        /// <summary>
-        /// A horizontal unit vector pointing away from the nearest known threat.
-        ///
-        /// Falls back progressively, because a retreat has to work even with an empty
-        /// track picture: the faction's nearest known ground enemy first, then the
-        /// reciprocal of the leader's heading, which at least takes the wing back the way
-        /// it came.
-        /// </summary>
+        /// <summary>Horizontal direction away from a known threat. Fall back to the nearest known ground
+        /// enemy, then opposite the leader's heading when tracks are unavailable.</summary>
         private Vector3 AwayFromThreat()
         {
             Vector3 away = Vector3.zero;
@@ -222,10 +198,8 @@ namespace WingCommand
             return away.normalized;
         }
 
-        /// <summary>
-        /// Nearest friendly airbase, else ship, else a standoff along <paramref name="away"/>.
-        /// Shared with Stand Down so both orders loiter in the same kind of place.
-        /// </summary>
+        /// <summary>Friendly loiter point: nearest base, then ship, then stand-off along away. Shared with
+        /// Stand Down.</summary>
         internal static GlobalPosition FriendlyLoiterPoint(Aircraft aircraft, Vector3 away)
         {
             if (aircraft == null) return default;
@@ -251,19 +225,13 @@ namespace WingCommand
 
         private GlobalPosition ChooseRally(Vector3 away) => FriendlyLoiterPoint(aircraft, away);
 
-        // -------------------------------------------------------------------- flares
+        // Retreat countermeasures.
 
-        /// <summary>Station holding flares, resolved on entry. -1 when this airframe has none.</summary>
+        /// <summary>Flare station resolved on entry; -1 if absent.</summary>
         private int flareIndex = -1;
 
-        /// <summary>
-        /// Cover the break with flares.
-        ///
-        /// Names the flare station rather than reusing <c>activeIndex</c>. Whatever was
-        /// selected last is not necessarily an expendable at all — an ECM-equipped aircraft
-        /// can easily be sitting on its jammer — so this used to hold the dispense trigger on
-        /// a jammer for three seconds and put nothing in the air.
-        /// </summary>
+        /// <summary>Trigger the actual flare station during the break; the previously active station may
+        /// be ECM.</summary>
         private void StartFlares()
         {
             if (aircraft == null || aircraft.countermeasureManager == null) return;

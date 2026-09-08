@@ -1,8 +1,8 @@
 using System;
 using Xunit;
 
-// Exercise the production station-fire adapter. Only the native target/shot boundary
-// is replaced; policy, cadence, retained payload and target routing run as shipped.
+// Exercise production firing policy, cadence, payload retention, and routing; replace only native
+// target and shot boundaries.
 namespace WingCommand
 {
     internal sealed partial class WingMember

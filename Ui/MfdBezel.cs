@@ -5,10 +5,8 @@ using UnityEngine.UI;
 
 namespace WingCommand
 {
-    /// <summary>
-    /// Named MFD bezel claim on top of <see cref="BezelRegistry"/>. Coordinates with
-    /// Boscali Summer's OPS/RAD screens without a compile-time reference.
-    /// </summary>
+    /// <summary>Named MFD bezel reservation via BezelRegistry, shared with companion screens without a
+    /// compiled dependency.</summary>
     internal static class MfdBezel
     {
         public static bool TryClaim(
@@ -75,7 +73,7 @@ namespace WingCommand
         public static MFDScreen FindTemplate(List<MFDScreen> screens)
         {
             if (screens == null) return null;
-            // Fixed option pages give a stable footprint; faction/target lists can grow.
+            // Measure stable option pages rather than variable-length faction or target lists.
             foreach (MFDScreen s in screens)
             {
                 if (s != null && (s.shortName == "MAP" || s.shortName == "HUD") &&

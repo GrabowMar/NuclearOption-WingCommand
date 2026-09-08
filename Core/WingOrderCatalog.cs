@@ -1,14 +1,11 @@
 namespace WingCommand
 {
-    /// <summary>One source of player-facing order names and capability metadata.</summary>
+    /// <summary>Shared order labels and capability rules.</summary>
     internal static class WingOrderCatalog
     {
         public static string Label(WingOrder order)
         {
-            // A companion plugin describing a non-aircraft host renames what an order means
-            // from its seat - "Form Up" is not a thing a jet can do on a moving warship.
-            // Checked here rather than at each surface because this is the one place every
-            // surface reads an order's name from.
+            // Apply host-specific order names centrally so every UI surface uses the same meaning.
             string host = WingHost.Current.LabelFor(order);
             if (host != null) return host;
 
@@ -57,25 +54,20 @@ namespace WingCommand
             }
         }
 
-        /// <summary>
-        /// Orders that cannot be issued without a map point at all.
-        ///
-        /// Deliberately narrower than <see cref="TakesPoint"/>: a cargo run may be given a
-        /// drop point, and is still a complete order without one, because the stock
-        /// transport behaviour will go and find somewhere itself.
-        /// </summary>
+        /// <summary>Orders requiring a map point. Cargo accepts one but can use native route search
+        /// without it.</summary>
         public static bool NeedsPoint(WingOrder order) =>
             order == WingOrder.OrbitHere || order == WingOrder.LandHere ||
             order == WingOrder.SeekAndDestroy;
 
-        /// <summary>Orders the map cursor may be armed for a coordinate.</summary>
+        /// <summary>Orders that can arm a map coordinate placement.</summary>
         public static bool TakesPoint(WingOrder order) => MapOrderPolicy.PlacesPoint(order);
 
         public static bool CanApply(WingMember member, WingOrder order)
         {
             if (member == null || !member.Alive) return false;
             if (WingHost.Current.IsHidden(order)) return false;
-            // A taxiing delivery can accept a standing order; it flies it once airborne.
+            // Retain queueable standing orders during taxi for activation after takeoff.
             if (member.DeliveryPending && !WingOrderRules.CanQueueWhilePending(order)) return false;
             if (order == WingOrder.DeliverCargo) return member.CanDeliverCargo;
             if (order == WingOrder.LandHere) return member.CanLandInPlace;
@@ -86,13 +78,8 @@ namespace WingCommand
             return true;
         }
 
-        /// <summary>
-        /// Whether an order may be offered at all, with no wingman in hand.
-        ///
-        /// The radial wheel builds its slices before there is a selection to test, so it
-        /// cannot ask <see cref="CanApply"/>. This answers the half of that question which
-        /// does not depend on who is being ordered.
-        /// </summary>
+        /// <summary>Whether the host exposes this order before a member selection exists; radial
+        /// construction uses this scope-independent check.</summary>
         public static bool IsOfferable(WingOrder order) => !WingHost.Current.IsHidden(order);
 
         public static string UnavailableReason(WingOrder order)

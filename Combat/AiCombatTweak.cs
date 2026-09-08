@@ -4,20 +4,18 @@ using HarmonyLib;
 
 namespace WingCommand
 {
-    /// <summary>
-    /// Repairs the stock missile-warning subscription when this mod moves a pilot back
-    /// into combat. It deliberately does not alter global AI skill or bravery.
-    /// </summary>
+    /// <summary>Restores missile warnings on combat re-entry without changing global AI skill or
+    /// bravery.</summary>
     [HarmonyPatch(typeof(AIPilotCombatModes), nameof(AIPilotCombatModes.EnterState))]
     internal static class AiCombatTweak
     {
         [HarmonyPostfix]
         private static void Postfix(AIPilotCombatModes __instance, Pilot pilot)
         {
-            if (pilot == null) return;
+            if (pilot == null || !Plugin.Settings.AiMissileWarningRepair.Value) return;
 
             Aircraft aircraft = pilot.aircraft;
-            if (aircraft == null || aircraft.Player != null) return;
+            if (aircraft == null || aircraft.Player != null || !aircraft.LocalSim) return;
 
             RebalanceMissileAlert(__instance, aircraft);
         }
@@ -27,10 +25,8 @@ namespace WingCommand
 
         private static bool loggedRebalanceFailure;
 
-        /// <summary>
-        /// The stock state subscribes in its constructor but unsubscribes in LeaveState.
-        /// Remove then add on entry to restore the handler without duplicating its subscription.
-        /// </summary>
+        /// <summary>The stock constructor subscribes once, but LeaveState unsubscribes. Reattach once on
+        /// each entry.</summary>
         private static void RebalanceMissileAlert(AIPilotCombatModes state, Aircraft aircraft)
         {
             if (state == null || MissileAlertHandler == null) return;

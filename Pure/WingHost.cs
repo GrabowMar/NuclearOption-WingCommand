@@ -2,59 +2,27 @@ using System;
 
 namespace WingCommand
 {
-    /// <summary>
-    /// What the player is commanding *from*, when it is not an aircraft.
-    ///
-    /// Two community mods - KAR (ground vehicles) and BOTE (warships) - put the player in
-    /// something the game still models as an Aircraft but which has no autopilot, no gear,
-    /// and a top speed a jet cannot fly at. Every assumption this mod makes about the leader
-    /// then reads wrong: formation slots land in the sea, the deck-hold entry test never
-    /// fires because there is no gear to extend, and the shop offers helicopters only
-    /// because a null autopilot classifies as rotary.
-    ///
-    /// This is the seam a companion plugin uses to say so. It is deliberately a *pushed
-    /// value*, not a callback: the call sites are the label table, the order gate and the
-    /// deck test, all of which run per roster row per repaint or every tick. A delegate or
-    /// an interface would put third-party code inside all three and then need the try/catch,
-    /// the fault set and the per-tick cache that <see cref="WingAi"/> needs for exactly that
-    /// reason. A struct cannot throw, and the caching is the registration itself.
-    ///
-    /// The default profile is inert in every field, so nothing here changes behaviour until
-    /// something calls <see cref="Set"/>.
-    /// </summary>
+    /// <summary>Validated host-vehicle profile pushed by companion plugins. Describes surface-command
+    /// capabilities without running extension callbacks inside UI or flight loops; the default leaves
+    /// aircraft behaviour unchanged.</summary>
     public static class WingHost
     {
-        /// <summary>
-        /// Bumped when the shape of <see cref="WingHostProfile"/> changes incompatibly.
-        ///
-        /// A property rather than a const, and that is the entire point of it: a const is
-        /// baked into the calling assembly at compile time, so a plugin checking one would
-        /// be comparing its own build-time copy against itself and could never detect a
-        /// mismatch. This is read from the Wing Command that is actually loaded.
-        /// </summary>
+        /// <summary>Runtime API version for incompatible profile changes. A property avoids baking the
+        /// value into consuming assemblies like a const would.</summary>
         public static int ApiVersion => 1;
 
         private static WingHostProfile current;
         private static int revision;
 
-        /// <summary>The active profile. Never invalid; the default describes an ordinary aircraft.</summary>
+        /// <summary>Validated active host profile, defaulting to an ordinary aircraft.</summary>
         public static WingHostProfile Current => current;
 
-        /// <summary>
-        /// Increments on every <see cref="Set"/> and <see cref="Clear"/>.
-        ///
-        /// The radial wheel and the overlay slice table are built once and cached, so a
-        /// relabel is invisible to both without something to compare against. This is that
-        /// something.
-        /// </summary>
+        /// <summary>Revision incremented on Set/Clear so cached radial labels and slices
+        /// refresh.</summary>
         public static int Revision => revision;
 
-        /// <summary>
-        /// Describe the vehicle the player is commanding from.
-        ///
-        /// Validation throws here, at the caller, rather than at the tick that would have
-        /// read the bad value - which is the whole reason the seam pushes rather than calls.
-        /// </summary>
+        /// <summary>Set host metadata after synchronous validation; invalid profiles fail at registration
+        /// rather than during flight.</summary>
         public static void Set(in WingHostProfile profile)
         {
             if (profile.Owner == null)
@@ -68,7 +36,7 @@ namespace WingCommand
             revision++;
         }
 
-        /// <summary>Go back to describing an ordinary aircraft.</summary>
+        /// <summary>Restore the default aircraft profile.</summary>
         public static void Clear()
         {
             if (current.Owner == null) return;
@@ -76,15 +44,8 @@ namespace WingCommand
             revision++;
         }
 
-        /// <summary>
-        /// Drop a profile whose vehicle is no longer the leader.
-        ///
-        /// Called from the one place the leader is assigned, which makes this the whole
-        /// liveness story: a mission change, an ejection, a death and a takeover into a
-        /// wingman's seat all pass through there, and none of them needs its own hook. A
-        /// registrant that never unregisters therefore cannot leave a stale profile applied
-        /// to an aircraft that is not the one it described.
-        /// </summary>
+        /// <summary>Clear a profile when its owner is no longer leader. The central leader-change path
+        /// covers death, ejection, mission changes, and takeover.</summary>
         internal static void NoteLeader(object leader)
         {
             if (current.Owner == null) return;
@@ -92,7 +53,7 @@ namespace WingCommand
             Clear();
         }
 
-        /// <summary>Test seam. Not for plugins, which unregister through <see cref="Clear"/>.</summary>
+        /// <summary>Internal test reset; extensions should call Clear.</summary>
         internal static void Reset()
         {
             current = default;
@@ -100,74 +61,50 @@ namespace WingCommand
         }
     }
 
-    /// <summary>
-    /// An immutable description of a non-aircraft host vehicle.
-    ///
-    /// Every field is inert at its default, so a partially filled profile degrades to stock
-    /// behaviour for everything it does not mention.
-    /// </summary>
+    /// <summary>Immutable host description with inert defaults for unspecified features.</summary>
     public readonly struct WingHostProfile
     {
-        // The number of WingOrder members. A table longer than this was built against a
-        // different Wing Command, which Validate refuses rather than silently truncating.
+        // Supported order count; reject longer tables as incompatible instead of truncating them.
         private const int OrderCount = 13;
 
-        /// <summary>
-        /// The aircraft this profile describes, compared by reference only.
-        ///
-        /// Typed object so this file stays engine-free and testable: the only operation
-        /// performed on it is a reference comparison.
-        /// </summary>
+        /// <summary>Profile owner compared only by reference. Object keeps the contract
+        /// engine-independent.</summary>
         public object Owner { get; }
 
-        /// <summary>True when the host is a surface vehicle rather than an aircraft.</summary>
+        /// <summary>Whether the host is a surface vehicle.</summary>
         public bool IsSurfaceVehicle { get; }
 
-        /// <summary>A short tag for logs and toasts - "kar", "bote", "surface".</summary>
+        /// <summary>Short diagnostic vehicle-class tag.</summary>
         public string VehicleClass { get; }
 
-        /// <summary>
-        /// Hold the wing overhead unconditionally.
-        ///
-        /// The existing deck hold is already the behaviour a surface leader wants - a
-        /// leader-tracking orbit that leaves explicit orders alone - so this forces its
-        /// entry test true rather than introducing a second kind of holding.
-        /// </summary>
+        /// <summary>Force leader-tracking deck hold for overhead escort while preserving explicit
+        /// orders.</summary>
         public bool Overwatch { get; }
 
-        /// <summary>
-        /// Let rotary and fixed-wing share the wing.
-        ///
-        /// Safe only alongside <see cref="Overwatch"/>: the refusal exists because a
-        /// helicopter cannot hold a slot on a jet, and in overwatch nobody holds a slot.
-        /// </summary>
+        /// <summary>Permit mixed rotary/fixed-wing members only with Overwatch, where no aircraft must
+        /// match another's slot speed.</summary>
         public bool AllowMixedAirframes { get; }
 
-        /// <summary>
-        /// Let units with no autopilot join the wing as members.
-        ///
-        /// Off by default and gated the same way as <see cref="AllowMixedAirframes"/>,
-        /// because with it on the roster can contain something none of the built-in flight
-        /// states can fly - safe only once the wing has stopped trying to hold slots.
-        /// </summary>
+        /// <summary>Permit members without autopilots under Overwatch; registered surface behaviours must
+        /// provide their control.</summary>
         public bool AllowSurfaceWingmen { get; }
 
-        /// <summary>Metres above the host to orbit at. Zero keeps the stock altitudes.</summary>
+        /// <summary>Orbit height above host in metres; zero retains defaults.</summary>
         public float OverwatchAltitude { get; }
 
-        /// <summary>Bitmask over <see cref="WingOrder"/>: set bits are offered nowhere.</summary>
+        /// <summary>WingOrder bitmask of commands hidden from all interfaces.</summary>
         public uint HiddenOrders { get; }
 
-        /// <summary>Why a hidden order is hidden, for the toast that refuses it.</summary>
+        /// <summary>Explanation for rejecting a hidden command.</summary>
         public string HiddenReason { get; }
 
-        /// <summary>Replaces "Leader on the deck - wing holding overhead".</summary>
+        /// <summary>Custom deck-hold notification text.</summary>
         public string OverwatchToast { get; }
 
-        /// <summary>Replaces the deck-hold HUD code, stock "HOLD".</summary>
+        /// <summary>Custom deck-hold HUD code, replacing HOLD.</summary>
         public string DeckHoldShortCode { get; }
 
-        /// <summary>Replaces the deck-hold roster label, stock "HOLDING".</summary>
+        /// <summary>Custom deck-hold roster text, replacing HOLDING.</summary>
         public string DeckHoldLabel { get; }
 
         private readonly string[] labels;
@@ -205,16 +142,16 @@ namespace WingCommand
             this.shortLabels = shortLabels;
         }
 
-        /// <summary>True while a profile is applied at all.</summary>
+        /// <summary>Whether a profile currently has an owner.</summary>
         public bool Active => Owner != null;
 
-        /// <summary>The override name for an order, or null to use the stock one.</summary>
+        /// <summary>Custom order label, or null for the default.</summary>
         public string LabelFor(WingOrder order) => Lookup(labels, order);
 
-        /// <summary>The override short code for an order, or null to use the stock one.</summary>
+        /// <summary>Custom compact order code, or null for the default.</summary>
         public string ShortLabelFor(WingOrder order) => Lookup(shortLabels, order);
 
-        /// <summary>Whether this order is withheld from every surface.</summary>
+        /// <summary>Whether every command interface hides this order.</summary>
         public bool IsHidden(WingOrder order)
         {
             int i = (int)order;
@@ -222,7 +159,7 @@ namespace WingCommand
             return (HiddenOrders & (1u << i)) != 0u;
         }
 
-        /// <summary>Build a mask for <see cref="HiddenOrders"/>.</summary>
+        /// <summary>Build the hidden-order bitmask.</summary>
         public static uint Mask(params WingOrder[] orders)
         {
             uint mask = 0u;
@@ -247,13 +184,8 @@ namespace WingCommand
             return string.IsNullOrEmpty(s) ? null : s;
         }
 
-        /// <summary>
-        /// Reject a profile that would misbehave, rather than let it through to a tick.
-        ///
-        /// A label table shorter than the enum is not an error - it simply overrides the
-        /// orders it covers - but one longer than the enum means the caller was built
-        /// against a different WingOrder, and ignoring the tail would hide that.
-        /// </summary>
+        /// <summary>Validate profile safety and compatibility. Short label tables override only supplied
+        /// orders; longer tables imply an incompatible enum and are rejected.</summary>
         internal void Validate()
         {
             if (labels != null && labels.Length > OrderCount)

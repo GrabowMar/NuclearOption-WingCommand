@@ -5,12 +5,9 @@ using UnityEngine;
 
 namespace WingCommand
 {
-    /// <summary>
-    /// Settles Return To Base as an idempotent sequence: capture facts, disembark without
-    /// scoring a death, credit stock through the game's Returned path, refund purchase
-    /// allocation, then release the squadron pilot back to the pool. A failed stage remains
-    /// pending and is retried instead of losing the aircraft between unrelated mutations.
-    /// </summary>
+    /// <summary>Retryable RTB settlement: capture facts, disembark without a death, return native stock,
+    /// refund allocation, and release the pilot. Completed stages are not repeated after
+    /// failure.</summary>
     internal static class WingRecovery
     {
         private const float GroundHeight = 5f;
@@ -21,13 +18,13 @@ namespace WingCommand
 
         private sealed class Settlement
         {
-            /// <summary>Null for a released aircraft, which is already off the roster.</summary>
+            /// <summary>Absent after the aircraft leaves the wing roster.</summary>
             public WingRegistry Wing;
 
-            /// <summary>Null for a released aircraft, which no longer has a member.</summary>
+            /// <summary>Absent for an already-released aircraft.</summary>
             public WingMember Member;
 
-            /// <summary>The departure record to close out, for a released aircraft.</summary>
+            /// <summary>Released-aircraft departure record to finish.</summary>
             public WingDeparture.Departing Departing;
 
             public Aircraft Aircraft;
@@ -72,20 +69,27 @@ namespace WingCommand
                 }
             }
 
+            // Complete pending settlements even after recovery is disabled.
+            for (int i = pending.Count - 1; i >= 0; i--)
+            {
+                Settlement settlement = pending[i];
+                Advance(settlement);
+                if (settlement.Completed) pending.RemoveAt(i);
+            }
+
             bool despawn = RecoverySettlementPolicy.ShouldDespawn(
                 Plugin.Settings.RtbReturnsToReserve.Value);
 
             if (!despawn)
             {
-                // Recovery is switched off, so nothing is credited or despawned. The crew
-                // still leaves the seat and returns to the pool, or the squadron count would
-                // go on excusing capacity they are no longer flying.
+                // With recovery disabled, release crew without crediting or despawning aircraft so
+                // capacity accounting stays accurate.
                 for (int i = wing.Count - 1; i >= 0; i--)
                 {
                     WingMember member = wing.Members[i];
                     if (member == null || member.RefitPending ||
                         member.Order != WingOrder.ReturnToBase) continue;
-                    if (!IsHome(member)) continue;
+                    if (IsPending(member) || !IsHome(member)) continue;
                     Disembark(member.Aircraft);
                     wing.Recover(member);
                 }
@@ -95,7 +99,7 @@ namespace WingCommand
                 for (int i = landed.Count - 1; i >= 0; i--)
                 {
                     WingDeparture.Departing departing = landed[i];
-                    if (!IsHome(departing.Aircraft)) continue;
+                    if (IsPending(departing) || !IsHome(departing.Aircraft)) continue;
                     Disembark(departing.Aircraft);
                     WingPilotRoster.Retire(departing.AircraftId, survived: true);
                     WingDeparture.Forget(departing);
@@ -103,15 +107,7 @@ namespace WingCommand
                 return;
             }
 
-            for (int i = pending.Count - 1; i >= 0; i--)
-            {
-                Settlement settlement = pending[i];
-                Advance(settlement);
-                if (settlement.Completed) pending.RemoveAt(i);
-            }
-
-            // Iterate backwards because a newly started settlement can complete immediately
-            // and remove its member from the roster.
+            // Walk backward because immediate settlement may remove a roster member.
             for (int i = wing.Count - 1; i >= 0; i--)
             {
                 WingMember member = wing.Members[i];
@@ -124,8 +120,7 @@ namespace WingCommand
                 if (settlement.Completed) pending.Remove(settlement);
             }
 
-            // Released aircraft settle on exactly the same terms, but they are no longer on
-            // the roster to be found by the loop above.
+            // Settle released aircraft separately because they are no longer on the wing roster.
             WingDeparture.Prune();
             IReadOnlyList<WingDeparture.Departing> outbound = WingDeparture.Outbound;
             for (int i = outbound.Count - 1; i >= 0; i--)
@@ -140,7 +135,8 @@ namespace WingCommand
             }
         }
 
-        /// <summary>Prune must not report a staged recovery as a combat loss between retries.</summary>
+        /// <summary>Whether a staged settlement must be protected from loss pruning during
+        /// retries.</summary>
         public static bool IsPending(WingMember member)
         {
             if (member == null) return false;
@@ -149,11 +145,8 @@ namespace WingCommand
             return false;
         }
 
-        /// <summary>
-        /// Whether prune should leave this member alone. Covers a settlement already
-        /// staged and the one-frame gap where they are down at base under RTB/refit
-        /// but the settlement has not begun yet.
-        /// </summary>
+        /// <summary>Protect staged recovery and the gap after RTB/refit touchdown before settlement
+        /// begins.</summary>
         public static bool HoldsDeath(WingMember member)
         {
             if (member == null) return false;
@@ -198,11 +191,8 @@ namespace WingCommand
             return settlement;
         }
 
-        /// <summary>
-        /// The same settlement for an aircraft the player released, which reached its base
-        /// after leaving the roster. The facts were captured at the moment of release, while
-        /// there was still a member to read them from.
-        /// </summary>
+        /// <summary>Start released-aircraft settlement from facts captured before roster
+        /// removal.</summary>
         private static Settlement Begin(WingDeparture.Departing departing)
         {
             Aircraft aircraft = departing.Aircraft;
@@ -240,9 +230,8 @@ namespace WingCommand
                     settlement.Disembarked = true;
                 }
 
-                // Retire the pilot while the aircraft reference is still valid. If the
-                // native return then fails, this settlement remains the durable owner and
-                // retries instead of abandoning an untracked frame.
+                // Retire crew while the aircraft reference is valid. Keep settlement ownership for
+                // retries if native return fails.
                 if (!settlement.RosterReleased)
                 {
                     WingPilotRoster.Retire(settlement.AircraftId, survived: true);
@@ -264,9 +253,13 @@ namespace WingCommand
 
                 if (!settlement.Refunded)
                 {
-                    if (RecoverySettlementPolicy.ShouldRefund(settlement.Owned, settlement.Paid) &&
-                        GameManager.GetLocalPlayer(out Player player) && player != null)
+                    if (RecoverySettlementPolicy.ShouldRefund(settlement.Owned, settlement.Paid))
                     {
+                        if (!GameManager.GetLocalPlayer(out Player player) || player == null)
+                        {
+                            Retry(settlement, "waiting for player to refund allocation");
+                            return;
+                        }
                         player.AddAllocation(settlement.Paid);
                         settlement.RefundedAmount = settlement.Paid;
                     }
@@ -364,20 +357,9 @@ namespace WingCommand
         private static bool IsHome(WingMember member) =>
             member != null && IsHome(member.Aircraft);
 
-        /// <summary>
-        /// Actually on the ground and stopped, which is a stricter question than
-        /// <see cref="IsHome"/> asks.
-        ///
-        /// A recovery only has to know that an aircraft has arrived, because the next thing
-        /// that happens to it is being returned. A refit has to know it is <i>down</i>: it
-        /// replenishes and then launches again, and the five-metre arrival window admits a
-        /// helicopter still two seconds above the pad and descending at walking pace, or a
-        /// jet rolling out at speed. Refitting there would rearm an aircraft in mid-air, or
-        /// send one back down the runway it is still braking on.
-        ///
-        /// Waiting is safe: a landed wingman is parked, and the stock parked state holds
-        /// full brake below one metre of radar altitude, so it does stop.
-        /// </summary>
+        /// <summary>Require grounded and stopped for refit, stricter than recovery arrival. The five-metre
+        /// arrival window can include descending helicopters or rolling jets; wait for native parking
+        /// brakes before replenishment and relaunch.</summary>
         private static bool IsDown(WingMember member)
         {
             if (member == null || !IsHome(member)) return false;

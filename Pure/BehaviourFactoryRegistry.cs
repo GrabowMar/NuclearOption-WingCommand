@@ -3,7 +3,7 @@ using System.Collections.Generic;
 
 namespace WingCommand
 {
-    /// <summary>Registration identity survives only until its next replacement or removal.</summary>
+    /// <summary>Factory registrations have identity until replaced or removed.</summary>
     internal sealed class BehaviourFactoryRegistry<TContext, TState> where TState : class
     {
         internal sealed class Registration
@@ -22,7 +22,7 @@ namespace WingCommand
                 throw new ArgumentException("A behaviour needs an id.", nameof(behaviourId));
             if (factory == null) throw new ArgumentNullException(nameof(factory));
 
-            // Even re-registering the same delegate is a new registration lifetime.
+            // Registering the same delegate still creates a fresh lifetime.
             registrations[behaviourId] = new Registration(factory);
         }
 
@@ -35,14 +35,14 @@ namespace WingCommand
 
         public bool RemoveIfCurrent(string behaviourId, Registration registration)
         {
-            // A factory may replace its own registration before throwing. Its failure
-            // must not remove the successor that a later evaluation should observe.
+            // Remove only the failed registration, preserving any successor the factory installed
+            // before throwing.
             if (!ReferenceEquals(Find(behaviourId), registration)) return false;
             return Remove(behaviourId);
         }
     }
 
-    /// <summary>Each aircraft owns its state objects; only factory registrations are shared.</summary>
+    /// <summary>Caches state per aircraft while sharing only registrations.</summary>
     internal sealed class BehaviourStateCache<TContext, TState> where TState : class
     {
         private readonly struct Entry
@@ -71,8 +71,8 @@ namespace WingCommand
             if (entries.TryGetValue(behaviourId, out Entry entry) &&
                 ReferenceEquals(entry.Registration, registration)) return entry.State;
 
-            // Publish only after construction succeeds. A throwing replacement does
-            // not overwrite the last known state, and is never mistaken for a hit.
+            // Publish a new state only after successful construction; failed replacements preserve the
+            // previous cache.
             TState state = registration.Create(context);
             entries[behaviourId] = new Entry(registration, state);
             return state;

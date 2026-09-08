@@ -26,8 +26,8 @@ namespace WingCommand
                     Mathf.Max(other.definition.length, other.definition.width, other.definition.height);
                 float physicalRadius = Mathf.Max(WingTuning.CollisionMinimumRadius,
                     LaunchSafety.Clearance(selfSize, otherSize));
-                // The predictive buffer must not repel a steady, valid compressed
-                // formation forever. Physical clearance remains an absolute minimum.
+                // Limit predictive repulsion for stable compressed formations while retaining physical
+                // clearance.
                 float radius = Mathf.Max(physicalRadius, Mathf.Min(spacing * 0.85f, relative.magnitude * 0.75f));
                 float score = FormationCollision.Threat(relative.x, relative.y, relative.z,
                     velocity.x, velocity.y, velocity.z, radius, out float time, out float predictedMiss);
@@ -39,8 +39,7 @@ namespace WingCommand
                     out float x, out float y, out float z);
                 escape = new Vector3(x, y, z);
                 if (self.radarAlt < 250f) escape.y = Mathf.Max(0f, escape.y);
-                // A fore/aft collision needs a lateral escape, not an aim point
-                // farther down the same collision course.
+                // Escape fore/aft collision laterally; extending the same course cannot resolve it.
                 Vector3 forward = self.rb.velocity.sqrMagnitude > 1f ? self.rb.velocity.normalized : self.transform.forward;
                 escape = Vector3.ProjectOnPlane(escape, forward);
                 if (escape.sqrMagnitude < 0.01f)

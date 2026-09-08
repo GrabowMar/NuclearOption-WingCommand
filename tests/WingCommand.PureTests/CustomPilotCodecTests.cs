@@ -7,6 +7,18 @@ namespace WingCommand.PureTests
     public class CustomPilotCodecTests
     {
         [Theory]
+        [InlineData("4294967297")]
+        [InlineData("-4294967295")]
+        [InlineData("1e30")]
+        [InlineData("NaN")]
+        public void OutOfRangeStatisticsFallBackInsteadOfWrapping(string value)
+        {
+            var record = Assert.Single(CustomPilotCodec.Decode(
+                "{\"callsign\":\"FOX\",\"xp\":" + value + "}").Pilots);
+            Assert.Equal(0, record.Xp);
+        }
+
+        [Theory]
         [InlineData("{\"pilots\": ]}")]
         [InlineData("[}")]
         [InlineData("{\"pilots\": /}")]

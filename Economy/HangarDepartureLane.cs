@@ -3,21 +3,9 @@ using UnityEngine;
 
 namespace WingCommand
 {
-    /// <summary>
-    /// One departure at a time per field, so two requisitions never occupy the same
-    /// threshold or the same pad.
-    ///
-    /// The unit of exclusion is the airbase rather than the hangar, which is what it used to
-    /// be. A fixed-wing requisition is put on the takeoff runway, and every aircraft at a
-    /// field shares that runway however many hangars the field has — reserving a pad said
-    /// nothing about whether the strip was clear, and two jets ordered together arrived on
-    /// top of each other. Rotary deliveries still come out of a hangar, and holding the same
-    /// slot for them costs nothing: a helipad departure is over in seconds.
-    ///
-    /// This only waits. Every movement decision belongs to the stock AI, and the anchor is
-    /// re-read from its live transform each pass so that a floating-origin shift or a moving
-    /// carrier does not read as a stationary aircraft that has cleared the spot.
-    /// </summary>
+    /// <summary>Serialises departures per airbase, covering shared runways and pads across hangars. Native
+    /// AI owns movement. Read the anchor's live transform so origin shifts and carrier motion do not
+    /// falsely signal clearance.</summary>
     internal static class HangarDepartureLane
     {
         private sealed class Departure
@@ -40,12 +28,8 @@ namespace WingCommand
             return true;
         }
 
-        /// <summary>
-        /// True while a departure has been holding this field's slot for longer than a
-        /// delivery should take. Drawn as JAMMED on the Supply field list, which is the
-        /// only honest answer when the pad or the strip is occupied by something the mod
-        /// does not control.
-        /// </summary>
+        /// <summary>Whether field departure ownership has exceeded its expected duration; shown as JAMMED
+        /// in Supply.</summary>
         internal static bool IsJammed(Airbase airbase)
         {
             if (airbase == null) return false;
@@ -78,11 +62,8 @@ namespace WingCommand
             return true;
         }
 
-        /// <summary>
-        /// Hand the slot from the order that reserved it to the member now flying it, so a
-        /// delivery keeps its field held across the point where the shop stops owning the
-        /// aircraft and the wing starts.
-        /// </summary>
+        /// <summary>Transfer lane ownership from purchase order to wing member without releasing the field
+        /// during handoff.</summary>
         internal static bool Transfer(object from, object to)
         {
             if (from == null || to == null) return false;
@@ -121,9 +102,8 @@ namespace WingCommand
                 Departure departure = active[i];
                 Aircraft aircraft = departure.Aircraft;
 
-                // The owning order holds this slot while native doors are still opening or
-                // a spawn is still being scheduled. It releases a failed request itself; an
-                // accepted request may still emit its aircraft several seconds later.
+                // Keep order ownership while native doors or delayed spawn are pending. The order
+                // releases failed requests itself.
                 if (!departure.AircraftTracked && departure.Airbase != null) continue;
 
                 if (aircraft == null || aircraft.disabled || departure.Airbase == null ||

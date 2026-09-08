@@ -2,10 +2,8 @@ using System;
 
 namespace WingCommand
 {
-    /// <summary>
-    /// One slot in formation units: lateral (+ right), back (+ astern), height (+ up).
-    /// The adapter multiplies lateral/back by spacing and height by vertical stack.
-    /// </summary>
+    /// <summary>Formation-unit slot: lateral positive right, back positive aft, height positive up. Scale
+    /// planar coordinates by spacing and height by stack.</summary>
     internal readonly struct SlotLayout
     {
         public readonly float Lateral;
@@ -20,15 +18,11 @@ namespace WingCommand
         }
     }
 
-    /// <summary>
-    /// Aircraft formations with stable lanes and repeatable element spacing. Fixed
-    /// sweep keeps extended echelons on their assigned side; tactical shapes grow aft
-    /// in elements rather than demanding ever larger outside-turn speeds. Every shape
-    /// has horizontal clearance even without its stack (surface units and terrain floors).
-    /// </summary>
+    /// <summary>Stable formation lanes with horizontal separation even at zero stack. Tactical shapes
+    /// extend aft in elements to bound outer-turn speed demands.</summary>
     internal static class FormationLayout
     {
-        // Shared with flight's turn deformation and checked by geometry regressions.
+        // Shared turn-deformation factor covered by geometry checks.
         internal const float TurnLateralScale = 0.72f;
         internal const float TurnBackScale = 1.12f;
         internal const float MinimumPlanarSeparation = 0.75f;
@@ -48,7 +42,7 @@ namespace WingCommand
                     return new SlotLayout(0.90f * slot, 0.80f * slot, StepDown(slot));
 
                 case FormationShape.LineAbreast:
-                    // All wingmen remain abeam instead of curving progressively into trail.
+                    // Keep line-abreast members abeam at every rank.
                     return new SlotLayout(side * 1.10f * rank, 0f, -0.15f);
                 case FormationShape.Trail:
                     return new SlotLayout(0f, 1.10f * slot, StepDown(slot));
@@ -63,22 +57,19 @@ namespace WingCommand
                     return Diamond(slot);
 
                 case FormationShape.Ladder:
-                    // A deliberate climbing trail; unlike other shapes, altitude is its identity.
+                    // Ladder uses a climbing trail as its defining geometry.
                     return new SlotLayout(0f, 1.10f * slot, 1.55f * slot);
                 case FormationShape.Wall:
                     return new SlotLayout(side * 1.55f * rank, 0f, Math.Min(0.75f * rank, 3f));
             }
         }
 
-        // Keep a large wing near its leader's altitude; a terrain clamp must not erase
-        // the only separation between slots or make the last aircraft chase a deep staircase.
+        // Cap step-down so large wings stay near leader altitude and retain horizontal separation when
+        // terrain flattens slots.
         private static float StepDown(int rank) => -0.25f * Math.Min(rank, 4);
 
-        /// <summary>
-        /// Two-aircraft elements in an offset box. Element wingmen hold the same wide
-        /// lateral interval; later elements sit aft and slightly high. The offset leaves
-        /// the rear element a view past the lead pair without an unbounded lateral arm.
-        /// </summary>
+        /// <summary>Offset two-aircraft boxes with constant lateral spacing; later elements sit aft and
+        /// higher for visibility without unbounded turn arms.</summary>
         private static SlotLayout CombatSpread(int slot)
         {
             int element = slot / 2;
@@ -89,11 +80,8 @@ namespace WingCommand
                 Math.Min(element, 2) * 0.65f + (wingman ? 0.35f : 0f));
         }
 
-        /// <summary>
-        /// Strong-right finger four: lead's wingman left, element lead right, its
-        /// wingman farther right and aft by the same interval. Extra four-ships repeat
-        /// behind with enough gap for the aft member of the preceding group.
-        /// </summary>
+        /// <summary>Strong-right finger four: lead wingman left, second element right and aft. Repeat
+        /// four-ships behind with clearance for the preceding tail.</summary>
         private static SlotLayout FingerFour(int slot)
         {
             int group = slot / 4;
@@ -108,7 +96,7 @@ namespace WingCommand
             }
         }
 
-        /// <summary>Equal-sided diamonds sharing each preceding tail as the next lead.</summary>
+        /// <summary>Linked equal-sided diamonds using each previous tail as the next lead.</summary>
         private static SlotLayout Diamond(int slot)
         {
             int group = (slot - 1) / 3;

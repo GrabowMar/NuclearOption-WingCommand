@@ -5,9 +5,7 @@ using System.Text;
 
 namespace WingCommand
 {
-    /// <summary>
-    /// Pure data record representing one custom pilot loaded from a file.
-    /// </summary>
+    /// <summary>Decoded custom-pilot data.</summary>
     internal sealed class CustomPilotRecord
     {
         public string Name { get; set; } = "UNKNOWN";
@@ -23,9 +21,7 @@ namespace WingCommand
             !string.IsNullOrWhiteSpace(DialogueTag) ? DialogueTag.Trim().ToUpperInvariant() : Callsign.Trim().ToUpperInvariant();
     }
 
-    /// <summary>
-    /// Pure data record representing a custom radio chatter line or exchange.
-    /// </summary>
+    /// <summary>Decoded custom radio line or exchange.</summary>
     internal sealed class CustomChatterRecord
     {
         public string Opening { get; set; }
@@ -39,19 +35,15 @@ namespace WingCommand
         public bool IsEventLine => !string.IsNullOrWhiteSpace(Event) && !string.IsNullOrWhiteSpace(Text);
     }
 
-    /// <summary>
-    /// The combined payload parsed from a custom pilot file.
-    /// </summary>
+    /// <summary>Pilots and chatter decoded from one file.</summary>
     internal sealed class CustomPilotPayload
     {
         public List<CustomPilotRecord> Pilots { get; } = new List<CustomPilotRecord>();
         public List<CustomChatterRecord> Chatters { get; } = new List<CustomChatterRecord>();
     }
 
-    /// <summary>
-    /// Resilient, zero-dependency JSON decoder for custom pilot and chatter files.
-    /// Supports comments, missing properties and casing differences. Invalid input is ignored.
-    /// </summary>
+    /// <summary>Dependency-free custom-pilot JSON decoder accepting comments, optional fields, and case
+    /// variations; malformed input is ignored.</summary>
     internal static class CustomPilotCodec
     {
         public static CustomPilotPayload Decode(string json)
@@ -288,9 +280,11 @@ namespace WingCommand
             {
                 if (string.Equals(pair.Key, key, StringComparison.OrdinalIgnoreCase))
                 {
-                    if (pair.Value is long l) return (int)l;
+                    if (pair.Value is long l)
+                        return l >= int.MinValue && l <= int.MaxValue ? (int)l : defaultValue;
                     if (pair.Value is int i) return i;
-                    if (pair.Value is double d) return (int)d;
+                    if (pair.Value is double d)
+                        return d >= int.MinValue && d <= int.MaxValue ? (int)d : defaultValue;
                     if (int.TryParse(pair.Value?.ToString(), NumberStyles.Integer, CultureInfo.InvariantCulture, out int parsed))
                         return parsed;
                 }
@@ -298,7 +292,7 @@ namespace WingCommand
             return defaultValue;
         }
 
-        // ------------------------------------------------------------------ scanner & parser
+        // JSON scanning and parsing.
 
         private sealed class JsonScanner
         {
@@ -336,7 +330,7 @@ namespace WingCommand
                         continue;
                     }
 
-                    // Line comment //
+                    // Consume a line comment.
                     if (c == '/' && pos + 1 < source.Length && source[pos + 1] == '/')
                     {
                         pos += 2;
@@ -345,7 +339,7 @@ namespace WingCommand
                         continue;
                     }
 
-                    // Block comment /* ... */
+                    // Consume a block comment.
                     if (c == '/' && pos + 1 < source.Length && source[pos + 1] == '*')
                     {
                         pos += 2;
@@ -365,7 +359,7 @@ namespace WingCommand
                 SkipWhitespaceAndComments();
                 if (pos >= source.Length || source[pos] != '"')
                     throw new FormatException("Expected a quoted string.");
-                pos++; // skip opening quote
+                pos++; // Consume the opening string quote.
 
                 var sb = new StringBuilder();
                 while (pos < source.Length)
@@ -445,7 +439,7 @@ namespace WingCommand
         private static Dictionary<string, object> ParseJsonObject(JsonScanner s, int depth)
         {
             var dict = new Dictionary<string, object>(StringComparer.OrdinalIgnoreCase);
-            s.Next(); // skip '{'
+            s.Next(); // Consume the object opener.
 
             while (!s.IsEnd)
             {
@@ -477,7 +471,7 @@ namespace WingCommand
         private static List<object> ParseJsonArray(JsonScanner s, int depth)
         {
             var list = new List<object>();
-            s.Next(); // skip '['
+            s.Next(); // Consume the array opener.
 
             while (!s.IsEnd)
             {

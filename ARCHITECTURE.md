@@ -143,7 +143,7 @@ sealed class DamagedFormation : IWingInfluence
     }
 }
 
-// Register at plugin initialization; unregister when unloading.
+// Register during plugin startup and unregister on unload.
 WingAi.RegisterInfluence(new DamagedFormation());
 ```
 

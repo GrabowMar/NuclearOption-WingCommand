@@ -1,13 +1,9 @@
 namespace WingCommand
 {
-    /// <summary>
-    /// One source of player-facing manoeuvre names and the entry gates that keep a
-    /// wingman from starting one it cannot finish. Engine-free so it compiles into the
-    /// test project beside <see cref="FormationShapes"/>.
-    /// </summary>
+    /// <summary>Shared manoeuvre labels and entry-safety gates, independent of the engine.</summary>
     internal static class ManeuverCatalog
     {
-        /// <summary>Every manoeuvre, in menu order.</summary>
+        /// <summary>Manoeuvres in display order.</summary>
         public static readonly ManeuverKind[] All =
         {
             ManeuverKind.BreakLeft,
@@ -58,11 +54,8 @@ namespace WingCommand
             }
         }
 
-        /// <summary>
-        /// True when a helicopter or tiltrotor can fly this. Only the level breaks are
-        /// safe on an airframe that has no energy to trade in the vertical; everything
-        /// else reports "unable".
-        /// </summary>
+        /// <summary>Rotary-compatible manoeuvres; only level breaks avoid unsupported vertical energy
+        /// demands.</summary>
         public static bool RotaryCapable(ManeuverKind kind) =>
             kind == ManeuverKind.BreakLeft ||
             kind == ManeuverKind.BreakRight ||
@@ -70,11 +63,8 @@ namespace WingCommand
             kind == ManeuverKind.NotchThreat ||
             kind == ManeuverKind.MaskTerrain;
 
-        /// <summary>
-        /// Height above ground, in metres, a wingman must have before it will start the
-        /// manoeuvre. Vertical manoeuvres that lose altitude need the most room; a level
-        /// break or a waggle needs almost none.
-        /// </summary>
+        /// <summary>Minimum entry altitude in metres AGL, allowing room for each manoeuvre's
+        /// descent.</summary>
         public static float MinEntryAltitudeAgl(ManeuverKind kind)
         {
             switch (kind)
@@ -93,10 +83,7 @@ namespace WingCommand
             }
         }
 
-        /// <summary>
-        /// Airspeed, as a fraction of the airframe's own maximum, below which the
-        /// manoeuvre is refused. A loop or a Split-S entered slow finishes in a stall.
-        /// </summary>
+        /// <summary>Minimum fraction of maximum airspeed needed to enter safely.</summary>
         public static float MinEntrySpeedFraction(ManeuverKind kind)
         {
             switch (kind)
@@ -110,7 +97,7 @@ namespace WingCommand
             }
         }
 
-        /// <summary>Which way the level break turns: -1 left, +1 right, 0 for non-breaks.</summary>
+        /// <summary>Break turn sign: -1 left, +1 right, zero otherwise.</summary>
         public static int BreakDirection(ManeuverKind kind)
         {
             if (kind == ManeuverKind.BreakLeft) return -1;

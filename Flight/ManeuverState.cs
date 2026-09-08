@@ -3,13 +3,14 @@ using UnityEngine;
 
 namespace WingCommand
 {
-    /// <summary>Native tactical turns and JSON aerobatics, bounded by entry gates, hard deck, and timeout.</summary>
+    /// <summary>Native tactical and JSON-scripted manoeuvres with entry, terrain, and timeout
+    /// limits.</summary>
     internal sealed class ManeuverState : WingPilotState
     {
-        /// <summary>No manoeuvre may run longer than this before it is abandoned level.</summary>
+        /// <summary>Maximum manoeuvre duration before level recovery.</summary>
         private const float MaxManeuverSeconds = 18f;
 
-        /// <summary>Airspeed fraction below which a vertical manoeuvre bails out.</summary>
+        /// <summary>Minimum airspeed fraction for continuing a vertical manoeuvre.</summary>
         private const float StallFraction = 0.12f;
 
         private ManeuverKind kind;
@@ -36,7 +37,7 @@ namespace WingCommand
             stateDisplayName = "manoeuvring";
         }
 
-        /// <summary>Choose which manoeuvre to fly. Call before switching to this state.</summary>
+        /// <summary>Select the manoeuvre before entering this state.</summary>
         public void SetManeuver(ManeuverKind value)
         {
             kind = value;
@@ -67,9 +68,8 @@ namespace WingCommand
             if (kind == ManeuverKind.NotchThreat)
                 notchDirection = ResolveNotchDirection(aircraft, entryForward);
 
-            // Reasons the manoeuvre cannot be flown. Recorded, not acted on here: switching
-            // pilot state from inside EnterState is re-entrant, so the first FixedUpdate
-            // tick does the rejoin instead - the same pattern AttackRunState uses.
+            // Record failed entry gates and recover on the first fixed update; switching inside
+            // EnterState would be re-entrant.
             if (ManeuverCatalog.BreakDirection(kind) == 0 &&
                 kind != ManeuverKind.WingWaggle &&
                 kind != ManeuverKind.NotchThreat &&
@@ -128,7 +128,7 @@ namespace WingCommand
                 return;
             }
 
-            // Hard floor and timeout apply in every phase of every manoeuvre.
+            // Enforce terrain floor and timeout in every manoeuvre phase.
             float hardFloor = kind == ManeuverKind.MaskTerrain ? 20f : WingTuning.ManeuverHardFloor;
             if (aircraft.radarAlt < hardFloor)
             {
@@ -158,19 +158,18 @@ namespace WingCommand
             else if (step == Step.Failed) Finish(unable: true, "recovered early");
         }
 
-        // ------------------------------------------------------------------ manoeuvres
+        // Manoeuvre execution.
 
         private Step FlyBreak()
         {
-            int dir = ManeuverCatalog.BreakDirection(kind);   // -1 left, +1 right
+            int dir = ManeuverCatalog.BreakDirection(kind);   // Left is -1; right is +1.
             Vector3 breakDir = Quaternion.AngleAxis(dir * 135f, Vector3.up) * entryForward;
 
             float turned = Vector3.Angle(entryForward, Flatten(Heading()));
 
             if (fixedWing)
             {
-                // Ensure the break turn destination accounts for terrain clearance and doesn't
-                // drag the nose down through the horizon during an 88-degree bank turn.
+                // Keep break-turn aim above terrain so near-vertical bank cannot drag the nose down.
                 float safeY = aircraft.radarAlt < entryRadarAlt
                     ? aircraft.GlobalPosition().y + (entryRadarAlt - aircraft.radarAlt) * 0.6f
                     : aircraft.GlobalPosition().y;
@@ -360,7 +359,7 @@ namespace WingCommand
                     altitudeHold: AutopilotMath.CruiseHold(aircraft, entryRadarAlt),
                     targetVelocity: Vector3.zero);
 
-                // Smoothly envelope waggle cycles to damp roll rate and settle dead-level.
+                // Taper waggle amplitude to damp roll and finish level.
                 float envelope = Mathf.Clamp01(1f - (t - 2.0f) / 0.8f);
                 float wave = Mathf.Sin(t * Mathf.PI * 2f * 1.0f) * 0.65f * envelope;
                 float bank = FixedWingFormation.BankOf(aircraft);
@@ -464,7 +463,7 @@ namespace WingCommand
             }
             return Step.Running;
         }
-        // ------------------------------------------------------------------ helpers
+        // Manoeuvre helpers.
 
         private void RecoverWingsLevel()
         {
@@ -480,8 +479,8 @@ namespace WingCommand
 
         private void Finish(bool unable, string reason)
         {
-            // Both endings rejoin the wing, so both use the same call - the distinction
-            // (a clean finish versus an early recovery) is only useful in the log.
+            // Use the same rejoin call for completion and early recovery; log their distinction
+            // separately.
             WingComms.Say(member, WingComms.Call.ManeuverDone);
 
             if (Plugin.Settings.VerboseLogging.Value)
@@ -498,13 +497,13 @@ namespace WingCommand
             abortReason = reason;
         }
 
-        /// <summary>Body-frame pitch rate in rad/s, positive nose-up (a pull).</summary>
+        /// <summary>Body pitch rate in rad/s, positive nose-up.</summary>
         private float BodyPitchRate() =>
             aircraft.rb != null
                 ? -Vector3.Dot(aircraft.rb.angularVelocity, aircraft.transform.right)
                 : 0f;
 
-        /// <summary>Body-frame roll rate in rad/s about the nose.</summary>
+        /// <summary>Body roll rate about the nose, in rad/s.</summary>
         private float BodyRollRate() =>
             aircraft.rb != null
                 ? Vector3.Dot(aircraft.rb.angularVelocity, aircraft.transform.forward)

@@ -4,7 +4,7 @@ using UnityEngine;
 
 namespace WingCommand
 {
-    /// <summary>White PNG glyphs, cached once and tinted by their UI controls.</summary>
+    /// <summary>Cached white PNG silhouettes, tinted by their controls.</summary>
     internal static class IconFactory
     {
         private static readonly Dictionary<string, Sprite> cache = new Dictionary<string, Sprite>();
@@ -46,15 +46,8 @@ namespace WingCommand
             }
         }
 
-        /// <summary>
-        /// Resolve an airframe to the silhouette used throughout Wing Command. The map
-        /// icon contains the aircraft's actual outline; the friendly icon remains a
-        /// compatible fallback for definitions that do not provide one.
-        ///
-        /// Game sprites are copied rather than reused: some airframes ship with an opaque
-        /// field behind the glyph, and drawing that field on a WMC tile looks like a square
-        /// backdrop. The original map/HUD sprite is left untouched.
-        /// </summary>
+        /// <summary>Copy the airframe map silhouette, falling back to its friendly icon, and remove opaque
+        /// backgrounds without modifying native map/HUD sprites.</summary>
         public static Sprite Aircraft(AircraftDefinition definition)
         {
             Sprite source = null;

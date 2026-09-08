@@ -3,23 +3,19 @@ using UnityEngine;
 
 namespace WingCommand
 {
-    /// <summary>
-    /// Opens transmissions with the native radio click. Missing scene singletons are retried;
-    /// playback exceptions disable audio until mission reset. Subtitles remain available.
-    /// </summary>
+    /// <summary>Plays native radio clicks. Retry missing singletons; disable playback after exceptions
+    /// until mission reset. Subtitles remain available.</summary>
     internal static class WingRadioAudio
     {
-        /// <summary>
-        /// Minimum seconds between clicks, preventing overlapping acknowledgements.
-        /// </summary>
+        /// <summary>Minimum click spacing in seconds to prevent overlap.</summary>
         private const float MinimumGap = 0.35f;
 
         private static float lastPlayed = float.MinValue;
 
-        /// <summary>Set once the game's audio has been found to be unreachable, to stop retrying.</summary>
+        /// <summary>Stop retrying after a playback failure.</summary>
         private static bool unavailable;
 
-        /// <summary>Open a transmission with the game's own radio click.</summary>
+        /// <summary>Play the native transmission-opening click.</summary>
         public static void Transmission()
         {
             if (unavailable || Plugin.Settings.Radio.Value != ChatterLevel.TextAndTone) return;
@@ -36,15 +32,14 @@ namespace WingCommand
             }
             catch (Exception e)
             {
-                // Not worth a warning per line. Radio chatter is cosmetic, and the subtitle
-                // carries the actual information either way.
+                // Disable failed audio quietly; subtitles still carry the message.
                 unavailable = true;
                 Plugin.LogVerbose(
                     "[Comms] radio click unavailable; chatter will be silent: " + e.Message);
             }
         }
 
-        /// <summary>Allow the audio to be found again on the next mission.</summary>
+        /// <summary>Retry audio discovery next mission.</summary>
         public static void Reset()
         {
             lastPlayed = float.MinValue;

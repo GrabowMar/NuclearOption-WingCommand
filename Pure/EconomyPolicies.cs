@@ -3,7 +3,8 @@ using System.Collections.Generic;
 
 namespace WingCommand
 {
-    /// <summary>Idempotent reverse-order compensation for a transaction's completed effects.</summary>
+    /// <summary>Retries transaction compensation in reverse order without repeating successful
+    /// actions.</summary>
     internal sealed class RollbackJournal
     {
         private readonly List<Action> compensations = new List<Action>();
@@ -37,13 +38,13 @@ namespace WingCommand
                     onError?.Invoke(e);
                 }
             }
-            // Failed actions stay in order for retry; successful ones never run twice.
+            // Retain failed actions in order; discard successful actions before retry.
             closed = compensations.Count == 0;
             return closed;
         }
     }
 
-    /// <summary>Outstanding delivery capacity counted independently of live aircraft.</summary>
+    /// <summary>Tracks pending delivery capacity separately from live aircraft.</summary>
     internal sealed class CapacityReservations
     {
         public int Wing { get; private set; }
@@ -72,7 +73,7 @@ namespace WingCommand
         }
     }
 
-    /// <summary>Priority rules for selecting one concrete reserve slot without parallel FIFOs.</summary>
+    /// <summary>Selects concrete reserve slots while preserving fit and ownership identity.</summary>
     internal static class ReserveSlotPolicy
     {
         public static int SelectForPurchase(int count, Func<int, bool> matchesDefinition,
@@ -113,60 +114,44 @@ namespace WingCommand
             return -1;
         }
 
-        /// <summary>
-        /// Whether an airframe being recovered or stored can enter the wing reserve.
-        /// Owned airframes are exempt from faction hold capacity because the player paid for them.
-        /// Manual HOLD still uses this; RTB no longer auto-stores.
-        /// </summary>
+        /// <summary>Apply capacity to manual faction holds while exempting paid aircraft. RTB no longer
+        /// auto-stores through this policy.</summary>
         public static bool CanStoreAirframe(bool owned, int currentCount, int factionStockCapacity) =>
             owned || currentCount < factionStockCapacity;
     }
 
-    /// <summary>
-    /// How a completed Return To Base settles: despawn vs park, and whether purchase
-    /// allocation is given back. Recruitment fees are not a purchase and never refund.
-    /// </summary>
+    /// <summary>RTB despawn/park and allocation-refund policy; recruitment fees are never refunded as
+    /// purchases.</summary>
     internal static class RecoverySettlementPolicy
     {
-        /// <summary>Despawn through the game's Returned path when the setting is on.</summary>
+        /// <summary>Use native Returned despawn when enabled.</summary>
         public static bool ShouldDespawn(bool rtbReturnsToReserve) => rtbReturnsToReserve;
 
-        /// <summary>Give back the allocation actually charged for this airframe.</summary>
+        /// <summary>Refund only allocation actually paid for an owned purchase.</summary>
         public static bool ShouldRefund(bool purchased, float paid) => purchased && paid > 0f;
 
-        /// <summary>
-        /// Native <c>OnStartClient</c> substitutes <c>loadouts[1]</c> when the weapons
-        /// list is missing or empty, which puts stripped fuel tanks back. A deliberate
-        /// empty fit must still have one slot per hardpoint.
-        /// </summary>
+        /// <summary>Native spawning replaces missing/empty weapon lists with loadouts[1]; deliberate empty
+        /// fits need one entry per hardpoint.</summary>
         public static bool NativeLoadoutReplaces(int weaponCount) => weaponCount <= 0;
     }
 
-    /// <summary>
-    /// How a requisition picks a field among the ones the player has allowed.
-    /// </summary>
+    /// <summary>Launch-field routing preference among enabled fields.</summary>
     internal enum HangarLaunchMode
     {
-        /// <summary>
-        /// Pin to the closest allowed field that can ever produce the airframe, and wait
-        /// there even if every pad is busy. A farther idle field is not a better answer.
-        /// </summary>
+        /// <summary>Queue at the nearest compatible enabled field, even when a farther field is
+        /// idle.</summary>
         OnlyNearest,
 
-        /// <summary>
-        /// Do not pin. Take the closest allowed field that can launch right now. If none
-        /// can, wait unpinned until one can, rather than queueing at a busy nearest.
-        /// </summary>
+        /// <summary>Choose the nearest currently available field; wait unpinned if all are busy.</summary>
         Any,
     }
 
-    /// <summary>
-    /// OnlyNearest waits at the closest compatible allowed field, even when busy.
-    /// Any selects the closest field that can launch now and otherwise stays unpinned.
-    /// </summary>
+    /// <summary>Select nearest-compatible pinning or nearest-currently-free routing according to launch
+    /// mode.</summary>
     internal static class HangarFieldPolicy
     {
-        /// <summary>Refund only when no observed aircraft or unfinished native launch owns the order.</summary>
+        /// <summary>Permit refund only when neither an observed aircraft nor an unfinished accepted native
+        /// sequence owns the purchase.</summary>
         internal static bool CanRefundDelivery(bool nativeAccepted, bool nativeSequenceFinished,
                                                bool hangarDestroyed, bool aircraftObserved) =>
             !aircraftObserved && (!nativeAccepted || nativeSequenceFinished || hangarDestroyed);
@@ -193,7 +178,7 @@ namespace WingCommand
             return best;
         }
 
-        /// <summary>QUE while waiting for a pad; DEPT once a hangar has taken the order.</summary>
+        /// <summary>Display QUE before field acceptance and DEPT afterward.</summary>
         public static string StatusCode(bool hangarClaimed) => hangarClaimed ? "DEPT" : "QUE";
     }
 
@@ -205,10 +190,8 @@ namespace WingCommand
         NoPad
     }
 
-    /// <summary>
-    /// Pure presentation and evaluation policy for launch base rows in the supply panel.
-    /// Determines whether a base can support the selected aircraft and what badge/tooltip to show.
-    /// </summary>
+    /// <summary>Supply-row capability, badge, and tooltip policy for the selected airframe and
+    /// base.</summary>
     internal static class LaunchBaseStatusPolicy
     {
         public static LaunchBaseStatus Evaluate(bool allowed, bool canProduce, bool hasAirframeSelection)
@@ -248,11 +231,8 @@ namespace WingCommand
         }
     }
 
-    /// <summary>
-    /// Labels and matching for the hangar prefab stock lists the game serializes as
-    /// <c>Hangar.availableAircraft</c>. Pad codes are the building <c>UnitDefinition.code</c>
-    /// values the native airbase info panel already uses.
-    /// </summary>
+    /// <summary>Matches native hangar availableAircraft lists and labels pads with the building
+    /// UnitDefinition.code.</summary>
     internal static class HangarStockPolicy
     {
         public static string PadLabel(string code)
@@ -320,10 +300,8 @@ namespace WingCommand
         }
     }
 
-    /// <summary>
-    /// Encyclopedia entries that must not appear on the Supply or Loadout panels.
-    /// The April Fools UFO is named "???" (dev key "UFO") and is not a squadron airframe.
-    /// </summary>
+    /// <summary>Exclude non-squadron encyclopedia placeholders such as the April Fools UFO from Supply and
+    /// Loadout.</summary>
     internal static class AirframeCatalogPolicy
     {
         public static bool IsHiddenFromPanels(string unitName, string code = null, string jsonKey = null) =>

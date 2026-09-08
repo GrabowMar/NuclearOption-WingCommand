@@ -3,17 +3,13 @@ using Xunit;
 
 namespace WingCommand.PureTests
 {
-    /// <summary>
-    /// The launch pose is where eight previous attempts died, so its arithmetic is pinned
-    /// down here rather than discovered in a BepInEx log.
-    /// </summary>
+    /// <summary>Regression checks for runway launch placement and native handoff geometry.</summary>
     public class LaunchGeometryTests
     {
         [Fact]
         public void ThresholdOffsetClearsTheTailOfASmallAirframe()
         {
-            // A Compass is about six metres long, so half of it plus the margin puts the
-            // whole aircraft past the threshold.
+            // Check the small airframe's offset against its footprint and threshold margin.
             float offset = LaunchGeometry.ThresholdOffset(length: 6f, width: 4f);
             Assert.True(offset >= 3f);
             Assert.Equal(LaunchGeometry.MaximumThresholdOffset, offset, 3);
@@ -22,9 +18,8 @@ namespace WingCommand.PureTests
         [Fact]
         public void ThresholdOffsetIsCappedShortOfTheStockTakeoffHandoff()
         {
-            // The stock taxi state hands off to takeoff inside twelve metres of the
-            // threshold. Placing a long airframe half its own length past that point puts it
-            // behind its own destination, and taxi then steers it backwards down the runway.
+            // Cap long-airframe placement inside native taxi's 12 m threshold handoff so it cannot
+            // steer backward.
             foreach (float length in new[] { 12f, 17f, 24f, 40f })
             {
                 float offset = LaunchGeometry.ThresholdOffset(length, width: 12f);
@@ -36,10 +31,7 @@ namespace WingCommand.PureTests
         [Fact]
         public void TheCappedOffsetStaysInsideTheTwelveMetreHandoffEvenForATallAirframe()
         {
-            // Taxi measures the distance to the threshold in three dimensions, and the
-            // aircraft is also lifted above it by its own spawnOffset.y. Both terms have to
-            // fit inside twelve metres or the handoff never fires and the watchdog carries
-            // every launch instead.
+            // Include vertical spawn height in the 3D 12 m handoff budget.
             foreach (float spawnOffsetY in new[] { 0f, 1.5f, 3f, 5f })
             {
                 float along = LaunchGeometry.ThresholdOffset(24f, 14f);
@@ -51,8 +43,7 @@ namespace WingCommand.PureTests
         [Fact]
         public void ThresholdOffsetUsesTheLargerOfLengthAndWidth()
         {
-            // A wide, short airframe still needs its span accounted for: the cap is what
-            // decides the answer, and it must be reached from either dimension.
+            // Apply footprint limits to wingspan as well as length.
             Assert.Equal(LaunchGeometry.ThresholdOffset(30f, 4f),
                          LaunchGeometry.ThresholdOffset(4f, 30f), 3);
         }
@@ -65,17 +56,49 @@ namespace WingCommand.PureTests
         }
 
         [Theory]
-        // Nearer end wins on a reversible strip.
+        // Choose the nearer reversible end.
         [InlineData(100f, 20f, true, true)]
         [InlineData(20f, 100f, true, false)]
-        // A one-way strip is always used forwards, however close the far end is.
+        // Keep one-way strips forward even when the far end is closer.
         [InlineData(100f, 20f, false, false)]
-        // A dead tie resolves the same way every time rather than on float noise.
+        // Resolve equal distances deterministically.
         [InlineData(50f, 50f, true, false)]
         public void ReverseTakesTheNearerUsableEnd(float toStart, float toEnd, bool reversable,
                                                    bool expected)
         {
             Assert.Equal(expected, LaunchGeometry.PreferReverse(toStart, toEnd, reversable));
+        }
+
+        [Fact]
+        public void ARecentlyUsedStripKeepsItsOperatingHeading()
+        {
+            // Honour native 30-second direction retention so spawn and takeoff cannot choose reciprocal
+            // headings.
+            Assert.Equal(30f, LaunchGeometry.OperatingDirectionHold, 3);
+            Assert.True(LaunchGeometry.OperatingDirectionLocked(0f));
+            Assert.True(LaunchGeometry.OperatingDirectionLocked(29.9f));
+            Assert.False(LaunchGeometry.OperatingDirectionLocked(30f));
+            Assert.False(LaunchGeometry.OperatingDirectionLocked(100f));
+
+            // Retain forward operation despite the nearer end.
+            Assert.False(LaunchGeometry.PreferReverse(
+                distanceToStart: 100f, distanceToEnd: 1f, reversable: true,
+                operatingLocked: true, currentlyReversed: false));
+            // Retain reverse operation despite the nearer start.
+            Assert.True(LaunchGeometry.PreferReverse(
+                distanceToStart: 1f, distanceToEnd: 100f, reversable: true,
+                operatingLocked: true, currentlyReversed: true));
+        }
+
+        [Fact]
+        public void AStaleStripFallsBackToTheNearerEnd()
+        {
+            Assert.True(LaunchGeometry.PreferReverse(
+                distanceToStart: 100f, distanceToEnd: 1f, reversable: true,
+                operatingLocked: false, currentlyReversed: false));
+            Assert.False(LaunchGeometry.PreferReverse(
+                distanceToStart: 1f, distanceToEnd: 100f, reversable: true,
+                operatingLocked: false, currentlyReversed: true));
         }
 
         [Fact]
@@ -85,11 +108,11 @@ namespace WingCommand.PureTests
 
             Assert.True(LaunchGeometry.IsUsable(true, 2000f, run, true));
 
-            // A landing-only strip is not a launch site.
+            // Reject landing-only strips.
             Assert.False(LaunchGeometry.IsUsable(false, 2000f, run, true));
-            // Nor is a sloped one: the stock takeoff state refuses to roll on it.
+            // Reject sloped land strips unsupported by native takeoff.
             Assert.False(LaunchGeometry.IsUsable(true, 2000f, run, false));
-            // Nor a helipad-sized patch of concrete.
+            // Reject helipad-sized land strips.
             Assert.False(LaunchGeometry.IsUsable(true, 60f, run, true));
         }
 
@@ -105,6 +128,23 @@ namespace WingCommand.PureTests
         }
 
         [Fact]
+        public void ACatapultDeckSkipsTheSlopeAndLengthTests()
+        {
+            float fast = LaunchGeometry.TakeoffRun(takeoffSpeed: 95f);
+
+            // Short, pitching carrier strips fail land-runway checks.
+            Assert.False(LaunchGeometry.IsUsable(true, 158f, fast, level: false));
+            Assert.False(LaunchGeometry.IsUsable(true, 84f, fast, level: true));
+
+            // Catapult strips trust the native takeoff flag despite land length/slope limits.
+            Assert.True(LaunchGeometry.IsUsable(true, 158f, fast, level: false, catapult: true));
+            Assert.True(LaunchGeometry.IsUsable(true, 84f, fast, level: true, catapult: true));
+
+            // Catapult status cannot turn a landing-only pad into a takeoff strip.
+            Assert.False(LaunchGeometry.IsUsable(false, 158f, fast, level: true, catapult: true));
+        }
+
+        [Fact]
         public void TakeoffRunGrowsWithTheSquareOfTakeoffSpeed()
         {
             float slow = LaunchGeometry.TakeoffRun(50f);
@@ -117,22 +157,18 @@ namespace WingCommand.PureTests
         [Fact]
         public void HandoffToTakeoffNeedsBothOnRunwayAndNoseAlignment()
         {
-            // Both halves are required. Being on the strip while pointing across it is the
-            // pose that makes the stock takeoff state aim three hundred metres over the
-            // grass at full throttle.
+            // Require both runway presence and heading alignment before takeoff handoff.
             Assert.True(LaunchGeometry.OnRunway(true, 0.99f));
             Assert.False(LaunchGeometry.OnRunway(true, 0.5f));
             Assert.False(LaunchGeometry.OnRunway(false, 1f));
-            // Pointing down the reciprocal is the worst case of all.
+            // Reject reciprocal runway alignment.
             Assert.False(LaunchGeometry.OnRunway(true, -1f));
         }
 
         [Fact]
         public void HeadingToleranceMatchesTheStockTakeoffGate()
         {
-            // AIPilotTakeoffState only sets startedTakeoffRun once dot > 0.95. Accepting a
-            // looser alignment than the state we are handing to would hand it an aircraft it
-            // then refuses to roll.
+            // Match native takeoff's 0.95 alignment gate so accepted poses can begin rolling.
             Assert.Equal(0.95f, LaunchGeometry.HeadingTolerance, 3);
             Assert.True(LaunchGeometry.OnRunway(true, LaunchGeometry.HeadingTolerance));
         }

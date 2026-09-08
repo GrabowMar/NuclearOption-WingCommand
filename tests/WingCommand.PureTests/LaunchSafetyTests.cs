@@ -5,10 +5,10 @@ namespace WingCommand.PureTests
     public class LaunchSafetyTests
     {
         [Theory]
-        [InlineData(false, false, 8f, 90f, false)] // Taxi still owns a fast aircraft.
-        [InlineData(true, false, 1f, 90f, false)] // Rotation is not runway clearance.
-        [InlineData(true, false, 8f, 60f, false)] // Below flying-speed margin.
-        [InlineData(true, false, 8f, 90f, true)]  // Rejoin before native 75 m gate.
+        [InlineData(false, false, 8f, 90f, false)] // Speed alone cannot take ownership from taxi.
+        [InlineData(true, false, 1f, 90f, false)] // Rotation alone does not clear the runway.
+        [InlineData(true, false, 8f, 60f, false)] // Reject speed below the launch margin.
+        [InlineData(true, false, 8f, 90f, true)]  // Permit safe early rejoin below native 75 m completion.
         [InlineData(true, true, 4f, 0f, false)]
         public void EarlyHandoffRequiresSafeLiftoff(bool takeoffState, bool rotary,
             float altitude, float speed, bool expected)

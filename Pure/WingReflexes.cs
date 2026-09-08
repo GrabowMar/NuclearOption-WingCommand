@@ -1,22 +1,13 @@
 namespace WingCommand
 {
-    /// <summary>
-    /// The reflexes this mod ships, and the overrides they replace.
-    ///
-    /// Each one used to be a bespoke mechanism scattered across two files — a boolean here,
-    /// a HashSet there, a direct <c>SwitchState</c> that bypassed the order system
-    /// entirely. They are collected here as one shape so that the precedence between them
-    /// is a table you can read rather than the order of three lines in an update loop.
-    ///
-    /// All of them are stateless. One instance serves every wingman in the wing.
-    /// </summary>
+    /// <summary>Stateless built-in reflexes shared by all members; bands and scores replace
+    /// update-order-dependent overrides.</summary>
     internal static class WingReflexes
     {
-        /// <summary>Register the built-in set. Idempotent.</summary>
+        /// <summary>Register built-in reflexes idempotently.</summary>
         public static void RegisterDefaults()
         {
-            // Through the public call, exactly as a third-party plugin would. If the core
-            // took a shortcut here the public path would be the untested one.
+            // Register built-ins through the same public API used by extensions.
             WingAi.Register(new DeliveryHold());
             WingAi.Register(new MissileBreak());
             WingAi.Register(new TerrainAbort());
@@ -28,19 +19,10 @@ namespace WingCommand
             WingInfluences.RegisterDefaults();
         }
 
-        /// <summary>
-        /// A hangar delivery still under the airbase's taxi and launch AI.
-        ///
-        /// Scores above the missile break, which is not a tie-break accident: this aircraft
-        /// is not ours to fly yet, and commandeering a parked one to make it dodge would
-        /// drive it off the apron.
-        ///
-        /// It does <b>not</b> replace the <c>deliveryPending</c> lockout on actually flying
-        /// the aircraft. Standing orders are recorded while pending and flown at
-        /// <c>ActivateWhenAirborne</c>; manoeuvres are refused because they would be spent
-        /// on the apron. <c>IsCommandable</c> remains "alive and not pending" for automation
-        /// that must not commandeer a taxiing airframe (bingo, cargo auto-run, flight lead).
-        /// </summary>
+        /// <summary>Preserve native taxi/launch ownership for pending deliveries, ahead of missile
+        /// manoeuvres. The deliveryPending control lock remains authoritative. Retain standing orders for
+        /// airborne activation; reject transient manoeuvres and commandability-dependent automation while
+        /// pending.</summary>
         private sealed class DeliveryHold : IWingReflex, IWingReflexLifecycle
         {
             public string Id => "wingcommand.delivery-hold";
@@ -55,17 +37,8 @@ namespace WingCommand
             public bool InterruptsMinimumHold => true;
         }
 
-        /// <summary>
-        /// A missile is in the air and this aircraft is the one it is chasing.
-        ///
-        /// <c>IsPanicking</c> used to be a stored boolean that four unrelated checks had to
-        /// remember to guard on, where forgetting one silently disabled missile defence. It
-        /// still exists and callers still branch on it, but it is <i>derived</i> from this
-        /// reflex winning rather than set by hand, so it can no longer disagree with what
-        /// the aircraft is doing. As a Survival
-        /// reflex it cannot be outranked by anything a future release or another plugin
-        /// adds, because bands are compared before scores.
-        /// </summary>
+        /// <summary>Survival reflex for missiles targeting this aircraft. IsPanicking derives from its
+        /// ownership; lower-priority bands cannot override it.</summary>
         private sealed class MissileBreak : IWingReflex, IWingReflexLifecycle
         {
             public string Id => "wingcommand.missile-break";
@@ -74,34 +47,27 @@ namespace WingCommand
             public float MinimumSeconds => WingTuning.PanicMinimumSeconds;
             public bool RequiresSmartMode => false;
 
-            public bool CanHold(in WingSituation s) => !s.DeliveryPending && s.RadarAlt >= WingTuning.PanicFloorAlt;
+            public bool CanHold(in WingSituation s) => !s.DeliveryPending &&
+                s.RadarAlt >= WingTuning.PanicFloorAlt &&
+                (s.MissileWarned || s.SecondsSinceMissileWarning < WingTuning.PanicClearSeconds);
             public bool InterruptsMinimumHold => false;
 
             public float Score(in WingSituation s, bool incumbent)
             {
-                // Below the floor the aircraft is landing or already crashing, and a hard
-                // break is the worse of the two outcomes.
+                // Reject hard breaks below the landing/crash floor.
                 if (s.RadarAlt < WingTuning.PanicFloorAlt) return 0f;
 
                 if (s.MissileWarned) return 0.9f;
 
-                // Hold through a gap in the warning. A missile that is briefly lost and
-                // re-acquired is one missile, not two, and handing the controls back in
-                // between is how a wingman gets killed by the shot it had already beaten.
+                // Bridge brief warning gaps so reacquisition cannot release controls mid-break.
                 return incumbent && s.SecondsSinceMissileWarning < WingTuning.PanicClearSeconds
                     ? 0.9f
                     : 0f;
             }
         }
 
-        /// <summary>
-        /// Pull up before turning. A Survival reflex so a missile break at 25 m AGL —
-        /// which is a 100° bank into the dirt — cannot outrank it.
-        ///
-        /// Only scores when the aircraft is both low and far from the leader. Nap-of-earth
-        /// station keeping (low and already in the slot) is left to the formation law's
-        /// own ground bank cap.
-        /// </summary>
+        /// <summary>Pull up before turning when low and far from the leader. Near-slot low flight uses
+        /// formation's own terrain bank limits.</summary>
         private sealed class TerrainAbort : IWingReflex, IWingReflexLifecycle
         {
             public string Id => "wingcommand.terrain-abort";
@@ -109,31 +75,17 @@ namespace WingCommand
             public string BehaviourId => WingBehaviours.TerrainAbort;
             public float MinimumSeconds => 1.5f;
             public bool RequiresSmartMode => false;
-            public bool CanHold(in WingSituation s) => !s.DeliveryPending && TerrainAbortPolicy.AllowsAbort(s.Order);
+            public bool CanHold(in WingSituation s) => TerrainAbortPolicy.AllowsRecovery(in s, incumbent: true) &&
+                (!s.MissileWarned || TerrainAbortPolicy.TerrainThreat(in s, incumbent: true));
             public bool InterruptsMinimumHold => true;
 
             public float Score(in WingSituation s, bool incumbent) =>
-                TerrainAbortPolicy.ShouldAbort(
-                    s.RadarAlt, s.LeaderDistance, s.Order, incumbent, s.DeliveryPending)
+                TerrainAbortPolicy.ShouldRecover(in s, incumbent)
                     ? 1f : 0f;
         }
 
-        /// <summary>
-        /// There is no leader — the player was shot down and is choosing a new seat.
-        ///
-        /// A formation slot is defined relative to a leader, so without one there is nothing
-        /// to fly. This used to be <c>WingRegistry.HoldForTakeover</c>, which walked the wing
-        /// applying an <c>OrbitHere</c> order to every member — overwriting each player-issued
-        /// directive with no record of what it had been, so the only way back was a blanket
-        /// re-order to Formation that flattened the lot. Exactly the mechanism the deck hold
-        /// was rewritten to remove, one file away and untouched by that rewrite.
-        ///
-        /// Because the directive survives, taking a new seat needs no re-order at all: naming
-        /// a leader stops this scoring and every member resumes what it was already doing.
-        ///
-        /// Safety rather than Cohesion: an aircraft with nowhere to form on is a hazard to
-        /// itself, and the question outranks any argument about where the slot should be.
-        /// </summary>
+        /// <summary>Safety hold when no leader exists, preserving standing intent. Restoring a leader
+        /// releases the hold automatically so prior tasks resume.</summary>
         private sealed class LeaderLost : IWingReflex
         {
             public string Id => "wingcommand.leader-lost";
@@ -146,8 +98,7 @@ namespace WingCommand
             {
                 if (s.LeaderPresent) return 0f;
 
-                // An order that goes somewhere definite of its own accord does not need a
-                // leader to carry out, and the player gave it before they lost the seat.
+                // Keep independent destination orders active without a leader.
                 switch (s.Order)
                 {
                     case WingOrder.ReturnToBase:
@@ -164,15 +115,8 @@ namespace WingCommand
             }
         }
 
-        /// <summary>
-        /// The leader is on the runway, so every formation slot is on the runway too.
-        ///
-        /// Replaces the <c>heldOnDeck</c> set, and with it the part that actually hurt: the
-        /// old version <i>overwrote the player's directive</i> with an orbit, so the HUD
-        /// showed an order nobody had given and the original had to be remembered on the
-        /// side. Here the directive is untouched — only the behaviour changes, and it
-        /// changes back on its own.
-        /// </summary>
+        /// <summary>Hold formation members above a grounded leader without replacing their directives;
+        /// resume automatically after takeoff.</summary>
         private sealed class DeckHold : IWingReflex
         {
             public string Id => "wingcommand.deck-hold";
@@ -185,31 +129,21 @@ namespace WingCommand
             {
                 if (!s.LeaderPresent || !s.LeaderOnDeck) return 0f;
 
-                // Only a wingman actually trying to hold formation is moved. An explicit
-                // order - an attack, a hold somewhere else, an RTB - is the player's and
-                // outlives their landing.
+                // Override only formation-slot orders; explicit attacks, holds, and RTB survive leader
+                // landing.
                 return WingOrderRules.UsesFormationSlot(s.Order) ? 1f : 0f;
             }
         }
 
-        /// <summary>
-        /// A hunting wingman that has drifted past its leash.
-        ///
-        /// Replaces the <c>recalled</c> boolean, and fixes what that boolean cost: the old
-        /// recall called <c>SwitchState</c> directly without going through the order system,
-        /// so the directive still read <c>Engage</c> while the aircraft flew formation — and
-        /// the engagement code, reading that directive, granted it autonomous-combat weapons
-        /// authority from the slot with ROE bypassed entirely.
-        /// </summary>
+        /// <summary>Temporarily rejoin after exceeding the hunting leash. Active behaviour supplies
+        /// station-keeping weapons authority while the combat directive remains retained.</summary>
         private sealed class LeashRecall : IWingReflex, IWingReflexLifecycle
         {
             public string Id => "wingcommand.leash-recall";
             public WingReflexBand Band => WingReflexBand.Cohesion;
             public string BehaviourId => WingBehaviours.Rejoin;
 
-            // Once the recall has the controls it keeps them briefly, so a wingman parked on
-            // the leash boundary completes the rejoin instead of trading control back and
-            // forth every pass. The wide release threshold below is the other half of that.
+            // Minimum recall hold complements the wider release threshold to prevent boundary chatter.
             public float MinimumSeconds => WingTuning.LeashHoldSeconds;
             public bool RequiresSmartMode => false;
             public bool CanHold(in WingSituation s) => !s.DeliveryPending && s.LeaderPresent &&
@@ -221,23 +155,22 @@ namespace WingCommand
                 if (!s.LeaderPresent || s.LeashRadius <= 0f || s.LeaderDistance < 0f) return 0f;
                 if (!WingOrderRules.SendsWingmanHunting(s.Order)) return 0f;
 
-                // Two thresholds, declared rather than tracked: grab control at the leash,
-                // give it back only well inside. Asking whether we are the incumbent is what
-                // lets a stateless reflex express that.
+                // Use incumbent to select separate recall and release thresholds without mutable reflex
+                // state.
                 float threshold = incumbent
                     ? s.LeashRadius * WingTuning.LeashReleaseFraction
                     : s.LeashRadius;
 
                 if (s.LeaderDistance <= threshold) return 0f;
 
-                // Urgency grows with the overshoot, so a wingman a long way out outranks one
-                // that has just crossed the line when both are competing for the same slot.
+                // Increase within-band urgency with proportional leash overshoot.
                 float over = (s.LeaderDistance - threshold) / s.LeashRadius;
                 return over < 0.02f ? 0.02f : over > 1f ? 1f : over;
             }
         }
 
-        /// <summary>Regroup during a quiet fight without replacing the player's combat order.</summary>
+        /// <summary>Temporarily regroup during combat inactivity while preserving the attack
+        /// order.</summary>
         private sealed class IdleCombatRejoin : IWingReflex
         {
             public string Id => "wingcommand.idle-combat-rejoin";
@@ -251,13 +184,8 @@ namespace WingCommand
                 s.SecondsWithoutEngagement >= WingTuning.EngageIdleSeconds ? 0.25f : 0f;
         }
 
-        /// <summary>
-        /// Fly what the player asked for.
-        ///
-        /// The floor of the ladder, and the reason resolution is total: it always scores, so
-        /// there is always an answer and never a null behaviour. Everything above it is a
-        /// temporary reason to do something else.
-        /// </summary>
+        /// <summary>Always score the standing task so arbitration has a non-null default beneath temporary
+        /// overrides.</summary>
         private sealed class StandingTask : IWingReflex
         {
             public string Id => "wingcommand.standing-task";

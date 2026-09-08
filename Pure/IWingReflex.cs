@@ -1,146 +1,84 @@
 namespace WingCommand
 {
-    /// <summary>
-    /// Precedence tiers, strictly ordered. A reflex in a lower-numbered band beats every
-    /// reflex in a higher-numbered one <b>regardless of score</b>.
-    ///
-    /// This is the guarantee that scoring alone cannot give. A pure utility system decides
-    /// everything by comparing numbers, so one mistuned curve — in this mod or in somebody
-    /// else's — can outrank a missile break. Bands make that structurally impossible:
-    /// scores are only ever compared against other scores in the same band.
-    /// </summary>
+    /// <summary>Strict precedence tiers: lower-numbered bands always beat higher bands. Compare scores
+    /// only within a band so utility tuning cannot override survival with a task preference.</summary>
     public enum WingReflexBand
     {
-        /// <summary>Staying alive. Missile break, terrain abort. Nothing outranks this.</summary>
+        /// <summary>Highest-priority survival, including missile and terrain escape.</summary>
         Survival = 0,
 
-        /// <summary>Conditions where holding the task would fly the aircraft into something.</summary>
+        /// <summary>Safety conditions that make continuing the task hazardous.</summary>
         Safety = 1,
 
-        /// <summary>Keeping the wing a wing. Leash recall.</summary>
+        /// <summary>Wing cohesion, including leash recall.</summary>
         Cohesion = 2,
 
-        /// <summary>The standing order. Always available, so resolution is total.</summary>
+        /// <summary>Always-available standing task, ensuring a resolution.</summary>
         Task = 3,
     }
 
-    /// <summary>
-    /// One reason a wingman might do something other than its standing order.
-    ///
-    /// <b>This is the modding surface.</b> The mod's built-in reflexes are registered
-    /// through the same public call a third-party plugin uses — if the core did not eat its
-    /// own cooking here, the public path would rot the first time an internal shortcut was
-    /// more convenient.
-    ///
-    /// One instance serves every wingman, so an implementation must be <b>stateless</b>:
-    /// everything it is allowed to know arrives in the <see cref="WingSituation"/>. It
-    /// returns a number and nothing else — it cannot switch a pilot state, edit the
-    /// standing directive, or touch the aircraft.
-    /// </summary>
+    /// <summary>Public stateless reflex contract shared by built-ins and extensions. One instance serves
+    /// all members; read WingSituation and return a score without changing aircraft, pilot state, or
+    /// standing intent.</summary>
     public interface IWingReflex
     {
-        /// <summary>
-        /// Stable, unique, namespaced — <c>"wingcommand.missile-break"</c>. Used as the tie
-        /// break when two reflexes in a band score identically, so registration order can
-        /// never change the outcome. Cached at registration; changing it requires
-        /// unregistering and registering the extension again.
-        /// </summary>
+        /// <summary>Stable unique namespaced ID, used for deterministic ties and cached at registration.
+        /// Unregister and register again to change identity.</summary>
         string Id { get; }
 
-        /// <summary>Which precedence tier this competes in.</summary>
+        /// <summary>Precedence band for this reflex.</summary>
         WingReflexBand Band { get; }
 
-        /// <summary>
-        /// The behaviour to fly when this reflex wins, from <see cref="WingBehaviours"/> or
-        /// registered by the plugin that owns it. A string rather than an enum so a third
-        /// party can add a behaviour without the core enumerating it. Sampled with
-        /// the other metadata once per decision; changes apply on the next decision.
-        /// </summary>
+        /// <summary>Built-in or registered behaviour ID to fly on winning. Metadata is sampled once per
+        /// decision; changes take effect on the next decision.</summary>
         string BehaviourId { get; }
 
-        /// <summary>
-        /// Seconds this reflex keeps control once it has it, even as its own score falls.
-        /// A lower band still preempts it immediately — a minimum hold is not immunity.
-        /// Zero for a reflex that should release the moment it stops scoring.
-        /// </summary>
+        /// <summary>Minimum control duration in seconds despite falling score. Lower bands still preempt
+        /// immediately; zero releases as soon as scoring stops.</summary>
         float MinimumSeconds { get; }
 
-        /// <summary>
-        /// True for a reflex the Performance profile drops entirely.
-        ///
-        /// Dropping a reflex changes what the wingman does, and that is fine — Performance
-        /// is a deliberately worse wingman, not a cheaper route to the same one. Use it for
-        /// behaviour that is a luxury on a multiplayer host, and not for anything the
-        /// aircraft needs in order to survive.
-        ///
-        /// Declared here rather than switched at the call site, so the mode stays one
-        /// question asked in one place instead of a toggle per behaviour.
-        /// </summary>
+        /// <summary>Whether Performance mode omits this optional reflex. Never require Smart mode for
+        /// survival-critical behaviour.</summary>
         bool RequiresSmartMode { get; }
 
-        /// <summary>
-        /// How much this reflex wants control right now: 0 to stand down, 1 for maximally
-        /// urgent. Only ever compared against other scores in the same band.
-        ///
-        /// <paramref name="incumbent"/> is true when this reflex is the one currently in
-        /// control, and it exists so hysteresis can be <i>declared</i> rather than tracked.
-        /// A reflex that grabs control at one threshold and releases at a looser one — which
-        /// is every reflex that should not flap on a boundary — reads its two thresholds off
-        /// this flag and stays stateless. One instance serves the whole wing, so there is
-        /// nowhere to keep a "was I running last tick" field even if it wanted one.
-        ///
-        /// Must not throw. Score, metadata and lifecycle faults are caught, reported
-        /// once and disabled for the mission; other extensions continue resolving.
-        /// </summary>
+        /// <summary>Score from 0 (inactive) to 1 (maximum urgency), compared within this band. Use
+        /// incumbent for stateless entry/release hysteresis. Do not throw; score, metadata, and lifecycle
+        /// faults are reported once and disable the extension for the mission.</summary>
         float Score(in WingSituation situation, bool incumbent);
     }
 
-    /// <summary>
-    /// Optional lifecycle constraints for a reflex. A minimum hold bridges noisy scores;
-    /// it must not outlive the order/aircraft conditions that make the behavior valid.
-    /// An immediate emergency may interrupt another hold within its own band.
-    /// </summary>
+    /// <summary>Optional lifecycle limits: invalidate holds when order/aircraft conditions end, and permit
+    /// immediate emergencies to interrupt holds within the same band.</summary>
     public interface IWingReflexLifecycle
     {
         bool CanHold(in WingSituation situation);
         bool InterruptsMinimumHold { get; }
     }
 
-    /// <summary>The behaviours this mod ships. A third party may register more.</summary>
+    /// <summary>Built-in behaviour IDs; extensions may register additional IDs.</summary>
     public static class WingBehaviours
     {
-        /// <summary>Hands off entirely — the stock taxi/launch AI owns the airframe.</summary>
+        /// <summary>Release mod flight control, preserving native taxi/launch ownership.</summary>
         public const string Held = "wingcommand.held";
 
-        /// <summary>The missile break.</summary>
+        /// <summary>Missile-evasion behaviour.</summary>
         public const string MissileBreak = "wingcommand.missile-break";
 
-        /// <summary>Orbit overhead while the leader is on the runway.</summary>
+        /// <summary>Leader-tracking overhead hold during landing or deck operations.</summary>
         public const string DeckHold = "wingcommand.deck-hold";
 
-        /// <summary>Post-airborne terrain recovery before resuming the standing order.</summary>
+        /// <summary>Airborne terrain recovery followed by standing-task resumption.</summary>
         public const string TerrainAbort = "wingcommand.terrain-abort";
 
-        /// <summary>Fly the slot to close a leash overshoot.</summary>
+        /// <summary>Rejoin the slot after exceeding the pursuit leash.</summary>
         public const string Rejoin = "wingcommand.rejoin";
 
-        /// <summary>Whatever the standing directive says. The resting behaviour.</summary>
+        /// <summary>Execute standing intent as the default behaviour.</summary>
         public const string Task = "wingcommand.task";
 
-        /// <summary>
-        /// The behaviour a member with no autopilot flies, whatever it was told to do.
-        ///
-        /// Every built-in behaviour steers through <c>Autopilot.AutoAim</c>, which a ship or
-        /// a ground vehicle does not have, so a surface member is routed here instead of
-        /// through the switch above - and this is the one id Wing Command declares but does
-        /// not implement. A companion plugin registers the state through
-        /// <see cref="WingBehaviourCatalog"/>; with nothing registered a surface member is
-        /// simply never given a state, which is inert rather than broken.
-        ///
-        /// Where it should go is Wing Command's answer, published through <c>WingSurface</c>.
-        /// How to make a hull go there is the registrant's, because the gains that drive a
-        /// light truck are not the gains that drive a fleet carrier.
-        /// </summary>
+        /// <summary>Required registered control for members without autopilots. WingSurface supplies
+        /// destination and task; companion plugins implement vehicle-specific steering. Without
+        /// registration, leave surface members without a mod flight state.</summary>
         public const string Surface = "wingcommand.surface";
     }
 }

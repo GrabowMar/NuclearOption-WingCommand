@@ -6,9 +6,24 @@ namespace WingCommand.PureTests
 {
     public class FormationEnergySimulationTests
     {
+        [Fact]
+        public void ArrivalClosesFasterButRestoresDampingAtStation()
+        {
+            float arrival = FormationControlRules.RejoinClosure(150f, 20f,
+                2f, 1f, 1f, 0.45f, 3f, 90f, 0.75f);
+            float previous = 0.45f * 150f - 3f * 20f;
+            Assert.True(arrival > previous);
+            Assert.True(arrival <= FormationClosure.SafeClosure(150f, 2f, 0.75f));
+            Assert.Equal(0.45f * 50f - 3f * 20f,
+                FormationControlRules.RejoinClosure(50f, 20f,
+                    2f, 1f, 1f, 0.45f, 3f, 90f, 0.75f));
+        }
+
         [Theory]
         [InlineData(6000f, 120f, false)]
         [InlineData(2000f, 250f, true)]
+        [InlineData(300f, 120f, false)]
+        [InlineData(150f, 140f, false)]
         public void AcceleratingAndHotJoinsSettleWithEngineLagAndFiniteDrag(
             float initialGap, float initialSpeed, bool mustBrake)
         {
@@ -43,9 +58,8 @@ namespace WingCommand.PureTests
                 usedBrake |= braking;
                 usedFullPower |= controls.Throttle == 1f;
 
-                // An independent, deliberately modest physical plant: delayed
-                // engine response, 4m/s² acceleration, 2m/s² idle drag, and fitted
-                // airbrakes adding 6m/s². Inputs are production throttle commands.
+                // Independent plant with engine lag, 4 m/s² thrust acceleration, 2 m/s² idle drag, and
+                // 6 m/s² extra airbrake drag; driven by production throttle outputs.
                 engine += (controls.Throttle - engine) * (1f - (float)Math.Exp(-dt / 0.75f));
                 float acceleration = Clamp((engine * maximum - speed) / 8f, -2f, 4f);
                 if (braking) acceleration -= 6f;
@@ -60,7 +74,7 @@ namespace WingCommand.PureTests
             Assert.InRange(firstCapture, 0f, 180f);
             Assert.True(minimumGap > -spacing, $"Overshot by {-minimumGap:F1}m");
             if (mustBrake) Assert.True(usedBrake);
-            else Assert.True(usedFullPower);
+            else if (initialGap > WingTuning.CaptureDistance) Assert.True(usedFullPower);
             Assert.False(braking);
         }
 

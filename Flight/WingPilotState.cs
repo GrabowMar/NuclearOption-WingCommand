@@ -1,15 +1,12 @@
 namespace WingCommand
 {
-    /// <summary>
-    /// Shared pilot binding and flight setup for the wingman autopilot states.
-    /// </summary>
+    /// <summary>Shared pilot binding and flight configuration for wing states.</summary>
     internal abstract class WingPilotState : PilotBaseState
     {
-        /// <summary>The squadron member this state is flying. Shared by every subclass.</summary>
+        /// <summary>Member controlled by this state.</summary>
         protected readonly WingMember member;
         internal int OrderRevision { get; private set; }
-        // A new payload normally starts a new task. Controllers that can safely
-        // retarget in place opt out; future phase-based states are safe by default.
+        // Restart on payload changes unless a controller explicitly supports safe in-place retargeting.
         internal virtual bool RestartOnOrderChange => true;
         internal void AcceptOrderRevision(int revision) => OrderRevision = revision;
 
@@ -22,10 +19,7 @@ namespace WingCommand
             this.member = member;
         }
 
-        /// <summary>
-        /// Bind the state to its pilot and take the controls. The minimum every state does;
-        /// used directly only by states that then configure the gear themselves.
-        /// </summary>
+        /// <summary>Bind pilot controls without changing gear or hover configuration.</summary>
         protected void BindControls(Pilot pilot)
         {
             base.pilot = pilot;
@@ -35,26 +29,17 @@ namespace WingCommand
             aircraft.SetFlightAssist(enabled: true);
         }
 
-        /// <summary>
-        /// The standard "we are flying now" setup: bind the controls, drop any hover
-        /// configuration a previous state left behind and retract the gear if it is down.
-        /// </summary>
-        /// <param name="releaseHover">
-        /// False for a state that needs the hover regime kept (a cargo let-down).
-        /// </param>
+        /// <summary>Bind controls, optionally release hover, and retract aircraft gear.</summary> <param
+        /// name="releaseHover">False to retain hover, such as during cargo descent.</param>
         protected void BeginFlight(Pilot pilot, bool releaseHover = true)
         {
             BindControls(pilot);
 
-            // A rotary or thrust-vectoring wingman arriving from a hover cannot make cruise
-            // speed until its nozzles/rotor are back to forward flight.
+            // Restore forward flight before asking a hovering airframe for cruise speed.
             if (releaseHover) HoverAssist.Release(aircraft);
 
-            // Retract the gear whenever it is not already up. A freshly spawned helicopter
-            // can still be Uninitialized here, which is what used to leave it flying with
-            // the gear hanging out.
-            // A ship or a ground vehicle has no gear to retract, and asking for it moves a
-            // state the vehicle's own mod may be using for something else entirely.
+            // Retract any non-retracted aircraft gear, including uninitialised spawns. Exclude surface
+            // units whose mods may repurpose gear state.
             if (aircraft.autopilot != null &&
                 aircraft.gearState != LandingGear.GearState.LockedRetracted)
                 aircraft.SetGear(deployed: false);

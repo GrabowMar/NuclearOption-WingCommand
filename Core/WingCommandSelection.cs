@@ -2,10 +2,8 @@ using System.Collections.Generic;
 
 namespace WingCommand
 {
-    /// <summary>
-    /// Selection used for tactical commands. It is deliberately unrelated to
-    /// <c>DynamicMap.selectedIcons</c>, which is also the player's weapon target list.
-    /// </summary>
+    /// <summary>Tactical command selection, independent of DynamicMap.selectedIcons and weapon
+    /// targeting.</summary>
     internal sealed class WingCommandSelection
     {
         internal enum Mode
@@ -20,7 +18,6 @@ namespace WingCommand
         public Mode CurrentMode { get; private set; } = Mode.All;
 
         public bool IsAll => CurrentMode == Mode.All;
-        public bool IsExplicit => CurrentMode == Mode.Explicit;
         public bool IsNone => CurrentMode == Mode.Explicit && selected.Count == 0;
 
         public void SelectAll()
@@ -78,7 +75,7 @@ namespace WingCommand
                 return;
             }
 
-            // A second click on an already-selected individual plane deselects it.
+            // Click the sole selected aircraft again to deselect it.
             if (SelectionTogglePolicy.ShouldDeselectMemberOnClick(CurrentMode == Mode.Explicit, selected.Count, selected.Contains(member)))
             {
                 DeselectAll();
@@ -94,7 +91,7 @@ namespace WingCommand
 
             if (CurrentMode == Mode.All)
             {
-                // A modified click while ALL is active starts a fresh explicit selection.
+                // A modified click changes ALL to a fresh explicit selection.
                 selected.Clear();
                 CurrentMode = Mode.Explicit;
                 selected.Add(member);
@@ -114,7 +111,7 @@ namespace WingCommand
         {
             if (CurrentMode == Mode.All || wing == null) return;
 
-            // RemoveWhere would allocate a capturing predicate on this per-frame path.
+            // Reuse stale-member storage; RemoveWhere would allocate a capturing predicate each frame.
             stale.Clear();
             foreach (WingMember member in selected)
                 if (member == null || !member.Alive || !wing.Contains(member))

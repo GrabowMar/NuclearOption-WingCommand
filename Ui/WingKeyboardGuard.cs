@@ -2,26 +2,21 @@ using System;
 using UnityEngine;
 using UnityEngine.EventSystems;
 
-// Unity invokes OnDisable by reflection.
-// IDE0051 cannot see a reflective call, so it is disabled for this file only.
+// Unity calls OnDisable by reflection, so suppress IDE0051 in this file.
 #pragma warning disable IDE0051
 
 namespace WingCommand
 {
-    /// <summary>
-    /// Disables Rewired keyboard input while panel fields are focused, using a nesting count.
-    /// Restores the prior enabled state after the last release or panel teardown.
-    /// Callers check Available before offering text entry; capture failures are logged.
-    /// </summary>
+    /// <summary>Nest keyboard capture while text fields are focused, restoring the previous Rewired state
+    /// after the last release or teardown. Check availability before offering entry and log capture
+    /// failures.</summary>
     internal static class WingKeyboardGuard
     {
         private static int depth;
         private static bool wasEnabled;
         private static bool held;
 
-        /// <summary>
-        /// Check before offering text entry so typing does not also control the aircraft.
-        /// </summary>
+        /// <summary>Whether text entry can safely suppress aircraft keyboard controls.</summary>
         public static bool Available
         {
             get
@@ -38,10 +33,10 @@ namespace WingCommand
             }
         }
 
-        /// <summary>True while at least one field has the keyboard.</summary>
+        /// <summary>Whether any focused field owns keyboard capture.</summary>
         public static bool Captured => depth > 0;
 
-        /// <summary>Take the keyboard away from the game. Balanced by <see cref="Release"/>.</summary>
+        /// <summary>Capture game keyboard input; balance with Release.</summary>
         public static void Capture()
         {
             depth++;
@@ -52,8 +47,7 @@ namespace WingCommand
                 Rewired.Keyboard keyboard = Rewired.ReInput.controllers?.Keyboard;
                 if (keyboard == null)
                 {
-                    // Nothing to hold. Recorded so Release does not restore a state that was
-                    // never captured.
+                    // Record that nothing was captured so Release does not invent a prior state.
                     held = false;
                     return;
                 }
@@ -71,7 +65,7 @@ namespace WingCommand
             }
         }
 
-        /// <summary>Give the keyboard back, once every field has let go of it.</summary>
+        /// <summary>Restore keyboard input after all captures are released.</summary>
         public static void Release()
         {
             if (depth == 0) return;
@@ -81,10 +75,8 @@ namespace WingCommand
             ForceRelease();
         }
 
-        /// <summary>
-        /// Restores the captured keyboard state during panel teardown, including when
-        /// a destroyed field never sends its deselect event.
-        /// </summary>
+        /// <summary>Restore captured state during teardown even if destroyed fields never
+        /// deselect.</summary>
         public static void ForceRelease()
         {
             if (depth == 0 && !held) return;
@@ -104,9 +96,7 @@ namespace WingCommand
             }
         }
 
-        /// <summary>
-        /// Deselects through the event system so the field releases its keyboard capture.
-        /// </summary>
+        /// <summary>Deselect through EventSystem so focused fields release capture.</summary>
         public static void Defocus()
         {
             try
@@ -117,18 +107,13 @@ namespace WingCommand
             }
             catch (Exception)
             {
-                // Nothing to do: ForceRelease is the backstop for this.
+                // ForceRelease covers failed deselection.
             }
         }
     }
 
-    /// <summary>
-    /// Publishes a line to the panel's status strip while the pointer is over something that
-    /// is not a button — a text field, a framed readout.
-    ///
-    /// <see cref="WingButton"/> owns the hover-note channel because almost everything on the
-    /// panel is a button; this is the small adapter for the things that are not.
-    /// </summary>
+    /// <summary>Publishes hover help for non-button fields through WingButton's shared status-note
+    /// channel.</summary>
     internal sealed class WingHoverNote : MonoBehaviour, IPointerEnterHandler, IPointerExitHandler
     {
         public string Note { get; set; }

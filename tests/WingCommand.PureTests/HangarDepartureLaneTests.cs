@@ -1,10 +1,8 @@
 using System;
 using Xunit;
 
-// The departure lane is small enough to link whole rather than mirror as a policy, so the
-// handful of engine types it touches are stubbed here. Nothing it does is Unity behaviour:
-// it is a list of who holds which field and a distance check against a live transform.
-// Vector3, Transform and Mathf are shared, and live in GameTypeStubs.cs.
+// Link production lane ownership and live-anchor distance checks with minimal engine stubs. Shared
+// vectors, transforms, and maths live in GameTypeStubs.
 namespace UnityEngine
 {
     public static partial class Time
@@ -38,7 +36,7 @@ namespace WingCommand
         public static string DisplayName(Airbase airbase) => airbase?.name ?? "FIELD";
     }
 
-    internal static class Plugin
+    internal static partial class Plugin
     {
         internal static readonly TestLogger Logger = new TestLogger();
         internal static void LogVerbose(string message) { }
@@ -70,12 +68,11 @@ namespace WingCommand.PureTests
             Assert.True(HangarDepartureLane.IsFree(airbase));
             Assert.True(HangarDepartureLane.Reserve(airbase, new Hangar(), new object()));
 
-            // The exclusion is the field, not the pad: a jet put on the takeoff threshold
-            // and a helo lifting off a pad share the same strip and the same circuit.
+            // Reserve per airbase so pad and runway departures cannot overlap at the same field.
             Assert.False(HangarDepartureLane.IsFree(airbase));
             Assert.False(HangarDepartureLane.Reserve(airbase, new Hangar(), new object()));
 
-            // A different field is unaffected.
+            // Other airbases retain independent capacity.
             Assert.True(HangarDepartureLane.Reserve(new Airbase(), new Hangar(), new object()));
         }
 
@@ -160,7 +157,7 @@ namespace WingCommand.PureTests
             HangarDepartureLane.Tick();
             Assert.True(HangarDepartureLane.IsJammed(airbase));
 
-            // Clearing the spot clears the badge with it.
+            // Clear the jam badge when the aircraft clears its anchor.
             aircraft.transform.position = new UnityEngine.Vector3(500f, 0f, 0f);
             HangarDepartureLane.Tick();
             Assert.False(HangarDepartureLane.IsJammed(airbase));
@@ -186,9 +183,7 @@ namespace WingCommand.PureTests
         [Fact]
         public void HandingTheLaneToTheWingMemberKeepsTheFieldHeld()
         {
-            // The shop order stops existing the moment its aircraft is claimed, but the
-            // departure is not over until the aircraft is airborne. The member that now
-            // owns the flight takes the slot over so it can release it at liftoff.
+            // Transfer the purchase order's field claim to the member until airborne release.
             var airbase = new Airbase();
             var order = new object();
             var member = new object();
@@ -198,7 +193,7 @@ namespace WingCommand.PureTests
             HangarDepartureLane.Track(order, aircraft);
             Assert.True(HangarDepartureLane.Transfer(order, member));
 
-            // The old owner can no longer release it; the new one can.
+            // Only the new owner may release the transferred claim.
             HangarDepartureLane.Release(order);
             Assert.False(HangarDepartureLane.IsFree(airbase));
             HangarDepartureLane.Release(member);

@@ -2,43 +2,21 @@ using HarmonyLib;
 
 namespace WingCommand
 {
-    /// <summary>
-    /// The one stock transition this mod rewrites: the taxi a wingman is given <i>after</i>
-    /// it lands.
-    ///
-    /// <c>AIPilotLandingState</c> hands a stopped aircraft to <c>AIPilotTaxiState</c> to
-    /// find a service point, and <c>AIHeloLandingState</c> reaches the same end by its own
-    /// route. That taxi is not a way home: with <c>HasTakenOff</c> already true it looks for
-    /// the nearest service point, and if there is none — or if it is already close enough to
-    /// one — it sets <c>disembarking</c> and ejects the pilot on the apron. For a faction AI
-    /// that is fine, the sortie is over. For a wingman the player ordered home it destroys
-    /// the crew and leaves an abandoned airframe blocking the field, moments before
-    /// <see cref="WingRecovery"/> would have credited it back into stock.
-    ///
-    /// So an inbound wingman is parked instead. Parked is what the aircraft ends up as
-    /// anyway; skipping the taxi only skips the ejection. Outbound taxi — a delivery on the
-    /// runway, a refit leaving the apron — is never touched: rewriting that is what every
-    /// failed attempt in <c>docs/airfield-findings.md</c> did.
-    ///
-    /// The runway queue is drained at the same time. Neither <c>AIPilotTaxiState</c> nor
-    /// <c>AIPilotTakeoffState</c> dequeues in <c>LeaveState</c>, so an aircraft that enters
-    /// the takeoff queue and then leaves by any route other than actually taking off holds
-    /// that strip — and every strip crossing it — against the rest of the mission.
-    /// </summary>
+    /// <summary>Redirect inbound post-landing taxi to parking so native service-point logic cannot eject
+    /// returning crew before settlement. Leave outbound delivery/refit taxi untouched. Drain runway queues
+    /// because native taxi/takeoff LeaveState does not dequeue interrupted departures.</summary>
     [HarmonyPatch(typeof(Pilot), nameof(Pilot.SwitchState))]
     internal static class WingInboundTaxiPatch
     {
-        // Harmony invokes this callback through reflection.
+        // Harmony calls this callback by reflection.
 #pragma warning disable IDE0051
-        // Void, not bool: this redirects the transition, it never cancels it. The original
-        // still runs, with a different destination state.
+        // A void prefix redirects the destination state while allowing the original transition to run.
         [HarmonyPrefix]
         private static void Prefix(Pilot __instance, ref PilotBaseState state)
         {
             if (__instance == null) return;
 
-            // Only the aircraft this mod is responsible for. A faction AI taxiing to
-            // resupply is the game working as designed.
+            // Limit interception to mod-owned aircraft; native faction resupply taxi remains unchanged.
             WingRegistry wing = WingCommandManager.Instance?.Wing;
             if (wing == null) return;
 
@@ -48,8 +26,7 @@ namespace WingCommand
             bool ours = wing.Find(aircraft) != null || WingDeparture.Contains(aircraft);
             bool hasTakenOff = __instance.flightInfo != null && __instance.flightInfo.HasTakenOff;
 
-            // Outbound taxi — a delivery on the threshold, a refit leaving its parking spot —
-            // is left exactly as the game wrote it.
+            // Preserve outbound delivery and refit taxi.
             if (!TaxiRewritePolicy.ShouldPark(ours, state is AIPilotTaxiState, hasTakenOff))
                 return;
 
@@ -61,13 +38,8 @@ namespace WingCommand
 #pragma warning restore IDE0051
     }
 
-    /// <summary>
-    /// Helicopters never enter inbound taxi: <c>AIHeloLandingState</c> ejects on the pad.
-    /// A parked jet's landing state does the same after ten seconds on the ground. For a
-    /// refit that eject is fatal — <see cref="WingMember.CompleteRefit"/> needs a living
-    /// seated pilot. For RTB it is the disembark we want, so this only suppresses the
-    /// stock eject while a refit is waiting on the pad.
-    /// </summary>
+    /// <summary>Suppress native pad/runway ejection only while refit needs a seated pilot. Plain RTB may
+    /// disembark normally for settlement.</summary>
     [HarmonyPatch(typeof(Aircraft), nameof(Aircraft.StartEjectionSequence))]
     internal static class WingRefitEjectPatch
     {
@@ -101,18 +73,12 @@ namespace WingCommand
 #pragma warning restore IDE0051
     }
 
-    /// <summary>
-    /// Give back a takeoff slot whenever a wingman leaves taxi by any route other than
-    /// starting its takeoff run.
-    ///
-    /// Separate from <see cref="WingInboundTaxiPatch"/> because it is about the state being
-    /// left rather than the one being entered, and because both prefixes have to run: Harmony
-    /// applies them in registration order and neither refuses the call.
-    /// </summary>
+    /// <summary>Release takeoff queues when taxi ends without entering takeoff. This leaving-state check
+    /// runs alongside inbound transition redirection; neither prefix cancels the call.</summary>
     [HarmonyPatch(typeof(Pilot), nameof(Pilot.SwitchState))]
     internal static class WingTakeoffQueuePatch
     {
-        // Harmony invokes this callback through reflection.
+        // Harmony calls this callback by reflection.
 #pragma warning disable IDE0051
         [HarmonyPrefix]
         private static void Prefix(Pilot __instance, PilotBaseState state)
