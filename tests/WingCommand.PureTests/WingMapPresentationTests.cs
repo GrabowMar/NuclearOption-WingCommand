@@ -32,8 +32,8 @@ namespace WingCommand.PureTests
         [Fact]
         public void NativeTargetSelectionCanClearWithoutChangingWingIdentityOrCommandScope()
         {
-            // The same member moves from a native selected target to a filtered ordinary
-            // icon. Native pointer behavior changes; identity and tactical scope do not.
+            // Native target/filter changes may alter clicks, but membership and command scope remain
+            // stable.
             foreach (bool nativeSelected in new[] { true, false })
             {
                 WingMapPresentation appearance = WingMapPresentation.Resolve(

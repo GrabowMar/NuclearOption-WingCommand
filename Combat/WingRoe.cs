@@ -1,11 +1,11 @@
 namespace WingCommand
 {
- /// <summary>Resolves weapons policy without changing movement orders. Hold permits missile defence
- /// only; Tight protects the leader and wingman from aircraft; Free permits valid opportunity targets
- /// within the current task.</summary>
+    /// <summary>Resolves weapons policy without changing movement orders. Hold permits missile defence
+    /// only; Tight protects the leader and wingman from aircraft; Free permits valid opportunity targets
+    /// within the current task.</summary>
     internal static class RoeRules
     {
-     /// <summary>Uppercase ROE label for the UI.</summary>
+        /// <summary>Uppercase ROE label for the UI.</summary>
         public static string Label(WingRoe roe)
         {
             switch (roe)
@@ -18,7 +18,7 @@ namespace WingCommand
 
         public static WingRoe Next(WingRoe roe) => (WingRoe)(((int)roe + 1) % 3);
 
-     /// <summary>Set FREE for Engage unless already selected.</summary>
+        /// <summary>Set FREE for Engage unless already selected.</summary>
         public static void EnsureFree(WingRegistry wing)
         {
             if (wing == null || wing.Roe == WingRoe.Free) return;
@@ -26,11 +26,11 @@ namespace WingCommand
             WingCommandManager.Instance?.Toast("ROE: FREE");
         }
 
-     /// <summary>Shared ROE accessor and fallback for every combat path.</summary>
+        /// <summary>Shared ROE accessor and fallback for every combat path.</summary>
         public static WingRoe Current =>
             WingCommandManager.Instance?.Wing?.Roe ?? WingRoe.Hold;
 
-     /// <summary>Allowed target classes under the current ROE.</summary>
+        /// <summary>Allowed target classes under the current ROE.</summary>
         public static WingWeapons.Allow WeaponsFree(WingRoe roe, Aircraft aircraft)
         {
             // Missile defence takes priority over ROE and designations; the standing directive resumes
@@ -50,9 +50,9 @@ namespace WingCommand
             return WingWeapons.Allow.None;
         }
 
-     /// <summary>Choose an aircraft under missile attack, or null. Tight checks the leader first; other
-     /// postures check self first, then the leader. The intercept search needs this aircraft's inbound
-     /// missile as an anchor.</summary>
+        /// <summary>Choose an aircraft under missile attack, or null. Tight checks the leader first; other
+        /// postures check self first, then the leader. The intercept search needs this aircraft's inbound
+        /// missile as an anchor.</summary>
         public static Aircraft MissileDefenceProtectee(Aircraft aircraft)
         {
             WingRegistry wing = WingCommandManager.Instance?.Wing;
@@ -79,8 +79,8 @@ namespace WingCommand
             return null;
         }
 
-     /// <summary>Choose Tight's protective target, checking threats to the leader before self. Target
-     /// selection does not alter movement orders.</summary>
+        /// <summary>Choose Tight's protective target, checking threats to the leader before self. Target
+        /// selection does not alter movement orders.</summary>
         public static Unit PriorityTarget(WingRoe roe, Aircraft aircraft, Aircraft leader,
                                           float range)
         {
@@ -90,7 +90,7 @@ namespace WingCommand
             return target ?? WingWeapons.NearestThreatTo(aircraft, range);
         }
 
-     /// <summary>ROE engagement range in metres.</summary>
+        /// <summary>ROE engagement range in metres.</summary>
         public static float EngageRange(WingRoe roe)
         {
             // Hold and Tight use a weapons-range limit, without manoeuvring to engage.
@@ -99,8 +99,8 @@ namespace WingCommand
                 : WingTuning.HoldEngageRange;
         }
 
-     /// <summary>Slot-spacing scale: Hold tightens, Free widens, Tight uses baseline. FormationFlyState
-     /// prevents compounding with reactive threat spacing.</summary>
+        /// <summary>Slot-spacing scale: Hold tightens, Free widens, Tight uses baseline. FormationFlyState
+        /// prevents compounding with reactive threat spacing.</summary>
         public static float SpacingScale(WingRoe roe)
         {
             switch (roe)
@@ -111,13 +111,13 @@ namespace WingCommand
             }
         }
 
-     /// <summary>Range cap for player-designated attacks, independent of ROE. The weapon envelope still
-     /// determines whether a shot is valid.</summary>
+        /// <summary>Range cap for player-designated attacks, independent of ROE. The weapon envelope still
+        /// determines whether a shot is valid.</summary>
         public static float ExplicitOrderRange() =>
             UnityEngine.Mathf.Max(WingTuning.HoldEngageRange,
                                   WingTuning.FreeEngageRange);
 
-     /// <summary>Hint beneath the ROE selector.</summary>
+        /// <summary>Hint beneath the ROE selector.</summary>
         public static string Hint(WingRoe roe)
         {
             switch (roe)

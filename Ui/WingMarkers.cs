@@ -3,33 +3,23 @@ using UnityEngine;
 
 namespace WingCommand
 {
-    /// <summary>
-    /// Wing identity and engaged targets shared by map outlines and HUD marker colours.
-    ///
-    /// Both the tactical map (<see cref="WingMapTint"/>) and the in-cockpit HUD
-    /// (<see cref="WingHudTint"/>) draw from this, so a unit cannot be a wingman on one
-    /// display and anonymous on the other. Before this existed the map had its own
-    /// membership test and the HUD had nothing at all, which left the game's own
-    /// nearest-ally icon as the only aircraft on the HUD with distinct symbology — one
-    /// aircraft, chosen by proximity, that reads exactly like a wing designation and
-    /// never is one.
-    /// </summary>
+    /// <summary>Shared wing membership and engaged-target roles for map outlines and HUD
+    /// colours.</summary>
     internal static class WingMarkers
     {
         internal enum Role
         {
-            /// <summary>Not connected to the wing; the game's own colour stands.</summary>
+            /// <summary>No wing role; retain native symbology.</summary>
             None,
 
-            /// <summary>A wingman under the player's command.</summary>
+            /// <summary>Aircraft under wing command.</summary>
             Member,
 
-            /// <summary>A unit the wing is currently engaging.</summary>
+            /// <summary>Current wing engagement target.</summary>
             Target,
         }
 
-        // Engaged targets change as the fight develops but not every frame, and resolving
-        // them walks each member's weapon manager. Rebuilt on a timer instead.
+        // Poll weapon managers for engaged targets periodically rather than each frame.
         private const float TargetPollInterval = 0.25f;
 
         private static readonly List<Unit> engaged = new List<Unit>();
@@ -37,7 +27,7 @@ namespace WingCommand
         private static readonly List<Unit> repaint = new List<Unit>();
         private static float nextPoll;
 
-        /// <summary>Units the wing is engaging, as of the last poll.</summary>
+        /// <summary>Engaged units from the latest poll.</summary>
         public static IReadOnlyList<Unit> EngagedTargets => engaged;
 
         public static void Reset()
@@ -47,10 +37,7 @@ namespace WingCommand
             nextPoll = 0f;
         }
 
-        /// <summary>
-        /// Refresh the engaged-target set and repaint anything whose role changed.
-        /// Called every frame; does real work four times a second.
-        /// </summary>
+        /// <summary>Poll role changes and repaint affected units four times per second.</summary>
         public static void Tick(WingRegistry wing)
         {
             if (Time.unscaledTime < nextPoll) return;
@@ -60,10 +47,8 @@ namespace WingCommand
 
             if (!SameAsEngaged())
             {
-                // Repaint the union of both sets, and only after the new set is in place:
-                // a unit's role is resolved by looking it up in this very list, so
-                // repainting a departing target while it is still listed would simply
-                // paint it as a target again.
+                // Install the new target set before repainting the union of old and new units so
+                // departed targets lose their role.
                 repaint.Clear();
                 repaint.AddRange(engaged);
                 foreach (Unit u in scratch)
@@ -78,13 +63,10 @@ namespace WingCommand
                 repaint.Clear();
             }
 
-            // Reconcile map effects as well as native paint callbacks: icon recreation
-            // and external UI refreshes must not erase persistent wing identity.
+            // Restore map markings after icon recreation or external UI changes.
             WingMapTint.Reassert(wing);
 
-            // Members are repainted when membership changes, but the HUD marker for a
-            // wingman is recoloured by the game for a second after it is created and
-            // whenever its track goes stale, so it is reasserted on the same timer.
+            // Reassert HUD tint after native creation fades and stale-track recolouring.
             WingHudTint.Reassert(wing);
         }
 
@@ -105,12 +87,8 @@ namespace WingCommand
             }
         }
 
-        /// <summary>
-        /// What a member is shooting at. An explicitly assigned target always counts; an
-        /// autonomous one only counts while the member is actually off fighting, because
-        /// a weapon manager holds the last target it was given long after the engagement
-        /// is over and marking that would leave stale symbols on the display.
-        /// </summary>
+        /// <summary>Prefer explicit assignments. Count autonomous weapon targets only during active combat
+        /// because native managers retain old targets after engagement.</summary>
         private static Unit TargetOf(WingMember member)
         {
             if (member.IsPanicking && member.Aircraft != null)
@@ -142,7 +120,7 @@ namespace WingCommand
             return true;
         }
 
-        /// <summary>The role a unit plays for the player's wing, for symbology purposes.</summary>
+        /// <summary>Resolve a unit's wing symbology role.</summary>
         public static Role RoleOf(Unit unit)
         {
             if (unit == null) return Role.None;
@@ -150,7 +128,7 @@ namespace WingCommand
             WingCommandManager mgr = WingCommandManager.Instance;
             if (mgr == null) return Role.None;
 
-            // Membership wins: a wingman that is also somebody's target is still a wingman.
+            // Membership takes precedence if a wingman is also targeted.
             if (unit is Aircraft aircraft && mgr.Wing.Contains(aircraft))
                 return Plugin.Settings.Highlight.Value != HighlightMode.Off
                     ? Role.Member
@@ -164,7 +142,7 @@ namespace WingCommand
             return Role.None;
         }
 
-        /// <summary>Repaint one unit on every display that carries wing symbology.</summary>
+        /// <summary>Refresh wing symbology on every supported display for this unit.</summary>
         public static void Repaint(Unit unit)
         {
             WingMapTint.Refresh(unit);
@@ -172,7 +150,7 @@ namespace WingCommand
         }
 
 
-        // ------------------------------------------------------------------- colours
+        // Marker colours.
 
         private static Color memberColor = new Color(0.22f, 1f, 0.40f);
         private static string memberFrom;
@@ -180,7 +158,7 @@ namespace WingCommand
         private static Color targetColor = new Color(1f, 0.69f, 0.13f);
         private static string targetFrom;
 
-        /// <summary>Configured wing colour, parsed once per distinct config value.</summary>
+        /// <summary>Wing-member colour cached per distinct configuration value.</summary>
         public static Color MemberColor
         {
             get
@@ -191,7 +169,7 @@ namespace WingCommand
             }
         }
 
-        /// <summary>Configured colour for units the wing is engaging.</summary>
+        /// <summary>Configured wing-target colour.</summary>
         public static Color TargetColor
         {
             get
@@ -230,7 +208,7 @@ namespace WingCommand
                 c.a);
         }
 
-        /// <summary>Selected symbology stays brighter, as it does in the stock theme.</summary>
+        /// <summary>Brighten selected markings consistently with the native theme.</summary>
         public static Color ColorFor(Role role, bool selected)
         {
             Color c = ColorFor(role);

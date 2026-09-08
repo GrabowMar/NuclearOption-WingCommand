@@ -9,8 +9,8 @@ namespace WingCommand
         public static float SlotBank(float bankDegrees) => (float)Math.Max(-80d, Math.Min(80d,
             Math.Asin(Math.Sin(bankDegrees * Math.PI / 180d)) * 180d / Math.PI));
 
-     /// <summary>Limit common formation roll using terrain clearance after reserving downward stack and
-     /// climb-induced aft drop. Include every member's transitioning slot extents.</summary>
+        /// <summary>Limit common formation roll using terrain clearance after reserving downward stack and
+        /// climb-induced aft drop. Include every member's transitioning slot extents.</summary>
         public static float TerrainBank(float requestedBank, float leaderRadarAltitude,
             float terrainClearance, float lateralExtent, float downwardStack, float aftExtent,
             float trackVertical = 0f)

@@ -7,15 +7,14 @@ namespace WingCommand.PureTests
         [Fact]
         public void WorldHeightSlotIsConvertedToCurrentAgl()
         {
-            // Own position: 120 m above sea level and 60 m AGL. A terrain-raised
-            // formation slot at 155 m therefore requires a 95 m local AGL hold.
+            // At 120 m ASL and 60 m AGL, a 155 m ASL slot requires 95 m local AGL hold.
             Assert.Equal(95f, RotaryAltitudePolicy.SlotAgl(120f, 60f, 155f, 45f));
         }
 
         [Fact]
         public void LowerFormationSlotCannotCutTerrainClearance()
         {
-            // This slot would otherwise be only 35 m above the local ground.
+            // Raise the otherwise 35 m AGL slot to the 45 m terrain floor.
             Assert.Equal(45f, RotaryAltitudePolicy.SlotAgl(100f, 50f, 85f, 45f));
         }
     }

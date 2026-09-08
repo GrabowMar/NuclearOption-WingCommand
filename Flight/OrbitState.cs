@@ -2,8 +2,8 @@ using UnityEngine;
 
 namespace WingCommand
 {
- /// <summary>Orbit until recalled: fixed anchors for explicit holds, moving leader anchors for deck
- /// holds.</summary>
+    /// <summary>Orbit until recalled: fixed anchors for explicit holds, moving leader anchors for deck
+    /// holds.</summary>
     internal class OrbitState : WingPilotState
     {
         internal override bool RestartOnOrderChange => false;
@@ -11,7 +11,7 @@ namespace WingCommand
         private float radius;
         private const float EngageInterval = 0.35f;
 
-     /// <summary>Shared station-keeping weapons handler respects active behaviour authority.</summary>
+        /// <summary>Shared station-keeping weapons handler respects active behaviour authority.</summary>
         private readonly SlotEngagement engagement = new SlotEngagement(EngageInterval);
 
         public OrbitState(WingMember member) : base(member)
@@ -19,10 +19,10 @@ namespace WingCommand
             stateDisplayName = "orbiting";
         }
 
-     /// <summary>Track a taxiing leader only for deck holds; explicit holds remain fixed.</summary>
+        /// <summary>Track a taxiing leader only for deck holds; explicit holds remain fixed.</summary>
         private bool followLeader;
 
-     /// <summary>Set anchor, radius, and optional leader tracking before entry.</summary>
+        /// <summary>Set anchor, radius, and optional leader tracking before entry.</summary>
         public void SetAnchor(GlobalPosition point, float orbitRadius, bool trackLeader = false)
         {
             anchor = point;

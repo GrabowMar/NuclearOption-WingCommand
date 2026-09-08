@@ -1,6 +1,6 @@
 namespace WingCommand
 {
-    /// <summary>The formation geometries a wing can be told to fly.</summary>
+    /// <summary>Commandable formation geometries.</summary>
     internal enum FormationShape
     {
         EchelonRight,
@@ -15,15 +15,13 @@ namespace WingCommand
         Wall,
     }
 
-    /// <summary>
-    /// Shared formation display names and the subset offered by the release UI.
-    /// </summary>
+    /// <summary>Shared shape names and release-menu selection.</summary>
     internal static class FormationShapes
     {
         public static readonly FormationShape[] All =
             (FormationShape[])System.Enum.GetValues(typeof(FormationShape));
 
-        /// <summary>The compact release-facing set. Legacy shapes remain supported by the solver.</summary>
+        /// <summary>Compact release-menu shapes; the solver still accepts legacy values.</summary>
         public static readonly FormationShape[] Core =
         {
             FormationShape.EchelonRight,
@@ -34,7 +32,7 @@ namespace WingCommand
             FormationShape.Vic,
         };
 
-        /// <summary>Display name. Every shape gets one — that is the point of this file.</summary>
+        /// <summary>Display label for every supported shape.</summary>
         public static string Pretty(FormationShape shape)
         {
             switch (shape)

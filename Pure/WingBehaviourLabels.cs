@@ -1,12 +1,10 @@
 namespace WingCommand
 {
-    /// <summary>
-    /// HUD and roster labels for behaviours that override the standing task.
-    /// Returns null when the caller should display the order instead.
-    /// </summary>
+    /// <summary>Override-behaviour labels for HUD and roster; null tells callers to display the standing
+    /// order.</summary>
     internal static class WingBehaviourLabels
     {
-        /// <summary>Four-or-so characters, for the HUD strip. Null when flying the order.</summary>
+        /// <summary>Compact HUD behaviour code, or null for the standing task.</summary>
         public static string ShortCode(string behaviourId)
         {
             switch (behaviourId)
@@ -20,7 +18,7 @@ namespace WingCommand
             }
         }
 
-        /// <summary>The roomier form, for the roster column. Null when flying the order.</summary>
+        /// <summary>Full roster behaviour label, or null for the standing task.</summary>
         public static string Label(string behaviourId)
         {
             switch (behaviourId)

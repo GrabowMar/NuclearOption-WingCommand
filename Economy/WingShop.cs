@@ -5,11 +5,11 @@ using UnityEngine;
 
 namespace WingCommand
 {
- /// <summary>Catalogue, pricing, and purchase transactions using native aircraft values, player
- /// allocation, and faction supply. Purchases compete with mission AI for stock.</summary>
+    /// <summary>Catalogue, pricing, and purchase transactions using native aircraft values, player
+    /// allocation, and faction supply. Purchases compete with mission AI for stock.</summary>
     internal static class WingShop
     {
-     /// <summary>One shop catalogue offer.</summary>
+        /// <summary>One shop catalogue offer.</summary>
         internal readonly struct Offer
         {
             public readonly AircraftDefinition Definition;
@@ -26,8 +26,8 @@ namespace WingCommand
             }
         }
 
-     /// <summary>Shared purchase eligibility for UI and execution, covering host, roster, stock, rank,
-     /// squadron capacity, and funds.</summary>
+        /// <summary>Shared purchase eligibility for UI and execution, covering host, roster, stock, rank,
+        /// squadron capacity, and funds.</summary>
         internal readonly struct PurchaseQuote
         {
             public readonly bool CanBuy;
@@ -62,8 +62,8 @@ namespace WingCommand
             }
         }
 
-     /// <summary>Owns funds, stock, fit, and capacity reservations until the exact delivery registers.
-     /// Commit on delivery or restore through idempotent rollback.</summary>
+        /// <summary>Owns funds, stock, fit, and capacity reservations until the exact delivery registers.
+        /// Commit on delivery or restore through idempotent rollback.</summary>
         internal sealed class PurchaseTransaction
         {
             internal enum State { Reserving, AwaitingAircraft, RollingBack, Committed, RolledBack }
@@ -175,15 +175,15 @@ namespace WingCommand
         private static readonly HashSet<PurchaseTransaction> activeTransactions =
             new HashSet<PurchaseTransaction>();
 
-     /// <summary>Explicit opt-in to ranked, surcharged purchases beyond the mission AI cap; disabled by
-     /// default.</summary>
+        /// <summary>Explicit opt-in to ranked, surcharged purchases beyond the mission AI cap; disabled by
+        /// default.</summary>
         public static bool ExceedLimit { get; set; }
 
-     /// <summary>Launch fuel as a fraction of full tank capacity, selected from SpawnFuelSteps.
-     /// Defaults to full, independent of the airframe's preset fuel.</summary>
+        /// <summary>Launch fuel as a fraction of full tank capacity, selected from SpawnFuelSteps.
+        /// Defaults to full, independent of the airframe's preset fuel.</summary>
         public static float SpawnFuelLevel { get; private set; } = WingTuning.DefaultSpawnFuel;
 
-     /// <summary>Cycle launch fuel to the next step, wrapping at the end.</summary>
+        /// <summary>Cycle launch fuel to the next step, wrapping at the end.</summary>
         public static void CycleSpawnFuel()
         {
             float[] steps = WingTuning.SpawnFuelSteps;
@@ -194,11 +194,11 @@ namespace WingCommand
             SpawnFuelLevel = steps[(idx + 1) % steps.Length];
         }
 
-     /// <summary>Launch fuel fraction relative to full tank capacity.</summary>
+        /// <summary>Launch fuel fraction relative to full tank capacity.</summary>
         public static float SpawnFuelFor(AircraftDefinition definition) =>
             Mathf.Clamp01(SpawnFuelLevel);
 
-     /// <summary>Clear mission purchase records and the over-limit preference.</summary>
+        /// <summary>Clear mission purchase records and the over-limit preference.</summary>
         public static void Reset()
         {
             foreach (PurchaseTransaction transaction in
@@ -219,7 +219,7 @@ namespace WingCommand
             WingLoadoutCatalog.Reset();
         }
 
-     /// <summary>Retry rollback actions rejected by external game APIs.</summary>
+        /// <summary>Retry rollback actions rejected by external game APIs.</summary>
         public static void Tick()
         {
             // Allocate a transaction snapshot only when nonempty; rollback may mutate the live set.
@@ -236,7 +236,7 @@ namespace WingCommand
         private static readonly Dictionary<AircraftDefinition, bool> rotaryCache =
             new Dictionary<AircraftDefinition, bool>();
 
-     /// <summary>Whether the definition uses rotary flight control.</summary>
+        /// <summary>Whether the definition uses rotary flight control.</summary>
         public static bool IsRotary(AircraftDefinition definition)
         {
             if (definition == null) return false;
@@ -261,20 +261,20 @@ namespace WingCommand
         private static readonly Dictionary<AircraftDefinition, bool> autopilotCache =
             new Dictionary<AircraftDefinition, bool>();
 
-     /// <summary>Whether this definition lacks aircraft flight control and represents a surface
-     /// unit.</summary>
+        /// <summary>Whether this definition lacks aircraft flight control and represents a surface
+        /// unit.</summary>
         public static bool IsSurfaceDefinition(AircraftDefinition definition) =>
             definition != null && !IsFlyableAircraft(definition);
 
-     /// <summary>Whether Supply/Loadout may expose the definition under host capabilities, excluding
-     /// event placeholders even if they have autopilots.</summary>
+        /// <summary>Whether Supply/Loadout may expose the definition under host capabilities, excluding
+        /// event placeholders even if they have autopilots.</summary>
         public static bool IsCommandableUnit(AircraftDefinition definition) =>
             definition != null
             && !AirframeCatalogPolicy.IsHiddenFromPanels(
                 definition.unitName, definition.code, definition.jsonKey)
             && (IsFlyableAircraft(definition) || WingHost.Current.AllowSurfaceWingmen);
 
-     /// <summary>Whether the prefab has an autopilot and can use aircraft control.</summary>
+        /// <summary>Whether the prefab has an autopilot and can use aircraft control.</summary>
         public static bool IsFlyableAircraft(AircraftDefinition definition)
         {
             if (definition == null) return false;
@@ -288,8 +288,8 @@ namespace WingCommand
             return has;
         }
 
-     /// <summary>Check formation compatibility before offering or buying an aircraft; reject
-     /// unsupported rotary/fixed-wing mixtures before spending stock or funds.</summary>
+        /// <summary>Check formation compatibility before offering or buying an aircraft; reject
+        /// unsupported rotary/fixed-wing mixtures before spending stock or funds.</summary>
         public static bool MatchesLeader(AircraftDefinition definition)
         {
             Aircraft leader = WingCommandManager.Instance?.Wing?.Leader;
@@ -306,26 +306,26 @@ namespace WingCommand
 
         // Aircraft pricing.
 
-     /// <summary>Native airframe list value without a wing-size multiplier.</summary>
+        /// <summary>Native airframe list value without a wing-size multiplier.</summary>
         public static float PriceOf(AircraftDefinition definition) =>
             definition != null ? definition.value : 0f;
 
-     /// <summary>Current purchase cost, including any over-cap surcharge. Recovered owned airframes are
-     /// already paid for.</summary>
+        /// <summary>Current purchase cost, including any over-cap surcharge. Recovered owned airframes are
+        /// already paid for.</summary>
         public static float CurrentPriceOf(AircraftDefinition definition) =>
             Plugin.Settings.CheatFreePurchases ||
             WingSupplyReserve.OwnedOf(definition) > 0
                 ? 0f
                 : PriceOf(definition) * (WouldExceedLimit ? ExceedLimitMultiplier : 1f);
 
-     /// <summary>Purchase-price multiplier beyond the squadron cap.</summary>
+        /// <summary>Purchase-price multiplier beyond the squadron cap.</summary>
         public static float ExceedLimitMultiplier =>
             Mathf.Max(1f, WingTuning.ExceedLimitCostMultiplier);
 
-     /// <summary>Minimum player rank for over-cap purchases.</summary>
+        /// <summary>Minimum player rank for over-cap purchases.</summary>
         public static int ExceedLimitRank => WingTuning.ExceedLimitRank;
 
-     /// <summary>Maximum simultaneous player-purchased over-cap aircraft.</summary>
+        /// <summary>Maximum simultaneous player-purchased over-cap aircraft.</summary>
         public static int ExceedLimitAllowance =>
             Mathf.Clamp(WingTuning.ExceedLimitAllowance, 1, 3);
 
@@ -348,7 +348,7 @@ namespace WingCommand
 
         internal static int PendingWingSlots => capacityReservations.Wing;
 
-     /// <summary>Live and pending player purchases using over-cap allowance.</summary>
+        /// <summary>Live and pending player purchases using over-cap allowance.</summary>
         public static int OverLimitOutstanding
         {
             get
@@ -361,7 +361,7 @@ namespace WingCommand
         private static bool StillFlying(PersistentID id) =>
             !UnitRegistry.TryGetUnit(id, out Unit unit) || unit == null || unit.disabled;
 
-     /// <summary>Record delivered ownership, fit, and any over-cap allocation.</summary>
+        /// <summary>Record delivered ownership, fit, and any over-cap allocation.</summary>
         public static void NoteDelivery(Aircraft aircraft, bool overLimit, WingLoadoutChoice loadout,
                                         float paid)
         {
@@ -376,8 +376,8 @@ namespace WingCommand
             WingLoadoutBook.NoteSpawned(aircraft, loadout);
         }
 
-     /// <summary>Transfer recovered aircraft ownership to reserve and free its over-cap slot
-     /// immediately.</summary>
+        /// <summary>Transfer recovered aircraft ownership to reserve and free its over-cap slot
+        /// immediately.</summary>
         internal static bool TakePurchased(PersistentID id)
         {
             overLimitAircraft.Remove(id);
@@ -385,36 +385,36 @@ namespace WingCommand
             return purchasedAircraft.Remove(id);
         }
 
-     /// <summary>Actual charged allocation for the aircraft; zero for free purchases.</summary>
+        /// <summary>Actual charged allocation for the aircraft; zero for free purchases.</summary>
         public static float PaidFor(PersistentID id) =>
             purchasePrice.TryGetValue(id, out float paid) ? paid : 0f;
 
         public static float PaidFor(Aircraft aircraft) =>
             aircraft != null ? PaidFor(aircraft.persistentID) : 0f;
 
-     /// <summary>Query live ownership without transferring it.</summary>
+        /// <summary>Query live ownership without transferring it.</summary>
         public static bool IsPurchased(Aircraft aircraft) =>
             aircraft != null && purchasedAircraft.Contains(aircraft.persistentID);
 
-     /// <summary>Whether the local player meets the over-cap rank requirement.</summary>
+        /// <summary>Whether the local player meets the over-cap rank requirement.</summary>
         public static bool MeetsExceedLimitRank =>
             (Plugin.Settings != null && Plugin.Settings.CheatBypassRank) ||
             (GameManager.GetLocalPlayer(out Player player) && player != null &&
              player.PlayerRank >= ExceedLimitRank);
 
-     /// <summary>Whether the next allowed purchase uses over-cap capacity.</summary>
+        /// <summary>Whether the next allowed purchase uses over-cap capacity.</summary>
         public static bool WouldExceedLimit =>
             ExceedLimit && Squadron().WouldExceed(capacityReservations.Squadron);
 
-     /// <summary>Spendable player allocation, or zero without a player.</summary>
+        /// <summary>Spendable player allocation, or zero without a player.</summary>
         public static float Allocation =>
             GameManager.GetLocalPlayer(out Player player) && player != null ? player.Allocation : 0f;
 
         // Shop catalogue.
 
-     /// <summary>Offer only mission faction stock and concrete wing-reserve airframes, filtered by
-     /// restrictions, rank, and formation compatibility. Reserve entries remain available when faction
-     /// stock is empty; encyclopedia entries alone do not create purchasable stock.</summary>
+        /// <summary>Offer only mission faction stock and concrete wing-reserve airframes, filtered by
+        /// restrictions, rank, and formation compatibility. Reserve entries remain available when faction
+        /// stock is empty; encyclopedia entries alone do not create purchasable stock.</summary>
         public static IReadOnlyList<Offer> Catalogue()
         {
             catalogue.Clear();
@@ -457,8 +457,8 @@ namespace WingCommand
 
         private static readonly List<Offer> loadoutCatalogue = new List<Offer>();
 
-     /// <summary>Loadout-editing catalogue across aircraft classes, independent of the current leader's
-     /// class.</summary>
+        /// <summary>Loadout-editing catalogue across aircraft classes, independent of the current leader's
+        /// class.</summary>
         public static IReadOnlyList<Offer> LoadoutCatalogue()
         {
             loadoutCatalogue.Clear();
@@ -507,7 +507,7 @@ namespace WingCommand
             return loadoutCatalogue;
         }
 
-     /// <summary>Shared restriction, rank, and optional leader-class filters.</summary>
+        /// <summary>Shared restriction, rank, and optional leader-class filters.</summary>
         private static bool Sellable(AircraftDefinition definition, FactionHQ hq, int rank, bool matchLeader = true)
         {
             if (definition == null) return false;
@@ -530,7 +530,7 @@ namespace WingCommand
 
         // Purchase execution.
 
-     /// <summary>Evaluate purchase eligibility without mutating funds, stock, or capacity.</summary>
+        /// <summary>Evaluate purchase eligibility without mutating funds, stock, or capacity.</summary>
         public static PurchaseQuote Quote(AircraftDefinition definition)
         {
             WingLoadoutChoice loadout = WingLoadoutBook.PlannedFor(definition);
@@ -611,8 +611,8 @@ namespace WingCommand
                                      player, hq, source, declared, autoRtbCandidate);
         }
 
-     /// <summary>Reserve and request delivery, committing only when the exact aircraft registers. Roll
-     /// back synchronous failures here and delayed failures in WingShopDelivery.Tick.</summary>
+        /// <summary>Reserve and request delivery, committing only when the exact aircraft registers. Roll
+        /// back synchronous failures here and delayed failures in WingShopDelivery.Tick.</summary>
         public static bool Buy(AircraftDefinition definition, out string reason, out float paid)
         {
             reason = null;
@@ -761,9 +761,9 @@ namespace WingCommand
             return ordinary + WingSupplyReserve.CountOf(definition);
         }
 
-     /// <summary>Faction AI capacity using the native mission/enemy/friendly-player formula. Count
-     /// friendly non-player aircraft from the public registry because activeAIAircraft is
-     /// private.</summary>
+        /// <summary>Faction AI capacity using the native mission/enemy/friendly-player formula. Count
+        /// friendly non-player aircraft from the public registry because activeAIAircraft is
+        /// private.</summary>
         internal readonly struct SquadronState
         {
             public readonly int Active;
@@ -775,18 +775,18 @@ namespace WingCommand
                 Limit = limit;
             }
 
-         /// <summary>Whether adding one aircraft exceeds capacity.</summary>
+            /// <summary>Whether adding one aircraft exceeds capacity.</summary>
             public bool AtCapacity => Active + 1 > Limit;
 
-         /// <summary>Whether accepted pending orders plus another aircraft exceed capacity.</summary>
+            /// <summary>Whether accepted pending orders plus another aircraft exceed capacity.</summary>
             public bool WouldExceed(int pending) => Active + Mathf.Max(0, pending) + 1 > Limit;
         }
 
         private static SquadronState cachedSquadron;
         private static float squadronCachedAt = float.MinValue;
 
-     /// <summary>Cache squadron counts briefly for repeated UI reads. Purchase validation uses the
-     /// uncached overload for live authority.</summary>
+        /// <summary>Cache squadron counts briefly for repeated UI reads. Purchase validation uses the
+        /// uncached overload for live authority.</summary>
         public static SquadronState Squadron()
         {
             if (Time.unscaledTime - squadronCachedAt < 0.25f) return cachedSquadron;
@@ -836,8 +836,8 @@ namespace WingCommand
             return new SquadronState(aiCount, Mathf.Max(0, Mathf.FloorToInt(limit)));
         }
 
-     /// <summary>Validate capacity and explicit ranked over-cap purchase terms, returning the
-     /// applicable price multiplier.</summary>
+        /// <summary>Validate capacity and explicit ranked over-cap purchase terms, returning the
+        /// applicable price multiplier.</summary>
         private static bool ClearedForPurchase(FactionHQ hq, out float multiplier,
                                                out string reason, out bool overLimit,
                                                out Aircraft autoRtbCandidate)
@@ -893,8 +893,8 @@ namespace WingCommand
             return true;
         }
 
-     /// <summary>Find the active friendly AI nearest a friendly base for an at-capacity return
-     /// order.</summary>
+        /// <summary>Find the active friendly AI nearest a friendly base for an at-capacity return
+        /// order.</summary>
         public static Aircraft FindClosestAiToAirbase(FactionHQ hq)
         {
             if (hq == null) return null;

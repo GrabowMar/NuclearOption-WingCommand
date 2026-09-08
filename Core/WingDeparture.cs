@@ -3,12 +3,12 @@ using NuclearOption.Networking;
 
 namespace WingCommand
 {
- /// <summary>Tracks released aircraft flying home under native landing AI. Exclude them from squadron
- /// capacity while returning; WingRecovery settles and despawns them on arrival, restoring owned
- /// airframes to stock.</summary>
+    /// <summary>Tracks released aircraft flying home under native landing AI. Exclude them from squadron
+    /// capacity while returning; WingRecovery settles and despawns them on arrival, restoring owned
+    /// airframes to stock.</summary>
     internal static class WingDeparture
     {
-     /// <summary>Settlement data captured before removing the member.</summary>
+        /// <summary>Settlement data captured before removing the member.</summary>
         internal sealed class Departing
         {
             public Aircraft Aircraft;
@@ -23,7 +23,7 @@ namespace WingCommand
 
         public static IReadOnlyList<Departing> Outbound => outbound;
 
-     /// <summary>Track a released member's return flight.</summary>
+        /// <summary>Track a released member's return flight.</summary>
         public static void Begin(WingMember member)
         {
             if (member == null || member.Aircraft == null) return;
@@ -40,7 +40,7 @@ namespace WingCommand
             });
         }
 
-     /// <summary>Track an unassigned faction aircraft ordered home.</summary>
+        /// <summary>Track an unassigned faction aircraft ordered home.</summary>
         public static void Begin(Aircraft aircraft, string name = null, bool owned = false)
         {
             if (aircraft == null) return;
@@ -57,14 +57,14 @@ namespace WingCommand
             });
         }
 
-     /// <summary>Remove a settled or lost departure from tracking.</summary>
+        /// <summary>Remove a settled or lost departure from tracking.</summary>
         public static void Forget(Departing departing)
         {
             if (departing != null) outbound.Remove(departing);
         }
 
-     /// <summary>Discard destroyed departures so they no longer reduce the shop's live-aircraft
-     /// count.</summary>
+        /// <summary>Discard destroyed departures so they no longer reduce the shop's live-aircraft
+        /// count.</summary>
         public static void Prune()
         {
             for (int i = outbound.Count - 1; i >= 0; i--)
@@ -74,8 +74,8 @@ namespace WingCommand
             }
         }
 
-     /// <summary>Whether the aircraft is a released return flight, for exclusion from shop squadron
-     /// capacity.</summary>
+        /// <summary>Whether the aircraft is a released return flight, for exclusion from shop squadron
+        /// capacity.</summary>
         public static bool Contains(Aircraft aircraft)
         {
             if (aircraft == null) return false;

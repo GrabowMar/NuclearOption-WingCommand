@@ -1,9 +1,7 @@
 namespace WingCommand
 {
-    /// <summary>
-    /// Standing movement/task order, separate from weapons policy.
-    /// Public because third-party reflexes inspect it through <see cref="WingSituation"/>.
-    /// </summary>
+    /// <summary>Public standing movement/task order, separate from weapons policy and available to
+    /// extension reflexes through WingSituation.</summary>
     public enum WingOrder
     {
         Formation,
@@ -17,29 +15,22 @@ namespace WingCommand
         FireForEffect,
         MoveToPoint,
 
-        /// <summary>Hold the formation slot, but run the jammer pod against a designated unit.</summary>
+        /// <summary>Hold the slot while jamming a designated unit with a pod.</summary>
         JamTarget,
 
-        /// <summary>Fly one scripted manoeuvre, then rejoin. Transient: never a resting state.</summary>
+        /// <summary>Run one transient manoeuvre, then rejoin.</summary>
         Maneuver,
 
-        /// <summary>
-        /// Fly to a player-marked map point, then hand the aircraft to autonomous combat.
-        ///
-        /// Appended deliberately: host profiles address orders by their enum value, so
-        /// inserting this among the existing orders would reinterpret their masks and
-        /// label tables.
-        /// </summary>
+        /// <summary>Move to the map point, then enter autonomous combat. Append enum values to preserve
+        /// host masks and label indices.</summary>
         SeekAndDestroy,
 
-        /// <summary>
-        /// Cancel the standing task and loiter near friendly territory. Appended so host
-        /// profiles that address orders by enum value keep their existing masks.
-        /// </summary>
+        /// <summary>Cancel the task and loiter near friendly territory. Keep the appended enum value
+        /// stable for host masks.</summary>
         StandDown,
     }
 
-    /// <summary>The scripted manoeuvres a wingman can be told to fly on command.</summary>
+    /// <summary>Scripted manoeuvres available as commands.</summary>
     internal enum ManeuverKind
     {
         BreakLeft,
@@ -54,10 +45,7 @@ namespace WingCommand
         MaskTerrain,
     }
 
-    /// <summary>
-    /// Standing weapons policy for the wing. Public for the same reason as
-    /// <see cref="WingOrder"/>: it is part of the situation a reflex scores against.
-    /// </summary>
+    /// <summary>Public wing weapons policy included in reflex telemetry.</summary>
     public enum WingRoe
     {
         Hold,
@@ -67,20 +55,20 @@ namespace WingCommand
 
     internal enum OrderEngagementAuthority
     {
-        /// <summary>The standing ROE may select and fire on incidental targets.</summary>
+        /// <summary>Use standing ROE for incidental target selection and fire.</summary>
         StandingRoe,
 
-        /// <summary>The player-designated target and order own weapons employment.</summary>
+        /// <summary>Use the explicit target directive for weapons authority.</summary>
         ExplicitTarget,
 
-        /// <summary>The task allows self-preservation only, not opportunity fire.</summary>
+        /// <summary>Allow self-preservation only.</summary>
         DefensiveOnly,
 
-        /// <summary>The order hands flying and fighting to the combat AI.</summary>
+        /// <summary>Delegate both flight and combat to native AI.</summary>
         AutonomousCombat,
     }
 
-    /// <summary>One weapons task selected for a station-keeping controller this pass.</summary>
+    /// <summary>Station-keeping weapons action for the current pass.</summary>
     internal enum StationFireMode
     {
         None,
@@ -90,52 +78,40 @@ namespace WingCommand
         Opportunity,
     }
 
-    /// <summary>
-    /// Shared order metadata for targeting, pursuit leashes, and pending deliveries.
-    /// </summary>
+    /// <summary>Order metadata for targeting, pursuit bounds, and delivery queuing.</summary>
     internal static class WingOrderRules
     {
-        /// <summary>
-        /// Orders that leave formation and need a pursuit leash. Only Jam stays in its slot.
-        /// </summary>
+        /// <summary>Hunting orders requiring a pursuit leash; Jam remains in formation.</summary>
         public static bool SendsWingmanHunting(WingOrder order) =>
             order == WingOrder.Engage || order == WingOrder.Attack || order == WingOrder.FireForEffect;
 
-        /// <summary>
-        /// Whether the directive carries a designated unit, including slot-based orders.
-        /// </summary>
+        /// <summary>Whether this order carries a unit designation, including slot jobs.</summary>
         public static bool CarriesTarget(WingOrder order) =>
             order == WingOrder.Attack ||
             order == WingOrder.FireForEffect ||
             order == WingOrder.JamTarget;
 
-        /// <summary>Orders whose destination is the leader's formation slot.</summary>
+        /// <summary>Orders directed at the leader's formation slot.</summary>
         public static bool UsesFormationSlot(WingOrder order) =>
             order == WingOrder.Formation || order == WingOrder.JamTarget;
 
-        /// <summary>A completed designation must not wait for a suspended task to regain flight.</summary>
+        /// <summary>Detect completed designations even while another behaviour suspends their flight
+        /// state.</summary>
         public static bool TargetTaskComplete(WingOrder order, bool targetAlive, bool deliveryPending) =>
             !deliveryPending && CarriesTarget(order) && !targetAlive;
 
-        /// <summary>
-        /// Pending deliveries retain standing orders until airborne. Transient manoeuvres
-        /// cannot be queued because they would expire during taxi.
-        /// </summary>
+        /// <summary>Allow standing orders during pending delivery; reject manoeuvres that would expire
+        /// during taxi.</summary>
         public static bool CanQueueWhilePending(WingOrder order) =>
             order != WingOrder.Maneuver;
 
-        /// <summary>
-        /// The standing order to take after a one-point ingress ends. Ordinary map moves
-        /// are temporary and reform; Seek and Destroy is deliberately a move followed by
-        /// autonomous combat.
-        /// </summary>
+        /// <summary>Terminal order after a point task: Move reforms, Seek and Destroy enters
+        /// combat.</summary>
         public static WingOrder PointTaskCompletion(WingOrder order) =>
             order == WingOrder.SeekAndDestroy ? WingOrder.Engage : WingOrder.Formation;
     }
 
-    /// <summary>
-    /// What a map pointer is sitting on, from Wing Command's point of view.
-    /// </summary>
+    /// <summary>Wing-command classification of the map pointer target.</summary>
     internal enum MapPointerKind
     {
         Empty,
@@ -143,7 +119,7 @@ namespace WingCommand
         Other,
     }
 
-    /// <summary>What a tactical-map right-click should do.</summary>
+    /// <summary>Resolved action for a map right-click.</summary>
     internal enum MapClickIntent
     {
         Move,
@@ -156,7 +132,7 @@ namespace WingCommand
         Ignore,
     }
 
-    /// <summary>What a WMC order-button press should do.</summary>
+    /// <summary>Resolved action for a WMC order press.</summary>
     internal enum MapOrderButtonIntent
     {
         Arm,
@@ -166,32 +142,27 @@ namespace WingCommand
         Ignore,
     }
 
-    /// <summary>
-    /// Tactical map order UX: left-click arms a highlighted WMC order, right-click
-    /// applies it. With nothing armed, right-click is a move.
-    /// </summary>
+    /// <summary>Left-click arms a WMC command; right-click applies it. Unarmed right-click defaults to
+    /// Move.</summary>
     internal static class MapOrderPolicy
     {
-        /// <summary>Orders the WMC grid can arm as the next map right-click.</summary>
+        /// <summary>Orders available to arm for the next map right-click.</summary>
         public static bool ArmsOnMap(WingOrder order) =>
             PlacesPoint(order) || PicksTarget(order);
 
-        /// <summary>Armed orders that consume a map coordinate.</summary>
+        /// <summary>Armed orders requiring a coordinate.</summary>
         public static bool PlacesPoint(WingOrder order) =>
             order == WingOrder.OrbitHere ||
             order == WingOrder.LandHere ||
             order == WingOrder.SeekAndDestroy ||
             order == WingOrder.DeliverCargo;
 
-        /// <summary>Armed orders that consume a hostile under the cursor.</summary>
+        /// <summary>Armed orders requiring a hostile cursor target.</summary>
         public static bool PicksTarget(WingOrder order) =>
             order == WingOrder.Attack;
 
-        /// <summary>
-        /// Standing orders a Shift-queued map task can wait behind. Open-ended holds still
-        /// qualify: arriving at the orbit with more to do advances the queue rather than
-        /// CAP-ing forever.
-        /// </summary>
+        /// <summary>Orders eligible for queued follow-ons, including Hold once its orbit is
+        /// reached.</summary>
         public static bool CanFollowOn(WingOrder order) =>
             order == WingOrder.MoveToPoint ||
             order == WingOrder.SeekAndDestroy ||
@@ -283,14 +254,12 @@ namespace WingCommand
         }
     }
 
-    /// <summary>Pure precedence table shared by runtime code and tests.</summary>
+    /// <summary>Engine-free weapons-authority precedence shared by runtime and tests.</summary>
     internal static class OrderRoePolicy
     {
-        /// <summary>
-        /// Resolve weapons intent independently of any retained target payload. A temporary
-        /// rejoin can keep an Attack target without inheriting permission to fire at it.
-        /// Missile defence takes priority even when optional opportunity scans are disabled.
-        /// </summary>
+        /// <summary>Resolve firing authority independently of retained targets; rejoin can retain Attack
+        /// payload without attack permission. Missile defence precedes optional opportunity
+        /// scans.</summary>
         public static StationFireMode StationFire(OrderEngagementAuthority authority,
             WingRoe roe, bool missileDefenceAvailable, bool opportunityFireEnabled)
         {
@@ -328,22 +297,18 @@ namespace WingCommand
             }
         }
 
-        /// <summary>
-        /// Uses the active behaviour before the standing order. A recalled Engage wingman
-        /// must obey station-keeping ROE while rejoining, rather than retain autonomous fire.
-        /// </summary>
+        /// <summary>Prefer active behaviour over standing order so recalled Engage members obey
+        /// station-keeping ROE.</summary>
         public static OrderEngagementAuthority AuthorityFor(string behaviourId, WingOrder order)
         {
             switch (behaviourId)
             {
-                // Rejoining and holding overhead are both station-keeping, whatever the
-                // order underneath them says. The standing ROE governs, as it does for any
-                // other wingman flying its slot.
+                // Rejoin and overhead hold use standing ROE regardless of suspended task.
                 case WingBehaviours.Rejoin:
                 case WingBehaviours.DeckHold:
                     return OrderEngagementAuthority.StandingRoe;
 
-                // Running from a missile, or not ours to fly at all.
+                // Missile escape or native ownership permits defensive handling only.
                 case WingBehaviours.MissileBreak:
                 case WingBehaviours.TerrainAbort:
                 case WingBehaviours.Held:

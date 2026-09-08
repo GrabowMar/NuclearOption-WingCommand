@@ -5,7 +5,7 @@ namespace WingCommand
 {
     internal partial class WingCommandManager
     {
-     /// <summary>Pending wing delivery and its reporting deadline.</summary>
+        /// <summary>Pending wing delivery and its reporting deadline.</summary>
         private struct PendingRecruit
         {
             public Aircraft Aircraft;
@@ -16,13 +16,13 @@ namespace WingCommand
             public bool DelayReported;
         }
 
-     /// <summary>Seconds before reporting a delayed departure; delivery remains pending.</summary>
+        /// <summary>Seconds before reporting a delayed departure; delivery remains pending.</summary>
         private const float RecruitTimeout = 420f;
 
         private readonly List<PendingRecruit> recruitQueue = new List<PendingRecruit>();
 
-     /// <summary>Add deliveries to the roster immediately, but let native taxi and launch AI retain
-     /// controls until airborne.</summary>
+        /// <summary>Add deliveries to the roster immediately, but let native taxi and launch AI retain
+        /// controls until airborne.</summary>
         internal void QueueRecruit(Aircraft aircraft, WingPilot preferredPilot = null)
         {
             if (aircraft == null) return;
@@ -61,8 +61,8 @@ namespace WingCommand
             });
         }
 
-     /// <summary>Wait for pilot initialisation and native takeoff before activating formation control;
-     /// switching a parked aircraft would strand it.</summary>
+        /// <summary>Wait for pilot initialisation and native takeoff before activating formation control;
+        /// switching a parked aircraft would strand it.</summary>
         private void FlushRecruitQueue()
         {
             for (int i = recruitQueue.Count - 1; i >= 0; i--)

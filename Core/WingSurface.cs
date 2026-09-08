@@ -2,29 +2,29 @@ using UnityEngine;
 
 namespace WingCommand
 {
- /// <summary>Publishes surface-member destination and effort from wing slots and directives. Registered
- /// behaviours supply vehicle-specific control. Read each fixed update because leaders move, orders
- /// change, and targets die.</summary>
+    /// <summary>Publishes surface-member destination and effort from wing slots and directives. Registered
+    /// behaviours supply vehicle-specific control. Read each fixed update because leaders move, orders
+    /// change, and targets die.</summary>
     public static class WingSurface
     {
-     /// <summary>Surface-control task for the current tick.</summary>
+        /// <summary>Surface-control task for the current tick.</summary>
         public readonly struct Task
         {
-         /// <summary>Destination in world coordinates.</summary>
+            /// <summary>Destination in world coordinates.</summary>
             public Vector3 Destination { get; }
 
-         /// <summary>Stopping distance from Destination, in metres.</summary>
+            /// <summary>Stopping distance from Destination, in metres.</summary>
             public float ArriveRadius { get; }
 
-         /// <summary>Hold current position even if the destination moves; this is independent of
-         /// arrival.</summary>
+            /// <summary>Hold current position even if the destination moves; this is independent of
+            /// arrival.</summary>
             public bool Hold { get; }
 
-         /// <summary>Suggested power fraction, 0-1. Station keeping uses less than repositioning to
-         /// reduce oscillation; controllers may ignore it.</summary>
+            /// <summary>Suggested power fraction, 0-1. Station keeping uses less than repositioning to
+            /// reduce oscillation; controllers may ignore it.</summary>
             public float Effort { get; }
 
-         /// <summary>Explicit target, or null.</summary>
+            /// <summary>Explicit target, or null.</summary>
             public Unit Target { get; }
 
             public Task(Vector3 destination, float arriveRadius, bool hold, float effort, Unit target)
@@ -37,7 +37,7 @@ namespace WingCommand
             }
         }
 
-     /// <summary>Read a commanded surface member's task; return false for other aircraft.</summary>
+        /// <summary>Read a commanded surface member's task; return false for other aircraft.</summary>
         public static bool TryGetTask(Aircraft aircraft, out Task task)
         {
             task = default;
@@ -90,13 +90,13 @@ namespace WingCommand
             }
         }
 
-     /// <summary>Stopping radius for surface slots and waypoints, in metres.</summary>
+        /// <summary>Stopping radius for surface slots and waypoints, in metres.</summary>
         private const float StationRadius = 150f;
 
-     /// <summary>Minimum target approach radius for surface members, in metres.</summary>
+        /// <summary>Minimum target approach radius for surface members, in metres.</summary>
         private const float StandOffRadius = 400f;
 
-     /// <summary>Preferred stand-off distance while attacking.</summary>
+        /// <summary>Preferred stand-off distance while attacking.</summary>
         private const float StandOffDistance = 3000f;
 
         private static Task Halt(WingMember member) =>

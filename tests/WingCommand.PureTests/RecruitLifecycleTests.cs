@@ -1,11 +1,11 @@
 using System;
 using Xunit;
 
-// Only native initialization/flight sensing is stubbed. The delayed recruitment
-// queue under test is the same source that runs in the plugin.
+// Test the linked production recruitment queue with only native initialisation and flight-sensing
+// stubs.
 namespace WingCommand
 {
-    // WingPilot and Pilot are shared, and live in GameTypeStubs.cs.
+    // Use shared WingPilot and Pilot stubs from GameTypeStubs.
     internal partial class Aircraft
     {
         public bool LocalSim = true;

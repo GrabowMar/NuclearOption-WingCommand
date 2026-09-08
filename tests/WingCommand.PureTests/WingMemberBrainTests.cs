@@ -65,7 +65,7 @@ namespace WingCommand.PureTests
             Assert.True(draft.LeavesMissileBreak);
             Assert.True(brain.Defensive);
             Assert.Equal(4f, brain.SecondsInBehaviour(14f));
-            // Lifecycle retires an interrupted maneuver, then resamples Formation.
+            // Retire the interrupted manoeuvre before resampling Formation.
             WingDecision actual = Step(brain, 14f, WingOrder.Formation, revision: 2);
             Assert.Equal(2, actual.OrderRevision);
             Assert.False(brain.Defensive);

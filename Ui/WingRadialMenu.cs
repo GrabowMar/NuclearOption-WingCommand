@@ -4,25 +4,14 @@ using System.Collections.Generic;
 using HarmonyLib;
 using UnityEngine;
 
-// Harmony invokes patch Prefix/Postfix methods by reflection.
-// IDE0051 cannot see a reflective call, so it is disabled for this file only.
+// Harmony calls prefixes and postfixes by reflection, so suppress IDE0051 in this file.
 #pragma warning disable IDE0051
 
 namespace WingCommand
 {
-    /// <summary>
-    /// Nested wing menu built on the game's own radial wheel.
-    ///
-    /// A single "Wing Command" slice is appended to the stock main wheel. Selecting it
-    /// opens a small category page, keeping every command page readable instead of putting
-    /// an unrelated ring of actions on one wheel. Each leaf action restores the stock
-    /// wheel once it has run, and a timeout restores it if the player wanders off.
-    ///
-    /// This is the same technique BOTE uses: replace <c>RadialMenuMain.actionsMain</c> and
-    /// call <c>SetupMain()</c> to rebuild. Using the native wheel also means selection runs
-    /// through Rewired look-axis input, which is what actually works while the cursor is
-    /// captured for mouse-look.
-    /// </summary>
+    /// <summary>Adds a Wing Command root slice and nested pages by swapping actionsMain and rebuilding
+    /// native radial content. Restore stock content after leaf actions or timeout; native Rewired
+    /// selection works with a captured cursor.</summary>
     internal static class WingRadialMenu
     {
         private const string RootLabel = "Wing Command";
@@ -35,10 +24,10 @@ namespace WingCommand
         private static WingMenuAction[] combatManeuverMenu;
         private static WingMenuAction[] roeMenu;
 
-        /// <summary>The current root wheel contents, captured when its mod entry is selected.</summary>
+        /// <summary>Root actions captured when entering the mod menu.</summary>
         private static RadialMenuAction[] stockActions;
 
-        /// <summary>The main wheel as first observed, used to tell it from foreign submenus.</summary>
+        /// <summary>First confirmed main wheel, used to distinguish other mods' submenus.</summary>
         private static RadialMenuAction[] baselineWheel;
 
         private static bool inSubmenu;
@@ -46,9 +35,9 @@ namespace WingCommand
 
         private static WingCommandManager Mgr => WingCommandManager.Instance;
 
-        // ------------------------------------------------------------------ lifecycle
+        // Radial lifecycle.
 
-        /// <summary>Called every frame by the manager. Handles the restore timeout.</summary>
+        /// <summary>Check submenu restore timeout each manager frame.</summary>
         public static void Tick()
         {
             if (!GameAccess.Available) return;
@@ -70,10 +59,7 @@ namespace WingCommand
                 RestoreStockWheel();
         }
 
-        /// <summary>
-        /// Ensure the "Wing Command" slice is present in the stock wheel. Called from a
-        /// prefix on <c>SetupMain</c> so it survives every rebuild the game does.
-        /// </summary>
+        /// <summary>Ensure the root slice survives native SetupMain rebuilds.</summary>
         internal static bool EnsureRootInjected(RadialMenuMain menu, bool openingRoot = false)
         {
             if (menu == null || inSubmenu) { Trace(openingRoot, "menu null or in submenu"); return false; }
@@ -81,10 +67,8 @@ namespace WingCommand
             RadialMenuAction[] current = GameAccess.GetActionsMain(menu);
             if (current == null) { Trace(openingRoot, "actionsMain is null"); return false; }
 
-            // BOTE uses the same swap-and-rebuild technique for its own submenus, so
-            // SetupMain also fires for wheels that are not the main one. OpenMenu is the
-            // reliable root boundary; SetupMain alone is not, and using its first call as
-            // the baseline could accidentally capture another mod's submenu.
+            // Capture baseline only at OpenMenu's root boundary; SetupMain also rebuilds foreign
+            // submenus.
             if (openingRoot && baselineWheel == null)
                 baselineWheel = current;
             else if (baselineWheel == null || !SharesAnyEntry(current, baselineWheel))
@@ -114,11 +98,8 @@ namespace WingCommand
             return true;
         }
 
-        /// <summary>
-        /// Diagnostic breadcrumb for the injection path. Rate-limited to one line per
-        /// distinct message: the callers run on every wheel open and every rebuild, and an
-        /// unthrottled log here buries everything else in BepInEx's output.
-        /// </summary>
+        /// <summary>Log each distinct injection diagnostic once to avoid repeated open/rebuild
+        /// noise.</summary>
         private static readonly HashSet<string> traced = new HashSet<string>();
 
         private static void Trace(bool openingRoot, string what)
@@ -137,31 +118,28 @@ namespace WingCommand
             return false;
         }
 
-        // -------------------------------------------------------------------- menus
+        // Radial menu construction.
 
         private static int builtRevision = -1;
 
         private static void BuildMenus(RadialMenuMain menu)
         {
-            // The wheel is built once and kept, but a host profile can rename the orders on
-            // it - the leaf labels below are baked into the WingMenuAction instances, so
-            // without this the wheel would keep offering "Form Up" from a ship's bridge.
+            // Rebuild cached labels when host revision changes their command meaning.
             if (rootEntry != null && builtRevision == WingHost.Revision) return;
             builtRevision = WingHost.Revision;
 
-            // Borrow appearance from whatever the stock wheel already has.
+            // Use existing native actions as appearance templates.
             RadialMenuAction[] templates = GameAccess.GetActionsMain(menu);
             Func<int, RadialMenuAction> template = i =>
                 (templates != null && templates.Length > 0) ? templates[i % templates.Length] : null;
 
-            // Identity is load-bearing: EnsureRootInjected finds our slice in the stock
-            // wheel by reference, so a rebuild must reuse the same root action rather than
-            // make a new one, which would be injected alongside the old.
+            // Reuse root action identity because injection detects it by reference; replacement would
+            // duplicate the slice.
             if (rootEntry == null)
                 rootEntry = WingMenuAction.Create(RootLabel, _ => ShowCommanderMenu());
 
-            // Direct tactical whole-wing orders on first open, with a 6th slice leading
-            // to secondary formations and posture configurations.
+            // Show primary whole-wing orders directly, with the sixth sector opening secondary
+            // controls.
             var commander = new List<WingMenuAction>
             {
                 Leaf(WingOrderCatalog.Label(WingOrder.Formation), WingAction.Rejoin, "rejoin",
@@ -224,8 +202,8 @@ namespace WingCommand
             }
             formations.Add(Back(ShowSecondaryMenu));
 
-            // Rebuilding is only allowed on the root wheel, so none of these submenu
-            // actions is displayed. HideAndDontSave assets require explicit destruction.
+            // Destroy hidden submenu assets explicitly during root-only rebuilds; HideAndDontSave does
+            // not manage their lifetime.
             DestroySubmenus();
             commanderMenu = commander.ToArray();
             secondaryMenu = secondary.ToArray();
@@ -233,8 +211,7 @@ namespace WingCommand
             combatManeuverMenu = combatManeuvers.ToArray();
             roeMenu = roes.ToArray();
 
-            // Take the wedge background and colours from a stock entry so the slices match
-            // the game's styling, then overwrite the icon with our own drawn glyph.
+            // Copy native wedge appearance, then replace only the glyph.
             ApplyAppearance(rootEntry, template(0), "root");
             ApplyAll(commanderMenu, template);
             ApplyAll(secondaryMenu, template);
@@ -249,14 +226,14 @@ namespace WingCommand
                 ApplyAppearance(entries[i], template(i), null);
         }
 
-        /// <summary>Tag an entry with the glyph it should draw.</summary>
+        /// <summary>Assign the entry's glyph key.</summary>
         private static WingMenuAction Icon(WingMenuAction action, string iconKey)
         {
             action.IconKey = iconKey;
             return action;
         }
 
-        /// <summary>A "Back" slice that swaps the wheel to another submenu.</summary>
+        /// <summary>Create a Back action that opens another menu.</summary>
         private static WingMenuAction Back(Action target) =>
             Icon(WingMenuAction.Create("Back", _ => target()), "back");
 
@@ -273,16 +250,13 @@ namespace WingCommand
             }
             catch (Exception e)
             {
-                // Keep the borrowed stock icon rather than losing the slice entirely.
+                // Retain the borrowed icon if custom glyph construction fails.
                 Plugin.Logger.LogWarning("Could not build icon '" + key + "': " + e.Message);
             }
         }
 
-        /// <summary>
-        /// A leaf action: run the order, then drop back to the stock wheel. An optional
-        /// gate greys the slice out on the native wheel when the order is unavailable
-        /// (e.g. Jam in Performance mode).
-        /// </summary>
+        /// <summary>Execute a leaf order and restore the stock wheel. Optional gates grey unavailable
+        /// commands.</summary>
         private static WingMenuAction Leaf(string label, WingAction action, string iconKey,
                                            Func<bool> available = null)
         {
@@ -293,7 +267,7 @@ namespace WingCommand
             return Icon(entry, iconKey);
         }
 
-        /// <summary>A manoeuvre leaf: fly it wing-wide, then drop back to the stock wheel.</summary>
+        /// <summary>Execute a wing-wide manoeuvre and restore the stock wheel.</summary>
         private static WingMenuAction ManeuverLeaf(ManeuverKind kind)
         {
             WingMenuAction entry = WingMenuAction.Create(
@@ -303,7 +277,7 @@ namespace WingCommand
             return Icon(entry, "maneuver");
         }
 
-        /// <summary>Select a concrete ROE instead of making the player cycle blindly.</summary>
+        /// <summary>Select a specific ROE directly.</summary>
         private static WingMenuAction Roe(string label, WingRoe roe)
         {
             WingMenuAction entry = WingMenuAction.Create(label, _ =>
@@ -319,7 +293,7 @@ namespace WingCommand
         }
 
 
-        // ------------------------------------------------------------------ swapping
+        // Menu swapping.
 
         private static void ShowCommanderMenu() => Swap(commanderMenu, submenu: true);
 
@@ -343,8 +317,7 @@ namespace WingCommand
             RadialMenuMain menu = SceneSingleton<RadialMenuMain>.i;
             if (menu == null || actions == null) return;
 
-            // SetupMain evaluates AllowedOnAircraft against the cached aircraft; with no
-            // aircraft the stock entries dereference null.
+            // Require the cached aircraft before SetupMain; stock AllowedOnAircraft dereferences it.
             if (GameAccess.GetMenuAircraft(menu) == null) return;
 
             if (stockActions == null && !submenu) return;
@@ -363,11 +336,11 @@ namespace WingCommand
                 Plugin.Logger.LogError("Radial submenu rebuild failed, restoring stock wheel: " + e);
                 GameAccess.SetActionsMain(menu, stockActions);
                 inSubmenu = false;
-                try { GameAccess.SetupMain(menu); } catch { /* nothing further we can do */ }
+                try { GameAccess.SetupMain(menu); } catch { /* Leave the wheel unchanged if restoration fails. */ }
             }
         }
 
-        /// <summary>Drop cached state when leaving a mission.</summary>
+        /// <summary>Clear mission-specific radial state.</summary>
         internal static void Reset()
         {
             stockActions = null;
@@ -402,11 +375,8 @@ namespace WingCommand
     {
         private static bool reportedInactive;
 
-        /// <summary>
-        /// Say once why the native wheel is being left alone. Silence here was the whole
-        /// problem: the patches attached and then declined to do anything, which looks
-        /// exactly like the patches never running.
-        /// </summary>
+        /// <summary>Log once why native integration is inactive so silent refusal is
+        /// diagnosable.</summary>
         private static void ReportInactive(string where)
         {
             if (reportedInactive) return;
@@ -419,20 +389,9 @@ namespace WingCommand
                 ". Bind Keys/WingMenu to open the mod's own wheel instead.");
         }
 
-        /// <summary>
-        /// Put the slice into <c>actionsMain</c> the moment the wheel object exists, which
-        /// is how BOTE does it and is the earliest point that can work.
-        ///
-        /// <c>RadialMenuMain</c> does not declare Awake — it inherits the one on
-        /// <c>SceneSingleton&lt;RadialMenuMain&gt;</c> — so the target is resolved by hand
-        /// rather than by attribute.
-        ///
-        /// Deliberately no <c>SetupMain()</c> call here: at Awake the menu's cached aircraft
-        /// is still null, and the stock entries dereference it in AllowedOnAircraft. The
-        /// array is simply seeded, and the game's own first OpenMenu builds the wheel from
-        /// it. That also makes this the robust path — nothing has to observe an event, the
-        /// entry is just *there* before anything reads the array.
-        /// </summary>
+        /// <summary>Seed actionsMain in inherited SceneSingleton Awake, resolved explicitly because
+        /// RadialMenuMain does not declare it. Defer SetupMain until OpenMenu supplies a cached
+        /// aircraft.</summary>
         [HarmonyPatch]
         internal static class AwakePatch
         {
@@ -442,9 +401,8 @@ namespace WingCommand
             [HarmonyPostfix]
             private static void Postfix(SceneSingleton<RadialMenuMain> __instance)
             {
-                // Mono shares one compiled body across every reference-type instantiation of
-                // a generic, so patching the closed SceneSingleton<RadialMenuMain>.Awake also
-                // runs for every other SceneSingleton<T> in the game. Claim only our own.
+                // Mono shares generic reference-type method bodies; ignore every singleton instance
+                // except RadialMenuMain.
                 if (!(__instance is RadialMenuMain menu)) return;
 
                 if (!WingCommandManager.NativeRadialActive) { ReportInactive("Awake"); return; }
@@ -460,10 +418,8 @@ namespace WingCommand
             }
         }
 
-        /// <summary>
-        /// Re-add the "Wing Command" slice before every wheel rebuild. The game rebuilds
-        /// whenever the player's aircraft changes, which would otherwise drop it.
-        /// </summary>
+        /// <summary>Reinsert the root slice before native wheel rebuilds, including aircraft
+        /// changes.</summary>
         [HarmonyPatch("SetupMain")]
         [HarmonyPrefix]
         private static void SetupMain_Prefix(RadialMenuMain __instance)
@@ -480,12 +436,8 @@ namespace WingCommand
             }
         }
 
-        /// <summary>
-        /// The game only calls SetupMain from OpenMenu when the local aircraft reference
-        /// changed. In scenes that pre-populate the reference, patching SetupMain alone
-        /// never gets an opportunity to append the mod entry. Checking after every open
-        /// supplies that missing lifecycle edge and rebuilds only when injection occurred.
-        /// </summary>
+        /// <summary>Check every OpenMenu because SetupMain may be skipped when the scene prepopulated its
+        /// aircraft; rebuild only after new injection.</summary>
         [HarmonyPatch(nameof(RadialMenuMain.OpenMenu))]
         [HarmonyPostfix]
         private static void OpenMenu_Postfix(RadialMenuMain __instance)

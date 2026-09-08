@@ -1,6 +1,6 @@
 namespace WingCommand
 {
- /// <summary>Shared order labels and capability rules.</summary>
+    /// <summary>Shared order labels and capability rules.</summary>
     internal static class WingOrderCatalog
     {
         public static string Label(WingOrder order)
@@ -54,13 +54,13 @@ namespace WingCommand
             }
         }
 
-     /// <summary>Orders requiring a map point. Cargo accepts one but can use native route search
-     /// without it.</summary>
+        /// <summary>Orders requiring a map point. Cargo accepts one but can use native route search
+        /// without it.</summary>
         public static bool NeedsPoint(WingOrder order) =>
             order == WingOrder.OrbitHere || order == WingOrder.LandHere ||
             order == WingOrder.SeekAndDestroy;
 
-     /// <summary>Orders that can arm a map coordinate placement.</summary>
+        /// <summary>Orders that can arm a map coordinate placement.</summary>
         public static bool TakesPoint(WingOrder order) => MapOrderPolicy.PlacesPoint(order);
 
         public static bool CanApply(WingMember member, WingOrder order)
@@ -78,8 +78,8 @@ namespace WingCommand
             return true;
         }
 
-     /// <summary>Whether the host exposes this order before a member selection exists; radial
-     /// construction uses this scope-independent check.</summary>
+        /// <summary>Whether the host exposes this order before a member selection exists; radial
+        /// construction uses this scope-independent check.</summary>
         public static bool IsOfferable(WingOrder order) => !WingHost.Current.IsHidden(order);
 
         public static string UnavailableReason(WingOrder order)

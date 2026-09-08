@@ -2,9 +2,9 @@ using HarmonyLib;
 
 namespace WingCommand
 {
- /// <summary>Redirect inbound post-landing taxi to parking so native service-point logic cannot eject
- /// returning crew before settlement. Leave outbound delivery/refit taxi untouched. Drain runway queues
- /// because native taxi/takeoff LeaveState does not dequeue interrupted departures.</summary>
+    /// <summary>Redirect inbound post-landing taxi to parking so native service-point logic cannot eject
+    /// returning crew before settlement. Leave outbound delivery/refit taxi untouched. Drain runway queues
+    /// because native taxi/takeoff LeaveState does not dequeue interrupted departures.</summary>
     [HarmonyPatch(typeof(Pilot), nameof(Pilot.SwitchState))]
     internal static class WingInboundTaxiPatch
     {
@@ -38,8 +38,8 @@ namespace WingCommand
 #pragma warning restore IDE0051
     }
 
- /// <summary>Suppress native pad/runway ejection only while refit needs a seated pilot. Plain RTB may
- /// disembark normally for settlement.</summary>
+    /// <summary>Suppress native pad/runway ejection only while refit needs a seated pilot. Plain RTB may
+    /// disembark normally for settlement.</summary>
     [HarmonyPatch(typeof(Aircraft), nameof(Aircraft.StartEjectionSequence))]
     internal static class WingRefitEjectPatch
     {
@@ -73,8 +73,8 @@ namespace WingCommand
 #pragma warning restore IDE0051
     }
 
- /// <summary>Release takeoff queues when taxi ends without entering takeoff. This leaving-state check
- /// runs alongside inbound transition redirection; neither prefix cancels the call.</summary>
+    /// <summary>Release takeoff queues when taxi ends without entering takeoff. This leaving-state check
+    /// runs alongside inbound transition redirection; neither prefix cancels the call.</summary>
     [HarmonyPatch(typeof(Pilot), nameof(Pilot.SwitchState))]
     internal static class WingTakeoffQueuePatch
     {

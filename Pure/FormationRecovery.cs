@@ -4,7 +4,7 @@ namespace WingCommand
 {
     internal enum FormationRecoveryMode { Station, SlowLeader, Overshoot }
 
-    /// <summary>Per-wingman flight memory. No shared timers or airframe estimates.</summary>
+    /// <summary>Per-member recovery timers and airframe estimates.</summary>
     internal sealed class FormationRecovery
     {
         public FormationRecoveryMode Mode { get; private set; }
@@ -14,6 +14,8 @@ namespace WingCommand
         private float slowTime, readyTime, lastSpeed, lastThrottle, stableThrottle, responseTime;
         private bool sampled, awaitingResponse;
         private float burstRemaining, burstCooldown, reportElapsed;
+        private string reportMode;
+        private bool reportTerrain;
 
         public bool UpdateMode(float leaderSpeed, float minimumSpeed, float gap, float spacing, float dt,
                                bool allowSlowLeader = true, bool allowOvershoot = true)
@@ -36,9 +38,8 @@ namespace WingCommand
             return previous != Mode;
         }
 
-        // Braking beside the leader is useful only after joining its flight path.
-        // A negative along-track projection alone also describes a distant aircraft
-        // on the other side of the airfield, or flying directly towards the leader.
+        // Use the overshoot lane only after joining the leader's flight path; negative along-track
+        // position alone also describes distant or head-on approaches.
         public static bool CanYieldAhead(float distance, float crossTrack, float alignment,
             float leaderSpeed, float minimumSpeed, float spacing, bool alreadyYielding = false) =>
             distance <= Math.Max(WingTuning.CaptureDistance * 2f, spacing * 4f) * (alreadyYielding ? 1.5f : 1f) &&
@@ -50,15 +51,14 @@ namespace WingCommand
             Math.Max(spacing * 1.5f, speed * speed /
                 (9.81f * (float)Math.Tan(WingTuning.FormationRecoveryBank * Math.PI / 180d)));
 
-        // For a circuit whose center is moving, solve |leaderVelocity + q*course|
-        // = flyingSpeed. Adding a fixed tangent then normalizing changes the
-        // relative course and lets the moving center walk away from the orbit.
+        // Solve moving-centre circulation speed while preserving relative course. Normalising a fixed
+        // tangent after adding leader motion would distort the orbit.
         public static float CirculationSpeed(float leaderAlongCourse, float leaderSpeed, float flyingSpeed) =>
             Math.Max(0f, -leaderAlongCourse + (float)Math.Sqrt(Math.Max(0f,
                 leaderAlongCourse * leaderAlongCourse + flyingSpeed * flyingSpeed - leaderSpeed * leaderSpeed)));
 
-        // Only stable, level flight at a settled throttle can identify drag. Reject
-        // discontinuities and reset across manoeuvres; never learn from a collision.
+        // Learn drag only from stable level flight at settled throttle; reset across manoeuvres and
+        // reject collision-like discontinuities.
         public void Observe(float speed, float throttle, bool stableFlight, float dt)
         {
             if (!sampled || dt <= 0f || dt > 0.5f || !stableFlight)
@@ -84,12 +84,21 @@ namespace WingCommand
             if (throttle < 0.1f && stableThrottle > 2f && accel < -0.2f && accel > -8f)
             {
                 float observed = Clamp(-accel * 0.8f, 0.5f, 6f);
-                // Weak brakes are learned faster than strong ones: underestimating
-                // stopping distance is the dangerous side of the model error.
+                // Learn weaker braking faster because underestimating stopping distance is the
+                // dangerous error.
                 float tau = observed < Braking ? 1f : 8f;
                 Braking += (observed - Braking) * (1f - (float)Math.Exp(-dt / tau));
             }
             lastSpeed = speed; lastThrottle = throttle;
+        }
+
+        // Preserve mode and native safety transitions even between bursts or during their cooldown.
+        public bool ReportStateChanged(string mode, bool terrain)
+        {
+            bool changed = mode != reportMode || terrain != reportTerrain;
+            reportMode = mode;
+            reportTerrain = terrain;
+            return changed;
         }
 
         public bool BurstReport(bool unstable, float dt)
@@ -112,8 +121,8 @@ namespace WingCommand
         public static float Move(float current, float target, float maximumChange) =>
             current + Clamp(target - current, -Math.Max(0f, maximumChange), Math.Max(0f, maximumChange));
 
-        // Preserve the side already occupied, rather than crossing the leader's nose
-        // to reach a parity-assigned lane. Parity only resolves an ambiguous centreline.
+        // Retain the occupied side lane to avoid nose crossings; use slot parity only near the
+        // centreline.
         public static float LaneSide(float lateral, float spacing, int slot) =>
             Math.Abs(lateral) > spacing * 0.5f ? Math.Sign(lateral) : (slot % 2 == 0 ? 1f : -1f);
 

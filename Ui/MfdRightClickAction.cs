@@ -6,7 +6,7 @@ using UnityEngine.EventSystems;
 
 namespace WingCommand
 {
-    /// <summary>Restores the native target filter's right-click "only this" behavior.</summary>
+    /// <summary>Restores the native filter's right-click isolation action.</summary>
     internal sealed class MfdRightClickAction : MonoBehaviour, IPointerClickHandler
     {
         private Action action;

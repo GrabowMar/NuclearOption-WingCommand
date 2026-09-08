@@ -1,6 +1,6 @@
 namespace WingCommand
 {
- /// <summary>Same-direction orbit lanes separated by roster slot radius.</summary>
+    /// <summary>Same-direction orbit lanes separated by roster slot radius.</summary>
     internal static class OrbitGeometry
     {
         public static (float x, float z) AimOffset(float fromX, float fromZ,
@@ -19,8 +19,8 @@ namespace WingCommand
         }
     }
 
- /// <summary>Followers use temporary flight lead; the lead and flights without one follow the
- /// player.</summary>
+    /// <summary>Followers use temporary flight lead; the lead and flights without one follow the
+    /// player.</summary>
     internal static class FlightLeadPolicy
     {
         public static T FormationLeader<T>(bool isThisMemberTheLead, T designatedLead,
@@ -28,7 +28,7 @@ namespace WingCommand
             (isThisMemberTheLead || designatedLead == null) ? wingLeader : designatedLead;
     }
 
- /// <summary>Engine-free rotary hover/cruise transition policy.</summary>
+    /// <summary>Engine-free rotary hover/cruise transition policy.</summary>
     internal static class RotaryHoverPolicy
     {
         public static bool ShouldHover(bool wasHovering, float leaderHorizontalSpeed,
@@ -43,8 +43,8 @@ namespace WingCommand
         }
     }
 
- /// <summary>Convert world slot height to rotary AGL hold because terrain-following ignores destination
- /// height; preserve terrain clearance for low slots.</summary>
+    /// <summary>Convert world slot height to rotary AGL hold because terrain-following ignores destination
+    /// height; preserve terrain clearance for low slots.</summary>
     internal static class RotaryAltitudePolicy
     {
         public static float SlotAgl(float ownAltitude, float ownRadarAltitude,
@@ -55,7 +55,7 @@ namespace WingCommand
         }
     }
 
- /// <summary>Restart timeout whenever a decreasing progress value advances.</summary>
+    /// <summary>Restart timeout whenever a decreasing progress value advances.</summary>
     internal sealed class CargoProgressTracker
     {
         public int LastAmount { get; private set; }
@@ -81,13 +81,39 @@ namespace WingCommand
         public bool IsStalled(float now, float timeout) => now - LastProgressAt >= timeout;
     }
 
- /// <summary>Terrain escape policy for aircraft already controlled by the wing.</summary>
+    /// <summary>Terrain escape policy for aircraft already controlled by the wing.</summary>
     internal static class TerrainAbortPolicy
     {
         public const float GrabRange = 400f;
         public const float ReleaseRange = 200f;
         public const float AbortAlt = 50f;
         public const float AbortReleaseAlt = 90f;
+
+        /// <summary>Use the native five-second terrain horizon and current descent before a fixed
+        /// altitude floor becomes too late. Native warning also covers terrain ahead.</summary>
+        public static bool ImmediateDanger(float radarAlt, float verticalSpeed, float terrainUrgency) =>
+            radarAlt >= 8f && (terrainUrgency > 0f ||
+                (verticalSpeed < -5f && radarAlt < AbortAlt - verticalSpeed * 5f));
+
+        public static bool AllowsRecovery(WingOrder order) => order != WingOrder.LandHere &&
+            order != WingOrder.ReturnToBase && order != WingOrder.DeliverCargo;
+
+        public static bool AllowsRecovery(in WingSituation s, bool incumbent = false) =>
+            !s.DeliveryPending && !s.MemberIsSurface && (s.RadarAlt >= 8f || incumbent) &&
+            AllowsRecovery(s.Order);
+
+        public static bool TerrainThreat(in WingSituation s, bool incumbent) =>
+            (incumbent && s.RadarAlt < AbortReleaseAlt) ||
+            ImmediateDanger(s.RadarAlt, s.VerticalSpeed, s.TerrainUrgency) ||
+            ShouldAbort(s.RadarAlt, s.LeaderDistance, s.Order, incumbent, s.DeliveryPending);
+
+        /// <summary>Keep the existing recovery controller until a defensive exit is upright, no longer
+        /// diving, and has enough forward airspeed to turn toward a task.</summary>
+        public static bool ShouldRecover(in WingSituation s, bool incumbent) =>
+            AllowsRecovery(in s, incumbent) && (TerrainThreat(in s, incumbent) ||
+                (!s.MemberIsRotary && !s.MissileWarned && (incumbent || s.RecoveringFromDefence) &&
+                    (System.Math.Abs(s.BankAngle) > 35f || s.VerticalSpeed < -10f ||
+                     s.Airspeed < s.MinimumAirspeed)));
 
         public static bool ShouldAbort(
             float radarAlt, float leaderDistance, WingOrder order,
@@ -103,7 +129,7 @@ namespace WingCommand
             return radarAlt < alt && leaderDistance > range;
         }
 
-     /// <summary>Low-altitude tasks for which terrain abort would oppose the order.</summary>
+        /// <summary>Low-altitude tasks for which terrain abort would oppose the order.</summary>
         public static bool AllowsAbort(WingOrder order) =>
             order != WingOrder.LandHere &&
             order != WingOrder.ReturnToBase &&

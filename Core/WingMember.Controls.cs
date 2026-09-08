@@ -6,10 +6,13 @@ namespace WingCommand
 {
     internal partial class WingMember
     {
-     /// <summary>Apply the resolved behaviour through the shared state-switch path for commandable
-     /// members.</summary>
+        /// <summary>Apply the resolved behaviour through the shared state-switch path for commandable
+        /// members.</summary>
         private void EnterBehaviour(string behaviourId)
         {
+            // The new behaviour owns targeting. Shots already in flight keep their firing slots.
+            TacticalCoordinator.ReleaseSelection(Aircraft);
+
             // Surface members require their registered behaviour because built-ins assume an autopilot.
             // WingSurface publishes their directive destination.
             if (IsSurface)
@@ -32,7 +35,6 @@ namespace WingCommand
                     return;
 
                 case WingBehaviours.MissileBreak:
-                    TacticalCoordinator.Release(Aircraft);
                     SwitchTo(defensiveState);
                     return;
 
@@ -41,7 +43,6 @@ namespace WingCommand
                     return;
 
                 case WingBehaviours.TerrainAbort:
-                    TacticalCoordinator.Release(Aircraft);
                     SwitchTo(terrainAbortState);
                     return;
 
@@ -69,18 +70,17 @@ namespace WingCommand
             }
         }
 
-     /// <summary>Release mod flight control to native AI. Leave pending apron deliveries untouched;
-     /// switching them to combat would interrupt taxi.</summary>
+        /// <summary>Release mod flight control to native AI. Leave pending apron deliveries untouched;
+        /// switching them to combat would interrupt taxi.</summary>
         private void EnterHeld()
         {
             if (deliveryPending) return;
 
-            TacticalCoordinator.Release(Aircraft);
             SwitchToCombat();
         }
 
-     /// <summary>Orbit above a grounded or missing leader without changing the standing
-     /// directive.</summary>
+        /// <summary>Orbit above a grounded or missing leader without changing the standing
+        /// directive.</summary>
         private void EnterDeckHold()
         {
             Aircraft leader = Leader;
@@ -94,7 +94,7 @@ namespace WingCommand
             SwitchTo(orbitState);
         }
 
-     /// <summary>Enter the state for the standing directive.</summary>
+        /// <summary>Enter the state for the standing directive.</summary>
         private void EnterTask()
         {
             switch (Directive.Order)
@@ -102,8 +102,9 @@ namespace WingCommand
                 case WingOrder.Formation:
                     // Boost only after a real transition into formation, not a payload change while
                     // already in the slot.
+                    bool recovered = enteredState is DefensiveManeuverState || enteredState is TerrainAbortState;
                     if (SwitchTo(formationState))
-                        formationState.BoostRejoin(Slot * WingTuning.RejoinStagger);
+                        formationState.BoostRejoin(recovered ? 0f : Slot * WingTuning.RejoinStagger);
                     break;
 
                 case WingOrder.Engage:
@@ -153,8 +154,8 @@ namespace WingCommand
             }
         }
 
-     /// <summary>Additional station-keeping job, read by FormationFlyState independently of the
-     /// standing order.</summary>
+        /// <summary>Additional station-keeping job, read by FormationFlyState independently of the
+        /// standing order.</summary>
         public SlotTask SlotTask
         {
             get
@@ -165,7 +166,7 @@ namespace WingCommand
             }
         }
 
-     /// <summary>Orbit the directive point, or the leader if no point was supplied.</summary>
+        /// <summary>Orbit the directive point, or the leader if no point was supplied.</summary>
         private void EnterOrbit(WingDirective directive)
         {
             Aircraft leader = Leader;
@@ -179,9 +180,9 @@ namespace WingCommand
             SwitchTo(orbitState);
         }
 
-     /// <summary>With a point, CargoRunState flies and drops any loaded airframe. Without one, use
-     /// native transport's supply-route search. CheckCargoRun confirms delivery from ammunition changes
-     /// and handles timeout.</summary>
+        /// <summary>With a point, CargoRunState flies and drops any loaded airframe. Without one, use
+        /// native transport's supply-route search. CheckCargoRun confirms delivery from ammunition changes
+        /// and handles timeout.</summary>
         private void EnterCargoRun(WingDirective directive)
         {
             cargoProgress.Reset(CargoAmmo, Time.timeSinceLevelLoad);
@@ -228,7 +229,7 @@ namespace WingCommand
             SwitchTo(waypointState);
         }
 
-     /// <summary>Enter or re-enter the attack state using the directive's target.</summary>
+        /// <summary>Enter or re-enter the attack state using the directive's target.</summary>
         private void EnterAttack(WingDirective directive)
         {
             if (AssignedTarget != null && !AssignedTarget.disabled)
@@ -243,8 +244,8 @@ namespace WingCommand
             }
         }
 
-     /// <summary>Hold formation and jam the designation via SlotTask. Do not trigger rejoin boost for
-     /// an aircraft already in its slot.</summary>
+        /// <summary>Hold formation and jam the designation via SlotTask. Do not trigger rejoin boost for
+        /// an aircraft already in its slot.</summary>
         private void EnterSlotTask()
         {
             if (AssignedTarget != null && !AssignedTarget.disabled)
@@ -259,8 +260,8 @@ namespace WingCommand
 
         private BehaviourStateCache<Aircraft, PilotBaseState> extraBehaviours;
 
-     /// <summary>Build extension state on first use and cache it per member and registration lifetime;
-     /// replacement creates fresh controller memory.</summary>
+        /// <summary>Build extension state on first use and cache it per member and registration lifetime;
+        /// replacement creates fresh controller memory.</summary>
         internal PilotBaseState CachedBehaviour(string behaviourId,
             BehaviourFactoryRegistry<Aircraft, PilotBaseState>.Registration registration)
         {
@@ -282,15 +283,16 @@ namespace WingCommand
             extraBehaviours.ObserveMissing(behaviourId);
         }
 
-     /// <summary>Last pilot state installed by this member.</summary>
+        /// <summary>Last pilot state installed by this member.</summary>
         private PilotBaseState enteredState;
 
-     /// <summary>Switch only when the live pilot state differs; return true on transition. Re-entering
-     /// a shared state resets filters and timers, while native or delegated transitions may change it
-     /// independently.</summary>
+        /// <summary>Switch only when the live pilot state differs; return true on transition. Re-entering
+        /// a shared state resets filters and timers, while native or delegated transitions may change it
+        /// independently.</summary>
         private bool SwitchTo(PilotBaseState state)
         {
-            if (state == null) return false;
+            if (state == null || Pilot == null || Aircraft == null ||
+                !Aircraft.LocalSim || Aircraft.Player != null) return false;
             if (ReferenceEquals(state, Pilot.currentState))
             {
                 enteredState = state;
@@ -319,8 +321,8 @@ namespace WingCommand
         // Allow surface entry only while installing a registered behaviour designed for that vehicle.
         private bool enteringRegisteredBehaviour;
 
-     /// <summary>Install catalog state through SwitchTo so repeated resolution preserves re-entry
-     /// protection.</summary>
+        /// <summary>Install catalog state through SwitchTo so repeated resolution preserves re-entry
+        /// protection.</summary>
         internal bool SwitchToRegistered(PilotBaseState state)
         {
             enteringRegisteredBehaviour = true;
@@ -353,8 +355,8 @@ namespace WingCommand
                 Plugin.Logger.LogWarning($"[Wing] {Name} has no combat state to return to.");
         }
 
-     /// <summary>Delegate RTB approach and runway or pad selection to native landing states; recovery
-     /// handles touchdown and taxi.</summary>
+        /// <summary>Delegate RTB approach and runway or pad selection to native landing states; recovery
+        /// handles touchdown and taxi.</summary>
         private void SwitchToLanding()
         {
             if (Pilot == null) return;

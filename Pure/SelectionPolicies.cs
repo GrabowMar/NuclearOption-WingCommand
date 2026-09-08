@@ -2,9 +2,7 @@ using System;
 
 namespace WingCommand
 {
-    /// <summary>
-    /// Pure policy for flight and roster selection toggles.
-    /// </summary>
+    /// <summary>Engine-free flight and roster toggle rules.</summary>
     internal static class SelectionTogglePolicy
     {
         public static bool ShouldDeselectAll(bool isAllMode, int selectedCount, int totalCount)
@@ -19,7 +17,7 @@ namespace WingCommand
         }
     }
 
-    /// <summary>Keep tactical aircraft clickable independently of the weapon target list.</summary>
+    /// <summary>Keep tactical member interaction independent of weapon-target selection.</summary>
     internal static class MapSelectionPolicy
     {
         public static bool DeferToMouseClick(bool controllerSource, bool mouseGestureActive,
@@ -36,15 +34,11 @@ namespace WingCommand
         }
     }
 
-    /// <summary>
-    /// Pure selection rules for cycling and automatically advancing pilots in the squadron roster.
-    /// </summary>
+    /// <summary>Roster pilot cycling and automatic selection advancement.</summary>
     public static class PilotSelectionPolicy
     {
-        /// <summary>
-        /// Determine the next pilot index to select, preferring the next candidate that is free/available.
-        /// If no candidates are free, advances cyclically by one (startIndex + 1) % totalCount.
-        /// </summary>
+        /// <summary>Choose the next free index with wraparound; if none are free, advance one index
+        /// cyclically.</summary>
         public static int NextIndex(int startIndex, int totalCount, Func<int, bool> isFree)
         {
             if (totalCount <= 0) return -1;
@@ -62,9 +56,7 @@ namespace WingCommand
             return (startIndex + 1) % totalCount;
         }
 
-        /// <summary>
-        /// Step manually in a direction (e.g. -1 for previous, +1 for next), wrapping around.
-        /// </summary>
+        /// <summary>Step selection in either direction with wraparound.</summary>
         public static int CycleIndex(int currentIndex, int totalCount, int direction)
         {
             if (totalCount <= 0) return -1;

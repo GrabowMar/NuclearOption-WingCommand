@@ -5,8 +5,8 @@ using System.Reflection;
 
 namespace WingCommand
 {
- /// <summary>Caches native countermeasure reflection at startup; disables access if the private field
- /// changes.</summary>
+    /// <summary>Caches native countermeasure reflection at startup; disables access if the private field
+    /// changes.</summary>
     internal static class CountermeasureAccess
     {
         private static readonly Dictionary<Type, MethodInfo> firstCountermeasureMethods =
@@ -30,9 +30,9 @@ namespace WingCommand
                     "Countermeasure station access unavailable; panic ECM support is disabled.");
         }
 
-     /// <summary>Finds chaff or flares for the seeker, excluding jammers. Native selection sorts by
-     /// display name and may choose ECM instead of chaff because both advertise ARH/SARH support.
-     /// RadarJammerPulser drives ECM separately.</summary>
+        /// <summary>Finds chaff or flares for the seeker, excluding jammers. Native selection sorts by
+        /// display name and may choose ECM instead of chaff because both advertise ARH/SARH support.
+        /// RadarJammerPulser drives ECM separately.</summary>
         public static bool TryFindExpendable(CountermeasureManager manager, string seekerType,
                                              out int index, out string reason)
         {
@@ -111,8 +111,8 @@ namespace WingCommand
             }
         }
 
-     /// <summary>Invokes the public GetFirstCountermeasure method on its private station type; caches
-     /// the method per type.</summary>
+        /// <summary>Invokes the public GetFirstCountermeasure method on its private station type; caches
+        /// the method per type.</summary>
         private static Countermeasure FirstCountermeasure(object station)
         {
             if (station == null) return null;

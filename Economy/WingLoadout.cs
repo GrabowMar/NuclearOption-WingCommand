@@ -7,12 +7,12 @@ using NOAvionics.Ui;
 
 namespace WingCommand
 {
- /// <summary>Builds pylon options and loadouts from native hardpoint weaponOptions and effectiveness
- /// data. Reflects private mount-to-station links once per mount; unreadable profiles fall back to the
- /// stock fit with diagnostics.</summary>
+    /// <summary>Builds pylon options and loadouts from native hardpoint weaponOptions and effectiveness
+    /// data. Reflects private mount-to-station links once per mount; unreadable profiles fall back to the
+    /// stock fit with diagnostics.</summary>
     internal static class WingLoadoutCatalog
     {
-     /// <summary>A hardpoint's native store option and role data.</summary>
+        /// <summary>A hardpoint's native store option and role data.</summary>
         private sealed class MountInfo
         {
             public WeaponMount Mount;
@@ -24,16 +24,16 @@ namespace WingCommand
             public float MaxRange;
             public bool Cargo;
 
-         /// <summary>Mount ammunition count; zero when not countable.</summary>
+            /// <summary>Mount ammunition count; zero when not countable.</summary>
             public int Ammo;
 
-         /// <summary>Loaded store mass for fitted-weight display.</summary>
+            /// <summary>Loaded store mass for fitted-weight display.</summary>
             public float Mass;
 
             public bool Armed => AntiAir > 0f || AntiSurface > 0f || AntiMissile > 0f;
         }
 
-     /// <summary>Editor-facing store data without exposing WeaponMount prefab references.</summary>
+        /// <summary>Editor-facing store data without exposing WeaponMount prefab references.</summary>
         internal readonly struct StoreOption
         {
             public readonly string Key;
@@ -58,7 +58,7 @@ namespace WingCommand
 
             public bool IsEmpty => string.IsNullOrEmpty(Key);
 
-         /// <summary>Two-letter role label for the store table.</summary>
+            /// <summary>Two-letter role label for the store table.</summary>
             public string RoleTag =>
                 Cargo ? "CGO"
                 : AntiAir <= 0f && AntiSurface <= 0f ? ""
@@ -67,26 +67,26 @@ namespace WingCommand
                 : "MLT";
         }
 
-     /// <summary>Cached hardpoint data for one airframe.</summary>
+        /// <summary>Cached hardpoint data for one airframe.</summary>
         private sealed class Profile
         {
             public HardpointSet[] Sets;
             public List<MountInfo>[] Options;
             public bool HasRoleData;
 
-         /// <summary>Whether any readable store is cargo; cargo-only profiles still count as
-         /// successfully read.</summary>
+            /// <summary>Whether any readable store is cargo; cargo-only profiles still count as
+            /// successfully read.</summary>
             public bool HasCargo;
         }
 
         private static readonly Dictionary<AircraftDefinition, Profile> profiles =
             new Dictionary<AircraftDefinition, Profile>();
 
-     /// <summary>Unavailable only after probing fails without any successful role data. Individual
-     /// unreadable airframes fall back to their standard fit.</summary>
+        /// <summary>Unavailable only after probing fails without any successful role data. Individual
+        /// unreadable airframes fall back to their standard fit.</summary>
         public static bool Available => roleDataSeen || !probeFailed;
 
-     /// <summary>Clear prefab caches at mission end because assets may reload.</summary>
+        /// <summary>Clear prefab caches at mission end because assets may reload.</summary>
         public static void Reset()
         {
             profiles.Clear();
@@ -95,7 +95,7 @@ namespace WingCommand
 
         // Loadout queries.
 
-     /// <summary>Template name or STANDARD for compact UI labels.</summary>
+        /// <summary>Template name or STANDARD for compact UI labels.</summary>
         public static string Label(WingLoadoutChoice choice)
         {
             // Centralise fit labels across shop, roster, and reserve displays.
@@ -107,14 +107,14 @@ namespace WingCommand
 
         // Pylon editing.
 
-     /// <summary>Declared hardpoint count, or zero if unreadable.</summary>
+        /// <summary>Declared hardpoint count, or zero if unreadable.</summary>
         public static int PylonCount(AircraftDefinition definition)
         {
             Profile profile = ProfileOf(definition);
             return profile?.Sets?.Length ?? 0;
         }
 
-     /// <summary>Use native hardpoint names; label symmetric pairs once with SymmetryName.</summary>
+        /// <summary>Use native hardpoint names; label symmetric pairs once with SymmetryName.</summary>
         public static string PylonName(AircraftDefinition definition, int index)
         {
             Profile profile = ProfileOf(definition);
@@ -131,8 +131,8 @@ namespace WingCommand
             return string.IsNullOrEmpty(name) ? "PYLON " + (index + 1) : name;
         }
 
-     /// <summary>Whether the pylon mirrors its predecessor and should be edited through that partner's
-     /// row.</summary>
+        /// <summary>Whether the pylon mirrors its predecessor and should be edited through that partner's
+        /// row.</summary>
         public static bool MirrorsPrevious(AircraftDefinition definition, int index)
         {
             Profile profile = ProfileOf(definition);
@@ -152,8 +152,8 @@ namespace WingCommand
                    profile.Sets[next].SymmetryWithPrev;
         }
 
-     /// <summary>List valid stores with the empty pylon first, allowing deliberate clean
-     /// stations.</summary>
+        /// <summary>List valid stores with the empty pylon first, allowing deliberate clean
+        /// stations.</summary>
         public static void OptionsFor(AircraftDefinition definition, int index,
                                       List<StoreOption> into)
         {
@@ -170,7 +170,7 @@ namespace WingCommand
             for (int i = 0; i < options.Count; i++) into.Add(Project(options[i]));
         }
 
-     /// <summary>Resolve a pylon's store key, falling back to the empty option.</summary>
+        /// <summary>Resolve a pylon's store key, falling back to the empty option.</summary>
         public static StoreOption StoreOn(AircraftDefinition definition, int index, string key)
         {
             var empty = new StoreOption(null, "— EMPTY —", 0, 0f, 0f, 0f, false);
@@ -200,8 +200,8 @@ namespace WingCommand
             return null;
         }
 
-     /// <summary>Ask native hardpoint-exclusion rules whether this pylon is blocked by the current
-     /// fit.</summary>
+        /// <summary>Ask native hardpoint-exclusion rules whether this pylon is blocked by the current
+        /// fit.</summary>
         public static bool IsPylonBlocked(AircraftDefinition definition, int index,
                                           Loadout inProgress)
         {
@@ -225,8 +225,8 @@ namespace WingCommand
             }
         }
 
-     /// <summary>Build a spawnable template from store keys. Unknown keys leave their pylons empty;
-     /// honour deliberate all-empty fits.</summary>
+        /// <summary>Build a spawnable template from store keys. Unknown keys leave their pylons empty;
+        /// honour deliberate all-empty fits.</summary>
         public static Loadout BuildFromKeys(AircraftDefinition definition,
                                             IReadOnlyList<string> keys)
         {
@@ -266,8 +266,8 @@ namespace WingCommand
             return new Loadout { weapons = weapons };
         }
 
-     /// <summary>Apply native exclusion rules authoritatively before spawn, including stale or
-     /// hand-edited templates. Repeat clearing until the remaining fit is stable.</summary>
+        /// <summary>Apply native exclusion rules authoritatively before spawn, including stale or
+        /// hand-edited templates. Repeat clearing until the remaining fit is stable.</summary>
         private static int ClearBlockedMounts(AircraftDefinition definition, Profile profile,
                                               List<WeaponMount> weapons)
         {
@@ -311,8 +311,8 @@ namespace WingCommand
             return removed;
         }
 
-     /// <summary>Fill reusable editor scratch for exclusion checks. Never spawn with this shared
-     /// mutable Loadout; each aircraft must own its container.</summary>
+        /// <summary>Fill reusable editor scratch for exclusion checks. Never spawn with this shared
+        /// mutable Loadout; each aircraft must own its container.</summary>
         public static Loadout FillScratch(AircraftDefinition definition,
                                           IReadOnlyList<string> keys)
         {
@@ -335,9 +335,9 @@ namespace WingCommand
 
         // Loadout construction.
 
-     /// <summary>Build a choice using the live player default, then game-start preset for Standard.
-     /// Return null for unavailable presets or deleted templates so native spawning chooses a usable
-     /// fallback fit.</summary>
+        /// <summary>Build a choice using the live player default, then game-start preset for Standard.
+        /// Return null for unavailable presets or deleted templates so native spawning chooses a usable
+        /// fallback fit.</summary>
         public static Loadout Build(AircraftDefinition definition, WingLoadoutChoice choice)
         {
             if (choice.HasSnapshot) return GuardNativeFallback(definition, BuildFromKeys(definition, choice.FittedKeys));
@@ -349,8 +349,8 @@ namespace WingCommand
                 : null;
         }
 
-     /// <summary>Copy the live player default, falling back to the airframe's game-start
-     /// preset.</summary>
+        /// <summary>Copy the live player default, falling back to the airframe's game-start
+        /// preset.</summary>
         internal static Loadout ClonePlayerDefault(AircraftDefinition definition)
         {
             if (definition == null) return null;
@@ -361,8 +361,8 @@ namespace WingCommand
             return CloneLoadout(GameStartLoadout(definition));
         }
 
-     /// <summary>Keep one entry per hardpoint for empty fits; a missing or empty list triggers native
-     /// loadouts[1] fallback and can restore removed tanks.</summary>
+        /// <summary>Keep one entry per hardpoint for empty fits; a missing or empty list triggers native
+        /// loadouts[1] fallback and can restore removed tanks.</summary>
         private static Loadout GuardNativeFallback(AircraftDefinition definition, Loadout loadout)
         {
             if (loadout?.weapons != null &&
@@ -380,7 +380,7 @@ namespace WingCommand
             return new Loadout { weapons = weapons };
         }
 
-     /// <summary>Snapshot the actual fitted stores, including native Standard.</summary>
+        /// <summary>Snapshot the actual fitted stores, including native Standard.</summary>
         internal static WingLoadoutChoice SnapshotFit(Aircraft aircraft, WingLoadoutChoice choice)
         {
             List<WeaponMount> weapons = aircraft?.Networkloadout?.weapons;
@@ -392,7 +392,7 @@ namespace WingCommand
             return choice.Snapshot(keys);
         }
 
-     /// <summary>Read the native player-start preset at index 1, not index 0.</summary>
+        /// <summary>Read the native player-start preset at index 1, not index 0.</summary>
         private static Loadout GameStartLoadout(AircraftDefinition definition)
         {
             if (definition == null) return null;
@@ -405,8 +405,8 @@ namespace WingCommand
             return loadouts[loadouts.Count > 1 ? 1 : 0];
         }
 
-     /// <summary>Copy each aircraft's mutable Loadout list; immutable WeaponMount assets may be
-     /// shared.</summary>
+        /// <summary>Copy each aircraft's mutable Loadout list; immutable WeaponMount assets may be
+        /// shared.</summary>
         private static Loadout CloneLoadout(Loadout source)
         {
             if (source?.weapons == null) return null;
@@ -500,7 +500,7 @@ namespace WingCommand
             return profile;
         }
 
-     /// <summary>Log unreadable role data once per airframe and offer its standard fit.</summary>
+        /// <summary>Log unreadable role data once per airframe and offer its standard fit.</summary>
         private static void NoteBlindProfile(AircraftDefinition definition)
         {
             if (roleDataSeen || blindProfilesLogged) return;
@@ -511,12 +511,12 @@ namespace WingCommand
                 SafeName(definition) + "'s hardpoints; that airframe offers the standard fit only.");
         }
 
-     /// <summary>Whether any airframe has yielded readable store data.</summary>
+        /// <summary>Whether any airframe has yielded readable store data.</summary>
         private static bool roleDataSeen;
 
         private static bool blindProfilesLogged;
 
-     /// <summary>Read hardpoint sets from the spawning prefab's weapon manager.</summary>
+        /// <summary>Read hardpoint sets from the spawning prefab's weapon manager.</summary>
         private static HardpointSet[] HardpointSetsOf(AircraftDefinition definition)
         {
             GameObject prefab = definition.unitPrefab;
@@ -538,7 +538,7 @@ namespace WingCommand
 
         // Mount inspection.
 
-     /// <summary>Cached check for WeaponStation deriving from Component.</summary>
+        /// <summary>Cached check for WeaponStation deriving from Component.</summary>
         private static readonly bool StationIsComponent =
             typeof(Component).IsAssignableFrom(typeof(WeaponStation));
 
@@ -585,7 +585,7 @@ namespace WingCommand
             return info;
         }
 
-     /// <summary>Merge this weapon's best role figures into the mount summary.</summary>
+        /// <summary>Merge this weapon's best role figures into the mount summary.</summary>
         private static void Absorb(MountInfo info, WeaponInfo weapon)
         {
             RoleIdentity role = weapon.effectiveness;
@@ -596,8 +596,8 @@ namespace WingCommand
             if (weapon.cargo || weapon.troops) info.Cargo = true;
         }
 
-     /// <summary>Find child station components, then reflect fields for mounts that reference stations
-     /// elsewhere.</summary>
+        /// <summary>Find child station components, then reflect fields for mounts that reference stations
+        /// elsewhere.</summary>
         private static List<WeaponStation> StationsOf(WeaponMount mount)
         {
             stationScratch.Clear();

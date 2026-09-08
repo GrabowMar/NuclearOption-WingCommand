@@ -3,7 +3,7 @@ using UnityEngine;
 
 namespace WingCommand
 {
- /// <summary>Track native departure phases without taking flight control.</summary>
+    /// <summary>Track native departure phases without taking flight control.</summary>
     internal static class WingDepartureChatter
     {
         private static readonly DepartureChatter reports = new DepartureChatter();

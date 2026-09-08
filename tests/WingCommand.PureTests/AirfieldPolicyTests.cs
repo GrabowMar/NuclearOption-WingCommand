@@ -7,8 +7,7 @@ namespace WingCommand.PureTests
         [Fact]
         public void OnlyInboundTaxiIsRewritten()
         {
-            // Landed and taxiing to a service point: this is the run that ejects the pilot
-            // on the apron, and the only one this mod takes over.
+            // Owned post-landing service taxi must park before native apron ejection.
             Assert.True(TaxiRewritePolicy.ShouldPark(ours: true, enteringTaxi: true,
                                                      hasTakenOff: true));
         }
@@ -16,8 +15,7 @@ namespace WingCommand.PureTests
         [Fact]
         public void OutboundTaxiIsNeverRewritten()
         {
-            // A delivery on the threshold and a refit leaving its parking spot both have
-            // HasTakenOff false, and both need the stock taxi they are being handed.
+            // Pending delivery and refit departure retain native taxi while HasTakenOff is false.
             Assert.False(TaxiRewritePolicy.ShouldPark(ours: true, enteringTaxi: true,
                                                       hasTakenOff: false));
         }
@@ -25,9 +23,9 @@ namespace WingCommand.PureTests
         [Fact]
         public void OtherStatesAndOtherAircraftAreLeftAlone()
         {
-            // Not a taxi transition at all.
+            // Ignore transitions that do not enter taxi.
             Assert.False(TaxiRewritePolicy.ShouldPark(true, enteringTaxi: false, hasTakenOff: true));
-            // A faction AI taxiing to resupply is the mission working as intended.
+            // Leave ordinary faction resupply taxi unchanged.
             Assert.False(TaxiRewritePolicy.ShouldPark(ours: false, enteringTaxi: true,
                                                       hasTakenOff: true));
         }
@@ -35,9 +33,8 @@ namespace WingCommand.PureTests
         [Fact]
         public void LeavingADepartureForAnythingButTakeoffGivesBackTheRunwaySlot()
         {
-            // Covers both leaks: an interrupted taxi that had already queued at the
-            // hold-short line, and a takeoff run whose twelve-second stuck timer ejected
-            // the pilot straight to parked without dequeuing.
+            // Cover interrupted taxi claims and stuck takeoff ejection, both of which bypass native
+            // queue release.
             Assert.True(TaxiRewritePolicy.ShouldDrainQueue(ours: true, leavingDeparture: true,
                                                            enteringTakeoff: false));
         }
@@ -45,9 +42,7 @@ namespace WingCommand.PureTests
         [Fact]
         public void StartingATakeoffRunKeepsTheSlotItQueuedFor()
         {
-            // The takeoff state is what the slot was reserved for, and gives it back itself.
-            // Draining here would release the strip to somebody else while this aircraft is
-            // still accelerating down it.
+            // Retain the claim when entering takeoff; native launch phases release it after safe use.
             Assert.False(TaxiRewritePolicy.ShouldDrainQueue(ours: true, leavingDeparture: true,
                                                             enteringTakeoff: true));
         }
@@ -64,8 +59,8 @@ namespace WingCommand.PureTests
         [Fact]
         public void RefitSuppressesTheStockPadEject()
         {
-            // Helicopters eject on the pad and a parked jet ejects after ten seconds.
-            // Refit has to keep the pilot in the seat; RTB wants that eject as disembark.
+            // Refit keeps seated crew through native pad/runway ejection points; RTB permits
+            // disembarkation.
             Assert.True(TaxiRewritePolicy.ShouldSuppressEjection(ours: true, refitPending: true,
                                                                  hasTakenOff: true));
             Assert.False(TaxiRewritePolicy.ShouldSuppressEjection(ours: true, refitPending: false,
@@ -93,25 +88,21 @@ namespace WingCommand.PureTests
         [Fact]
         public void ADuplicateHangarDebitIsGivenBackExactlyOnce()
         {
-            // Hangar.TrySpawnAircraft charges one airframe when the player argument is null,
-            // on top of the source the purchase transaction already reserved.
+            // Compensate the null-player hangar's extra stock debit after transaction reservation.
             Assert.Equal(1, SupplyCompensation.Delta(before: 5, after: 4));
         }
 
         [Fact]
         public void NoDebitMeansNoCompensation()
         {
-            // A refused spawn, or a carrier pad that abandoned the launch while its doors
-            // opened, never charged anything.
+            // No debit means no compensation for refused or abandoned launches.
             Assert.Equal(0, SupplyCompensation.Delta(before: 5, after: 5));
         }
 
         [Fact]
         public void StockRisingDuringTheCallIsNeverTreatedAsADebit()
         {
-            // Something other than this delivery moved the count - a recovery settling in
-            // the same frame, a mission trigger. Taking that away would invent a charge
-            // nobody made.
+            // Do not remove unrelated supply increases from recovery or mission events.
             Assert.Equal(0, SupplyCompensation.Delta(before: 5, after: 7));
         }
 

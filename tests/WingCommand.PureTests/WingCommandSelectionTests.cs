@@ -1,7 +1,7 @@
 using System.Collections.Generic;
 using Xunit;
 
-// Minimal roster boundary for the linked production selection class; no game assemblies.
+// Minimal engine-free roster stubs for production command selection.
 namespace WingCommand
 {
     internal sealed partial class WingMember
@@ -55,12 +55,12 @@ namespace WingCommand.PureTests
         }
 
         [Theory]
-        [InlineData(false, true, true, true, true)]  // A stock target remains clickable in WMC.
-        [InlineData(false, true, true, false, false)] // Closing Tactical restores stock behavior.
-        [InlineData(false, true, false, true, false)] // Unrelated selected contacts stay native.
+        [InlineData(false, true, true, true, true)]  // Keep native weapon targets tactically clickable.
+        [InlineData(false, true, true, false, false)] // Restore stock hit behaviour after Tactical closes.
+        [InlineData(false, true, false, true, false)] // Leave unrelated selected contacts under native handling.
         [InlineData(false, false, true, true, true)]
         [InlineData(false, false, true, false, true)]
-        [InlineData(true, false, false, true, false)] // Never steal the player's own marker.
+        [InlineData(true, false, false, true, false)] // Never capture the player's own icon.
         [InlineData(true, true, true, true, false)]
         public void TacticalPointerSelectionIsIndependentOfWeaponTargetSelection(
             bool isPlayer, bool nativeSelected, bool wingMember, bool tactical, bool clickable)

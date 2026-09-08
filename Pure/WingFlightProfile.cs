@@ -2,7 +2,8 @@ using System;
 
 namespace WingCommand
 {
-    /// <summary>Flight telemetry for composable influences; no live aircraft or order writers.</summary>
+    /// <summary>Read-only flight telemetry for influences without live aircraft or order mutation
+    /// access.</summary>
     public readonly struct WingFlightSituation
     {
         public readonly WingSituation Situation;
@@ -11,7 +12,7 @@ namespace WingCommand
         public readonly float RelativeClosingSpeed;
         public readonly float LeaderSpeed;
         public readonly float PilotSkill;
-        /// <summary>Safe formation airspeed in m/s; zero when the sampler cannot supply it.</summary>
+        /// <summary>Safe formation airspeed in m/s, or zero when unavailable.</summary>
         public readonly float MinimumAirspeed;
 
         public WingFlightSituation(in WingSituation situation, float slotError, float captureDistance,
@@ -37,10 +38,8 @@ namespace WingCommand
             new WingFlightSituation(in this, minimumAirspeed);
     }
 
-    /// <summary>
-    /// A weighted adjustment to the active flight controller. These never change the
-    /// standing task or own the controls; all eligible contributions combine each tick.
-    /// </summary>
+    /// <summary>Weighted flight adjustment without task or control ownership; combine all eligible
+    /// contributions each tick.</summary>
     public interface IWingInfluence
     {
         string Id { get; }
@@ -71,7 +70,8 @@ namespace WingCommand
         private static bool Finite(float value) => !float.IsNaN(value) && !float.IsInfinity(value);
     }
 
-    /// <summary>One bounded result, applied once by flight. Existing safety limits still win.</summary>
+    /// <summary>Bounded combined profile applied once by flight, subject to existing safety
+    /// limits.</summary>
     public readonly struct WingFlightProfile
     {
         public readonly float CaptureGain;

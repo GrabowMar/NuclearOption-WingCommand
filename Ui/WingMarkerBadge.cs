@@ -3,10 +3,8 @@ using UnityEngine.UI;
 
 namespace WingCommand
 {
-    /// <summary>
-    /// A thin ring identifies membership without repainting or duplicating the aircraft
-    /// silhouette. Separate, screen-aligned brackets identify tactical order recipients.
-    /// </summary>
+    /// <summary>Separate membership ring and screen-aligned command brackets without recolouring the
+    /// aircraft silhouette.</summary>
     internal static class WingMarkerBadge
     {
         private const string RingObjectName = "WingCommand_MembershipRing";
@@ -26,9 +24,8 @@ namespace WingCommand
                 return;
             }
 
-            // UnitMapIcon scales the host by mapInverseScale * 15 * mapIconSize, then
-            // rotates it to the aircraft heading. Measure the rendered size rather than
-            // treating its tiny local rect as pixels or inheriting its heading/zoom.
+            // Measure rendered icon dimensions because native local scale includes zoom, icon size, and
+            // heading rotation.
             Canvas canvas = host.canvas;
             Camera camera = canvas != null && canvas.renderMode != RenderMode.ScreenSpaceOverlay
                 ? canvas.worldCamera : null;
@@ -65,7 +62,7 @@ namespace WingCommand
         private static Vector2 ScreenPoint(RectTransform transform, Vector2 point, Camera camera) =>
             RectTransformUtility.WorldToScreenPoint(camera, transform.TransformPoint(point));
 
-        /// <summary>Give badge geometry a screen-pixel coordinate system centered on its icon.</summary>
+        /// <summary>Centre badge geometry on the icon in screen-pixel coordinates.</summary>
         private static void AlignToScreen(RectTransform badge, Canvas canvas, Camera camera)
         {
             badge.anchorMin = badge.anchorMax = new Vector2(0.5f, 0.5f);
@@ -112,10 +109,8 @@ namespace WingCommand
         }
     }
 
-    /// <summary>
-    /// An unfilled ring built from UI geometry. Feathered inner/outer edges avoid the
-    /// jagged, overlapping silhouette copies produced by Unity's Outline mesh effect.
-    /// </summary>
+    /// <summary>Unfilled UI ring with feathered edges, avoiding overlapping silhouette copies from Unity
+    /// Outline.</summary>
     internal sealed class WingMapRingGraphic : MaskableGraphic
     {
         private WingMapBadgeGeometry geometry;
@@ -138,8 +133,8 @@ namespace WingCommand
             Color transparent = new Color(color.r, color.g, color.b, 0f);
             Vector2 center = rectTransform.rect.center;
 
-            // Four radial rows make three bands: transparent -> solid, the 1px stroke,
-            // then solid -> transparent. No triangles ever fill the aircraft underneath.
+            // Build transparent-to-solid edge bands around a 1 px stroke; leave the aircraft interior
+            // unfilled.
             for (int row = 0; row < 4; row++)
             {
                 float radius = row == 0 ? geometry.InnerRadiusPixels - WingMapBadgeGeometry.FeatherPixels

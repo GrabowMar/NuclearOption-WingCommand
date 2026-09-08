@@ -20,7 +20,7 @@ namespace WingCommand
                     (s.SlotError / s.CaptureDistance - 0.5f) / 3.5f);
                 float closing = WingFlightProfile.Smooth(
                     s.RelativeClosingSpeed / System.Math.Max(15f, s.LeaderSpeed * 0.3f));
-                // Hurry a distant arrival, then yield to braking as closure develops.
+                // Increase distant capture effort, yielding as braking closure develops.
                 return new WingFlightContribution(distance * (1f - closing * 0.75f), captureGain: 1.3f);
             }
         }
@@ -33,16 +33,16 @@ namespace WingCommand
             {
                 float fuel = WingFlightProfile.Smooth((0.3f - s.Situation.Fuel) / 0.25f);
                 float damage = WingFlightProfile.Smooth((0.85f - s.Situation.Integrity) / 0.6f);
-                // Use the flight controller's actual envelope when available. Rotation
-                // speed can be far below fixed-wing stall speed on a vectoring aircraft.
+                // Use sampled flight-envelope limits when available; vectoring rotation speed can be
+                // below fixed-wing stall speed.
                 float slow = s.Situation.MemberIsRotary ? 0f : s.MinimumAirspeed > 0f
                     ? WingFlightProfile.Smooth((1.15f - s.Situation.Airspeed / s.MinimumAirspeed) / 0.15f)
                     : s.Situation.TakeoffSpeed > 0f
                         ? WingFlightProfile.Smooth((1.4f - s.Situation.Airspeed / s.Situation.TakeoffSpeed) / 0.4f)
                         : 0f;
                 float caution = System.Math.Max(slow, System.Math.Max(fuel, damage));
-                // ROE and threat geometry already set their own spacing. This adds
-                // only room for an aircraft whose energy or condition needs it.
+                // Add only energy/condition spacing; ROE and threat geometry already supply their own
+                // spread.
                 return new WingFlightContribution(caution, captureGain: 0.85f,
                     spacingScale: 1.15f, dampingScale: 1.3f, bankScale: 0.75f);
             }

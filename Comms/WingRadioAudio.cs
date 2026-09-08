@@ -3,19 +3,19 @@ using UnityEngine;
 
 namespace WingCommand
 {
- /// <summary>Plays native radio clicks. Retry missing singletons; disable playback after exceptions
- /// until mission reset. Subtitles remain available.</summary>
+    /// <summary>Plays native radio clicks. Retry missing singletons; disable playback after exceptions
+    /// until mission reset. Subtitles remain available.</summary>
     internal static class WingRadioAudio
     {
-     /// <summary>Minimum click spacing in seconds to prevent overlap.</summary>
+        /// <summary>Minimum click spacing in seconds to prevent overlap.</summary>
         private const float MinimumGap = 0.35f;
 
         private static float lastPlayed = float.MinValue;
 
-     /// <summary>Stop retrying after a playback failure.</summary>
+        /// <summary>Stop retrying after a playback failure.</summary>
         private static bool unavailable;
 
-     /// <summary>Play the native transmission-opening click.</summary>
+        /// <summary>Play the native transmission-opening click.</summary>
         public static void Transmission()
         {
             if (unavailable || Plugin.Settings.Radio.Value != ChatterLevel.TextAndTone) return;
@@ -39,7 +39,7 @@ namespace WingCommand
             }
         }
 
-     /// <summary>Retry audio discovery next mission.</summary>
+        /// <summary>Retry audio discovery next mission.</summary>
         public static void Reset()
         {
             lastPlayed = float.MinValue;

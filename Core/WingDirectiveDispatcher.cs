@@ -22,8 +22,8 @@ namespace WingCommand
         }
     }
 
- /// <summary>Validates and applies commands consistently across WMC, map, radial, and hotkeys; callers
- /// choose scope.</summary>
+    /// <summary>Validates and applies commands consistently across WMC, map, radial, and hotkeys; callers
+    /// choose scope.</summary>
     internal sealed class WingDirectiveDispatcher
     {
         private readonly WingRegistry wing;
@@ -92,8 +92,8 @@ namespace WingCommand
             return new WingDispatchResult(applied, WithQueued(message, responders), responders, WingOrder.Attack);
         }
 
-     /// <summary>Assign the entire scope to expend on one target, bypassing Attack's distribution and
-     /// useful-attacker cap.</summary>
+        /// <summary>Assign the entire scope to expend on one target, bypassing Attack's distribution and
+        /// useful-attacker cap.</summary>
         public WingDispatchResult FireForEffect(IReadOnlyList<Unit> targets, bool wholeWing)
         {
             List<WingMember> scope = Scope(wholeWing);
@@ -126,8 +126,8 @@ namespace WingCommand
             return new WingDispatchResult(applied, WithQueued(message, responders), responders, WingOrder.FireForEffect);
         }
 
-     /// <summary>Assign jam-capable members to hold station and jam one target until destroyed or
-     /// superseded.</summary>
+        /// <summary>Assign jam-capable members to hold station and jam one target until destroyed or
+        /// superseded.</summary>
         public WingDispatchResult JamTarget(IReadOnlyList<Unit> targets, bool wholeWing)
         {
             List<WingMember> scope = Scope(wholeWing);
@@ -157,7 +157,7 @@ namespace WingCommand
             return new WingDispatchResult(applied, WithQueued(message, responders), responders, WingOrder.JamTarget);
         }
 
-     /// <summary>Run one manoeuvre across the scope, then rejoin.</summary>
+        /// <summary>Run one manoeuvre across the scope, then rejoin.</summary>
         public WingDispatchResult Maneuver(ManeuverKind kind, bool wholeWing) =>
             Apply(WingDirective.RunManeuver(kind), wholeWing);
 

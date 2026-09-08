@@ -3,7 +3,7 @@ using UnityEngine;
 
 namespace WingCommand
 {
- /// <summary>Routes identified squadron subtitles, with cooldowns per member and call kind.</summary>
+    /// <summary>Routes identified squadron subtitles, with cooldowns per member and call kind.</summary>
     internal static class WingComms
     {
         private readonly struct SpeechKey : System.IEquatable<SpeechKey>
@@ -59,8 +59,8 @@ namespace WingCommand
             AirborneRejoining,
         }
 
-     /// <summary>Calls retained in Performance mode. Order acknowledgements are handled separately;
-     /// ReportLoss is never gated here. Other status and colour chatter is suppressed.</summary>
+        /// <summary>Calls retained in Performance mode. Order acknowledgements are handled separately;
+        /// ReportLoss is never gated here. Other status and colour chatter is suppressed.</summary>
         private static bool Critical(Call call)
         {
             switch (call)
@@ -73,7 +73,6 @@ namespace WingCommand
                 case Call.Damaged:
                 case Call.Critical:
                 case Call.Panic:
-                case Call.DefensiveClear:
                 case Call.NoDropOff:
                 case Call.BreakCall:
                 // SendHome acknowledges RTB with Detached; retain this explicit-order confirmation in
@@ -86,12 +85,14 @@ namespace WingCommand
         }
 
         private const float RepeatCooldown = 12f;
-        private const float BanterCheckMin = 80f;
-        private const float BanterCheckMax = 160f;
+        private const float RoutineRepeatCooldown = 60f;
+        private const float ThreatClearCooldown = 120f;
+        private const float BanterCheckMin = 160f;
+        private const float BanterCheckMax = 320f;
         private const float BanterChance = 0.28f;
 
-     /// <summary>Slot-and-kind value keys avoid callsign allocations and bound the cooldown table
-     /// across replacement pilots.</summary>
+        /// <summary>Slot-and-kind value keys avoid callsign allocations and bound the cooldown table
+        /// across replacement pilots.</summary>
         private static readonly Dictionary<SpeechKey, float> lastSpoken =
             new Dictionary<SpeechKey, float>();
         private static float nextBanterCheck;
@@ -104,9 +105,12 @@ namespace WingCommand
             if (!WingFidelity.RichChatter && !Critical(call)) return;
             if (call == Call.Rejoining && WingDepartureChatter.ReportingLiftoff(member)) return;
 
-            var key = new SpeechKey(member, call);
+            // Threat-clear reports share one cooldown across the whole wing.
+            var key = new SpeechKey(call == Call.DefensiveClear ? null : member, call);
+            float cooldown = call == Call.DefensiveClear ? ThreatClearCooldown :
+                Critical(call) ? RepeatCooldown : RoutineRepeatCooldown;
             if (lastSpoken.TryGetValue(key, out float last) &&
-                Time.timeSinceLevelLoad - last < RepeatCooldown)
+                Time.timeSinceLevelLoad - last < cooldown)
                 return;
 
             lastSpoken[key] = Time.timeSinceLevelLoad;
@@ -120,13 +124,13 @@ namespace WingCommand
                 call == Call.Panic || call == Call.Critical);
         }
 
-     /// <summary>Acknowledge only accepting aircraft. A single member answers alone; a group uses its
-     /// lowest slot as lead and names the others in one line.</summary>
+        /// <summary>Acknowledge only accepting aircraft. A single member answers alone; a group uses its
+        /// lowest slot as lead and names the others in one line.</summary>
         public static void Acknowledge(IReadOnlyList<WingMember> members, WingOrder order) =>
             Acknowledge(members, order.ToString(), order);
 
-     /// <summary>Acknowledge refit like other player commands, although it is a recovery workflow
-     /// rather than a WingOrder.</summary>
+        /// <summary>Acknowledge refit like other player commands, although it is a recovery workflow
+        /// rather than a WingOrder.</summary>
         public static void AcknowledgeRefit(IReadOnlyList<WingMember> members) =>
             Acknowledge(members, "REFIT", order: null);
 
@@ -171,7 +175,7 @@ namespace WingCommand
             Broadcast(lead, phrase, urgent: false);
         }
 
-     /// <summary>Assign loss calls to surviving pilots.</summary>
+        /// <summary>Assign loss calls to surviving pilots.</summary>
         public static void ReportLoss(WingMember lost, IReadOnlyList<WingMember> flight)
         {
             if (Plugin.Settings.Radio.Value == ChatterLevel.Off || lost == null) return;
@@ -313,8 +317,8 @@ namespace WingCommand
             return null;
         }
 
-     /// <summary>Select an exchange and cast without temporary lists. The timer and random gate make a
-     /// static-table scan cheaper than maintaining roster indexes.</summary>
+        /// <summary>Select an exchange and cast without temporary lists. The timer and random gate make a
+        /// static-table scan cheaper than maintaining roster indexes.</summary>
         private static bool TryChooseBanter(IReadOnlyList<WingMember> members, int eligible,
                                             int seed, out WingMember first,
                                             out WingMember second,

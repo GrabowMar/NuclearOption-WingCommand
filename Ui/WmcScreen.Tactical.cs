@@ -10,35 +10,22 @@ using NOAvionics.Ui;
 
 namespace WingCommand
 {
-    /// <summary>The WMC panel's TACTICAL tab: rules of engagement, weapon preference, the order grid, and the flight roster.</summary>
+    /// <summary>TACTICAL page for ROE, scoped weapon preference, orders, and flight roster.</summary>
     internal static partial class WmcScreen
     {
-        /// <summary>
-        /// The three standing choices that shape a fight, in one labelled block: what a
-        /// wingman may shoot, which of its own weapons it reaches for, and where it sits.
-        ///
-        /// Grouped under one heading with a left gutter rather than given a heading each.
-        /// Three headings and a hint line cost sixty pixels of a panel that now shares its
-        /// bezel with four tabs, and they were labelling three rows that all answer the
-        /// same question — how does this flight fight. The per-choice explanations moved to
-        /// the status line at the foot of the page, where only the one being changed is
-        /// shown and it has the width to be a sentence.
-        /// </summary>
+        /// <summary>Group ROE, weapon preference, and formation controls in one compact block; put
+        /// per-control explanations in the shared status strip.</summary>
         private static float AddEngagementSection(RectTransform parent, float y)
         {
-            y = Heading(parent, y, "ENGAGEMENT");
+            y = Heading(parent, y, "ENGAGEMENT - ROE APPLIES TO ALL");
 
             float left = Pad + GutterWidth;
             float w = PanelWidth - Pad - left;
 
-            // Rules of engagement: three rungs, so three buttons. They are an escalation
-            // rather than a toggle — each answers "the leader is being shot at" differently,
-            // which is the whole reason there are three of them. Wing-wide.
+            // Three wing-wide ROE choices form an escalation, not a toggle.
             Gutter(parent, y, "ROE");
             float roeWidth = (w - Gap * 2f) / 3f;
-            // Each rung explains itself from the same source the status line already used
-            // for the standing hint, so the hovered description and the resting one cannot
-            // drift apart.
+            // Reuse ROE hints for hover and resting status text.
             holdButton = Button(parent, "HOLD", new Rect(left, y, roeWidth, RowHeight),
                                 () => SetRoe(WingRoe.Hold))
                          .WithTooltip("HOLD - " + RoeRules.Hint(WingRoe.Hold));
@@ -52,9 +39,7 @@ namespace WingCommand
                          .WithTooltip("FREE - " + RoeRules.Hint(WingRoe.Free));
             y -= RowHeight + Gap;
 
-            // Weapon preference. Unlike the two rows around it this one is scoped to the
-            // current selection, which is what makes a mixed flight possible: two wingmen
-            // holding their missiles for aircraft while the third works the ground.
+            // Scope weapon preference to selected members so mixed flights can favour different roles.
             Gutter(parent, y, "WEAPON");
             float preferenceWidth = (w - Gap * (preferenceButtons.Length - 1)) / preferenceButtons.Length;
             for (int i = 0; i < preferenceButtons.Length; i++)
@@ -98,14 +83,16 @@ namespace WingCommand
                           FontMicro, UiButtonStyle.Primary,
                           () => WingCommandManager.Instance?.SelectAllMembers())
                 .WithTooltip(OrderHint.SelectAll);
-            return y - RowHeight - Space2;
+            y -= RowHeight + Space1;
+            Hint(parent, y, "Click a row to select. Shift-click to add or remove.");
+            return y - LineHeight - Space2;
         }
 
         private static float AddRosterArea(RectTransform parent, float y)
         {
             y = Heading(parent, y, "FLIGHT");
 
-            // Column headers, so the numbers in each row are readable without guessing.
+            // Align headers with roster values.
             float w = PanelWidth - Pad * 2f;
             y = ColumnHeaders(parent, y, RosterColumns);
 
@@ -129,21 +116,14 @@ namespace WingCommand
         }
 
 
-        /// <summary>
-        /// The scoped orders, grouped by what the player is trying to accomplish.
-        ///
-        /// Target work comes first, autonomous combat follows, and point orders stay
-        /// together. RTB belongs on an individual aircraft's roster row: it dismisses that
-        /// airframe from the active wing and returns its crew and airframe after recovery.
-        /// </summary>
+        /// <summary>Group scoped target, autonomous-combat, and point orders. Individual RTB dismissal
+        /// belongs on the member row.</summary>
         private static float AddActions(RectTransform parent, float y)
         {
             y = Heading(parent, y, "ORDERS - SELECTED SCOPE");
             float w = (PanelWidth - Pad * 2f - Gap * 2f) / 3f;
 
-            // Short labels that read as a set — Attack Target / Splash / Engage / Seek &
-            // Destroy — while the status strip carries the detail that does not fit on a
-            // compact command button.
+            // Use compact order labels and put detailed distinctions in status help.
             GridButton(parent, "Form Up", Pad, y, w,
                        () => Order(WingAction.Rejoin)).WithTooltip(OrderHint.Rejoin);
             attackButton = GridButton(parent, "Attack Target", Pad + w + Gap, y, w,
@@ -173,8 +153,7 @@ namespace WingCommand
                                    () => Order(WingAction.JamMyTarget))
                         .WithTooltip(OrderHint.Jam);
 
-            // Deliver Cargo arms a drop point, and says on the status line that pressing it
-            // again falls back to the stock supply route.
+            // Cargo arms a point; explain the second-press native-route fallback in status.
             cargoButton = GridButton(parent, "Cargo", Pad + (w + Gap) * 2f, y, w,
                                      () => WingCommandManager.Instance?.SelectMapOrder(WingOrder.DeliverCargo),
                                      UiButtonStyle.Toggle)
@@ -194,16 +173,16 @@ namespace WingCommand
             y -= RowHeight + Gap;
 
             float tuneW = (PanelWidth - Pad * 2f - Gap * 3f) / 4f;
-            GridButton(parent, "H+", Pad, y, tuneW,
+            GridButton(parent, "ALT +", Pad, y, tuneW,
                        () => WingCommandManager.Instance?.StepMoveHeight(1))
                 .WithTooltip(OrderHint.HeightUp);
-            GridButton(parent, "H-", Pad + tuneW + Gap, y, tuneW,
+            GridButton(parent, "ALT -", Pad + tuneW + Gap, y, tuneW,
                        () => WingCommandManager.Instance?.StepMoveHeight(-1))
                 .WithTooltip(OrderHint.HeightDown);
-            GridButton(parent, "S+", Pad + (tuneW + Gap) * 2f, y, tuneW,
+            GridButton(parent, "SPD +", Pad + (tuneW + Gap) * 2f, y, tuneW,
                        () => WingCommandManager.Instance?.StepMoveSpeed(1))
                 .WithTooltip(OrderHint.SpeedUp);
-            GridButton(parent, "S-", Pad + (tuneW + Gap) * 3f, y, tuneW,
+            GridButton(parent, "SPD -", Pad + (tuneW + Gap) * 3f, y, tuneW,
                        () => WingCommandManager.Instance?.StepMoveSpeed(-1))
                 .WithTooltip(OrderHint.SpeedDown);
             y -= RowHeight + Gap;
@@ -242,16 +221,16 @@ namespace WingCommand
 
         private static float AddFormationAndDoctrine(RectTransform parent, float y)
         {
-            y = Heading(parent, y, "FORMATION & COMBAT DOCTRINE");
+            y = Heading(parent, y, "FORMATION - WHOLE FLIGHT");
 
             float w = PanelWidth - Pad * 2f;
             const float radarW = 108f;
-            const float boxH = 104f;
+            const float boxH = 88f;
 
-            // --- Left: Formation Radar Visualizer ---
+            // Formation preview.
             WingUi.TacticalCard(parent, new Rect(Pad, y, radarW, boxH), WingUi.RailEmerald);
 
-            // Crosshairs with subtle emerald glow
+            // Low-opacity preview crosshairs.
             Color crosshairCol = new Color(WingUi.RailEmerald.r, WingUi.RailEmerald.g, WingUi.RailEmerald.b, 0.25f);
             Rule(parent, new Rect(Pad + radarW * 0.5f, y - 6f, 1f, boxH - 28f), crosshairCol);
             Rule(parent, new Rect(Pad + 6f, y - (boxH - 20f) * 0.5f, radarW - 12f, 1f), crosshairCol);
@@ -259,13 +238,13 @@ namespace WingCommand
             float radarCenterX = Pad + radarW * 0.5f;
             formationRadarCenterY = y - 22f;
 
-            // Leader indicator at center
-            Label(parent, "▲", new Rect(radarCenterX - 10f, formationRadarCenterY - 6f, 20f, 16f),
+            // Centred leader symbol.
+            Label(parent, "^", new Rect(radarCenterX - 10f, formationRadarCenterY - 6f, 20f, 16f),
                   Green(), FontSmall, FontStyles.Bold, TextAlignmentOptions.Center);
             Label(parent, "LDR", new Rect(radarCenterX - 15f, formationRadarCenterY + 10f, 30f, 10f),
                   Green(), FontMicro, FontStyles.Bold, TextAlignmentOptions.Center);
 
-            // 3 Wingmen indicators and connecting lines
+            // Three follower markers with slot connections.
             formationWingmenDots.Clear();
             formationVectorLines.Clear();
 
@@ -278,45 +257,42 @@ namespace WingCommand
                 var dotGo = new GameObject("WingmanDot_" + i, typeof(RectTransform));
                 var rt = dotGo.GetComponent<RectTransform>();
                 rt.SetParent(parent, worldPositionStays: false);
-                Label(rt, "▲", new Rect(0f, 0f, 16f, 16f), Friendly(), FontMicro, FontStyles.Normal, TextAlignmentOptions.Center);
+                Label(rt, (i + 1).ToString(), new Rect(0f, 0f, 16f, 16f), Friendly(), FontSmall, FontStyles.Bold, TextAlignmentOptions.Center);
                 Place(rt, new Rect(radarCenterX, formationRadarCenterY, 16f, 16f));
                 formationWingmenDots.Add(rt);
             }
 
-            // --- Right: AI Combat Doctrine Telemetry ---
+            // Combat-doctrine readouts.
             float docX = Pad + radarW + Gap;
             float docW = w - radarW - Gap;
 
             WingUi.TacticalCard(parent, new Rect(docX, y, docW, boxH), WingUi.RailCyan);
 
             float lineY = y - 4f;
-            doctrineTitleLabel = Label(parent, "COMBAT DOCTRINE",
+            doctrineTitleLabel = Label(parent, "",
                 new Rect(docX + Space2, lineY, docW - Space3, 16f),
                 Green(), FontSmall, FontStyles.Bold, TextAlignmentOptions.Left);
             lineY -= 18f;
 
             doctrineProfileLabel = Label(parent, "",
-                new Rect(docX + Space2, lineY, docW - Space3, 24f),
-                Friendly(), FontMicro, FontStyles.Normal, TextAlignmentOptions.Left);
-            doctrineProfileLabel.enableWordWrapping = true;
-            lineY -= 26f;
+                new Rect(docX + Space2, lineY, docW - Space3, LineHeight),
+                Friendly(), FontSmall, FontStyles.Normal, TextAlignmentOptions.Left);
+            lineY -= 20f;
 
             doctrineRulesLabel = Label(parent, "",
-                new Rect(docX + Space2, lineY, docW - Space3, 24f),
-                Green(), FontMicro, FontStyles.Normal, TextAlignmentOptions.Left);
-            doctrineRulesLabel.enableWordWrapping = true;
-            lineY -= 26f;
+                new Rect(docX + Space2, lineY, docW - Space3, LineHeight),
+                Friendly(), FontSmall, FontStyles.Normal, TextAlignmentOptions.Left);
+            lineY -= 20f;
 
             doctrineWeaponsLabel = Label(parent, "",
-                new Rect(docX + Space2, lineY, docW - Space3, 24f),
-                Dim(), FontMicro, FontStyles.Normal, TextAlignmentOptions.Left);
-            doctrineWeaponsLabel.enableWordWrapping = true;
+                new Rect(docX + Space2, lineY, docW - Space3, LineHeight),
+                WingUi.TextPrimary, FontSmall, FontStyles.Normal, TextAlignmentOptions.Left);
 
             y -= boxH + Space2;
 
-            // --- Grid of all available formations (small buttons under formation preview) ---
+            // Formation choices below the preview.
             const int cols = 5;
-            const float btnH = 22f;
+            const float btnH = RowHeight;
             float btnW = (w - (cols - 1) * Gap) / cols;
             formationButtons = new WingButton[FormationShapes.All.Length];
 
@@ -331,7 +307,7 @@ namespace WingCommand
                 formationButtons[i] = WingUi.Button(
                     parent, ShortFormationName(shape),
                     new Rect(bx, by, btnW, btnH),
-                    FontMicro, UiButtonStyle.Toggle,
+                    FontSmall, UiButtonStyle.Toggle,
                     () => SetFormationShape(shape))
                     .WithTooltip(FormationShapes.Pretty(shape) + " formation geometry");
             }
@@ -352,15 +328,8 @@ namespace WingCommand
             }
         }
 
-        /// <summary>
-        /// What each control does, in the two lines the status strip has room for.
-        ///
-        /// Kept together rather than written at each call site: these are the panel's
-        /// documentation, they have to stay consistent in voice and length, and several of
-        /// them are the only place a distinction is ever explained — Attack versus Fire For
-        /// Effect, or Disengage versus Return To Base, are not differences a four-word
-        /// button label can carry.
-        /// </summary>
+        /// <summary>Shared two-line order help explaining scope and distinctions that compact button
+        /// labels cannot carry.</summary>
         private static class OrderHint
         {
             public const string Rejoin =
@@ -484,16 +453,13 @@ namespace WingCommand
             WingCommandManager manager = WingCommandManager.Instance;
 
             if (summaryLabel != null)
-                summaryLabel.text = "COMMAND: " + (manager?.Selection.Summary(wing) ?? "ALL") +
-                                    "   ·   WING " + (wing.Count + WingShopDelivery.PendingCount) + "/" + WingRegistry.WingLimitLabel +
-                                    "  (YOUR FLIGHT)";
+                summaryLabel.text = "COMMAND: " + (manager?.Selection.Summary(wing) ?? "ALL");
 
             holdButton?.SetLatched(wing.Roe == WingRoe.Hold);
             tightButton?.SetLatched(wing.Roe == WingRoe.Tight);
             freeButton?.SetLatched(wing.Roe == WingRoe.Free);
 
-            // A scope whose members disagree lights nothing, rather than lighting the first
-            // one's choice and inviting the player to believe the whole scope shares it.
+            // Leave all preference buttons unlit for mixed scope values.
             WingWeaponPreference? shared = manager?.ScopeWeaponPreference();
             for (int i = 0; i < preferenceButtons.Length; i++)
                 preferenceButtons[i]?.SetLatched(shared == WingWeaponPreferences.All[i]);
@@ -516,8 +482,7 @@ namespace WingCommand
                 landButton?.SetEnabled(canLand && WingRegistry.IsRotary(wing.Leader));
                 seekAndDestroyButton?.SetEnabled(canSeekAndDestroy);
 
-                // Jam needs a jam-capable wingman in scope. The manoeuvre controls live on
-                // the radial wheel, keeping this page focused on persistent orders.
+                // Require a jam-capable member in scope; manoeuvres are offered on the radial.
                 jamButton?.SetEnabled(canJam);
 
                 bool armed = manager.MapOrderArmed;
@@ -529,10 +494,7 @@ namespace WingCommand
                 landButton?.SetLatched(armed && armedOrder == WingOrder.LandHere);
             }
 
-            // The map has first claim on this line: an armed point order or a pending
-            // assignment fee is a live instruction, and the engagement hints are not. A
-            // hovered control outranks both, because it is the one the player is asking
-            // about right now — RefreshStatusStrip resolves that.
+            // Status priority is hover help, live map instruction, then standing engagement hints.
             RefreshStatusStrip(Page.Tactical,
                 manager != null && manager.MapStatusIsNotice
                     ? manager.MapStatus
@@ -595,60 +557,30 @@ namespace WingCommand
             }
 
             string roeName = wing != null ? RoeRules.Label(wing.Roe) : "HOLD";
-            string wepName = shared.HasValue ? shared.Value.ToString().ToUpperInvariant() : "AUTO";
+            string wepName = shared.HasValue ? WingWeaponPreferences.Label(shared.Value) : "MIXED";
+            if (wing == null || wing.Count == 0 || WingCommandManager.Instance?.Selection.IsNone == true)
+                wepName = "NONE";
             string shapeName = FormationShapes.Pretty(shape).ToUpperInvariant();
 
             if (doctrineTitleLabel != null)
-                doctrineTitleLabel.text = $"DOCTRINE: {roeName} · {wepName} · {shapeName}";
+                doctrineTitleLabel.text = shapeName;
 
             if (doctrineProfileLabel != null)
-            {
-                switch (shape)
-                {
-                    case FormationShape.EchelonRight:
-                    case FormationShape.EchelonLeft:
-                        doctrineProfileLabel.text = "FLIGHT: Scimitar echelon, stepped down. One photograph from abeam.";
-                        break;
-                    case FormationShape.Trail:
-                    case FormationShape.Ladder:
-                        doctrineProfileLabel.text = "FLIGHT: Tight column astern. Trail weaves the wake; ladder climbs it.";
-                        break;
-                    case FormationShape.Vic:
-                        doctrineProfileLabel.text = "FLIGHT: Display V, lead at the point. Reads as one aircraft head-on.";
-                        break;
-                    case FormationShape.LineAbreast:
-                    case FormationShape.Wall:
-                        doctrineProfileLabel.text = "FLIGHT: Shallow crescent abreast. Wall stacks the same line vertically.";
-                        break;
-                    case FormationShape.Diamond:
-                    case FormationShape.FingerFour:
-                    default:
-                        doctrineProfileLabel.text = "FLIGHT: Close element. Diamond rolls as a rhombus; finger-four as a hand.";
-                        break;
-                }
-            }
+                doctrineProfileLabel.text = "ROE: " + roeName + "  /  WHOLE FLIGHT";
 
             if (doctrineRulesLabel != null)
             {
-                WingRoe roe = wing != null ? wing.Roe : WingRoe.Hold;
-                doctrineRulesLabel.text = "RULES: " + RoeRules.Hint(roe);
+                doctrineRulesLabel.text = "WEAPONS: " + wepName + "  /  SELECTED";
             }
 
             if (doctrineWeaponsLabel != null)
             {
-                doctrineWeaponsLabel.text = shared.HasValue
-                    ? "WEAPONS: " + WingWeaponPreferences.Hint(shared.Value)
-                    : "WEAPONS: Mixed preference across selected flight members.";
+                doctrineWeaponsLabel.text = "FLIGHT " + (wing?.Count ?? 0) +
+                    "  /  INBOUND " + WingShopDelivery.PendingCount;
             }
         }
 
-        /// <summary>
-        /// What the two engagement rows currently mean, in one sentence.
-        ///
-        /// The rules of engagement line is the important half and comes first; the weapon
-        /// preference is only mentioned when it is doing something, so an ordinary AUTO
-        /// flight reads exactly as it did before this control existed.
-        /// </summary>
+        /// <summary>Summarise ROE first, adding weapon preference only when non-Auto.</summary>
         private static string EngagementHint(WingRegistry wing, WingWeaponPreference? shared)
         {
             string hint = RoeRules.Hint(wing.Roe);
@@ -697,15 +629,14 @@ namespace WingCommand
             }
         }
 
-        /// <summary>Keep the inspection focus on a pilot who is still on the roster.</summary>
+        /// <summary>Retain inspection focus only while its pilot remains on the roster.</summary>
         private static void PruneFocus(WingRegistry wing)
         {
             _ = wing;
 
             if (WingPilotRoster.Contains(inspectPilot)) return;
 
-            // When the roster changes out from under the selection, fall back to the pilot
-            // the player picked for the next flight, then to the most senior available.
+            // After removal, prefer the next-flight pilot, then the most senior available.
             inspectPilot = WingPilotRoster.Selected;
             if (inspectPilot != null && WingPilotRoster.Contains(inspectPilot)) return;
 
@@ -724,7 +655,8 @@ namespace WingCommand
         }
 
 
-        /// <summary>One line of the roster: slot, name, state, fuel, ammo, release button.</summary>
+        /// <summary>Active-aircraft row with identity, state, fuel, ammunition, and release
+        /// control.</summary>
         private sealed class RosterRow
         {
             private readonly GameObject go;
@@ -737,17 +669,12 @@ namespace WingCommand
             private WingMember bound;
             private WingShopDelivery.PendingDelivery boundPending;
 
-            /// <summary>
-            /// Which wingman, if any, has had its RTB pressed once and is waiting to have it
-            /// pressed again.
-            ///
-            /// Static, so arming one row disarms every other: two rows both offering to
-            /// discharge a wingman on the next click is worse than none.
-            /// </summary>
+            /// <summary>Shared RTB confirmation across rows; arming one member disarms the previous
+            /// member.</summary>
             private static readonly Confirmation memberRelease = new Confirmation();
             private static readonly Confirmation pendingRelease = new Confirmation();
 
-            /// <summary>Drop the armed wingman when the mission ends, with everything else.</summary>
+            /// <summary>Clear pending member-release confirmation at mission end.</summary>
             public static void Disarm()
             {
                 memberRelease.Clear();
@@ -786,30 +713,31 @@ namespace WingCommand
                     }
                 });
 
-                // Cells sit under the columns in RosterColumns — PLANE, CALLSIGN, STATE,
-                // FUEL, AMMO — so a header and the value beneath it cannot drift apart.
-                slot  = Label(rt, "", new Rect(4f, 0f, 16f, RowHeight), Dim(), FontBody,
+                // Use RosterColumns positions so labels remain aligned with headers.
+                slot  = Label(rt, "", new Rect(4f, 0f, 24f, RowHeight), Dim(), FontBody,
                               FontStyles.Normal, TextAlignmentOptions.Left);
-                plane = Label(rt, "", new Rect(22f, 0f, 56f, RowHeight), WingColor(), FontBody,
-                              FontStyles.Normal, TextAlignmentOptions.Left);
-                name  = Label(rt, "", new Rect(80f, 0f, 66f, RowHeight), WingColor(), FontBody,
-                              FontStyles.Normal, TextAlignmentOptions.Left);
-                order = Label(rt, "", new Rect(148f, 0f, 54f, RowHeight), Dim(), FontBody,
-                              FontStyles.Normal, TextAlignmentOptions.Left);
-                fuel  = Label(rt, "", new Rect(204f, 0f, 36f, RowHeight), Dim(), FontSmall,
-                              FontStyles.Normal, TextAlignmentOptions.Right);
-                ammo  = Label(rt, "", new Rect(242f, 0f, 34f, RowHeight), Dim(), FontSmall,
-                              FontStyles.Normal, TextAlignmentOptions.Right);
+                plane = Cell(0);
+                name = Cell(1);
+                order = Cell(2);
+                fuel = Cell(3);
+                ammo = Cell(4);
 
-                // LD grants this wingman temporary flight lead: the rest of the wing then
-                // formates on them instead of on the player.
+                TMP_Text Cell(int index)
+                {
+                    Column column = RosterColumns[index];
+                    return Label(rt, "", new Rect(column.X, 0f, column.Width, RowHeight),
+                                 WingUi.TextPrimary, FontBody, FontStyles.Normal,
+                                 column.RightAligned ? TextAlignmentOptions.Right : TextAlignmentOptions.Left);
+                }
+
+                // LD toggles temporary flight lead for the other members.
                 lead = WingUi.Button(rt, "LD",
                                      new Rect(leadX, -1f, leadWidth, RowHeight - 2f),
                                      FontMicro, UiButtonStyle.Default, ToggleLead)
                              .WithTooltip("Flight lead - the rest of the wing formates on this " +
                                           "wingman while it takes your orders. Press again to release.");
 
-                // RTB dismisses a wingman from the active flight and sends it home.
+                // RTB removes the member from active command and sends it home.
                 release = WingUi.Button(rt, "RTB",
                                         new Rect(releaseX, -1f, releaseWidth, RowHeight - 2f),
                                         FontSmall, UiButtonStyle.Danger, ConfirmRelease)
@@ -821,7 +749,7 @@ namespace WingCommand
                 if (bound != null) WingCommandManager.Instance?.ToggleFlightLead(bound);
             }
 
-            /// <summary>Arm on the first press, then send the selected wingman home.</summary>
+            /// <summary>Arm release first, then confirm the same member's RTB.</summary>
             private void ConfirmRelease()
             {
                 if (bound != null)
@@ -879,14 +807,12 @@ namespace WingCommand
                 release?.SetText(armed ? "SURE?" : "RTB");
 
                 lead?.SetLatched(m.IsFlightLead);
+                lead?.SetEnabled(true);
+                slot.text = (selected ? ">" : "") + m.Slot;
 
-                // Just the slot number. The filled/hollow circles this used to draw are not
-                // in the MFD font, so every row rendered the same tofu box and the marker
-                // said nothing — while the lit edge and the green callsign beside it were
-                // already showing selection perfectly well.
+                // Use a numeric slot; unsupported circle glyphs render as missing-character boxes.
                 if (memberChanged)
                 {
-                    slot.text = m.Slot.ToString();
                     string planeStr = !string.IsNullOrEmpty(m.Aircraft?.definition?.code)
                         ? m.Aircraft.definition.code
                         : m.Name;
@@ -894,28 +820,26 @@ namespace WingCommand
                     string callsignStr = m.Crew != null && !string.IsNullOrEmpty(m.Crew.Callsign)
                         ? m.Crew.Callsign
                         : "AI";
-                    name.text = AvTheme.Truncate(callsignStr, 8);
+                    name.text = callsignStr;
+                    hit.WithTooltip(m.Name + " / " + planeStr + " / " + callsignStr +
+                        ". Click to select; Shift-click to add or remove.");
                 }
                 slot.color = selected ? Green() : Dim();
                 plane.color = selected ? Green() : WingColor();
                 name.color = selected ? Green() : WingColor();
                 selectionRule.color = selected ? Green() : MemberFrameColor();
 
-                // Selection is the row's resting state; the pointer only adds to it. Until
-                // now nothing at all happened when the mouse crossed a row, so a roster that
-                // is the panel's main control surface looked exactly like a readout.
+                // Layer hover feedback over persistent row selection.
                 hit?.SetRowHighlight(fill,
                                      selected ? WingUi.CardFillSelected : WingUi.CardFill,
                                      WingUi.CardFillHover);
                 order.text = ShortOrder(m);
 
-                // Fuel and stores are aggregate queries over every tank/station. Sample
-                // each once so binding one row does not walk both collections twice. Each
-                // reads under its own header and turns amber on its own threshold, rather
-                // than the old shared "45%  12" cell that went amber for either.
+                // Sample tank and station aggregates once per row; apply separate fuel and ammunition
+                // warning thresholds.
                 float fuelFraction = m.Fuel;
                 int ammoCount = m.Ammo;
-                Color low = new Color(1f, 0.55f, 0.2f);
+                Color low = Warning();
                 fuel.text = Mathf.RoundToInt(fuelFraction * 100f) + "%";
                 fuel.color = fuelFraction <= WingTuning.BingoFuel ? low : Dim();
                 ammo.text = ammoCount.ToString();
@@ -940,9 +864,11 @@ namespace WingCommand
                 release?.SetText(canCancel ? (armed ? "SURE?" : "CXL") : "DEPT");
 
                 lead?.SetLatched(false);
+                lead?.SetEnabled(false);
 
                 if (pendingChanged)
                 {
+                    hit.WithTooltip(p.AirframeName + " is preparing for departure. Orders unlock when airborne.");
                     slot.text = slotNumber.ToString();
                     string planeStr = !string.IsNullOrEmpty(p.Definition?.code)
                         ? p.Definition.code

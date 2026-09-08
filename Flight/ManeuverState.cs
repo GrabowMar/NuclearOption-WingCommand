@@ -3,14 +3,14 @@ using UnityEngine;
 
 namespace WingCommand
 {
- /// <summary>Native tactical and JSON-scripted manoeuvres with entry, terrain, and timeout
- /// limits.</summary>
+    /// <summary>Native tactical and JSON-scripted manoeuvres with entry, terrain, and timeout
+    /// limits.</summary>
     internal sealed class ManeuverState : WingPilotState
     {
-     /// <summary>Maximum manoeuvre duration before level recovery.</summary>
+        /// <summary>Maximum manoeuvre duration before level recovery.</summary>
         private const float MaxManeuverSeconds = 18f;
 
-     /// <summary>Minimum airspeed fraction for continuing a vertical manoeuvre.</summary>
+        /// <summary>Minimum airspeed fraction for continuing a vertical manoeuvre.</summary>
         private const float StallFraction = 0.12f;
 
         private ManeuverKind kind;
@@ -37,7 +37,7 @@ namespace WingCommand
             stateDisplayName = "manoeuvring";
         }
 
-     /// <summary>Select the manoeuvre before entering this state.</summary>
+        /// <summary>Select the manoeuvre before entering this state.</summary>
         public void SetManeuver(ManeuverKind value)
         {
             kind = value;
@@ -497,13 +497,13 @@ namespace WingCommand
             abortReason = reason;
         }
 
-     /// <summary>Body pitch rate in rad/s, positive nose-up.</summary>
+        /// <summary>Body pitch rate in rad/s, positive nose-up.</summary>
         private float BodyPitchRate() =>
             aircraft.rb != null
                 ? -Vector3.Dot(aircraft.rb.angularVelocity, aircraft.transform.right)
                 : 0f;
 
-     /// <summary>Body roll rate about the nose, in rad/s.</summary>
+        /// <summary>Body roll rate about the nose, in rad/s.</summary>
         private float BodyRollRate() =>
             aircraft.rb != null
                 ? Vector3.Dot(aircraft.rb.angularVelocity, aircraft.transform.forward)

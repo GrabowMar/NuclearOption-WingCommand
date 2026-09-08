@@ -30,8 +30,8 @@ namespace WingCommand.PureTests
         [MemberData(nameof(Shapes))]
         public void ExtendedFormationRetainsHorizontalClearanceThroughoutTurnCompression(int shape)
         {
-            // Include leader, large debug wings, and every intermediate deformation.
-            // Ignore stack: terrain floors can flatten it and ships do not use it.
+            // Check leader, large debug wings, and intermediate deformations without stack, which
+            // terrain and surface flight can remove.
             for (int step = 0; step <= 8; step++)
             {
                 float blend = step / 8f;

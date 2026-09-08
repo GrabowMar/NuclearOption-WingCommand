@@ -3,8 +3,8 @@ using NuclearOption.Networking;
 
 namespace WingCommand
 {
- /// <summary>Concrete reserve airframes with definition, ownership, and fit stored together, preventing
- /// per-type counters from mismatching owned equipment.</summary>
+    /// <summary>Concrete reserve airframes with definition, ownership, and fit stored together, preventing
+    /// per-type counters from mismatching owned equipment.</summary>
     internal static class WingSupplyReserve
     {
         public const int Capacity = 3;
@@ -16,7 +16,7 @@ namespace WingCommand
             Owned,
         }
 
-     /// <summary>One reserve airframe; purchase reservation keeps its slot occupied.</summary>
+        /// <summary>One reserve airframe; purchase reservation keeps its slot occupied.</summary>
         internal sealed class Slot
         {
             internal readonly AircraftDefinition Definition;
@@ -47,7 +47,7 @@ namespace WingCommand
         public static bool IsHost => isHost;
         public static bool HasFaction => hq != null;
 
-     /// <summary>Occupied slots, including pending purchase reservations.</summary>
+        /// <summary>Occupied slots, including pending purchase reservations.</summary>
         public static int Count => slots.Count;
 
         public static IReadOnlyList<AircraftDefinition> Definitions
@@ -65,7 +65,7 @@ namespace WingCommand
             }
         }
 
-     /// <summary>Unreserved launchable slots of this definition.</summary>
+        /// <summary>Unreserved launchable slots of this definition.</summary>
         public static int CountOf(AircraftDefinition definition)
         {
             if (definition == null) return 0;
@@ -102,7 +102,7 @@ namespace WingCommand
             hq = current;
         }
 
-     /// <summary>Hold one faction airframe outside AI-accessible stock.</summary>
+        /// <summary>Hold one faction airframe outside AI-accessible stock.</summary>
         public static bool Hold(AircraftDefinition definition, out string reason)
         {
             reason = null;
@@ -126,7 +126,7 @@ namespace WingCommand
             return true;
         }
 
-     /// <summary>Return an exact unreserved airframe to faction stock.</summary>
+        /// <summary>Return an exact unreserved airframe to faction stock.</summary>
         public static bool Release(AircraftDefinition definition, out bool wasOwned,
                                    out string reason)
         {
@@ -158,7 +158,7 @@ namespace WingCommand
             return true;
         }
 
-     /// <summary>Preserve a recovered airframe's definition, ownership, and fit together.</summary>
+        /// <summary>Preserve a recovered airframe's definition, ownership, and fit together.</summary>
         public static bool StoreRecovered(AircraftDefinition definition, bool owned,
                                           bool loadoutKnown, WingLoadoutChoice loadout,
                                           object recoveryToken)
@@ -180,7 +180,7 @@ namespace WingCommand
             return true;
         }
 
-     /// <summary>Inspect the concrete slot the next purchase would consume.</summary>
+        /// <summary>Inspect the concrete slot the next purchase would consume.</summary>
         internal static bool PeekForPurchase(AircraftDefinition definition, out Slot slot)
         {
             int index = ReserveSlotPolicy.SelectForPurchase(
@@ -204,7 +204,7 @@ namespace WingCommand
             return true;
         }
 
-     /// <summary>Reserve a slot without freeing its capacity for other returns.</summary>
+        /// <summary>Reserve a slot without freeing its capacity for other returns.</summary>
         internal static bool ReserveForPurchase(AircraftDefinition definition, Source expected,
                                                 out Slot slot)
         {
@@ -216,7 +216,7 @@ namespace WingCommand
             return true;
         }
 
-     /// <summary>Consume the exact reserved slot on confirmed delivery.</summary>
+        /// <summary>Consume the exact reserved slot on confirmed delivery.</summary>
         internal static bool CommitPurchase(Slot slot)
         {
             if (slot == null || !slot.ReservedForPurchase) return false;
@@ -226,7 +226,7 @@ namespace WingCommand
             return true;
         }
 
-     /// <summary>Cancel reservation without changing slot identity or FIFO order.</summary>
+        /// <summary>Cancel reservation without changing slot identity or FIFO order.</summary>
         internal static void CancelPurchase(Slot slot)
         {
             if (slot != null && slots.Contains(slot)) slot.ReservedForPurchase = false;

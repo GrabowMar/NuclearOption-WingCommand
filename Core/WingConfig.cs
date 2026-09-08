@@ -3,7 +3,7 @@ using UnityEngine;
 
 namespace WingCommand
 {
- /// <summary>Squadron radio detail preference.</summary>
+    /// <summary>Squadron radio detail preference.</summary>
     internal enum ChatterLevel
     {
         Off,
@@ -11,7 +11,7 @@ namespace WingCommand
         TextAndTone,
     }
 
- /// <summary>Display scope for wing outlines and HUD tints.</summary>
+    /// <summary>Display scope for wing outlines and HUD tints.</summary>
     internal enum HighlightMode
     {
         Off,
@@ -19,8 +19,8 @@ namespace WingCommand
         WingAndTargets,
     }
 
- /// <summary>Player preferences and feature permissions. Internal tuning belongs in WingTuning; Mode
- /// selects the WingFidelity behaviour budget.</summary>
+    /// <summary>Player preferences and feature permissions. Internal tuning belongs in WingTuning; Mode
+    /// selects the WingFidelity behaviour budget.</summary>
     internal class WingConfig
     {
         // Formation settings.
@@ -37,6 +37,9 @@ namespace WingCommand
 
         // AI settings.
         public ConfigEntry<WingMode> Mode { get; private set; }
+        public ConfigEntry<bool> AiSharpTurns { get; private set; }
+        public ConfigEntry<bool> AiTargetSpreading { get; private set; }
+        public ConfigEntry<bool> AiMissileWarningRepair { get; private set; }
 
         // Engagement settings.
         public ConfigEntry<WingRoe> DefaultRoe { get; private set; }
@@ -75,12 +78,13 @@ namespace WingCommand
         public ConfigEntry<bool> ExternalHitmarkerAudio { get; private set; }
 
         // Debug controls.
-     /// <summary>Display-only carrier for the Debug warning banner; its value is unused.</summary>
+        /// <summary>Display-only carrier for the Debug warning banner; its value is unused.</summary>
         public ConfigEntry<bool> DebugWarning { get; private set; }
         public ConfigEntry<bool> EnableDebugActions { get; private set; }
 
-     /// <summary>Display-only carrier for the spawn button; CustomDrawer handles the action.</summary>
+        /// <summary>Display-only carrier for the spawn button; CustomDrawer handles the action.</summary>
         public ConfigEntry<bool> SpawnDebugWing { get; private set; }
+        public ConfigEntry<string> DebugSpawnAircraft { get; private set; }
         public ConfigEntry<bool> FreePlanePurchases { get; private set; }
         public ConfigEntry<bool> DisableWingSizeLimit { get; private set; }
         public ConfigEntry<bool> BypassRankRequirement { get; private set; }
@@ -97,8 +101,8 @@ namespace WingCommand
 
         private const string HexHelp = "Six-digit hex, with or without the leading #.";
 
-     /// <summary>Validate colours when binding so BepInEx logs malformed values and restores the
-     /// default.</summary>
+        /// <summary>Validate colours when binding so BepInEx logs malformed values and restores the
+        /// default.</summary>
         private sealed class HexColourValue : AcceptableValueBase
         {
             public HexColourValue() : base(typeof(string)) { }
@@ -160,6 +164,15 @@ namespace WingCommand
 
         private void BindMode(ConfigFile c)
         {
+            AiSharpTurns = c.Bind("AI", "AiSharpTurns", true,
+                "Enable stronger turns for airborne AI with sufficient speed and terrain clearance. " +
+                "Applies on the next steering update, including non-wing AI.");
+            AiTargetSpreading = c.Bind("AI", "AiTargetSpreading", true,
+                "Spread locally simulated AI across comparable targets. Applies on the next target " +
+                "selection, including non-wing AI. Performance mode still disables this feature.");
+            AiMissileWarningRepair = c.Bind("AI", "AiMissileWarningRepair", true,
+                "Repair AI missile-warning subscriptions when entering combat. Applies on the next " +
+                "combat entry, including non-wing AI; disabling does not undo existing subscriptions.");
             // Put the shared behaviour-budget switch at the top of settings.
             Mode = c.Bind("AI", "Mode", WingMode.Smart,
                 new ConfigDescription(
@@ -209,8 +222,8 @@ namespace WingCommand
                     new AcceptableValueRange<float>(0.05f, 0.40f)));
         }
 
-     /// <summary>Check the raw file for legacy ROE values; BepInEx exposes no failed-bind
-     /// record.</summary>
+        /// <summary>Check the raw file for legacy ROE values; BepInEx exposes no failed-bind
+        /// record.</summary>
         private static bool FileMentionsLegacyRoe(ConfigFile c, string legacyValue)
         {
             try
@@ -282,10 +295,10 @@ namespace WingCommand
         private void BindKeys(ConfigFile c)
         {
             // Optional extra wheel key; native radial availability is independent.
-            RadialKey = c.Bind("Keys", "WingMenu", KeyCode.None,
-                "Optional: hold this to open Wing Command's own wheel. The Wing Command slice " +
-                "is added to the game's radial menu either way, so leave it unbound unless you " +
-                "want a second key that goes straight to the wing commands.");
+            RadialKey = c.Bind("Keys", "WingMenu", KeyCode.C,
+                "Hold to open Wing Command's wheel, aim at an order, then release to confirm. " +
+                "Right-click cancels. Set None to disable the shortcut. " +
+                "The Wing Command slice remains available in the game's radial menu.");
             QuickRejoinKey = c.Bind("Keys", "QuickRejoin", KeyCode.None,
                 Advanced("Optional hotkey: order the whole wing to rejoin formation."));
             QuickEngageKey = c.Bind("Keys", "QuickEngage", KeyCode.None,
@@ -367,14 +380,26 @@ namespace WingCommand
                         DispName = "Enable debug actions",
                         Order = 40,
                     }));
+            DebugSpawnAircraft = c.Bind("Debug", "DebugSpawnAircraft", "",
+                new ConfigDescription(
+                    "DEBUG CHEAT: Override the aircraft used by the debug spawn button. " +
+                    "Choose a catalogue aircraft regardless of faction stock or rank. " +
+                    "Empty uses your current aircraft. Requires EnableDebugActions; host-only.",
+                    null,
+                    new ConfigurationManagerAttributes
+                    {
+                        DispName = "Debug spawn aircraft",
+                        Order = 35,
+                        CustomDrawer = WingDebugActions.DrawAircraftSelector,
+                    }));
             SpawnDebugWing = c.Bind("Debug", "SpawnDebugWing", false,
                 new ConfigDescription(
-                    "DEBUG CHEAT: Spawn a full wing of your own aircraft type, already in " +
+                    "DEBUG CHEAT: Spawn a full wing of the selected debug aircraft, already in " +
                     "formation slots, and assign them. Requires the switch above.",
                     null,
                     new ConfigurationManagerAttributes
                     {
-                        DispName = "Spawn wing of my aircraft",
+                        DispName = "Spawn debug wing",
                         Order = 30,
                         CustomDrawer = WingDebugActions.DrawSpawnButton,
 
@@ -417,9 +442,11 @@ namespace WingCommand
                     }));
             VerboseLogging = c.Bind("Debug", "VerboseLogging", false,
                 new ConfigDescription(
-                    "Log every order and state transition to the BepInEx console.",
+                    "Log command requests, results, state transitions and flight diagnostics to the " +
+                    "BepInEx console and LogOutput.log. Applies immediately; does not require debug cheats. " +
+                    "Disable after reproducing an issue to reduce log volume.",
                     null,
-                    new ConfigurationManagerAttributes { IsAdvanced = true, Order = 5 }));
+                    new ConfigurationManagerAttributes { DispName = "Debug action logging", IsAdvanced = false, Order = 60 }));
         }
     }
 }

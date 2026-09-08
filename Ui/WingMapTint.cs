@@ -6,15 +6,15 @@ using UnityEngine;
 
 namespace WingCommand
 {
-    /// <summary>Wing outlines and command selection, applied after native icon updates.</summary>
+    /// <summary>Reconciles wing outlines and command selection after native icon updates.</summary>
     internal static class WingMapTint
     {
-        // DynamicMap updates selectedIcons after calling the icon's colour callback.
-        // Read the icon flag so a select/deselect repaint observes the new native state.
+        // Read the icon's selected flag because DynamicMap updates selectedIcons after its colour
+        // callback.
         private static readonly AccessTools.FieldRef<MapIcon, bool> nativeSelected =
             AccessTools.FieldRefAccess<MapIcon, bool>("isSelected");
 
-        /// <summary>Reconcile one unit's map markings with its current roster identity.</summary>
+        /// <summary>Refresh map identity for one unit.</summary>
         public static void Refresh(Unit unit)
         {
             if (unit == null) return;
@@ -23,11 +23,8 @@ namespace WingCommand
             {
                 if (DynamicMap.TryGetMapIcon(unit, out UnitMapIcon icon) && icon != null)
                 {
-                    // The unit-level entry point, not MapIcon.UpdateColor: it adds the
-                    // dimming for units excluded from the target list and the white
-                    // highlight for the player's own aircraft. Calling the base method
-                    // directly would drop both and make a refreshed icon look subtly
-                    // different from one the game repainted.
+                    // Use the unit repaint path to preserve native filter dimming and player
+                    // highlighting; base MapIcon.UpdateColor omits them.
                     icon.UnitMapIcon_UpdateColor();
                     Apply(icon);
                 }
@@ -39,10 +36,8 @@ namespace WingCommand
             }
         }
 
-        /// <summary>
-        /// Reattach markings after icons are created, recreated, or another UI refresh
-        /// changes their components. Does not repaint the native image or its fade state.
-        /// </summary>
+        /// <summary>Restore markings after icon recreation or external component changes without
+        /// repainting native fade state.</summary>
         public static void Reassert(WingRegistry wing)
         {
             if (SceneSingleton<DynamicMap>.i == null) return;
@@ -70,9 +65,8 @@ namespace WingCommand
             bool nativeSelected = IsSelected(icon);
             bool commandSelected = manager != null && manager.Selection.Contains(member);
 
-            // Stock SelectIcon disables raycasts. A plane already in the weapon target
-            // list must still accept tactical clicks; leaving Tactical restores the stock
-            // hit behavior without selecting or deselecting any weapon targets.
+            // Keep native-selected aircraft clickable for Tactical; restore stock raycast behaviour on
+            // exit without changing weapon targets.
             bool isPlayer = SceneSingleton<CombatHUD>.i?.aircraft == icon.unit;
             icon.iconImage.raycastTarget = MapSelectionPolicy.IconReceivesPointer(
                 isPlayer, nativeSelected, member != null, tactical);
@@ -86,9 +80,8 @@ namespace WingCommand
                 tacticalActive: tactical,
                 commandSelected: commandSelected);
 
-            // Never replace the faction silhouette's colour. Native target clearing,
-            // filters and theme changes repaint that Image; our separate mesh outline
-            // keeps membership visible through all of them.
+            // Keep wing identity in a separate outline so native faction, target, filter, and theme
+            // repainting remains authoritative.
             WingMarkerBadge.Apply(icon.iconImage, presentation);
         }
 
@@ -97,9 +90,8 @@ namespace WingCommand
             return nativeSelected(icon);
         }
 
-        // UnselectAll/DeselectAllIcons call MapIcon.DeselectIcon -> UpdateColor, then
-        // remove native TargetMarkers. Our outline belongs to the Image, not that list.
-        // SetIcon and UpdateIcon also reconcile reused/recreated icons and command scope.
+        // Attach identity to the Image rather than native TargetMarkers removed during deselection.
+        // Reconcile on icon setup, reuse, and scope changes.
         [HarmonyPatch]
         internal static class MapIconColorPatch
         {
@@ -118,10 +110,8 @@ namespace WingCommand
             }
         }
 
-        /// <summary>
-        /// Keeps airbase icons visible on the tactical map when doing tactical planning
-        /// or when any wingman is actively landing or returning to base.
-        /// </summary>
+        /// <summary>Keep airbase icons visible during tactical planning and active wing landing or
+        /// RTB.</summary>
         [HarmonyPatch(typeof(DynamicMap), "ShouldShowAirbase")]
         internal static class ShowAirbasePatch
         {

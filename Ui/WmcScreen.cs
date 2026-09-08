@@ -11,19 +11,8 @@ using UnityEngine.UI;
 
 namespace WingCommand
 {
-    /// <summary>
-    /// "WMC" — a native MFD screen on the maximised map, alongside BDF / MAP / HUD.
-    ///
-    /// The game's bezel columns each carry six buttons but only three configured screens,
-    /// so the fourth slot is free. Registering an <see cref="MFDScreen"/> there and calling
-    /// <c>VirtualMFD.SetupButtons()</c> lights the button up and labels it, and the game
-    /// then drives show/hide exactly as it does for its own screens.
-    ///
-    /// The panel is built from scratch rather than cloned: the stock HUD OPTIONS hierarchy
-    /// is not something this mod can safely dissect, whereas building known widgets and
-    /// borrowing only the font and theme colours produces a predictable result that still
-    /// matches the game's look.
-    /// </summary>
+    /// <summary>Native WMC MFD registration using an available bezel slot and SetupButtons. Build known
+    /// widgets with shared font/theme; native MFD lifecycle owns visibility.</summary>
     internal static partial class WmcScreen
     {
         private const float PanelWidth = AvTokens.PanelWidth;
@@ -45,7 +34,7 @@ namespace WingCommand
         private const float FontBody = WingUi.FontBody;
         private const float FontLead = WingUi.FontLead;
 
-        /// <summary>Height of a single-line label block: hint lines, status lines, readouts.</summary>
+        /// <summary>Single-line text-block height for hints, status, and readouts.</summary>
         private const float LineHeight = Space4;
 
         private const float GutterWidth = 62f;
@@ -56,16 +45,9 @@ namespace WingCommand
         private const float HeaderPagerHeight = Space5;
 
         private const float StatusStripHeight = AvTokens.StatusStripHeight;
-        private const string HoverPrompt = "Hover a control to see what it does.";
 
-        /// <summary>
-        /// Roster rows visible at once, on every page that lists the flight.
-        ///
-        /// Three, matching the default MaxWingSize, rather than the four this used to
-        /// reserve. With four tabs sharing one bezel the page has to earn its height back
-        /// somewhere, and a permanently empty fourth row was the cheapest 32 pixels
-        /// available. A larger configured wing still pages.
-        /// </summary>
+        /// <summary>Visible flight rows matching normal wing capacity; larger debug rosters
+        /// paginate.</summary>
         private const int RosterRowsPerPage = 3;
         private const int SquadronRowsPerPage = 6;
 
@@ -82,25 +64,16 @@ namespace WingCommand
         private static MFDScreen screen;
         private static TacticalPauseState tacticalPause;
 
-        // Indexed by Page, so adding a tab is a matter of building one more root rather
-        // than adding a third parallel set of fields to every lifecycle method.
+        // Index roots by Page for shared lifecycle handling.
         private static readonly RectTransform[] pageRoots = new RectTransform[PageCount];
         private static readonly WingButton[] pageTabs = new WingButton[PageCount];
         private static readonly float[] pageHeights = new float[PageCount];
 
-        /// <summary>Each page's status line, which doubles as its tooltip strip.</summary>
+        /// <summary>Per-page status and hover-help text.</summary>
         private static readonly TMP_Text[] statusLabels = new TMP_Text[PageCount];
 
-        /// <summary>
-        /// The height every page is drawn at.
-        ///
-        /// One height for all four, not each page sized to its own content. Sizing them
-        /// individually meant the panel grew and shrank under the tab strip every time you
-        /// changed page — Supply and Tactical differ by nearly a third of the panel — so
-        /// the control you were reaching for moved before you got to it, and the whole
-        /// bezel appeared to twitch on every tab press. A stable frame is worth more than
-        /// the whitespace it costs the shorter pages.
-        /// </summary>
+        /// <summary>Shared height across tabs so switching pages cannot move the bezel or
+        /// controls.</summary>
         private static float panelHeight;
 
         private static Page page;
@@ -127,24 +100,11 @@ namespace WingCommand
             new WingButton[WingWeaponPreferences.All.Length];
 
 
-        /// <summary>
-        /// The pilot the Wing tab is inspecting.
-        ///
-        /// Pilot-centric rather than aircraft-centric now that the Wing tab lists the whole
-        /// squadron, including people who are not currently flying. The airframe dossier on
-        /// that page is whatever the inspected pilot is flying, if anything. Separate from
-        /// the command selection the Tactical page uses, so inspecting a pilot never changes
-        /// who the next order goes to.
-        /// </summary>
+        /// <summary>Pilot inspection focus independent of tactical command selection; the dossier follows
+        /// that pilot's current aircraft.</summary>
         private static WingPilot inspectPilot;
 
-        /// <summary>
-        /// Which page of the flight the Loadout and Wing tabs are showing.
-        ///
-        /// Shared by both, and separate from the Tactical page's own cursor: those two
-        /// inspect one aircraft at a time and should not jump about because the command
-        /// page happened to be scrolled somewhere else.
-        /// </summary>
+        /// <summary>Inspection-list page, independent of Tactical command-roster paging.</summary>
         private static int inspectPage;
 
         private static readonly List<RosterRow> rosterRows = new List<RosterRow>();
@@ -196,17 +156,15 @@ namespace WingCommand
         private static float nextRefresh;
         private static bool gaveUp;
 
-        /// <summary>Map icon clicks become command selection only on the active WMC page.</summary>
+        /// <summary>Whether WMC currently owns tactical member clicks.</summary>
         public static bool TacticalCommandModeActive =>
             Plugin.Settings.UseMfdPanel.Value && Plugin.Settings.MapCommandEnabled.Value &&
             DynamicMap.mapMaximized && screen != null && screen.isActive && page == Page.Tactical;
 
-        // ------------------------------------------------------------------- lifecycle
+        // Panel lifecycle.
 
-        /// <summary>
-        /// Called each frame from the manager. Installs lazily rather than patching
-        /// <c>VirtualMFD.Start</c>, so it does not depend on plugin/scene ordering.
-        /// </summary>
+        /// <summary>Lazily install from the manager update without relying on VirtualMFD.Start
+        /// ordering.</summary>
         public static void Tick(WingRegistry wing)
         {
             bool enabled = !gaveUp && GameAccess.MfdAvailable && Plugin.Settings.UseMfdPanel.Value;
@@ -233,19 +191,12 @@ namespace WingCommand
 
             if (!visible)
             {
-                // The screen can be closed with a list open or a name half typed — the bezel
-                // button does not ask this code first. Neither may survive into a panel the
-                // player cannot see: an open popup would still be holding the pointer, and a
-                // focused field would still be holding the keyboard off the aircraft.
+                // Close popups and release text focus when native bezel actions hide the panel.
                 ReleasePanelInput();
                 return;
             }
 
-            // The status strip is the one part of the panel that answers the pointer, and a
-            // fifth of a second is plainly visible as lag on something that should feel
-            // attached to the cursor. Rather than repaint the whole page every frame, watch
-            // for the hovered control changing and bring the next refresh forward when it
-            // does — which covers arriving on a control and leaving one equally.
+            // Refresh immediately when hover help changes; keep other page work on its normal cadence.
             string tooltip = WingButton.HoveredTooltip;
             if (!ReferenceEquals(tooltip, lastTooltip))
             {
@@ -253,8 +204,8 @@ namespace WingCommand
                 nextRefresh = 0f;
             }
 
-            // Refreshing rebuilds a formatted string per roster row; at frame rate that is
-            // pure garbage for numbers a reader cannot follow that fast.
+            // Throttle formatted roster refreshes to avoid per-frame string allocation for slowly
+            // changing readouts.
             if (Time.unscaledTime >= nextRefresh)
             {
                 nextRefresh = Time.unscaledTime + WingFidelity.Interval(0.2f);
@@ -262,7 +213,7 @@ namespace WingCommand
             }
         }
 
-        /// <summary>Forget the screen when the mission ends; a new one is built next time.</summary>
+        /// <summary>Clear mission screen state for fresh installation next mission.</summary>
         public static void Reset()
         {
             UpdateTacticalPause(shouldPause: false);
@@ -385,8 +336,7 @@ namespace WingCommand
             pylonPage = 0;
             inspectPage = 0;
 
-            // The rename field may have been focused when the mission ended, and a field
-            // destroyed while focused never fires the deselect that gives the keyboard back.
+            // Force keyboard release if a focused field was destroyed without deselection.
             WingKeyboardGuard.ForceRelease();
 
             pilotRows.Clear();
@@ -485,7 +435,7 @@ namespace WingCommand
                 "). The radial menu and hotkeys still work; there is no fallback panel.");
         }
 
-        // --------------------------------------------------------------------- building
+        // Panel construction.
 
         private static MFDScreen Build(MFDScreen template, Button bezelButton)
         {
@@ -495,21 +445,15 @@ namespace WingCommand
             RectTransform rt = root.GetComponent<RectTransform>();
             rt.SetParent(template.transform.parent, worldPositionStays: false);
 
-            // Inherit placement from a working screen so the panel lands where the game
-            // expects, then let VirtualMFD drive localPosition for show/hide.
-            // Anchors and scale come from a working stock screen; position does not.
-            // VirtualMFD.showPos is Vector3.zero and MFDScreen.ShowScreen assigns it straight
-            // to localPosition, so a screen has no remembered home — it is placed by its
-            // parent and its anchors, and any anchoredPosition written here is overwritten
-            // the next time the panel is opened. Fit only our child content in vanilla;
-            // Boscali owns placement when installed.
+            // Copy working screen anchors and scale, letting native show/hide own localPosition. Fit
+            // only child content in vanilla and defer layout to Boscali when present.
             var templateRt = (RectTransform)template.transform;
             rt.anchorMin = templateRt.anchorMin;
             rt.anchorMax = templateRt.anchorMax;
             rt.pivot = templateRt.pivot;
             rt.localScale = templateRt.localScale;
 
-            // Native CloseScreen must hide the background along with WMC's controls.
+            // Parent background with controls so native CloseScreen hides both.
             var content = new GameObject("Content", typeof(RectTransform), typeof(Image));
             RectTransform contentRt = content.GetComponent<RectTransform>();
             contentRt.SetParent(rt, worldPositionStays: false);
@@ -519,6 +463,12 @@ namespace WingCommand
             bg.type = Image.Type.Sliced;
             bg.color = Color.white;
             bg.raycastTarget = true;
+
+            // The shared frame fades towards its foot; keep scenery out of the reading surface.
+            Image backing = Rule(contentRt, new Rect(), AvTheme.Ground.WithAlpha(1f));
+            Stretch(backing.rectTransform);
+            backing.rectTransform.offsetMin = new Vector2(Space2, Space2);
+            backing.rectTransform.offsetMax = new Vector2(-Space2, -Space2);
 
             float y = -Pad;
             y = AddTitle(contentRt, y);
@@ -536,10 +486,8 @@ namespace WingCommand
             tacticalY = AddEngagementSection(tacticalRoot, tacticalY);
             tacticalY = AddActions(tacticalRoot, tacticalY);
 
-            // Supply reads top to bottom in the order the questions are actually asked: what
-            // can I afford and is there room, then buying one, then conscripting one that is
-            // already flying, then the holdback knob that only matters once you care about
-            // what the AI is doing with the rest of the stock.
+            // Build Supply in decision order: funds/capacity, pilot, purchase, then active-aircraft
+            // assignment.
             RectTransform supplyRoot = pageRoots[(int)Page.Supply];
             float supplyY = y;
             supplyY = AddSupplyStatus(supplyRoot, supplyY);
@@ -550,20 +498,19 @@ namespace WingCommand
             float loadoutY = AddLoadoutPage(pageRoots[(int)Page.Loadout], y);
             float wingY = AddWingPage(pageRoots[(int)Page.Wing], y);
 
-            // Each page's content, plus the room the pinned status strip needs under it.
+            // Include pinned status-strip clearance in content height accounting.
             const float stripBlock = StatusStripHeight + Space2;
             pageHeights[(int)Page.Tactical] = Mathf.Abs(tacticalY) + stripBlock + Pad;
             pageHeights[(int)Page.Supply] = Mathf.Abs(supplyY) + stripBlock + Pad;
             pageHeights[(int)Page.Loadout] = Mathf.Abs(loadoutY) + stripBlock + Pad;
             pageHeights[(int)Page.Wing] = Mathf.Abs(wingY) + stripBlock + Pad;
 
-            // One frame for all four pages. Unified to shared AvTokens.PanelHeight.
+            // Use the shared fixed height for every tab.
             panelHeight = AvTokens.PanelHeight;
             for (int i = 0; i < PageCount; i++)
                 panelHeight = Mathf.Max(panelHeight, pageHeights[i]);
 
-            // Placed only once the tallest page is known, so the strip lands in the same
-            // spot on every tab rather than wherever that page's content happened to end.
+            // Pin status to one bottom position across all tabs.
             float stripY = -(panelHeight - Pad - StatusStripHeight);
             for (int i = 0; i < PageCount; i++)
                 PinStatusStrip(pageRoots[i], stripY, (Page)i);
@@ -599,15 +546,8 @@ namespace WingCommand
             return rt;
         }
 
-        /// <summary>Centred green title over chip rail and rule, matching unified avionics contract.</summary>
-        /// <summary>
-        /// The hard top strip: a filled WMC tag, the flight's live state, and three chips.
-        ///
-        /// This replaces a centred title, a subtitle and a separate chip rail — three rows
-        /// that between them said "WING COMMAND" twice. The id tag carries the panel's
-        /// identity in one 30px row, and the space that buys goes to the metric strip
-        /// below it, which is information the pilot actually reads.
-        /// </summary>
+        /// <summary>Build the WMC identity/state bar and three chips above shared funds and fuel
+        /// metrics.</summary>
         private static float AddTitle(RectTransform parent, float y)
         {
             float inner = PanelWidth - Pad * 2f;
@@ -616,17 +556,17 @@ namespace WingCommand
             dataBar = AvStyled.TopBar(parent, bar, "WMC", 3);
             y -= bar.height + Space2;
 
-            // Funds and minimum flight fuel sit above the tabs because every page needs
-            // them: they used to live inside Supply and Tactical respectively, so checking
-            // one meant leaving the page you were working on.
-            var metrics = new Rect(Pad, y, inner, 58f);
+            // Keep funds and minimum flight fuel visible above tabs on every page.
+            const float metricHeight = 72f;
+            var metrics = new Rect(Pad, y, inner, metricHeight);
             AvStyled.Box(parent, metrics, "metrics");
             float half = inner * 0.5f;
-            fundsMetric = AvStyled.MetricCell(parent, new Rect(Pad, y, half, 58f), "SQUADRON FUNDS", "CR");
-            fuelMetric = AvStyled.MetricCell(parent, new Rect(Pad + half, y, half, 58f), "FLIGHT FUEL", "% MIN");
-            Rule(parent, new Rect(Pad + half, y, 1f, 58f), WingUi.BorderSubtle);
+            fundsMetric = AvStyled.MetricCell(parent, new Rect(Pad, y, half, metricHeight), "SQUADRON FUNDS", "CR");
+            fuelMetric = AvStyled.MetricCell(parent, new Rect(Pad + half, y, half, metricHeight), "FLIGHT FUEL", "% MIN");
+            fundsMetric.Caption.color = fuelMetric.Caption.color = Dim();
+            Rule(parent, new Rect(Pad + half, y, 1f, metricHeight), WingUi.BorderSubtle);
 
-            return y - 58f - Space2;
+            return y - metricHeight - Space2;
         }
 
         private static float AddTabs(RectTransform parent, float y)
@@ -660,24 +600,20 @@ namespace WingCommand
                 pageTabs[i]?.SetLatched(active);
             }
 
-            // Deliberately not resized per page: the panel keeps one frame so that changing
-            // tab does not move every control on the page below it.
+            // Keep panel size fixed when switching tabs.
             if (panelRect != null)
                 panelRect.sizeDelta = new Vector2(PanelWidth, panelHeight);
 
-            // The pointer is almost always on the tab that was just pressed, and that tab
-            // is about to be covered by a different page's content.
+            // Clear the previous page's hover text on tab changes.
             WingButton.ClearTooltip();
 
-            // A popup belongs to the page under it. Left open across a tab change it would
-            // come back on top of that page's controls the next time it was shown, with its
-            // scrim still eating every click. Dropping focus first unwinds the keyboard
-            // guard through the field's own deselect rather than the forced path.
+            // Defocus fields before closing page-owned popups so keyboard capture unwinds and hidden
+            // scrims cannot consume clicks.
             WingKeyboardGuard.Defocus();
             AvKit.Popup.CloseAny();
+            nextRefresh = 0f;
 
-            // Leaving Tactical stops the map intercepting wing-icon clicks, so the icons
-            // have to lose their command-selection bracket at the same moment.
+            // Remove command brackets immediately when leaving Tactical input mode.
             WingCommandManager manager = WingCommandManager.Instance;
             if (manager != null)
             {
@@ -686,35 +622,18 @@ namespace WingCommand
             }
         }
 
-        /// <summary>
-        /// Section heading with a rule running out to the right of it, which is how the
-        /// stock panels separate their groups.
-        /// </summary>
-        /// <summary>
-        /// A section heading, and the tick that ties it back to the spine.
-        ///
-        /// The spine plus a tick per section replaces the frame each block used to carry.
-        /// Four hairlines around every group made a page of equally-weighted boxes with
-        /// nothing standing out; one stroke down the page and a mark per section says the
-        /// same thing about grouping and leaves the emphasis for what matters.
-        /// </summary>
+        /// <summary>Draw a shared section heading with a tick on the panel spine.</summary>
         private static float Heading(RectTransform parent, float y, string text)
         {
             AvStyled.SpineTick(parent, SpineX + 3f, y - 8f);
-            return WingUi.Heading(parent, y, text, PanelWidth);
+            return AvKit.Heading(parent, y, text, PanelWidth, WingUi.TextPrimary, WingUi.BorderSubtle);
         }
 
-        /// <summary>Where the spine sits: inside the panel frame, outside the content column.</summary>
+        /// <summary>Spine position inside the frame and outside the content column.</summary>
         private const float SpineX = 5f;
 
-        /// <summary>
-        /// A value with an arrow on either side of it.
-        ///
-        /// The arrows are drawn quiet: they page through a list rather than doing anything,
-        /// and at full accent weight they read as loudly as the choice they are scrolling.
-        /// Both take the row's full height as their click target even though they are drawn
-        /// inset, so the small visual arrow is not also a small thing to hit.
-        /// </summary>
+        /// <summary>Value with quiet previous/next arrows; retain generous click targets despite compact
+        /// visuals.</summary>
         private static WingButton[] Stepper(RectTransform parent, float x, float y, float w,
                                             out TMP_Text valueLabel,
                                             Action onPrev, Action onNext,
@@ -722,9 +641,7 @@ namespace WingCommand
         {
             Panel(parent, new Rect(x, y, w, RowHeight), RowColor());
 
-            // Inset by a pixel so the arrow's own frame does not double up on the box it
-            // sits in, but still tall enough to be an easy thing to hit — the old arrows
-            // were 26 by 24 inside a 30-pixel row and hard to land on.
+            // Inset arrows to avoid doubled borders while preserving nearly full row-height targets.
             const float arrow = Space6 + Space1;
             WingButton prev = WingUi.Button(parent, "<",
                                             new Rect(x + 1f, y - 1f, arrow, RowHeight - 2f),
@@ -743,15 +660,12 @@ namespace WingCommand
             return new[] { prev, next };
         }
 
-        /// <summary>The dim row label in the left gutter of the engagement block.</summary>
+        /// <summary>Dim engagement-row gutter label.</summary>
         private static void Gutter(RectTransform parent, float y, string text) =>
             Label(parent, text, new Rect(Pad, y, GutterWidth - Gap, RowHeight), Dim(), FontMicro,
                   FontStyles.Normal, TextAlignmentOptions.Left);
 
-        /// <summary>
-        /// One column header on a list. Kept as data rather than five near-identical calls,
-        /// so a header and the cell under it cannot drift apart by a pixel at a time.
-        /// </summary>
+        /// <summary>Shared column geometry for headers and cells.</summary>
         private struct Column
         {
             public string Text;
@@ -768,21 +682,18 @@ namespace WingCommand
             }
         }
 
-        // Four columns, not seven. WPN duplicated the weapon row in the engagement block,
-        // SLOT ERR was a formed-up indicator the WING tab already carries, and squeezing
-        // both in clipped their two-word headers and drove the fuel/ammo readout into the
-        // RTB button. What is left is what a glance at the flight actually asks: who, doing
-        // what, with how much fuel and ammo. Every header is one word so none of them wrap.
+        // Compact identity/state/fuel/ammunition columns; other details have dedicated controls or
+        // dossier readouts.
         private static readonly Column[] RosterColumns =
         {
-            new Column("PLANE", 22f, 56f),
-            new Column("CALLSIGN", 80f, 66f),
-            new Column("STATE", 148f, 54f),
-            new Column("FUEL", 204f, 36f, rightAligned: true),
-            new Column("AMMO", 242f, 34f, rightAligned: true),
+            new Column("PLANE", 28f, 58f),
+            new Column("CALLSIGN", 90f, 90f),
+            new Column("STATE", 184f, 62f),
+            new Column("FUEL", 250f, 38f, rightAligned: true),
+            new Column("AMMO", 292f, 38f, rightAligned: true),
         };
 
-        /// <summary>The two-column header over the Wing tab's squadron list.</summary>
+        /// <summary>Pilot-list header geometry.</summary>
         private static readonly Column[] PilotColumns =
         {
             new Column("CALLSIGN", 30f, 88f),
@@ -800,7 +711,7 @@ namespace WingCommand
             return y - Space4;
         }
 
-        /// <summary>A page-turn arrow at one end of a list's footer strip.</summary>
+        /// <summary>Footer page-turn arrow.</summary>
         private static WingButton Pager(RectTransform parent, float y, string glyph, Action onClick)
         {
             float x = glyph == "<" ? Pad : PanelWidth - Pad - ArrowWidth;
@@ -815,11 +726,8 @@ namespace WingCommand
                            PanelWidth - Pad * 2f - (ArrowWidth + Gap) * 2f, RowHeight),
                   Dim(), FontMicro, FontStyles.Normal, TextAlignmentOptions.Center);
 
-        /// <summary>
-        /// A compact page control that shares a header row with a catalogue or launch-mode
-        /// selector. It deliberately uses the same inset quiet arrows as steppers while the
-        /// full-width footer pager remains reserved for scrolling a list below it.
-        /// </summary>
+        /// <summary>Compact header pager with quiet inset arrows, separate from full-width list
+        /// footers.</summary>
         private static RectTransform HeaderPager(RectTransform parent, float y, Action onPrevious,
                                                  Action onNext, out WingButton previous,
                                                  out TMP_Text label, out WingButton next)
@@ -850,7 +758,7 @@ namespace WingCommand
             return root;
         }
 
-        /// <summary>Apply one consistent edge state and compact fraction to a header pager.</summary>
+        /// <summary>Update header pager bounds and page fraction consistently.</summary>
         private static void RefreshHeaderPager(RectTransform pager, WingButton previous, TMP_Text label,
                                                WingButton next, int page, int pageCount)
         {
@@ -876,7 +784,7 @@ namespace WingCommand
         private static string PageFraction(int page, int pageCount) =>
             (page + 1) + " / " + pageCount;
 
-        /// <summary>Shared text treatment for the three full-width list footers.</summary>
+        /// <summary>Shared list-footer count and pagination text.</summary>
         private static string PageSummary(int count, int page, int pageCount,
                                           string singular, string plural)
         {
@@ -888,11 +796,7 @@ namespace WingCommand
                 : "PAGE " + PageFraction(page, pageCount) + "  ·  " + count + " " + noun;
         }
 
-        /// <summary>
-        /// One cell of the order grid. Carries the panel's body size now that the order
-        /// names are single words — the ten-pixel type this used to need was a symptom of
-        /// labels like "Deliver Cargo" fighting a third of the panel for room.
-        /// </summary>
+        /// <summary>Order-grid button using standard body text.</summary>
         private static WingButton GridButton(RectTransform parent, string text, float x, float y,
                                              float w, Action onClick) =>
             GridButton(parent, text, x, y, w, onClick, UiButtonStyle.Default);
@@ -901,31 +805,8 @@ namespace WingCommand
                                              float w, Action onClick, UiButtonStyle style) =>
             WingUi.Button(parent, text, new Rect(x, y, w, RowHeight), FontSmall, style, onClick);
 
-        /// <summary>
-        /// The panel's one feedback channel, given a place of its own on every page.
-        ///
-        /// Everything the panel says back to the player arrives here — what an armed point
-        /// order is waiting for, what the current rules of engagement actually mean, and
-        /// now what whichever control the pointer is resting on will do. It was ten-pixel
-        /// grey text floating under the order grid with nothing marking it as a distinct
-        /// region, which is a poor home for the only place the panel ever answers you.
-        ///
-        /// Two lines, because that is what the explanations need: most orders take a short
-        /// sentence to say what they do and a second clause to say who they do it to, and
-        /// a one-line strip was silently clipping the half that made them different from
-        /// each other.
-        /// </summary>
-        /// <summary>
-        /// Place the strip at a fixed distance from the bottom of the panel, the same on
-        /// every page.
-        ///
-        /// Pinned rather than flowing after the page's content, because the panel is now
-        /// one height for all four tabs and a strip that simply followed the last control
-        /// would sit two thirds of the way down the shorter pages, floating in the middle
-        /// of nothing. Pinned, the dead space that uniform sizing costs the short pages
-        /// falls between the content and the strip, where it reads as margin — and the one
-        /// line that answers the pointer is in the same place on every tab.
-        /// </summary>
+        /// <summary>Pin each page's two-line status/hover strip at the same bottom position, independent
+        /// of content height.</summary>
         private static void PinStatusStrip(RectTransform parent, float y, Page page)
         {
             float w = PanelWidth - Pad * 2f;
@@ -935,14 +816,7 @@ namespace WingCommand
             statusLabels[(int)page] = label;
         }
 
-        /// <summary>
-        /// Put the hovered control's description on the page's status line, falling back to
-        /// whatever that page normally reports.
-        ///
-        /// Called for every page on every refresh rather than only the one being drawn,
-        /// because the tooltip is the only thing on the panel that changes without the
-        /// player pressing anything.
-        /// </summary>
+        /// <summary>Show current hover help or the page fallback in its status strip.</summary>
         private static void RefreshStatusStrip(Page page, string fallback)
         {
             TMP_Text label = statusLabels[(int)page];
@@ -955,10 +829,7 @@ namespace WingCommand
             label.color = hovering ? WingUi.TextPrimary : Dim();
         }
 
-        /// <summary>
-        /// A note displayed across the whole of an empty list area. Switched on and off
-        /// by the refresh when the list it belongs to is empty.
-        /// </summary>
+        /// <summary>Full-area empty-list message toggled during refresh.</summary>
         private static TMP_Text EmptyNote(RectTransform area, string text)
         {
             TMP_Text label = Label(area, text,
@@ -971,17 +842,13 @@ namespace WingCommand
             return label;
         }
 
-        /// <summary>A line of explanatory text under a heading, at the panel's hint weight.</summary>
+        /// <summary>Secondary explanatory line beneath a section heading.</summary>
         private static TMP_Text Hint(RectTransform parent, float y, string text) =>
             Label(parent, text, new Rect(Pad, y, PanelWidth - Pad * 2f, LineHeight),
                   Dim(), FontMicro, FontStyles.Normal, TextAlignmentOptions.Left);
 
-        /// <summary>
-        /// The data bar and the two display metrics.
-        ///
-        /// Refreshed for every page rather than only the visible one, because these sit
-        /// above the tab strip and stay on screen whichever page is showing.
-        /// </summary>
+        /// <summary>Refresh persistent top-bar state and metrics independently of the selected
+        /// tab.</summary>
         private static void RefreshDataBar(WingRegistry wing)
         {
             int count = wing?.Count ?? 0;
@@ -1009,8 +876,7 @@ namespace WingCommand
 
             if (fuelMetric != null)
             {
-                // The flight's *minimum* fuel, not its average: the wingman closest to bingo
-                // is the one that decides when the flight has to turn for home.
+                // Report the lowest member fuel fraction, which determines the first bingo call.
                 float lowest = 1f;
                 bool any = false;
                 if (wing != null)
@@ -1035,16 +901,10 @@ namespace WingCommand
             }
         }
 
-        // -------------------------------------------------------------------- refreshing
+        // Panel refresh.
 
-        /// <summary>
-        /// Repaint the page the player is actually looking at.
-        ///
-        /// Only the visible page is refreshed. With two tabs that distinction was academic;
-        /// with four it is not, because rebuilding the requisition catalogue walks the
-        /// faction's whole supply dictionary and would otherwise be paid five times a second
-        /// while the player was reading the flight roster.
-        /// </summary>
+        /// <summary>Refresh only the visible page so hidden shop catalogue scans do not run while
+        /// inspecting other tabs.</summary>
         private static void Refresh(WingRegistry wing)
         {
             PruneFocus(wing);
@@ -1058,20 +918,19 @@ namespace WingCommand
                     RefreshSupplyStatus();
                     RefreshShop();
                     RefreshLaunchFrom();
-                    // Refreshed after the catalogue, because selecting or exhausting a shop
-                    // row can change which reserve action is valid for the current airframe.
+                    // Refresh reserve after catalogue changes can alter selected-airframe actions.
                     RefreshReserve();
-                    RefreshStatusStrip(Page.Supply, HoverPrompt);
+                    RefreshStatusStrip(Page.Supply, "Choose a pilot, airframe and launch base, then requisition.");
                     break;
 
                 case Page.Loadout:
                     RefreshLoadoutPage();
-                    RefreshStatusStrip(Page.Loadout, HoverPrompt);
+                    RefreshStatusStrip(Page.Loadout, "Click a pylon to edit its stores. Select this fit on SUPPLY.");
                     break;
 
                 case Page.Wing:
                     RefreshWingPage(wing);
-                    RefreshStatusStrip(Page.Wing, HoverPrompt);
+                    RefreshStatusStrip(Page.Wing, "Select a pilot to inspect their record and assigned aircraft.");
                     break;
 
                 default:
@@ -1080,18 +939,12 @@ namespace WingCommand
             }
         }
 
-        // ------------------------------------------------------- shared roster plumbing
+        // Shared roster helpers.
 
         private static AircraftDefinition DefinitionOf(WingMember member) =>
             member != null && member.Aircraft != null ? member.Aircraft.definition : null;
 
-        /// <summary>
-        /// The <c>&lt;</c> page <c>&gt;</c> strip under the squadron list.
-        ///
-        /// A roster of pilots is larger than the three rows a page shows, so without this
-        /// the rest of the squadron would be hidden with nothing on screen to say so. Both
-        /// arrows go dead on a single page rather than looking available and doing nothing.
-        /// </summary>
+        /// <summary>Pilot-list pager; disable arrows when only one page exists.</summary>
         private sealed class PilotPager
         {
             private readonly WingButton prev;
@@ -1112,7 +965,7 @@ namespace WingCommand
                 if (wing != null) RefreshWingPage(wing);
             }
 
-            /// <summary>Clamp against the live list and return the first visible index.</summary>
+            /// <summary>Clamp page to current count and return its starting index.</summary>
             public int Refresh(int count)
             {
                 int pages = Mathf.Max(1, Mathf.CeilToInt(count / (float)SquadronRowsPerPage));
@@ -1134,15 +987,8 @@ namespace WingCommand
             while (rows.Count < SquadronRowsPerPage) rows.Add(new PilotRow(area, rows.Count));
         }
 
-        /// <summary>
-        /// One row of the squadron list.
-        ///
-        /// Unlike the Tactical page's <see cref="RosterRow"/> this lists people, not
-        /// aircraft, and its state signal is a colour rail rather than a second column: rank
-        /// drives the left badge and right rail, and a lost pilot's whole row washes red with
-        /// a KIA mark so the widow of a five-strong squadron is unmissable. Clicking a row
-        /// inspects it; selecting a lost pilot only shows their record.
-        /// </summary>
+        /// <summary>Pilot record row with rank styling and loss marking. Clicking inspects the person
+        /// without assigning them, including lost pilots.</summary>
         private sealed class PilotRow
         {
             private readonly GameObject go;
@@ -1167,8 +1013,7 @@ namespace WingCommand
                 selectionRule = Rule(rt, new Rect(0f, 0f, 3f, RowHeight), WingColor());
                 rankRail = Rule(rt, new Rect(width - 6f, 0f, 3f, RowHeight), Dim());
 
-                // A red wash that sits over the fill (so it reads as a mark) but under the
-                // labels (so the record stays readable). Shown only for lost pilots.
+                // Place the loss wash above row fill but below readable labels.
                 kiaOverlay = Rule(rt, new Rect(0f, 0f, width, RowHeight),
                                   new Color(Alert().r, Alert().g, Alert().b, 0.24f));
                 kiaOverlay.gameObject.SetActive(false);
@@ -1213,16 +1058,8 @@ namespace WingCommand
             }
         }
 
-        /// <summary>
-        /// Press once to arm, press again to confirm — the panel's one idiom for a control
-        /// that cannot be taken back.
-        ///
-        /// Held per control rather than globally, so arming the roster's RTB does not also
-        /// arm the reserve's RELEASE. The subject is carried alongside the timer because
-        /// what was armed matters as much as when: selecting a different airframe between
-        /// the two presses has to disarm, or the confirmation belongs to something the
-        /// player is no longer looking at.
-        /// </summary>
+        /// <summary>Per-control arm/confirm state bound to subject and timeout. Changing subject disarms;
+        /// RTB and reserve release do not share confirmation.</summary>
         private sealed class Confirmation
         {
             private const float ArmSeconds = 3f;
@@ -1245,8 +1082,7 @@ namespace WingCommand
 
         private static WingRegistry Wing() => WingCommandManager.Instance?.Wing;
 
-        // The widgets themselves live in WingUi, which is also where the aircraft-recovery
-        // prompt draws from. These are the page's local names for them.
+        // Local aliases for shared WingUi widgets also used by recovery prompts.
 
         private static TMP_Text Label(RectTransform parent, string text, Rect rect,
                                       Color color, float size, FontStyles style,
@@ -1304,10 +1140,8 @@ namespace WingCommand
                 : button.GetComponentInChildren<TextMeshProUGUI>(includeInactive: true);
         }
 
-        /// <summary>
-        /// Locate the button's highlight image by mirroring the path a working screen uses
-        /// on its own button, falling back to any non-Button image on the target.
-        /// </summary>
+        /// <summary>Find highlight by matching a working bezel button path, then fall back to a non-Button
+        /// image.</summary>
         private static Image FindHighlight(Button button, MFDScreen template)
         {
             if (button == null) return null;
@@ -1349,7 +1183,7 @@ namespace WingCommand
             return string.Join("/", parts.ToArray());
         }
 
-        // ------------------------------------------------------------------- styling
+        // Panel styling.
 
         private static Color Green() => WingUi.Green;
 
@@ -1357,7 +1191,7 @@ namespace WingCommand
 
         private static Color Alert() => WingUi.Alert;
 
-        private static Color Friendly() => WingUi.Friendly;
+        private static Color Friendly() => WingUi.TextPrimary;
 
         private static Color WingColor() => WingMarkers.MemberColor;
 
@@ -1367,12 +1201,8 @@ namespace WingCommand
         private static Color MemberFrameColor() => WingColor().WithAlpha(0.58f);
         private static Color FrameColor() => WingUi.FrameColor;
 
-        /// <summary>
-        /// A rank's accent: the greener and more senior the pilot, the warmer and brighter
-        /// the marker gets. Veterans and aces use the two accents the stock HUD already has a
-        /// place for rather than inventing a new colour family, so the panel stays on the
-        /// game's palette.
-        /// </summary>
+        /// <summary>Map pilot rank to shared theme accents, increasing warmth and emphasis with
+        /// seniority.</summary>
         private static Color RankColor(WingRank rank)
         {
             switch (rank)
@@ -1385,7 +1215,7 @@ namespace WingCommand
             }
         }
 
-        /// <summary>The one-letter mark put in a pilot's rank slot.</summary>
+        /// <summary>Single-letter pilot rank marker.</summary>
         private static string RankBadgeText(WingRank rank)
         {
             switch (rank)
@@ -1398,7 +1228,7 @@ namespace WingCommand
             }
         }
 
-        /// <summary>The wingman flying this pilot, or null when they are on the ground.</summary>
+        /// <summary>Member flown by this pilot, or null while unassigned.</summary>
         private static WingMember FlyingMember(WingRegistry wing, WingPilot pilot)
         {
             if (wing == null || pilot == null) return null;
@@ -1410,37 +1240,23 @@ namespace WingCommand
             return null;
         }
 
-        // ----------------------------------------------------------------------- text
+        // Display text.
 
-        /// <summary>
-        /// A round figure with thousands separators: funds, prices, kilograms.
-        ///
-        /// Four- and five-digit numbers are common on this panel — a mid-game funds balance,
-        /// an airframe price, a loadout's mass — and "20640" is read a digit at a time where
-        /// "20,640" is read at a glance.
-        /// </summary>
+        /// <summary>Round and group numeric readouts for funds, prices, and mass.</summary>
         private static string Grouped(float amount) =>
             Mathf.RoundToInt(amount).ToString("N0", System.Globalization.CultureInfo.InvariantCulture);
 
 
-        /// <summary>
-        /// The order column, which names the target when there is one.
-        ///
-        /// With targets distributed across the wing, "ENGAGE" on four rows says nothing
-        /// about who went after what. The target's own designation is the useful thing to
-        /// read here, and it pairs with the amber marks on the map and HUD.
-        /// </summary>
+        /// <summary>Compact order status with designation where useful, distinguishing distributed
+        /// attacks.</summary>
         private static string ShortOrder(WingMember m)
         {
-            // What it is actually doing outranks what it was told to do. Null means it is
-            // flying the order, so fall through to naming that.
+            // Display active override behaviour before the retained order.
             string behaviour = WingBehaviourLabels.Label(m.Behaviour.BehaviourId);
             if (behaviour != null) return behaviour;
 
-            // Splash 'Em keeps its own name rather than borrowing the target's. The
-            // column is too narrow for both, and which of the two target orders a wingman
-            // is flying is the thing that cannot be read anywhere else on this page - the
-            // map already draws an amber line to the unit either way.
+            // Keep Splash's distinct order label; the map already identifies its target and the column
+            // cannot fit both.
             if (m.Order == WingOrder.FireForEffect)
                 return WingOrderCatalog.ShortLabel(m.Order);
 

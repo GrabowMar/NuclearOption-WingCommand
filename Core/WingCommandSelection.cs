@@ -2,8 +2,8 @@ using System.Collections.Generic;
 
 namespace WingCommand
 {
- /// <summary>Tactical command selection, independent of DynamicMap.selectedIcons and weapon
- /// targeting.</summary>
+    /// <summary>Tactical command selection, independent of DynamicMap.selectedIcons and weapon
+    /// targeting.</summary>
     internal sealed class WingCommandSelection
     {
         internal enum Mode

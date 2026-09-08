@@ -4,10 +4,10 @@ namespace WingCommand
 {
     internal enum DeparturePhase { None, Taxiing, Departing, Airborne }
 
- /// <summary>Keeps one current departure report per airframe on a rate-limited radio channel.</summary>
+    /// <summary>Keeps one current departure report per airframe on a rate-limited radio channel.</summary>
     internal sealed class DepartureChatter
     {
-        internal const float ChannelSpacingSeconds = 5f;
+        internal const float ChannelSpacingSeconds = 12f;
         internal const float ReportLifetimeSeconds = 20f;
 
         private sealed class Progress

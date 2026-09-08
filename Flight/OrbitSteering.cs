@@ -2,17 +2,17 @@ using UnityEngine;
 
 namespace WingCommand
 {
- /// <summary>Native fixed-wing and rotary steering around an orbit anchor.</summary>
+    /// <summary>Native fixed-wing and rotary steering around an orbit anchor.</summary>
     internal static class OrbitSteering
     {
-     /// <summary>Fixed-wing orbit height above anchor, in metres.</summary>
+        /// <summary>Fixed-wing orbit height above anchor, in metres.</summary>
         private const float FixedWingAltitude = 1500f;
 
-     /// <summary>Rotary orbit height above anchor, in metres.</summary>
+        /// <summary>Rotary orbit height above anchor, in metres.</summary>
         private const float RotaryAltitude = 250f;
 
-     /// <summary>Steer an aircraft around anchor.</summary> <param name="slot">Selects a separate orbit
-     /// radius; all members turn in the same direction.</param>
+        /// <summary>Steer an aircraft around anchor.</summary> <param name="slot">Selects a separate orbit
+        /// radius; all members turn in the same direction.</param>
         public static void Fly(Aircraft aircraft, ControlInputs controls,
                                GlobalPosition anchor, float radius, int slot)
         {

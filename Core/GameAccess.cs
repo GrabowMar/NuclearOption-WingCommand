@@ -7,9 +7,9 @@ using UnityEngine.UI;
 
 namespace WingCommand
 {
- /// <summary>Caches private radial and MFD access through Harmony AccessTools. Local application policy
- /// blocks publicizer tasks. Resolve at startup and disable unavailable integrations instead of
- /// throwing each frame.</summary>
+    /// <summary>Caches private radial and MFD access through Harmony AccessTools. Local application policy
+    /// blocks publicizer tasks. Resolve at startup and disable unavailable integrations instead of
+    /// throwing each frame.</summary>
     internal static partial class GameAccess
     {
         // Native radial fields.
@@ -31,12 +31,12 @@ namespace WingCommand
         private static AccessTools.FieldRef<RadialMenuAction, Color> bgActiveRef;
         private static AccessTools.FieldRef<RadialMenuAction, Image> iconImageRef;
 
-     /// <summary>Whether all required native radial members resolved.</summary>
+        /// <summary>Whether all required native radial members resolved.</summary>
         public static bool Available { get; private set; }
 
         public static string UnavailableReason { get; private set; }
 
-     /// <summary>Whether native MFD internals resolved for the WMC screen.</summary>
+        /// <summary>Whether native MFD internals resolved for the WMC screen.</summary>
         public static bool MfdAvailable { get; private set; }
 
         // Read the native landing state's chosen airbase; a guessed nearest base may differ from the
@@ -45,14 +45,14 @@ namespace WingCommand
         private static AccessTools.FieldRef<AIHeloLandingState, Airbase.VerticalLandingPoint>
             heloLandingPointRef;
 
-     /// <summary>Whether native landing destinations are readable.</summary>
+        /// <summary>Whether native landing destinations are readable.</summary>
         public static bool LandingDestinationAvailable { get; private set; }
 
         // Read the private spawned prefab immediately after TrySpawnAircraft, before registry
         // discovery.
         private static AccessTools.FieldRef<Hangar, GameObject> hangarSpawnedObjectRef;
 
-     /// <summary>Whether the hangar's spawned object is readable.</summary>
+        /// <summary>Whether the hangar's spawned object is readable.</summary>
         public static bool HangarSpawnAvailable { get; private set; }
 
         public static void Initialise()
@@ -162,8 +162,8 @@ namespace WingCommand
 
         // Landing accessors.
 
-     /// <summary>Read the native landing destination. Return false until the state chooses one or if
-     /// reflection is unavailable; callers should omit the line rather than guess a base.</summary>
+        /// <summary>Read the native landing destination. Return false until the state chooses one or if
+        /// reflection is unavailable; callers should omit the line rather than guess a base.</summary>
         public static bool TryGetLandingDestination(Pilot pilot, out GlobalPosition destination)
         {
             destination = default;
@@ -196,7 +196,7 @@ namespace WingCommand
             return false;
         }
 
-     /// <summary>Read the assigned landing runway's endpoints and nominal approach direction.</summary>
+        /// <summary>Read the assigned landing runway's endpoints and nominal approach direction.</summary>
         public static bool TryGetLandingRunway(Pilot pilot, out GlobalPosition start, out GlobalPosition end, out Vector3 approachDir)
         {
             start = default;
@@ -250,8 +250,8 @@ namespace WingCommand
         public static void SetIconSprite(RadialMenuAction action, Sprite sprite) =>
             iconSpriteRef(action) = sprite;
 
-     /// <summary>Copy native sprites and colours; newly created actions otherwise have null sprites and
-     /// transparent colours.</summary>
+        /// <summary>Copy native sprites and colours; newly created actions otherwise have null sprites and
+        /// transparent colours.</summary>
         public static void CopyAppearance(RadialMenuAction target, RadialMenuAction template)
         {
             if (target == null || template == null) return;

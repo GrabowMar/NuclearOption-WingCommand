@@ -1,68 +1,63 @@
 namespace WingCommand
 {
-    /// <summary>Mission fidelity: full behavior, or reduced geometry and optional work.</summary>
+    /// <summary>Mission mode selecting full behaviour or reduced optional work and geometry
+    /// cadence.</summary>
     internal enum WingMode
     {
         Smart,
         Performance,
     }
 
-    /// <summary>
-    /// Mission-wide feature gates and update cadence, frozen from <c>AI/Mode</c> at
-    /// mission start. Per-aircraft decision state belongs to WingMemberBrain; this
-    /// class never selects a behavior, changes an order or writes flight controls.
-    /// </summary>
+    /// <summary>Snapshots AI/Mode at mission start for shared feature gates and timing. Member brains own
+    /// decisions; fidelity never edits intent or aircraft controls.</summary>
     internal static class WingFidelity
     {
         private static bool performance;
 
         public static WingMode Mode { get; private set; } = WingMode.Smart;
 
-        /// <summary>Snapshot the mode for the mission about to start.</summary>
+        /// <summary>Freeze the selected mode for the next mission.</summary>
         public static void Begin(WingMode mode)
         {
             Mode = mode;
             performance = mode == WingMode.Performance;
         }
 
-        /// <summary>True in Smart mode: the full, expensive behaviour set is available.</summary>
+        /// <summary>Whether the complete Smart behaviour set is enabled.</summary>
         public static bool Full => !performance;
 
-        /// <summary>Physics ticks a wingman may coast between full formation recomputes.</summary>
+        /// <summary>Physics-tick interval between full formation geometry updates.</summary>
         public static int GeometryStride => performance ? 3 : 1;
 
-        /// <summary>Multiplies every periodic-check and UI-refresh interval.</summary>
+        /// <summary>Multiplier for mode-scaled periodic and UI intervals.</summary>
         public static float IntervalScale => performance ? 2.5f : 1f;
 
-        /// <summary>
-        /// A base interval in seconds, stretched for the current mode. Missile evasion, the
-        /// takeover prompt and the radio anti-spam gaps are deliberately left on their own
-        /// fixed timers.
-        /// </summary>
+        /// <summary>Scale a base interval by mode. Missile evasion, takeover interaction, and radio
+        /// anti-spam use independent fixed timers.</summary>
         public static float Interval(float seconds) => seconds * IntervalScale;
 
-        // Behaviour gates. All follow Full today; named individually so a call site reads
-        // for itself and a future third mode can differ per behaviour.
+        // Named feature gates share the current full-mode setting.
 
-        /// <summary>Terrain floor, turn-side mirror, combat-spread reaction, rejoin-lead, reactive widen.</summary>
+        /// <summary>Terrain clearance, turn mirroring, threat spacing, and rejoin prediction
+        /// features.</summary>
         public static bool SmartFormation => Full;
 
-        /// <summary>The <c>CombatAI.ChooseHQTarget</c> deconfliction postfix - the biggest host cost.</summary>
+        /// <summary>Enable native target-search deconfliction, a significant host cost.</summary>
         public static bool Deconfliction => Full;
 
-        /// <summary>Let wingmen search for and fire on opportunity targets from the slot.</summary>
+        /// <summary>Allow station-keeping opportunity target scans and fire.</summary>
         public static bool OpportunityFire => Full;
 
-        /// <summary>Non-critical radio calls and idle crew banter.</summary>
+        /// <summary>Enable noncritical calls and ambient banter.</summary>
         public static bool RichChatter => Full;
 
-        /// <summary>The manoeuvres menu and the Manoeuvre order.</summary>
+        /// <summary>Expose manoeuvre commands and menu.</summary>
         public static bool Manoeuvres => Full;
 
-        /// <summary>The Jam Target order.</summary>
+        /// <summary>Expose targeted pod jamming.</summary>
         public static bool Jamming => Full;
 
-        /// <summary>Metres of terrain clearance a formation slot keeps, 0 when disabled.</summary>
+        /// <summary>Formation terrain clearance in metres, or zero when disabled.</summary>
         public static float TerrainClearance => SmartFormation ? 45f : 0f;
 
         public static string Summary() =>

@@ -171,8 +171,8 @@ namespace WingCommand.PureTests
             Assert.False(registry.RemoveIfCurrent(Id, failed));
             cache.ObserveMissing(Id);
 
-            // The member's stale-controller guard first requires an observed entry.
-            // Recording this unsuccessful first attempt makes the successor visible.
+            // Record the failed first cache attempt so stale-controller checks can detect its
+            // successor.
             Assert.True(cache.Contains(Id));
             Assert.False(cache.IsCurrent(Id, registry.Find(Id)));
             Assert.Same(successorState, cache.GetOrCreate(Id, registry.Find(Id), null));

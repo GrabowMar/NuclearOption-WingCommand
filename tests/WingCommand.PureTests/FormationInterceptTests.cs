@@ -7,6 +7,37 @@ namespace WingCommand.PureTests
     public class FormationInterceptTests
     {
         [Theory]
+        [InlineData(-3000f)]
+        [InlineData(3000f)]
+        public void CatchUpSteersAtFutureCrossingPointDespiteCurrentHeading(float lateralGap)
+        {
+            var gap = new Vector2(lateralGap, 0f);
+            var leader = new Vector2(0f, 150f);
+            var own = new Vector2(0f, 200f);
+            var plan = FormationIntercept.Solve(gap, leader, Vector2.Zero, leader, 200f, 220f, 0f);
+            var guidance = FormationGuidance.Horizontal(gap, own, leader, Vector2.UnitY,
+                plan.Gap, plan.ArrivalVelocity, gap.Length(), 700f, 200f, 1f, 1f, 1f);
+            Vector2 course = Vector2.Normalize(guidance.Aim);
+            Assert.True(course.Y > 0.5f); // Lead the crossing player, not their current position.
+            Assert.InRange(Vector2.Distance(course, Vector2.Normalize(plan.Gap)), 0f, 0.00001f);
+            Assert.InRange(Math.Abs(guidance.Aim.Length() - 700f), 0f, 0.001f);
+        }
+
+        [Fact]
+        public void CloseMergeRetainsVelocityMatchedArrivalCurve()
+        {
+            var gap = new Vector2(300f, 200f);
+            var own = new Vector2(0f, 180f);
+            var leader = new Vector2(0f, 150f);
+            var plan = FormationIntercept.Solve(gap, leader, Vector2.Zero, leader, 180f, 220f, 0f);
+            var expected = FormationTracking.Capture(plan.Gap.X, plan.Gap.Y,
+                own.X, own.Y, leader.X, leader.Y, gap.Length() / 180f, 650f / 180f);
+            var actual = FormationGuidance.Horizontal(gap, own, leader, Vector2.UnitY,
+                plan.Gap, plan.ArrivalVelocity, gap.Length(), 650f, 180f, 1f, 1f, 1f);
+            Assert.Equal(new Vector2(expected.x, expected.z), actual.Aim);
+        }
+
+        [Theory]
         [InlineData(1000f, 100f, 200f, 10f)]
         [InlineData(1200f, -100f, 200f, 4f)]
         [InlineData(1000f, -100f, 100f, 5f)]

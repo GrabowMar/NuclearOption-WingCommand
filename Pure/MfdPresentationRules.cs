@@ -2,7 +2,7 @@ using System;
 
 namespace WingCommand
 {
-    /// <summary>Owns a temporary time scale until the panel closes or another system changes it.</summary>
+    /// <summary>Owns temporary panel time scale until close or an external change.</summary>
     internal struct TacticalPauseState
     {
         private bool requested;
@@ -15,8 +15,8 @@ namespace WingCommand
             bool opening = shouldPause && !requested;
             requested = shouldPause;
 
-            // A native pause or another mod takes precedence. Do not reacquire until
-            // the next opening, or closing WMC could resume somebody else's pause.
+            // Relinquish time scale after native or external changes until next opening; closing must
+            // not undo another owner's pause.
             if (ownsScale && currentScale != appliedScale) ownsScale = false;
             if (!shouldPause)
             {
@@ -60,29 +60,25 @@ namespace WingCommand
             float min = left ? viewportLeft : Math.Max(viewportLeft, bezelRight + gap);
             float max = left ? Math.Min(viewportRight, bezelLeft - gap) : viewportRight;
             float center = centerY ?? (viewportTop + viewportBottom) * 0.5f;
-            // Unequal top/bottom reserves limit clearance; they must not move the
-            // visual center away from the map. Fit symmetrically around that center.
+            // Fit around the map's visual centre using the smaller vertical clearance; asymmetric
+            // reserves must not shift it.
             float availableHeight = 2f * Math.Min(viewportTop - center, center - viewportBottom);
             float scale = FitScale(width, height, max - min, availableHeight);
-            // Seat the panel beside its button column, not at a prefab's off-screen origin.
+            // Position beside the native button column instead of an off-screen prefab origin.
             float top = center + height * scale * 0.5f;
             return new Placement(left ? max - width * scale : min, top, scale);
         }
 
-        // A missing/invalid prefab measurement must defer installation, never produce a
-        // zero-size (or infinitely large) screen that still intercepts map input.
+        // Defer installation when dimensions are invalid; an invisible or enormous screen must not
+        // capture map input.
         public static float FitScale(float width, float height, float availableWidth, float availableHeight)
         {
             if (!PositiveFinite(width) || !PositiveFinite(height) ||
                 !PositiveFinite(availableWidth) || !PositiveFinite(availableHeight)) return 0f;
-            return Math.Min(1f, Math.Min(availableWidth / width, availableHeight / height));
+            return Math.Min(availableWidth / width, availableHeight / height);
         }
 
-        /// <summary>
-        /// Sizing calculation for covering/filling a container with an image (aspect fill / cover).
-        /// Returns the rendered width and height that preserves the sprite's aspect ratio
-        /// while completely covering the container area.
-        /// </summary>
+        /// <summary>Compute aspect-preserving image dimensions that fully cover the container.</summary>
         public static (float RenderedWidth, float RenderedHeight) CalculateAspectFill(
             float containerWidth, float containerHeight, float spriteWidth, float spriteHeight)
         {

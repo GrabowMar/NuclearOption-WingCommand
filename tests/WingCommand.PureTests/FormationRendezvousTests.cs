@@ -59,12 +59,10 @@ namespace WingCommand.PureTests
         public void BankAndAccelerationLimitedAircraftActuallyConverges(
             float x, float z, float headingDegrees, float leaderSpeed, float aggression, float damping)
         {
-            // Receding-horizon integration, not an endpoint/formula assertion. The
-            // Target and follower advance every 50ms through the same production
-            // horizontal command and airspeed/altitude bank envelope as live flight.
-            // Roll/engine lag and finite braking model the remaining physical plant.
+            // Integrate target and follower every 50 ms through production steering and bank limits,
+            // with independent roll/engine lag and braking dynamics.
             const float dt = 0.05f, spacing = 120f;
-            // Actual installed VT-7 metadata: stall180km/h, AI landing100m/s.
+            // Installed VT-7 metadata uses 180 km/h stall and 100 m/s AI approach speed.
             float minimum = FormationGuidance.MinimumAirspeed(180f, 100f);
             float heading = headingDegrees * (float)Math.PI / 180f;
             float speed = 95f, bank = 0f, leaderZ = 0f, finalWorst = 0f;
@@ -112,11 +110,13 @@ namespace WingCommand.PureTests
                     55f, 18f, 15f, 600f, out float sx, out _, out float sz);
                 float error = FormationTracking.WrapDegrees(((float)Math.Atan2(sx, sz) - heading) * 180f / (float)Math.PI);
                 float airframeBank = FormationGuidance.AirborneBankLimit(600f, speed, minimum / 1.2f);
-                float bankCeiling = Math.Min(distance > 1500f ? 45f : 40f + 18f * blend, airframeBank);
+                float bankCeiling = Math.Min(distance > 1500f ? 60f : 40f + 18f * blend, airframeBank);
                 bankCeiling += (Math.Min(bankCeiling, 25f) - bankCeiling) * recovery.Blend;
-                float bankDemand = Clamp(Math.Abs(error) * (distance > 1500f ? 1.5f : 3f), 8f, bankCeiling);
-                // Decompiled AutoAim projects a level lateral waypoint to a 90deg
-                // roll demand, then clamps to bankAllowed and applies these factors.
+                float bankDemand = distance > 1500f
+                    ? Math.Min(FormationGuidance.InterceptBank(error), bankCeiling)
+                    : Clamp(Math.Abs(error) * 3f, 8f, bankCeiling);
+                // Model native lateral AutoAim's 90-degree roll request, clamped to allowed bank and
+                // scaled by its factors.
                 float demandedBank = Math.Sign(error) * FormationControlRules.BankInput(bankDemand, 600f) * 0.8f * 1.2f;
                 bank += (demandedBank - bank) * (1f - (float)Math.Exp(-dt / 0.8f));
                 heading += 9.81f * (float)Math.Tan(bank * Math.PI / 180d) / Math.Max(speed, 1f) * dt;
@@ -144,8 +144,8 @@ namespace WingCommand.PureTests
         [Fact]
         public void VagrantCruisingAtPlayerSpeedDoesNotEnterAnUnnecessaryHoldingCircuit()
         {
-            // EncyclopediaBrowser divides AircraftInfo.stallSpeed by3.6; the
-            // installed VT-7's native landing target100 is unrelated to stall50.
+            // Convert native published stall units: 180 km/h is 50 m/s, independent of the 100 m/s
+            // approach target.
             float stall = FormationGuidance.StallAirspeed(180f, 100f);
             float minimum = FormationGuidance.MinimumAirspeed(180f, 100f);
             Assert.Equal(50f, stall);

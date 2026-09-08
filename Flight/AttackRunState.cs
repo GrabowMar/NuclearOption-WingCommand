@@ -2,25 +2,25 @@ using UnityEngine;
 
 namespace WingCommand
 {
- /// <summary>Flies the explicit target attack independently of native autonomous target selection,
- /// which does not honour Pilot.SetPrimaryTarget. Runs in, fires, and returns when complete.</summary>
+    /// <summary>Flies the explicit target attack independently of native autonomous target selection,
+    /// which does not honour Pilot.SetPrimaryTarget. Runs in, fires, and returns when complete.</summary>
     internal class AttackRunState : WingPilotState
     {
         internal override bool RestartOnOrderChange => false;
-     /// <summary>Run-in height above surface targets, in metres.</summary>
+        /// <summary>Run-in height above surface targets, in metres.</summary>
         private const float AttackAltitude = 900f;
 
-     /// <summary>Lower surface-attack height for rotary aircraft.</summary>
+        /// <summary>Lower surface-attack height for rotary aircraft.</summary>
         private const float RotaryAttackAltitude = 220f;
 
-     /// <summary>Search radius around a destroyed Splash target; expend within the area rather than
-     /// chasing survivors across the map.</summary>
+        /// <summary>Search radius around a destroyed Splash target; expend within the area rather than
+        /// chasing survivors across the map.</summary>
         private const float SplashSweepRadius = 8000f;
 
-     /// <summary>Timestamp of the last shot, used to enforce the shared firing interval.</summary>
+        /// <summary>Timestamp of the last shot, used to enforce the shared firing interval.</summary>
         private float lastFiredTime;
 
-     /// <summary>Last known target position for Splash follow-on searches.</summary>
+        /// <summary>Last known target position for Splash follow-on searches.</summary>
         private GlobalPosition lastTargetPos;
 
         public AttackRunState(WingMember member) : base(member)
@@ -83,8 +83,8 @@ namespace WingCommand
             Shoot(target);
         }
 
-     /// <summary>Rejoin after the run. Announce Winchester only when ammunition is empty; no-target
-     /// completion is quiet.</summary>
+        /// <summary>Rejoin after the run. Announce Winchester only when ammunition is empty; no-target
+        /// completion is quiet.</summary>
         private void FinishRun()
         {
             WingComms.Say(member, member.Ammo <= 0
@@ -93,8 +93,8 @@ namespace WingCommand
             CompleteTask(WingOrder.Formation);
         }
 
-     /// <summary>Retarget Splash near the last designation; return false for other orders or an empty
-     /// sweep.</summary>
+        /// <summary>Retarget Splash near the last designation; return false for other orders or an empty
+        /// sweep.</summary>
         private bool TryRollToNextExpendTarget()
         {
             if (member.Order != WingOrder.FireForEffect) return false;

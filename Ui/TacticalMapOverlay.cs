@@ -5,23 +5,17 @@ using UnityEngine.UI;
 
 namespace WingCommand
 {
-    /// <summary>
-    /// What the wing's orders look like on the maximised map: a marker at each commanded
-    /// point, and a line from every wingman to the point it is flying to.
-    ///
-    /// The markers alone said where the orders were but never who had them, which with more
-    /// than one wingman tasked is the question actually being asked of the map. The lines
-    /// answer it, and carry the queue: a Shift-clicked route is drawn as the chain it is.
-    /// </summary>
+    /// <summary>Draws commanded point markers and per-member route chains on the maximised map, showing
+    /// both destinations and assigned aircraft.</summary>
     internal static class TacticalMapOverlay
     {
-        /// <summary>Line thickness on screen, in pixels, held constant against map zoom.</summary>
+        /// <summary>Screen-space route line width in pixels, independent of zoom.</summary>
         private const float LineThickness = 1.6f;
 
-        /// <summary>Alpha of a leg that is not the one currently being flown.</summary>
+        /// <summary>Opacity for queued, inactive route legs.</summary>
         private const float QueuedAlpha = 0.45f;
 
-        /// <summary>Radius of the dot marking a queued point, in screen pixels.</summary>
+        /// <summary>Queued-point dot radius in screen pixels.</summary>
         private const float NodeRadius = 3f;
 
         private sealed class Group
@@ -39,7 +33,7 @@ namespace WingCommand
             public TMP_Text Label;
         }
 
-        /// <summary>One drawn leg: two map points, a colour, and whether it is the live one.</summary>
+        /// <summary>Rendered leg endpoints, colour, and active status.</summary>
         private struct Leg
         {
             public GlobalPosition From;
@@ -57,13 +51,8 @@ namespace WingCommand
 
         private static readonly List<Group> groups = new List<Group>();
 
-        /// <summary>
-        /// Where each wingman currently on its way home is actually going.
-        ///
-        /// Rebuilt on the marker timer rather than per frame: reading it crosses a
-        /// reflection boundary into the stock landing state, and an airbase does not move.
-        /// The legs, which are rebuilt every frame, read this rather than recomputing it.
-        /// </summary>
+        /// <summary>Cache native landing destinations on the marker timer to limit reflection; per-frame
+        /// route drawing reuses the cache.</summary>
         private static readonly Dictionary<WingMember, GlobalPosition> rtbDestinations =
             new Dictionary<WingMember, GlobalPosition>();
         private static readonly Dictionary<WingMember, RunwayInfo> rtbRunways =
@@ -109,9 +98,7 @@ namespace WingCommand
                 Sync(map);
             }
 
-            // Legs are rebuilt every frame, not on the refresh timer: one end of each is an
-            // aircraft, and a line lagging a fifth of a second behind its own wingman reads
-            // as a bug rather than as a route.
+            // Rebuild legs each frame so their aircraft endpoints do not lag moving wingmen.
             CollectLegs(wing);
             SyncLines(map);
 
@@ -148,7 +135,7 @@ namespace WingCommand
             nextRefresh = 0f;
         }
 
-        /// <summary>Request an immediate collection after a directive changes.</summary>
+        /// <summary>Refresh marker collection immediately after directive changes.</summary>
         public static void Invalidate()
         {
             markersDirty = true;
@@ -166,9 +153,8 @@ namespace WingCommand
             {
                 if (!member.Alive) continue;
 
-                // Return To Base has no commanded point — it hands off to the stock landing
-                // state, which picks its own airbase — so its destination is read back out
-                // of that state rather than taken from the directive.
+                // Read RTB destination from the native landing state, which chooses the base instead of
+                // carrying a directive point.
                 if (member.Order == WingOrder.ReturnToBase)
                 {
                     if (GameAccess.TryGetLandingDestination(member.Pilot,
@@ -210,7 +196,7 @@ namespace WingCommand
             }
         }
 
-        /// <summary>Fold one commanded point into the marker groups, merging near-coincident ones.</summary>
+        /// <summary>Merge nearby commanded points into shared marker groups.</summary>
         private static void Add(WingOrder order, GlobalPosition point)
         {
             foreach (Group group in groups)
@@ -224,10 +210,8 @@ namespace WingCommand
             groups.Add(new Group { Order = order, Point = point, Count = 1 });
         }
 
-        /// <summary>
-        /// Build the polyline for every tasked wingman: aircraft to its current point, then
-        /// on through whatever remains of its route.
-        /// </summary>
+        /// <summary>Build each member's route from aircraft to current destination and queued
+        /// follow-ons.</summary>
         private static void CollectLegs(WingRegistry wing)
         {
             legs.Clear();
@@ -244,8 +228,7 @@ namespace WingCommand
                 Color color = WingMarkers.ColorFor(WingMarkers.Role.Member, selected);
                 GlobalPosition from = aircraft.GlobalPosition();
 
-                // A route is drawn as a chain, so a Shift-queued sequence reads as an order
-                // of march rather than as several unrelated destinations.
+                // Draw queued tasks as a connected route in execution order.
                 IReadOnlyList<WingDirective> route = member.Route;
                 if (route.Count > 0)
                 {
@@ -264,9 +247,7 @@ namespace WingCommand
                     continue;
                 }
 
-                // The way home, from the destination the landing state actually chose. Drawn
-                // dimmer than a commanded leg: RTB is a wingman leaving the fight under an
-                // order already given, not a place the player is still directing it to.
+                // Draw the actual native RTB destination with lower emphasis than active point tasking.
                 if (member.Order == WingOrder.ReturnToBase &&
                     rtbDestinations.TryGetValue(member, out GlobalPosition home))
                 {
@@ -277,10 +258,10 @@ namespace WingCommand
                         Color = color.WithAlpha(color.a * QueuedAlpha),
                     });
 
-                    // Draw runway centerline and final approach alignment vector if available
+                    // Add runway and final-approach guidance when available.
                     if (rtbRunways.TryGetValue(member, out RunwayInfo rw))
                     {
-                        // Runway strip
+                        // Runway centreline.
                         legs.Add(new Leg
                         {
                             From = rw.Start,
@@ -289,7 +270,7 @@ namespace WingCommand
                             Node = true,
                         });
 
-                        // Extended final approach vector (3.5 km out from touchdown threshold)
+                        // Extend final approach 3.5 km before the threshold.
                         GlobalPosition approachExt = rw.Start - rw.ApproachDir * 3500f;
                         legs.Add(new Leg
                         {
@@ -309,8 +290,7 @@ namespace WingCommand
                     continue;
                 }
 
-                // An attack runs to a unit rather than to a point, and takes the amber the
-                // rest of the wing's target symbology already uses.
+                // Use amber target symbology for unit-directed attack legs.
                 Unit target = member.AssignedTarget;
                 if (target != null && !target.disabled)
                 {
@@ -419,23 +399,19 @@ namespace WingCommand
             return new Marker { Root = root, Rect = rect, Icon = icon, Label = label };
         }
 
-        /// <summary>
-        /// A leg is one stretched quad pivoted at its start, so it can be positioned and
-        /// rotated without any geometry of its own.
-        /// </summary>
+        /// <summary>Render a leg as a stretched quad pivoted at its starting point.</summary>
         private static Image CreateLine(DynamicMap map)
         {
             var go = new GameObject("WingCommand_OrderLine", typeof(RectTransform), typeof(Image));
             RectTransform rect = go.GetComponent<RectTransform>();
             rect.SetParent(map.iconLayer.transform, worldPositionStays: false);
 
-            // Pivot at the left edge, centred vertically: the rect then runs from the
-            // aircraft along its own local +x, and rotating it about z aims it at the point.
+            // Anchor the quad at its left-centre so local X length and Z rotation place the leg.
             rect.anchorMin = rect.anchorMax = new Vector2(0.5f, 0.5f);
             rect.pivot = new Vector2(0f, 0.5f);
             rect.localScale = Vector3.one;
 
-            // Behind the icons and markers, which are created into the same layer.
+            // Keep route lines behind sibling icons and markers.
             rect.SetAsFirstSibling();
 
             Image image = go.GetComponent<Image>();
@@ -458,7 +434,7 @@ namespace WingCommand
             return image;
         }
 
-        /// <summary>A small filled disc for a queued route point, drawn once.</summary>
+        /// <summary>Cached filled-disc sprite for queued points.</summary>
         private static Sprite NodeSprite()
         {
             if (nodeSprite != null) return nodeSprite;
@@ -492,7 +468,7 @@ namespace WingCommand
             return nodeSprite;
         }
 
-        /// <summary>Map-space position of a world point, in the icon layer's own coordinates.</summary>
+        /// <summary>Convert a world point into icon-layer map coordinates.</summary>
         private static Vector3 ToMap(GlobalPosition point, float displayFactor)
         {
             Vector3 p = point.AsVector3() * displayFactor;
@@ -519,9 +495,8 @@ namespace WingCommand
                 lastDisplayFactor = displayFactor;
             }
 
-            // A leg's length is a distance on the map and scales with it; its width is a
-            // screen quantity and must not. Only the thickness takes the inverse scale, so
-            // the line stays a hairline at every zoom instead of thickening into a slab.
+            // Scale leg length with the map and width inversely so zoom preserves screen-pixel
+            // thickness.
             int node = 0;
             float lineThickness = LineThickness * inverseScale;
             float nodeSize = NodeRadius * 2f * inverseScale;

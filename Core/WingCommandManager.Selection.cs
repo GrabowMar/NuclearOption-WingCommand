@@ -15,7 +15,7 @@ namespace WingCommand
                 WingMarkers.Repaint(candidate.Aircraft);
         }
 
-     /// <summary>Set weapon preference for the current command scope without changing ROE.</summary>
+        /// <summary>Set weapon preference for the current command scope without changing ROE.</summary>
         internal void SetWeaponPreference(WingWeaponPreference preference)
         {
             List<WingMember> scope = Commands.Scope(wholeWing: false);
@@ -33,8 +33,8 @@ namespace WingCommand
                   WingWeaponPreferences.Label(preference));
         }
 
-     /// <summary>Shared scope preference, or null for mixed preferences; determines selector
-     /// highlighting.</summary>
+        /// <summary>Shared scope preference, or null for mixed preferences; determines selector
+        /// highlighting.</summary>
         internal WingWeaponPreference? ScopeWeaponPreference()
         {
             List<WingMember> scope = Commands.Scope(wholeWing: false);
@@ -54,7 +54,7 @@ namespace WingCommand
             foreach (WingMember member in Wing.Members) WingMarkers.Repaint(member.Aircraft);
         }
 
-     /// <summary>Release a map-selected member to native AI.</summary>
+        /// <summary>Release a map-selected member to native AI.</summary>
         internal void RemoveMember(WingMember member)
         {
             if (member == null) return;
@@ -63,8 +63,8 @@ namespace WingCommand
             Toast(name + " released - returning to base");
         }
 
-     /// <summary>Toggle temporary flight lead, transferring from any previous lead so at most one
-     /// remains.</summary>
+        /// <summary>Toggle temporary flight lead, transferring from any previous lead so at most one
+        /// remains.</summary>
         internal void ToggleFlightLead(WingMember member)
         {
             if (member == null) return;
@@ -81,7 +81,7 @@ namespace WingCommand
                 : "Cannot make " + member.Name + " lead: " + reason);
         }
 
-     /// <summary>Recruit the current map selection.</summary>
+        /// <summary>Recruit the current map selection.</summary>
         internal void AddSelectedFromMap()
         {
             mapLayer?.AddSelected();

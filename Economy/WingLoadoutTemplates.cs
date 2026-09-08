@@ -4,13 +4,13 @@ using NuclearOption.SavedMission;
 
 namespace WingCommand
 {
- /// <summary>Persists per-airframe pylon templates in BepInEx config across missions and restarts. Use
- /// stable definition/store keys, never prefab references. Mission-specific fitted and planned loadouts
- /// belong in WingLoadoutBook.</summary>
+    /// <summary>Persists per-airframe pylon templates in BepInEx config across missions and restarts. Use
+    /// stable definition/store keys, never prefab references. Mission-specific fitted and planned loadouts
+    /// belong in WingLoadoutBook.</summary>
     internal static class WingLoadoutTemplates
     {
-     /// <summary>All templates in creation order, stored as a small flat list for
-     /// serialization.</summary>
+        /// <summary>All templates in creation order, stored as a small flat list for
+        /// serialization.</summary>
         private static readonly List<LoadoutTemplateRecord> records =
             new List<LoadoutTemplateRecord>();
 
@@ -19,10 +19,10 @@ namespace WingCommand
 
         private static bool loaded;
 
-     /// <summary>Template-name length limit for selector display.</summary>
+        /// <summary>Template-name length limit for selector display.</summary>
         public const int MaxNameLength = 28;
 
-     /// <summary>Per-airframe template limit to avoid popup pagination.</summary>
+        /// <summary>Per-airframe template limit to avoid popup pagination.</summary>
         public const int MaxPerAirframe = 8;
 
         private static readonly Dictionary<string, int> airframeLiveryIndices =
@@ -98,8 +98,8 @@ namespace WingCommand
 
         // Template lifecycle.
 
-     /// <summary>Load config once, outside mission Reset, so mission changes cannot discard unsaved
-     /// template edits.</summary>
+        /// <summary>Load config once, outside mission Reset, so mission changes cannot discard unsaved
+        /// template edits.</summary>
         private static void EnsureLoaded()
         {
             if (loaded) return;
@@ -135,7 +135,7 @@ namespace WingCommand
 
         // Template queries.
 
-     /// <summary>This airframe's templates in creation order.</summary>
+        /// <summary>This airframe's templates in creation order.</summary>
         public static IReadOnlyList<LoadoutTemplateRecord> For(AircraftDefinition definition)
         {
             EnsureLoaded();
@@ -178,8 +178,8 @@ namespace WingCommand
             return null;
         }
 
-     /// <summary>Resolve a template name with a fallback for deleted or unavailable IDs; purchases and
-     /// recovered fits may outlive templates.</summary>
+        /// <summary>Resolve a template name with a fallback for deleted or unavailable IDs; purchases and
+        /// recovered fits may outlive templates.</summary>
         public static string NameOf(string id)
         {
             LoadoutTemplateRecord record = ById(id);
@@ -192,8 +192,8 @@ namespace WingCommand
 
         // Template editing.
 
-     /// <summary>Create a template from store keys; return null when the airframe lacks a key or has
-     /// reached its template limit.</summary>
+        /// <summary>Create a template from store keys; return null when the airframe lacks a key or has
+        /// reached its template limit.</summary>
         public static LoadoutTemplateRecord Create(AircraftDefinition definition, string name,
                                                    IEnumerable<string> mountKeys)
         {
@@ -246,7 +246,7 @@ namespace WingCommand
             Save();
         }
 
-     /// <summary>Set the pylon's store key; null clears it.</summary>
+        /// <summary>Set the pylon's store key; null clears it.</summary>
         public static void SetMount(LoadoutTemplateRecord record, int pylon, string key)
         {
             EnsureLoaded();
@@ -259,7 +259,7 @@ namespace WingCommand
 
         // Template naming.
 
-     /// <summary>Generate the next default template name within this airframe's list.</summary>
+        /// <summary>Generate the next default template name within this airframe's list.</summary>
         public static string NextDefaultName(AircraftDefinition definition)
         {
             EnsureLoaded();
@@ -282,8 +282,8 @@ namespace WingCommand
             return false;
         }
 
-     /// <summary>Trim names to display/storage limits. Leave delimiter escaping to the codec so
-     /// characters are not silently substituted.</summary>
+        /// <summary>Trim names to display/storage limits. Leave delimiter escaping to the codec so
+        /// characters are not silently substituted.</summary>
         private static string Clean(string name)
         {
             if (string.IsNullOrEmpty(name)) return "TEMPLATE";
@@ -300,8 +300,8 @@ namespace WingCommand
             return string.IsNullOrEmpty(key) ? null : key;
         }
 
-     /// <summary>Generate a stable unique ID independent of editable names, preserving purchase and
-     /// recovered-fit references across renames.</summary>
+        /// <summary>Generate a stable unique ID independent of editable names, preserving purchase and
+        /// recovered-fit references across renames.</summary>
         private static string NewId()
         {
             for (int attempt = 0; attempt < 64; attempt++)

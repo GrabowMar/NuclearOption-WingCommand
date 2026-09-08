@@ -2,23 +2,23 @@ using UnityEngine;
 
 namespace WingCommand
 {
- /// <summary>Scatter by slot with a hard break and brief flares, egress low toward rally, then rejoin.
- /// Native countermeasures dispense continuously while triggered, so release the trigger after the
- /// flare phase.</summary>
+    /// <summary>Scatter by slot with a hard break and brief flares, egress low toward rally, then rejoin.
+    /// Native countermeasures dispense continuously while triggered, so release the trigger after the
+    /// flare phase.</summary>
     internal class FallBackState : WingPilotState
     {
         private enum Phase { Break, Egress, Hold }
 
-     /// <summary>Duration of the initial hard break, in seconds.</summary>
+        /// <summary>Duration of the initial hard break, in seconds.</summary>
         private const float BreakSeconds = 4.5f;
 
-     /// <summary>Flare duration from break entry, in seconds.</summary>
+        /// <summary>Flare duration from break entry, in seconds.</summary>
         private const float FlareSeconds = 3f;
 
-     /// <summary>Angular separation between slot break headings, in degrees.</summary>
+        /// <summary>Angular separation between slot break headings, in degrees.</summary>
         private const float ScatterSpread = 35f;
 
-     /// <summary>Egress altitude in metres AGL.</summary>
+        /// <summary>Egress altitude in metres AGL.</summary>
         private const float EgressAltitude = 200f;
 
         private Phase phase;
@@ -107,7 +107,7 @@ namespace WingCommand
 
         // Retreat phases.
 
-     /// <summary>Break away at full power with maximum permitted bank.</summary>
+        /// <summary>Break away at full power with maximum permitted bank.</summary>
         private void Break()
         {
             controlInputs.throttle = 1f;
@@ -132,7 +132,7 @@ namespace WingCommand
                 targetVelocity: Vector3.zero);
         }
 
-     /// <summary>Fly low and fast toward rally.</summary>
+        /// <summary>Fly low and fast toward rally.</summary>
         private void Egress()
         {
             controlInputs.throttle = 1f;
@@ -176,8 +176,8 @@ namespace WingCommand
 
         // Retreat geometry.
 
-     /// <summary>Horizontal direction away from a known threat. Fall back to the nearest known ground
-     /// enemy, then opposite the leader's heading when tracks are unavailable.</summary>
+        /// <summary>Horizontal direction away from a known threat. Fall back to the nearest known ground
+        /// enemy, then opposite the leader's heading when tracks are unavailable.</summary>
         private Vector3 AwayFromThreat()
         {
             Vector3 away = Vector3.zero;
@@ -198,8 +198,8 @@ namespace WingCommand
             return away.normalized;
         }
 
-     /// <summary>Friendly loiter point: nearest base, then ship, then stand-off along away. Shared with
-     /// Stand Down.</summary>
+        /// <summary>Friendly loiter point: nearest base, then ship, then stand-off along away. Shared with
+        /// Stand Down.</summary>
         internal static GlobalPosition FriendlyLoiterPoint(Aircraft aircraft, Vector3 away)
         {
             if (aircraft == null) return default;
@@ -227,11 +227,11 @@ namespace WingCommand
 
         // Retreat countermeasures.
 
-     /// <summary>Flare station resolved on entry; -1 if absent.</summary>
+        /// <summary>Flare station resolved on entry; -1 if absent.</summary>
         private int flareIndex = -1;
 
-     /// <summary>Trigger the actual flare station during the break; the previously active station may
-     /// be ECM.</summary>
+        /// <summary>Trigger the actual flare station during the break; the previously active station may
+        /// be ECM.</summary>
         private void StartFlares()
         {
             if (aircraft == null || aircraft.countermeasureManager == null) return;

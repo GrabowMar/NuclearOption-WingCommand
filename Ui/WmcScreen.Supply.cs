@@ -10,23 +10,15 @@ using NOAvionics.Ui;
 
 namespace WingCommand
 {
-    /// <summary>The WMC panel's SUPPLY tab: squadron funds, the aircraft shop, and the wing reserve.</summary>
+    /// <summary>SUPPLY page for funds, purchases, launch choices, and reserve airframes.</summary>
     internal static partial class WmcScreen
     {
-        /// <summary>
-        /// The three numbers that gate every control on this page, kept permanently on
-        /// screen.
-        ///
-        /// The squadron count is the important one. A mission's AI aircraft limit is
-        /// routinely zero once the player's own presence is subtracted from it, and until
-        /// now the only sign of that was a toast that said "Squadron at capacity (0 of 0)"
-        /// and then vanished — leaving a shop whose buttons did nothing for no visible
-        /// reason.
-        /// </summary>
+        /// <summary>Keep funds and capacity limits visible so disabled purchases have an
+        /// explanation.</summary>
         private static float AddSupplyStatus(RectTransform parent, float y)
         {
             float w = PanelWidth - Pad * 2f;
-            const float reserveBlockW = 126f;
+            const float reserveBlockW = 142f;
             float textW = w - reserveBlockW - Gap;
 
             supplyFundsLabel = Label(parent, "", new Rect(Pad, y, textW, LineHeight),
@@ -37,7 +29,7 @@ namespace WingCommand
                                         Friendly(), FontSmall, FontStyles.Normal,
                                         TextAlignmentOptions.Left);
 
-            // Compact Wing Reserve control on the right of the top status block
+            // Place reserve controls beside the status readouts.
             float ctrlX = PanelWidth - Pad - reserveBlockW;
             float ctrlY = y + LineHeight + 2f;
             Panel(parent, new Rect(ctrlX, ctrlY, reserveBlockW, LineHeight * 2f + 2f), WingUi.CardFill);
@@ -50,8 +42,8 @@ namespace WingCommand
                                  new Rect(ctrlX + 38f, ctrlY, 34f, LineHeight * 2f + 2f),
                                  Friendly(), FontSmall, FontStyles.Bold, TextAlignmentOptions.Center);
 
-            const float btnW = 20f;
-            const float btnH = 20f;
+            const float btnW = 24f;
+            const float btnH = 28f;
             float btnY = ctrlY - (LineHeight * 2f + 2f - btnH) * 0.5f;
 
             reserveReleaseButton = WingUi.Button(parent, "-",
@@ -69,15 +61,8 @@ namespace WingCommand
             return y - LineHeight - Space2;
         }
 
-        /// <summary>
-        /// Which pilot the next requisition or assignment is for.
-        ///
-        /// Sat at the top of the page because it answers the first question a shop asks —
-        /// who is this for — rather than hiding it below the list of things to buy. Defaults
-        /// to the best available pilot, persists until the player cycles it, and skips a lost
-        /// pilot automatically. Choosing a pilot here is the same choice the Wing tab shows
-        /// as its listing; the two are one squadron.
-        /// </summary>
+        /// <summary>Show the shared pilot choice above purchases and assignments; roster selection
+        /// excludes lost pilots and advances after assignment.</summary>
         private static float AddPilotSelection(RectTransform parent, float y)
         {
             y = Heading(parent, y, "NEXT PILOT");
@@ -90,9 +75,13 @@ namespace WingCommand
 
             var (_, sRail) = WingUi.TacticalCard(parent, new Rect(Pad, y, portrait, portrait), RankColor(WingRank.Rookie));
             supplyPilotRail = sRail;
-            supplyPilotPortrait = AddSprite(parent, "SupplyPilotPortrait", PilotPortrait.Sprite,
-                                            new Rect(Pad + 3f, y - 3f, portrait - 6f, portrait - 6f),
-                                            Color.white);
+            var portraitMask = new GameObject("SupplyPilotPortraitMask", typeof(RectTransform), typeof(RectMask2D));
+            var portraitRect = portraitMask.GetComponent<RectTransform>();
+            portraitRect.SetParent(parent, worldPositionStays: false);
+            Place(portraitRect, new Rect(Pad + 3f, y - 3f, portrait - 6f, portrait - 6f));
+            // Frame the face: crop side margins and headroom inside the 50px square.
+            supplyPilotPortrait = AddSprite(portraitRect, "SupplyPilotPortrait", PilotPortrait.Sprite,
+                                            new Rect(-5f, 8f, 60f, 90f), Color.white);
 
             float dossierX = Pad + portrait + Space3;
             float dossierW = w - portrait - Space3 - stepperW - Gap;
@@ -126,7 +115,7 @@ namespace WingCommand
             return y - portrait - Space2;
         }
 
-        /// <summary>Step the pilot selection through the available pilots, wrapping around.</summary>
+        /// <summary>Cycle selectable pilots in either direction with wraparound.</summary>
         private static void CycleSupplyPilot(int direction)
         {
             List<WingPilot> selectable = WingPilotRoster.SelectablePilots();
@@ -141,7 +130,7 @@ namespace WingCommand
             RefreshSupplyPilot();
         }
 
-        /// <summary>Repaint the pilot picker on the SUPPLY tab.</summary>
+        /// <summary>Update the SUPPLY pilot chooser.</summary>
         private static void RefreshSupplyPilot()
         {
             if (supplyPilotPortrait == null) return;
@@ -154,6 +143,8 @@ namespace WingCommand
                 sel = selectable[0];
             }
 
+            supplyPilotPortrait.sprite = PilotPortrait.For(sel);
+
             if (sel == null)
             {
                 if (supplyPilotNameLabel != null)
@@ -161,10 +152,10 @@ namespace WingCommand
                     supplyPilotNameLabel.text = "NO AVAILABLE PILOTS";
                     supplyPilotNameLabel.color = Warning();
                 }
-                if (supplyPilotRankLabel != null) supplyPilotRankLabel.text = "EVERY PILOT IS LOST";
-                if (supplyPilotStatusLabel != null) { supplyPilotStatusLabel.text = ""; }
+                if (supplyPilotRankLabel != null) supplyPilotRankLabel.text = "OPEN WING TO RECRUIT";
+                if (supplyPilotStatusLabel != null) { supplyPilotStatusLabel.text = "A pilot is required to launch."; }
                 if (supplyPilotCountLabel != null) { supplyPilotCountLabel.text = "0 / 0"; }
-                supplyPilotPortrait.color = Color.white;
+                supplyPilotPortrait.color = Color.clear;
                 if (supplyPilotRail != null) supplyPilotRail.color = Dim();
                 supplyPilotPrev?.SetEnabled(false);
                 supplyPilotNext?.SetEnabled(false);
@@ -231,10 +222,7 @@ namespace WingCommand
         private const float LaunchRowHeight = 22f;
         private const float LaunchCheckWidth = 20f;
 
-        /// <summary>
-        /// Which fields a requisition may launch from, and whether it waits at the nearest
-        /// or takes any free pad.
-        /// </summary>
+        /// <summary>Build enabled launch-field and nearest/any routing controls.</summary>
         private static float AddLaunchFrom(RectTransform parent, float y)
         {
             y = Heading(parent, y, "LAUNCH FROM");
@@ -342,14 +330,8 @@ namespace WingCommand
                 : reason);
         }
 
-        /// <summary>
-        /// Hand an airframe back to the faction pool, on the second press.
-        ///
-        /// The same arm-then-confirm the roster's RTB and the assignment fee use. Releasing
-        /// is not undoable from this panel — the AI may spend the airframe the moment it is
-        /// back in the pool — and it sat one button-width from HOLD, which does the
-        /// opposite.
-        /// </summary>
+        /// <summary>Require a second matching press before releasing reserve stock; faction AI may consume
+        /// it immediately afterward.</summary>
         private static void ReleaseSelectedReserve()
         {
             AircraftDefinition definition = selectedOffer;
@@ -380,7 +362,7 @@ namespace WingCommand
         private static readonly Confirmation reserveRelease = new Confirmation();
 
 
-        /// <summary>Refresh the concrete three-airframe wing reserve.</summary>
+        /// <summary>Refresh concrete reserve capacity and selected-airframe controls.</summary>
         private static void RefreshReserve()
         {
             if (reserveLabel == null) return;
@@ -412,9 +394,8 @@ namespace WingCommand
             bool host = WingSupplyReserve.IsHost;
             bool selected = selectedOffer != null;
 
-            // Selecting a different airframe disarms: the confirmation is for the thing
-            // that was named when the first press happened, not for whatever is selected
-            // when the second one lands.
+            // Bind confirmation to the originally selected airframe; changing selection disarms
+            // release.
             bool armed = reserveRelease.IsArmedFor(selectedOffer);
 
             reserveReleaseButton?.SetLatched(armed);
@@ -429,14 +410,11 @@ namespace WingCommand
 
         private const int ShopGridRows = 3;
         private const int ShopGridCols = 4;
-        private const int ShopGridCapacity = ShopGridRows * ShopGridCols; // 12
+        private const int ShopGridCapacity = ShopGridRows * ShopGridCols; // Shop grid capacity.
         private const float ShopTileHeight = 36f;
         private const float ShopTileGap = 4f;
 
-        /// <summary>
-        /// The shop: an airframe icon grid matching the LOADOUT screen, then controls for
-        /// templates, fuel, and requisition.
-        /// </summary>
+        /// <summary>Build airframe tiles followed by fit, fuel, and purchase controls.</summary>
         private static float AddShop(RectTransform parent, float y)
         {
             if (!Plugin.Settings.ShopEnabled.Value) return y;
@@ -447,29 +425,20 @@ namespace WingCommand
             float shopGridTop = y;
             y = AddShopGrid(parent, shopGridTop);
 
-            // The pager is deliberately built after the tiles, so its compact title-line
-            // controls keep their pointer and draw priority at the grid boundary.
+            // Create pager after tiles to preserve draw and click priority at the grid boundary.
             shopPager = HeaderPager(parent, shopGridTop + Space5,
                                     () => TurnPage(-1), () => TurnPage(1),
                                     out shopPrevButton, out shopPageLabel, out shopNextButton);
             shopPager.SetAsLastSibling();
             y -= Gap;
 
-            // The detail line gets the full width to itself. It used to share a row with the
-            // requisition button and print the pricing formula to fit — "31 x 1.5^0 = 31" —
-            // which is a thing to decode rather than a thing to read.
+            // Give offer details a full-width row beside no competing purchase control.
             offerDetailLabel = Label(parent, "", new Rect(Pad, y, PanelWidth - Pad * 2f, LineHeight),
                                      Dim(), FontMicro, FontStyles.Normal, TextAlignmentOptions.Left);
             y -= LineHeight + 2f;
 
-            // What is actually being bought. A requisition carries a loadout, and a
-            // price/stock breakdown that named only the airframe would be describing half
-            // the purchase.
-            //
-            // The fit is chosen here rather than on LOADOUT, which is the other half of this
-            // rework: LOADOUT builds templates, this decides which one the money is being
-            // spent on. It was a sentence telling the player to go to another tab, which is
-            // a poor substitute for the control the other tab was hiding.
+            // Select purchase fit here alongside stock and price; LOADOUT only builds reusable
+            // templates.
             const float fitGutter = 34f;
             const float fuelWidth = 96f;
             float fitButtonWidth = PanelWidth - Pad * 2f - fitGutter - Gap - fuelWidth;
@@ -481,14 +450,12 @@ namespace WingCommand
             Label(parent, "FIT", new Rect(Pad, y, fitGutter - Gap, RowHeight), Dim(), FontMicro,
                   FontStyles.Normal, TextAlignmentOptions.Left);
 
-            // Where the list drops from: directly under the button that opens it.
+            // Open the template list beneath its trigger.
             shopTemplateRowY = y - RowHeight;
             shopTemplateRowX = Pad + fitGutter;
             shopTemplateRowWidth = fitButtonWidth;
 
-            // The fuel switch is a small share of the row rather than one of its own — it is
-            // a modifier on the fit, not a full step of the purchase, so it rides with the
-            // template picker it changes the launch of.
+            // Keep fuel beside template selection as a launch modifier.
             fullFuelButton = WingUi.Button(
                 parent, "", new Rect(Pad + fitGutter + fitButtonWidth + Gap, y, fuelWidth, RowHeight),
                 FontSmall, UiButtonStyle.Quiet, CycleSpawnFuel)
@@ -502,9 +469,7 @@ namespace WingCommand
             y = AddLaunchFrom(parent, y);
             y = AddDispatchBrief(parent, y);
 
-            // REQUISITION is the reason this page exists and is drawn as such; the
-            // over-limit permission beside it is a modifier on that purchase and reads a
-            // rank quieter until it is switched on, at which point it latches lit.
+            // Emphasise requisition; show over-limit permission as a secondary latched modifier.
             const float buyWidth = WingUi.ButtonPrimary;
             float exceedWidth = PanelWidth - Pad * 2f - Gap - buyWidth;
             exceedLimitButton = WingUi.Button(parent, "", new Rect(Pad, y, exceedWidth, RowHeight),
@@ -520,11 +485,7 @@ namespace WingCommand
             return y;
         }
 
-        /// <summary>
-        /// A compact confirmation rail immediately above requisition. It keeps the selected
-        /// aircraft, pilot, fit, and permit outcome together without reserving a tall card
-        /// for details already visible in the controls above.
-        /// </summary>
+        /// <summary>Compact pre-purchase summary of aircraft, pilot, fit, and launch permission.</summary>
         private static float AddDispatchBrief(RectTransform parent, float y)
         {
             const float height = 64f;
@@ -580,14 +541,8 @@ namespace WingCommand
             RefreshShop();
         }
 
-        /// <summary>
-        /// Grant or withdraw permission to requisition past the mission's AI aircraft cap.
-        ///
-        /// Permission rather than a purchase mode: it changes nothing while the squadron has
-        /// room, and only then does the surcharge apply. Keeping the button live even when it
-        /// cannot be used is deliberate — a rank refusal the player can read beats a greyed
-        /// control that never says why.
-        /// </summary>
+        /// <summary>Toggle explicit over-cap permission; surcharge applies only when needed. Keep the
+        /// control clickable so rank refusal can explain itself.</summary>
         private static void ToggleExceedLimit()
         {
             if (!WingShop.MeetsExceedLimitRank)
@@ -604,12 +559,8 @@ namespace WingCommand
                 : "Over-limit requisition disallowed");
         }
 
-        /// <summary>
-        /// Step the fuel the next requisition launches with: 25 / 50 / 75 / 100%, wrapping.
-        ///
-        /// It applies to the launch, not to the price, so it can be changed between
-        /// purchases and affects only the ones made after it.
-        /// </summary>
+        /// <summary>Cycle launch fuel through 25/50/75/100%. Changes affect later purchases and do not
+        /// alter price.</summary>
         private static void CycleSpawnFuel()
         {
             WingShop.CycleSpawnFuel();
@@ -637,16 +588,14 @@ namespace WingCommand
             }
         }
 
-        /// <summary>Rebind the shop rows and the allocation header.</summary>
+        /// <summary>Refresh catalogue tiles and allocation display.</summary>
         private static void RefreshShop()
         {
             if (!Plugin.Settings.ShopEnabled.Value || shopTiles.Count == 0) return;
 
             IReadOnlyList<WingShop.Offer> offers = WingShop.Catalogue();
 
-            // Clamp here rather than in TurnPage: stock runs out and the catalogue shrinks
-            // under the player, so the page has to be re-validated against what is actually
-            // on offer each time rather than only when a button is pressed.
+            // Revalidate page bounds on every refresh because changing stock can shrink the catalogue.
             int pages = Mathf.Max(1, Mathf.CeilToInt(offers.Count / (float)ShopGridCapacity));
             if (shopPage >= pages) shopPage = pages - 1;
             if (shopPage < 0) shopPage = 0;
@@ -666,13 +615,8 @@ namespace WingCommand
             RefreshOfferDetail(offers);
         }
 
-        /// <summary>
-        /// Drop a selection the catalogue no longer contains.
-        ///
-        /// Stock runs out under the player, and both the Supply and Loadout tabs act on this
-        /// one selection — so it is re-checked against what is actually on offer wherever it
-        /// is read, not only where it is set.
-        /// </summary>
+        /// <summary>Clear shared aircraft selection when it is no longer offered, wherever the catalogue
+        /// is read.</summary>
         private static void ValidateSelectedOffer(IReadOnlyList<WingShop.Offer> offers)
         {
             if (selectedOffer == null) return;
@@ -684,9 +628,7 @@ namespace WingCommand
             selectedOffer = null;
         }
 
-        /// <summary>
-        /// The selected airframe in one plain sentence, and the two controls that act on it.
-        /// </summary>
+        /// <summary>Refresh selected-airframe details and action controls.</summary>
         private static void RefreshOfferDetail(IReadOnlyList<WingShop.Offer> offers)
         {
             WingShop.PurchaseQuote quote = WingShop.Quote(selectedOffer);
@@ -701,9 +643,7 @@ namespace WingCommand
 
             if (fullFuelButton != null)
             {
-                // The label is the whole state: the chosen percentage. It never latches —
-                // the value is in the words, and a permanently-lit stepper would read
-                // louder than the setting deserves.
+                // Show the chosen fuel percentage without a permanently lit toggle state.
                 fullFuelButton.SetText(
                     "FUEL  " + Mathf.RoundToInt(WingShop.SpawnFuelLevel * 100f) + "%");
                 fullFuelButton.SetLatched(false);
@@ -750,10 +690,8 @@ namespace WingCommand
                 }
                 else
                 {
-                    // A recovered airframe launches with the fit it came home with, so the
-                    // planned loadout is not what the next one of these will carry. Saying
-                    // which of the two applies is the difference between a breakdown and a
-                    // guess.
+                    // Distinguish saved recovered fit from the future purchase plan in the offer
+                    // breakdown.
                     WingLoadoutChoice fit = WingLoadoutBook.PlannedFor(selectedOffer);
                     bool fromReserve = false;
 
@@ -780,12 +718,8 @@ namespace WingCommand
             RefreshDispatchBrief(quote);
         }
 
-        /// <summary>
-        /// Repaint the lower confirmation card from the same live choices that drive the
-        /// purchase button. It deliberately repeats the outcome rather than every price
-        /// breakdown above: at the commit point the useful questions are who flies, what
-        /// fit they carry, how they launch, and whether the order can leave now.
-        /// </summary>
+        /// <summary>Render the dispatch summary from the live purchase quote, showing pilot, fit, launch,
+        /// and eligibility at confirmation.</summary>
         private static void RefreshDispatchBrief(WingShop.PurchaseQuote quote)
         {
             if (supplyDispatchAirframeLabel == null) return;
@@ -849,13 +783,8 @@ namespace WingCommand
             }
         }
 
-        /// <summary>
-        /// The fit the next requisition of the selected airframe will launch with.
-        ///
-        /// Reports the plan, not the reserve. A recovered airframe keeps what it came home
-        /// with and the button cannot change that, so the line beneath it says so instead of
-        /// this control lying about which of the two is about to be spent.
-        /// </summary>
+        /// <summary>Display the planned fit in the picker; describe any recovered-fit override separately
+        /// because this control cannot change it.</summary>
         private static void RefreshShopTemplateButton()
         {
             if (shopTemplateButton == null) return;
@@ -870,9 +799,7 @@ namespace WingCommand
 
             WingLoadoutChoice planned = WingLoadoutBook.PlannedFor(selectedOffer);
 
-            // A template deleted since the order was placed falls back to the standard fit,
-            // which is what Build would do with it anyway. Saying so here beats printing the
-            // name of something that no longer exists.
+            // Display Standard when a planned template has been deleted, matching build fallback.
             if (planned.IsTemplate && !WingLoadoutTemplates.Exists(planned.TemplateId))
             {
                 WingLoadoutBook.Plan(selectedOffer, planned.WithTemplate(null));
@@ -886,13 +813,8 @@ namespace WingCommand
             shopTemplateButton.SetLatched(planned.IsTemplate);
         }
 
-        /// <summary>
-        /// Choose what the next one of these flies with: the player's current default
-        /// for this airframe this mission, or a saved template.
-        ///
-        /// The standard fit is always first and always available — it is the same loadout
-        /// the game applies when the player starts in that aircraft.
-        /// </summary>
+        /// <summary>Choose the live player-default Standard fit or a saved template for the next purchase;
+        /// Standard is always first.</summary>
         private static void OpenShopTemplatePicker()
         {
             if (selectedOffer == null)
@@ -904,8 +826,7 @@ namespace WingCommand
             WingLoadoutChoice planned = WingLoadoutBook.PlannedFor(selectedOffer);
             IReadOnlyList<LoadoutTemplateRecord> mine = WingLoadoutTemplates.For(selectedOffer);
 
-            // Null stands for the standard fit in the parallel id list, so the pick handler
-            // is one branch rather than an index offset to keep straight.
+            // Use null as the Standard entry's ID.
             var ids = new List<string>(mine.Count + 1) { null };
             popupEntries.Clear();
             popupEntries.Add(new AvKit.PopupEntry(
@@ -931,29 +852,26 @@ namespace WingCommand
             {
                 if (index < 0 || index >= ids.Count) return;
 
-                // Re-read rather than reusing the captured choice: the popup was open across
-                // frames and the plan may have moved under it.
+                // Read the current plan again when the popup callback runs; captured state may be
+                // stale.
                 WingLoadoutChoice current = WingLoadoutBook.PlannedFor(target);
                 WingLoadoutBook.Plan(target, current.WithTemplate(ids[index]));
             });
         }
 
-        /// <summary>Funds, wing size, and how much of the mission's AI aircraft cap is left.</summary>
+        /// <summary>Refresh funds, wing occupancy, and faction AI capacity.</summary>
         private static void RefreshSupplyStatus()
         {
             if (supplyFundsLabel == null) return;
 
             int wing = WingCommandManager.Instance?.Wing?.Count ?? 0;
-            supplyFundsLabel.text = "FUNDS " + Grouped(WingShop.Allocation) +
-                                    "   ·   WING " + wing + " / " + WingRegistry.WingLimitLabel +
-                                    "   (YOUR FLIGHT)";
+            supplyFundsLabel.text = "YOUR FLIGHT  " + wing + " / " + WingRegistry.WingLimitLabel;
 
             WingShop.SquadronState squadron = WingShop.Squadron();
-            string text = "SQUADRON " + squadron.Active + " / " + squadron.Limit +
-                          "   (AI POOL)";
+            string text = "AI POOL  " + squadron.Active + " / " + squadron.Limit;
             if (Plugin.Settings.CheatNoWingLimit)
             {
-                supplySquadronLabel.text = text + "  ·  WING NO LIMIT - CAP WAIVED";
+                supplySquadronLabel.text = text + "  ·  CAP WAIVED";
                 supplySquadronLabel.color = Warning();
                 return;
             }
@@ -965,18 +883,15 @@ namespace WingCommand
                 return;
             }
 
-            // At capacity is the state that silently disables the whole shop, so it says both
-            // that it is the reason and what can be done about it.
+            // Explain capacity refusal and available remedies in persistent status.
             if (WingShop.ExceedLimit && WingShop.MeetsExceedLimitRank)
             {
-                // The multiplier is on the OVER LIMIT button itself; the status line only
-                // needs to say the cap is being flown past.
+                // Keep the surcharge on its button; status only signals over-cap operation.
                 supplySquadronLabel.text = text + "  ·  OVER LIMIT";
             }
             else if (!WingShop.MeetsExceedLimitRank)
             {
-                supplySquadronLabel.text = text + "  ·  FULL, RANK " + WingShop.ExceedLimitRank +
-                                           " TO EXCEED";
+                supplySquadronLabel.text = text + "  ·  FULL (RANK " + WingShop.ExceedLimitRank + "+)";
             }
             else
             {
@@ -984,7 +899,7 @@ namespace WingCommand
             }
             supplySquadronLabel.color = Warning();
         }
-        /// <summary>One purchasable airframe tile in the shop grid: silhouette, code, stock, cost.</summary>
+        /// <summary>Purchasable-airframe tile with silhouette, code, stock, and cost.</summary>
         private sealed class ShopAirframeTile
         {
             private readonly GameObject go;
@@ -1096,7 +1011,7 @@ namespace WingCommand
             }
         }
 
-        /// <summary>One friendly field the player can allow or refuse as a launch origin.</summary>
+        /// <summary>Friendly launch field with an enable/disable control.</summary>
         private sealed class LaunchBaseRow
         {
             private readonly GameObject go;

@@ -4,11 +4,11 @@ using UnityEngine;
 
 namespace WingCommand
 {
- /// <summary>Engine-facing slot geometry and separation using FormationLayout indices. Flight can use a
- /// banked velocity frame; icons, surface units, and slot allocation use a flattened frame.</summary>
+    /// <summary>Engine-facing slot geometry and separation using FormationLayout indices. Flight can use a
+    /// banked velocity frame; icons, surface units, and slot allocation use a flattened frame.</summary>
     internal static class FormationSolver
     {
-     /// <summary>Extend lateral, downward, and aft bounds for the shared terrain bank limit.</summary>
+        /// <summary>Extend lateral, downward, and aft bounds for the shared terrain bank limit.</summary>
         internal static void IncludeBankFootprint(ref Vector3 footprint, Vector3 local)
         {
             footprint.x = Mathf.Max(footprint.x, Mathf.Abs(local.x));
@@ -32,8 +32,8 @@ namespace WingCommand
             return found ? scale : 1f;
         }
 
-     /// <summary>Validate supported shapes and slots at startup to catch overlapping assignments before
-     /// flight.</summary>
+        /// <summary>Validate supported shapes and slots at startup to catch overlapping assignments before
+        /// flight.</summary>
         public static bool ValidateGeometry(int maxSlots, out string problem)
         {
             var report = new StringBuilder();
@@ -74,8 +74,8 @@ namespace WingCommand
             return problem.Length == 0;
         }
 
-     /// <summary><param name="leaderForward">Leader direction, flattened internally.</param> <param
-     /// name="slot">Follower index starting at 1; 0 denotes the leader.</param></summary>
+        /// <param name="leaderForward">Leader direction, flattened internally.</param> <param
+        /// name="slot">Follower index starting at 1; 0 denotes the leader.</param>
         public static Vector3 SlotOffset(
             Vector3 leaderForward, int slot, FormationShape shape, float spacing, float stack,
             float lateralScale = 1f, float backScale = 1f)
@@ -84,8 +84,8 @@ namespace WingCommand
                 SlotCoordinates(slot, shape, spacing, stack, lateralScale, backScale));
         }
 
-     /// <summary>Local slot coordinates in metres: X right, Y up, Z forward. Ease shapes here while
-     /// allowing the whole frame to follow leader heading.</summary>
+        /// <summary>Local slot coordinates in metres: X right, Y up, Z forward. Ease shapes here while
+        /// allowing the whole frame to follow leader heading.</summary>
         public static Vector3 SlotCoordinates(int slot, FormationShape shape, float spacing,
                                               float stack, float lateralScale = 1f,
                                               float backScale = 1f)
@@ -98,13 +98,13 @@ namespace WingCommand
                               -s.Back * spacing * backScale);
         }
 
-     /// <summary>Flattened world offset for icons, surface units, and slot allocation; leader pitch
-     /// cannot lift these slots.</summary>
+        /// <summary>Flattened world offset for icons, surface units, and slot allocation; leader pitch
+        /// cannot lift these slots.</summary>
         public static Vector3 WorldOffset(Vector3 leaderForward, Vector3 local) =>
             WorldOffset(leaderForward, local, bankDeg: 0f, velocityPlane: false);
 
-     /// <summary>Transform local slots using either a flat frame or the leader's velocity plane rolled
-     /// by bankDeg. Distant rejoin stays flat to avoid banked targets below terrain.</summary>
+        /// <summary>Transform local slots using either a flat frame or the leader's velocity plane rolled
+        /// by bankDeg. Distant rejoin stays flat to avoid banked targets below terrain.</summary>
         public static Vector3 WorldOffset(Vector3 track, Vector3 local, float bankDeg,
                                           bool velocityPlane)
         {
@@ -138,10 +138,10 @@ namespace WingCommand
             return right * local.x + up * local.y + fwd * local.z;
         }
 
-     /// <summary>Push laterally out of the corridor ahead of the leader to prevent rejoin paths
-     /// crossing its aircraft. Return zero outside the corridor.</summary> <param
-     /// name="lookAhead">Protected corridor length.</param> <param name="corridorRadius">Protected
-     /// corridor half-width.</param>
+        /// <summary>Push laterally out of the corridor ahead of the leader to prevent rejoin paths
+        /// crossing its aircraft. Return zero outside the corridor.</summary> <param
+        /// name="lookAhead">Protected corridor length.</param> <param name="corridorRadius">Protected
+        /// corridor half-width.</param>
         public static Vector3 AvoidLeaderPath(Aircraft self, Aircraft leader,
                                               float lookAhead, float corridorRadius, float strength)
         {
@@ -179,8 +179,8 @@ namespace WingCommand
             return escape * (strength * urgency);
         }
 
-     /// <summary>Inverse-square repulsion from nearby wing members, protecting arbitrary converging
-     /// rejoin paths.</summary>
+        /// <summary>Inverse-square repulsion from nearby wing members, protecting arbitrary converging
+        /// rejoin paths.</summary>
         public static Vector3 Separation(Aircraft self, IReadOnlyList<WingMember> members,
                                          float radius, float strength)
         {

@@ -3,13 +3,13 @@ using UnityEngine;
 
 namespace WingCommand
 {
- /// <summary>Mission-scoped launch-field preferences. New fields default enabled; exclusions persist
- /// until re-enabled or mission reset. Controls nearest-field versus any-free-pad routing.</summary>
+    /// <summary>Mission-scoped launch-field preferences. New fields default enabled; exclusions persist
+    /// until re-enabled or mission reset. Controls nearest-field versus any-free-pad routing.</summary>
     internal static class WingLaunchFields
     {
         public static HangarLaunchMode Mode { get; set; } = HangarLaunchMode.OnlyNearest;
 
-     /// <summary>Disabled field IDs; unlisted and newly created fields remain eligible.</summary>
+        /// <summary>Disabled field IDs; unlisted and newly created fields remain eligible.</summary>
         private static readonly HashSet<int> denied = new HashSet<int>();
 
         private static readonly List<Airbase> listing = new List<Airbase>();
@@ -39,16 +39,16 @@ namespace WingCommand
             return false;
         }
 
-     /// <summary>Whether a live hangar or pad supports this airframe, regardless of current
-     /// occupancy.</summary>
+        /// <summary>Whether a live hangar or pad supports this airframe, regardless of current
+        /// occupancy.</summary>
         public static bool CanProduce(Airbase airbase, AircraftDefinition definition)
         {
             if (airbase == null || airbase.disabled || definition == null) return false;
             return WingHangarStock.FieldLists(airbase, definition);
         }
 
-     /// <summary>Whether an enabled friendly field can launch this definition. Surface units bypass
-     /// hangars and spawn astern in water.</summary>
+        /// <summary>Whether an enabled friendly field can launch this definition. Surface units bypass
+        /// hangars and spawn astern in water.</summary>
         public static bool CanAnyAllowedLaunch(FactionHQ hq, AircraftDefinition definition)
         {
             if (definition == null) return false;
@@ -64,8 +64,8 @@ namespace WingCommand
             return false;
         }
 
-     /// <summary>Refresh live friendly fields nearest first for Supply. Delivery uses its own snapshot
-     /// so UI refreshes cannot change spawn decisions.</summary>
+        /// <summary>Refresh live friendly fields nearest first for Supply. Delivery uses its own snapshot
+        /// so UI refreshes cannot change spawn decisions.</summary>
         public static void RefreshListing(FactionHQ hq, Vector3 from)
         {
             listing.Clear();

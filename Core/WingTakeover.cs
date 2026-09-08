@@ -11,8 +11,8 @@ using NOAvionics.Ui;
 
 namespace WingCommand
 {
- /// <summary>Offers surviving wing aircraft after player loss, spawning a fresh player copy through the
- /// native ownership/cockpit/HUD path. Uses WingUi cards on a dedicated canvas.</summary>
+    /// <summary>Offers surviving wing aircraft after player loss, spawning a fresh player copy through the
+    /// native ownership/cockpit/HUD path. Uses WingUi cards on a dedicated canvas.</summary>
     internal static class WingTakeover
     {
         private const float PanelWidth = 720f;
@@ -23,8 +23,8 @@ namespace WingCommand
         private const float CardStride = CardHeight + CardGap;
         private const float CardsTop = 118f;
 
-     /// <summary>Maximum prebuilt cards; candidates can only disappear while the prompt is
-     /// open.</summary>
+        /// <summary>Maximum prebuilt cards; candidates can only disappear while the prompt is
+        /// open.</summary>
         private const int MaxCards = 8;
 
         private static WingRegistry wing;
@@ -44,7 +44,7 @@ namespace WingCommand
 
         public static bool Active => active;
 
-     /// <summary>Open recovery when the leader becomes unflyable.</summary>
+        /// <summary>Open recovery when the leader becomes unflyable.</summary>
         public static bool Begin(WingRegistry registry, Aircraft previousLeader)
         {
             if (!CanOffer(registry)) return false;
@@ -67,7 +67,7 @@ namespace WingCommand
             return true;
         }
 
-     /// <summary>Whether the guarded player-death/ejection call can suppress defeat.</summary>
+        /// <summary>Whether the guarded player-death/ejection call can suppress defeat.</summary>
         public static bool CanSuppressPlayerLoss()
         {
             WingCommandManager manager = WingCommandManager.Instance;
@@ -131,8 +131,8 @@ namespace WingCommand
 
         // Recovery panel.
 
-     /// <summary>Reusable aircraft card; refresh values without rebuilding controls under the
-     /// cursor.</summary>
+        /// <summary>Reusable aircraft card; refresh values without rebuilding controls under the
+        /// cursor.</summary>
         private sealed class Card
         {
             public GameObject Root;
@@ -260,8 +260,8 @@ namespace WingCommand
             }
         }
 
-     /// <summary>Build keyboard hints and decline control; Refresh positions them below the current
-     /// card rows.</summary>
+        /// <summary>Build keyboard hints and decline control; Refresh positions them below the current
+        /// card rows.</summary>
         private static void BuildFooter()
         {
             footerHint = WingUi.Label(content, "[1-8]  SELECT AIRCRAFT",
@@ -468,8 +468,8 @@ namespace WingCommand
             return false;
         }
 
-     /// <summary>Copy the mutable Loadout container while sharing immutable WeaponMount definitions so
-     /// aircraft initialisation cannot alter each other's equipment.</summary>
+        /// <summary>Copy the mutable Loadout container while sharing immutable WeaponMount definitions so
+        /// aircraft initialisation cannot alter each other's equipment.</summary>
         private static Loadout CloneLoadout(Loadout source)
         {
             if (source == null) return null;
@@ -513,7 +513,7 @@ namespace WingCommand
             if (finishDefeat) GameManager.FinishGame(GameResolution.Defeat);
         }
 
-     /// <summary>Close the prompt and release its references.</summary>
+        /// <summary>Close the prompt and release its references.</summary>
         private static void Close()
         {
             active = false;
@@ -538,8 +538,8 @@ namespace WingCommand
         }
     }
 
- /// <summary>Suppress defeat only inside the native local-player death/ejection calls. Objective and
- /// scripted defeats remain unguarded.</summary>
+    /// <summary>Suppress defeat only inside the native local-player death/ejection calls. Objective and
+    /// scripted defeats remain unguarded.</summary>
     [HarmonyPatch]
     internal static class WingTakeoverPatches
     {

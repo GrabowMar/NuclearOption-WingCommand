@@ -2,11 +2,11 @@ using UnityEngine;
 
 namespace WingCommand
 {
- /// <summary>Handles station-keeping weapons without changing flight controls. Each state owns its
- /// cadence; active behaviour and target determine firing authority.</summary>
+    /// <summary>Handles station-keeping weapons without changing flight controls. Each state owns its
+    /// cadence; active behaviour and target determine firing authority.</summary>
     internal sealed class SlotEngagement
     {
-     /// <summary>Seconds between checks, scaled by fidelity mode.</summary>
+        /// <summary>Seconds between checks, scaled by fidelity mode.</summary>
         private readonly float checkInterval;
 
         private float lastCheck;
@@ -17,7 +17,7 @@ namespace WingCommand
             this.checkInterval = checkInterval;
         }
 
-     /// <summary>Attempt a shot; return true if fired.</summary>
+        /// <summary>Attempt a shot; return true if fired.</summary>
         public bool Run(WingMember member, Aircraft aircraft, Pilot pilot, Aircraft leader)
         {
             if (Time.timeSinceLevelLoad - lastCheck < WingFidelity.Interval(checkInterval))

@@ -3,8 +3,8 @@ using System.Collections.Generic;
 
 namespace WingCommand
 {
- /// <summary>Retries transaction compensation in reverse order without repeating successful
- /// actions.</summary>
+    /// <summary>Retries transaction compensation in reverse order without repeating successful
+    /// actions.</summary>
     internal sealed class RollbackJournal
     {
         private readonly List<Action> compensations = new List<Action>();
@@ -44,7 +44,7 @@ namespace WingCommand
         }
     }
 
- /// <summary>Tracks pending delivery capacity separately from live aircraft.</summary>
+    /// <summary>Tracks pending delivery capacity separately from live aircraft.</summary>
     internal sealed class CapacityReservations
     {
         public int Wing { get; private set; }
@@ -73,7 +73,7 @@ namespace WingCommand
         }
     }
 
- /// <summary>Selects concrete reserve slots while preserving fit and ownership identity.</summary>
+    /// <summary>Selects concrete reserve slots while preserving fit and ownership identity.</summary>
     internal static class ReserveSlotPolicy
     {
         public static int SelectForPurchase(int count, Func<int, bool> matchesDefinition,
@@ -114,44 +114,44 @@ namespace WingCommand
             return -1;
         }
 
-     /// <summary>Apply capacity to manual faction holds while exempting paid aircraft. RTB no longer
-     /// auto-stores through this policy.</summary>
+        /// <summary>Apply capacity to manual faction holds while exempting paid aircraft. RTB no longer
+        /// auto-stores through this policy.</summary>
         public static bool CanStoreAirframe(bool owned, int currentCount, int factionStockCapacity) =>
             owned || currentCount < factionStockCapacity;
     }
 
- /// <summary>RTB despawn/park and allocation-refund policy; recruitment fees are never refunded as
- /// purchases.</summary>
+    /// <summary>RTB despawn/park and allocation-refund policy; recruitment fees are never refunded as
+    /// purchases.</summary>
     internal static class RecoverySettlementPolicy
     {
-     /// <summary>Use native Returned despawn when enabled.</summary>
+        /// <summary>Use native Returned despawn when enabled.</summary>
         public static bool ShouldDespawn(bool rtbReturnsToReserve) => rtbReturnsToReserve;
 
-     /// <summary>Refund only allocation actually paid for an owned purchase.</summary>
+        /// <summary>Refund only allocation actually paid for an owned purchase.</summary>
         public static bool ShouldRefund(bool purchased, float paid) => purchased && paid > 0f;
 
-     /// <summary>Native spawning replaces missing/empty weapon lists with loadouts[1]; deliberate empty
-     /// fits need one entry per hardpoint.</summary>
+        /// <summary>Native spawning replaces missing/empty weapon lists with loadouts[1]; deliberate empty
+        /// fits need one entry per hardpoint.</summary>
         public static bool NativeLoadoutReplaces(int weaponCount) => weaponCount <= 0;
     }
 
- /// <summary>Launch-field routing preference among enabled fields.</summary>
+    /// <summary>Launch-field routing preference among enabled fields.</summary>
     internal enum HangarLaunchMode
     {
-     /// <summary>Queue at the nearest compatible enabled field, even when a farther field is
-     /// idle.</summary>
+        /// <summary>Queue at the nearest compatible enabled field, even when a farther field is
+        /// idle.</summary>
         OnlyNearest,
 
-     /// <summary>Choose the nearest currently available field; wait unpinned if all are busy.</summary>
+        /// <summary>Choose the nearest currently available field; wait unpinned if all are busy.</summary>
         Any,
     }
 
- /// <summary>Select nearest-compatible pinning or nearest-currently-free routing according to launch
- /// mode.</summary>
+    /// <summary>Select nearest-compatible pinning or nearest-currently-free routing according to launch
+    /// mode.</summary>
     internal static class HangarFieldPolicy
     {
-     /// <summary>Permit refund only when neither an observed aircraft nor an unfinished accepted native
-     /// sequence owns the purchase.</summary>
+        /// <summary>Permit refund only when neither an observed aircraft nor an unfinished accepted native
+        /// sequence owns the purchase.</summary>
         internal static bool CanRefundDelivery(bool nativeAccepted, bool nativeSequenceFinished,
                                                bool hangarDestroyed, bool aircraftObserved) =>
             !aircraftObserved && (!nativeAccepted || nativeSequenceFinished || hangarDestroyed);
@@ -178,7 +178,7 @@ namespace WingCommand
             return best;
         }
 
-     /// <summary>Display QUE before field acceptance and DEPT afterward.</summary>
+        /// <summary>Display QUE before field acceptance and DEPT afterward.</summary>
         public static string StatusCode(bool hangarClaimed) => hangarClaimed ? "DEPT" : "QUE";
     }
 
@@ -190,8 +190,8 @@ namespace WingCommand
         NoPad
     }
 
- /// <summary>Supply-row capability, badge, and tooltip policy for the selected airframe and
- /// base.</summary>
+    /// <summary>Supply-row capability, badge, and tooltip policy for the selected airframe and
+    /// base.</summary>
     internal static class LaunchBaseStatusPolicy
     {
         public static LaunchBaseStatus Evaluate(bool allowed, bool canProduce, bool hasAirframeSelection)
@@ -231,8 +231,8 @@ namespace WingCommand
         }
     }
 
- /// <summary>Matches native hangar availableAircraft lists and labels pads with the building
- /// UnitDefinition.code.</summary>
+    /// <summary>Matches native hangar availableAircraft lists and labels pads with the building
+    /// UnitDefinition.code.</summary>
     internal static class HangarStockPolicy
     {
         public static string PadLabel(string code)
@@ -300,8 +300,8 @@ namespace WingCommand
         }
     }
 
- /// <summary>Exclude non-squadron encyclopedia placeholders such as the April Fools UFO from Supply and
- /// Loadout.</summary>
+    /// <summary>Exclude non-squadron encyclopedia placeholders such as the April Fools UFO from Supply and
+    /// Loadout.</summary>
     internal static class AirframeCatalogPolicy
     {
         public static bool IsHiddenFromPanels(string unitName, string code = null, string jsonKey = null) =>

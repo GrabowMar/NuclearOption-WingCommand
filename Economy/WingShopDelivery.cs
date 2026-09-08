@@ -5,17 +5,17 @@ using UnityEngine;
 
 namespace WingCommand
 {
- /// <summary>Spawns vertical aircraft through native pads, surface units astern of the player, and
- /// runway aircraft at the threshold with no spawningHangar. Threshold placement avoids unreliable
- /// shelter taxi; native AI owns movement after spawn.</summary>
+    /// <summary>Spawns vertical aircraft through native pads, surface units astern of the player, and
+    /// runway aircraft at the threshold with no spawningHangar. Threshold placement avoids unreliable
+    /// shelter taxi; native AI owns movement after spawn.</summary>
     internal static class WingShopDelivery
     {
         private static readonly List<Airbase> fieldScratch = new List<Airbase>();
 
         // Delivery dispatch.
 
-     /// <summary>Spawn or queue the purchase at an eligible field. Pending orders show QUE; accepted
-     /// field departures show DEPT until registration.</summary>
+        /// <summary>Spawn or queue the purchase at an eligible field. Pending orders show QUE; accepted
+        /// field departures show DEPT until registration.</summary>
         public static bool Deliver(WingShop.PurchaseTransaction transaction, Aircraft leader,
                                    FactionHQ hq, out string reason)
         {
@@ -57,8 +57,8 @@ namespace WingCommand
             return false;
         }
 
-     /// <summary>Build the requested fit, returning null on failure so native spawning can use standard
-     /// equipment without blocking delivery.</summary>
+        /// <summary>Build the requested fit, returning null on failure so native spawning can use standard
+        /// equipment without blocking delivery.</summary>
         private static Loadout BuildLoadout(AircraftDefinition definition, WingLoadoutChoice choice)
         {
             try
@@ -74,9 +74,9 @@ namespace WingCommand
             }
         }
 
-     /// <summary>Classify departure from prefab autopilot: helos/tiltwings use pads unless all relevant
-     /// seats identify a plane-typed VTOL. Inspect every Pilot so a gunner cannot misclassify the
-     /// airframe; plane autopilots use runways.</summary>
+        /// <summary>Classify departure from prefab autopilot: helos/tiltwings use pads unless all relevant
+        /// seats identify a plane-typed VTOL. Inspect every Pilot so a gunner cannot misclassify the
+        /// airframe; plane autopilots use runways.</summary>
         private static bool LaunchesVertically(AircraftDefinition definition)
         {
             if (definition == null) return false;
@@ -131,8 +131,8 @@ namespace WingCommand
         private static readonly Dictionary<AircraftDefinition, bool> verticalCache =
             new Dictionary<AircraftDefinition, bool>();
 
-     /// <summary>Shared live player-default fit with game-start fallback, keeping pad and runway
-     /// STANDARD equipment consistent.</summary>
+        /// <summary>Shared live player-default fit with game-start fallback, keeping pad and runway
+        /// STANDARD equipment consistent.</summary>
         private static Loadout DefaultLoadout(AircraftDefinition definition) =>
             WingLoadoutCatalog.ClonePlayerDefault(definition);
 
@@ -190,10 +190,10 @@ namespace WingCommand
             public LiveryKey Livery;
             public float Fuel;
 
-         /// <summary>Accepting pad, or null for runway launch.</summary>
+            /// <summary>Accepting pad, or null for runway launch.</summary>
             public Hangar Hangar;
 
-         /// <summary>Whether a field has accepted this order.</summary>
+            /// <summary>Whether a field has accepted this order.</summary>
             public bool Claimed;
 
             public GameObject PreviousSpawnedObject;
@@ -207,11 +207,11 @@ namespace WingCommand
             public float NextAttemptAt;
             public bool Starting;
 
-         /// <summary>Whether the order must wait at Origin. Any-mode orders remain unpinned until a
-         /// field accepts them.</summary>
+            /// <summary>Whether the order must wait at Origin. Any-mode orders remain unpinned until a
+            /// field accepts them.</summary>
             public bool Pinned;
 
-         /// <summary>Whether departure uses a vertical pad instead of a runway threshold.</summary>
+            /// <summary>Whether departure uses a vertical pad instead of a runway threshold.</summary>
             public bool Vertical;
 
             public AircraftDefinition Definition => Transaction?.Definition;
@@ -228,7 +228,7 @@ namespace WingCommand
         public static PendingDelivery GetPending(int index) =>
             (index >= 0 && index < pending.Count) ? pending[index] : null;
 
-     /// <summary>Order currently executing this hangar's native spawn call, if any.</summary>
+        /// <summary>Order currently executing this hangar's native spawn call, if any.</summary>
         internal static PendingDelivery StartingAt(Hangar hangar)
         {
             for (int i = 0; i < pending.Count; i++)
@@ -249,8 +249,8 @@ namespace WingCommand
             return true;
         }
 
-     /// <summary>Capability-based launch refusal, or null. Check before charging; temporary field
-     /// occupancy should queue rather than reject a purchase.</summary>
+        /// <summary>Capability-based launch refusal, or null. Check before charging; temporary field
+        /// occupancy should queue rather than reject a purchase.</summary>
         public static string LaunchBlockReason(FactionHQ hq, AircraftDefinition definition,
                                                Vector3 from)
         {
@@ -396,8 +396,8 @@ namespace WingCommand
                 i => CanEverProduce(fieldScratch[i], definition),
                 i => CanLaunchNow(fieldScratch[i], definition));
 
-     /// <summary>Check serialized hangar type support independent of current occupancy. Fixed-wing
-     /// departures also require a takeoff strip.</summary>
+        /// <summary>Check serialized hangar type support independent of current occupancy. Fixed-wing
+        /// departures also require a takeoff strip.</summary>
         private static bool CanEverProduce(Airbase airbase, AircraftDefinition definition)
         {
             if (!WingLaunchFields.CanProduce(airbase, definition)) return false;
@@ -405,8 +405,8 @@ namespace WingCommand
             return WingAirfield.HasTakeoffRunway(airbase, definition);
         }
 
-     /// <summary>Whether this field can accept a departure now; reserve per field because its hangars
-     /// share runways.</summary>
+        /// <summary>Whether this field can accept a departure now; reserve per field because its hangars
+        /// share runways.</summary>
         private static bool CanLaunchNow(Airbase airbase, AircraftDefinition definition)
         {
             if (airbase == null || airbase.disabled) return false;
@@ -466,8 +466,8 @@ namespace WingCommand
             else AttemptRunwaySpawn(order);
         }
 
-     /// <summary>Spawn runway aircraft with spawningHangar=null. A non-null SyncVar makes clients snap
-     /// the aircraft back onto that hangar's pad.</summary>
+        /// <summary>Spawn runway aircraft with spawningHangar=null. A non-null SyncVar makes clients snap
+        /// the aircraft back onto that hangar's pad.</summary>
         private static void AttemptRunwaySpawn(PendingDelivery order)
         {
             FactionHQ hq = order.Transaction.Hq;
@@ -559,8 +559,8 @@ namespace WingCommand
             Claim(order, spawned);
         }
 
-     /// <summary>Let native pad doors handle vertical launch. Keep accepted orders pending for
-     /// registration and refused orders pending for retry.</summary>
+        /// <summary>Let native pad doors handle vertical launch. Keep accepted orders pending for
+        /// registration and refused orders pending for retry.</summary>
         private static void AttemptPadSpawn(PendingDelivery order)
         {
             FactionHQ hq = order.Transaction.Hq;
@@ -644,7 +644,7 @@ namespace WingCommand
             if (watched != null) watched.onRegisterUnit += OnUnitRegistered;
         }
 
-     /// <summary>Claim only this order's accepting pad's aircraft.</summary>
+        /// <summary>Claim only this order's accepting pad's aircraft.</summary>
         private static void OnUnitRegistered(Unit unit)
         {
             if (!(unit is Aircraft aircraft)) return;
@@ -697,7 +697,7 @@ namespace WingCommand
             Claim(match, aircraft);
         }
 
-     /// <summary>Commit the purchase and queue the aircraft for wing recruitment.</summary>
+        /// <summary>Commit the purchase and queue the aircraft for wing recruitment.</summary>
         private static void Claim(PendingDelivery order, Aircraft aircraft)
         {
             if (order == null || aircraft == null) return;
@@ -748,8 +748,8 @@ namespace WingCommand
 
         // Delivery updates.
 
-     /// <summary>Advance pending orders oldest first, retrying eligible fields and resolving failures
-     /// that cannot produce an aircraft.</summary>
+        /// <summary>Advance pending orders oldest first, retrying eligible fields and resolving failures
+        /// that cannot produce an aircraft.</summary>
         public static void Tick()
         {
             TickSpawnFuel();
@@ -943,8 +943,8 @@ namespace WingCommand
             }
         }
 
-     /// <summary>Place surface units astern at slot spacing on the player's plane; they cannot use
-     /// aircraft hangars.</summary>
+        /// <summary>Place surface units astern at slot spacing on the player's plane; they cannot use
+        /// aircraft hangars.</summary>
         private static bool SurfacePlacement(Aircraft leader, out Vector3 position,
                                              out Quaternion rotation, out Vector3 velocity)
         {

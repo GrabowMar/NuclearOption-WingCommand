@@ -3,8 +3,8 @@ using UnityEngine;
 
 namespace WingCommand
 {
- /// <summary>Reads each friendly hangar's serialized availableAircraft list for actual spawn
- /// compatibility instead of inferring it from airframe class or pad size.</summary>
+    /// <summary>Reads each friendly hangar's serialized availableAircraft list for actual spawn
+    /// compatibility instead of inferring it from airframe class or pad size.</summary>
     internal static class WingHangarStock
     {
         private struct Pad
@@ -66,8 +66,8 @@ namespace WingCommand
             return Lists(hangar.GetAvailableAircraft(), definition);
         }
 
-     /// <summary>Use the hangar's AircraftDefinition instance because native CanSpawnAircraft compares
-     /// by reference.</summary>
+        /// <summary>Use the hangar's AircraftDefinition instance because native CanSpawnAircraft compares
+        /// by reference.</summary>
         internal static AircraftDefinition NativeDefinition(Hangar hangar, AircraftDefinition wanted)
         {
             if (hangar == null || wanted == null) return wanted;

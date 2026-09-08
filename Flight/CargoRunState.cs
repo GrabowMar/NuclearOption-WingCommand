@@ -2,41 +2,41 @@ using UnityEngine;
 
 namespace WingCommand
 {
- /// <summary>Delivers cargo to a map point: fixed-wing aircraft release overhead, helicopters descend.
- /// Confirm drops through ammunition changes. If release stalls, relinquish the point and use native
- /// transport where supported.</summary>
+    /// <summary>Delivers cargo to a map point: fixed-wing aircraft release overhead, helicopters descend.
+    /// Confirm drops through ammunition changes. If release stalls, relinquish the point and use native
+    /// transport where supported.</summary>
     internal class CargoRunState : WingPilotState
     {
         private enum Phase { Transit, Deliver, Egress }
 
-     /// <summary>Transit height to the drop point, in metres.</summary>
+        /// <summary>Transit height to the drop point, in metres.</summary>
         private const float TransitAltitude = 140f;
 
-     /// <summary>Helicopter stabilisation height before descent.</summary>
+        /// <summary>Helicopter stabilisation height before descent.</summary>
         private const float SettleAltitude = 24f;
 
-     /// <summary>Settled descent rate in metres per second.</summary>
+        /// <summary>Settled descent rate in metres per second.</summary>
         private const float DescentRate = 3f;
 
-     /// <summary>Maximum radar altitude for helicopter release.</summary>
+        /// <summary>Maximum radar altitude for helicopter release.</summary>
         private const float ReleaseAltitude = 8f;
 
-     /// <summary>Fixed-wing drop-run height.</summary>
+        /// <summary>Fixed-wing drop-run height.</summary>
         private const float DropRunAltitude = 260f;
 
-     /// <summary>Distance in metres considered arrival over the point.</summary>
+        /// <summary>Distance in metres considered arrival over the point.</summary>
         private const float ArrivalRadius = 120f;
 
-     /// <summary>Maximum distance from the point for fixed-wing release.</summary>
+        /// <summary>Maximum distance from the point for fixed-wing release.</summary>
         private const float DropRadius = 250f;
 
-     /// <summary>Delay between cargo release attempts, in seconds.</summary>
+        /// <summary>Delay between cargo release attempts, in seconds.</summary>
         private const float ReleaseInterval = 1.5f;
 
-     /// <summary>Delivery timeout before handing a stalled load to native transport.</summary>
+        /// <summary>Delivery timeout before handing a stalled load to native transport.</summary>
         private const float DeliverTimeout = 45f;
 
-     /// <summary>Climb-out height after cargo release.</summary>
+        /// <summary>Climb-out height after cargo release.</summary>
         private const float EgressAltitude = 220f;
 
         private GlobalPosition point;
@@ -51,7 +51,7 @@ namespace WingCommand
             stateDisplayName = "delivering";
         }
 
-     /// <summary>Set the drop destination before entering this state.</summary>
+        /// <summary>Set the drop destination before entering this state.</summary>
         public void SetDestination(GlobalPosition destination) => point = destination;
 
         public override void EnterState(Pilot pilot)
@@ -160,17 +160,21 @@ namespace WingCommand
 
         // Cargo release.
 
-     /// <summary>Stabilise overhead, descend, and release below the altitude threshold.</summary>
+        /// <summary>Stabilise overhead, descend, and release below the altitude threshold.</summary>
         private void DeliverRotary()
         {
-            hold = Mathf.Max(0f, hold - DescentRate * Time.fixedDeltaTime);
+            bool settled = HoverApproachPolicy.Settled(aircraft.speed,
+                HorizontalDistance(aircraft.GlobalPosition(), point));
+            hold = settled
+                ? Mathf.Max(0f, hold - DescentRate * Time.fixedDeltaTime)
+                : Mathf.Max(hold, SettleAltitude);
             HoverAssist.Hover(aircraft, point, hold, facing);
 
-            if (aircraft.radarAlt <= ReleaseAltitude) TryRelease();
+            if (settled && aircraft.radarAlt <= ReleaseAltitude) TryRelease();
             CheckStalled();
         }
 
-     /// <summary>Fly over the point and release within the drop radius.</summary>
+        /// <summary>Fly over the point and release within the drop radius.</summary>
         private void DeliverFixedWing()
         {
             Transit(rotary: false);
@@ -187,8 +191,8 @@ namespace WingCommand
             WingWeapons.ReleaseCargo(aircraft, pilot);
         }
 
-     /// <summary>Report a stalled drop and relinquish the point for native transport
-     /// fallback.</summary>
+        /// <summary>Report a stalled drop and relinquish the point for native transport
+        /// fallback.</summary>
         private void CheckStalled()
         {
             cargoProgress.Observe(member.CargoAmmo, Time.timeSinceLevelLoad);
@@ -217,7 +221,7 @@ namespace WingCommand
 
         // Departure from drop.
 
-     /// <summary>Climb clear while waiting for order completion.</summary>
+        /// <summary>Climb clear while waiting for order completion.</summary>
         private void Egress(bool rotary)
         {
             if (rotary)
@@ -243,8 +247,8 @@ namespace WingCommand
             return delta.magnitude;
         }
 
-     /// <summary>Resolve terrain beneath the map point; use the point itself over water or on a missed
-     /// raycast.</summary>
+        /// <summary>Resolve terrain beneath the map point; use the point itself over water or on a missed
+        /// raycast.</summary>
         private static GlobalPosition GroundUnder(GlobalPosition requested)
         {
             Vector3 local = requested.ToLocalPosition();

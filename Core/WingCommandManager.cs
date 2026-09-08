@@ -7,8 +7,8 @@ using UnityEngine;
 
 namespace WingCommand
 {
- /// <summary>Tracks the player leader, drives per-frame updates, handles input, and renders wing UI.
- /// Partial files separate radial input, recruitment, orders, and selection.</summary>
+    /// <summary>Tracks the player leader, drives per-frame updates, handles input, and renders wing UI.
+    /// Partial files separate radial input, recruitment, orders, and selection.</summary>
     [DefaultExecutionOrder(10000)]
     internal partial class WingCommandManager : MonoBehaviour
     {
@@ -21,7 +21,7 @@ namespace WingCommand
 
         internal string MapStatus => mapLayer?.Status;
 
-     /// <summary>Whether the map layer has an active notice.</summary>
+        /// <summary>Whether the map layer has an active notice.</summary>
         internal bool MapStatusIsNotice => mapLayer != null && mapLayer.HasNotice;
 
         private string toast;
@@ -135,8 +135,8 @@ namespace WingCommand
             WingComms.Tick(Wing);
         }
 
-     /// <summary>Enable the native wheel whenever reflection resolves. The standalone key adds another
-     /// entry point and does not disable integration.</summary>
+        /// <summary>Enable the native wheel whenever reflection resolves. The standalone key adds another
+        /// entry point and does not disable integration.</summary>
         internal static bool NativeRadialActive => GameAccess.Available;
 
         private static bool InPlayableState()
@@ -145,15 +145,15 @@ namespace WingCommand
             return s == GameState.SinglePlayer || s == GameState.Multiplayer;
         }
 
-     /// <summary>Log internal notices through verbose diagnostics. Show command state on WMC/map and
-     /// pilot events on radio, avoiding duplicate MessageUI boxes.</summary>
+        /// <summary>Log internal notices through verbose diagnostics. Show command state on WMC/map and
+        /// pilot events on radio, avoiding duplicate MessageUI boxes.</summary>
         internal void Toast(string message)
         {
             if (string.IsNullOrWhiteSpace(message)) return;
             Plugin.LogVerbose("[Wing] " + message);
         }
 
-     /// <summary>Debug messages permitted in the native game feed.</summary>
+        /// <summary>Debug messages permitted in the native game feed.</summary>
         internal void DebugToast(string message)
         {
             if (!Plugin.Settings.EnableDebugActions.Value || string.IsNullOrWhiteSpace(message))

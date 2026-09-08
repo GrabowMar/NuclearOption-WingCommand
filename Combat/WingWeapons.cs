@@ -3,23 +3,23 @@ using UnityEngine;
 
 namespace WingCommand
 {
- /// <summary>Fires through the stock select-target-notify-fire sequence while leaving attitude and
- /// throttle to the flight controller.</summary>
+    /// <summary>Fires through the stock select-target-notify-fire sequence while leaving attitude and
+    /// throttle to the flight controller.</summary>
     internal static class WingWeapons
     {
-     /// <summary>Shared shot interval for formation, orbit, and attack runs, shortened by pilot
-     /// experience.</summary>
+        /// <summary>Shared shot interval for formation, orbit, and attack runs, shortened by pilot
+        /// experience.</summary>
         public static float FireInterval(Aircraft aircraft) =>
             WingTuning.FireInterval * WingPilotRoster.ReactionScale(aircraft);
 
-     /// <summary>This member's weapon preference, or Auto if the aircraft is not commandable.</summary>
+        /// <summary>This member's weapon preference, or Auto if the aircraft is not commandable.</summary>
         private static WingWeaponPreference PreferenceOf(Aircraft aircraft)
         {
             WingMember member = WingCommandManager.Instance?.Wing?.Find(aircraft);
             return member != null ? member.WeaponPreference : WingWeaponPreference.Auto;
         }
 
-     /// <summary>Permitted target classes.</summary>
+        /// <summary>Permitted target classes.</summary>
         internal enum Allow
         {
             None,
@@ -29,7 +29,7 @@ namespace WingCommand
             GroundOnly,
         }
 
-     /// <summary>Engage the highest-value allowed target; return true if fired.</summary>
+        /// <summary>Engage the highest-value allowed target; return true if fired.</summary>
         public static bool Engage(Aircraft aircraft, Pilot pilot, Allow allow, float maxRange)
         {
             if (aircraft == null || !aircraft.LocalSim || pilot == null || allow == Allow.None) return false;
@@ -57,8 +57,8 @@ namespace WingCommand
             return true;
         }
 
-     /// <summary>Checks the weapon's shot envelope. Callers enforce cadence separately to prevent
-     /// firing on every engagement tick.</summary>
+        /// <summary>Checks the weapon's shot envelope. Callers enforce cadence separately to prevent
+        /// firing on every engagement tick.</summary>
         private static bool ShotIsValid(Aircraft aircraft, WeaponStation station, Unit target)
         {
             WeaponInfo info = station.WeaponInfo;
@@ -91,12 +91,12 @@ namespace WingCommand
             return true;
         }
 
-     /// <summary>Engage the player's designated unit; return true if fired.</summary>
+        /// <summary>Engage the player's designated unit; return true if fired.</summary>
         public static bool EngageSpecific(Aircraft aircraft, Pilot pilot, Unit target, float maxRange) =>
             EngageDesignated(aircraft, pilot, target, maxRange, massed: false);
 
-     /// <summary>Splash 'Em bypasses TacticalCoordinator's firing cap for massed fire. Stations must
-     /// still match the target and pass their shot envelopes.</summary>
+        /// <summary>Splash 'Em bypasses TacticalCoordinator's firing cap for massed fire. Stations must
+        /// still match the target and pass their shot envelopes.</summary>
         public static bool EngageMassed(Aircraft aircraft, Pilot pilot, Unit target, float maxRange) =>
             EngageDesignated(aircraft, pilot, target, maxRange, massed: true);
 
@@ -138,7 +138,7 @@ namespace WingCommand
             return true;
         }
 
-     /// <summary>Select, target, notify, and fire an offensive station.</summary>
+        /// <summary>Select, target, notify, and fire an offensive station.</summary>
         private static void FireStation(Aircraft aircraft, Pilot pilot, Unit target,
                                         WeaponManager wm, WeaponStation station)
         {
@@ -171,8 +171,8 @@ namespace WingCommand
             }
         }
 
-     /// <summary>Choose the most effective ready station that can fire now, preferring a different
-     /// station from the last shot. Reuse the previous one only if no alternative can fire.</summary>
+        /// <summary>Choose the most effective ready station that can fire now, preferring a different
+        /// station from the last shot. Reuse the previous one only if no alternative can fire.</summary>
         private static WeaponStation MassedStationFor(Aircraft aircraft, Unit target,
                                                       WeaponStation justFired)
         {
@@ -184,8 +184,8 @@ namespace WingCommand
             return pick ?? BestStationFor(aircraft, targetClass, WingWeaponPreference.Auto, target);
         }
 
-     /// <summary>Choose a station for measured Attack using weapon preference. Splash uses
-     /// MassedStationFor to cycle stores.</summary>
+        /// <summary>Choose a station for measured Attack using weapon preference. Splash uses
+        /// MassedStationFor to cycle stores.</summary>
         private static WeaponStation DesignatedStationFor(Aircraft aircraft, Unit target)
         {
             bool isAir = target.definition != null && target.definition.typeIdentity.air > 0.5f;
@@ -193,8 +193,8 @@ namespace WingCommand
             return BestStationFor(aircraft, targetClass, PreferenceOf(aircraft), target);
         }
 
-     /// <summary>Whether any remaining store can damage the target. Ignore temporary cooldown and range
-     /// limits so Splash does not mistake a delayed shot for an empty loadout.</summary>
+        /// <summary>Whether any remaining store can damage the target. Ignore temporary cooldown and range
+        /// limits so Splash does not mistake a delayed shot for an empty loadout.</summary>
         public static bool CanStillEngage(Aircraft aircraft, Unit target)
         {
             if (aircraft == null || target == null || target.disabled) return false;
@@ -215,8 +215,8 @@ namespace WingCommand
             return false;
         }
 
-     /// <summary>Required height above a surface target to clear bomb release limits. Return zero for
-     /// missile/gun-only loadouts to use the default attack height.</summary>
+        /// <summary>Required height above a surface target to clear bomb release limits. Return zero for
+        /// missile/gun-only loadouts to use the default attack height.</summary>
         public static float BombReleaseFloor(Aircraft aircraft, Unit target)
         {
             if (aircraft == null || aircraft.weaponStations == null || target == null) return 0f;
@@ -239,12 +239,12 @@ namespace WingCommand
             return floor;
         }
 
-     /// <summary>Whether a weapon station carries a jammer pod. Self-protection RadarJammer
-     /// countermeasures do not qualify for the Jam order.</summary>
+        /// <summary>Whether a weapon station carries a jammer pod. Self-protection RadarJammer
+        /// countermeasures do not qualify for the Jam order.</summary>
         public static bool HasJammer(Aircraft aircraft) => JammerStation(aircraft) != null;
 
-     /// <summary>Fire the jammer pod at the designation. The native pod controls jamming range, power,
-     /// and updates.</summary>
+        /// <summary>Fire the jammer pod at the designation. The native pod controls jamming range, power,
+        /// and updates.</summary>
         public static bool EngageJammer(Aircraft aircraft, Pilot pilot, Unit target)
         {
             if (aircraft == null || pilot == null || target == null || target.disabled)
@@ -293,9 +293,9 @@ namespace WingCommand
             return null;
         }
 
-     /// <summary>Release one cargo load through the native station. Ground release requires runtime
-     /// confirmation: the caller checks ammunition changes and falls back to native transport if
-     /// nothing drops.</summary>
+        /// <summary>Release one cargo load through the native station. Ground release requires runtime
+        /// confirmation: the caller checks ammunition changes and falls back to native transport if
+        /// nothing drops.</summary>
         public static bool ReleaseCargo(Aircraft aircraft, Pilot pilot)
         {
             if (aircraft == null || pilot == null || aircraft.weaponStations == null) return false;
@@ -324,7 +324,7 @@ namespace WingCommand
             return true;
         }
 
-     /// <summary>Intercept inbound missiles through the native target search.</summary>
+        /// <summary>Intercept inbound missiles through the native target search.</summary>
         public static bool InterceptMissiles(Aircraft aircraft, Pilot pilot, Aircraft protectee)
         {
             if (aircraft == null || !aircraft.LocalSim || pilot == null || aircraft.weaponManager == null ||
@@ -468,8 +468,8 @@ namespace WingCommand
             return best;
         }
 
-     /// <summary>Soft target-class preference. Both weights remain positive, so preference reorders
-     /// candidates without excluding them.</summary>
+        /// <summary>Soft target-class preference. Both weights remain positive, so preference reorders
+        /// candidates without excluding them.</summary>
         private static float ClassBias(WingWeaponPreference preference, bool isAir)
         {
             switch (preference)
@@ -480,8 +480,8 @@ namespace WingCommand
             }
         }
 
-     /// <summary>Choose the unclaimed tracked inbound with the shortest time to impact that a ready
-     /// station can engage.</summary>
+        /// <summary>Choose the unclaimed tracked inbound with the shortest time to impact that a ready
+        /// station can engage.</summary>
         private static Missile ChooseIncoming(MissileWarning warning, Aircraft protectee,
                                               Aircraft interceptor, out WeaponStation station)
         {
@@ -521,7 +521,7 @@ namespace WingCommand
             return best;
         }
 
-     /// <summary>Remaining missiles, laser-guided bombs, and glide bombs.</summary>
+        /// <summary>Remaining missiles, laser-guided bombs, and glide bombs.</summary>
         public static int GetGuidedAmmo(Aircraft aircraft)
         {
             if (aircraft == null || aircraft.weaponStations == null) return 0;
@@ -547,7 +547,7 @@ namespace WingCommand
             return Mathf.Clamp(estimated, 1, maxWingmen);
         }
 
-     /// <summary>Estimate useful simultaneous shooters for this aircraft and target.</summary>
+        /// <summary>Estimate useful simultaneous shooters for this aircraft and target.</summary>
         public static int RecommendedAttackers(Aircraft aircraft, Unit target)
         {
             if (aircraft == null || target == null || target.definition == null) return 1;
@@ -559,13 +559,13 @@ namespace WingCommand
             return RequiredAttackers(station, target);
         }
 
-     /// <summary>Reuse target-search storage to avoid per-tick allocation.</summary>
+        /// <summary>Reuse target-search storage to avoid per-tick allocation.</summary>
         private static readonly List<Unit> scratch = new List<Unit>(64);
         private static readonly List<Unit> interceptTargets = new List<Unit>();
 
-     /// <summary>Rank ready stations by effectiveness and preference. For a specific target, reject
-     /// invalid shots first so an out-of-envelope preferred weapon cannot hide one that can
-     /// fire.</summary>
+        /// <summary>Rank ready stations by effectiveness and preference. For a specific target, reject
+        /// invalid shots first so an out-of-envelope preferred weapon cannot hide one that can
+        /// fire.</summary>
         private static WeaponStation BestStationFor(Aircraft aircraft, TargetClass targetClass) =>
             BestStationFor(aircraft, targetClass, PreferenceOf(aircraft));
 
@@ -614,8 +614,8 @@ namespace WingCommand
             return best;
         }
 
-     /// <summary>Weight valid stations by preference, excluding missile defence. Close-in preference
-     /// uses weapon range rather than weapon names.</summary>
+        /// <summary>Weight valid stations by preference, excluding missile defence. Close-in preference
+        /// uses weapon range rather than weapon names.</summary>
         private static float StationBias(WingWeaponPreference preference, WeaponStation station,
                                          TargetClass targetClass)
         {
@@ -630,14 +630,14 @@ namespace WingCommand
             return Mathf.Lerp(2f, 1f, Mathf.Clamp01(reach / 10000f));
         }
 
-     /// <summary>Whether any carried weapon can engage missiles.</summary>
+        /// <summary>Whether any carried weapon can engage missiles.</summary>
         public static bool HasMissileDefence(Aircraft aircraft)
         {
             return aircraft != null && BestStationFor(aircraft, TargetClass.Missile) != null;
         }
 
-     /// <summary>Choose the most threatening enemy aircraft, or null. Rear-hemisphere contacts receive
-     /// a distance advantage to favour threats behind the protectee.</summary>
+        /// <summary>Choose the most threatening enemy aircraft, or null. Rear-hemisphere contacts receive
+        /// a distance advantage to favour threats behind the protectee.</summary>
         public static Unit NearestThreatTo(Aircraft protectee, float range)
         {
             if (protectee == null) return null;
@@ -674,8 +674,8 @@ namespace WingCommand
             return best;
         }
 
-     /// <summary>Choose the nearest live enemy within radius of near that remaining stores can damage.
-     /// Different HQs are hostile. Return null when no usable target or ordnance remains.</summary>
+        /// <summary>Choose the nearest live enemy within radius of near that remaining stores can damage.
+        /// Different HQs are hostile. Return null when no usable target or ordnance remains.</summary>
         public static Unit NextExpendTarget(Aircraft aircraft, GlobalPosition near,
                                             float radius, Unit exclude)
         {

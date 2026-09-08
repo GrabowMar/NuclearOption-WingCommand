@@ -46,10 +46,13 @@ namespace WingCommand.PureTests
             radio.Observe(2, DeparturePhase.Taxiing, 0f);
             AssertCall(radio, 0f, 1, DeparturePhase.Taxiing);
             Assert.False(radio.TryDequeue(0f, true, out _, out _));
-            Assert.False(radio.TryDequeue(4.99f, true, out _, out _));
-            AssertCall(radio, 5f, 2, DeparturePhase.Taxiing);
-            Assert.False(radio.TryDequeue(9.99f, true, out _, out _));
-            AssertCall(radio, 10f, 3, DeparturePhase.Taxiing);
+            Assert.False(radio.TryDequeue(11.99f, true, out _, out _));
+            AssertCall(radio, 12f, 2, DeparturePhase.Taxiing);
+            Assert.False(radio.TryDequeue(23.99f, true, out _, out _));
+            // The remaining taxi report expires instead of building a stale backlog.
+            Assert.False(radio.TryDequeue(24f, true, out _, out _));
+            radio.Observe(3, DeparturePhase.Airborne, 25f);
+            AssertCall(radio, 25f, 3, DeparturePhase.Airborne);
         }
 
         [Fact]

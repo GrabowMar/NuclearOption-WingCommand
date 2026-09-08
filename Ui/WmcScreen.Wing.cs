@@ -10,10 +10,10 @@ using NOAvionics.Ui;
 
 namespace WingCommand
 {
-    /// <summary>The WMC panel's WING tab: one pilot's record and the aircraft they are flying.</summary>
+    /// <summary>WING page for pilot history and current aircraft details.</summary>
     internal static partial class WmcScreen
     {
-        // --- Wing page ---
+        // Pilot inspection state.
         private static readonly List<PilotRow> pilotRows = new List<PilotRow>();
         private static RectTransform pilotRosterArea;
         private static TMP_Text pilotEmptyLabel;
@@ -46,17 +46,10 @@ namespace WingCommand
         private static TMP_Text airframeWeaponsLabel;
         private static Image airframeSilhouette;
 
-        // -------------------------------------------------------------------- wing page
+        // Wing-page construction.
 
-        /// <summary>
-        /// The squadron roster and one person's record.
-        ///
-        /// Read-only by design. Everything that can be changed about a pilot already has a
-        /// control somewhere else — the SUPPLY tab picks who flies next — and duplicating
-        /// those here would give the player two places to look for the same switch. The
-        /// airframe half of the dossier is whatever the inspected pilot is flying, or an
-        /// explicit "on the ground" note when they are not.
-        /// </summary>
+        /// <summary>Read-only squadron roster and pilot dossier. SUPPLY chooses the next pilot; aircraft
+        /// details follow the inspected pilot or show ground status.</summary>
         private static float AddWingPage(RectTransform parent, float y)
         {
             y = Heading(parent, y, "SQUADRON");
@@ -92,7 +85,7 @@ namespace WingCommand
             const float portraitX = Pad + 8f;
             const float portraitGap = Space3;
 
-            // --- Left Column: Tall Portrait Photo Card ---
+            // Portrait column.
             Panel(parent, new Rect(portraitX, y, PortraitWidth, PortraitHeight), AvTheme.Surface);
 
             var maskGo = new GameObject("PilotPortraitMask", typeof(RectTransform), typeof(RectMask2D));
@@ -108,7 +101,7 @@ namespace WingCommand
             pilotPortrait.raycastTarget = false;
             UpdatePortraitAspectFill(pilotPortrait, PilotPortrait.Sprite, PortraitWidth, PortraitHeight);
 
-            // A subtle red wash over the portrait for a lost pilot (no face-covering badge)
+            // Overlay a subtle loss tint without covering the face.
             var kiaOverlayGo = new GameObject("PilotKiaOverlay", typeof(RectTransform), typeof(Image));
             RectTransform kiaRt = kiaOverlayGo.GetComponent<RectTransform>();
             kiaRt.SetParent(maskRt, worldPositionStays: false);
@@ -121,7 +114,7 @@ namespace WingCommand
             pilotPortraitFrame = Outline(parent, new Rect(portraitX, y, PortraitWidth, PortraitHeight), RankColor(WingRank.Rookie));
             pilotCardRail = null;
 
-            // --- Right Column: Pilot Data, Skills & Bio Grid ---
+            // Pilot identity, skills, and biography column.
             float dossierX = portraitX + PortraitWidth + portraitGap;
             float dossierW = (Pad + w - 8f) - dossierX;
 
@@ -146,7 +139,7 @@ namespace WingCommand
                                       FontMicro, FontStyles.Normal, TextAlignmentOptions.Left);
             detailY -= LineHeight + 3f;
 
-            // Pilot specialization skills (icons only with full tactical tooltips)
+            // Skill icons with descriptive hover help.
             const float skillSize = 20f;
             const float skillGap = 4f;
             pilotSkillIcons.Clear();
@@ -162,9 +155,9 @@ namespace WingCommand
                 "jam", "AVIONICS SPECIALIST", "Extended ECM radar jamming reach and rapid flare countermeasure bursts"));
             detailY -= skillSize + 4f;
 
-            // Integrated bio narrative in right data column
+            // Biography within the dossier column.
             pilotBackgroundLabel = Label(parent, "", new Rect(dossierX, detailY, dossierW, 38f),
-                                         Friendly(), FontMicro, FontStyles.Italic,
+                                         Friendly(), FontMicro, FontStyles.Normal,
                                          TextAlignmentOptions.TopLeft);
             pilotBackgroundLabel.enableWordWrapping = true;
             pilotBackgroundLabel.overflowMode = TextOverflowModes.Ellipsis;
@@ -304,14 +297,14 @@ namespace WingCommand
             }
 
             string stats = "COMBAT RECORD   " + focus.Kills + " KILL(S)   /   " +
-                           focus.Sorties + " SORTIE(S)" + (kia ? "   —   MIA" : "");
+                           focus.Sorties + " SORTIE(S)" + (kia ? "   —   KIA" : "");
             string persona = kia
-                ? "STATUS   MISSING IN ACTION"
+                ? "STATUS   KILLED IN ACTION"
                 : "RADIO PROFILE   " + focus.Persona.ToString().ToUpperInvariant();
 
             SetWingDetail(identity, rank, stats, persona, progress,
-                          focus.Background, kia ? "NO AIRFRAME" : "",
-                          "", "", "", "");
+                          focus.Background, kia ? focus.LastAircraft ?? "Unknown aircraft" : "",
+                          "", kia ? "KILLED BY   " + (focus.KilledBy ?? "Unknown") : "", "", "");
 
             if (pilotIdentityLabel != null) pilotIdentityLabel.color = kia ? Alert() : Green();
 
@@ -321,13 +314,13 @@ namespace WingCommand
                 if (airframeSilhouette != null) airframeSilhouette.sprite = IconFactory.Get("airframe");
                 if (airframeTypeLabel != null)
                 {
-                    airframeTypeLabel.text = kia ? "NO AIRFRAME   (GROUNDED)" : "NO AIRFRAME";
+                    airframeTypeLabel.text = kia ? "AIRCRAFT   " + (focus.LastAircraft ?? "Unknown aircraft") : "NO AIRFRAME";
                     airframeTypeLabel.color = kia ? Alert() : Dim();
                 }
                 if (airframeStateLabel != null)
                 {
                     airframeStateLabel.text = kia
-                        ? "LOST IN ACTION  ·  WILL NOT BE RECOVERED"
+                        ? "CAUSE   " + (focus.LossCause ?? "Unknown")
                         : "ON THE GROUND  ·  AWAITING AN AIRFRAME";
                     airframeStateLabel.color = kia ? Alert() : Friendly();
                 }
@@ -386,7 +379,7 @@ namespace WingCommand
                 airframeTypeLabel.text = type + "   (NOT LOCALLY SIMULATED)";
         }
 
-        /// <summary>Keep the ghost airframe faint, or hide it entirely on the empty page.</summary>
+        /// <summary>Set faint aircraft-silhouette opacity or hide it on empty pages.</summary>
         private static void SetSilhouetteAlpha(float alpha)
         {
             if (airframeSilhouette == null) return;
@@ -396,13 +389,7 @@ namespace WingCommand
         }
 
         /// <summary>
-        /// Dress the portrait and corner badge for whoever is being inspected.
-        ///
-        /// Alive pilots get a subtle tinting by rank and a rank letter; a lost pilot gets a
-        /// red wash, a centred KIA stencil, and a badge turned to the alert colour. The
-        /// shared placeholder sprite is tinted rather than swapped, since the roster has one
-        /// portrait asset — a per-pilot art path would only need to feed this a different
-        /// sprite.
+        /// Display the pilot's generated portrait with loss tint and rank frame.
         /// </summary>
         private static void RenderPilotVisual(WingPilot pilot)
         {
@@ -411,7 +398,7 @@ namespace WingCommand
                 pilotPortrait.color = pilot == null
                     ? Color.white
                     : pilot.Lost ? new Color(0.7f, 0.45f, 0.45f, 0.85f) : Color.white;
-                UpdatePortraitAspectFill(pilotPortrait, PilotPortrait.Sprite, PortraitWidth, PortraitHeight);
+                UpdatePortraitAspectFill(pilotPortrait, PilotPortrait.For(pilot), PortraitWidth, PortraitHeight);
             }
 
             if (pilotKiaOverlay != null) pilotKiaOverlay.gameObject.SetActive(pilot != null && pilot.Lost);
@@ -493,7 +480,7 @@ namespace WingCommand
                     new Vector2(Mathf.Max(0f, pilotXpBarWidth * Mathf.Clamp01(progress)), 3f);
         }
 
-        /// <summary>A compact live inventory, grouped by the weapon definition on each station.</summary>
+        /// <summary>Summarise live stores grouped by weapon definition.</summary>
         private static string WeaponManifest(Aircraft aircraft)
         {
             if (aircraft == null || aircraft.weaponStations == null) return "WEAPONS   —";

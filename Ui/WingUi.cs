@@ -8,13 +8,10 @@ using UnityEngine.UI;
 
 namespace WingCommand
 {
-    /// <summary>
-    /// The Wing Command widget bridge over NOAvionics and NOAvionics.Ui.
-    /// Provides chamfered bezels, tactile cards, segmented tabs, and input-guarded controls.
-    /// </summary>
+    /// <summary>Wing widget adapter over shared NOAvionics controls, styling, and guarded input.</summary>
     internal static class WingUi
     {
-        // ------------------------------------------------------------------- spacing
+        // Shared spacing tokens.
         public const float Space1 = AvTokens.Space1;
         public const float Space2 = AvTokens.Space2;
         public const float Space3 = AvTokens.Space3;
@@ -28,12 +25,12 @@ namespace WingCommand
         public const float Pad = AvTokens.Pad;
         public const float RowPitch = AvTokens.RowPitch;
 
-        // Button widths
+        // Standard button widths.
         public const float ButtonCompact = 44f;
         public const float ButtonAction = 104f;
         public const float ButtonPrimary = 132f;
 
-        // ---------------------------------------------------------------------- type
+        // Shared text sizes.
         public const float FontMicro = AvTokens.FontMicro;
         public const float FontSmall = AvTokens.FontSmall;
         public const float FontBody = AvTokens.FontBody;
@@ -52,7 +49,7 @@ namespace WingCommand
             AvSprites.Reset();
         }
 
-        // ------------------------------------------------------------------- colours
+        // Shared theme colours.
         public static Color Green => AvTheme.Accent;
         public static Color Grey => Color.grey;
         public static Color Friendly => AvTheme.Friendly;
@@ -77,7 +74,7 @@ namespace WingCommand
         public static Color RailInert => AvTheme.RailInert;
         public static Color TextPrimary => AvTheme.Unity(AvTokens.TextPrimary);
 
-        // ------------------------------------------------------------------- widgets
+        // Widget helpers.
         public static void Place(RectTransform target, Rect rect) => AvKit.Place(target, rect);
 
         public static void Stretch(RectTransform target) => AvKit.Stretch(target);
@@ -177,9 +174,7 @@ namespace WingCommand
 
     }
 
-    /// <summary>
-    /// Wing Command button extending AvButton to preserve WingButton type compatibility.
-    /// </summary>
+    /// <summary>AvButton subclass retaining WingButton type compatibility.</summary>
     internal class WingButton : AvButton
     {
         public new WingButton WithTooltip(string text)

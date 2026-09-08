@@ -6,10 +6,11 @@ namespace WingCommand
     {
         internal void Execute(WingAction action) => Execute(action, wholeWing: true);
 
-     /// <summary>Execute a UI action. Radial and hotkeys target the whole wing; WMC and map pass
-     /// wholeWing=false.</summary>
+        /// <summary>Execute a UI action. Radial and hotkeys target the whole wing; WMC and map pass
+        /// wholeWing=false.</summary>
         internal void Execute(WingAction action, bool wholeWing)
         {
+            Plugin.LogAction($"request action={action} scope={(wholeWing ? "wing" : "selection")}");
             // Clear armed map tools after an immediate order so the next right-click defaults to Move.
             CancelMapOrder(notify: false);
 
@@ -46,6 +47,7 @@ namespace WingCommand
                     }
 
                     WingComms.AcknowledgeRefit(refitScratch);
+                    Plugin.LogAction($"result action=Refit applied={refitScratch.Count}");
                     break;
                 }
 
@@ -103,6 +105,7 @@ namespace WingCommand
         {
             float altitude = mapLayer != null ? mapLayer.MoveAltitude : 0f;
             float speed = mapLayer != null ? mapLayer.MoveSpeed : 0f;
+            Plugin.LogAction($"request order=MoveToPoint point={point} append={append} altitude={altitude} speed={speed}");
             List<WingMember> scope = Commands.Scope(wholeWing: false);
             var responders = new List<WingMember>();
             foreach (WingMember member in scope)
@@ -136,6 +139,7 @@ namespace WingCommand
 
         private void IssueMapTask(WingDirective directive, WingOrder order, bool append)
         {
+            Plugin.LogAction($"request order={order} point={directive.Point} hasPoint={directive.HasPoint} target={directive.Target?.unitName} append={append}");
             List<WingMember> scope = Commands.Scope(wholeWing: false);
             var responders = new List<WingMember>();
             foreach (WingMember member in scope)
@@ -151,6 +155,7 @@ namespace WingCommand
 
         private void AcknowledgeMapIssue(List<WingMember> responders, WingOrder order, bool append)
         {
+            Plugin.LogAction($"result order={order} applied={responders.Count} append={append}");
             if (responders.Count == 0)
             {
                 Toast(WingOrderCatalog.UnavailableReason(order));
@@ -164,19 +169,21 @@ namespace WingCommand
                   " selected wingman" + (n == 1 ? "" : "men"));
         }
 
-     /// <summary>Run one manoeuvre for the command scope, then rejoin.</summary>
+        /// <summary>Run one manoeuvre for the command scope, then rejoin.</summary>
         internal void ExecuteManeuver(ManeuverKind kind, bool wholeWing)
         {
+            Plugin.LogAction($"request maneuver={kind} scope={(wholeWing ? "wing" : "selection")}");
             CancelMapOrder(notify: false);
             Show(Commands.Maneuver(kind, wholeWing));
         }
 
         private static readonly List<WingMember> refitScratch = new List<WingMember>();
 
-     /// <summary>Arm a WMC order for the next map right-click. Attack also executes immediately if
-     /// player targets are already designated.</summary>
+        /// <summary>Arm a WMC order for the next map right-click. Attack also executes immediately if
+        /// player targets are already designated.</summary>
         internal void SelectMapOrder(WingOrder order)
         {
+            Plugin.LogAction($"select map order={order}");
             if (Selection.IsNone)
             {
                 Toast("No wingmen selected");
@@ -218,6 +225,7 @@ namespace WingCommand
 
         private void Show(WingDispatchResult result)
         {
+            Plugin.LogAction($"result success={result.Success} applied={result.Applied} message={result.Message}");
             if (!result.Success)
             {
                 Toast(result.Message);
@@ -229,9 +237,9 @@ namespace WingCommand
             WingComms.Acknowledge(result.Responders, result.Order);
         }
 
-     /// <summary>Player designations from CombatHUD.GetTargetList, newest first. Pilot.GetPrimaryTarget
-     /// is populated by AI, not player HUD selection. Keep all designations for target
-     /// distribution.</summary>
+        /// <summary>Player designations from CombatHUD.GetTargetList, newest first. Pilot.GetPrimaryTarget
+        /// is populated by AI, not player HUD selection. Keep all designations for target
+        /// distribution.</summary>
         private static readonly List<Unit> playerTargets = new List<Unit>();
 
         private static List<Unit> CurrentPlayerTargets()

@@ -4,8 +4,8 @@ namespace WingCommand
 {
     internal static class FormationControlRules
     {
-     /// <summary>Build vertical aim over the horizontal baseline using slot climb speed, not leader
-     /// flight-path angle. Keep damping independent of pursuit distance.</summary>
+        /// <summary>Build vertical aim over the horizontal baseline using slot climb speed, not leader
+        /// flight-path angle. Keep damping independent of pursuit distance.</summary>
         public static float VerticalAimRise(float horizontalDistance, float horizontalSpeed,
             float lookAhead, float slotClimb, float verticalCorrection) =>
             Math.Max(0f, horizontalDistance) *
@@ -58,8 +58,8 @@ namespace WingCommand
             z /= length;
         }
 
-     /// <summary>Rotate rejoin direction mainly through horizontal heading while bounding pitch against
-     /// zoom climbs and terrain dives.</summary>
+        /// <summary>Rotate rejoin direction mainly through horizontal heading while bounding pitch against
+        /// zoom climbs and terrain dives.</summary>
         public static void SafeRejoinDirection(
             float curDirX, float curDirY, float curDirZ,
             float reqX, float reqY, float reqZ,
@@ -141,13 +141,16 @@ namespace WingCommand
             outZ = (float)(rotHZ * cosPitch);
         }
 
-     /// <summary>Cap closure by the speed the remaining along-track gap can shed at the supplied
-     /// deceleration.</summary>
+        /// <summary>Cap closure by the speed the remaining along-track gap can shed at the supplied
+        /// deceleration.</summary>
         public static float RejoinClosure(
             float gap, float closing, float maxDecel, float aggression, float damping,
             float gapGain, float closingDamp, float maxStationClosure, float responseSeconds = 0f)
         {
-            float rawClosure = gapGain * gap * aggression - closingDamp * closing * damping;
+            // Ease arrival damping while behind, restoring it over the last 50 m
+            // so a captured aircraft still settles quietly. Keep the braking cap.
+            float capture = closing > 0f ? Math.Max(0f, Math.Min(1f, (gap - 50f) / 250f)) : 0f;
+            float rawClosure = gapGain * gap * aggression - closingDamp * closing * damping * (1f - 0.5f * capture);
             float responseLoss = Math.Max(0f, maxDecel) * Math.Max(0f, responseSeconds);
             float overspeedCap = (float)Math.Sqrt(responseLoss * responseLoss +
                 2f * Math.Max(0f, maxDecel) * Math.Max(gap, 0f)) - responseLoss;
@@ -157,20 +160,9 @@ namespace WingCommand
             return Math.Max(-maxStationClosure, Math.Min(overspeedCap, rawClosure));
         }
 
-        /// <summary>
-        /// Restricts bank authority to wings-level when the aircraft needs downward pitch authority
-        /// to arrest a climb or execute a descent.
-        /// 
-        /// In the native AutopilotPlane.AutoAim implementation, if the aim direction is lower in pitch
-        /// than the current flight path, AutoAim calculates a desired bank of 120° to 180° (attempting to
-        /// roll inverted to pull positive Gs downward). Because bankAllowed clamps this roll, the aircraft
-        /// locks into a steep knife-edge bank (up to bankAllowed). In knife-edge flight, the elevator is
-        /// oriented horizontally and AutoAim suppresses elevator authority by up to 90% due to roll error,
-        /// completely disabling the aircraft's ability to pitch down and trapping it in a runaway climb.
-        /// 
-        /// Clamping bankAllowed to near-zero (level bank) forces AutoAim to keep wings level, prevents elevator
-        /// suppression, and gives the elevator 100% downward pitch authority to bunt down immediately.
-        /// </summary>
+        /// <summary>Restrict bank toward level when pitch-down recovery is needed. Native pursuit may
+        /// otherwise request inversion, leaving the aircraft at knife-edge with suppressed elevator
+        /// authority and unable to arrest climb.</summary>
         public static float PitchDownBankAuthority(
             float currentPitchDeg, float demandedPitchDeg,
             float verticalSpeed, float verticalError,
@@ -181,8 +173,8 @@ namespace WingCommand
 
             if (divergingClimb || pitchDeficit > 0f)
             {
-                // When pitch deficit is >= 3 degrees, full collapse to levelBank.
-                // If diverging in climb (e.g. climbing at > 5 m/s above slot), collapse immediately.
+                // Reach levelBank at a 3-degree pitch deficit; diverging climb collapses authority
+                // immediately.
                 float deficitScale = Math.Max(0f, Math.Min(1f, pitchDeficit / 3f));
                 if (divergingClimb)
                 {
@@ -196,11 +188,8 @@ namespace WingCommand
             return requestedBankDeg;
         }
 
-        /// <summary>
-        /// Kinematically-limited vertical correction. Prevents high-speed climb or dive overshoot
-        /// when closing on slot altitude by anticipating the stopping distance (v^2 / 2a) required
-        /// to round out smoothly.
-        /// </summary>
+        /// <summary>Bound vertical closure using stopping distance v²/(2a) to reduce altitude
+        /// overshoot.</summary>
         public static float KinematicVerticalCorrection(
             float verticalGap, float verticalDrift, float maxCorrection,
             float positionGain, float driftDamping, float aggression, float damping,
@@ -211,8 +200,7 @@ namespace WingCommand
 
             if (verticalGap > 0f)
             {
-                // Slot is above: vCap is the max safe closing climb rate (relative to slot)
-                // that can be shed before overshooting the slot.
+                // Maximum relative climb rate that can stop within the upward slot gap.
                 float vCap = (float)Math.Sqrt(2f * Math.Max(0.1f, maxDecel) * verticalGap);
                 if (verticalDrift > vCap)
                 {
@@ -222,7 +210,7 @@ namespace WingCommand
             }
             else if (verticalGap < 0f)
             {
-                // Slot is below: vCap is max safe descent rate relative to slot.
+                // Maximum relative descent rate that can stop within the downward slot gap.
                 float vCap = (float)Math.Sqrt(2f * Math.Max(0.1f, maxDecel) * (-verticalGap));
                 if (-verticalDrift > vCap)
                 {
@@ -234,21 +222,19 @@ namespace WingCommand
             return Math.Max(-maxCorrection, Math.Min(maxCorrection, rawCorrection));
         }
 
-        /// <summary>
-        /// Caps engine throttle when the aircraft is diverging above slot altitude while still climbing.
-        /// Cuts full afterburner so upward momentum and kinetic energy wash off rapidly under gravity.
-        /// </summary>
+        /// <summary>Limit throttle while climbing away above the slot so excess upward energy can
+        /// dissipate.</summary>
         public static float ClimbThrottleCap(float rawThrottle, float verticalSpeed, float verticalError,
                                              float maxCap = 0.45f, float airspeed = float.MaxValue,
                                              float minimumSpeed = 0f)
         {
-            // Altitude correction must never starve a slow aircraft of recovery power.
+            // Preserve recovery power below minimum safe airspeed.
             if (airspeed < minimumSpeed) return 1f;
             if (verticalSpeed > 2f && verticalError < -30f)
             {
-                // Scale cap down as vertical divergence increases
+                // Tighten the throttle cap with increasing altitude divergence.
                 float severity = Math.Max(0f, Math.Min(1f, (-verticalError - 30f) / 70f));
-                float effectiveCap = maxCap - severity * 0.15f; // Drops to 0.30 at -100m error
+                float effectiveCap = maxCap - severity * 0.15f; // Cap reaches 0.30 at 100 m above the slot.
                 return Math.Min(rawThrottle, Math.Max(0.2f, effectiveCap));
             }
             return rawThrottle;

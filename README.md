@@ -3,7 +3,7 @@
 # ✈ WING COMMAND
 ### Tactical AI wing control for Nuclear Option
 
-[![Release](https://img.shields.io/badge/release-0.9.2-blue?style=for-the-badge)](https://github.com/GrabowMar/NuclearOption-WingCommand/releases)
+[![Release](https://img.shields.io/badge/release-0.9.2.1-blue?style=for-the-badge)](https://github.com/GrabowMar/NuclearOption-WingCommand/releases)
 [![Game](https://img.shields.io/badge/Nuclear%20Option-0.34.2-orange?style=for-the-badge)](https://store.steampowered.com/app/2247020/Nuclear_Option/)
 [![BepInEx](https://img.shields.io/badge/BepInEx-5.4.23%2B-lightgrey?style=for-the-badge)](https://github.com/BepInEx/BepInEx/releases)
 [![License](https://img.shields.io/badge/license-MIT-green?style=for-the-badge)](LICENSE)
@@ -75,7 +75,7 @@ Vanilla gives you one semi-autonomous wingman. WingCommand turns your wing into 
    Nuclear Option/BepInEx/plugins/WingCommand/WingCommand.dll
    ```
 
-3. Launch and check `BepInEx/LogOutput.log` for `WingCommand 0.9.2 loaded.` — if it's missing, see [Troubleshooting](#-troubleshooting).
+3. Launch and check `BepInEx/LogOutput.log` for `WingCommand 0.9.2.1 loaded.` — if it's missing, see [Troubleshooting](#-troubleshooting).
 
 > [!WARNING]
 > Keep the DLL only in `plugins/WingCommand/`. A stray copy in `plugins/` can load the wrong build.
@@ -379,8 +379,13 @@ including one issued while defensive. Shown as `DEFENSIVE` / `DEF`.
 - Rank has a small real effect — at the top, ~12% more weapon reach and off-boresight and
   ~12% faster shot cycling, plus modest formation-control adjustments in Smart mode.
   `Pilot/RankEffect = 0` keeps the record, removes the rank benefits.
-- Backbone only: a pregenerated pool with portraits and an assignment screen is a later
-  feature. Three pilots are hand-written, the rest generated.
+- Random recruits draw from 80 surnames, 26 initials and 96 callsigns, with varied service
+  backgrounds, personal habits and radio styles. Callsigns stay unique within the roster.
+- Experimental portraits retain six generated faces, with separate male/female pools of
+  four hairstyles (plus bald) and two uniforms each. Wing and Supply show the same face for
+  an identity, including imported pilots.
+  The small atlas is embedded in the DLL; portraits are composed once on demand and released
+  when the mission resets. No image service, extra runtime dependency or shader is required.
 
 **Radio.** Calls use frameless subtitles at top centre, not the game-message feed — speaker
 as `M. "COBALT" ADEYEMI`, a smaller line for flight position and aircraft. A command to
@@ -517,6 +522,9 @@ tactical rules, hotkeys, and appearance can be configured.
 | Section | Setting | Default | Purpose |
 |---|---|---:|---|
 | AI | `Mode` | `Smart` | `Smart` (full AI passes) or `Performance` (lean updates for heavy MP hosts) |
+| AI | `AiSharpTurns` | `true` | Enable stronger AI turns; changes apply on the next steering update. |
+| AI | `AiTargetSpreading` | `true` | Enable AI target spreading on the next target selection; still disabled in Performance mode. |
+| AI | `AiMissileWarningRepair` | `true` | Repair warning subscriptions on the next combat entry. Disabling leaves existing subscriptions intact. |
 | Formation | `Shape` | `EchelonRight` | Initial formation at mission start |
 | Formation | `Spacing` | `120` | Lateral and longitudinal slot spacing in metres (`50`–`300`) |
 | Engagement | `DefaultRoe` | `Hold` | Initial ROE (`Hold`, `Tight`, `Free`) |
@@ -532,7 +540,7 @@ tactical rules, hotkeys, and appearance can be configured.
 | Shop | `ShopEnabled` | `true` | Enable purchasing wingmen from faction supply |
 | Shop | `RecruitmentCostPercent` | `0.25` | Active-AI reassignment fee, fraction of list value (`0.0` = free) |
 | Loadout | `SavedTemplates` | `""` | Your saved per-pylon templates (managed by WMC) |
-| Keys | `WingMenu` | `None` | Optional hotkey to open standalone command wheel |
+| Keys | `WingMenu` | `C` | Hold for the command wheel; aim and release to confirm, right-click to cancel. Set `None` to disable. |
 | Keys | `QuickRejoin` | `None` | Optional hotkey: whole wing rejoins formation |
 | Keys | `QuickEngage` | `None` | Optional hotkey: whole wing engages |
 | Keys | `QuickDisengage` | `None` | Optional hotkey: whole wing falls back / disengages |
@@ -549,10 +557,12 @@ tactical rules, hotkeys, and appearance can be configured.
 | UI | `TacticalPauseScale` | `0.25` | Simulation time-scale during tactical pause (`0.0` = full pause) |
 | UI | `ExternalHitmarkerAudio` | `true` | Hitmarker audio confirmation in 3rd-person/orbit view |
 | Debug | `EnableDebugActions` | `false` | Master switch for development cheats (host-only) |
-| Debug | `SpawnDebugWing` | — | F1 button: spawn a full wing of current aircraft |
+| Debug | `VerboseLogging` | `false` | F1 “Debug action logging” switch, visible without advanced settings. Applies immediately; logs action requests/results, frame numbers, state transitions and flight diagnostics to BepInEx `LogOutput.log`. Independent of cheats. |
+| Debug | `DebugSpawnAircraft` | empty | F1 aircraft selector: override the debug spawn type using compatible catalogue aircraft, including modded planes, without faction stock or rank requirements. Empty uses your current aircraft. |
+| Debug | `SpawnDebugWing` | — | F1 button: spawn a full wing of the selected debug aircraft in formation; requires flying above 80 m and host authority |
 | Debug | `FreePlanePurchases` | `false` | Requisitioned aircraft cost no allocation |
 | Debug | `DisableWingSizeLimit` | `false` | Ignore 3-wingman squadron cap |
-| Debug | `VerboseLogging` | `false` | Log state transitions and reflexes to BepInEx console |
+
 
 The Debug cheats are F1-only, off by default, and unsupported. Squadron size is capped at 3 wingmen by design (matching HUD and WMC layout); `DisableWingSizeLimit` bypasses this for testing. Global AI `SkillScale` / `BraveryScale`, player-specific target protection, `WingPriceGrowth`, `RecruitRange`, and `AdditionalWingReservePerType` are retired and ignored.
 

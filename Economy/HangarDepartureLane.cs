@@ -3,9 +3,9 @@ using UnityEngine;
 
 namespace WingCommand
 {
- /// <summary>Serialises departures per airbase, covering shared runways and pads across hangars. Native
- /// AI owns movement. Read the anchor's live transform so origin shifts and carrier motion do not
- /// falsely signal clearance.</summary>
+    /// <summary>Serialises departures per airbase, covering shared runways and pads across hangars. Native
+    /// AI owns movement. Read the anchor's live transform so origin shifts and carrier motion do not
+    /// falsely signal clearance.</summary>
     internal static class HangarDepartureLane
     {
         private sealed class Departure
@@ -28,8 +28,8 @@ namespace WingCommand
             return true;
         }
 
-     /// <summary>Whether field departure ownership has exceeded its expected duration; shown as JAMMED
-     /// in Supply.</summary>
+        /// <summary>Whether field departure ownership has exceeded its expected duration; shown as JAMMED
+        /// in Supply.</summary>
         internal static bool IsJammed(Airbase airbase)
         {
             if (airbase == null) return false;
@@ -62,8 +62,8 @@ namespace WingCommand
             return true;
         }
 
-     /// <summary>Transfer lane ownership from purchase order to wing member without releasing the field
-     /// during handoff.</summary>
+        /// <summary>Transfer lane ownership from purchase order to wing member without releasing the field
+        /// during handoff.</summary>
         internal static bool Transfer(object from, object to)
         {
             if (from == null || to == null) return false;

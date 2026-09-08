@@ -4,13 +4,13 @@ using UnityEngine;
 
 namespace WingCommand
 {
- /// <summary>Purchases command rights for active faction aircraft.</summary>
+    /// <summary>Purchases command rights for active faction aircraft.</summary>
     internal static class WingRecruitment
     {
         private static readonly HashSet<PersistentID> paidAircraft = new HashSet<PersistentID>();
 
-     /// <summary>One-time assignment price as a fixed fraction of airframe list value, independent of
-     /// wing size.</summary>
+        /// <summary>One-time assignment price as a fixed fraction of airframe list value, independent of
+        /// wing size.</summary>
         public static float PriceOf(Aircraft aircraft)
         {
             if (aircraft == null || aircraft.definition == null) return 0f;

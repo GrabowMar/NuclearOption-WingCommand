@@ -1,7 +1,7 @@
 using System;
 using Xunit;
 
-// Minimal engine/roster boundary for the linked production reservation coordinator.
+// Minimal engine and roster stubs for production target reservations.
 namespace UnityEngine
 {
     public static partial class Time
@@ -70,7 +70,7 @@ namespace WingCommand.PureTests
             Assert.True(TacticalCoordinator.TryClaim(target, first, 1, 3f));
             Assert.False(TacticalCoordinator.TryClaim(target, second, 1, 3f));
 
-            // Assignment plus a real reservation from the same pilot is one commitment.
+            // Count one pilot's assignment and shot reservation as a single commitment.
             Assert.Equal(2, TacticalCoordinator.CountCommitments(target));
             Assert.Equal(1, TacticalCoordinator.CountCommitments(target, second));
 
@@ -116,6 +116,65 @@ namespace WingCommand.PureTests
             Assert.True(TacticalCoordinator.TryClaim(target, new Aircraft(), 1, 3f));
             TacticalCoordinator.Release(owner);
             Assert.Equal(1, TacticalCoordinator.CountCommitments(target));
+        }
+
+        [Fact]
+        public void NativeTargetSwitchReleasesAbandonedSelectionsButPreservesShotsInFlight()
+        {
+            var first = new Unit();
+            var second = new Unit();
+            var third = new Unit();
+            var owner = new Aircraft();
+            TacticalCoordinator.NoteSelection(first, owner, 7f);
+            TacticalCoordinator.NoteSelection(second, owner, 7f);
+            Assert.Equal(0, TacticalCoordinator.CountCommitments(first));
+            Assert.Equal(1, TacticalCoordinator.CountCommitments(second));
+
+            Assert.True(TacticalCoordinator.TryClaim(second, owner, 1, 3f));
+            TacticalCoordinator.NoteSelection(third, owner, 7f);
+            Assert.Equal(1, TacticalCoordinator.CountCommitments(second));
+            Assert.Equal(1, TacticalCoordinator.CountClaims(second));
+            Assert.Equal(1, TacticalCoordinator.CountCommitments(third));
+            Assert.False(TacticalCoordinator.TryClaim(second, new Aircraft(), 1, 3f));
+
+            UnityEngine.Time.timeSinceLevelLoad += 3f;
+            Assert.Equal(0, TacticalCoordinator.CountCommitments(second));
+            Assert.Equal(1, TacticalCoordinator.CountCommitments(third));
+        }
+
+        [Theory]
+        [InlineData(false)]
+        [InlineData(true)]
+        public void EmptyOrDisabledSearchResultsClearOnlyThisPilotsSelection(bool disabledResult)
+        {
+            var target = new Unit();
+            var owner = new Aircraft();
+            var other = new Aircraft();
+            TacticalCoordinator.NoteSelection(target, owner, 7f);
+            TacticalCoordinator.NoteSelection(target, other, 7f);
+            Assert.True(TacticalCoordinator.TryClaim(target, owner, 1, 3f));
+
+            TacticalCoordinator.NoteSelection(disabledResult ? new Unit { disabled = true } : null,
+                                              owner, 7f);
+            Assert.Equal(1, TacticalCoordinator.CountClaims(target));
+            UnityEngine.Time.timeSinceLevelLoad += 3f;
+            Assert.Equal(1, TacticalCoordinator.CountCommitments(target));
+            Assert.Equal(0, TacticalCoordinator.CountCommitments(target, other));
+        }
+
+        [Fact]
+        public void BehaviourHandoffDropsSelectionWhileAnExistingShotStillCapsFire()
+        {
+            var target = new Unit();
+            var owner = new Aircraft();
+            TacticalCoordinator.NoteSelection(target, owner, 7f);
+            Assert.True(TacticalCoordinator.TryClaim(target, owner, 1, 3f));
+
+            TacticalCoordinator.ReleaseSelection(owner);
+            Assert.Equal(1, TacticalCoordinator.CountClaims(target));
+            Assert.False(TacticalCoordinator.TryClaim(target, new Aircraft(), 1, 3f));
+            UnityEngine.Time.timeSinceLevelLoad += 3f;
+            Assert.Equal(0, TacticalCoordinator.CountCommitments(target));
         }
 
         [Fact]

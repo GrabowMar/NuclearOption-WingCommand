@@ -2,8 +2,8 @@ using NOAvionics;
 
 namespace WingCommand.Interop
 {
- /// <summary>Public reflection-safe presence API. Companion plugins use shared AppDomain keys or
- /// type-name probes instead of a compiled WingCommand dependency.</summary>
+    /// <summary>Public reflection-safe presence API. Companion plugins use shared AppDomain keys or
+    /// type-name probes instead of a compiled WingCommand dependency.</summary>
     public static class WingPresence
     {
         public static int ApiVersion => 1;

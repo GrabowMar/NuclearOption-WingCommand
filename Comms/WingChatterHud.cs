@@ -7,8 +7,8 @@ using NOAvionics.Ui;
 
 namespace WingCommand
 {
- /// <summary>Frameless radio subtitles with separate speaker, aircraft, and dialogue styling, clear of
- /// native message boxes.</summary>
+    /// <summary>Frameless radio subtitles with separate speaker, aircraft, and dialogue styling, clear of
+    /// native message boxes.</summary>
     internal static class WingChatterHud
     {
         private sealed class Transmission
@@ -224,8 +224,8 @@ namespace WingCommand
             canvasRoot.SetActive(false);
         }
 
-     /// <summary>Position a decorative aircraft sprite beside the readable name. Avoid Unicode
-     /// silhouettes unsupported by some HUD fonts.</summary>
+        /// <summary>Position a decorative aircraft sprite beside the readable name. Avoid Unicode
+        /// silhouettes unsupported by some HUD fonts.</summary>
         private static void PositionContextIcon()
         {
             if (contextIcon == null || contextLabel == null || card == null) return;

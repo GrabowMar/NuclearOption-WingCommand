@@ -2,8 +2,8 @@ using System.Collections.Generic;
 
 namespace WingCommand
 {
- /// <summary>Tracks fitted loadouts by aircraft ID and future plans by definition. Recovery moves fits
- /// to reserve slots before aircraft IDs disappear.</summary>
+    /// <summary>Tracks fitted loadouts by aircraft ID and future plans by definition. Recovery moves fits
+    /// to reserve slots before aircraft IDs disappear.</summary>
     internal static class WingLoadoutBook
     {
         private sealed class FittedLoadout
@@ -26,7 +26,7 @@ namespace WingCommand
 
         // Purchase planning.
 
-     /// <summary>Planned fit for the next purchase of this definition.</summary>
+        /// <summary>Planned fit for the next purchase of this definition.</summary>
         public static WingLoadoutChoice PlannedFor(AircraftDefinition definition)
         {
             if (definition == null) return WingLoadoutChoice.Standard;
@@ -43,12 +43,12 @@ namespace WingCommand
 
         // Fitted loadouts.
 
-     /// <summary>Whether this aircraft has a recorded fit.</summary>
+        /// <summary>Whether this aircraft has a recorded fit.</summary>
         public static bool IsKnown(Aircraft aircraft) =>
             aircraft != null && aboard.ContainsKey(aircraft.persistentID);
 
-     /// <summary>Recorded fit, or Standard for aircraft the mod did not configure, including recruited
-     /// mission aircraft.</summary>
+        /// <summary>Recorded fit, or Standard for aircraft the mod did not configure, including recruited
+        /// mission aircraft.</summary>
         public static WingLoadoutChoice AboardOf(Aircraft aircraft)
         {
             if (aircraft == null) return WingLoadoutChoice.Standard;
@@ -63,7 +63,7 @@ namespace WingCommand
             return fitted.Choice;
         }
 
-     /// <summary>Record a delivered aircraft's actual fit.</summary>
+        /// <summary>Record a delivered aircraft's actual fit.</summary>
         public static void NoteSpawned(Aircraft aircraft, WingLoadoutChoice choice)
         {
             if (aircraft == null) return;

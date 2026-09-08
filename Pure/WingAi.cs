@@ -4,7 +4,7 @@ using System.Runtime.CompilerServices;
 
 namespace WingCommand
 {
-    /// <summary>Public registry of exclusive reflexes and composable flight influences.</summary>
+    /// <summary>Public registry for exclusive reflexes and combined flight influences.</summary>
     public static class WingAi
     {
         public const int ApiVersion = 1;
@@ -31,7 +31,7 @@ namespace WingCommand
             public InfluenceRegistration(IWingInfluence source, string id) { Source = source; Id = id; }
         }
 
-        // Copy on registration: callbacks cannot mutate an evaluation already in progress.
+        // Copy registrations so callbacks cannot mutate the active evaluation snapshot.
         private static ReflexSnapshot[] registrations = Array.Empty<ReflexSnapshot>();
         private static IReadOnlyList<IWingReflex> reflexes = Array.Empty<IWingReflex>();
         private static InfluenceRegistration[] influences = Array.Empty<InfluenceRegistration>();
@@ -40,15 +40,13 @@ namespace WingCommand
         private static readonly HashSet<string> faultedInfluences = new HashSet<string>(StringComparer.Ordinal);
         private static readonly HashSet<object> faultedInstances = new HashSet<object>(ReferenceComparer.Instance);
 
-        /// <summary>Host diagnostics. A reporter fault never escapes into flight decisions.</summary>
+        /// <summary>Host fault reporter; reporter failures cannot interrupt flight decisions.</summary>
         public static Action<string, Exception> FaultReporter { get; set; }
-        /// <summary>Read-only registration snapshot, ordered by band and stable Id.</summary>
+        /// <summary>Read-only reflex snapshot ordered by band and stable ID.</summary>
         public static IReadOnlyList<IWingReflex> Reflexes => reflexes;
 
-        /// <summary>
-        /// Add or replace by stable Id. Validate metadata before replacing an existing
-        /// registration; a throwing extension is reported and ignored.
-        /// </summary>
+        /// <summary>Validate metadata before adding or replacing a stable ID; report and ignore throwing
+        /// registrations.</summary>
         public static void Register(IWingReflex reflex)
         {
             if (reflex == null) throw new ArgumentNullException(nameof(reflex));
@@ -64,7 +62,7 @@ namespace WingCommand
             faultedInstances.Remove(reflex);
         }
 
-        /// <summary>Remove by cached identity, without invoking extension getters.</summary>
+        /// <summary>Remove using cached identity without calling extension getters.</summary>
         public static bool Unregister(string id)
         {
             var updated = new List<ReflexSnapshot>(registrations);
@@ -81,8 +79,8 @@ namespace WingCommand
             reflexes = Array.AsReadOnly(sources);
         }
 
-        // Metadata is extension code too. Read once per decision so ranking, hold
-        // validity and the emitted behavior all use the same coherent values.
+        // Snapshot extension metadata once per decision so ranking, lifecycle, and emitted behaviour
+        // agree.
         internal static bool TrySnapshot(IWingReflex reflex, out ReflexSnapshot snapshot, bool registering = false)
         {
             snapshot = default;
@@ -135,8 +133,8 @@ namespace WingCommand
 
         internal static void RejectBehaviour(string reflexId, string behaviourId)
         {
-            // Missing factories are recoverable availability failures. Never replace
-            // a genuine provider fault with this weaker, automatically retryable reason.
+            // Missing factories may recover; do not downgrade a provider fault into automatically
+            // retryable unavailability.
             if (string.IsNullOrEmpty(reflexId) ||
                 (faulted.Contains(reflexId) && !unavailableBehaviours.ContainsKey(reflexId))) return;
             unavailableBehaviours[reflexId] = behaviourId;
@@ -167,7 +165,7 @@ namespace WingCommand
             catch (Exception e) { FaultInstance(reflex.Source, reflex.Id, e, faulted); return false; }
         }
 
-        /// <summary>Add or replace a flight influence, ordered by its cached stable Id.</summary>
+        /// <summary>Add or replace an influence, ordered by cached stable ID.</summary>
         public static void RegisterInfluence(IWingInfluence influence)
         {
             if (influence == null) throw new ArgumentNullException(nameof(influence));
@@ -233,10 +231,10 @@ namespace WingCommand
         private static void ReportFault(string id, Exception error)
         {
             try { FaultReporter?.Invoke(id, error); }
-            catch (Exception) { /* Diagnostics cannot interrupt the surviving extensions. */ }
+            catch (Exception) { /* Reporter failure must not interrupt healthy extensions. */ }
         }
 
-        /// <summary>Retry quarantined extensions at the start of a new mission.</summary>
+        /// <summary>Retry quarantined extensions on the next mission.</summary>
         public static void ResetFaults()
         { faulted.Clear(); faultedInfluences.Clear(); faultedInstances.Clear(); unavailableBehaviours.Clear(); }
 
@@ -248,7 +246,7 @@ namespace WingCommand
             ResetFaults();
         }
 
-        // Never invoke plugin Equals/GetHashCode while quarantining a faulty plugin.
+        // Use reference identity to avoid faulty plugin Equals or GetHashCode during quarantine.
         private sealed class ReferenceComparer : IEqualityComparer<object>
         {
             public static readonly ReferenceComparer Instance = new ReferenceComparer();

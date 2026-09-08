@@ -3,12 +3,12 @@ using UnityEngine;
 
 namespace WingCommand
 {
- /// <summary>Infers kill credit from recent wingman shots; native scoring does not expose arbitrary
- /// killers. Despawns and friendly finishing shots may count. Each target is credited once. ponytail:
- /// shot-window heuristic; use native killer attribution if it becomes available.</summary>
+    /// <summary>Infers kill credit from recent wingman shots; native scoring does not expose arbitrary
+    /// killers. Despawns and friendly finishing shots may count. Each target is credited once. ponytail:
+    /// shot-window heuristic; use native killer attribution if it becomes available.</summary>
     internal static class WingKillCredit
     {
-     /// <summary>Seconds after a shot during which target disappearance earns credit.</summary>
+        /// <summary>Seconds after a shot during which target disappearance earns credit.</summary>
         private const float CreditWindow = 25f;
 
         private sealed class PendingCredit
@@ -27,7 +27,7 @@ namespace WingCommand
             nextTick = 0f;
         }
 
-     /// <summary>Record a wingman's shot at a target.</summary>
+        /// <summary>Record a wingman's shot at a target.</summary>
         public static void NoteShot(Aircraft shooter, Unit target)
         {
             if (!Plugin.Settings.PilotProgression.Value) return;
@@ -52,8 +52,8 @@ namespace WingCommand
             });
         }
 
-     /// <summary>Settle shot claims periodically; target disappearance does not need a frame-rate
-     /// scan.</summary>
+        /// <summary>Settle shot claims periodically; target disappearance does not need a frame-rate
+        /// scan.</summary>
         public static void Tick()
         {
             if (pending.Count == 0 || Time.timeSinceLevelLoad < nextTick) return;

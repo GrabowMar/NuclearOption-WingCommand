@@ -2,13 +2,13 @@ using UnityEngine;
 
 namespace WingCommand
 {
- /// <summary>Pairs native Hover with auto-hover configuration, which enables altitude control and VTOL
- /// nozzle positioning. HasAutoHover identifies capability even for plane-autopilot jets; native
- /// SetAutoHover refuses below 1 m radar altitude.</summary>
+    /// <summary>Pairs native Hover with auto-hover configuration, which enables altitude control and VTOL
+    /// nozzle positioning. HasAutoHover identifies capability even for plane-autopilot jets; native
+    /// SetAutoHover refuses below 1 m radar altitude.</summary>
     internal static class HoverAssist
     {
-     /// <summary>Whether the aircraft supports native hover, including helicopters, tiltwings, and
-     /// vectoring jets.</summary>
+        /// <summary>Whether the aircraft supports native hover, including helicopters, tiltwings, and
+        /// vectoring jets.</summary>
         public static bool CanHover(Aircraft aircraft)
         {
             if (aircraft == null) return false;
@@ -16,8 +16,8 @@ namespace WingCommand
             return filter != null && filter.HasAutoHover();
         }
 
-     /// <summary>Reassert native hover configuration each frame; SetAutoHover is idempotent and native
-     /// touchdown can clear it.</summary>
+        /// <summary>Reassert native hover configuration each frame; SetAutoHover is idempotent and native
+        /// touchdown can clear it.</summary>
         public static void Engage(Aircraft aircraft)
         {
             if (aircraft == null) return;
@@ -29,8 +29,8 @@ namespace WingCommand
             filter.SetAutoHover(enabled: true);
         }
 
-     /// <summary>Release hover configuration and restore forward thrust so the aircraft can accelerate
-     /// into cruise.</summary>
+        /// <summary>Release hover configuration and restore forward thrust so the aircraft can accelerate
+        /// into cruise.</summary>
         public static void Release(Aircraft aircraft)
         {
             if (aircraft == null) return;
@@ -47,7 +47,7 @@ namespace WingCommand
                 aircraft.GetInputs().customAxis1 = 1f;
         }
 
-     /// <summary>Configure hover before commanding position hold through the shared path.</summary>
+        /// <summary>Configure hover before commanding position hold through the shared path.</summary>
         public static void Hover(Aircraft aircraft, GlobalPosition destination,
                                  float altitudeHold, Vector3 aimDirection)
         {

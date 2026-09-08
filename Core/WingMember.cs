@@ -4,14 +4,14 @@ using UnityEngine;
 
 namespace WingCommand
 {
- /// <summary>Commanded AI airframe and its formation slot.</summary>
+    /// <summary>Commanded AI airframe and its formation slot.</summary>
     internal partial class WingMember
     {
         public readonly Aircraft Aircraft;
         public readonly Pilot Pilot;
         public int Slot;
 
-     /// <summary>Diagnostic distance from the assigned slot, in metres.</summary>
+        /// <summary>Diagnostic distance from the assigned slot, in metres.</summary>
         public float SlotError;
         public WingFlightProfile FlightProfile => brain.Flight;
 
@@ -20,19 +20,19 @@ namespace WingCommand
         public WingDirective Directive => standingOrder.Current;
         public WingOrder Order => Directive.Order;
 
-     /// <summary>Per-member weapon preference, read on every station choice so mixed flights can favour
-     /// different stores.</summary>
+        /// <summary>Per-member weapon preference, read on every station choice so mixed flights can favour
+        /// different stores.</summary>
         public WingWeaponPreference WeaponPreference { get; set; } = WingWeaponPreference.Auto;
 
-     /// <summary>Recorded loadout configured by this mod.</summary>
+        /// <summary>Recorded loadout configured by this mod.</summary>
         public WingLoadoutChoice Loadout => WingLoadoutBook.AboardOf(Aircraft);
 
-     /// <summary>Whether the mod knows this loadout; recruited mission aircraft may carry an unknown
-     /// fit.</summary>
+        /// <summary>Whether the mod knows this loadout; recruited mission aircraft may carry an unknown
+        /// fit.</summary>
         public bool LoadoutKnown => WingLoadoutBook.IsKnown(Aircraft);
 
-     /// <summary>Squadron pilot record, or null before assignment. Pilot is the separate native state
-     /// machine.</summary>
+        /// <summary>Squadron pilot record, or null before assignment. Pilot is the separate native state
+        /// machine.</summary>
         public WingPilot Crew => WingPilotRoster.Of(Aircraft);
 
         private readonly FormationFlyState formationState;
@@ -63,24 +63,24 @@ namespace WingCommand
         private bool damageReported;
         private bool criticalDamageReported;
 
-     /// <summary>Whether a hangar delivery still awaits native takeoff.</summary>
+        /// <summary>Whether a hangar delivery still awaits native takeoff.</summary>
         public bool DeliveryPending => deliveryPending;
         public bool RefitPending { get; private set; }
 
-     /// <summary>Request RTB, replenishment, and relaunch while retaining aircraft and pilot.
-     /// WingRecovery calls CompleteRefit instead of settling this return into stock.</summary>
+        /// <summary>Request RTB, replenishment, and relaunch while retaining aircraft and pilot.
+        /// WingRecovery calls CompleteRefit instead of settling this return into stock.</summary>
         public void RequestRefit()
         {
             Apply(WingOrder.ReturnToBase);
             RefitPending = true;
         }
 
-     /// <summary>Cancel refit so recovery can settle normal RTB, including after native pilot
-     /// ejection.</summary>
+        /// <summary>Cancel refit so recovery can settle normal RTB, including after native pilot
+        /// ejection.</summary>
         internal void AbandonRefit() => RefitPending = false;
 
-     /// <summary>Replenish at the current parked pose, then queue native taxi through the departure
-     /// lane.</summary>
+        /// <summary>Replenish at the current parked pose, then queue native taxi through the departure
+        /// lane.</summary>
         public void CompleteRefit()
         {
             if (!RefitPending || Pilot == null || Pilot.dead || Pilot.ejected) return;
@@ -104,9 +104,9 @@ namespace WingCommand
             BeginRefitDeparture();
         }
 
-     /// <summary>Restart departure with fresh native taxi at the current pose. Direct takeoff
-     /// off-runway drives across the apron and can eject after its stuck timeout. Reset HasTakenOff so
-     /// taxi seeks a runway rather than service.</summary>
+        /// <summary>Restart departure with fresh native taxi at the current pose. Direct takeoff
+        /// off-runway drives across the apron and can eject after its stuck timeout. Reset HasTakenOff so
+        /// taxi seeks a runway rather than service.</summary>
         private void BeginRefitDeparture()
         {
             if (Pilot == null || Aircraft == null || !Alive) return;
@@ -135,11 +135,11 @@ namespace WingCommand
                                   (field != null ? WingLaunchFields.DisplayName(field) : "its field"));
         }
 
-     /// <summary>Whether the airframe lacks an autopilot and requires surface-vehicle control,
-     /// regardless of its supplying mod.</summary>
+        /// <summary>Whether the airframe lacks an autopilot and requires surface-vehicle control,
+        /// regardless of its supplying mod.</summary>
         public bool IsSurface => Aircraft != null && Aircraft.autopilot == null;
 
-     /// <summary>Whether this live member has finished delivery and can receive commands.</summary>
+        /// <summary>Whether this live member has finished delivery and can receive commands.</summary>
         public bool IsCommandable => Alive && !deliveryPending;
 
         public WingMember(WingRegistry owner, Aircraft aircraft, Pilot pilot, int slot,
@@ -164,8 +164,8 @@ namespace WingCommand
             lastIntegrity = Integrity;
         }
 
-     /// <summary>Formation reference: the player's aircraft, or the assigned flight lead. The lead
-     /// itself continues to form on the player.</summary>
+        /// <summary>Formation reference: the player's aircraft, or the assigned flight lead. The lead
+        /// itself continues to form on the player.</summary>
         public Aircraft Leader
         {
             get
@@ -176,10 +176,10 @@ namespace WingCommand
             }
         }
 
-     /// <summary>Whether this member is the temporary flight lead.</summary>
+        /// <summary>Whether this member is the temporary flight lead.</summary>
         public bool IsFlightLead => ReferenceEquals(owner?.FlightLead, this);
 
-     /// <summary>Wing roster used for separation steering.</summary>
+        /// <summary>Wing roster used for separation steering.</summary>
         public System.Collections.Generic.IReadOnlyList<WingMember> Siblings =>
             owner != null ? owner.Members : null;
 
@@ -191,7 +191,7 @@ namespace WingCommand
 
         public void Apply(WingOrder order) => Apply(WingDirective.Simple(order));
 
-     /// <summary>Record standing intent, then ask the arbiter to resolve control immediately.</summary>
+        /// <summary>Record standing intent, then ask the arbiter to resolve control immediately.</summary>
         public void Apply(WingDirective directive)
         {
             if (directive.Order == WingOrder.StandDown && !directive.HasPoint && Aircraft != null)
@@ -216,7 +216,7 @@ namespace WingCommand
             // that would expire before use.
             if (directive.Order == WingOrder.Maneuver && IsPanicking) return;
 
-            TacticalCoordinator.Release(Aircraft);
+            TacticalCoordinator.ReleaseSelection(Aircraft);
 
             if (!applyKeepsQueue) taskQueue.Clear();
 
@@ -231,8 +231,8 @@ namespace WingCommand
             Resolve(force: true);
         }
 
-     /// <summary>Complete a task without resolving inline; state-update callers must not switch state
-     /// re-entrantly.</summary>
+        /// <summary>Complete a task without resolving inline; state-update callers must not switch state
+        /// re-entrantly.</summary>
         internal void Complete(WingDirective directive) => CompleteOrder(directive, null);
 
         internal void CompleteFrom(WingPilotState source, WingDirective directive)
@@ -248,16 +248,16 @@ namespace WingCommand
             // Validate task ownership before changing directive or queue.
             if (!SetDirective(directive, startedRevision)) return;
 
-            TacticalCoordinator.Release(Aircraft);
+            TacticalCoordinator.ReleaseSelection(Aircraft);
             if (!applyKeepsQueue) taskQueue.Clear();
             brain.RequestEvaluation();
         }
 
-     /// <summary>Complete with a simple order directive.</summary>
+        /// <summary>Complete with a simple order directive.</summary>
         internal void Complete(WingOrder order) => Complete(WingDirective.Simple(order));
 
-     /// <summary>Update intent only when changed. The revision triggers task re-entry, so identical
-     /// directives must not bump it.</summary>
+        /// <summary>Update intent only when changed. The revision triggers task re-entry, so identical
+        /// directives must not bump it.</summary>
         private bool SetDirective(WingDirective directive, int? startedRevision = null)
         {
             bool changed;
@@ -272,7 +272,7 @@ namespace WingCommand
             return true;
         }
 
-     /// <summary>Transfer control once safely airborne; cruise altitude is not required.</summary>
+        /// <summary>Transfer control once safely airborne; cruise altitude is not required.</summary>
         internal bool ActivateWhenAirborne()
         {
             if (!deliveryPending) return false;
@@ -284,9 +284,13 @@ namespace WingCommand
             Vector3 airVelocity = Aircraft.rb != null ? Aircraft.rb.velocity : Vector3.zero;
             LevelInfo level = NetworkSceneSingleton<LevelInfo>.i;
             if (level != null) airVelocity -= level.GetWind(Aircraft.GlobalPosition());
+            float forwardAirspeed = Vector3.Dot(airVelocity, Aircraft.transform.forward);
+            float minimumAirspeed = parameters != null
+                ? FormationGuidance.MinimumAirspeed(Aircraft.definition.aircraftInfo?.stallSpeed ?? 0f,
+                    parameters.landingSpeed) : 0f;
             if (!IsSurface && !LaunchSafety.CanHandOff(Pilot.flightInfo.HasTakenOff, takingOff,
-                WingRegistry.IsRotary(Aircraft), Aircraft.radarAlt, airVelocity.magnitude,
-                parameters != null ? parameters.takeoffSpeed : 0f)) return false;
+                WingRegistry.IsRotary(Aircraft), Aircraft.radarAlt, forwardAirspeed,
+                parameters != null ? parameters.takeoffSpeed : 0f, minimumAirspeed)) return false;
 
             Pilot.flightInfo.HasTakenOff = true;
             deliveryPending = false;
@@ -301,8 +305,8 @@ namespace WingCommand
             return true;
         }
 
-     /// <summary>Whether any cargo station is loaded. Point deliveries support fixed-wing aircraft;
-     /// only the point-free route requires native transport state.</summary>
+        /// <summary>Whether any cargo station is loaded. Point deliveries support fixed-wing aircraft;
+        /// only the point-free route requires native transport state.</summary>
         public bool CanDeliverCargo
         {
             get
@@ -317,7 +321,7 @@ namespace WingCommand
             }
         }
 
-     /// <summary>Total cargo ammunition across stations.</summary>
+        /// <summary>Total cargo ammunition across stations.</summary>
         public int CargoAmmo
         {
             get
@@ -333,11 +337,11 @@ namespace WingCommand
             }
         }
 
-     /// <summary>Seconds allowed for a cargo run before abandoning it.</summary>
+        /// <summary>Seconds allowed for a cargo run before abandoning it.</summary>
         private const float CargoRunTimeout = 300f;
 
-     /// <summary>Confirm delivery by decreasing cargo ammunition. Rejoin when empty; abandon after five
-     /// minutes without delivery instead of circling indefinitely.</summary>
+        /// <summary>Confirm delivery by decreasing cargo ammunition. Rejoin when empty; abandon after five
+        /// minutes without delivery instead of circling indefinitely.</summary>
         public void CheckCargoRun()
         {
             if (Order != WingOrder.DeliverCargo || !IsCommandable || IsPanicking) return;
@@ -364,16 +368,16 @@ namespace WingCommand
             Apply(WingOrder.Formation);
         }
 
-     /// <summary>Whether the hover controller permits vertical landing, including vectoring jets
-     /// classified as fixed-wing for formation flight.</summary>
+        /// <summary>Whether the hover controller permits vertical landing, including vectoring jets
+        /// classified as fixed-wing for formation flight.</summary>
         public bool CanLandInPlace => HoverAssist.CanHover(Aircraft);
 
-     /// <summary>Whether a jammer pod is fitted. Recheck stations so mid-mission loadout changes affect
-     /// order availability.</summary>
+        /// <summary>Whether a jammer pod is fitted. Recheck stations so mid-mission loadout changes affect
+        /// order availability.</summary>
         public bool CanJam => WingWeapons.HasJammer(Aircraft);
 
-     /// <summary>Airframe integrity from native part hit points, 0-1; detached parts count as fully
-     /// lost.</summary>
+        /// <summary>Airframe integrity from native part hit points, 0-1; detached parts count as fully
+        /// lost.</summary>
         public float Integrity
         {
             get
@@ -394,8 +398,8 @@ namespace WingCommand
             }
         }
 
-     /// <summary>Report damage threshold crossings; a severe first hit emits only the critical
-     /// call.</summary>
+        /// <summary>Report damage threshold crossings; a severe first hit emits only the critical
+        /// call.</summary>
         public void CheckDamage()
         {
             // Wait for asynchronous partLookup initialisation; its temporary zero integrity is not
@@ -417,8 +421,8 @@ namespace WingCommand
 
             lastIntegrity = current;
         }
-     /// <summary>Teardown-only handoff to native combat AI, used by DisbandAll. Overwrites intent and
-     /// bypasses arbitration; never call for a member remaining on the roster.</summary>
+        /// <summary>Teardown-only handoff to native combat AI, used by DisbandAll. Overwrites intent and
+        /// bypasses arbitration; never call for a member remaining on the roster.</summary>
         public void ReleaseToCombat(string reason)
         {
             HangarDepartureLane.Release(this);
@@ -439,8 +443,8 @@ namespace WingCommand
             SwitchToCombat();
         }
 
-     /// <summary>Dismiss the aircraft to native RTB, freeing squadron capacity and returning owned
-     /// stock on recovery. Teardown uses ReleaseToCombat separately.</summary>
+        /// <summary>Dismiss the aircraft to native RTB, freeing squadron capacity and returning owned
+        /// stock on recovery. Teardown uses ReleaseToCombat separately.</summary>
         public void SendHome(string reason)
         {
             HangarDepartureLane.Release(this);
@@ -469,25 +473,25 @@ namespace WingCommand
         }
 
 
-     /// <summary>Player-designated target, or null.</summary>
+        /// <summary>Player-designated target, or null.</summary>
         public Unit AssignedTarget => Directive.Target;
 
-     /// <summary>Whether missile defence owns flight, derived from the winning reflex.</summary>
+        /// <summary>Whether missile defence owns flight, derived from the winning reflex.</summary>
         public bool IsPanicking =>
             brain.Current.BehaviourId == WingBehaviours.MissileBreak;
 
-     /// <summary>Current reflex resolution for UI and diagnostics.</summary>
+        /// <summary>Current reflex resolution for UI and diagnostics.</summary>
         internal WingResolution Behaviour => brain.Current;
 
-     /// <summary>Weapons authority from active behaviour, which may temporarily override the standing
-     /// order.</summary>
+        /// <summary>Weapons authority from active behaviour, which may temporarily override the standing
+        /// order.</summary>
         internal OrderEngagementAuthority EngagementAuthority =>
             OrderRoePolicy.AuthorityFor(brain.Current.BehaviourId, Order);
 
-     /// <summary>Remaining fuel fraction, 0-1.</summary>
+        /// <summary>Remaining fuel fraction, 0-1.</summary>
         public float Fuel => Aircraft != null ? Aircraft.GetFuelLevel() : 0f;
 
-     /// <summary>Total remaining ammunition across weapon stations.</summary>
+        /// <summary>Total remaining ammunition across weapon stations.</summary>
         public int Ammo
         {
             get
@@ -503,8 +507,8 @@ namespace WingCommand
             }
         }
 
-     /// <summary>Issue a targeted attack directive so the flight controller prosecutes it; native
-     /// combat AI does not consume Pilot.SetPrimaryTarget for this purpose.</summary>
+        /// <summary>Issue a targeted attack directive so the flight controller prosecutes it; native
+        /// combat AI does not consume Pilot.SetPrimaryTarget for this purpose.</summary>
         public void AttackTarget(Unit target, bool report = true)
         {
             if (target == null || !Alive) return;
@@ -512,8 +516,8 @@ namespace WingCommand
             if (report && !IsPanicking)
                 WingComms.Say(this, WingComms.Call.Engaging, target.unitName);
         }
-     /// <summary>Issue Splash 'Em as a distinct expend order, preserving its own map, roster, and radio
-     /// identity.</summary>
+        /// <summary>Issue Splash 'Em as a distinct expend order, preserving its own map, roster, and radio
+        /// identity.</summary>
         public void FireForEffect(Unit target, bool report = true)
         {
             if (target == null || !Alive) return;
@@ -522,16 +526,16 @@ namespace WingCommand
                 WingComms.Say(this, WingComms.Call.FireForEffect, target.unitName);
         }
 
-     /// <summary>Retarget an active Splash run without resolving inside its state update. The attack
-     /// state reads AssignedTarget each frame and need not restart.</summary>
+        /// <summary>Retarget an active Splash run without resolving inside its state update. The attack
+        /// state reads AssignedTarget each frame and need not restart.</summary>
         internal void RetargetSplash(Unit target)
         {
             if (target == null || target.disabled || Order != WingOrder.FireForEffect) return;
             SetDirective(WingDirective.AtTarget(WingOrder.FireForEffect, target));
         }
 
-     /// <summary>Replace or append a map task. Shift appends only to a compatible current map task;
-     /// Move replaces Attack or Hold.</summary>
+        /// <summary>Replace or append a map task. Shift appends only to a compatible current map task;
+        /// Move replaces Attack or Hold.</summary>
         public void IssueMapTask(WingDirective directive, bool append)
         {
             if (!Alive) return;
@@ -556,7 +560,7 @@ namespace WingCommand
 
         public bool HasFollowOn => taskQueue.Count > 1;
 
-     /// <summary>Requested Move altitude in metres AGL; zero selects the airframe default.</summary>
+        /// <summary>Requested Move altitude in metres AGL; zero selects the airframe default.</summary>
         public float MoveAltitude => moveAltitude;
 
         public float ResolvedMoveAltitude =>
@@ -576,11 +580,11 @@ namespace WingCommand
             moveSpeed = speed;
         }
 
-     /// <summary>Live route with current leg first, used by the tactical map. Do not retain it across
-     /// CompleteWaypoint.</summary>
+        /// <summary>Live route with current leg first, used by the tactical map. Do not retain it across
+        /// CompleteWaypoint.</summary>
         public IReadOnlyList<WingDirective> Route => taskQueue;
 
-     /// <summary>Advance the route, then apply the completed task's terminal order.</summary>
+        /// <summary>Advance the route, then apply the completed task's terminal order.</summary>
         internal void CompleteWaypoint(WingPilotState source)
         {
             if (source == null || !ReferenceEquals(Pilot?.currentState, source) ||
@@ -603,7 +607,7 @@ namespace WingCommand
             Complete(WingOrder.Formation);
         }
 
-     /// <summary>Start a queued follow-on after reaching the open-ended hold's orbit.</summary>
+        /// <summary>Start a queued follow-on after reaching the open-ended hold's orbit.</summary>
         internal void CompleteHoldForQueue(int orbitRevision)
         {
             if (Order != WingOrder.OrbitHere || !HasFollowOn) return;
@@ -611,8 +615,8 @@ namespace WingCommand
             TryAdvanceQueue(orbitRevision);
         }
 
-     /// <summary>Remove the completed leg and activate the next; return false when empty so the caller
-     /// selects its terminal order.</summary>
+        /// <summary>Remove the completed leg and activate the next; return false when empty so the caller
+        /// selects its terminal order.</summary>
         internal bool TryAdvanceQueue(int startedRevision)
         {
             if (taskQueue.Count == 0) return false;
@@ -628,14 +632,14 @@ namespace WingCommand
             if (next.Order == WingOrder.Engage || next.Order == WingOrder.Attack)
                 engageActivityAt = Time.timeSinceLevelLoad;
 
-            TacticalCoordinator.Release(Aircraft);
+            TacticalCoordinator.ReleaseSelection(Aircraft);
             brain.RequestEvaluation();
             TacticalMapOverlay.Invalidate();
             return true;
         }
 
-     /// <summary>Send bingo-fuel members home; regroup empty racks in formation instead of ending their
-     /// sorties.</summary>
+        /// <summary>Send bingo-fuel members home; regroup empty racks in formation instead of ending their
+        /// sorties.</summary>
         public void CheckReserves()
         {
             if (!IsCommandable || !Plugin.Settings.AutoReturnOnEmpty.Value) return;
@@ -678,9 +682,9 @@ namespace WingCommand
 
         private float engageActivityAt;
 
-     /// <summary>Sample Engage/Attack activity during housekeeping. Regroup after EngageIdleSeconds
-     /// without a usable designation or nearby threat to self/leader. Retain the directive so combat
-     /// can resume automatically.</summary>
+        /// <summary>Sample Engage/Attack activity during housekeeping. Regroup after EngageIdleSeconds
+        /// without a usable designation or nearby threat to self/leader. Retain the directive so combat
+        /// can resume automatically.</summary>
         internal void CheckEngageIdle()
         {
             float now = Time.timeSinceLevelLoad;
@@ -708,8 +712,8 @@ namespace WingCommand
             // Temporary regrouping preserves target and order for renewed combat.
         }
 
-     /// <summary>After missile defence, discard interrupted manoeuvres and dead-target tasks. Resume
-     /// all other standing intent unchanged.</summary>
+        /// <summary>After missile defence, discard interrupted manoeuvres and dead-target tasks. Resume
+        /// all other standing intent unchanged.</summary>
         internal void RetireStaleOrder()
         {
             WingPilotRoster.NoteSurvivedEngagement(Aircraft);

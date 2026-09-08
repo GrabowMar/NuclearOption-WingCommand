@@ -5,9 +5,9 @@ using UnityEngine;
 
 namespace WingCommand
 {
- /// <summary>Retryable RTB settlement: capture facts, disembark without a death, return native stock,
- /// refund allocation, and release the pilot. Completed stages are not repeated after
- /// failure.</summary>
+    /// <summary>Retryable RTB settlement: capture facts, disembark without a death, return native stock,
+    /// refund allocation, and release the pilot. Completed stages are not repeated after
+    /// failure.</summary>
     internal static class WingRecovery
     {
         private const float GroundHeight = 5f;
@@ -18,13 +18,13 @@ namespace WingCommand
 
         private sealed class Settlement
         {
-         /// <summary>Absent after the aircraft leaves the wing roster.</summary>
+            /// <summary>Absent after the aircraft leaves the wing roster.</summary>
             public WingRegistry Wing;
 
-         /// <summary>Absent for an already-released aircraft.</summary>
+            /// <summary>Absent for an already-released aircraft.</summary>
             public WingMember Member;
 
-         /// <summary>Released-aircraft departure record to finish.</summary>
+            /// <summary>Released-aircraft departure record to finish.</summary>
             public WingDeparture.Departing Departing;
 
             public Aircraft Aircraft;
@@ -69,7 +69,7 @@ namespace WingCommand
                 }
             }
 
-            // Finish settlements already begun even if recovery is switched off between retries.
+            // Complete pending settlements even after recovery is disabled.
             for (int i = pending.Count - 1; i >= 0; i--)
             {
                 Settlement settlement = pending[i];
@@ -135,8 +135,8 @@ namespace WingCommand
             }
         }
 
-     /// <summary>Whether a staged settlement must be protected from loss pruning during
-     /// retries.</summary>
+        /// <summary>Whether a staged settlement must be protected from loss pruning during
+        /// retries.</summary>
         public static bool IsPending(WingMember member)
         {
             if (member == null) return false;
@@ -145,8 +145,8 @@ namespace WingCommand
             return false;
         }
 
-     /// <summary>Protect staged recovery and the gap after RTB/refit touchdown before settlement
-     /// begins.</summary>
+        /// <summary>Protect staged recovery and the gap after RTB/refit touchdown before settlement
+        /// begins.</summary>
         public static bool HoldsDeath(WingMember member)
         {
             if (member == null) return false;
@@ -191,8 +191,8 @@ namespace WingCommand
             return settlement;
         }
 
-     /// <summary>Start released-aircraft settlement from facts captured before roster
-     /// removal.</summary>
+        /// <summary>Start released-aircraft settlement from facts captured before roster
+        /// removal.</summary>
         private static Settlement Begin(WingDeparture.Departing departing)
         {
             Aircraft aircraft = departing.Aircraft;
@@ -357,9 +357,9 @@ namespace WingCommand
         private static bool IsHome(WingMember member) =>
             member != null && IsHome(member.Aircraft);
 
-     /// <summary>Require grounded and stopped for refit, stricter than recovery arrival. The five-metre
-     /// arrival window can include descending helicopters or rolling jets; wait for native parking
-     /// brakes before replenishment and relaunch.</summary>
+        /// <summary>Require grounded and stopped for refit, stricter than recovery arrival. The five-metre
+        /// arrival window can include descending helicopters or rolling jets; wait for native parking
+        /// brakes before replenishment and relaunch.</summary>
         private static bool IsDown(WingMember member)
         {
             if (member == null || !IsHome(member)) return false;

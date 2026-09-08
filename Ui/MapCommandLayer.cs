@@ -4,16 +4,13 @@ using NOAvionics;
 using UnityEngine;
 using UnityEngine.EventSystems;
 
-// Harmony invokes patch Prefix methods by reflection.
-// IDE0051 cannot see a reflective call, so it is disabled for this file only.
+// Harmony calls prefixes by reflection, so suppress IDE0051 in this file.
 #pragma warning disable IDE0051
 
 namespace WingCommand
 {
-    /// <summary>
-    /// Tactical-map input that belongs specifically to WingCommand. Wing selection is
-    /// kept separate from the stock selectedIcons/CombatHUD target list.
-    /// </summary>
+    /// <summary>Wing-specific tactical-map input with command selection independent of native weapon
+    /// targets.</summary>
     internal sealed class MapCommandLayer
     {
         private readonly WingRegistry wing;
@@ -28,18 +25,15 @@ namespace WingCommand
         private float moveAltitude;
         private float moveSpeed;
 
-        /// <summary>Commanded Move height, metres AGL. Zero means each airframe's default.</summary>
+        /// <summary>Requested Move altitude in metres AGL; zero uses airframe defaults.</summary>
         public float MoveAltitude => moveAltitude;
-        /// <summary>Commanded Move speed fraction. Zero means full.</summary>
+        /// <summary>Requested Move speed fraction; zero selects full speed.</summary>
         public float MoveSpeed => moveSpeed;
 
         public bool PointArmed => pointArmed;
         public WingOrder ArmedOrder => armedOrder;
-        /// <summary>
-        /// True while <see cref="Status"/> is reporting something rather than repeating the
-        /// standing instructions. The WMC status line uses it to decide whether that line is
-        /// free to explain the current rules of engagement instead.
-        /// </summary>
+        /// <summary>Whether status contains an active notice rather than standing instructions, reserving
+        /// WMC space from ROE hints.</summary>
         public bool HasNotice => pointArmed ||
             (pendingRecruit.Count > 0 && Time.unscaledTime <= recruitConfirmationUntil);
 
@@ -77,7 +71,7 @@ namespace WingCommand
             DynamicMap map = SceneSingleton<DynamicMap>.i;
             if (map == null) return;
 
-            // An armed order owns the next right-click. Unarmed, that click is a move.
+            // Apply the armed order on right-click; otherwise issue Move.
             if (pointArmed) HandleArmedOrder(map);
             else HandleWaypointInput(map);
         }
@@ -91,11 +85,8 @@ namespace WingCommand
             }
             if (!MapOrderPolicy.ArmsOnMap(order)) return;
 
-            // Do not acknowledge an arm we cannot keep. Before this guard, pressing Hold
-            // while the map or its Tactical page was closing set pointArmed for a frame,
-            // then Update silently cleared it. That reads exactly like a map click was
-            // ignored. A map command is useful only while this layer can receive the
-            // follow-up click, so reject it at the boundary with an actionable reason.
+            // Reject arming when the map cannot receive the next click, with an actionable reason
+            // instead of a transient acknowledgement.
             if (!DynamicMap.mapMaximized)
             {
                 Toast("Open the tactical map to place " + WingOrderCatalog.Label(order));
@@ -164,9 +155,8 @@ namespace WingCommand
                 return;
             }
 
-            // The WMC button that armed this order is a left-click. The follow-up is a
-            // right-click, so the arming press cannot also place the order. The one-frame
-            // skip still drops a right-click that lands in the same frame as the arm.
+            // Ignore the arming frame and its immediate successor so a simultaneous right-click cannot
+            // place the order.
             if (Time.frameCount <= armedFrame + 1 || !Input.GetMouseButtonDown(1)) return;
             if (!TryGetMapPointer(map, out GlobalPosition point, out Unit target)) return;
 
@@ -270,12 +260,8 @@ namespace WingCommand
                 : MapPointerKind.Other;
         }
 
-        /// <summary>
-        /// Resolve the foremost pointer target before accepting a map point. The native
-        /// coordinate helper tests only the map rectangle, so it also succeeds behind MFD
-        /// controls. A foreground panel blocks the click; a friendly icon cannot expose an
-        /// enemy underneath it.
-        /// </summary>
+        /// <summary>Resolve the topmost UI target before accepting coordinates. Foreground panels block
+        /// map actions, and friendly icons must not expose hostiles beneath them.</summary>
         private static bool TryGetMapPointer(DynamicMap map, out GlobalPosition point, out Unit unit) =>
             TryGetMapPointer(map, out point, out unit, out _);
 
@@ -288,11 +274,8 @@ namespace WingCommand
             if (map == null) return false;
             if (!map.TryGetCursorCoordinates(out point)) return false;
             EventSystem events = EventSystem.current;
-            // The coordinate conversion above is the authoritative map hit-test. An
-            // EventSystem is only needed to discover foreground UI and map icons; it can
-            // be absent for a frame while the tactical display is rebuilding. In that
-            // window a valid Hold/S&D point must still be placeable rather than appearing
-            // to eat the click.
+            // Map-rectangle coordinate conversion is authoritative. Without an EventSystem during
+            // rebuild, allow valid points; use raycasts only to reject foreground UI or resolve icons.
             if (events == null) return true;
 
             var pointer = new PointerEventData(events) { position = Input.mousePosition };
@@ -318,15 +301,12 @@ namespace WingCommand
                        (map.mapImage != null && target.IsChildOf(map.mapImage.transform));
             }
 
-            // Some map artwork does not receive raycasts. The rectangle test above still
-            // permits an empty map point when no interactive foreground target was hit.
+            // Accept empty map areas even when noninteractive artwork has no raycast target.
             return true;
         }
 
-        /// <summary>
-        /// The stock map consumes right-click for ICommandable units. While Tactical is
-        /// open, that gesture belongs to the armed WMC order, or to a move if none is armed.
-        /// </summary>
+        /// <summary>While Tactical is open, reserve native ICommandable right-click for the armed WMC
+        /// order or default Move.</summary>
         internal static bool ShouldConsumeNativeRightClick()
         {
             if (!Plugin.Settings.MapCommandEnabled.Value || !DynamicMap.mapMaximized ||
@@ -340,10 +320,8 @@ namespace WingCommand
                    (manager.MapOrderArmed || manager.Commands.Scope(wholeWing: false).Count > 0);
         }
 
-        /// <summary>
-        /// Assign eligible friendly AI aircraft from the stock map selection. The
-        /// recruitment transaction performs final eligibility and economy validation.
-        /// </summary>
+        /// <summary>Recruit eligible aircraft from native map selection; the transaction performs final
+        /// eligibility and cost checks.</summary>
         public void AddSelected()
         {
             DynamicMap map = SceneSingleton<DynamicMap>.i;
@@ -468,7 +446,7 @@ namespace WingCommand
         }
     }
 
-    /// <summary>Claim wing-icon clicks only while WMC is explicitly in tactical mode.</summary>
+    /// <summary>Intercept wing-icon clicks only in explicit WMC Tactical mode.</summary>
     [HarmonyPatch(typeof(UnitMapIcon), nameof(UnitMapIcon.ClickIcon))]
     internal static class WingMapSelectionPatch
     {
@@ -487,14 +465,14 @@ namespace WingCommand
             WingMember member = manager.Wing.Find(aircraft);
             if (member == null) return true;
 
-            // Native controller selection searches near the cursor without raycasting
-            // foreground UI. A WMC row click must not also select a plane behind the panel.
+            // Reject controller selection through foreground panels; native proximity search does not
+            // raycast UI.
             if (!MapCommandLayer.TryGetMapPointer(SceneSingleton<DynamicMap>.i, out _, out _,
                                                   out bool pointerOverIcon))
                 return false;
 
-            // Rewired Select can share the mouse binding. Its controller-source call on
-            // press and the EventSystem's mouse call on release must not toggle twice.
+            // Avoid toggling twice when Rewired press and EventSystem release share the left mouse
+            // binding.
             bool mouseGestureActive = Input.GetMouseButton(0) || Input.GetMouseButtonDown(0) ||
                                       Input.GetMouseButtonUp(0);
             if (MapSelectionPolicy.DeferToMouseClick(clickSource == MapIcon.ClickSource.Controller,

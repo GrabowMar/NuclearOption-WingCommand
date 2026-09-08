@@ -2,27 +2,29 @@ using System;
 
 namespace WingCommand
 {
-    /// <summary>Continuous motion for formation targets, independent of the engine.</summary>
+    /// <summary>Engine-free continuous formation target motion.</summary>
     internal static class FormationTracking
     {
         public const float SlotResponseSeconds = 0.5f;
 
-        // Outside the slot, closure belongs to the line of sight to the rendezvous,
-        // not the leader's forward axis. A lateral join needs both forward speed
-        // and lateral closure; an ahead/opposite-heading join must not be mistaken
-        // for an already captured aircraft that merely needs to reduce throttle.
+        // During rejoin, measure closure along rendezvous line of sight. Lateral and opposing-heading
+        // joins are not captured along-track overshoots.
         public static float ApproachSpeed(float gapX, float gapZ,
             float ownVx, float ownVz, float slotVx, float slotVz,
-            float braking, float aggression, float damping, float responseSeconds)
+            float braking, float aggression, float damping, float responseSeconds,
+            float slotVy = 0f, float speedLead = 0f)
         {
             float distance = (float)Math.Sqrt(gapX * gapX + gapZ * gapZ);
-            if (distance < 1f) return (float)Math.Sqrt(slotVx * slotVx + slotVz * slotVz);
+            if (distance < 1f) return Math.Max(0f,
+                (float)Math.Sqrt(slotVx * slotVx + slotVy * slotVy + slotVz * slotVz) + speedLead);
             float x = gapX / distance, z = gapZ / distance;
             float closing = (ownVx - slotVx) * x + (ownVz - slotVz) * z;
             float closure = Math.Max(0f, Math.Min(90f, FormationControlRules.RejoinClosure(
                 distance, closing, braking, aggression, damping, 0.45f, 3f, 90f, responseSeconds)));
             float vx = slotVx + x * closure, vz = slotVz + z * closure;
-            return (float)Math.Sqrt(vx * vx + vz * vz);
+            // Closure uses measured motion; engine lead survives rejoin blending and climbs retain
+            // their vertical speed demand instead of throttling back to horizontal speed.
+            return Math.Max(0f, (float)Math.Sqrt(vx * vx + slotVy * slotVy + vz * vz) + speedLead);
         }
 
         public static float QuietTurnRate(float rate, float deadband)
@@ -32,9 +34,8 @@ namespace WingCommand
             return rate * blend * blend * (3f - 2f * blend);
         }
 
-        // Integrate velocity around a constant-rate turn. Rotating velocity * time
-        // instead doubles the lateral lead for a shallow turn. Bound the sweep so
-        // a long intercept never predicts a loop back through the leader.
+        // Integrate constant-rate turn velocity instead of rotating velocity times duration, which
+        // doubles shallow-turn lateral lead. Bound sweep to avoid predicted loops.
         public static float Sweep(float turnRate, float seconds) =>
             Math.Max(-(float)Math.PI / 2f, Math.Min((float)Math.PI / 2f,
                 turnRate * Math.Max(0f, seconds)));
@@ -77,9 +78,8 @@ namespace WingCommand
             WrapDegrees(bank + WrapDegrees(observed - bank) *
                 (1f - (float)Math.Exp(-Math.Max(0f, dt) / Math.Max(0.001f, responseSeconds))));
 
-        // Preserve the established quiet-flight filters. Only a manoeuvre large
-        // enough to leave them visibly behind earns faster tracking; making every
-        // tick faster would feed stick noise back into the close formation.
+        // Accelerate tracking only for large manoeuvre error; retain quiet-flight filtering against
+        // stick noise.
         public static float TrackResponse(float errorDegrees, float quietSeconds) =>
             ManeuverResponse(errorDegrees, quietSeconds, 0.10f, 2f, 12f);
 
@@ -94,9 +94,8 @@ namespace WingCommand
             return quiet + (Math.Min(quiet, fast) - quiet) * blend;
         }
 
-        // x/z are components of a normalized 3D velocity, not an already flattened
-        // heading. Near vertical flight has almost no horizontal track information:
-        // tiny lateral noise or crossing the loop apex must not predict a sharp yaw.
+        // Weight horizontal information from normalized 3D velocity; near-vertical tracks cannot
+        // reliably indicate yaw.
         public static float HorizontalTrackWeight(float x, float z)
         {
             float horizontal = (float)Math.Sqrt(x * x + z * z);
@@ -116,9 +115,8 @@ namespace WingCommand
             return Math.Max(-maximumRate, Math.Min(maximumRate, rate)) * confidence;
         }
 
-        // Cubic Hermite approach: leave along the follower's current velocity and
-        // arrive along the slot's future velocity. Tangents cannot exceed the gap,
-        // preventing loops when a prediction horizon is long or the gap is small.
+        // Cubic Hermite capture follows current velocity at departure and future slot velocity at
+        // arrival. Bound tangents by gap to prevent loops.
         public static (float x, float z) Capture(
             float targetX, float targetZ, float ownVx, float ownVz,
             float slotVx, float slotVz, float seconds, float previewSeconds)
@@ -130,9 +128,8 @@ namespace WingCommand
                 Math.Sqrt((double)ownVx * ownVx + (double)ownVz * ownVz)));
             double slotScale = Math.Min(time, distance / Math.Max(1d,
                 Math.Sqrt((double)slotVx * slotVx + (double)slotVz * slotVz)));
-            // When the rendezvous is behind, a forward departure tangent can keep
-            // a receding-horizon preview ahead forever. Fade the tangents outside
-            // the forward cone so the heading limiter can first turn toward it.
+            // Fade tangents outside the forward cone so rearward rendezvous can enter the heading
+            // limiter instead of keeping preview ahead indefinitely.
             double alignment = ((double)targetX * ownVx + (double)targetZ * ownVz) /
                 Math.Max(1d, distance * Math.Sqrt((double)ownVx * ownVx + (double)ownVz * ownVz));
             double tangentBlend = Math.Max(0d, Math.Min(1d, alignment * 4d));
@@ -146,9 +143,8 @@ namespace WingCommand
                     (float)(h10 * ownVz * ownScale + h01 * targetZ + h11 * slotVz * slotScale));
         }
 
-        // Exact critically damped response for a held sample. Unlike differentiating
-        // a freshly rotated slot, this keeps position and velocity continuous across
-        // attitude changes and behaves the same at different geometry tick strides.
+        // Exact critically damped held-target response preserving continuous position and velocity
+        // across attitude changes and geometry strides.
         public static void DampedAxis(float position, float velocity, float target,
             float responseSeconds, float maxSpeed, float dt, out float nextPosition, out float nextVelocity)
         {

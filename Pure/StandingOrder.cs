@@ -2,7 +2,7 @@ using System;
 
 namespace WingCommand
 {
-    /// <summary>Versioned intent. A completion can retire only the order it started under.</summary>
+    /// <summary>Versioned standing intent; completions may retire only their starting revision.</summary>
     internal sealed class StandingOrder<T>
     {
         private readonly Func<T, T, bool> sameIntent;

@@ -1,9 +1,9 @@
 namespace WingCommand
 {
- /// <summary>Shared pilot binding and flight configuration for wing states.</summary>
+    /// <summary>Shared pilot binding and flight configuration for wing states.</summary>
     internal abstract class WingPilotState : PilotBaseState
     {
-     /// <summary>Member controlled by this state.</summary>
+        /// <summary>Member controlled by this state.</summary>
         protected readonly WingMember member;
         internal int OrderRevision { get; private set; }
         // Restart on payload changes unless a controller explicitly supports safe in-place retargeting.
@@ -19,7 +19,7 @@ namespace WingCommand
             this.member = member;
         }
 
-     /// <summary>Bind pilot controls without changing gear or hover configuration.</summary>
+        /// <summary>Bind pilot controls without changing gear or hover configuration.</summary>
         protected void BindControls(Pilot pilot)
         {
             base.pilot = pilot;
@@ -29,8 +29,8 @@ namespace WingCommand
             aircraft.SetFlightAssist(enabled: true);
         }
 
-     /// <summary>Bind controls, optionally release hover, and retract aircraft gear.</summary> <param
-     /// name="releaseHover">False to retain hover, such as during cargo descent.</param>
+        /// <summary>Bind controls, optionally release hover, and retract aircraft gear.</summary> <param
+        /// name="releaseHover">False to retain hover, such as during cargo descent.</param>
         protected void BeginFlight(Pilot pilot, bool releaseHover = true)
         {
             BindControls(pilot);

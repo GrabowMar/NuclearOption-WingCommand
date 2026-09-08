@@ -2,20 +2,17 @@ using UnityEngine;
 
 namespace WingCommand
 {
- /// <summary>Land at a local or designated point instead of routing to a base. Native Hover holds
- /// position while a decreasing altitude command descends to the surface.</summary>
+    /// <summary>Land at a local or designated point instead of routing to a base. Native Hover holds
+    /// position while a decreasing altitude command descends to the surface.</summary>
     internal class LandInPlaceState : WingPilotState
     {
         private enum Phase { Transit, Settle, Descend, Down }
 
-     /// <summary>Commanded descent rate in metres per second.</summary>
+        /// <summary>Commanded descent rate in metres per second.</summary>
         private const float DescentRate = 3f;
 
-     /// <summary>Radar-altitude touchdown threshold.</summary>
+        /// <summary>Radar-altitude touchdown threshold.</summary>
         private const float TouchdownAlt = 1.5f;
-
-     /// <summary>Maximum ground speed before descent begins.</summary>
-        private const float SettleSpeed = 6f;
 
         private const float TransitAltitude = 120f;
         private const float SettleAltitude = 22f;
@@ -125,8 +122,8 @@ namespace WingCommand
 
                 case Phase.Settle:
                     HoverAssist.Hover(aircraft, spot, hold, facing);
-                    if (aircraft.speed < SettleSpeed &&
-                        HorizontalDistance(aircraft.GlobalPosition(), spot) < 30f)
+                    if (HoverApproachPolicy.Settled(aircraft.speed,
+                        HorizontalDistance(aircraft.GlobalPosition(), spot)))
                         phase = Phase.Descend;
                     break;
 
@@ -143,6 +140,26 @@ namespace WingCommand
             // spot.
             HoverAssist.Release(aircraft);
 
+            // Hover-capable jets still use the plane AutoAim overload during forward flight; the
+            // rotary overload is empty on AutopilotPlane.
+            if (aircraft.autopilot is AutopilotPlane)
+            {
+                controlInputs.throttle = Mathf.Clamp01(aircraft.GetAircraftParameters().cruiseThrottle);
+                aircraft.autopilot.AutoAim(
+                    destination: spot + Vector3.up * TransitAltitude,
+                    aimVelocity: true,
+                    ignoreCollisions: false,
+                    runwayAlign: false,
+                    effort: 1f,
+                    bankAllowed: FixedWingFormation.GroundLimitedBank(
+                        aircraft.radarAlt, WingTuning.StationBank,
+                        aircraft.rb != null ? aircraft.rb.velocity.y : 0f),
+                    followTerrain: true,
+                    altitudeHold: AutopilotMath.CruiseHold(aircraft, TransitAltitude),
+                    targetVelocity: Vector3.zero);
+                return;
+            }
+
             aircraft.autopilot.AutoAim(
                 destination: spot + Vector3.up * TransitAltitude,
                 altitudeHold: AutopilotMath.RotaryAgl(aircraft, TransitAltitude, 40f, 1000f),
@@ -158,8 +175,8 @@ namespace WingCommand
             return delta.magnitude;
         }
 
-     /// <summary>Find the nearest reasonably level static landing surface around the requested
-     /// point.</summary>
+        /// <summary>Find the nearest reasonably level static landing surface around the requested
+        /// point.</summary>
         private static bool TryFindLandingSpot(GlobalPosition requested, out GlobalPosition result)
         {
             Vector3 centre = requested.ToLocalPosition();

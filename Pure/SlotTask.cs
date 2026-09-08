@@ -1,17 +1,15 @@
 namespace WingCommand
 {
-    /// <summary>
-    /// The extra job a wingman is working while it holds its formation slot.
-    /// </summary>
+    /// <summary>Additional job performed while holding formation.</summary>
     public enum SlotTask
     {
-        /// <summary>Just fly the slot.</summary>
+        /// <summary>Station keeping without an additional job.</summary>
         None,
 
-        /// <summary>Run the jammer pod against the designated unit.</summary>
+        /// <summary>Operate the jammer pod at the designation.</summary>
         Jam,
 
-        /// <summary>Legacy ID retained for binary compatibility; Splash now flies an attack run.</summary>
+        /// <summary>Retained binary-compatible value; current Splash orders use attack runs.</summary>
         Splash,
     }
 }

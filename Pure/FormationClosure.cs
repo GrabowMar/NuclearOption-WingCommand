@@ -3,7 +3,7 @@ using System.Numerics;
 
 namespace WingCommand
 {
- /// <summary>Braking-distance limits, pursuit throttle, and speed-brake hysteresis.</summary>
+    /// <summary>Braking-distance limits, pursuit throttle, and speed-brake hysteresis.</summary>
     internal static class FormationClosure
     {
         internal readonly struct Controls

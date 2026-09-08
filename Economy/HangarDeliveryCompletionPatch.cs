@@ -3,7 +3,7 @@ using HarmonyLib;
 
 namespace WingCommand
 {
- /// <summary>Track carrier door-sequence completion, including launches skipped after damage.</summary>
+    /// <summary>Track carrier door-sequence completion, including launches skipped after damage.</summary>
     [HarmonyPatch(typeof(Hangar), "DoorSequenceCarrier")]
     internal static class HangarDeliveryCompletionPatch
     {

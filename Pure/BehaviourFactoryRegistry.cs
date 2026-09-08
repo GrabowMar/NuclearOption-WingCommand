@@ -3,7 +3,7 @@ using System.Collections.Generic;
 
 namespace WingCommand
 {
- /// <summary>Factory registrations have identity until replaced or removed.</summary>
+    /// <summary>Factory registrations have identity until replaced or removed.</summary>
     internal sealed class BehaviourFactoryRegistry<TContext, TState> where TState : class
     {
         internal sealed class Registration
@@ -42,7 +42,7 @@ namespace WingCommand
         }
     }
 
- /// <summary>Caches state per aircraft while sharing only registrations.</summary>
+    /// <summary>Caches state per aircraft while sharing only registrations.</summary>
     internal sealed class BehaviourStateCache<TContext, TState> where TState : class
     {
         private readonly struct Entry

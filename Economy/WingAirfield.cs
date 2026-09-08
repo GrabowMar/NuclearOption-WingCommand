@@ -3,19 +3,19 @@ using UnityEngine;
 
 namespace WingCommand
 {
- /// <summary>Builds runway launch poses and watches stalled native taxi. Missing pathfinder waypoints
- /// can prevent the native taxi-to-takeoff transition and eventually eject the pilot. After verifying
- /// runway position and alignment, hand off to native takeoff without moving the aircraft.</summary>
+    /// <summary>Builds runway launch poses and watches stalled native taxi. Missing pathfinder waypoints
+    /// can prevent the native taxi-to-takeoff transition and eventually eject the pilot. After verifying
+    /// runway position and alignment, hand off to native takeoff without moving the aircraft.</summary>
     internal static class WingAirfield
     {
-     /// <summary>Seconds allowed for native taxi before intervening, well before its stuck timer ejects
-     /// the pilot.</summary>
+        /// <summary>Seconds allowed for native taxi before intervening, well before its stuck timer ejects
+        /// the pilot.</summary>
         private const float TaxiGrace = 6f;
 
-     /// <summary>Maximum speed considered a stalled taxi departure.</summary>
+        /// <summary>Maximum speed considered a stalled taxi departure.</summary>
         private const float StalledSpeed = 1.5f;
 
-     /// <summary>Distance defining field proximity.</summary>
+        /// <summary>Distance defining field proximity.</summary>
         private const float FieldRadius = 4000f;
 
         private sealed class Launch
@@ -31,14 +31,14 @@ namespace WingCommand
 
         private static readonly List<Launch> launches = new List<Launch>();
 
-     /// <summary>Spawn pose and its departure runway.</summary>
+        /// <summary>Spawn pose and its departure runway.</summary>
         internal struct LaunchPose
         {
             public Airbase.Runway Runway;
             public bool Reverse;
 
-         /// <summary>Live threshold transform for lane clearance, accounting for floating-origin shifts
-         /// and carrier motion.</summary>
+            /// <summary>Live threshold transform for lane clearance, accounting for floating-origin shifts
+            /// and carrier motion.</summary>
             public Transform Threshold;
 
             public GlobalPosition Position;
@@ -48,9 +48,9 @@ namespace WingCommand
 
         // Runway selection.
 
-     /// <summary>Find a suitable launch strip before an aircraft exists, without GetTakeoffRunway's
-     /// direction-claim side effect. Match native direction rules: retain recent usage heading,
-     /// otherwise choose the end nearest the field.</summary>
+        /// <summary>Find a suitable launch strip before an aircraft exists, without GetTakeoffRunway's
+        /// direction-claim side effect. Match native direction rules: retain recent usage heading,
+        /// otherwise choose the end nearest the field.</summary>
         internal static bool TryFindTakeoffRunway(Airbase airbase, AircraftDefinition definition,
                                                   out Airbase.Runway runway,
                                                   out bool reverse)
@@ -103,8 +103,8 @@ namespace WingCommand
             return runway != null;
         }
 
-     /// <summary>Log each carrier's runway rejection once per session under VerboseLogging; legitimate
-     /// launch limits are not release-log warnings.</summary>
+        /// <summary>Log each carrier's runway rejection once per session under VerboseLogging; legitimate
+        /// launch limits are not release-log warnings.</summary>
         private static readonly HashSet<int> carrierMissLogged = new HashSet<int>();
 
         private static void LogCarrierRunwayMiss(Airbase airbase, AircraftDefinition definition,
@@ -145,13 +145,13 @@ namespace WingCommand
             Plugin.LogVerbose(sb.ToString());
         }
 
-     /// <summary>Whether this field has a compatible takeoff strip.</summary>
+        /// <summary>Whether this field has a compatible takeoff strip.</summary>
         internal static bool HasTakeoffRunway(Airbase airbase, AircraftDefinition definition) =>
             airbase != null &&
             TryFindTakeoffRunway(airbase, definition, out _, out _);
 
-     /// <summary>Preflight the native landing-runway search; entering landing with no usable runway
-     /// ejects the pilot instead of reporting failure.</summary>
+        /// <summary>Preflight the native landing-runway search; entering landing with no usable runway
+        /// ejects the pilot instead of reporting failure.</summary>
         internal static bool HasLandingRunway(Aircraft aircraft)
         {
             if (aircraft == null || aircraft.NetworkHQ == null) return false;
@@ -181,8 +181,8 @@ namespace WingCommand
 
         // Launch placement.
 
-     /// <summary>Build a runway spawn using native spawnOffset and restRotation conventions. Runway
-     /// endpoint rotations are not meaningful; derive heading from GetDirection.</summary>
+        /// <summary>Build a runway spawn using native spawnOffset and restRotation conventions. Runway
+        /// endpoint rotations are not meaningful; derive heading from GetDirection.</summary>
         internal static bool TryBuildLaunchPose(Airbase airbase, AircraftDefinition definition,
                                                 out LaunchPose pose)
         {
@@ -238,8 +238,8 @@ namespace WingCommand
             return true;
         }
 
-     /// <summary>Check the fixed launch pose for aircraft or wrecks before another delivery spawns into
-     /// an uncleared predecessor.</summary>
+        /// <summary>Check the fixed launch pose for aircraft or wrecks before another delivery spawns into
+        /// an uncleared predecessor.</summary>
         internal static bool LaunchSpotBlocked(GlobalPosition pose, AircraftDefinition definition,
                                                out string blocker)
         {
@@ -264,7 +264,7 @@ namespace WingCommand
 
         // Departure monitoring.
 
-     /// <summary>Watch runway placement until later physics updates confirm departure.</summary>
+        /// <summary>Watch runway placement until later physics updates confirm departure.</summary>
         internal static void WatchLaunch(Aircraft aircraft, in LaunchPose pose)
         {
             if (aircraft == null || pose.Runway == null) return;
@@ -373,8 +373,8 @@ namespace WingCommand
             launches.Clear();
         }
 
-     /// <summary>Release the launch watch and its runway claim; native taxi/takeoff do not dequeue on
-     /// interrupted exit.</summary>
+        /// <summary>Release the launch watch and its runway claim; native taxi/takeoff do not dequeue on
+        /// interrupted exit.</summary>
         private static void Release(Launch launch, int index)
         {
             if (launch.Queued && launch.Runway != null && launch.Aircraft != null)
@@ -395,9 +395,9 @@ namespace WingCommand
             Plugin.LogVerbose("[Airfield] " + launch.Aircraft.unitName + " " + what);
         }
 
-     /// <summary>Try native dequeue on every field runway. It removes only this aircraft at the head,
-     /// or destroyed head entries; it does not remove this aircraft from behind another live
-     /// entry.</summary>
+        /// <summary>Try native dequeue on every field runway. It removes only this aircraft at the head,
+        /// or destroyed head entries; it does not remove this aircraft from behind another live
+        /// entry.</summary>
         internal static void DrainTakeoffQueue(Aircraft aircraft)
         {
             if (aircraft == null) return;
@@ -412,9 +412,9 @@ namespace WingCommand
             }
         }
 
-     /// <summary>Remove completed landing claims. Native LeaveState can retain live aircraft on the
-     /// landing list, blocking takeoff indefinitely after refit; despawn only self-clears plain
-     /// RTB.</summary>
+        /// <summary>Remove completed landing claims. Native LeaveState can retain live aircraft on the
+        /// landing list, blocking takeoff indefinitely after refit; despawn only self-clears plain
+        /// RTB.</summary>
         internal static void DrainLandingList(Aircraft aircraft)
         {
             if (aircraft == null) return;
@@ -430,8 +430,8 @@ namespace WingCommand
 
         // Field lookup.
 
-     /// <summary>Find the friendly field beneath the aircraft for relaunch after native
-     /// landing.</summary>
+        /// <summary>Find the friendly field beneath the aircraft for relaunch after native
+        /// landing.</summary>
         internal static Airbase FieldUnder(Aircraft aircraft)
         {
             if (aircraft == null) return null;

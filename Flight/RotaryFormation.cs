@@ -2,39 +2,39 @@ using UnityEngine;
 
 namespace WingCommand
 {
- /// <summary>Rotary station keeping commands leader velocity plus slot-error correction. Cruise seeds
- /// native waypoint direction to reduce its one-second steering lag; slow near-slot flight uses native
- /// Hover position hold.</summary>
+    /// <summary>Rotary station keeping commands leader velocity plus slot-error correction. Cruise seeds
+    /// native waypoint direction to reduce its one-second steering lag; slow near-slot flight uses native
+    /// Hover position hold.</summary>
     internal static class RotaryFormation
     {
         internal enum Mode
         {
-         /// <summary>Hold the slot as a point near a slow leader.</summary>
+            /// <summary>Hold the slot as a point near a slow leader.</summary>
             Hover,
 
-         /// <summary>Match moving-leader velocity with slot closure.</summary>
+            /// <summary>Match moving-leader velocity with slot closure.</summary>
             Cruise,
         }
 
-     /// <summary>Minimum aim distance in metres; shorter destinations make native collective command
-     /// descent.</summary>
+        /// <summary>Minimum aim distance in metres; shorter destinations make native collective command
+        /// descent.</summary>
         private const float MinPowerDistance = 600f;
 
-     /// <summary>On-station error radius in multiples of rotary spacing.</summary>
+        /// <summary>On-station error radius in multiples of rotary spacing.</summary>
         private const float StationSpacings = 1.5f;
 
-     /// <summary>Hover/cruise speed hysteresis in m/s to prevent threshold chatter.</summary>
+        /// <summary>Hover/cruise speed hysteresis in m/s to prevent threshold chatter.</summary>
         private const float HoverHysteresis = 3f;
 
-     /// <summary>Seconds of leader climb feed-forward in altitude hold.</summary>
+        /// <summary>Seconds of leader climb feed-forward in altitude hold.</summary>
         private const float AltitudeLeadSeconds = 1f;
 
-     /// <summary>Velocity correction per metre of slot error, in (m/s)/m; sets the proportional
-     /// position response rate.</summary>
+        /// <summary>Velocity correction per metre of slot error, in (m/s)/m; sets the proportional
+        /// position response rate.</summary>
         private const float FollowGain = 0.4f;
 
-     /// <summary>Steer the member using previous mode for hover hysteresis; output horizontal slot
-     /// error.</summary>
+        /// <summary>Steer the member using previous mode for hover hysteresis; output horizontal slot
+        /// error.</summary>
         public static Mode Fly(Aircraft aircraft, Aircraft leader, GlobalPosition slotPos,
                                Vector3 toSlot, float distance, float spacing,
                                Mode previous, LeaderState leaderState, out float horizontalError)
@@ -83,8 +83,8 @@ namespace WingCommand
             return Mode.Cruise;
         }
 
-     /// <summary>Convert predicted leader velocity plus slot correction into native cruise direction
-     /// and power.</summary>
+        /// <summary>Convert predicted leader velocity plus slot correction into native cruise direction
+        /// and power.</summary>
         private static void Cruise(Aircraft aircraft, Aircraft leader, GlobalPosition slotPos,
                                    Vector3 toSlotFlat,
                                    float flat, Vector3 slotDir, Vector3 heading,

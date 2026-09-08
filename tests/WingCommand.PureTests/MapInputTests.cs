@@ -13,13 +13,13 @@ namespace WingCommand.PureTests
             wing.Members.AddRange(new[] { member, other });
             var selection = new WingCommandSelection();
 
-            // A mouse-bound Rewired Select fires first, then the EventSystem on release.
+            // Rewired mouse-bound selection precedes EventSystem release.
             Dispatch(controller: true);
             Assert.True(selection.IsAll);
             Dispatch(controller: false);
             Assert.Equal(new[] { member }, selection.Snapshot(wing));
 
-            // A second intentional click still deselects; no timer swallows it.
+            // A separate click must deselect without timer suppression.
             Dispatch(controller: true);
             Assert.Equal(new[] { member }, selection.Snapshot(wing));
             Dispatch(controller: false);
@@ -34,8 +34,8 @@ namespace WingCommand.PureTests
         }
 
         [Theory]
-        [InlineData(false, true)]  // Keyboard/controller over an icon, without a mouse gesture.
-        [InlineData(true, false)]  // Nearest-icon controller selection on an empty map point.
+        [InlineData(false, true)]  // Controller/keyboard selection without a mouse gesture.
+        [InlineData(true, false)]  // Native nearest-icon selection from an empty map point.
         [InlineData(false, false)]
         public void ControllerSelectionRemainsAvailableWithoutAnEventSystemIconClick(
             bool mouseGestureActive, bool pointerOverIcon)

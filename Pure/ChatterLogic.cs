@@ -3,7 +3,7 @@ using System.Collections.Generic;
 
 namespace WingCommand
 {
- /// <summary>Pilot radio style, independent of rank and flight skill.</summary>
+    /// <summary>Pilot radio style, independent of rank and flight skill.</summary>
     internal enum ChatterPersona
     {
         Professional,
@@ -12,7 +12,7 @@ namespace WingCommand
         Dry,
     }
 
- /// <summary>Ambient flight line with an optional pilot reply.</summary>
+    /// <summary>Ambient flight line with an optional pilot reply.</summary>
     internal readonly struct ChatterExchange
     {
         public readonly string Opening;
@@ -30,7 +30,7 @@ namespace WingCommand
         }
     }
 
- /// <summary>Engine-free radio presentation and dialogue selection.</summary>
+    /// <summary>Engine-free radio presentation and dialogue selection.</summary>
     internal static class ChatterDialogue
     {
         // Keep ambient dialogue in static data and within the pilots' world.
@@ -249,8 +249,8 @@ namespace WingCommand
             }
         }
 
-     /// <summary>Let one element lead acknowledge accepted tactical numbers in a single readable
-     /// transmission.</summary>
+        /// <summary>Let one element lead acknowledge accepted tactical numbers in a single readable
+        /// transmission.</summary>
         public static string GroupAcknowledge(ChatterPersona persona, string order,
                                               string others, int seed)
         {

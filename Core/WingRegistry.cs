@@ -4,15 +4,16 @@ using UnityEngine;
 
 namespace WingCommand
 {
- /// <summary>Owns wing membership, slots, and standing orders; recruits from the native live aircraft
- /// registry.</summary>
+    /// <summary>Owns wing membership, slots, and standing orders; recruits from the native live aircraft
+    /// registry.</summary>
     internal class WingRegistry
     {
         private readonly List<WingMember> members = new List<WingMember>();
 
         public Aircraft Leader { get; private set; }
+        private PersistentID? takeoverPilotAircraftId;
 
-     /// <summary>Wing-wide standing weapons policy.</summary>
+        /// <summary>Wing-wide standing weapons policy.</summary>
         public WingRoe Roe { get; set; } = WingRoe.Hold;
 
         public IReadOnlyList<WingMember> Members => members;
@@ -20,9 +21,9 @@ namespace WingCommand
 
         private WingMember flightLead;
 
-     /// <summary>Temporary flight lead, or null to form on the player. The lead follows the player;
-     /// others follow it. The getter clears removed, dead, or uncommandable leads; CheckReserves
-     /// reports the change.</summary>
+        /// <summary>Temporary flight lead, or null to form on the player. The lead follows the player;
+        /// others follow it. The getter clears removed, dead, or uncommandable leads; CheckReserves
+        /// reports the change.</summary>
         public WingMember FlightLead
         {
             get
@@ -37,8 +38,8 @@ namespace WingCommand
             }
         }
 
-     /// <summary>Assign flight lead only to a commandable roster member compatible with the wing's
-     /// airframe class; otherwise return a reason.</summary>
+        /// <summary>Assign flight lead only to a commandable roster member compatible with the wing's
+        /// airframe class; otherwise return a reason.</summary>
         public bool TrySetFlightLead(WingMember member, out string reason)
         {
             if (member == null || !members.Contains(member))
@@ -65,7 +66,7 @@ namespace WingCommand
             return true;
         }
 
-     /// <summary>Clear temporary lead so members form on the player.</summary>
+        /// <summary>Clear temporary lead so members form on the player.</summary>
         public void ClearFlightLead() => flightLead = null;
 
         public void SetLeader(Aircraft leader)
@@ -79,8 +80,16 @@ namespace WingCommand
                     leader = null;
             }
 
-            if (Leader == leader) return;
+            if (Leader == leader && !(leader == null && takeoverPilotAircraftId.HasValue)) return;
             Aircraft previous = Leader;
+            if (takeoverPilotAircraftId.HasValue)
+            {
+                Pilot pilot = PrimaryPilot(previous);
+                WingPilotRoster.Retire(takeoverPilotAircraftId.Value,
+                    survived: previous != null && !previous.disabled &&
+                              pilot != null && !pilot.dead && !pilot.ejected);
+                takeoverPilotAircraftId = null;
+            }
             Leader = leader;
 
             // Invalidate host profiles on every leader transition so a stale companion registration
@@ -105,16 +114,19 @@ namespace WingCommand
             }
         }
 
-     /// <summary>Replace the selected AI member with its player-spawned copy. Do not switch the old
-     /// pilot state; the server destroys that object after success.</summary>
+        /// <summary>Replace the selected AI member with its player-spawned copy. Do not switch the old
+        /// pilot state; the server destroys that object after success.</summary>
         public bool ReplaceWithLeader(WingMember member, Aircraft newLeader)
         {
             if (member == null || newLeader == null || !members.Remove(member)) return false;
 
             HangarDepartureLane.Release(member);
 
-            // Return the squadron pilot alive to the pool; the player takes the replacement seat.
+            // Keep the same squadron pilot in the player-controlled replacement seat.
+            WingPilot pilot = WingPilotRoster.Of(member);
             WingPilotRoster.Retire(member, survived: true);
+            WingPilotRoster.Assign(newLeader, pilot);
+            takeoverPilotAircraftId = newLeader.persistentID;
 
             Leader = newLeader;
             WingMarkers.Repaint(member.Aircraft);
@@ -125,8 +137,8 @@ namespace WingCommand
 
         private float nextReserveCheck;
 
-     /// <summary>Periodically check fuel, ammunition, damage, and cargo completion. Share the pass
-     /// because these checks traverse member equipment and change slowly.</summary>
+        /// <summary>Periodically check fuel, ammunition, damage, and cargo completion. Share the pass
+        /// because these checks traverse member equipment and change slowly.</summary>
         public void CheckReserves()
         {
             if (Time.timeSinceLevelLoad < nextReserveCheck) return;
@@ -151,17 +163,17 @@ namespace WingCommand
 
         // Leader ground state.
 
-     /// <summary>Radar altitude below which extended gear indicates a grounded leader.</summary>
+        /// <summary>Radar altitude below which extended gear indicates a grounded leader.</summary>
         private const float DeckAltitude = 10f;
 
-     /// <summary>Radar altitude required to leave deck hold and rejoin.</summary>
+        /// <summary>Radar altitude required to leave deck hold and rejoin.</summary>
         private const float AirborneAltitude = 40f;
 
-     /// <summary>Leader ground-state flag consumed by deck-hold reflexes without altering standing
-     /// directives.</summary>
+        /// <summary>Leader ground-state flag consumed by deck-hold reflexes without altering standing
+        /// directives.</summary>
         public bool LeaderOnDeck { get; private set; }
 
-     /// <summary>Whether an active member has RTB or Land orders.</summary>
+        /// <summary>Whether an active member has RTB or Land orders.</summary>
         public bool HasAnyLandingOrder()
         {
             for (int i = 0; i < members.Count; i++)
@@ -173,8 +185,8 @@ namespace WingCommand
             return false;
         }
 
-     /// <summary>Distinguish landing from low flight using gear and altitude. Separate entry and exit
-     /// heights prevent touchdown bounces from toggling hold and rejoin.</summary>
+        /// <summary>Distinguish landing from low flight using gear and altitude. Separate entry and exit
+        /// heights prevent touchdown bounces from toggling hold and rejoin.</summary>
         private bool LeaderIsOnDeck()
         {
             Aircraft leader = Leader;
@@ -188,8 +200,8 @@ namespace WingCommand
             return leader.gearDeployed && leader.radarAlt < DeckAltitude;
         }
 
-     /// <summary>Update and announce leader deck state. The deck-hold reflex moves formation members
-     /// overhead while preserving explicit tasks until the leader is airborne.</summary>
+        /// <summary>Update and announce leader deck state. The deck-hold reflex moves formation members
+        /// overhead while preserving explicit tasks until the leader is airborne.</summary>
         public void CheckLeaderOnDeck()
         {
             bool onDeck = LeaderIsOnDeck();
@@ -202,17 +214,18 @@ namespace WingCommand
                 WingHost.Current.OverwatchToast ?? "Leader on the deck - wing holding overhead");
         }
 
-     /// <summary>Clear the roster at mission end without touching aircraft already being
-     /// destroyed.</summary>
+        /// <summary>Clear the roster at mission end without touching aircraft already being
+        /// destroyed.</summary>
         public void Clear()
         {
             members.Clear();
+            takeoverPilotAircraftId = null;
             LeaderOnDeck = false;
             Leader = null;
         }
 
-     /// <summary>Distribute scoped attacks by target coverage before concentration. Choose the nearest
-     /// free shooter each pass; a single designation concentrates the eligible scope.</summary>
+        /// <summary>Distribute scoped attacks by target coverage before concentration. Choose the nearest
+        /// free shooter each pass; a single designation concentrates the eligible scope.</summary>
         public int AttackTargets(IReadOnlyList<WingMember> candidates,
                                  IReadOnlyList<Unit> targets, out int covered,
                                  bool forceAll = false,
@@ -297,7 +310,7 @@ namespace WingCommand
             return null;
         }
 
-     /// <summary>Take the free member nearest the target.</summary>
+        /// <summary>Take the free member nearest the target.</summary>
         private static WingMember TakeNearest(List<WingMember> free, Unit target)
         {
             int best = -1;
@@ -322,14 +335,14 @@ namespace WingCommand
             free.RemoveAt(best);
             return member;
         }
-     /// <summary>Resolve each member once per frame; reflex bands and scores determine
-     /// precedence.</summary>
+        /// <summary>Resolve each member once per frame; reflex bands and scores determine
+        /// precedence.</summary>
         public void Tick()
         {
             for (int i = 0; i < members.Count; i++) members[i].Tick();
         }
 
-     /// <summary>Remove members lost to death, ejection, or despawn.</summary>
+        /// <summary>Remove members lost to death, ejection, or despawn.</summary>
         public void Prune()
         {
             for (int i = members.Count - 1; i >= 0; i--)
@@ -353,7 +366,7 @@ namespace WingCommand
             }
         }
 
-     /// <summary>Describe loss cause and observed flight state for diagnostics.</summary>
+        /// <summary>Describe loss cause and observed flight state for diagnostics.</summary>
         private static string LostReason(WingMember m)
         {
             Aircraft a = m.Aircraft;
@@ -382,8 +395,8 @@ namespace WingCommand
             return "unknown" + state;
         }
 
-     /// <summary>Use an allocation-free loop on the per-icon colour-update path; LINQ Any would capture
-     /// a predicate.</summary>
+        /// <summary>Use an allocation-free loop on the per-icon colour-update path; LINQ Any would capture
+        /// a predicate.</summary>
         public bool Contains(Aircraft aircraft)
         {
             for (int i = 0; i < members.Count; i++)
@@ -405,13 +418,13 @@ namespace WingCommand
             return null;
         }
 
-     /// <summary>Shared capacity gate for purchases, recruitment, and delayed deliveries, including the
-     /// debug bypass.</summary>
+        /// <summary>Shared capacity gate for purchases, recruitment, and delayed deliveries, including the
+        /// debug bypass.</summary>
         public static bool HasRoom(int occupied) =>
             Plugin.Settings.CheatNoWingLimit ||
             occupied + WingShop.PendingWingSlots < WingFormation.MaxWingSize;
 
-     /// <summary>Count label when the wing-limit bypass is active.</summary>
+        /// <summary>Count label when the wing-limit bypass is active.</summary>
         public static string WingLimitLabel =>
             Plugin.Settings.CheatNoWingLimit
                 ? "NO LIMIT"
@@ -450,8 +463,8 @@ namespace WingCommand
             return true;
         }
 
-     /// <summary>Require matching rotary/fixed-wing classes for formation; their autopilots and speed
-     /// envelopes are incompatible.</summary>
+        /// <summary>Require matching rotary/fixed-wing classes for formation; their autopilots and speed
+        /// envelopes are incompatible.</summary>
         private bool TypeMatchesLeader(Aircraft candidate)
         {
             if (Leader == null || candidate == null) return false;
@@ -507,7 +520,7 @@ namespace WingCommand
             return member;
         }
 
-     /// <summary>Warn at recruitment when airframe speed is unlikely to support formation.</summary>
+        /// <summary>Warn at recruitment when airframe speed is unlikely to support formation.</summary>
         private void WarnIfTooSlow(Aircraft recruit)
         {
             if (Leader == null) return;
@@ -525,7 +538,7 @@ namespace WingCommand
                 $"[Wing] {recruit.unitName} max speed {mine:F0} vs leader {leader:F0} - cannot hold station");
         }
 
-     /// <summary>Dismiss a member through SendHome rather than native combat AI.</summary>
+        /// <summary>Dismiss a member through SendHome rather than native combat AI.</summary>
         public void Remove(WingMember member, string reason)
         {
             if (member == null) return;
@@ -545,8 +558,8 @@ namespace WingCommand
             WingMarkers.Repaint(released);
         }
 
-     /// <summary>Remove a recovered member without changing its pilot state; the settled aircraft is
-     /// about to despawn.</summary>
+        /// <summary>Remove a recovered member without changing its pilot state; the settled aircraft is
+        /// about to despawn.</summary>
         public void Recover(WingMember member)
         {
             if (member == null || !members.Remove(member)) return;
@@ -574,8 +587,8 @@ namespace WingCommand
             foreach (Aircraft a in released) WingMarkers.Repaint(a);
         }
 
-     /// <summary>Assign the nearest free slot to reduce crossing on joins. Preserve surviving slot
-     /// numbers after losses; later recruits fill gaps.</summary>
+        /// <summary>Assign the nearest free slot to reduce crossing on joins. Preserve surviving slot
+        /// numbers after losses; later recruits fill gaps.</summary>
         private int NearestFreeSlot(Aircraft joining)
         {
             // Count + 1 bounds the unlimited search: that many slots must include a free one, even with
@@ -632,15 +645,15 @@ namespace WingCommand
             return false;
         }
 
-     /// <summary>Whether the autopilot uses rotary/tiltwing control rather than fixed-wing
-     /// control.</summary>
+        /// <summary>Whether the autopilot uses rotary/tiltwing control rather than fixed-wing
+        /// control.</summary>
         public static bool IsRotary(Aircraft aircraft)
         {
             return aircraft != null && !(aircraft.autopilot is AutopilotPlane);
         }
 
-     /// <summary>Whether the airframe lacks an autopilot and needs surface handling. IsRotary alone
-     /// cannot distinguish hulls from helicopters.</summary>
+        /// <summary>Whether the airframe lacks an autopilot and needs surface handling. IsRotary alone
+        /// cannot distinguish hulls from helicopters.</summary>
         public static bool IsSurface(Aircraft aircraft) =>
             aircraft != null && aircraft.autopilot == null;
 

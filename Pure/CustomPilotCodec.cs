@@ -5,7 +5,7 @@ using System.Text;
 
 namespace WingCommand
 {
- /// <summary>Decoded custom-pilot data.</summary>
+    /// <summary>Decoded custom-pilot data.</summary>
     internal sealed class CustomPilotRecord
     {
         public string Name { get; set; } = "UNKNOWN";
@@ -21,7 +21,7 @@ namespace WingCommand
             !string.IsNullOrWhiteSpace(DialogueTag) ? DialogueTag.Trim().ToUpperInvariant() : Callsign.Trim().ToUpperInvariant();
     }
 
- /// <summary>Decoded custom radio line or exchange.</summary>
+    /// <summary>Decoded custom radio line or exchange.</summary>
     internal sealed class CustomChatterRecord
     {
         public string Opening { get; set; }
@@ -35,15 +35,15 @@ namespace WingCommand
         public bool IsEventLine => !string.IsNullOrWhiteSpace(Event) && !string.IsNullOrWhiteSpace(Text);
     }
 
- /// <summary>Pilots and chatter decoded from one file.</summary>
+    /// <summary>Pilots and chatter decoded from one file.</summary>
     internal sealed class CustomPilotPayload
     {
         public List<CustomPilotRecord> Pilots { get; } = new List<CustomPilotRecord>();
         public List<CustomChatterRecord> Chatters { get; } = new List<CustomChatterRecord>();
     }
 
- /// <summary>Dependency-free custom-pilot JSON decoder accepting comments, optional fields, and case
- /// variations; malformed input is ignored.</summary>
+    /// <summary>Dependency-free custom-pilot JSON decoder accepting comments, optional fields, and case
+    /// variations; malformed input is ignored.</summary>
     internal static class CustomPilotCodec
     {
         public static CustomPilotPayload Decode(string json)

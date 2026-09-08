@@ -3,9 +3,9 @@ using UnityEngine;
 
 namespace WingCommand
 {
- /// <summary>Shares expiring target reservations across combat paths. Native AI accounts for missiles
- /// in flight but not simultaneous target selections; short claims spread fire without permanently
- /// locking targets.</summary>
+    /// <summary>Shares expiring target reservations across combat paths. Native AI accounts for missiles
+    /// in flight but not simultaneous target selections; short claims spread fire without permanently
+    /// locking targets.</summary>
     internal static class TacticalCoordinator
     {
         private sealed class Claim
@@ -29,7 +29,7 @@ namespace WingCommand
             lastPrunedFrame = -1;
         }
 
-     /// <summary>Count live firing claims; target assignments do not consume shots.</summary>
+        /// <summary>Count live firing claims; target assignments do not consume shots.</summary>
         public static int CountClaims(Unit target, Aircraft except = null)
         {
             if (target == null || target.disabled) return 0;
@@ -44,8 +44,8 @@ namespace WingCommand
             return count;
         }
 
-     /// <summary>Count firing claims, native selections, and active explicit attack
-     /// assignments.</summary>
+        /// <summary>Count firing claims, native selections, and active explicit attack
+        /// assignments.</summary>
         public static int CountCommitments(Unit target, Aircraft except = null)
         {
             if (target == null || target.disabled) return 0;
@@ -79,14 +79,15 @@ namespace WingCommand
             return owners.Count;
         }
 
-     /// <summary>Record native selection pressure without consuming a firing slot; selection alone does
-     /// not prove the aircraft can shoot.</summary>
+        /// <summary>Record native selection pressure without consuming a firing slot; selection alone does
+        /// not prove the aircraft can shoot.</summary>
         public static void NoteSelection(Unit target, Aircraft owner, float seconds)
         {
-            if (target == null || target.disabled || owner == null || owner.disabled) return;
+            if (owner == null) return;
 
             Prune();
-            if (claims.TryGetValue(target, out List<Claim> list))
+            bool valid = target != null && !target.disabled && !owner.disabled;
+            if (valid && claims.TryGetValue(target, out List<Claim> list))
             {
                 for (int i = 0; i < list.Count; i++)
                 {
@@ -95,11 +96,14 @@ namespace WingCommand
                     return;
                 }
             }
-            AddClaim(target, owner, seconds, firing: false);
+            // Native callers replace one current target. A switch or empty search must not keep
+            // discouraging teammates from targets this pilot abandoned; existing shots still count.
+            ReleaseSelection(owner);
+            if (valid) AddClaim(target, owner, seconds, firing: false);
         }
 
-     /// <summary>Claim a firing slot below the target limit, or renew this owner's existing claim even
-     /// at capacity.</summary>
+        /// <summary>Claim a firing slot below the target limit, or renew this owner's existing claim even
+        /// at capacity.</summary>
         public static bool TryClaim(Unit target, Aircraft owner, int maximum, float seconds)
         {
             if (target == null || target.disabled || owner == null || owner.disabled || maximum <= 0)
@@ -138,7 +142,12 @@ namespace WingCommand
             });
         }
 
-        public static void Release(Aircraft owner)
+        /// <summary>Abandon target selection while retaining reservations for shots already fired.</summary>
+        public static void ReleaseSelection(Aircraft owner) => Release(owner, selectionOnly: true);
+
+        public static void Release(Aircraft owner) => Release(owner, selectionOnly: false);
+
+        private static void Release(Aircraft owner, bool selectionOnly)
         {
             if (owner == null) return;
 
@@ -147,7 +156,8 @@ namespace WingCommand
                 List<Claim> list = pair.Value;
                 for (int i = list.Count - 1; i >= 0; i--)
                 {
-                    if (list[i].Owner == owner) list.RemoveAt(i);
+                    if (list[i].Owner == owner && (!selectionOnly || !list[i].Firing))
+                        list.RemoveAt(i);
                 }
             }
             Prune();

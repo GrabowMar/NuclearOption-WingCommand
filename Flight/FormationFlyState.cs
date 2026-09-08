@@ -2,8 +2,8 @@ using UnityEngine;
 
 namespace WingCommand
 {
- /// <summary>Native pilot state for formation slots, installed through Pilot.SwitchState. Uses AutoAim
- /// for steering and controls throttle/destination without patching the state machine.</summary>
+    /// <summary>Native pilot state for formation slots, installed through Pilot.SwitchState. Uses AutoAim
+    /// for steering and controls throttle/destination without patching the state machine.</summary>
     internal class FormationFlyState : WingPilotState
     {
         internal override bool RestartOnOrderChange => false;
@@ -12,31 +12,31 @@ namespace WingCommand
         // Scale avoidance geometry with slot spacing so the dimensions remain consistent across
         // formations.
 
-     /// <summary>Separation radius relative to the nearest valid slot gap.</summary>
+        /// <summary>Separation radius relative to the nearest valid slot gap.</summary>
         private const float SeparationSpacings = FormationLayout.MinimumPlanarSeparation;
 
-     /// <summary>Repulsion displacement strength in metres.</summary>
+        /// <summary>Repulsion displacement strength in metres.</summary>
         private const float SeparationStrength = 12f;
 
-     /// <summary>Protected corridor length ahead of the leader, in slot spacings.</summary>
+        /// <summary>Protected corridor length ahead of the leader, in slot spacings.</summary>
         private const float PathCutSpacings = 3.3f;
 
-     /// <summary>Protected corridor half-width in slot spacings.</summary>
+        /// <summary>Protected corridor half-width in slot spacings.</summary>
         private const float PathCutRadiusSpacings = 1f;
 
-     /// <summary>Path-clearance push strength in slot spacings.</summary>
+        /// <summary>Path-clearance push strength in slot spacings.</summary>
         private const float PathCutStrengthSpacings = 1.7f;
 
-     /// <summary>Avoidance smoothing duration in seconds, preventing target steps.</summary>
+        /// <summary>Avoidance smoothing duration in seconds, preventing target steps.</summary>
         private const float AvoidanceSmoothing = 0.4f;
 
-     /// <summary>Slot error threshold for inability to hold formation, in metres.</summary>
+        /// <summary>Slot error threshold for inability to hold formation, in metres.</summary>
         private const float UnableDistance = 3000f;
 
-     /// <summary>Persistent failure duration before abandoning station keeping, in seconds.</summary>
+        /// <summary>Persistent failure duration before abandoning station keeping, in seconds.</summary>
         private const float UnableSeconds = 20f;
 
-     /// <summary>Delegate station weapons to the same engagement helper used by orbit.</summary>
+        /// <summary>Delegate station weapons to the same engagement helper used by orbit.</summary>
         private readonly SlotEngagement engagement = new SlotEngagement(EngageInterval);
         private float rejoinBoostUntil;
         private float rejoinHoldUntil;
@@ -68,31 +68,31 @@ namespace WingCommand
 
         // Adaptive formation state.
 
-     /// <summary>Signed duration of a consistent leader turn for slot mirroring.</summary>
+        /// <summary>Signed duration of a consistent leader turn for slot mirroring.</summary>
         private float turnPersist;
         private const float TurnMirrorRate = 0.05f;   // Yaw-rate threshold in rad/s.
         private const float TurnMirrorHold = 1.5f;    // Consistent-turn duration before mirroring, in seconds.
 
-     /// <summary>Smoothed aft-spacing scale during leader threat response.</summary>
+        /// <summary>Smoothed aft-spacing scale during leader threat response.</summary>
         private float combatSpread = 1f;
         private bool leaderMissileThreat;
         private const float CombatSpreadBackScale = 1.4f;
         private const float CombatSpreadEaseSeconds = 2f;
 
-     /// <summary>Cached terrain-floor altitude above sea level, stable across origin shifts.</summary>
+        /// <summary>Cached terrain-floor altitude above sea level, stable across origin shifts.</summary>
         private float terrainFloorY = float.MinValue;
         private float nextTerrainProbe;
         private const float TerrainProbeInterval = 0.3f;
 
-     /// <summary>Quantized terrain-height cache shared across nearby members to reduce duplicate
-     /// raycasts.</summary>
+        /// <summary>Quantized terrain-height cache shared across nearby members to reduce duplicate
+        /// raycasts.</summary>
         private static readonly System.Collections.Generic.Dictionary<(int x, int z), float> terrainFloorCache =
             new System.Collections.Generic.Dictionary<(int x, int z), float>(256);
         private const int MaxTerrainCacheEntries = 1024;
 
         public static void ResetTerrainCache() => terrainFloorCache.Clear();
 
-     /// <summary>Physics-step counter for mode-scaled geometry updates.</summary>
+        /// <summary>Physics-step counter for mode-scaled geometry updates.</summary>
         private int geometryTick;
 
         public FormationFlyState(WingMember member) : base(member)
@@ -102,53 +102,54 @@ namespace WingCommand
 
         public Aircraft Leader => member.Leader;
 
-     /// <summary>Low-pass leader track rejects brief control twitches while following sustained
-     /// motion.</summary>
+        /// <summary>Low-pass leader track rejects brief control twitches while following sustained
+        /// motion.</summary>
         private Vector3 smoothedLeaderDir;
+        private Vector3 lastLeaderTrack;
 
-     /// <summary>Horizontal leader track defining the formation frame.</summary>
+        /// <summary>Horizontal leader track defining the formation frame.</summary>
         private Vector3 flatLeaderTrack = Vector3.forward;
 
-     /// <summary>Filtered heading rate in rad/s; positive turns right.</summary>
+        /// <summary>Filtered heading rate in rad/s; positive turns right.</summary>
         private float leaderTurnRate;
 
-     /// <summary>Filtered speed derivative in m/s² for acceleration feed-forward.</summary>
+        /// <summary>Filtered speed derivative in m/s² for acceleration feed-forward.</summary>
         private float leaderSpeedRate;
 
-     /// <summary>Filtered leader bank used by slot geometry and roll control.</summary>
+        /// <summary>Filtered leader bank used by slot geometry and roll control.</summary>
         private float leaderBank;
         private float leaderBankRate;
         private Aircraft trackedLeader;
 
-     
 
-     /// <summary>Previous leader speed for acceleration sampling.</summary>
+
+        /// <summary>Previous leader speed for acceleration sampling.</summary>
         private float lastLeaderSpeed;
 
-     /// <summary>Filtered leader throttle and whether it is readable.</summary>
+        /// <summary>Filtered leader throttle and whether it is readable.</summary>
         private float leaderThrottle;
         private bool leaderThrottleKnown;
 
-     /// <summary>Last geometry-update time. Differentiate over actual elapsed time because Performance
-     /// mode skips physics ticks.</summary>
+        /// <summary>Last geometry-update time. Differentiate over actual elapsed time because Performance
+        /// mode skips physics ticks.</summary>
         private float lastGeometryTime;
 
-     /// <summary>Leader-track smoothing duration, balancing stick-noise rejection and turn
-     /// lag.</summary>
+        /// <summary>Leader-track smoothing duration, balancing stick-noise rejection and turn
+        /// lag.</summary>
         private const float LeaderTrackSmoothing = 0.35f;
 
-     /// <summary>Heading-rate smoothing duration in seconds.</summary>
+        /// <summary>Heading-rate smoothing duration in seconds.</summary>
         private const float TurnRateSmoothing = 0.20f;
 
-     /// <summary>Heading-rate noise threshold in rad/s, below deliberate turns but above differentiated
-     /// filter residue.</summary>
+        /// <summary>Heading-rate noise threshold in rad/s, below deliberate turns but above differentiated
+        /// filter residue.</summary>
         private const float TurnRateDeadband = 0.006f;
 
-     /// <summary>Maximum credible heading rate in rad/s, used to reject discontinuities.</summary>
+        /// <summary>Maximum credible heading rate in rad/s, used to reject discontinuities.</summary>
         private const float MaxCredibleTurnRate = 1.5f;
 
-     /// <summary>Per-member five-second report timer. A shared static timer would interleave different
-     /// aircraft's samples.</summary>
+        /// <summary>Per-member five-second report timer. A shared static timer would interleave different
+        /// aircraft's samples.</summary>
         private bool DueToReport()
         {
             if (!Plugin.Settings.VerboseLogging.Value) return false;
@@ -160,9 +161,9 @@ namespace WingCommand
 
         private float lastReport;
 
-     /// <summary>Filter leader track and differentiate its horizontal heading for turn rate. Rigidbody
-     /// world-y angular velocity mixes roll and pitch into yaw and can create false formation
-     /// sway.</summary>
+        /// <summary>Filter leader track and differentiate its horizontal heading for turn rate. Rigidbody
+        /// world-y angular velocity mixes roll and pitch into yaw and can create false formation
+        /// sway.</summary>
         private LeaderState TrackLeader(Aircraft leader, float dt)
         {
             Vector3 instant = leader.rb != null && leader.rb.velocity.sqrMagnitude > 1f
@@ -182,6 +183,7 @@ namespace WingCommand
             if (smoothedLeaderDir.sqrMagnitude < 0.5f)
             {
                 smoothedLeaderDir = instant;
+                lastLeaderTrack = instant;
                 flatLeaderTrack = Flatten(instant);
                 leaderTurnRate = 0f;
                 leaderSpeedRate = 0f;
@@ -191,7 +193,6 @@ namespace WingCommand
                 return State();
             }
 
-            Vector3 previousTrack = smoothedLeaderDir;
             float trackResponse = FormationTracking.TrackResponse(
                 Vector3.Angle(smoothedLeaderDir, instant), LeaderTrackSmoothing);
             smoothedLeaderDir = Vector3.Slerp(
@@ -204,8 +205,11 @@ namespace WingCommand
                 ? Flatten(smoothedLeaderDir) : flatLeaderTrack;
 
             // Clamp implausible heading discontinuities before they reach slot geometry.
-            float measured = FormationTracking.TrackTurnRate(previousTrack.x, previousTrack.z,
-                smoothedLeaderDir.x, smoothedLeaderDir.z, dt, MaxCredibleTurnRate);
+            // Differentiate observed motion before filtering the rate; differentiating the smoothed
+            // steering direction delayed turn onset and kept predicting the old turn after reversals.
+            float measured = FormationTracking.TrackTurnRate(lastLeaderTrack.x, lastLeaderTrack.z,
+                instant.x, instant.z, dt, MaxCredibleTurnRate);
+            lastLeaderTrack = instant;
             flatLeaderTrack = flat;
 
             leaderTurnRate = Mathf.Lerp(
@@ -234,14 +238,14 @@ namespace WingCommand
             return State();
         }
 
-     /// <summary>Package filtered leader signals for the current flight update.</summary>
+        /// <summary>Package filtered leader signals for the current flight update.</summary>
         private LeaderState State() =>
             new LeaderState(smoothedLeaderDir, flatLeaderTrack, LeaderTurnRate,
                             leaderSpeedRate, leaderBank, leaderBankRate, lastLeaderSpeed, leaderThrottle,
                             leaderThrottleKnown);
 
-     /// <summary>Briefly smooth leader throttle for immediate acceleration/deceleration anticipation
-     /// without propagating AI throttle chatter.</summary>
+        /// <summary>Briefly smooth leader throttle for immediate acceleration/deceleration anticipation
+        /// without propagating AI throttle chatter.</summary>
         private void ReadLeaderThrottle(Aircraft leader, float dt)
         {
             ControlInputs inputs = leader.GetInputs();
@@ -266,7 +270,7 @@ namespace WingCommand
                 1f - Mathf.Exp(-dt / WingTuning.LeaderThrottleSmoothing));
         }
 
-     /// <summary>Filtered heading rate with the noise deadband removed.</summary>
+        /// <summary>Filtered heading rate with the noise deadband removed.</summary>
         private float LeaderTurnRate =>
             FormationTracking.QuietTurnRate(leaderTurnRate, TurnRateDeadband);
 
@@ -307,7 +311,7 @@ namespace WingCommand
             lastGeometryTime = 0f;
 
             if (Plugin.Settings.VerboseLogging.Value)
-                Plugin.LogVerbose($"[Formation] {aircraft.unitName} entering slot {member.Slot}");
+                Plugin.LogVerbose($"[Formation] {aircraft.unitName} id={aircraft.GetInstanceID()} entering slot {member.Slot}");
         }
 
         public override void LeaveState()
@@ -428,8 +432,8 @@ namespace WingCommand
             }
         }
 
-     /// <summary>Ease local shape changes for turn compression, threat spacing, and side mirroring
-     /// before transforming them into world space.</summary>
+        /// <summary>Ease local shape changes for turn compression, threat spacing, and side mirroring
+        /// before transforming them into world space.</summary>
         private void EaseSlotLocal(FormationShape shape, float spacing, float turnRate, float dt)
         {
             // Compress lateral and extend aft spacing during turns to reduce inner/outer speed
@@ -481,8 +485,8 @@ namespace WingCommand
             }
         }
 
-     /// <summary>Transform the continuous local slot into the filtered flight frame, then apply
-     /// avoidance and terrain clearance.</summary>
+        /// <summary>Transform the continuous local slot into the filtered flight frame, then apply
+        /// avoidance and terrain clearance.</summary>
         private GlobalPosition SlotPosition(Aircraft leader, LeaderState leaderState,
                                             float spacing, float dt)
         {
@@ -541,7 +545,7 @@ namespace WingCommand
             return slotPos;
         }
 
-     /// <summary>Common fixed-wing slot bank, reduced near terrain.</summary>
+        /// <summary>Common fixed-wing slot bank, reduced near terrain.</summary>
         private float FormationBank(LeaderState leaderState)
         {
             Aircraft leader = Leader;
@@ -578,7 +582,7 @@ namespace WingCommand
                 footprint.x, footprint.y, footprint.z, leaderState.Track.y);
         }
 
-     /// <summary>Report rotary regime changes and periodic slot errors for flight diagnosis.</summary>
+        /// <summary>Report rotary regime changes and periodic slot errors for flight diagnosis.</summary>
         private void ReportRotaryMode(RotaryFormation.Mode mode, float distance, float horizontalError)
         {
             bool changed = mode != lastRotaryMode;
@@ -595,15 +599,16 @@ namespace WingCommand
 
             Aircraft leader = Leader;
             Plugin.LogVerbose(
-                $"[Rotary] {aircraft.unitName} slot {member.Slot}: {mode}, " +
+                $"[Rotary] {aircraft.unitName} id={aircraft.GetInstanceID()} slot {member.Slot}: {mode}, " +
+                $"leaderId={(leader != null ? leader.GetInstanceID() : 0)}, " +
                 $"error {distance:F0} m (flat {horizontalError:F0}), " +
                 $"own speed {aircraft.speed:F0}, " +
                 $"leader {(leader != null ? leader.speed : 0f):F0} m/s, " +
                 $"alt {aircraft.radarAlt:F0} m");
         }
 
-     /// <summary>Return sustained turn sign after TurnMirrorHold, otherwise zero. Decay persistence
-     /// when turns ease so brief jinks do not mirror the formation.</summary>
+        /// <summary>Return sustained turn sign after TurnMirrorHold, otherwise zero. Decay persistence
+        /// when turns ease so brief jinks do not mirror the formation.</summary>
         private int TurnMirrorSign(float turnRate, float dt)
         {
             if (Mathf.Abs(turnRate) > TurnMirrorRate)
@@ -620,8 +625,8 @@ namespace WingCommand
             return Mathf.Abs(turnPersist) >= TurnMirrorHold ? (int)Mathf.Sign(turnPersist) : 0;
         }
 
-     /// <summary>Periodically raise slots above rising terrain, including low elements beneath a safely
-     /// cleared leader.</summary>
+        /// <summary>Periodically raise slots above rising terrain, including low elements beneath a safely
+        /// cleared leader.</summary>
         private GlobalPosition ApplyTerrainFloor(GlobalPosition slotPos)
         {
             float clearance = WingFidelity.TerrainClearance;
@@ -662,8 +667,8 @@ namespace WingCommand
             return slotPos;
         }
 
-     /// <summary>Smoothly widen under threat and close when clear so slot targets remain
-     /// continuous.</summary>
+        /// <summary>Smoothly widen under threat and close when clear so slot targets remain
+        /// continuous.</summary>
         private float ThreatSpacingScale(Aircraft leader, float dt)
         {
             // Sample the leader warning once for both smart-formation reactions; skip it when neither
@@ -715,8 +720,8 @@ namespace WingCommand
             return nearbyThreatPresent;
         }
 
-     /// <summary>Operate the fitted native jammer pod at the designation while holding station; the pod
-     /// owns range, power, and network updates.</summary>
+        /// <summary>Operate the fitted native jammer pod at the designation while holding station; the pod
+        /// owns range, power, and network updates.</summary>
         private void RunJam()
         {
             Unit jamTarget = member.AssignedTarget;
@@ -724,8 +729,8 @@ namespace WingCommand
             WingWeapons.EngageJammer(aircraft, pilot, jamTarget);
         }
 
-     /// <summary>Report unable and return home after sustained, growing separation caused by
-     /// insufficient airframe performance.</summary>
+        /// <summary>Report unable and return home after sustained, growing separation caused by
+        /// insufficient airframe performance.</summary>
         private void CheckAbleToKeepUp(Aircraft leader, float distance)
         {
             // Require a real speed-capability deficit; distant same-type members may still be closing
@@ -766,7 +771,7 @@ namespace WingCommand
             CompleteTask(WingOrder.ReturnToBase);
         }
 
-     /// <summary>Start a brief rejoin boost after an optional delay to stagger slot arrivals.</summary>
+        /// <summary>Start a brief rejoin boost after an optional delay to stagger slot arrivals.</summary>
         public void BoostRejoin(float delay = 0f)
         {
             rejoinHoldUntil = Time.timeSinceLevelLoad + delay;
