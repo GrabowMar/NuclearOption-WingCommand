@@ -49,18 +49,23 @@ Vanilla gives you one semi-autonomous wingman. WingCommand turns your wing into 
 
 ## 📸 Screenshots
 
+<p align="center">
+  <img src="Assets/Screenshots/tactical-map.png" width="100%" alt="WMC tactical panel and map showing Hold, Move and Seek and Destroy orders for three wingmen"><br>
+  <sub>Tactical map — select wingmen and issue individual orders</sub>
+</p>
+
 <table align="center">
   <tr>
-    <td align="center" width="50%"><img src="docs/images/tactical-map.png" width="100%" alt="Tactical map with wing selected"><br><sub>Tactical map — selecting and tasking a wing</sub></td>
-    <td align="center" width="50%"><img src="docs/images/wmc-supply.png" width="100%" alt="WMC Supply tab"><br><sub>WMC Supply — buying and reserving aircraft</sub></td>
+    <td align="center" colspan="2"><img src="Assets/Screenshots/wmc-tactical-supply.png" width="100%" alt="WMC Tactical and Supply panels side by side"><br><sub>Tactical + Supply — command the flight and requisition aircraft</sub></td>
   </tr>
   <tr>
-    <td align="center" width="50%"><img src="docs/images/wmc-loadout.png" width="100%" alt="WMC Loadout tab"><br><sub>WMC Loadout — building a template pylon by pylon</sub></td>
-    <td align="center" width="50%"><img src="docs/images/radial-menu.png" width="100%" alt="Wing Command radial menu"><br><sub>The Wing Command radial menu</sub></td>
+    <td align="center" colspan="2"><img src="Assets/Screenshots/wmc-loadout-wing.png" width="100%" alt="WMC Loadout and Wing panels side by side, including a pilot portrait and dossier"><br><sub>Loadout + Wing — configure aircraft and meet the pilots</sub></td>
+  </tr>
+  <tr>
+    <td align="center" width="50%"><img src="Assets/Screenshots/wing-in-combat.png" width="100%" alt="Wing aircraft over the ocean amid missile and countermeasure trails"><br><sub>The wing in combat</sub></td>
+    <td align="center" width="50%"><img src="Assets/Screenshots/defensive-break.png" width="100%" alt="FS-20 wingmen breaking away and releasing flares over the ocean"><br><sub>Defensive break — hamsters doing hamster things</sub></td>
   </tr>
 </table>
-
-<div align="center"><sub>Better shots or a GIF? Swap the files in <a href="docs/images/"><code>docs/images/</code></a>.</sub></div>
 
 ## 📦 Install
 
