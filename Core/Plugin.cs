@@ -74,7 +74,7 @@ namespace WingCommand
                     "These options may break mission balance, UI, formations or the mod itself.");
             }
 
-            if (!FormationSolver.ValidateGeometry(WingFormation.MaxWingSize, out string geometryProblem))
+            if (!FormationSolver.ValidateGeometry(64, out string geometryProblem))
                 Logger.LogError("Formation geometry validation failed: " + geometryProblem);
 
             // Resolve reflection before patches consult GameAccess.Available.

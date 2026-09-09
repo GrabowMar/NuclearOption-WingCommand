@@ -20,6 +20,7 @@ namespace WingCommand
         private static PilotPager pilotPager;
         private static AvKit.Popup customPilotsPopup;
         private static float customPilotsRowY;
+        private static WingButton sarButton;
 
         private static TMP_Text pilotIdentityLabel;
         private static TMP_Text pilotRankLabel;
@@ -48,8 +49,8 @@ namespace WingCommand
 
         // Wing-page construction.
 
-        /// <summary>Read-only squadron roster and pilot dossier. SUPPLY chooses the next pilot; aircraft
-        /// details follow the inspected pilot or show ground status.</summary>
+        /// <summary>Squadron dossier and explicit SAR dispatch. SUPPLY chooses the next pilot; aircraft
+        /// details follow the inspected pilot or show recovery status.</summary>
         private static float AddWingPage(RectTransform parent, float y)
         {
             y = Heading(parent, y, "SQUADRON");
@@ -143,17 +144,18 @@ namespace WingCommand
             const float skillSize = 20f;
             const float skillGap = 4f;
             pilotSkillIcons.Clear();
-            pilotSkillIcons.Add(new PilotSkillIcon(parent, new Rect(dossierX + (skillSize + skillGap) * 0, detailY, skillSize, skillSize),
-                "attack", "ACE COMBATANT", "Enhanced gun-lead tracking & rapid missile lock acquisition"));
-            pilotSkillIcons.Add(new PilotSkillIcon(parent, new Rect(dossierX + (skillSize + skillGap) * 1, detailY, skillSize, skillSize),
-                "maneuver", "HIGH-G TOLERANCE", "Sustained maximum turn rate without pilot blackout"));
-            pilotSkillIcons.Add(new PilotSkillIcon(parent, new Rect(dossierX + (skillSize + skillGap) * 2, detailY, skillSize, skillSize),
-                "cargo", "PRECISION STRIKE", "High-accuracy CCIP dive bombing and standoff release"));
-            pilotSkillIcons.Add(new PilotSkillIcon(parent, new Rect(dossierX + (skillSize + skillGap) * 3, detailY, skillSize, skillSize),
-                "cover", "FUEL DISCIPLINE", "10% reduced throttle fuel consumption at cruise speeds"));
-            pilotSkillIcons.Add(new PilotSkillIcon(parent, new Rect(dossierX + (skillSize + skillGap) * 4, detailY, skillSize, skillSize),
-                "jam", "AVIONICS SPECIALIST", "Extended ECM radar jamming reach and rapid flare countermeasure bursts"));
-            detailY -= skillSize + 4f;
+            int perkColumns = Mathf.Max(1, Mathf.FloorToInt((dossierW + skillGap) / (skillSize + skillGap)));
+            string[] perkIcons = {
+                "maneuver", "cover", "rejoin", "attack", "cargo", "rejoin", "cover", "cover",
+                "land", "rejoin", "orbit", "move", "land", "jam", "maneuver", "maneuver",
+                "jam", "maneuver", "jam", "tasking", "attack", "attack", "cargo", "move"
+            };
+            for (int i = 0; i < PilotPerks.Count; i++)
+                pilotSkillIcons.Add(new PilotSkillIcon(parent,
+                    new Rect(dossierX + (skillSize + skillGap) * (i % perkColumns),
+                        detailY - (skillSize + skillGap) * (i / perkColumns), skillSize, skillSize),
+                    perkIcons[i], PilotPerks.Name((PilotPerk)i), PilotPerks.Description((PilotPerk)i)));
+            detailY -= ((PilotPerks.Count + perkColumns - 1) / perkColumns) * (skillSize + skillGap);
 
             // Biography within the dossier column.
             pilotBackgroundLabel = Label(parent, "", new Rect(dossierX, detailY, dossierW, 38f),
@@ -162,7 +164,7 @@ namespace WingCommand
             pilotBackgroundLabel.enableWordWrapping = true;
             pilotBackgroundLabel.overflowMode = TextOverflowModes.Ellipsis;
 
-            y -= PortraitHeight + Space4;
+            y = Mathf.Min(y - PortraitHeight, detailY - 38f) - Space4;
 
             y = Heading(parent, y, "AIRFRAME");
             float airframeRailY = y;
@@ -205,7 +207,11 @@ namespace WingCommand
             airframeCardRail = Rule(parent,
                 new Rect(Pad, airframeRailY, 3f, airframeRailY - airframeBottom),
                 FrameColor());
-            return airframeBottom;
+            sarButton = WingUi.Button(parent, "DISPATCH SAR",
+                new Rect(Pad, airframeBottom - Gap, PanelWidth - Pad * 2f, RowHeight), FontSmall,
+                () => WingSearchAndRescue.Dispatch(inspectPilot, WingCommandManager.Instance?.Wing))
+                .WithTooltip("Send the nearest idle rescue-capable wing helicopter to this downed pilot on land. Water rescue uses the native hoist.");
+            return airframeBottom - Gap - RowHeight;
         }
 
         private static void RefreshWingPage(WingRegistry wing)
@@ -239,6 +245,7 @@ namespace WingCommand
             }
 
             WingPilot focus = inspectPilot;
+            sarButton?.SetEnabled(focus != null && !focus.Lost && focus.RecoveryStatus == PilotRecoveryStatus.Downed);
             if (focus == null)
             {
                 SetWingDetail("NO PILOT", "", "", "", 0f,
@@ -300,7 +307,9 @@ namespace WingCommand
                            focus.Sorties + " SORTIE(S)" + (kia ? "   —   KIA" : "");
             string persona = kia
                 ? "STATUS   KILLED IN ACTION"
-                : "RADIO PROFILE   " + focus.Persona.ToString().ToUpperInvariant();
+                : focus.RecoveryStatus != PilotRecoveryStatus.None
+                    ? "STATUS   " + WingSearchAndRescue.Status(focus)
+                    : "RADIO PROFILE   " + focus.Persona.ToString().ToUpperInvariant();
 
             SetWingDetail(identity, rank, stats, persona, progress,
                           focus.Background, kia ? focus.LastAircraft ?? "Unknown aircraft" : "",
@@ -321,7 +330,9 @@ namespace WingCommand
                 {
                     airframeStateLabel.text = kia
                         ? "CAUSE   " + (focus.LossCause ?? "Unknown")
-                        : "ON THE GROUND  ·  AWAITING AN AIRFRAME";
+                        : focus.RecoveryStatus != PilotRecoveryStatus.None
+                            ? WingSearchAndRescue.Status(focus)
+                            : "ON THE GROUND  ·  AWAITING AN AIRFRAME";
                     airframeStateLabel.color = kia ? Alert() : Friendly();
                 }
                 return;
@@ -418,21 +429,9 @@ namespace WingCommand
 
             if (pilotSkillIcons.Count > 0)
             {
-                int unlocked = 0;
-                if (pilot != null && !pilot.Lost)
-                {
-                    switch (pilot.Rank)
-                    {
-                        case WingRank.Rookie: unlocked = 1; break;
-                        case WingRank.Wingman: unlocked = 2; break;
-                        case WingRank.Veteran: unlocked = 3; break;
-                        case WingRank.Ace: unlocked = 5; break;
-                        case WingRank.Legend: unlocked = 5; break;
-                    }
-                }
                 for (int i = 0; i < pilotSkillIcons.Count; i++)
                 {
-                    pilotSkillIcons[i].SetActive(i < unlocked);
+                    pilotSkillIcons[i].SetActive(pilot != null && pilot.Perks.Contains((PilotPerk)i));
                 }
             }
         }
@@ -548,6 +547,7 @@ namespace WingCommand
 
             public void SetActive(bool active)
             {
+                Hit.WithTooltip((active ? "EARNED: " : "NOT EARNED: ") + Title + " — " + Description);
                 Icon.color = active ? Green() : new Color(0.35f, 0.5f, 0.45f, 0.35f);
                 Color frame = active ? Green() : FrameColor();
                 if (Outline != null)

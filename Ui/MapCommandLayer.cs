@@ -3,6 +3,7 @@ using HarmonyLib;
 using NOAvionics;
 using UnityEngine;
 using UnityEngine.EventSystems;
+using UnityEngine.UI;
 
 // Harmony calls prefixes by reflection, so suppress IDE0051 in this file.
 #pragma warning disable IDE0051
@@ -272,7 +273,11 @@ namespace WingCommand
             point = default;
             pointerOverIcon = false;
             if (map == null) return false;
-            if (!map.TryGetCursorCoordinates(out point)) return false;
+            if (!map.TryGetCursorCoordinates(out point))
+            {
+                if (Input.GetMouseButtonDown(1)) Plugin.LogAction("map click rejected: outside map rectangle");
+                return false;
+            }
             EventSystem events = EventSystem.current;
             // Map-rectangle coordinate conversion is authoritative. Without an EventSystem during
             // rebuild, allow valid points; use raycasts only to reject foreground UI or resolve icons.
@@ -281,10 +286,17 @@ namespace WingCommand
             var pointer = new PointerEventData(events) { position = Input.mousePosition };
             var hits = new List<RaycastResult>();
             events.RaycastAll(pointer, hits);
+            GraphicRaycaster mapRaycaster = map.GetComponent<GraphicRaycaster>();
 
             foreach (RaycastResult hit in hits)
             {
                 if (hit.gameObject == null) continue;
+                // Transparent map areas can expose HUD/world hits behind the map. Only foreground
+                // UI can block a map command; use the same canvas priorities as EventSystem.
+                if (!(hit.module is GraphicRaycaster raycaster)) continue;
+                if (mapRaycaster != null &&
+                    MapSelectionPolicy.IsBehindMap(raycaster.sortOrderPriority, raycaster.renderOrderPriority,
+                        mapRaycaster.sortOrderPriority, mapRaycaster.renderOrderPriority)) continue;
 
                 MapIcon icon = hit.gameObject.GetComponentInParent<MapIcon>();
                 if (icon == null)
@@ -297,8 +309,11 @@ namespace WingCommand
                 }
 
                 Transform target = hit.gameObject.transform;
-                return (map.mapBackground != null && target == map.mapBackground.transform) ||
-                       (map.mapImage != null && target.IsChildOf(map.mapImage.transform));
+                bool overMap = (map.mapBackground != null && target.IsChildOf(map.mapBackground.transform)) ||
+                               (map.mapImage != null && target.IsChildOf(map.mapImage.transform));
+                if (!overMap && Input.GetMouseButtonDown(1))
+                    Plugin.LogAction($"map click rejected: foreground UI {target.name} point={point}");
+                return overMap;
             }
 
             // Accept empty map areas even when noninteractive artwork has no raycast target.

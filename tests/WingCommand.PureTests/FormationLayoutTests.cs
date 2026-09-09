@@ -37,7 +37,7 @@ namespace WingCommand.PureTests
                 float blend = step / 8f;
                 float lateral = 1f + (FormationLayout.TurnLateralScale - 1f) * blend;
                 float back = 1f + (FormationLayout.TurnBackScale - 1f) * blend;
-                for (int slot = 1; slot <= 64; slot++)
+                for (int slot = 1; slot <= 1024; slot++)
                 {
                     SlotLayout point = FormationLayout.Slot((FormationShape)shape, slot);
                     Assert.True(float.IsFinite(point.Lateral) && float.IsFinite(point.Back) &&

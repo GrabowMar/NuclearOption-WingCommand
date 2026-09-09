@@ -20,6 +20,11 @@ namespace WingCommand
     /// <summary>Keep tactical member interaction independent of weapon-target selection.</summary>
     internal static class MapSelectionPolicy
     {
+        public static bool IsBehindMap(int sortPriority, int renderPriority,
+                                       int mapSortPriority, int mapRenderPriority) =>
+            sortPriority < mapSortPriority ||
+            (sortPriority == mapSortPriority && renderPriority < mapRenderPriority);
+
         public static bool DeferToMouseClick(bool controllerSource, bool mouseGestureActive,
                                             bool pointerOverIcon)
         {

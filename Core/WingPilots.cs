@@ -7,16 +7,6 @@ using Random = UnityEngine.Random;
 
 namespace WingCommand
 {
-    /// <summary>Pilot experience rank, derived from XP.</summary>
-    internal enum WingRank
-    {
-        Rookie,
-        Wingman,
-        Veteran,
-        Ace,
-        Legend,
-    }
-
     /// <summary>Squadron pilot record. The roster owns callsign generation; external providers can supply
     /// complete records through Provide.</summary>
     internal sealed class WingPilot
@@ -40,6 +30,9 @@ namespace WingCommand
 
         /// <summary>Marks a deceased pilot as permanently unavailable.</summary>
         public bool Lost;
+        public PilotRecoveryStatus RecoveryStatus;
+        public readonly List<PilotPerk> Perks = new List<PilotPerk>();
+        public bool SecondChanceUsed;
         public string LastAircraft;
         public string LossCause;
         public string KilledBy;
@@ -48,8 +41,8 @@ namespace WingCommand
     }
 
     /// <summary>Persistent squadron pilots and XP. Recovery returns pilots to the pool without losing
-    /// records. Rank slightly improves shot cadence and weapon envelope; Pilot/RankEffect disables those
-    /// effects.</summary>
+    /// records within the current mission. Each rank awards a unique survival perk; Pilot/RankEffect
+    /// disables effects without discarding earned records.</summary>
     internal static class WingPilotRoster
     {
         /// <summary>Maximum attainable pilot rank.</summary>
@@ -92,7 +85,8 @@ namespace WingCommand
         }
 
         /// <summary>Whether the pilot is alive and eligible for selection.</summary>
-        public static bool IsSelectable(WingPilot pilot) => pilot != null && !pilot.Lost;
+        public static bool IsSelectable(WingPilot pilot) =>
+            pilot != null && !pilot.Lost && pilot.RecoveryStatus == PilotRecoveryStatus.None;
 
         /// <summary>Whether the pilot currently occupies an aircraft.</summary>
         public static bool IsFlying(WingPilot pilot) =>
@@ -174,11 +168,11 @@ namespace WingCommand
         {
             if (pilot == null) return;
             reserved.Remove(pilot);
-            if (!IsFlying(pilot) && !pilot.Lost && !pool.Contains(pilot))
+            if (!IsFlying(pilot) && IsSelectable(pilot) && !pool.Contains(pilot))
             {
                 pool.Add(pilot);
             }
-            if (restoreSelection && !IsFlying(pilot) && !pilot.Lost)
+            if (restoreSelection && !IsFlying(pilot) && IsSelectable(pilot))
             {
                 selectedPilot = pilot;
             }
@@ -190,6 +184,8 @@ namespace WingCommand
 
         public static void Reset()
         {
+            WingSearchAndRescue.Reset();
+            WingSurvivalPerks.Reset();
             PilotPortrait.Reset();
             pool.Clear();
             reserved.Clear();
@@ -215,6 +211,9 @@ namespace WingCommand
         public static WingPilot Of(WingMember member) =>
             member != null ? Of(member.Aircraft) : null;
 
+        internal static WingPilot Of(PersistentID id) =>
+            assigned.TryGetValue(id, out WingPilot pilot) ? pilot : null;
+
         /// <summary>Assign the reserved preferred pilot, otherwise the player's selection, most senior
         /// free pilot, or a new pilot. Advance selection after seating the chosen pilot.</summary>
         public static WingPilot Assign(Aircraft aircraft, WingPilot preferred = null)
@@ -224,12 +223,13 @@ namespace WingCommand
             PersistentID id = aircraft.persistentID;
             if (assigned.TryGetValue(id, out WingPilot existing)) return existing;
 
-            WingPilot pilot = (preferred != null && !preferred.Lost && !IsFlying(preferred))
+            WingPilot pilot = (IsSelectable(preferred) && !IsFlying(preferred))
                 ? preferred
                 : TakeSelected() ?? TakeFromPool() ?? Create();
 
             reserved.Remove(pilot);
             assigned[id] = pilot;
+            pilot.SecondChanceUsed = false;
             losses.Remove(id);
             pilot.LastAircraft = aircraft.definition != null ? aircraft.definition.unitName : aircraft.unitName;
             pilot.LossCause = null;
@@ -268,7 +268,16 @@ namespace WingCommand
 
             if (survived)
             {
-                pool.Add(pilot);
+                WingSearchAndRescue.Forget(id);
+                if (!pool.Contains(pilot)) pool.Add(pilot);
+                return;
+            }
+
+            if (WingSearchAndRescue.MarkDowned(id, pilot))
+            {
+                pool.Remove(pilot);
+                reserved.Remove(pilot);
+                if (selectedPilot == pilot) AdvanceSelected(pilot);
                 return;
             }
 
@@ -338,6 +347,7 @@ namespace WingCommand
             };
 
             roster.Add(pilot);
+            GrantPerks(pilot);
             pool.Add(pilot);
             if (selectedPilot == null) selectedPilot = pilot;
             created++;
@@ -360,6 +370,7 @@ namespace WingCommand
             if (pilot != null)
             {
                 roster.Add(pilot);
+                GrantPerks(pilot);
                 created++;
             }
             return pilot;
@@ -376,7 +387,8 @@ namespace WingCommand
             if (pilot == null) return;
 
             WingRank before = pilot.Rank;
-            pilot.Xp += xp;
+            xp = PilotPerks.Experience(xp, WingSurvivalPerks.Has(aircraft, PilotPerk.FastLearner));
+            pilot.Xp = PilotPerks.AddXp(pilot.Xp, xp);
 
             if (Plugin.Settings.VerboseLogging.Value)
                 Plugin.LogVerbose(
@@ -384,8 +396,37 @@ namespace WingCommand
 
             if (pilot.Rank == before) return;
 
+            int previousPerks = pilot.Perks.Count;
+            GrantPerks(pilot);
+            string gained = "";
+            for (int i = previousPerks; i < pilot.Perks.Count; i++)
+                gained += (i == previousPerks ? " — " : ", ") + PilotPerks.Name(pilot.Perks[i]);
             WingCommandManager.Instance?.Toast(
-                pilot.Callsign + " promoted to " + RankName(pilot.Rank));
+                pilot.Callsign + " promoted to " + RankName(pilot.Rank) + gained);
+        }
+
+        private static void GrantPerks(WingPilot pilot) =>
+            PilotPerks.GrantThroughRank(pilot.Perks, pilot.Rank, n => Random.Range(0, n));
+
+        internal static void SettleRescue(PersistentID id, WingPilot pilot, PilotRecoveryStatus status,
+                                          bool killed, string message)
+        {
+            if (pilot == null || pilot.Lost) return;
+            assigned.Remove(id);
+            reserved.Remove(pilot);
+            pool.Remove(pilot);
+            pilot.RecoveryStatus = status;
+            pilot.Lost = killed;
+            if (IsSelectable(pilot))
+            {
+                pilot.LossCause = null;
+                pilot.KilledBy = null;
+                pool.Add(pilot);
+                if (selectedPilot == null) selectedPilot = pilot;
+            }
+            else if (selectedPilot == pilot) AdvanceSelected(pilot);
+            if (killed) losses[id] = pilot;
+            WingCommandManager.Instance?.Toast(pilot.Callsign + " — " + message);
         }
 
         public static void NoteKill(Aircraft aircraft, Unit victim)
@@ -408,6 +449,7 @@ namespace WingCommand
             if (pilot == null) return;
 
             pilot.Sorties++;
+            pilot.SecondChanceUsed = false;
             Award(aircraft, WingTuning.XpPerSortie, "sortie");
         }
 
@@ -419,22 +461,9 @@ namespace WingCommand
 
         /// <summary>Triangular XP thresholds share one tuning value so the rank curve scales
         /// consistently.</summary>
-        public static int XpForRank(WingRank rank)
-        {
-            int step = Mathf.Max(1, WingTuning.XpPerRank);
-            int r = (int)rank;
-            return step * r * (r + 1) / 2;
-        }
+        public static int XpForRank(WingRank rank) => PilotPerks.XpForRank(rank);
 
-        public static WingRank RankFor(int xp)
-        {
-            WingRank best = WingRank.Rookie;
-            for (WingRank rank = WingRank.Rookie; rank <= TopRank; rank++)
-            {
-                if (xp >= XpForRank(rank)) best = rank;
-            }
-            return best;
-        }
+        public static WingRank RankFor(int xp) => PilotPerks.RankFor(xp);
 
         public static string RankName(WingRank rank)
         {
@@ -463,10 +492,12 @@ namespace WingCommand
         }
 
         /// <summary>Pilot weapon-envelope scale, never below 1.</summary>
-        public static float EnvelopeScale(Aircraft aircraft) => 1f + SkillBonus(aircraft) * 0.5f;
+        public static float EnvelopeScale(Aircraft aircraft) => (1f + SkillBonus(aircraft) * 0.5f) *
+            (WingSurvivalPerks.Has(aircraft, PilotPerk.Standoff) ? 1.25f : 1f);
 
         /// <summary>Pilot shot-interval scale, never above 1.</summary>
-        public static float ReactionScale(Aircraft aircraft) => 1f - SkillBonus(aircraft) * 0.5f;
+        public static float ReactionScale(Aircraft aircraft) => (1f - SkillBonus(aircraft) * 0.5f) *
+            (WingSurvivalPerks.Has(aircraft, PilotPerk.QuickDraw) ? 0.65f : 1f);
 
         // Roster presentation.
 
@@ -494,7 +525,7 @@ namespace WingCommand
             var list = new List<WingPilot>();
             for (int i = 0; i < roster.Count; i++)
             {
-                if (!roster[i].Lost) list.Add(roster[i]);
+                if (IsSelectable(roster[i])) list.Add(roster[i]);
             }
             list.Sort(CompareByXp);
             return list;

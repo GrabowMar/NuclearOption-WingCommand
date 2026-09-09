@@ -262,10 +262,10 @@ namespace WingCommand
                 "Wing pilots keep a callsign, a record and a rank that rises with kills, " +
                 "completed sorties and engagements survived. Rank has a small effect on how " +
                 "well they shoot: a Legend gets roughly 12% more weapon reach and cycles " +
-                "shots about 12% faster than a rookie.");
+                "shots about 12% faster than a rookie. Each promotion grants one random survival perk.");
             RankEffect = c.Bind("Pilot", "RankEffect", 1.0f,
                 new ConfigDescription(
-                    "Multiplier on pilot rank benefits (weapon reach, reaction cadence and formation control). Set to 0 for cosmetic progression only.",
+                    "Multiplier on pilot rank benefits (weapon reach, reaction cadence and formation control). Set to 0 to disable rank and perk effects. Survival perks use fixed percentages whenever effects are enabled.",
                     new AcceptableValueRange<float>(0f, 2.0f)));
         }
 

@@ -70,7 +70,15 @@ namespace WingCommand
             for (int i = outbound.Count - 1; i >= 0; i--)
             {
                 Aircraft aircraft = outbound[i].Aircraft;
-                if (aircraft == null || aircraft.disabled) outbound.RemoveAt(i);
+                // Native parking may already have ejected the crew. Let recovery settle that
+                // friendly-base arrival before treating an empty seat as a combat loss.
+                if (WingRecovery.IsHome(aircraft)) continue;
+                Pilot pilot = WingRegistry.PrimaryPilot(aircraft);
+                if (aircraft == null || aircraft.disabled || pilot == null || pilot.dead || pilot.ejected)
+                {
+                    WingPilotRoster.Retire(outbound[i].AircraftId, survived: false);
+                    outbound.RemoveAt(i);
+                }
             }
         }
 

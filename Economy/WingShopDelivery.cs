@@ -488,9 +488,8 @@ namespace WingCommand
                                                  out WingAirfield.LaunchPose pose))
                 return;
 
-            // Wait for the fixed threshold pose to clear before spawning into a stalled aircraft or
-            // wreck.
-            if (WingAirfield.LaunchSpotBlocked(pose.Position, definition, out string blocker))
+            // Wait for landing traffic and physical runway clearance, including wrecks.
+            if (WingAirfield.LaunchSpotBlocked(pose, definition, out string blocker))
             {
                 Plugin.LogVerbose("[Shop] " + definition.unitName + " launch from " +
                     WingLaunchFields.DisplayName(order.Origin) +
@@ -504,6 +503,9 @@ namespace WingCommand
 
             // Anchor lane clearance to the actual threshold, not a potentially distant field centre.
             if (!HangarDepartureLane.Reserve(order.Origin, pose.Threshold, order)) return;
+
+            // Claim the heading only once the runway is clear and this delivery is ready to spawn.
+            pose.Runway.SetUsageDirection(pose.Reverse);
 
             order.Starting = true;
             Aircraft spawned;

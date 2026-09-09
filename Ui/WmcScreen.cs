@@ -266,6 +266,7 @@ namespace WingCommand
             supplyPilotStatusLabel = null;
             supplyPilotPrev = null;
             supplyPilotNext = null;
+            sarButton = null;
             supplyDispatchRail = null;
             supplyDispatchIcon = null;
             supplyDispatchAirframeLabel = null;
@@ -1046,7 +1047,8 @@ namespace WingCommand
                 slot.color = kia ? Alert() : RankColor(pilot.Rank);
                 name.text = AvTheme.Truncate(pilot.Callsign, 12);
                 name.color = kia ? Alert() : selected ? Green() : Friendly();
-                detail.text = kia ? "KIA" : WingPilotRoster.RankName(pilot.Rank);
+                detail.text = kia ? "KIA" : pilot.RecoveryStatus != PilotRecoveryStatus.None
+                    ? pilot.RecoveryStatus.ToString().ToUpperInvariant() : WingPilotRoster.RankName(pilot.Rank);
                 detail.color = kia ? Alert() : Dim();
 
                 kiaOverlay.gameObject.SetActive(kia);

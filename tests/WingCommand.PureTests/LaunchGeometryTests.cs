@@ -6,6 +6,28 @@ namespace WingCommand.PureTests
     /// <summary>Regression checks for runway launch placement and native handoff geometry.</summary>
     public class LaunchGeometryTests
     {
+        [Theory]
+        [InlineData(true, true, true, false, true)]
+        [InlineData(true, false, false, true, true)]
+        [InlineData(true, true, false, true, false)]
+        [InlineData(true, true, false, false, false)]
+        [InlineData(true, false, false, false, false)]
+        [InlineData(false, true, true, true, false)]
+        [InlineData(false, false, false, true, false)]
+        public void RunwayCleanupProtectsLiveOwnersAndRunsOnlyOnHost(
+            bool host, bool hasOwner, bool disabled, bool detached, bool expected)
+        {
+            Assert.Equal(expected, LaunchGeometry.CanClearRunwayDebris(host, hasOwner, disabled, detached));
+        }
+
+        [Fact]
+        public void SpawnClearanceIncludesBothFootprintsAndAMargin()
+        {
+            Assert.Equal(14f, LaunchGeometry.SpawnClearance(0f, 0f));
+            Assert.Equal(44f, LaunchGeometry.SpawnClearance(12f, 60f));
+            Assert.Equal(44f, LaunchGeometry.SpawnClearance(60f, 12f));
+        }
+
         [Fact]
         public void ThresholdOffsetClearsTheTailOfASmallAirframe()
         {

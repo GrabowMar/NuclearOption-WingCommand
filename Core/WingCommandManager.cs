@@ -109,6 +109,7 @@ namespace WingCommand
 
             // Settle RTB before Prune can misclassify an ejected landing pilot as a combat loss.
             WingRecovery.Tick(Wing);
+            WingSearchAndRescue.Tick();
             Wing.Prune();
             Selection.Prune(Wing);
             WingTakeover.Tick();

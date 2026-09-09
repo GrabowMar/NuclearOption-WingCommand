@@ -10,6 +10,15 @@ namespace WingCommand
         /// <summary>Requested tail clearance from the pavement end.</summary>
         public const float ThresholdMargin = 8f;
 
+        /// <summary>Keep both aircraft footprints clear, including a larger existing aircraft or wreck.</summary>
+        public static float SpawnClearance(float spawningSize, float existingSize) =>
+            Math.Max(14f, (Math.Max(0f, spawningSize) + Math.Max(0f, existingSize)) * 0.5f + ThresholdMargin);
+
+        /// <summary>Only the host clears wrecks or orphaned debris; parts of live units remain intact.</summary>
+        public static bool CanClearRunwayDebris(bool isHost, bool hasOwner, bool ownerDisabled,
+                                               bool detached) =>
+            isHost && (hasOwner ? ownerDisabled : detached);
+
         /// <summary>Maximum along-strip spawn offset. Native taxi's 12 m handoff distance includes
         /// vertical spawn height, so reserve part of that budget for tall aircraft.</summary>
         public const float MaximumThresholdOffset = 10f;

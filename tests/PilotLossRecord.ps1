@@ -28,27 +28,33 @@ public class WingCommandManager {
     public static WingCommandManager Instance;
     public void Toast(string text) {}
 }
+public enum PilotPerk { Toughness }
+public static class WingSurvivalPerks { public static void ProtectPilotDamage(Aircraft a, ref float p, ref float b, ref float f, ref float i, ref float hp) {} }
+public static class PilotPerks { public static float PilotDamage(float v, bool e) { return v; } }
+public static class WingSearchAndRescue { public static void Forget(int id) {} public static bool MarkDowned(int id, WingPilot p) { return false; } }
 public static class Plugin { public static void LogVerbose(string text) {} }
 public static class WingPilotRoster {
     static Dictionary<int, WingPilot> assigned = new Dictionary<int, WingPilot>();
     static Dictionary<int, WingPilot> losses = new Dictionary<int, WingPilot>();
     static List<WingPilot> pool = new List<WingPilot>();
+    static HashSet<WingPilot> reserved = new HashSet<WingPilot>();
     static WingPilot selectedPilot = null;
     static void AdvanceSelected(WingPilot p) {}
     static string RankName(int rank) { return ""; }
     public static WingPilot Of(Aircraft a) { return assigned.TryGetValue(1, out var p) ? p : null; }
 '@ + $fatal + $retire + $killer + @'
+    public static void Damage(Pilot pilot, float p, float b, float f, float i, float hp, byte n) { Prefix(pilot, ref p, ref b, ref f, ref i, ref hp, n); }
     public static void Check() {
         foreach (string cause in new[] { "Projectile", "Explosion", "Fire", "Impact / collision" }) {
             var record = new WingPilot(); assigned[1] = record;
             var pilot = new Pilot();
             float p = cause == "Projectile" ? 101 : 0, b = cause == "Explosion" ? 101 : 0;
             float f = cause == "Fire" ? 101 : 0, i = cause == "Impact / collision" ? 101 : 0;
-            Prefix(pilot, p, b, f, i, 101, 0);
+            Damage(pilot, p, b, f, i, 101, 0);
             if (record.LossCause != null) throw new Exception("Nonfatal damage recorded");
-            pilot.ejected = true; Prefix(pilot, p, b, f, i, 100, 0);
+            pilot.ejected = true; Damage(pilot, p, b, f, i, 100, 0);
             if (record.LossCause != null) throw new Exception("Ejected pilot recorded");
-            pilot.ejected = false; Prefix(pilot, p, b, f, i, 100, 0);
+            pilot.ejected = false; Damage(pilot, p, b, f, i, 100, 0);
             if (record.LossCause != cause) throw new Exception("Wrong fatal cause");
             Retire(1, false); RecordKiller(1, 2); RecordKiller(1, 0); Retire(1, true);
             if (!record.Lost || record.KilledBy != "SAM launcher" || record.LastAircraft != "FS-12" ||

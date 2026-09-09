@@ -9,10 +9,15 @@ namespace WingCommand
     internal static class WingPilotFatalDamagePatch
     {
         [HarmonyPrefix]
-        private static void Prefix(Pilot __instance, float pierceDamage, float blastDamage,
-                                   float fireDamage, float impactDamage, float ___hitPoints,
+        private static void Prefix(Pilot __instance, ref float pierceDamage, ref float blastDamage,
+                                   ref float fireDamage, ref float impactDamage, ref float ___hitPoints,
                                    byte ___pilotNumber)
         {
+            if (___pilotNumber == 0 && !__instance.dead && !__instance.ejected)
+            {
+                WingSurvivalPerks.ProtectPilotDamage(__instance.aircraft, ref pierceDamage,
+                    ref blastDamage, ref fireDamage, ref impactDamage, ref ___hitPoints);
+            }
             if (___pilotNumber != 0 || __instance.dead || __instance.ejected ||
                 ___hitPoints - (pierceDamage + blastDamage + fireDamage + impactDamage) >= 0f) return;
             WingPilot pilot = WingPilotRoster.Of(__instance.aircraft);

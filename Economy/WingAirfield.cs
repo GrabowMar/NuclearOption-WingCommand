@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using NuclearOption.Networking;
 using UnityEngine;
 
 namespace WingCommand
@@ -225,9 +226,6 @@ namespace WingCommand
                             Quaternion.Euler(definition.restRotation);
             // Match runway velocity to keep carrier spawns stationary relative to the deck.
             pose.Velocity = runway.GetVelocity();
-            // Claim the spawn heading so native takeoff's runway query honours the same 30-second
-            // direction lock.
-            runway.SetUsageDirection(reverse);
 
             Plugin.LogVerbose(
                 "[Airfield] " + definition.unitName + " pose on " +
@@ -238,25 +236,59 @@ namespace WingCommand
             return true;
         }
 
-        /// <summary>Check the fixed launch pose for aircraft or wrecks before another delivery spawns into
-        /// an uncleared predecessor.</summary>
-        internal static bool LaunchSpotBlocked(GlobalPosition pose, AircraftDefinition definition,
+        /// <summary>Wait for native landing/departure claims and physical runway clearance before spawning.</summary>
+        internal static bool LaunchSpotBlocked(LaunchPose pose, AircraftDefinition definition,
                                                out string blocker)
         {
             blocker = null;
-            float clear = Mathf.Max(
-                definition != null ? Mathf.Max(definition.length, definition.width) : 0f, 14f);
-            float clearSq = clear * clear;
-
             List<Aircraft> all = UnitRegistry.allAircraft;
             for (int i = 0; i < all.Count; i++)
             {
                 Aircraft a = all[i];
-                if (a == null) continue;
-                if ((pose - a.GlobalPosition()).sqrMagnitude > clearSq) continue;
-                // Ignore airborne traffic above the ground-spawn clearance.
-                if (!a.disabled && a.radarAlt > 15f) continue;
+                if (a == null || a.disabled) continue;
+                float clear = LaunchGeometry.SpawnClearance(
+                    definition != null ? Mathf.Max(definition.length, definition.width) : 0f,
+                    a.definition != null ? Mathf.Max(a.definition.length, a.definition.width) : 0f);
+                bool nearSpawn = (pose.Position - a.GlobalPosition()).sqrMagnitude <= clear * clear;
+                bool onStrip = (a.disabled || a.radarAlt <= 15f) && pose.Runway.AircraftOnRunway(a);
+                if (!nearSpawn && !onStrip) continue;
                 blocker = a.disabled ? a.unitName + " (wreck)" : a.unitName;
+                return true;
+            }
+
+            // Disabled aircraft leave UnitRegistry before their colliders disappear. Detached parts
+            // can also remain after the parent aircraft is destroyed.
+            float radius = Mathf.Max(pose.Runway.GetWidth() * 0.5f,
+                definition != null ? Mathf.Max(definition.length, definition.width) * 0.5f : 14f);
+            Collider[] obstacles = Physics.OverlapCapsule(pose.Runway.Start.position,
+                pose.Runway.End.position, radius + LaunchGeometry.ThresholdMargin,
+                ~0, QueryTriggerInteraction.Ignore);
+            foreach (Collider obstacle in obstacles)
+            {
+                UnitPart part = obstacle.GetComponentInParent<UnitPart>();
+                Aircraft aircraft = obstacle.GetComponentInParent<Aircraft>();
+                if (aircraft == null && (part == null ||
+                    (!(part.parentUnit is Aircraft) && !part.IsDetached()))) continue;
+                Aircraft owner = aircraft != null ? aircraft : part?.parentUnit as Aircraft;
+                bool hasOwner = aircraft != null || (part != null && part.parentUnit != null);
+                if (LaunchGeometry.CanClearRunwayDebris(
+                    NetworkManagerNuclearOption.i != null && NetworkManagerNuclearOption.i.Server.Active,
+                    hasOwner, owner != null && owner.disabled, part != null && part.IsDetached()))
+                {
+                    // Match native WaitRemoveAircraft: destruction also removes its detached parts
+                    // and propagates through the network identity. Never destroy a live part owner.
+                    if (owner != null) Object.Destroy(owner.gameObject);
+                    else part.RemovePart();
+                    blocker = "clearing runway debris";
+                    // Unity destruction is deferred. Recheck physical clearance on the next attempt.
+                    return true;
+                }
+                blocker = "aircraft or debris on runway";
+                return true;
+            }
+            if (!pose.Runway.IsAvailableForTakeoff(null) || pose.Runway.CrossingRunwaysInUse())
+            {
+                blocker = "runway traffic";
                 return true;
             }
             return false;

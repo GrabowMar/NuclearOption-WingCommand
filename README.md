@@ -377,13 +377,19 @@ including one issued while defensive. Shown as `DEFENSIVE` / `DEF`.
 
 **WMC → Wing** shows each wingman's callsign, name, background, rank and record.
 
-- Pilots belong to the squadron. One who lands, or whose aircraft you release, goes back on
-  the list with their record and flies your next requisition. A killed pilot doesn't return.
+- Pilots belong to the squadron. Successful base recovery returns them to the pool with
+  their record. Released RTB pilots remain assigned until recovery; killed pilots don't return.
 - Experience comes from kills, completed sorties and engagements survived; rank rises through
   Rookie → Wingman → Veteran → Ace → Legend.
 - Rank has a small real effect — at the top, ~12% more weapon reach and off-boresight and
   ~12% faster shot cycling, plus modest formation-control adjustments in Smart mode.
-  `Pilot/RankEffect = 0` keeps the record, removes the rank benefits.
+  `Pilot/RankEffect = 0` keeps the record and earned perks but disables their effects.
+- Each promotion grants **one random, unique survival perk from a pool of 24**. Promotions crossed in one XP
+  award all count; imported experienced pilots receive perks for their existing ranks.
+  Rookie / Wingman / Veteran / Ace / Legend require **0 / 120 / 360 / 720 / 1200 XP** and
+  hold **0 / 1 / 2 / 3 / 4 perks**. XP awards remain 25 per kill, 40 per recovered sortie,
+  and 10 per survived engagement. The 24 dossier badges show actual earned perks;
+  hover for the effect and whether it is earned.
 - Random recruits draw from 80 surnames, 26 initials and 96 callsigns, with varied service
   backgrounds, personal habits and radio styles. Callsigns stay unique within the roster.
 - Experimental portraits retain six generated faces, with separate male/female pools of
@@ -391,6 +397,58 @@ including one issued while defensive. Shown as `DEFENSIVE` / `DEF`.
   an identity, including imported pilots.
   The small atlas is embedded in the DLL; portraits are composed once on demand and released
   when the mission resets. No image service, extra runtime dependency or shader is required.
+
+| Perk | Survival effect |
+|---|---|
+| **LUCK** | 30% chance per incoming missile to bias guidance 350m sideways; proximity blasts still hurt. |
+| **FUEL DISCIPLINE** | 30% less engine fuel consumption. Leaks and fires remain dangerous. |
+| **TOUGHNESS** | 35% less seated-pilot damage; does not strengthen the airframe. |
+| **G TOLERANCE** | 75% less pilot damage from extreme G loads. |
+| **COMMANDO** | One 50% escape chance after landing alive; return after 120 seconds if still free and alive. |
+| **FIREPROOF** | 75% less fire damage to the seated pilot. Does not extinguish the aircraft. |
+| **BLAST SURVIVOR** | 60% less explosion damage to the seated pilot. |
+| **BALLISTIC VEST** | 60% less projectile damage to the seated pilot. |
+| **CRASH TRAINING** | 60% less impact damage to the seated pilot; aircraft can still be destroyed. |
+| **SECOND CHANCE** | Survive one otherwise fatal seated-pilot hit at 1 HP per sortie. Rearmed by assignment or successful base sortie; subsequent damage can kill. |
+| **COOL HEAD** | 40% less engine fuel use while a native incoming-missile warning is active. |
+| **HIGH ALTITUDE CRUISE** | 40% less engine fuel use above 3000m AGL. |
+| **LOW LEVEL EVASION** | 25% guidance-error chance per incoming missile, rolled when first encountered below 300m AGL. |
+| **RADAR GHOST** | 30% guidance-error chance per incoming ARH or SARH missile. |
+| **HEAT GHOST** | 30% guidance-error chance per incoming IR missile. |
+| **NOTCH EXPERT** | 40% guidance-error chance against radar missiles first encountered within 15 degrees of a beam approach, while moving over 30m/s. |
+| **CHAFF REFLEX** | Fitted chaff dispensers have 50% shorter burst intervals; uses ammunition faster. |
+| **FLARE REFLEX** | Fitted flare dispensers have 50% shorter burst intervals; uses ammunition faster. |
+| **ECM SPECIALIST** | Fitted self-protection radar jammer produces 75% stronger ECM at normal power cost. |
+| **FAST LEARNER** | 50% more XP from every award, reaching ranks and survival perks sooner. |
+| **QUICK DRAW** | 35% shorter wing weapon-command intervals; native reload and lock requirements still apply. |
+| **STANDOFF** | 25% larger wing weapon-employment envelope; native weapon readiness still applies. |
+| **SURVIVALIST** | 60% less incoming projectile, blast and fire damage to the dismounted pilot before native armour calculations. |
+| **PATHFINDER** | 35% independent escape chance with a 60-second return delay; with Commando, 67.5% chance and 60 seconds. One roll per ejection. |
+
+Missile guidance-error chances combine as independent chances, with an 80% cap and one roll per missile/pilot pair at first encounter. Conditional evasion perks use the altitude, seeker and flight angle at that encounter; changing conditions does not grant another roll. Fuel savings multiply, with a floor of 25% normal consumption. Damage resistances multiply. No perk guarantees aircraft survival.
+
+Perk percentages are fixed while effects are enabled; `RankEffect` scales the existing rank
+bonuses. `PilotProgression = false` disables XP awards and perk effects. SAR status tracking
+continues to distinguish survivors from KIA. Records and earned perks last through aircraft
+changes **within the current mission**; this does not add a campaign save system.
+
+**Search and rescue.** Ejection creates a **DOWNED** roster entry once the game's living
+survivor is confirmed. That pilot cannot be selected or assigned until rescued. Friendly
+native rescue (player or AI) and return at a friendly base restore the same pilot with their
+XP, perks and record. Enemy capture shows **CAPTURED**; a confirmed death after ejection
+shows **KIA**. A lost survivor signal shows **MIA**, never an automatic rescue. Disabled
+aircraft receive a short grace period for the game's delayed ejection sequence.
+
+On **WMC → Wing**, inspect a downed pilot and click **DISPATCH SAR** to send the nearest
+eligible idle wing helicopter to their landing position. It must have native capture capacity,
+more than 25% fuel, and be in Formation or Hold/Orbit. It uses the existing Land Here approach;
+the native game performs the rescue when a suitable friendly unit stops nearby. This is an
+explicit order and leaves the helicopter at the landing site afterward. Landing failure,
+terrain and enemy fire can still prevent rescue. Player aircraft and native AI can also rescue
+normally without this button. **Water rescues use the game's helicopter hoist**; automated
+hoist operation is not included.
+
+The implementation audit and manual flight checks are in [SURVIVAL-SYSTEM.md](SURVIVAL-SYSTEM.md).
 
 **Radio.** Calls use frameless subtitles at top centre, not the game-message feed — speaker
 as `M. "COBALT" ADEYEMI`, a smaller line for flight position and aircraft. A command to

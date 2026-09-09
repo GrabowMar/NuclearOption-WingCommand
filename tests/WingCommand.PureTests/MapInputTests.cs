@@ -4,6 +4,18 @@ namespace WingCommand.PureTests
 {
     public class MapInputTests
     {
+        [Theory]
+        [InlineData(0, 1, 0, 2, true)]  // HUD exposed through transparent water.
+        [InlineData(0, 9, 1, 2, true)]  // Canvas sorting takes precedence over render order.
+        [InlineData(1, 0, 0, 2, false)] // Foreground WMC panel still blocks commands.
+        [InlineData(0, 3, 0, 2, false)] // Later canvas at the same sorting priority.
+        [InlineData(0, 2, 0, 2, false)] // Map icons remain eligible for hit resolution.
+        public void MapHitFilteringPreservesForegroundUi(int sort, int render,
+            int mapSort, int mapRender, bool behind)
+        {
+            Assert.Equal(behind, MapSelectionPolicy.IsBehindMap(sort, render, mapSort, mapRender));
+        }
+
         [Fact]
         public void MousePressAndReleaseToggleSelectionOnlyOncePerPhysicalClick()
         {
