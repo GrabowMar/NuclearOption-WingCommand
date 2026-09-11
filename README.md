@@ -148,6 +148,47 @@ Wing icons keep the stock faction fill and gain a thin, unfilled ring with space
 the aircraft silhouette. **Clear Targets** does not remove the ring or change WMC command selection. Selected command recipients
 also have brackets while Tactical is open. `UI/Highlight` controls the outlines.
 
+## Tactical pages, flight groups and patrols
+
+Tactical uses one four-column command grid with consistent button heights, widths and spacing. Orders have three
+pages: **Combat**, **Tasking**, and **Route**. The lower selector switches between
+**Formation** (whole flight) and **Manoeuvres** (selected aircraft), with aerobatics first.
+Both pages retain the formation diagram and live order, ROE and weapon readouts.
+Changing the order page disarms an active map placement tool. Switching these pages does
+not change command selection or any aircraft's standing order.
+
+**FLIGHT [+]** expands the roster from three to six aircraft per page; **FLIGHT [-]**
+collapses it again. Page arrows reach larger wings, and the expanded panel scrolls with
+the mouse wheel or its right-hand scrollbar. The status/help strip stays pinned below it.
+Click a roster row to select; Shift-click adds or removes a member.
+
+Groups are optional and appear **only while FLIGHT is expanded**. There are no default
+groups. Select aircraft, press **CREATE GROUP**, enter a name and **SAVE**. Up to three
+groups can be created per mission. Click a saved group to recall it; **EDIT GROUP**
+updates its name and membership using the current selection. **DELETE GROUP** removes
+it without releasing aircraft. With Flight expanded, **Ctrl+1/2/3** recalls existing
+groups and **Ctrl+Shift+1/2/3** updates their selection; shortcuts never create groups.
+Lost or released aircraft are pruned from groups; mission exit removes all groups.
+ROE and formation shape still apply to the whole flight.
+
+To create a patrol, select a flight, open **Orders → Route**, and right-click the map for
+the first Move point. Shift-right-click adds points. With at least two distinct queued
+Move points, switch **PATROL** on. The route repeats in order and its closing leg appears
+on the map. Wingmen use the existing ROE weapons policy while following the route.
+Turning Patrol off flies the remaining legs once, then rejoins. A replacement order
+cancels the loop. ALT and SPD controls adjust the selected Move routes as before.
+
+**Refit** now remembers the current task, remaining route, patrol loop and Move settings.
+After native landing, rearming and takeoff, it resumes that plan. Destroyed or now-friendly
+targets are skipped; with nothing valid to resume, the aircraft forms up. A new command
+or roster RTB cancels the saved plan, including a repeated RTB command.
+
+**AUTO REFIT** on the Route page opts selected aircraft into refit-and-resume when fuel
+reaches bingo or their fitted combat stores are empty. It requires
+`Engagement/AutoReturnOnEmpty` and leaves deliberate landing, cargo, disengagement,
+manoeuvre and Stand Down tasks alone. Unarmed aircraft refit for fuel only. It is off
+by default; it does not coordinate staggered replacements between flights.
+
 ## 📋 Orders
 
 | Order | What it does |
@@ -161,14 +202,14 @@ also have brackets while Tactical is open. `UI/Highlight` controls the outlines.
 | **Hold Here** | CAP a point while still applying ROE |
 | **Deliver Cargo** | Fly cargo to a chosen point, drop it, report, rejoin |
 | **Land Here** | Set compatible helicopters down near the point |
-| **Refit** | Return to base, replenish fuel and stores, take off again, then rejoin |
+| **Refit** | Return to base, replenish fuel and stores, take off again, then resume the saved task and route |
 | **Stand Down** | Cancel the current task and loiter near friendly airbases or ships |
 | **Roster RTB** | On an individual roster row, dismiss a wingman home; its plane and pilot return to their pools after recovery |
 | **Formation dial** | Swap between the six shapes on the fly |
 
 Orders stick through missile defence and leash recall, including new orders issued while
 defending. Idle Attack/Engage aircraft regroup temporarily and resume when combat becomes
-available again. Automatic bingo/Winchester return, when enabled, ends the current task.
+available again. Ordinary bingo return ends the current task; optional AUTO REFIT preserves it.
 Interrupted manoeuvres and target orders whose target has died finish by returning to formation.
 
 Holding aircraft circle in the same direction on separate radii, spaced by formation slot.

@@ -17,6 +17,7 @@ namespace WingCommand
                     : WingTuning.MoveAltitudeFixed);
 
         private GlobalPosition targetPoint;
+        private readonly SlotEngagement patrolEngagement = new SlotEngagement(0.35f);
 
         public WaypointTaskState(WingMember member) : base(member)
         {
@@ -55,6 +56,8 @@ namespace WingCommand
             }
 
             float cruise = CruiseAltitude;
+            if (member.PatrolRoute)
+                patrolEngagement.Run(member, aircraft, pilot, member.Leader);
             bool moving = member.Order == WingOrder.MoveToPoint;
             float speedFrac = moving ? member.ResolvedMoveSpeed : 1f;
             Vector3 lead = Vector3.zero;

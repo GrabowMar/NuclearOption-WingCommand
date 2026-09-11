@@ -20,7 +20,6 @@
     <GameDir Condition="'$(GameDir)' == ''">C:\Program Files (x86)\Steam\steamapps\common\Nuclear Option</GameDir>
     <ManagedDir>$(GameDir)\NuclearOption_Data\Managed</ManagedDir>
     <BepInExDir>$(GameDir)\BepInEx\core</BepInExDir>
-    <NomodKitDir Condition="'$(NomodKitDir)' == ''">$(MSBuildProjectDirectory)\..\nomodkit</NomodKitDir>
   </PropertyGroup>
 
   <Target Name="CheckLocalDependencies" BeforeTargets="ResolveAssemblyReferences">
@@ -28,8 +27,6 @@
            Text="Nuclear Option assemblies not found. Set GameDir to your game installation." />
     <Error Condition="!Exists('$(BepInExDir)\BepInEx.dll')"
            Text="BepInEx 5 not found under $(BepInExDir). Install it in the game directory." />
-    <Error Condition="!Exists('$(NomodKitDir)\shared\avionics') Or !Exists('$(NomodKitDir)\shared\avionics-ui\avionics.avss')"
-           Text="Shared avionics sources not found. Set NomodKitDir to your nomodkit checkout." />
   </Target>
 
   <!-- Keep the BepInPlugin compile-time version constant aligned with assembly metadata. -->
@@ -69,13 +66,13 @@
     <EmbeddedResource Include="Assets\Icons\*.png" LogicalName="WingCommand.Icons.%(Filename)%(Extension)" />
     <EmbeddedResource Include="Assets\Pilots\layers.png" LogicalName="WingCommand.PilotLayers.png" />
     <EmbeddedResource Include="Assets\maneuvers.json" LogicalName="WingCommand.maneuvers.json" />
-    <!-- Compile the engine-free avionics protocol into each plugin to coordinate bezels and map gestures without a shared DLL. -->
-    <Compile Include="$(NomodKitDir)\shared\avionics\*.cs" Link="Avionics\%(Filename)%(Extension)"
-             Exclude="$(NomodKitDir)\shared\avionics\*Tests.cs" />
-    <Compile Include="$(NomodKitDir)\shared\avionics-ui\*.cs" Link="AvionicsUi\%(Filename)%(Extension)" />
 
-    <!-- Embed the shared default stylesheet; allow live overrides at BepInEx/config/NOAvionics/avionics.avss. Both plugins use the same resource name. -->
-    <EmbeddedResource Include="$(NomodKitDir)\shared\avionics-ui\avionics.avss">
+    <!-- Vendored engine-free avionics widget kit + design tokens (namespace NOAvionics / NOAvionics.Ui),
+         picked up by the default compile glob from Avionics/ and AvionicsUi/. Boscali Summer carries its
+         own byte-identical copy; the two mods share no runtime contract, only this visual language and
+         the NOAvionics.avionics.avss resource name. See Avionics/README.md. Live override:
+         BepInEx/config/NOAvionics/avionics.avss. -->
+    <EmbeddedResource Include="AvionicsUi\avionics.avss">
       <LogicalName>NOAvionics.avionics.avss</LogicalName>
     </EmbeddedResource>
   </ItemGroup>

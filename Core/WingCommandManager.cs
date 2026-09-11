@@ -79,7 +79,9 @@ namespace WingCommand
                 FormationFlyState.ResetTerrainCache();
                 Wing.Clear();
                 Selection.Reset();
-                WingInteropPush.Clear();
+                Interop.WingMembership.Clear();
+                Interop.WingMapMode.TacticalCommandActive = false;
+                Interop.WingMapMode.GestureArmed = false;
                 resetForNonPlayableState = true;
                 return;
             }
@@ -123,7 +125,9 @@ namespace WingCommand
             HandleRadialInput();
             HandleHotkeys();
 
-            WingInteropPush.Publish(Wing);
+            Interop.WingMembership.Publish(Wing);
+            Interop.WingMapMode.TacticalCommandActive = WmcScreen.TacticalCommandModeActive;
+            Interop.WingMapMode.GestureArmed = mapLayer != null && mapLayer.PointArmed;
 
             mapLayer.Update();
 

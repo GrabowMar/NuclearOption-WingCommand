@@ -1,16 +1,17 @@
 using System.Collections.Generic;
-using NOAvionics;
 using UnityEngine;
 using UnityEngine.UI;
 
 namespace WingCommand
 {
-    /// <summary>Named MFD bezel reservation via BezelRegistry, shared with companion screens without a
-    /// compiled dependency.</summary>
+    /// <summary>Finds a free MFD bezel slot on the live <see cref="VirtualMFD"/> and binds a companion
+    /// screen to it. There is no cross-mod reservation: each plugin scans the same vanilla button/screen
+    /// lists and writes its screen immediately, so Unity's single-threaded frame order resolves a
+    /// same-frame contest, and <see cref="Bind"/> re-checks the slot before committing.</summary>
     internal static class MfdBezel
     {
         public static bool TryClaim(
-            string id, bool preferLeft, VirtualMFD mfd,
+            bool preferLeft, VirtualMFD mfd,
             out List<Button> buttons, out List<MFDScreen> screens, out int slot, out bool left)
         {
             buttons = null;
@@ -24,15 +25,13 @@ namespace WingCommand
             List<MFDScreen> leftScreens = GameAccess.GetLeftScreens(mfd);
             List<MFDScreen> rightScreens = GameAccess.GetRightScreens(mfd);
 
-            if (!BezelRegistry.TryClaim(
-                id, preferLeft,
-                leftButtons == null ? 0 : leftButtons.Count,
-                rightButtons == null ? 0 : rightButtons.Count,
-                (isLeft, index) => IsFree(
-                    isLeft ? leftButtons : rightButtons,
-                    isLeft ? leftScreens : rightScreens,
-                    index),
-                out left, out slot))
+            if (TryColumn(preferLeft ? leftButtons : rightButtons,
+                    preferLeft ? leftScreens : rightScreens, out slot))
+                left = preferLeft;
+            else if (TryColumn(preferLeft ? rightButtons : leftButtons,
+                    preferLeft ? rightScreens : leftScreens, out slot))
+                left = !preferLeft;
+            else
                 return false;
 
             buttons = left ? leftButtons : rightButtons;
@@ -40,10 +39,22 @@ namespace WingCommand
             return buttons != null && screens != null && slot >= 0 && slot < buttons.Count;
         }
 
-        public static void Bind(VirtualMFD mfd, List<Button> buttons, List<MFDScreen> screens,
+        private static bool TryColumn(List<Button> buttons, List<MFDScreen> screens, out int slot)
+        {
+            slot = -1;
+            if (buttons == null) return false;
+            for (int i = 0; i < buttons.Count; i++)
+                if (IsFree(buttons, screens, i)) { slot = i; return true; }
+            return false;
+        }
+
+        /// <summary>Bind <paramref name="screen"/> to the claimed slot. Returns false if another plugin
+        /// took the slot in the same frame between the scan and here; the caller retries next second.</summary>
+        public static bool Bind(VirtualMFD mfd, List<Button> buttons, List<MFDScreen> screens,
             int slot, bool left, MFDScreen screen)
         {
             while (screens.Count <= slot) screens.Add(null);
+            if (screens[slot] != null && screens[slot] != screen) return false;
             screens[slot] = screen;
             mfd.SetupButtons();
 
@@ -62,6 +73,7 @@ namespace WingCommand
             }
 
             screen.CloseScreen(Screen.width * (left ? Vector3.left : Vector3.right));
+            return true;
         }
 
         public static MFDScreen FindTemplate(VirtualMFD mfd)

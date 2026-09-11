@@ -299,8 +299,10 @@ namespace WingCommand
 
         /// <summary>Prefer active behaviour over standing order so recalled Engage members obey
         /// station-keeping ROE.</summary>
-        public static OrderEngagementAuthority AuthorityFor(string behaviourId, WingOrder order)
+        public static OrderEngagementAuthority AuthorityFor(string behaviourId, WingOrder order, bool patrol = false)
         {
+            if (patrol && order == WingOrder.MoveToPoint && behaviourId == WingBehaviours.Task)
+                return OrderEngagementAuthority.StandingRoe;
             switch (behaviourId)
             {
                 // Rejoin and overhead hold use standing ROE regardless of suspended task.

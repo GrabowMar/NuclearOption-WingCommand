@@ -1,0 +1,185 @@
+/* ===========================================================================
+   avionics.avss — the look of every Wing Command and Boscali Summer panel.
+
+   This file is compiled into both plugins as the default. To retune the panels
+   without rebuilding, drop a copy at:
+
+       BepInEx/config/NOAvionics/avionics.avss
+
+   ...edit it, and reload in game. A syntax error is logged with its line number
+   and the last good sheet is kept, so a bad edit never leaves you with no UI.
+
+   Grammar: class selectors only, one optional state, flat properties.
+     .a          matches an element carrying class "a"
+     .a.b        matches an element carrying BOTH classes
+     .a:hover    a state; states always win over stateless rules
+   Colours are #RRGGBB with an optional two-hex-digit alpha after a space.
+   "accent" / "friendly" / "warning" / "alert" follow the player's live theme.
+   =========================================================================== */
+
+:root {
+  /* Surfaces — a deep dark green-slate cockpit ground, deep enough that a busy map
+     underneath does not read through the text on top of it. */
+  ground:          #030504 f8;
+  surface:         #060C0A f0;
+  surface-raised:  #0A1410 f5;
+  surface-inert:   #040806 b0;
+  band:            #FFFFFF 06;
+
+  /* Edges */
+  hairline:        #2EA56B 4d;
+  frame:           #387059 8c;
+
+  /* Status rails. Literal on purpose: a mission theme must not be able to
+     turn "armed" and "ready" into the same colour. */
+  rail-ready:      #00FF9D;
+  rail-caution:    #F59E0B;
+  rail-danger:     #EF4444;
+  rail-info:       #00E5FF;
+  rail-inert:      #26403A 80;
+
+  /* Type */
+  text-primary:    #EBFFF5;
+  text-dim:        #9EB7AB;
+  text-muted:      #57706A;
+  ink:             #02120B;
+
+  /* Geometry */
+  panel-width:     512;
+  pad:             14;
+  gap:             8;
+}
+
+/* ---------------------------------------------------------------- 1. panel */
+
+/* Fill fades from ground-dark to see-through over the panel's own bottom
+   stretch (baked into the "panel" sprite, not tunable from here). */
+.panel        { sprite: panel; border: 1 frame; ticks: on; }
+
+/* The spine: one accent stroke the whole content hangs off, replacing a frame
+   around every group. */
+.spine        { width: 3; background: accent; }
+.spine-tick   { width: 9; height: 1; background: accent c0; }
+
+/* ------------------------------------------------------------ 2. sections */
+
+.section      { pad: 12 14; gap: 8; }
+.section.band { background: band; }
+
+.section-title      { font: micro bold; color: text-dim; tracking: 18; }
+.section-title-note  { font: micro; color: text-muted; tracking: 10; }
+
+/* ------------------------------------------------------------ 4. data bar */
+
+.databar   { height: 30; background: #000000 33; border: 1 hairline; }
+.id-tag    { background: accent; color: ink; font: 15 bold; tracking: 16; pad: 0 12; align: center; }
+.databar-state { font: small; color: text-dim; tracking: 10; pad: 0 12; }
+.databar-state-key { font: small bold; color: text-primary; tracking: 10; }
+
+.chip        { font: micro; color: text-dim; tracking: 9; border: 1 hairline;
+               background: #000000 47; sprite: control; align: center; }
+.chip.live   { color: rail-ready; border: 1 #00FF9D 66; }
+.chip.warn   { color: rail-caution; border: 1 #F59E0B 66; }
+
+/* -------------------------------------------------------------- 5. metrics */
+
+.metrics       { height: 58; border: 1 hairline; }
+.metric        { pad: 9 14 10 14; }
+.metric-key    { font: micro; color: text-muted; tracking: 16; }
+.metric-value  { font: 25 bold; color: text-primary; tabular: on; tracking: 1; }
+.metric-unit   { font: micro; color: text-dim; tracking: 10; }
+.metric-cap    { font: micro; color: text-muted; tracking: 8; align: right; }
+.metric-track  { height: 3; background: #FFFFFF 12; }
+
+/* ----------------------------------------------------------------- 6. tabs */
+
+.tabbar   { height: 30; border: 1 hairline; }
+.tab      { font: small; color: text-muted; tracking: 16; background: #000000 33; align: center; }
+.tab:hover   { color: accent; }
+.tab:latched { color: text-primary; background: #00000000; rail: 2 accent; }
+
+/* ------------------------------------------------------------ 7. list rows */
+
+/* Rows size to their own copy. This is what ends the ellipsis: a description
+   that needs two lines gets two lines instead of being cut. */
+.row          { pad: 8 0; gap: 10; border: 1 #2EA56B 21; }
+.row:hover    { background: surface-raised; }
+.row:armed    { background: #00FF9D 0c; ticks: on; }
+.row:disabled { color: text-muted; }
+
+.row-name     { font: 12.5 bold; color: text-primary; tracking: 5; }
+.row-sub      { font: micro; color: text-muted; tracking: 4; wrap: on; }
+.row-sub.ok   { color: rail-ready; }
+.row-sub.warn { color: rail-caution; }
+.row-sub.bad  { color: rail-danger; }
+
+.row-value      { font: lead bold; color: text-primary; tabular: on; align: right; }
+.row-value-unit { font: 8.5 ; color: text-muted; tracking: 14; align: right; }
+
+/* State lives on the rail; what a thing *is* lives on its glyph. Colour is
+   therefore never the only carrier of meaning. */
+.rail          { width: 3; }
+.rail.ready    { background: rail-ready; }
+.rail.armed    { background: rail-caution; }
+.rail.cooling  { background: rail-caution; }
+.rail.danger   { background: rail-danger; }
+.rail.locked   { background: rail-inert; }
+.rail.info     { background: rail-info; }
+/* A sector or node under opposing pressure. Separate from :armed so a frontline
+   reading amber never means "you have armed something". */
+.rail.contested { background: rail-caution; }
+.rail.hostile   { background: rail-danger; }
+
+/* ------------------------------------------------------- 7b. readout bars */
+
+/* A share bar: one track, several fills laid end to end. Used for the theater
+   control split, where a single-fill progress bar cannot show that the ground
+   between two sides is neither side's. */
+.bar           { height: 6; background: #FFFFFF 12; }
+.bar-friendly  { background: accent; }
+.bar-contested { background: rail-caution; }
+.bar-hostile   { background: rail-danger; }
+.bar-inert     { background: rail-inert; }
+
+/* Key/value pairs for the logistics readouts: label left, figure right, on one line. */
+.kv-key        { font: micro; color: text-muted; tracking: 14; }
+.kv-value      { font: small bold; color: text-primary; align: right; }
+.kv-value.warn { color: rail-caution; }
+.kv-value.bad  { color: rail-danger; }
+
+/* ------------------------------------------------------------- 8. controls */
+
+.btn          { font: micro; color: text-dim; tracking: 13; border: 1 frame;
+                background: #000000 4d; sprite: control; align: center; }
+.btn:hover    { color: text-primary; border: 1 accent; }
+.btn:latched  { color: text-primary; }
+/* Button fills, frames and text come from the tested four-state paint machine in
+   AvionicsTokens (rest / hover / pressed / latched), not from here — a button has to
+   stay readable in states a stylesheet cannot see. The sheet sets its type only. */
+
+.badge        { font: 9 ; color: text-dim; tracking: 13; border: 1 hairline; pad: 2 6; align: center; }
+.badge.on     { color: rail-ready; border: 1 #00FF9D 73; }
+.badge.aff    { color: rail-caution; border: 1 #F59E0B 73; }
+
+/* -------------------------------------------------------- 9. status strip */
+
+.status       { height: 44; background: #000000 4d; border: 1 hairline; pad: 9 14; }
+.status-text  { font: 10.5 ; color: text-dim; wrap: on; }
+
+/* ------------------------------------------------------------- 10. cards */
+
+/* Kept for the surfaces that genuinely are objects — a pilot dossier, a
+   now-playing card. Ordinary groups use .section instead. */
+.card         { background: surface; sprite: card; border: 1 hairline; pad: 8; gap: 4; }
+.card:hover   { background: surface-raised; }
+.card.inert   { background: surface-inert; }
+.card.focused { ticks: on; }
+
+/* ------------------------------------------------ 11. reskinned stock panels */
+
+/* The game's own map panels — BDF, PALA, TGT, MIS, MAP — docked into the left
+   column. Their contents and titles stay the game's; this only supplies the
+   same top-to-bottom fade as .panel (via AvSprites.GroundGradient, also not
+   tunable from here) plus a hairline edge, so the rows read as an instrument
+   instead of as green text floating over the terrain. */
+.stock-panel   { }

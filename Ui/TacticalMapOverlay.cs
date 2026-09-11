@@ -244,6 +244,10 @@ namespace WingCommand
                         });
                         from = to;
                     }
+                    if (member.PatrolRoute && route.Count > 1 &&
+                        TryRoutePoint(route[0], out GlobalPosition loopStart))
+                        legs.Add(new Leg { From = from, To = loopStart,
+                            Color = color.WithAlpha(color.a * QueuedAlpha), Node = true });
                     continue;
                 }
 

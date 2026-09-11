@@ -14,6 +14,16 @@ namespace WingCommand
 
         private readonly HashSet<WingMember> selected = new HashSet<WingMember>();
         private readonly List<WingMember> stale = new List<WingMember>();
+        internal readonly FlightGroups<WingMember> Groups = new FlightGroups<WingMember>();
+
+        internal IReadOnlyList<WingMember> GroupMembers(int index, WingRegistry wing) =>
+            Groups.Members(index, member => member != null && member.Alive && wing != null && wing.Contains(member));
+
+        internal void RecallGroup(int index, WingRegistry wing)
+        {
+            DeselectAll();
+            foreach (WingMember member in GroupMembers(index, wing)) selected.Add(member);
+        }
 
         public Mode CurrentMode { get; private set; } = Mode.All;
 
@@ -140,6 +150,10 @@ namespace WingCommand
             return selected.Count == 0 ? "NONE" : selected.Count + " OF " + total;
         }
 
-        public void Reset() => SelectAll();
+        public void Reset()
+        {
+            SelectAll();
+            Groups.Reset();
+        }
     }
 }

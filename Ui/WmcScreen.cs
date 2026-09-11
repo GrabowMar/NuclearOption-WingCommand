@@ -219,7 +219,6 @@ namespace WingCommand
             UpdateTacticalPause(shouldPause: false);
             ReleasePanelInput();
 
-            BezelRegistry.Release(BezelRegistry.Wmc);
             screen = null;
             page = Page.Tactical;
             panelRect = null;
@@ -244,13 +243,7 @@ namespace WingCommand
             dataBar = null;
             fundsMetric = null;
             fuelMetric = null;
-            doctrineTitleLabel = null;
-            doctrineProfileLabel = null;
-            doctrineRulesLabel = null;
-            doctrineWeaponsLabel = null;
             formationButtons = null;
-            formationWingmenDots.Clear();
-            formationVectorLines.Clear();
             rosterPageLabel = null;
             rosterRows.Clear();
             shopTiles.Clear();
@@ -294,6 +287,7 @@ namespace WingCommand
             selectedOffer = null;
             shopPage = 0;
             rosterPage = 0;
+            ResetTacticalNavigation();
             holdButton = null;
             tightButton = null;
             freeButton = null;
@@ -393,7 +387,7 @@ namespace WingCommand
                     ?? UnityEngine.Object.FindObjectOfType<VirtualMFD>();
                 if (mfd == null) return;
 
-                if (!MfdBezel.TryClaim(BezelRegistry.Wmc, preferLeft: true, mfd,
+                if (!MfdBezel.TryClaim(preferLeft: true, mfd: mfd,
                     out List<Button> buttons, out List<MFDScreen> screens, out int slot, out bool left))
                 {
                     Fail("no free bezel button on either column");
@@ -401,20 +395,18 @@ namespace WingCommand
                 }
 
                 MFDScreen template = MfdBezel.FindTemplate(screens) ?? MfdBezel.FindTemplate(mfd);
-                if (template == null)
-                {
-                    BezelRegistry.Release(BezelRegistry.Wmc);
-                    return;
-                }
+                if (template == null) return;
 
                 screen = Build(template, buttons[slot]);
-                if (screen == null)
+                if (screen == null) return;
+
+                // Bind fails only if another plugin took the slot in the same frame; retry next second.
+                if (!MfdBezel.Bind(mfd, buttons, screens, slot, left, screen))
                 {
-                    BezelRegistry.Release(BezelRegistry.Wmc);
+                    screen = null;
                     return;
                 }
 
-                MfdBezel.Bind(mfd, buttons, screens, slot, left, screen);
                 MfdPresentation.Register(screen, screen.displayPanel.transform as RectTransform,
                     new Vector2(PanelWidth, panelHeight), buttons[slot], left);
                 Plugin.LogVerbose("WMC screen installed on " + (left ? "left" : "right") +
@@ -481,11 +473,7 @@ namespace WingCommand
             pageRoots[(int)Page.Wing] = PageRoot(contentRt, "WingPage");
 
             RectTransform tacticalRoot = pageRoots[(int)Page.Tactical];
-            float tacticalY = y;
-            tacticalY = AddSummary(tacticalRoot, tacticalY);
-            tacticalY = AddRosterArea(tacticalRoot, tacticalY);
-            tacticalY = AddEngagementSection(tacticalRoot, tacticalY);
-            tacticalY = AddActions(tacticalRoot, tacticalY);
+            float tacticalY = BuildTacticalPage(tacticalRoot, y);
 
             // Build Supply in decision order: funds/capacity, pilot, purchase, then active-aircraft
             // assignment.
@@ -510,6 +498,8 @@ namespace WingCommand
             panelHeight = AvTokens.PanelHeight;
             for (int i = 0; i < PageCount; i++)
                 panelHeight = Mathf.Max(panelHeight, pageHeights[i]);
+
+            FitTacticalViewport();
 
             // Pin status to one bottom position across all tabs.
             float stripY = -(panelHeight - Pad - StatusStripHeight);
@@ -796,15 +786,6 @@ namespace WingCommand
                 ? count + " " + noun
                 : "PAGE " + PageFraction(page, pageCount) + "  ·  " + count + " " + noun;
         }
-
-        /// <summary>Order-grid button using standard body text.</summary>
-        private static WingButton GridButton(RectTransform parent, string text, float x, float y,
-                                             float w, Action onClick) =>
-            GridButton(parent, text, x, y, w, onClick, UiButtonStyle.Default);
-
-        private static WingButton GridButton(RectTransform parent, string text, float x, float y,
-                                             float w, Action onClick, UiButtonStyle style) =>
-            WingUi.Button(parent, text, new Rect(x, y, w, RowHeight), FontSmall, style, onClick);
 
         /// <summary>Pin each page's two-line status/hover strip at the same bottom position, independent
         /// of content height.</summary>
@@ -1116,9 +1097,6 @@ namespace WingCommand
         private static Image Rule(RectTransform parent, Rect rect, Color color) =>
             WingUi.Rule(parent, rect, color);
 
-        private static WingButton Button(RectTransform parent, string text, Rect rect, Action onClick) =>
-            WingUi.Button(parent, text, rect, onClick);
-
         private static WingButton HitButton(RectTransform parent, Rect rect, Action onClick) =>
             WingUi.HitButton(parent, rect, onClick);
 
@@ -1256,6 +1234,9 @@ namespace WingCommand
             // Display active override behaviour before the retained order.
             string behaviour = WingBehaviourLabels.Label(m.Behaviour.BehaviourId);
             if (behaviour != null) return behaviour;
+
+            if (m.RefitPending) return "REFIT";
+            if (m.PatrolRoute) return "PATROL";
 
             // Keep Splash's distinct order label; the map already identifies its target and the column
             // cannot fit both.

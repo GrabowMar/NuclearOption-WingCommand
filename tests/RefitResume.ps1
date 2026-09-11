@@ -1,0 +1,151 @@
+# Run the production member transition methods against a small native-game boundary.
+$ErrorActionPreference = 'Stop'
+$memberSource = Get-Content "$PSScriptRoot/../Core/WingMember.cs" -Raw
+$taskingSource = Get-Content "$PSScriptRoot/../Core/WingMember.Tasking.cs" -Raw
+$methods = foreach ($name in @('RequestRefit', 'AbandonRefit', 'CompleteRefit', 'SetDirective', 'TryAdvanceQueue', 'CheckReserves')) {
+    $match = [regex]::Match($memberSource, "(?ms)^        (?:public|internal|private) (?:void|bool) $name\(.*?^        }")
+    if (!$match.Success) { throw "Missing member method: $name" }
+    $match.Value
+}
+$apply = [regex]::Match($memberSource, '(?ms)^        public void Apply\(WingDirective directive\).*?^        }').Value
+$resume = [regex]::Match($taskingSource, '(?ms)^        private bool CanResumeAfterRefit\(.*?^        }').Value
+$stores = [regex]::Match($taskingSource, '(?ms)^        private bool CombatStoresEmpty\s*\{.*?^        }').Value
+if (!$apply -or !$resume -or !$stores) { throw 'Missing production apply/resume/store transition' }
+$pure = foreach ($file in @('TaskRoute', 'StandingOrder')) {
+    (Get-Content "$PSScriptRoot/../Pure/$file.cs" -Raw) -replace '(?m)^using .*;\r?\n', ''
+}
+$boundary = @'
+using System;
+using System.Collections;
+using System.Collections.Generic;
+namespace WingCommand {
+internal enum WingOrder { Formation, ReturnToBase, Maneuver, FallBack, Attack, FireForEffect,
+    JamTarget, MoveToPoint, Engage, StandDown, LandHere, DeliverCargo, SeekAndDestroy }
+internal struct GlobalPosition { public int Id; }
+internal struct Vector3 { public static Vector3 forward => new Vector3(); public static Vector3 operator -(Vector3 v) => v; }
+internal class Transform { public Vector3 forward; }
+internal class Unit { public bool disabled; public object NetworkHQ; }
+internal class Aircraft : Unit {
+    public Transform transform;
+    public float NetworkfuelLevel;
+    public readonly FuelTank tank = new FuelTank();
+    public readonly List<WeaponStation> weaponStations = new List<WeaponStation> { new WeaponStation() };
+    public FuelTank[] GetFuelTanks() => new[] { tank };
+    public float GetFuelLevel() => tank.Fuel;
+    public void RpcRearm(RearmEventArgs args) {
+        for (int i = 0; i < args.Stations.Length; i++) weaponStations[i].Ammo += args.Stations[i];
+    }
+}
+internal class Pilot { public bool dead, ejected; }
+internal class FuelTank { public float Fuel; public void Refuel(float v) { Fuel = v; } }
+internal class WeaponStation { public int FullAmmo = 4, Ammo; public bool Cargo; public int GetAmmoTotal() => Ammo; }
+internal class RearmEventArgs { public Aircraft Rearmer; public int[] Stations; }
+internal static class Mathf { public static int Max(int a, int b) => Math.Max(a,b); }
+internal static class Time { public static float timeSinceLevelLoad = 50f; }
+internal class Setting { public bool Value = true; }
+internal class Settings { public Setting AutoReturnOnEmpty = new Setting(); public float BingoFuel = 0.15f; }
+internal static class Plugin { public static Settings Settings = new Settings(); }
+internal static class WingTuning { public const float BingoFuel = 0.15f; }
+internal static class WingComms { public enum Call { Bingo, OutOfAmmo } public static void Say(WingMember m, Call c) {} }
+internal static class TacticalCoordinator { public static void ReleaseSelection(Aircraft a) {} }
+internal static class TacticalMapOverlay { public static void Invalidate() {} }
+internal static class WingPilotRoster { public static int Sorties; public static void NoteSortie(Aircraft a) { Sorties++; } }
+internal static class WingOrderRules { public static bool CanQueueWhilePending(WingOrder o) => o != WingOrder.Maneuver; }
+internal static class WingOrderCatalog { public static bool CanApply(WingMember m, WingOrder o) => m.Alive; }
+internal static class FallBackState { public static GlobalPosition FriendlyLoiterPoint(Aircraft a, Vector3 v) => default; }
+internal class Brain { public void RequestEvaluation() {} }
+internal struct WingDirective {
+    public WingOrder Order; public Unit Target; public GlobalPosition Point;
+    public bool HasPoint;
+    public static WingDirective Simple(WingOrder o) => new WingDirective { Order = o };
+    public static WingDirective AtPoint(WingOrder o, GlobalPosition p) => new WingDirective { Order = o, Point = p, HasPoint = true };
+    public bool SameIntentAs(WingDirective other) => Order == other.Order && Target == other.Target && Point.Id == other.Point.Id;
+}
+internal class WingMember {
+    private readonly StandingOrder<WingDirective> standingOrder = new StandingOrder<WingDirective>(
+        WingDirective.Simple(WingOrder.Formation), (a,b) => a.SameIntentAs(b));
+    internal readonly TaskRoute<WingDirective> taskQueue = new TaskRoute<WingDirective>();
+    private bool applyKeepsQueue, deliveryPending;
+    private float engageActivityAt;
+    private readonly Brain brain = new Brain();
+    internal bool IsSurface, IsPanicking, AutoRefit;
+    private float joinedAt;
+    internal float Fuel => Aircraft.GetFuelLevel();
+    internal int Ammo { get { int total=0; foreach(var s in Aircraft.weaponStations) if (!s.Cargo) total+=s.Ammo; return total; } }
+    internal bool Alive => !Pilot.dead && !Pilot.ejected;
+    internal bool IsCommandable => Alive && !deliveryPending;
+    internal bool RefitPending { get; private set; }
+    internal Aircraft Aircraft = new Aircraft();
+    internal Pilot Pilot = new Pilot();
+    internal int Launches;
+    internal int directiveSerial => standingOrder.Revision;
+    internal WingDirective Directive => standingOrder.Current;
+    internal WingOrder Order => Directive.Order;
+    internal void Apply(WingOrder order) => Apply(WingDirective.Simple(order));
+    private void Resolve(bool force) {}
+    private void BeginRefitDeparture() { Launches++; deliveryPending = true; }
+'@
+$checks = @'
+}
+public static class RefitChecks {
+    private static void Check(bool pass, string message) { if (!pass) throw new Exception(message); }
+    public static void Run() {
+        var member = new WingMember();
+        var a = WingDirective.AtPoint(WingOrder.MoveToPoint, new GlobalPosition { Id = 1 });
+        var b = WingDirective.AtPoint(WingOrder.MoveToPoint, new GlobalPosition { Id = 2 });
+        member.Apply(a); member.taskQueue.Add(a); member.taskQueue.Add(b); member.taskQueue.SetRepeat(true);
+        int oldRevision = member.directiveSerial;
+        member.RequestRefit(); member.RequestRefit();
+        Check(member.RefitPending && member.Order == WingOrder.ReturnToBase, "Refit must own RTB");
+        Check(member.taskQueue.Count == 0, "Refit route must be suspended, not drawn as active");
+        member.CompleteRefit();
+        Check(member.Order == WingOrder.MoveToPoint && member.Directive.Point.Id == 1, "Resume current leg");
+        Check(member.taskQueue.Count == 2 && member.taskQueue.Repeat, "Resume full patrol loop");
+        Check(member.Launches == 1 && !member.RefitPending, "Exactly one relaunch");
+        Check(member.Aircraft.NetworkfuelLevel == 1f && member.Aircraft.weaponStations[0].Ammo == 4, "Native resupply");
+        Check(!member.TryAdvanceQueue(oldRevision), "Ignore stale pre-refit completion");
+        Check(member.taskQueue[0].Point.Id == 1, "Stale callback cannot mutate restored route");
+        member.CompleteRefit();
+        Check(member.Launches == 1, "Duplicate completion cannot launch twice");
+
+        var replaced = new WingMember();
+        replaced.Apply(a); replaced.RequestRefit(); replaced.Apply(b); replaced.CompleteRefit();
+        Check(replaced.Directive.Point.Id == 2 && replaced.Launches == 0, "New order wins during refit");
+
+        var rtb = new WingMember();
+        rtb.Apply(a); rtb.RequestRefit(); rtb.Apply(WingOrder.ReturnToBase); rtb.CompleteRefit();
+        Check(!rtb.RefitPending && rtb.Launches == 0, "Identical RTB explicitly cancels refit");
+
+        var target = new Unit { NetworkHQ = new object() };
+        var attack = new WingMember();
+        attack.Apply(new WingDirective { Order = WingOrder.Attack, Target = target });
+        attack.RequestRefit(); target.disabled = true; attack.CompleteRefit();
+        Check(attack.Order == WingOrder.Formation, "Destroyed target falls back to formation");
+
+        var captured = new WingMember();
+        target.disabled = false;
+        captured.Apply(new WingDirective { Order = WingOrder.Attack, Target = target });
+        captured.RequestRefit(); target.NetworkHQ = captured.Aircraft.NetworkHQ; captured.CompleteRefit();
+        Check(captured.Order == WingOrder.Formation, "Friendly target must not resume");
+
+        var dry = new WingMember { AutoRefit=true };
+        dry.Aircraft.tank.Fuel=1f; dry.Apply(a); dry.CheckReserves();
+        Check(dry.RefitPending, "Empty fitted combat stores trigger refit during a route");
+        var unarmed = new WingMember { AutoRefit=true };
+        unarmed.Aircraft.tank.Fuel=1f; unarmed.Aircraft.weaponStations.Clear(); unarmed.Apply(a); unarmed.CheckReserves();
+        Check(!unarmed.RefitPending && unarmed.Order==WingOrder.MoveToPoint, "Unarmed route must not refit forever");
+        unarmed.Aircraft.tank.Fuel=0.1f; unarmed.CheckReserves();
+        Check(unarmed.RefitPending, "Bingo refits an unarmed route");
+        var cargo = new WingMember { AutoRefit=true };
+        cargo.Apply(WingOrder.DeliverCargo); cargo.CheckReserves();
+        Check(!cargo.RefitPending && cargo.Order==WingOrder.DeliverCargo, "Deliberate cargo task takes priority");
+        var disabled = new WingMember { AutoRefit=true };
+        disabled.Apply(a); Plugin.Settings.AutoReturnOnEmpty.Value=false; disabled.CheckReserves();
+        Check(!disabled.RefitPending && disabled.Order==WingOrder.MoveToPoint, "Respect global automatic-return switch");
+    }
+}
+}
+'@
+Add-Type -TypeDefinition ($boundary + ($methods -join "`n") + $apply + $resume + $stores + $checks + ($pure -join "`n")) -IgnoreWarnings -WarningAction SilentlyContinue
+[WingCommand.RefitChecks]::Run()
+Write-Output 'Refit resume lifecycle checks passed.'

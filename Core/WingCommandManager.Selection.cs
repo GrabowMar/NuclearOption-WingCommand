@@ -4,6 +4,27 @@ namespace WingCommand
 {
     internal partial class WingCommandManager
     {
+        internal void RecallFlightGroup(int index)
+        {
+            Selection.RecallGroup(index, Wing);
+            CancelMapOrder(notify: false);
+            foreach (WingMember member in Wing.Members) WingMarkers.Repaint(member.Aircraft);
+        }
+
+        internal void SaveFlightGroup(int index, string name) =>
+            Selection.Groups.Save(index, name, Selection.Snapshot(Wing));
+
+        internal void SetPatrolRoute(bool enabled)
+        {
+            foreach (WingMember member in Commands.Scope(wholeWing: false)) member.SetPatrolRoute(enabled);
+        }
+
+        internal void SetAutoRefit(bool enabled)
+        {
+            foreach (WingMember member in Commands.Scope(wholeWing: false))
+                if (!member.IsSurface) member.AutoRefit = enabled;
+        }
+
         internal bool MapOrderArmed => mapLayer != null && mapLayer.PointArmed;
         internal WingOrder ArmedMapOrder => mapLayer != null ? mapLayer.ArmedOrder : default;
         internal float MapMoveAltitude => mapLayer != null ? mapLayer.MoveAltitude : 0f;

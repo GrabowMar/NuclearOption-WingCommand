@@ -28,6 +28,49 @@ namespace WingCommand.PureTests
     public class WingCommandSelectionTests
     {
         [Fact]
+        public void NamedGroupsRecallOnlyTheirSurvivingMembersAndResetBetweenMissions()
+        {
+            var wing = new WingRegistry();
+            var first = new WingMember();
+            var second = new WingMember();
+            var third = new WingMember();
+            wing.Members.AddRange(new[] { first, second, third });
+            var selection = new WingCommandSelection();
+            for (int i = 0; i < FlightGroups<WingMember>.Count; i++)
+            {
+                Assert.False(selection.Groups.Exists(i));
+                Assert.Null(selection.Groups.Name(i));
+            }
+            selection.Groups.Save(0, "  ", selection.Snapshot(wing));
+            Assert.False(selection.Groups.Exists(0));
+            selection.SelectOnly(first);
+            selection.Toggle(second);
+            selection.Groups.Save(0, "  Cover  ", selection.Snapshot(wing));
+            selection.SelectOnly(third);
+            selection.Groups.Save(1, "Strike", selection.Snapshot(wing));
+            Assert.Equal("Cover", selection.Groups.Name(0));
+            selection.RecallGroup(0, wing);
+            Assert.Equal(new[] { first, second }, selection.Snapshot(wing));
+            second.Alive = false;
+            wing.Members.Remove(first);
+            selection.RecallGroup(0, wing);
+            Assert.True(selection.IsNone);
+            Assert.Empty(selection.Snapshot(wing));
+            selection.RecallGroup(1, wing);
+            Assert.Equal(new[] { third }, selection.Snapshot(wing));
+            selection.Groups.Clear(1);
+            Assert.False(selection.Groups.Exists(1));
+            Assert.Null(selection.Groups.Name(1));
+            Assert.True(third.Alive);
+            Assert.Contains(third, wing.Members);
+            selection.Reset();
+            Assert.Null(selection.Groups.Name(0));
+            Assert.False(selection.Groups.Exists(0));
+            Assert.Empty(selection.GroupMembers(0, wing));
+            Assert.Empty(selection.GroupMembers(1, wing));
+        }
+
+        [Fact]
         public void RosterAndMapClicksShareScopeAndSelectAllRestoresTheWholeFlight()
         {
             var first = new WingMember();

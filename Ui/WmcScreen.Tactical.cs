@@ -19,42 +19,28 @@ namespace WingCommand
         {
             y = Heading(parent, y, "ENGAGEMENT - ROE APPLIES TO ALL");
 
-            float left = Pad + GutterWidth;
-            float w = PanelWidth - Pad - left;
-
-            // Three wing-wide ROE choices form an escalation, not a toggle.
-            Gutter(parent, y, "ROE");
-            float roeWidth = (w - Gap * 2f) / 3f;
-            // Reuse ROE hints for hover and resting status text.
-            holdButton = Button(parent, "HOLD", new Rect(left, y, roeWidth, RowHeight),
-                                () => SetRoe(WingRoe.Hold))
-                         .WithTooltip("HOLD - " + RoeRules.Hint(WingRoe.Hold));
-            tightButton = Button(parent, "TIGHT",
-                                  new Rect(left + roeWidth + Gap, y, roeWidth, RowHeight),
-                                  () => SetRoe(WingRoe.Tight))
-                           .WithTooltip("TIGHT - " + RoeRules.Hint(WingRoe.Tight));
-            freeButton = Button(parent, "FREE",
-                                new Rect(left + (roeWidth + Gap) * 2f, y, roeWidth, RowHeight),
-                                () => SetRoe(WingRoe.Free))
-                         .WithTooltip("FREE - " + RoeRules.Hint(WingRoe.Free));
-            y -= RowHeight + Gap;
-
-            // Scope weapon preference to selected members so mixed flights can favour different roles.
-            Gutter(parent, y, "WEAPON");
-            float preferenceWidth = (w - Gap * (preferenceButtons.Length - 1)) / preferenceButtons.Length;
+            float w = TacticalCellWidth;
+            Gutter(parent, y, "ROE / ALL");
+            holdButton = TacticalButton(parent, "HOLD", TacticalColumn(1), y, w,
+                () => SetRoe(WingRoe.Hold), UiButtonStyle.Toggle)
+                .WithTooltip("HOLD - " + RoeRules.Hint(WingRoe.Hold));
+            tightButton = TacticalButton(parent, "TIGHT", TacticalColumn(2), y, w,
+                () => SetRoe(WingRoe.Tight), UiButtonStyle.Toggle)
+                .WithTooltip("TIGHT - " + RoeRules.Hint(WingRoe.Tight));
+            freeButton = TacticalButton(parent, "FREE", TacticalColumn(3), y, w,
+                () => SetRoe(WingRoe.Free), UiButtonStyle.Toggle)
+                .WithTooltip("FREE - " + RoeRules.Hint(WingRoe.Free));
+            y -= TacticalButtonHeight + Gap;
             for (int i = 0; i < preferenceButtons.Length; i++)
             {
                 WingWeaponPreference preference = WingWeaponPreferences.All[i];
-                preferenceButtons[i] = WingUi.Button(
-                    parent, WingWeaponPreferences.Label(preference),
-                    new Rect(left + (preferenceWidth + Gap) * i, y, preferenceWidth, RowHeight),
-                    FontSmall,
-                    () => WingCommandManager.Instance?.SetWeaponPreference(preference))
-                    .WithTooltip(WingWeaponPreferences.Label(preference) + " - " +
-                                 WingWeaponPreferences.Hint(preference) +
-                                 " Applies to the selected wingmen only.");
+                preferenceButtons[i] = TacticalButton(parent, WingWeaponPreferences.Label(preference),
+                    TacticalColumn(i), y, w,
+                    () => WingCommandManager.Instance?.SetWeaponPreference(preference), UiButtonStyle.Toggle)
+                    .WithTooltip("WEAPON " + WingWeaponPreferences.Label(preference) + " - " +
+                        WingWeaponPreferences.Hint(preference) + " Selected aircraft only.");
             }
-            y -= RowHeight + Gap;
+            y -= TacticalButtonHeight + Gap;
             return y;
         }
 
@@ -73,46 +59,42 @@ namespace WingCommand
             float w = PanelWidth - Pad * 2f;
             WingUi.TacticalCard(parent, new Rect(Pad, y, w, RowHeight), WingUi.RailEmerald);
 
-            const float actionWidth = WingUi.ButtonAction;
+            const float actionWidth = TacticalCellWidth;
             summaryLabel = Label(parent, "",
                                  new Rect(Pad + Space3, y, w - actionWidth - Space4,
                                           RowHeight),
                                  Friendly(), FontSmall, FontStyles.Bold, TextAlignmentOptions.MidlineLeft);
             WingUi.Button(parent, "SELECT ALL",
-                          new Rect(PanelWidth - Pad - actionWidth - Space1, y - 2f, actionWidth, RowHeight - 4f),
-                          FontMicro, UiButtonStyle.Primary,
+                          new Rect(TacticalColumn(3), y, actionWidth, TacticalButtonHeight),
+                          FontSmall, UiButtonStyle.Primary,
                           () => WingCommandManager.Instance?.SelectAllMembers())
                 .WithTooltip(OrderHint.SelectAll);
             y -= RowHeight + Space1;
-            Hint(parent, y, "Click a row to select. Shift-click to add or remove.");
-            return y - LineHeight - Space2;
+            return y - Space1;
         }
 
         private static float AddRosterArea(RectTransform parent, float y)
         {
-            y = Heading(parent, y, "FLIGHT");
-
-            // Align headers with roster values.
+            rosterExpandButton = WingUi.Button(parent, "FLIGHT [+]", new Rect(Pad, y, TacticalCellWidth, TacticalButtonHeight),
+                FontSmall, UiButtonStyle.Quiet, ToggleRosterExpanded)
+                .WithTooltip("Expand to six aircraft per page, or collapse to three. Selection is preserved.");
+            rosterPrevButton = WingUi.Button(parent, "PREV", new Rect(TacticalColumn(2), y, TacticalCellWidth, TacticalButtonHeight),
+                FontSmall, () => TurnRosterPage(-1)).WithTooltip("Previous flight page");
+            rosterPageLabel = Label(parent, "", new Rect(TacticalColumn(1), y, TacticalCellWidth, TacticalButtonHeight),
+                Friendly(), FontSmall, FontStyles.Normal, TextAlignmentOptions.Center);
+            rosterNextButton = WingUi.Button(parent, "NEXT", new Rect(TacticalColumn(3), y, TacticalCellWidth, TacticalButtonHeight),
+                FontSmall, () => TurnRosterPage(1)).WithTooltip("Next flight page");
+            y -= RowHeight + Gap;
             float w = PanelWidth - Pad * 2f;
             y = ColumnHeaders(parent, y, RosterColumns);
-
             float h = RowPitch * RosterRowsPerPage;
-
             var area = new GameObject("Roster", typeof(RectTransform));
             rosterArea = area.GetComponent<RectTransform>();
             rosterArea.SetParent(parent, worldPositionStays: false);
             Place(rosterArea, new Rect(Pad, y, w, h));
-
             rosterEmptyLabel = EmptyNote(rosterArea,
-                "No wingmen. Requisition aircraft on the SUPPLY tab, or ASSIGN a friendly " +
-                "AI aircraft selected on the map.");
-
-            y -= h + Gap;
-
-            rosterPrevButton = Pager(parent, y, "<", () => TurnRosterPage(-1));
-            rosterPageLabel = PagerLabel(parent, y);
-            rosterNextButton = Pager(parent, y, ">", () => TurnRosterPage(1));
-            return y - RowHeight - Gap;
+                "No wingmen. Requisition on SUPPLY, or assign friendly AI from the map.");
+            return y - h - Gap;
         }
 
 
@@ -121,200 +103,122 @@ namespace WingCommand
         private static float AddActions(RectTransform parent, float y)
         {
             y = Heading(parent, y, "ORDERS - SELECTED SCOPE");
-            float w = (PanelWidth - Pad * 2f - Gap * 2f) / 3f;
+            y = AddTacticalTabs(parent, y, new[] { "1 COMBAT", "2 TASKING", "3 ROUTE" },
+                orderPages, orderTabs, index => SetOrderPage(index));
+            RectTransform combat = orderPages[0];
+            RectTransform tasking = orderPages[1];
+            RectTransform route = orderPages[2];
+            float top = y;
+            parent = combat;
+            float w = TacticalCellWidth;
 
             // Use compact order labels and put detailed distinctions in status help.
-            GridButton(parent, "Form Up", Pad, y, w,
+            TacticalButton(parent, "Form Up", Pad, y, w,
                        () => Order(WingAction.Rejoin)).WithTooltip(OrderHint.Rejoin);
-            attackButton = GridButton(parent, "Attack Target", Pad + w + Gap, y, w,
+            attackButton = TacticalButton(parent, "Attack Target", Pad + w + Gap, y, w,
                                       () => WingCommandManager.Instance?.SelectMapOrder(WingOrder.Attack),
                                       UiButtonStyle.Toggle)
                            .WithTooltip(OrderHint.Attack);
-            GridButton(parent, "Splash", Pad + (w + Gap) * 2f, y, w,
+            TacticalButton(parent, "Splash", Pad + (w + Gap) * 2f, y, w,
                        () => Order(WingAction.FireForEffect)).WithTooltip(OrderHint.FireForEffect);
-            y -= RowHeight + Gap;
-
-            GridButton(parent, "Engage", Pad, y, w,
+            TacticalButton(parent, "Engage", TacticalColumn(3), y, w,
                        () => Order(WingAction.Engage)).WithTooltip(OrderHint.Engage);
-            seekAndDestroyButton = GridButton(parent, "Seek & Destroy", Pad + w + Gap, y, w,
+            y -= TacticalButtonHeight + Gap;
+            seekAndDestroyButton = TacticalButton(parent, "Seek & Destroy", Pad, y, w,
                                               () => WingCommandManager.Instance?.SelectMapOrder(WingOrder.SeekAndDestroy),
                                               UiButtonStyle.Toggle)
                                   .WithTooltip(OrderHint.SeekAndDestroy);
-            GridButton(parent, "Disengage", Pad + (w + Gap) * 2f, y, w,
+            TacticalButton(parent, "Disengage", TacticalColumn(1), y, w,
                        () => Order(WingAction.FallBack)).WithTooltip(OrderHint.Disengage);
-            y -= RowHeight + Gap;
+            y -= TacticalButtonHeight + Gap;
 
-            holdHereButton = GridButton(parent, "Hold Here", Pad, y, w,
+            parent = tasking;
+            y = top;
+            holdHereButton = TacticalButton(parent, "Hold Here", Pad, y, w,
                                         () => WingCommandManager.Instance?.SelectMapOrder(WingOrder.OrbitHere),
                                         UiButtonStyle.Toggle)
                              .WithTooltip(OrderHint.HoldHere);
 
-            jamButton = GridButton(parent, "Jam", Pad + w + Gap, y, w,
+            jamButton = TacticalButton(parent, "Jam", Pad + w + Gap, y, w,
                                    () => Order(WingAction.JamMyTarget))
                         .WithTooltip(OrderHint.Jam);
 
             // Cargo arms a point; explain the second-press native-route fallback in status.
-            cargoButton = GridButton(parent, "Cargo", Pad + (w + Gap) * 2f, y, w,
+            cargoButton = TacticalButton(parent, "Cargo", Pad + (w + Gap) * 2f, y, w,
                                      () => WingCommandManager.Instance?.SelectMapOrder(WingOrder.DeliverCargo),
                                      UiButtonStyle.Toggle)
                           .WithTooltip(OrderHint.DeliverCargo);
-            y -= RowHeight + Gap;
-
-            landButton = GridButton(parent, "Land", Pad, y, w,
+            landButton = TacticalButton(parent, "Land", TacticalColumn(3), y, w,
                                     () => WingCommandManager.Instance?.SelectMapOrder(WingOrder.LandHere),
                                     UiButtonStyle.Toggle)
                          .WithTooltip(OrderHint.LandHere);
-            GridButton(parent, "Refit", Pad + w + Gap, y, w,
+            y -= TacticalButtonHeight + Gap;
+            TacticalButton(parent, "Refit", Pad, y, w,
                        () => Order(WingAction.Refit))
-                .WithTooltip("REFIT - land at base, refill fuel and ammunition, then relaunch and rejoin.");
-            GridButton(parent, "Stand Down", Pad + (w + Gap) * 2f, y, w,
+                .WithTooltip("REFIT - land at base, refill fuel and ammunition, then resume this task and route. A new order cancels the saved task.");
+            TacticalButton(parent, "Stand Down", TacticalColumn(1), y, w,
                        () => Order(WingAction.StandDown))
                 .WithTooltip(OrderHint.StandDown);
-            y -= RowHeight + Gap;
+            y -= TacticalButtonHeight + Gap;
 
-            float tuneW = (PanelWidth - Pad * 2f - Gap * 3f) / 4f;
-            GridButton(parent, "ALT +", Pad, y, tuneW,
+            parent = route;
+            y = top;
+            y = AddRouteControls(parent, y);
+            float tuneW = TacticalCellWidth;
+            TacticalButton(parent, "ALT +", Pad, y, tuneW,
                        () => WingCommandManager.Instance?.StepMoveHeight(1))
                 .WithTooltip(OrderHint.HeightUp);
-            GridButton(parent, "ALT -", Pad + tuneW + Gap, y, tuneW,
+            TacticalButton(parent, "ALT -", Pad + tuneW + Gap, y, tuneW,
                        () => WingCommandManager.Instance?.StepMoveHeight(-1))
                 .WithTooltip(OrderHint.HeightDown);
-            GridButton(parent, "SPD +", Pad + (tuneW + Gap) * 2f, y, tuneW,
+            TacticalButton(parent, "SPD +", Pad + (tuneW + Gap) * 2f, y, tuneW,
                        () => WingCommandManager.Instance?.StepMoveSpeed(1))
                 .WithTooltip(OrderHint.SpeedUp);
-            GridButton(parent, "SPD -", Pad + (tuneW + Gap) * 3f, y, tuneW,
+            TacticalButton(parent, "SPD -", Pad + (tuneW + Gap) * 3f, y, tuneW,
                        () => WingCommandManager.Instance?.StepMoveSpeed(-1))
                 .WithTooltip(OrderHint.SpeedDown);
-            y -= RowHeight + Gap;
+            y -= TacticalButtonHeight + Gap;
 
-            y = AddFormationAndDoctrine(parent, y);
+            routeLabel = Label(route, "", new Rect(Pad, y, PanelWidth - Pad * 2f, LineHeight),
+                Friendly(), FontSmall, FontStyles.Normal, TextAlignmentOptions.Left);
+            Hint(combat, y, "Combat orders apply to the selected aircraft.");
+            Hint(tasking, y, "Hold, logistics and recovery for the selection.");
+            SetOrderPage(orderPage);
+            return y - LineHeight - Gap;
 
-            return y;
         }
 
-        private static TMP_Text doctrineTitleLabel;
-        private static TMP_Text doctrineProfileLabel;
-        private static TMP_Text doctrineRulesLabel;
-        private static TMP_Text doctrineWeaponsLabel;
         private static WingButton[] formationButtons;
-        private static float formationRadarCenterY;
-        private static readonly List<RectTransform> formationWingmenDots = new List<RectTransform>();
-        private static readonly List<Image> formationVectorLines = new List<Image>();
 
-        private static string ShortFormationName(FormationShape shape)
+        private static float AddFlightGeometry(RectTransform parent, float y)
         {
-            switch (shape)
-            {
-                case FormationShape.EchelonRight: return "ECH R";
-                case FormationShape.EchelonLeft:  return "ECH L";
-                case FormationShape.LineAbreast:  return "ABREAST";
-                case FormationShape.Trail:        return "TRAIL";
-                case FormationShape.CombatSpread: return "SPREAD";
-                case FormationShape.FingerFour:   return "FINGER 4";
-                case FormationShape.Vic:          return "VIC";
-                case FormationShape.Diamond:      return "DIAMOND";
-                case FormationShape.Ladder:       return "LADDER";
-                case FormationShape.Wall:         return "WALL";
-                default: return shape.ToString().ToUpperInvariant();
-            }
-        }
-
-        private static float AddFormationAndDoctrine(RectTransform parent, float y)
-        {
-            y = Heading(parent, y, "FORMATION - WHOLE FLIGHT");
-
-            float w = PanelWidth - Pad * 2f;
-            const float radarW = 108f;
-            const float boxH = 88f;
-
-            // Formation preview.
-            WingUi.TacticalCard(parent, new Rect(Pad, y, radarW, boxH), WingUi.RailEmerald);
-
-            // Low-opacity preview crosshairs.
-            Color crosshairCol = new Color(WingUi.RailEmerald.r, WingUi.RailEmerald.g, WingUi.RailEmerald.b, 0.25f);
-            Rule(parent, new Rect(Pad + radarW * 0.5f, y - 6f, 1f, boxH - 28f), crosshairCol);
-            Rule(parent, new Rect(Pad + 6f, y - (boxH - 20f) * 0.5f, radarW - 12f, 1f), crosshairCol);
-
-            float radarCenterX = Pad + radarW * 0.5f;
-            formationRadarCenterY = y - 22f;
-
-            // Centred leader symbol.
-            Label(parent, "^", new Rect(radarCenterX - 10f, formationRadarCenterY - 6f, 20f, 16f),
-                  Green(), FontSmall, FontStyles.Bold, TextAlignmentOptions.Center);
-            Label(parent, "LDR", new Rect(radarCenterX - 15f, formationRadarCenterY + 10f, 30f, 10f),
-                  Green(), FontMicro, FontStyles.Bold, TextAlignmentOptions.Center);
-
-            // Three follower markers with slot connections.
-            formationWingmenDots.Clear();
-            formationVectorLines.Clear();
-
-            for (int i = 0; i < 3; i++)
-            {
-                var line = Rule(parent, new Rect(radarCenterX, formationRadarCenterY, 1f, 1f),
-                                new Color(WingUi.RailEmerald.r, WingUi.RailEmerald.g, WingUi.RailEmerald.b, 0.35f));
-                formationVectorLines.Add(line);
-
-                var dotGo = new GameObject("WingmanDot_" + i, typeof(RectTransform));
-                var rt = dotGo.GetComponent<RectTransform>();
-                rt.SetParent(parent, worldPositionStays: false);
-                Label(rt, (i + 1).ToString(), new Rect(0f, 0f, 16f, 16f), Friendly(), FontSmall, FontStyles.Bold, TextAlignmentOptions.Center);
-                Place(rt, new Rect(radarCenterX, formationRadarCenterY, 16f, 16f));
-                formationWingmenDots.Add(rt);
-            }
-
-            // Combat-doctrine readouts.
-            float docX = Pad + radarW + Gap;
-            float docW = w - radarW - Gap;
-
-            WingUi.TacticalCard(parent, new Rect(docX, y, docW, boxH), WingUi.RailCyan);
-
-            float lineY = y - 4f;
-            doctrineTitleLabel = Label(parent, "",
-                new Rect(docX + Space2, lineY, docW - Space3, 16f),
-                Green(), FontSmall, FontStyles.Bold, TextAlignmentOptions.Left);
-            lineY -= 18f;
-
-            doctrineProfileLabel = Label(parent, "",
-                new Rect(docX + Space2, lineY, docW - Space3, LineHeight),
-                Friendly(), FontSmall, FontStyles.Normal, TextAlignmentOptions.Left);
-            lineY -= 20f;
-
-            doctrineRulesLabel = Label(parent, "",
-                new Rect(docX + Space2, lineY, docW - Space3, LineHeight),
-                Friendly(), FontSmall, FontStyles.Normal, TextAlignmentOptions.Left);
-            lineY -= 20f;
-
-            doctrineWeaponsLabel = Label(parent, "",
-                new Rect(docX + Space2, lineY, docW - Space3, LineHeight),
-                WingUi.TextPrimary, FontSmall, FontStyles.Normal, TextAlignmentOptions.Left);
-
-            y -= boxH + Space2;
-
-            // Formation choices below the preview.
-            const int cols = 5;
-            const float btnH = RowHeight;
-            float btnW = (w - (cols - 1) * Gap) / cols;
+            y = Heading(parent, y, "FLIGHT GEOMETRY / MANOEUVRES");
+            y = AddTacticalTabs(parent, y, new[] { "1 FORMATION", "2 MANOEUVRES" },
+                geometryPages, geometryTabs, index => SetGeometryPage(index));
+            y = AddTacticalPreview(parent, y);
+            const int columns = 4;
+            float w = (PanelWidth - Pad * 2f - Gap * (columns - 1)) / columns;
             formationButtons = new WingButton[FormationShapes.All.Length];
-
             for (int i = 0; i < FormationShapes.All.Length; i++)
             {
                 FormationShape shape = FormationShapes.All[i];
-                int col = i % cols;
-                int row = i / cols;
-                float bx = Pad + col * (btnW + Gap);
-                float by = y - row * (btnH + Gap);
-
-                formationButtons[i] = WingUi.Button(
-                    parent, ShortFormationName(shape),
-                    new Rect(bx, by, btnW, btnH),
-                    FontSmall, UiButtonStyle.Toggle,
-                    () => SetFormationShape(shape))
-                    .WithTooltip(FormationShapes.Pretty(shape) + " formation geometry");
+                formationButtons[i] = TacticalButton(geometryPages[0], FormationShapes.Pretty(shape),
+                    Pad + i % columns * (w + Gap), y - i / columns * (TacticalButtonHeight + Gap), w,
+                    () => SetFormationShape(shape), UiButtonStyle.Toggle)
+                    .WithTooltip(FormationShapes.Pretty(shape) + " - applies to the whole flight.");
             }
-
-            int rows = Mathf.CeilToInt(FormationShapes.All.Length / (float)cols);
-            y -= rows * btnH + (rows - 1) * Gap + Space2;
-            return y;
+            for (int i = 0; i < TacticalManeuvers.Length; i++)
+            {
+                ManeuverKind kind = TacticalManeuvers[i];
+                maneuverButtons[i] = TacticalButton(geometryPages[1], ManeuverCatalog.Label(kind),
+                    Pad + i % columns * (w + Gap), y - i / columns * (TacticalButtonHeight + Gap), w,
+                    () => WingCommandManager.Instance?.ExecuteManeuver(kind, wholeWing: false))
+                    .WithTooltip(ManeuverCatalog.Label(kind) + " - selected wingmen; needs " +
+                        ManeuverCatalog.MinEntryAltitudeAgl(kind) + " m AGL and safe entry speed.");
+            }
+            SetGeometryPage(geometryPage);
+            int rows = Mathf.CeilToInt(Mathf.Max(FormationShapes.All.Length, TacticalManeuvers.Length) / (float)columns);
+            return y - rows * (TacticalButtonHeight + Gap);
         }
 
         private static void SetFormationShape(FormationShape shape)
@@ -482,7 +386,7 @@ namespace WingCommand
                 landButton?.SetEnabled(canLand && WingRegistry.IsRotary(wing.Leader));
                 seekAndDestroyButton?.SetEnabled(canSeekAndDestroy);
 
-                // Require a jam-capable member in scope; manoeuvres are offered on the radial.
+                // Require a jam-capable member in scope.
                 jamButton?.SetEnabled(canJam);
 
                 bool armed = manager.MapOrderArmed;
@@ -500,11 +404,12 @@ namespace WingCommand
                     ? manager.MapStatus
                     : EngagementHint(wing, shared));
 
+            RefreshTacticalNavigation(wing);
             RefreshRoster(wing);
-            UpdateFormationAndDoctrine(wing, shared);
+            RefreshFlightGeometry();
         }
 
-        private static void UpdateFormationAndDoctrine(WingRegistry wing, WingWeaponPreference? shared)
+        private static void RefreshFlightGeometry()
         {
             FormationShape shape = WingFormation.Shape;
 
@@ -519,65 +424,7 @@ namespace WingCommand
                 }
             }
 
-            const float radarW = 108f;
-            float radarCenterX = Pad + radarW * 0.5f;
-
-            int totalInWing = (wing != null ? wing.Count : 0) + WingShopDelivery.PendingCount;
-            for (int i = 0; i < formationWingmenDots.Count; i++)
-            {
-                Vector3 coord = FormationSolver.SlotCoordinates(i + 1, shape, 1f, 1f);
-                float px = radarCenterX + Mathf.Clamp(coord.x * 16f, -44f, 44f);
-                float py = formationRadarCenterY + Mathf.Clamp(coord.z * 16f, -48f, 12f);
-
-                RectTransform dot = formationWingmenDots[i];
-                if (dot != null)
-                {
-                    Place(dot, new Rect(px - 8f, py + 8f, 16f, 16f));
-                    bool inWing = i < totalInWing;
-                    dot.gameObject.SetActive(true);
-                    var lbl = dot.GetComponentInChildren<TMP_Text>();
-                    if (lbl != null) lbl.color = inWing ? Green() : new Color(0.4f, 0.6f, 0.55f, 0.45f);
-                }
-
-                if (i < formationVectorLines.Count && formationVectorLines[i] != null)
-                {
-                    Image line = formationVectorLines[i];
-                    float dx = px - radarCenterX;
-                    float dy = py - formationRadarCenterY;
-                    float dist = Mathf.Sqrt(dx * dx + dy * dy);
-                    float angle = Mathf.Atan2(dy, dx) * Mathf.Rad2Deg;
-
-                    RectTransform lineRt = line.rectTransform;
-                    lineRt.sizeDelta = new Vector2(dist, 1f);
-                    lineRt.anchoredPosition = new Vector2(radarCenterX, formationRadarCenterY);
-                    lineRt.localRotation = Quaternion.Euler(0f, 0f, angle);
-                    bool inWing = i < totalInWing;
-                    line.color = inWing ? new Color(0.2f, 0.65f, 0.45f, 0.45f) : new Color(0.2f, 0.35f, 0.3f, 0.2f);
-                }
-            }
-
-            string roeName = wing != null ? RoeRules.Label(wing.Roe) : "HOLD";
-            string wepName = shared.HasValue ? WingWeaponPreferences.Label(shared.Value) : "MIXED";
-            if (wing == null || wing.Count == 0 || WingCommandManager.Instance?.Selection.IsNone == true)
-                wepName = "NONE";
-            string shapeName = FormationShapes.Pretty(shape).ToUpperInvariant();
-
-            if (doctrineTitleLabel != null)
-                doctrineTitleLabel.text = shapeName;
-
-            if (doctrineProfileLabel != null)
-                doctrineProfileLabel.text = "ROE: " + roeName + "  /  WHOLE FLIGHT";
-
-            if (doctrineRulesLabel != null)
-            {
-                doctrineRulesLabel.text = "WEAPONS: " + wepName + "  /  SELECTED";
-            }
-
-            if (doctrineWeaponsLabel != null)
-            {
-                doctrineWeaponsLabel.text = "FLIGHT " + (wing?.Count ?? 0) +
-                    "  /  INBOUND " + WingShopDelivery.PendingCount;
-            }
+            RefreshTacticalPreview();
         }
 
         /// <summary>Summarise ROE first, adding weapon preference only when non-Auto.</summary>
@@ -599,21 +446,23 @@ namespace WingCommand
             if (rosterEmptyLabel != null && rosterEmptyLabel.gameObject.activeSelf != empty)
                 rosterEmptyLabel.gameObject.SetActive(empty);
 
-            int pages = Mathf.Max(1, Mathf.CeilToInt(totalCount / (float)RosterRowsPerPage));
+            int visibleRows = rosterExpanded ? ExpandedRosterRows : RosterRowsPerPage;
+            int pages = Mathf.Max(1, Mathf.CeilToInt(totalCount / (float)visibleRows));
             rosterPage = Mathf.Clamp(rosterPage, 0, pages - 1);
             if (rosterPageLabel != null)
-                rosterPageLabel.text = PageSummary(totalCount, rosterPage, pages,
-                                                    "WINGMAN", "WINGMEN");
+                rosterPageLabel.text = (rosterPage + 1) + "/" + pages;
+            rosterExpandButton?.SetText("FLIGHT " + totalCount + (rosterExpanded ? " [-]" : " [+]"));
 
             rosterPrevButton?.SetEnabled(rosterPage > 0);
             rosterNextButton?.SetEnabled(rosterPage < pages - 1);
 
-            SyncRosterRows(RosterRowsPerPage);
-            int first = rosterPage * RosterRowsPerPage;
+            SyncRosterRows(visibleRows);
+            int first = rosterPage * visibleRows;
 
             for (int i = 0; i < rosterRows.Count; i++)
             {
                 int index = first + i;
+                if (i >= visibleRows) { rosterRows[i].Hide(); continue; }
                 if (index < wing.Count)
                 {
                     rosterRows[i].Bind(wing.Members[index]);
@@ -732,14 +581,14 @@ namespace WingCommand
 
                 // LD toggles temporary flight lead for the other members.
                 lead = WingUi.Button(rt, "LD",
-                                     new Rect(leadX, -1f, leadWidth, RowHeight - 2f),
+                                     new Rect(leadX, 0f, leadWidth, RowHeight),
                                      FontMicro, UiButtonStyle.Default, ToggleLead)
                              .WithTooltip("Flight lead - the rest of the wing formates on this " +
                                           "wingman while it takes your orders. Press again to release.");
 
                 // RTB removes the member from active command and sends it home.
                 release = WingUi.Button(rt, "RTB",
-                                        new Rect(releaseX, -1f, releaseWidth, RowHeight - 2f),
+                                        new Rect(releaseX, 0f, releaseWidth, RowHeight),
                                         FontSmall, UiButtonStyle.Danger, ConfirmRelease)
                                 .WithTooltip(OrderHint.ReturnToBase);
             }

@@ -52,7 +52,7 @@ namespace WingCommand
 
         private readonly float joinedAt;
         private WingRegistry owner;
-        private readonly List<WingDirective> taskQueue = new List<WingDirective>();
+        private readonly TaskRoute<WingDirective> taskQueue = new TaskRoute<WingDirective>();
         private bool applyKeepsQueue;
         private float moveAltitude;
         private float moveSpeed;
@@ -71,13 +71,21 @@ namespace WingCommand
         /// WingRecovery calls CompleteRefit instead of settling this return into stock.</summary>
         public void RequestRefit()
         {
-            Apply(WingOrder.ReturnToBase);
+            if (!IsCommandable || IsSurface || RefitPending) return;
+            taskQueue.Suspend(Directive);
+            applyKeepsQueue = true;
+            try { Apply(WingOrder.ReturnToBase); }
+            finally { applyKeepsQueue = false; }
             RefitPending = true;
         }
 
         /// <summary>Cancel refit so recovery can settle normal RTB, including after native pilot
         /// ejection.</summary>
-        internal void AbandonRefit() => RefitPending = false;
+        internal void AbandonRefit()
+        {
+            RefitPending = false;
+            taskQueue.CancelSuspension();
+        }
 
         /// <summary>Replenish at the current parked pose, then queue native taxi through the departure
         /// lane.</summary>
@@ -99,7 +107,11 @@ namespace WingCommand
             Aircraft.RpcRearm(new RearmEventArgs { Rearmer = Aircraft, Stations = ammunition });
 
             WingPilotRoster.NoteSortie(Aircraft);
-            SetDirective(WingDirective.Simple(WingOrder.Formation));
+            WingDirective resume = taskQueue.Restore(CanResumeAfterRefit,
+                WingDirective.Simple(WingOrder.Formation));
+            SetDirective(resume);
+            if (resume.Order == WingOrder.Engage || resume.Order == WingOrder.Attack)
+                engageActivityAt = Time.timeSinceLevelLoad;
             RefitPending = false;
             BeginRefitDeparture();
         }
@@ -207,7 +219,7 @@ namespace WingCommand
             if (deliveryPending)
             {
                 if (!WingOrderRules.CanQueueWhilePending(directive.Order)) return;
-                if (!applyKeepsQueue) taskQueue.Clear();
+                if (!applyKeepsQueue) { taskQueue.Clear(); AbandonRefit(); }
                 SetDirective(directive);
                 return;
             }
@@ -218,7 +230,7 @@ namespace WingCommand
 
             TacticalCoordinator.ReleaseSelection(Aircraft);
 
-            if (!applyKeepsQueue) taskQueue.Clear();
+            if (!applyKeepsQueue) { taskQueue.Clear(); AbandonRefit(); }
 
             // Restart idle-combat timing for each new open-ended fight order.
             if (directive.Order == WingOrder.Engage || directive.Order == WingOrder.Attack)
@@ -249,7 +261,7 @@ namespace WingCommand
             if (!SetDirective(directive, startedRevision)) return;
 
             TacticalCoordinator.ReleaseSelection(Aircraft);
-            if (!applyKeepsQueue) taskQueue.Clear();
+            if (!applyKeepsQueue) { taskQueue.Clear(); AbandonRefit(); }
             brain.RequestEvaluation();
         }
 
@@ -425,6 +437,8 @@ namespace WingCommand
         /// bypasses arbitration; never call for a member remaining on the roster.</summary>
         public void ReleaseToCombat(string reason)
         {
+            taskQueue.Clear();
+            AbandonRefit();
             HangarDepartureLane.Release(this);
             if (deliveryPending)
             {
@@ -447,6 +461,8 @@ namespace WingCommand
         /// stock on recovery. Teardown uses ReleaseToCombat separately.</summary>
         public void SendHome(string reason)
         {
+            taskQueue.Clear();
+            AbandonRefit();
             HangarDepartureLane.Release(this);
             if (deliveryPending)
             {
@@ -486,7 +502,7 @@ namespace WingCommand
         /// <summary>Weapons authority from active behaviour, which may temporarily override the standing
         /// order.</summary>
         internal OrderEngagementAuthority EngagementAuthority =>
-            OrderRoePolicy.AuthorityFor(brain.Current.BehaviourId, Order);
+            OrderRoePolicy.AuthorityFor(brain.Current.BehaviourId, Order, PatrolRoute);
 
         /// <summary>Remaining fuel fraction, 0-1.</summary>
         public float Fuel => Aircraft != null ? Aircraft.GetFuelLevel() : 0f;
@@ -543,6 +559,7 @@ namespace WingCommand
             bool sameKind = append && Order == directive.Order && MapOrderPolicy.CanFollowOn(Order);
             if (!sameKind)
             {
+                AbandonRefit();
                 taskQueue.Clear();
                 taskQueue.Add(directive);
                 applyKeepsQueue = true;
@@ -619,11 +636,7 @@ namespace WingCommand
         /// selects its terminal order.</summary>
         internal bool TryAdvanceQueue(int startedRevision)
         {
-            if (taskQueue.Count == 0) return false;
-            taskQueue.RemoveAt(0);
-            if (taskQueue.Count == 0) return false;
-
-            WingDirective next = taskQueue[0];
+            if (!taskQueue.Advance(startedRevision, directiveSerial, out WingDirective next)) return false;
             applyKeepsQueue = true;
             bool applied = SetDirective(next, startedRevision);
             applyKeepsQueue = false;
@@ -644,6 +657,17 @@ namespace WingCommand
         {
             if (!IsCommandable || !Plugin.Settings.AutoReturnOnEmpty.Value) return;
             if (IsPanicking) return;
+
+            if (AutoRefit && !IsSurface && Order != WingOrder.ReturnToBase &&
+                Order != WingOrder.LandHere && Order != WingOrder.DeliverCargo &&
+                Order != WingOrder.FallBack && Order != WingOrder.StandDown &&
+                Order != WingOrder.Maneuver && Time.timeSinceLevelLoad - joinedAt >= 10f &&
+                (Fuel <= Plugin.Settings.BingoFuel ||
+                 (CombatStoresEmpty && Order != WingOrder.JamTarget)))
+            {
+                RequestRefit();
+                return;
+            }
 
             // Do not interrupt deliberate landing, cargo, or retreat tasks for bingo handling.
             switch (Order)

@@ -112,6 +112,20 @@ namespace WingCommand
         }
         private void HandleHotkeys()
         {
+            if (WingKeyboardGuard.Captured) return;
+            if (WmcScreen.TacticalFlightExpanded &&
+                (Input.GetKey(KeyCode.LeftControl) || Input.GetKey(KeyCode.RightControl)))
+            {
+                for (int i = 0; i < FlightGroups<WingMember>.Count; i++)
+                {
+                    if (!Input.GetKeyDown((KeyCode)((int)KeyCode.Alpha1 + i))) continue;
+                    if (!Selection.Groups.Exists(i)) return;
+                    if (Input.GetKey(KeyCode.LeftShift) || Input.GetKey(KeyCode.RightShift))
+                        SaveFlightGroup(i, Selection.Groups.Name(i));
+                    else RecallFlightGroup(i);
+                    return;
+                }
+            }
             if (Wing.Count == 0) return;
 
             if (Plugin.Settings.QuickRejoinKey.Value != KeyCode.None &&
