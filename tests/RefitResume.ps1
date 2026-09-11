@@ -11,7 +11,7 @@ $apply = [regex]::Match($memberSource, '(?ms)^        public void Apply\(WingDir
 $resume = [regex]::Match($taskingSource, '(?ms)^        private bool CanResumeAfterRefit\(.*?^        }').Value
 $stores = [regex]::Match($taskingSource, '(?ms)^        private bool CombatStoresEmpty\s*\{.*?^        }').Value
 if (!$apply -or !$resume -or !$stores) { throw 'Missing production apply/resume/store transition' }
-$pure = foreach ($file in @('TaskRoute', 'StandingOrder')) {
+$pure = foreach ($file in @('Flight/TaskRoute', 'Ai/StandingOrder')) {
     (Get-Content "$PSScriptRoot/../Pure/$file.cs" -Raw) -replace '(?m)^using .*;\r?\n', ''
 }
 $boundary = @'

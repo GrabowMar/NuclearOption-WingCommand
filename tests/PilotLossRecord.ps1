@@ -1,7 +1,7 @@
 # Run the actual fatal-damage hook and roster settlement without Unity.
 $ErrorActionPreference = 'Stop'
-$roster = Get-Content "$PSScriptRoot/../Core/WingPilots.cs" -Raw
-$patch = Get-Content "$PSScriptRoot/../Core/WingPilotLoss.cs" -Raw
+$roster = Get-Content "$PSScriptRoot/../Personnel/WingPilots.cs" -Raw
+$patch = Get-Content "$PSScriptRoot/../Personnel/WingPilotLoss.cs" -Raw
 $fatal = [regex]::Match($patch, '(?ms)^        private static void Prefix\(Pilot.*?^        }').Value.Replace('private static', 'public static')
 $retire = [regex]::Match($roster, '(?ms)^        internal static void Retire\(PersistentID.*?^        }').Value
 $killer = [regex]::Match($roster, '(?ms)^        internal static void RecordKiller\(.*?^        }').Value

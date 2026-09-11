@@ -7,10 +7,15 @@ Canonical plugin GUID is `com.marci.wingcommand`. Never alter the assembly name,
 ## Repo Layout
 
 ```
-Core/          Composition root, Plugin.cs, WingCommandManager, WingRegistry, pilots, config
-Flight/        Autopilot behaviors (AttackRunState, OrbitState, Formation, etc.)
+Core/          Composition root, Plugin.cs, WingCommandManager, WingRegistry, WingMember,
+               config, directive dispatch — the shared kernel every module depends on
+Personnel/     Pilot lifecycle: recruitment, takeover, loss/kill-credit, search and
+               rescue, survival perks, departure chatter, custom pilots, portraits,
+               RTB recovery/settlement, inbound taxi/parking/ejection patches
+Flight/        Autopilot behaviors (AttackRunState, OrbitState, Formation, etc.),
+               surface-unit tasking (WingSurface)
 Combat/        Weapons discipline, ROE arbitration, jamming, countermeasures
-Economy/       Squadron store, loadout manager, launch queue, supply reserve
+Economy/       Squadron store, loadout manager, launch queue, supply reserve, hangar
 Comms/         Radio dispatch, subtitle generation, audio cue playback
 Ui/            Cockpit WMC MFD screen, HUD markers, radial command wheel, map layer
 Pure/          Engine-free deterministic domain logic (tested by PureTests), split by
@@ -24,7 +29,7 @@ tests/WingCommand.PureTests/  Pure xUnit test suite (net8.0, 570+ tests), mirror
 
 ## Start Narrow
 
-1. Classify the request before exploring: `Core`, `Flight`, `Combat`, `Economy`, `Comms`, `Ui`, or `Pure`.
+1. Classify the request before exploring: `Core`, `Personnel`, `Flight`, `Combat`, `Economy`, `Comms`, `Ui`, or `Pure`.
 2. Keep pure math, formatting, and decision tables inside `Pure/`.
 3. If changing `Pure/`, ensure no `UnityEngine` or `Assembly-CSharp` references are introduced.
 4. Verify changes with `tests/WingCommand.PureTests` and `nomod asm verify --mod wingcommand`.

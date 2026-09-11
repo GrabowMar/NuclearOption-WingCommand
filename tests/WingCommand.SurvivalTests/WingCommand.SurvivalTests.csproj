@@ -12,11 +12,11 @@
   </ItemGroup>
   <!-- Exercise the actual roster, SAR bridge and perk hooks against a minimal native-game boundary. -->
   <ItemGroup>
-    <Compile Include="../../Core/WingPilots.cs" Link="Runtime/WingPilots.cs" />
-    <Compile Include="../../Core/WingSearchAndRescue.cs" Link="Runtime/WingSearchAndRescue.cs" />
-    <Compile Include="../../Core/WingSurvivalPerks.cs" Link="Runtime/WingSurvivalPerks.cs" />
-    <Compile Include="../../Core/WingPilotLoss.cs" Link="Runtime/WingPilotLoss.cs" />
-    <Compile Include="../../Core/WingDeparture.cs" Link="Runtime/WingDeparture.cs" />
-    <Compile Include="../../Pure/PilotPerks.cs" Link="Runtime/PilotPerks.cs" />
+    <Compile Include="../../Personnel/WingPilots.cs" Link="Runtime/WingPilots.cs" />
+    <Compile Include="../../Personnel/WingSearchAndRescue.cs" Link="Runtime/WingSearchAndRescue.cs" />
+    <Compile Include="../../Personnel/WingSurvivalPerks.cs" Link="Runtime/WingSurvivalPerks.cs" />
+    <Compile Include="../../Personnel/WingPilotLoss.cs" Link="Runtime/WingPilotLoss.cs" />
+    <Compile Include="../../Personnel/WingDeparture.cs" Link="Runtime/WingDeparture.cs" />
+    <Compile Include="../../Pure/Pilots/PilotPerks.cs" Link="Runtime/PilotPerks.cs" />
   </ItemGroup>
 </Project>
