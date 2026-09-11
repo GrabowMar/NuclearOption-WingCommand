@@ -85,7 +85,7 @@ namespace WingCommand
             if (takeoverPilotAircraftId.HasValue)
             {
                 Pilot pilot = PrimaryPilot(previous);
-                WingPilotRoster.Retire(takeoverPilotAircraftId.Value,
+                PersonnelFacade.Roster.Retire(takeoverPilotAircraftId.Value,
                     survived: previous != null && !previous.disabled &&
                               pilot != null && !pilot.dead && !pilot.ejected);
                 takeoverPilotAircraftId = null;
@@ -103,14 +103,14 @@ namespace WingCommand
             {
                 // LeaderLost holds members temporarily without replacing their directives; a new leader
                 // resumes their orders.
-                if (previous == null || !WingTakeover.Begin(this, previous))
+                if (previous == null || !PersonnelFacade.Takeover.Begin(this, previous))
                     DisbandAll("leader gone");
             }
             else if (previous == null && members.Count > 0)
             {
                 // Close takeover on native respawn; restoring the leader releases LeaderLost without
                 // reissuing orders.
-                WingTakeover.LeaderRestored(leader);
+                PersonnelFacade.Takeover.LeaderRestored(leader);
             }
         }
 
@@ -123,9 +123,9 @@ namespace WingCommand
             HangarDepartureLane.Release(member);
 
             // Keep the same squadron pilot in the player-controlled replacement seat.
-            WingPilot pilot = WingPilotRoster.Of(member);
-            WingPilotRoster.Retire(member, survived: true);
-            WingPilotRoster.Assign(newLeader, pilot);
+            WingPilot pilot = PersonnelFacade.Roster.Of(member);
+            PersonnelFacade.Roster.Retire(member, survived: true);
+            PersonnelFacade.Roster.Assign(newLeader, pilot);
             takeoverPilotAircraftId = newLeader.persistentID;
 
             Leader = newLeader;
@@ -349,7 +349,7 @@ namespace WingCommand
             {
                 WingMember m = members[i];
                 if (m.Alive) continue;
-                if (WingRecovery.HoldsDeath(m)) continue;
+                if (PersonnelFacade.Recovery.HoldsDeath(m)) continue;
 
                 if (Plugin.Settings.VerboseLogging.Value)
                     Plugin.LogVerbose("[Wing] lost " + m.Name + ": " + LostReason(m));
@@ -357,7 +357,7 @@ namespace WingCommand
                 WingComms.ReportLoss(m, members);
 
                 // Recovery claims successful returns before this pass; remaining removals are losses.
-                WingPilotRoster.Retire(m, survived: false);
+                PersonnelFacade.Roster.Retire(m, survived: false);
                 WingLoadoutBook.Forget(m.Aircraft);
                 // Release taxi ownership for ejected pilots even if no state transition occurs.
                 HangarDepartureLane.Release(m);
@@ -513,7 +513,7 @@ namespace WingCommand
             members.Add(member);
 
             // Assign crew centrally for purchases, active-aircraft recruitment, and debug spawns.
-            WingPilotRoster.Assign(aircraft, preferredPilot);
+            PersonnelFacade.Roster.Assign(aircraft, preferredPilot);
             if (!deferCommand) member.Apply(WingOrder.Formation);
             WingMarkers.Repaint(aircraft);
             WarnIfTooSlow(aircraft);
@@ -553,7 +553,7 @@ namespace WingCommand
             // Pending deliveries retain native launch control and have no return settlement; release
             // their crew immediately on cancellation.
             if (awaitingNativeDeparture)
-                WingPilotRoster.Retire(member, survived: true);
+                PersonnelFacade.Roster.Retire(member, survived: true);
 
             WingMarkers.Repaint(released);
         }
@@ -567,7 +567,7 @@ namespace WingCommand
             HangarDepartureLane.Release(member);
 
             // Retire the surviving pilot before despawn makes its aircraft ID unavailable.
-            WingPilotRoster.Retire(member, survived: true);
+            PersonnelFacade.Roster.Retire(member, survived: true);
             TacticalCoordinator.Release(member.Aircraft);
             WingMarkers.Repaint(member.Aircraft);
         }
@@ -578,7 +578,7 @@ namespace WingCommand
             foreach (WingMember m in members.ToList())
             {
                 released.Add(m.Aircraft);
-                WingPilotRoster.Retire(m, survived: m.Alive);
+                PersonnelFacade.Roster.Retire(m, survived: m.Alive);
                 if (m.Alive) m.ReleaseToCombat(reason);
             }
             members.Clear();

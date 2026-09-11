@@ -18,24 +18,26 @@ public class Aircraft {
 }
 public class WingPilot { public bool Lost; }
 public class WingMember { public Aircraft Aircraft; }
-public static class WingPilotRoster {
-    public static Dictionary<PersistentID, WingPilot> assigned = new Dictionary<PersistentID, WingPilot>();
-    public static int Losses;
-    public static WingPilot Of(WingMember member) { return assigned[member.Aircraft.persistentID]; }
-    public static void Retire(WingMember member, bool survived) { Retire(member.Aircraft.persistentID, survived); }
-    public static void Retire(PersistentID id, bool survived) {
-        WingPilot pilot;
-        if (!assigned.TryGetValue(id, out pilot)) return;
-        assigned.Remove(id);
-        if (!survived) { pilot.Lost = true; Losses++; }
+public static class PersonnelFacade {
+    public static class Roster {
+        public static Dictionary<PersistentID, WingPilot> assigned = new Dictionary<PersistentID, WingPilot>();
+        public static int Losses;
+        public static WingPilot Of(WingMember member) { return assigned[member.Aircraft.persistentID]; }
+        public static void Retire(WingMember member, bool survived) { Retire(member.Aircraft.persistentID, survived); }
+        public static void Retire(PersistentID id, bool survived) {
+            WingPilot pilot;
+            if (!assigned.TryGetValue(id, out pilot)) return;
+            assigned.Remove(id);
+            if (!survived) { pilot.Lost = true; Losses++; }
+        }
+        public static void Assign(Aircraft aircraft, WingPilot pilot) { assigned[aircraft.persistentID] = pilot; }
     }
-    public static void Assign(Aircraft aircraft, WingPilot pilot) { assigned[aircraft.persistentID] = pilot; }
+    public static class Takeover {
+        public static bool Begin(WingRegistry w, Aircraft a) { return false; }
+        public static void LeaderRestored(Aircraft a) {}
+    }
 }
 public static class WingHost { public static void NoteLeader(Aircraft a) {} }
-public static class WingTakeover {
-    public static bool Begin(WingRegistry w, Aircraft a) { return false; }
-    public static void LeaderRestored(Aircraft a) {}
-}
 public static class HangarDepartureLane { public static void Release(WingMember m) {} }
 public static class WingMarkers { public static void Repaint(Aircraft a) {} }
 public class WingRegistry {
@@ -53,13 +55,13 @@ public class WingRegistry {
             var replacement = new Aircraft { persistentID = new PersistentID { Value = 2 } };
             var member = new WingMember { Aircraft = original };
             var pilot = new WingPilot();
-            WingPilotRoster.assigned.Clear();
-            WingPilotRoster.Losses = 0;
-            WingPilotRoster.Assign(original, pilot);
+            PersonnelFacade.Roster.assigned.Clear();
+            PersonnelFacade.Roster.Losses = 0;
+            PersonnelFacade.Roster.Assign(original, pilot);
             registry.members.Add(member);
             if (!registry.ReplaceWithLeader(member, replacement) ||
-                WingPilotRoster.assigned.ContainsKey(original.persistentID) ||
-                WingPilotRoster.assigned[replacement.persistentID] != pilot || pilot.Lost)
+                PersonnelFacade.Roster.assigned.ContainsKey(original.persistentID) ||
+                PersonnelFacade.Roster.assigned[replacement.persistentID] != pilot || pilot.Lost)
                 throw new Exception("Takeover did not preserve the pilot assignment");
             if (registry.ReplaceWithLeader(member, replacement))
                 throw new Exception("Repeated takeover should be ignored");
@@ -72,8 +74,8 @@ public class WingRegistry {
             registry.SetLeader(next);
             registry.SetLeader(next);
             bool lost = outcome != "switch";
-            if (pilot.Lost != lost || WingPilotRoster.Losses != (lost ? 1 : 0) ||
-                WingPilotRoster.assigned.ContainsKey(replacement.persistentID))
+            if (pilot.Lost != lost || PersonnelFacade.Roster.Losses != (lost ? 1 : 0) ||
+                PersonnelFacade.Roster.assigned.ContainsKey(replacement.persistentID))
                 throw new Exception("Incorrect pilot settlement: " + outcome);
         }
     }

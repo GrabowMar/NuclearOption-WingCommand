@@ -80,7 +80,7 @@ namespace WingCommand
             portraitRect.SetParent(parent, worldPositionStays: false);
             Place(portraitRect, new Rect(Pad + 3f, y - 3f, portrait - 6f, portrait - 6f));
             // Frame the face: crop side margins and headroom inside the 50px square.
-            supplyPilotPortrait = AddSprite(portraitRect, "SupplyPilotPortrait", PilotPortrait.Sprite,
+            supplyPilotPortrait = AddSprite(portraitRect, "SupplyPilotPortrait", PersonnelFacade.Portraits.Sprite,
                                             new Rect(-5f, 8f, 60f, 90f), Color.white);
 
             float dossierX = Pad + portrait + Space3;
@@ -118,14 +118,14 @@ namespace WingCommand
         /// <summary>Cycle selectable pilots in either direction with wraparound.</summary>
         private static void CycleSupplyPilot(int direction)
         {
-            List<WingPilot> selectable = WingPilotRoster.SelectablePilots();
+            List<WingPilot> selectable = PersonnelFacade.Roster.SelectablePilots();
             if (selectable.Count == 0) return;
 
             int index = PilotSelectionPolicy.CycleIndex(
-                selectable.IndexOf(WingPilotRoster.Selected), selectable.Count, direction);
+                selectable.IndexOf(PersonnelFacade.Roster.Selected), selectable.Count, direction);
             if (index >= 0 && index < selectable.Count)
             {
-                WingPilotRoster.Select(selectable[index]);
+                PersonnelFacade.Roster.Select(selectable[index]);
             }
             RefreshSupplyPilot();
         }
@@ -135,15 +135,15 @@ namespace WingCommand
         {
             if (supplyPilotPortrait == null) return;
 
-            List<WingPilot> selectable = WingPilotRoster.SelectablePilots();
-            WingPilot sel = WingPilotRoster.Selected;
+            List<WingPilot> selectable = PersonnelFacade.Roster.SelectablePilots();
+            WingPilot sel = PersonnelFacade.Roster.Selected;
             if (sel == null && selectable.Count > 0)
             {
-                WingPilotRoster.Select(selectable[0]);
+                PersonnelFacade.Roster.Select(selectable[0]);
                 sel = selectable[0];
             }
 
-            supplyPilotPortrait.sprite = PilotPortrait.For(sel);
+            supplyPilotPortrait.sprite = PersonnelFacade.Portraits.For(sel);
 
             if (sel == null)
             {
@@ -169,17 +169,17 @@ namespace WingCommand
             }
             if (supplyPilotRankLabel != null)
             {
-                supplyPilotRankLabel.text = WingPilotRoster.RankName(sel.Rank) + "   XP " + sel.Xp;
+                supplyPilotRankLabel.text = PersonnelFacade.Roster.RankName(sel.Rank) + "   XP " + sel.Xp;
                 supplyPilotRankLabel.color = RankColor(sel.Rank);
             }
             if (supplyPilotStatusLabel != null)
             {
-                if (WingPilotRoster.IsFlying(sel))
+                if (PersonnelFacade.Roster.IsFlying(sel))
                 {
                     supplyPilotStatusLabel.text = "IN THE AIR";
                     supplyPilotStatusLabel.color = Friendly();
                 }
-                else if (WingPilotRoster.IsReserved(sel))
+                else if (PersonnelFacade.Roster.IsReserved(sel))
                 {
                     supplyPilotStatusLabel.text = "AWAITING AIRFRAME";
                     supplyPilotStatusLabel.color = Friendly();
@@ -743,7 +743,7 @@ namespace WingCommand
                 ? selectedOffer.code + "  " + AvTheme.Truncate(selectedOffer.unitName, 16)
                 : AvTheme.Truncate(selectedOffer.unitName, 21);
 
-            WingPilot pilot = WingPilotRoster.Selected;
+            WingPilot pilot = PersonnelFacade.Roster.Selected;
             string pilotName = pilot == null
                 ? "AUTO"
                 : AvTheme.Truncate(pilot.Callsign, 12);

@@ -87,7 +87,7 @@ namespace WingCommand
                 $"[Wing] AI provider '{id}' failed and has been disabled for this mission: " +
                 $"{e.GetType().Name} - {e.Message}");
             WingReflexes.RegisterDefaults();
-            WingCustomPilots.EnsurePilotsDirectory();
+            PersonnelFacade.CustomPilots.EnsurePilotsDirectory();
 
             harmony = new Harmony(PluginGuid);
             Type[] patchTypes =
@@ -201,7 +201,7 @@ namespace WingCommand
                 Settings.AiTargetSpreading.SettingChanged -= OnAiSettingChanged;
                 Settings.AiMissileWarningRepair.SettingChanged -= OnAiSettingChanged;
             }
-            PilotPortrait.Reset();
+            PersonnelFacade.Portraits.Reset();
             harmony?.UnpatchSelf();
         }
     }

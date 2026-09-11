@@ -103,7 +103,7 @@ namespace WingCommand
 
             // Suppress noncritical chatter in Performance mode.
             if (!WingFidelity.RichChatter && !Critical(call)) return;
-            if (call == Call.Rejoining && WingDepartureChatter.ReportingLiftoff(member)) return;
+            if (call == Call.Rejoining && PersonnelFacade.DepartureChatter.ReportingLiftoff(member)) return;
 
             // Threat-clear reports share one cooldown across the whole wing.
             var key = new SpeechKey(call == Call.DefensiveClear ? null : member, call);
@@ -115,7 +115,7 @@ namespace WingCommand
 
             lastSpoken[key] = Time.timeSinceLevelLoad;
             string tag = DialogueTag(member.Crew);
-            if (!WingCustomPilots.TryGetEventLine(tag, call.ToString(), detail, out string phrase))
+            if (!PersonnelFacade.CustomPilots.TryGetEventLine(tag, call.ToString(), detail, out string phrase))
             {
                 phrase = ChatterDialogue.Event(
                     Persona(member), call.ToString(), detail, Random.Range(0, int.MaxValue));
@@ -218,12 +218,12 @@ namespace WingCommand
 
             if (Plugin.Settings.Radio.Value == ChatterLevel.Off || wing == null)
             {
-                WingDepartureChatter.Tick(wing, speechAllowed: false);
+                PersonnelFacade.DepartureChatter.Tick(wing, speechAllowed: false);
                 return;
             }
 
             CheckLeaderThreats(wing);
-            WingDepartureChatter.Tick(wing, speechAllowed: WingFidelity.RichChatter);
+            PersonnelFacade.DepartureChatter.Tick(wing, speechAllowed: WingFidelity.RichChatter);
 
             if (!WingFidelity.RichChatter)
                 return;
@@ -299,7 +299,7 @@ namespace WingCommand
             lastSpoken.Clear();
             nextBanterCheck = 0f;
             nextThreatCheck = 0f;
-            WingDepartureChatter.Reset();
+            PersonnelFacade.DepartureChatter.Reset();
             WingChatterHud.Reset();
         }
 

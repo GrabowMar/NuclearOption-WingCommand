@@ -33,7 +33,7 @@ namespace WingCommand
 
         /// <summary>Squadron pilot record, or null before assignment. Pilot is the separate native state
         /// machine.</summary>
-        public WingPilot Crew => WingPilotRoster.Of(Aircraft);
+        public WingPilot Crew => PersonnelFacade.Roster.Of(Aircraft);
 
         private readonly FormationFlyState formationState;
         private readonly TerrainAbortState terrainAbortState;
@@ -106,7 +106,7 @@ namespace WingCommand
             }
             Aircraft.RpcRearm(new RearmEventArgs { Rearmer = Aircraft, Stations = ammunition });
 
-            WingPilotRoster.NoteSortie(Aircraft);
+            PersonnelFacade.Roster.NoteSortie(Aircraft);
             WingDirective resume = taskQueue.Restore(CanResumeAfterRefit,
                 WingDirective.Simple(WingOrder.Formation));
             SetDirective(resume);
@@ -308,7 +308,7 @@ namespace WingCommand
             deliveryPending = false;
             // Refit owns the departure lane until liftoff.
             HangarDepartureLane.Release(this);
-            WingDepartureChatter.Activated(this);
+            PersonnelFacade.DepartureChatter.Activated(this);
             // Evaluate the retained order without resetting queued-task clocks or treating takeoff as a
             // new command.
             brain.RequestEvaluation();
@@ -367,7 +367,7 @@ namespace WingCommand
 
             if (remaining <= 0)
             {
-                if (cargoProgress.MadeProgress) WingPilotRoster.NoteSortie(Aircraft);
+                if (cargoProgress.MadeProgress) PersonnelFacade.Roster.NoteSortie(Aircraft);
                 Apply(WingOrder.Formation);
                 return;
             }
@@ -479,11 +479,11 @@ namespace WingCommand
             SetDirective(WingDirective.Simple(WingOrder.ReturnToBase));
 
             // Credit the sortie before releasing the pilot; later settlement no longer owns this seat.
-            WingPilotRoster.NoteSortie(Aircraft);
+            PersonnelFacade.Roster.NoteSortie(Aircraft);
 
             // Track departure before switching state so an already-landed aircraft can settle on the
             // next recovery pass.
-            WingDeparture.Begin(this);
+            PersonnelFacade.Departure.Begin(this);
             WingComms.Say(this, WingComms.Call.Detached);
             SwitchToLanding();
         }
@@ -740,7 +740,7 @@ namespace WingCommand
         /// all other standing intent unchanged.</summary>
         internal void RetireStaleOrder()
         {
-            WingPilotRoster.NoteSurvivedEngagement(Aircraft);
+            PersonnelFacade.Roster.NoteSurvivedEngagement(Aircraft);
 
             bool stale = Directive.Order == WingOrder.Maneuver ||
                          (WingOrderRules.CarriesTarget(Directive.Order) &&

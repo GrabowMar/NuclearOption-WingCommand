@@ -49,7 +49,7 @@ internal static class WingTuning { public const float BingoFuel = 0.15f; }
 internal static class WingComms { public enum Call { Bingo, OutOfAmmo } public static void Say(WingMember m, Call c) {} }
 internal static class TacticalCoordinator { public static void ReleaseSelection(Aircraft a) {} }
 internal static class TacticalMapOverlay { public static void Invalidate() {} }
-internal static class WingPilotRoster { public static int Sorties; public static void NoteSortie(Aircraft a) { Sorties++; } }
+internal static class PersonnelFacade { internal static class Roster { public static int Sorties; public static void NoteSortie(Aircraft a) { Sorties++; } } }
 internal static class WingOrderRules { public static bool CanQueueWhilePending(WingOrder o) => o != WingOrder.Maneuver; }
 internal static class WingOrderCatalog { public static bool CanApply(WingMember m, WingOrder o) => m.Alive; }
 internal static class FallBackState { public static GlobalPosition FriendlyLoiterPoint(Aircraft a, Vector3 v) => default; }

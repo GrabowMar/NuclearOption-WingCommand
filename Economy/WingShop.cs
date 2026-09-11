@@ -100,7 +100,7 @@ namespace WingCommand
             internal void NotePilot(WingPilot pilot)
             {
                 Pilot = pilot;
-                rollback.Add(() => WingPilotRoster.ReleaseReservation(pilot, restoreSelection: true));
+                rollback.Add(() => PersonnelFacade.Roster.ReleaseReservation(pilot, restoreSelection: true));
             }
 
             internal void NoteReserveSlot(WingSupplyReserve.Slot slot)
@@ -642,7 +642,7 @@ namespace WingCommand
                             (PilotBaseState)pilot.AILandingState ?? pilot.AIHeloLandingState;
                         if (landing != null) pilot.SwitchState(landing);
                     }
-                    WingDeparture.Begin(candidate);
+                    PersonnelFacade.Departure.Begin(candidate);
                 }
                 WingCommandManager.Instance?.Toast(
                     "Ordered " + candidate.unitName + " to RTB to free squadron slot");
@@ -684,7 +684,7 @@ namespace WingCommand
 
             try
             {
-                WingPilot reservedPilot = WingPilotRoster.ReserveForRequisition();
+                WingPilot reservedPilot = PersonnelFacade.Roster.ReserveForRequisition();
                 if (reservedPilot != null)
                 {
                     transaction.NotePilot(reservedPilot);
@@ -828,7 +828,7 @@ namespace WingCommand
                 if (a.Player != null) continue;
 
                 // Exclude dismissed RTB aircraft from capacity while they await recovery and despawn.
-                if (WingDeparture.Contains(a)) continue;
+                if (PersonnelFacade.Departure.Contains(a)) continue;
 
                 aiCount++;
             }
@@ -919,7 +919,7 @@ namespace WingCommand
                 if (a == null || a.disabled) continue;
                 if (a.NetworkHQ != hq) continue;
                 if (a.Player != null) continue;
-                if (WingDeparture.Contains(a)) continue;
+                if (PersonnelFacade.Departure.Contains(a)) continue;
 
                 Pilot pilot = WingRegistry.PrimaryPilot(a);
                 if (pilot == null || pilot.dead || pilot.ejected) continue;

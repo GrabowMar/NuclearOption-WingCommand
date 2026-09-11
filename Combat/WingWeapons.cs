@@ -10,7 +10,7 @@ namespace WingCommand
         /// <summary>Shared shot interval for formation, orbit, and attack runs, shortened by pilot
         /// experience.</summary>
         public static float FireInterval(Aircraft aircraft) =>
-            WingTuning.FireInterval * WingPilotRoster.ReactionScale(aircraft);
+            WingTuning.FireInterval * PersonnelFacade.Roster.ReactionScale(aircraft);
 
         /// <summary>This member's weapon preference, or Auto if the aircraft is not commandable.</summary>
         private static WingWeaponPreference PreferenceOf(Aircraft aircraft)
@@ -68,7 +68,7 @@ namespace WingCommand
 
             // Experience may widen range and off-boresight tolerance; the scale never reduces the base
             // envelope.
-            float envelope = WingPilotRoster.EnvelopeScale(aircraft);
+            float envelope = PersonnelFacade.Roster.EnvelopeScale(aircraft);
 
             float distance = FastMath.Distance(target.GlobalPosition(), aircraft.GlobalPosition());
             if (req.maxRange > 0f && distance > req.maxRange * envelope) return false;
@@ -152,7 +152,7 @@ namespace WingCommand
 
             pilot.SetPrimaryTarget(target);
             pilot.Fire();
-            WingKillCredit.NoteShot(aircraft, target);
+            PersonnelFacade.KillCredit.NoteShot(aircraft, target);
 
             if (station != null && station.WeaponInfo != null)
             {

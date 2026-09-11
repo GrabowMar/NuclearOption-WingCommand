@@ -100,7 +100,7 @@ namespace WingCommand
             pilotPortrait = portraitGo.GetComponent<Image>();
             pilotPortrait.color = Color.white;
             pilotPortrait.raycastTarget = false;
-            UpdatePortraitAspectFill(pilotPortrait, PilotPortrait.Sprite, PortraitWidth, PortraitHeight);
+            UpdatePortraitAspectFill(pilotPortrait, PersonnelFacade.Portraits.Sprite, PortraitWidth, PortraitHeight);
 
             // Overlay a subtle loss tint without covering the face.
             var kiaOverlayGo = new GameObject("PilotKiaOverlay", typeof(RectTransform), typeof(Image));
@@ -209,20 +209,20 @@ namespace WingCommand
                 FrameColor());
             sarButton = WingUi.Button(parent, "DISPATCH SAR",
                 new Rect(Pad, airframeBottom - Gap, PanelWidth - Pad * 2f, RowHeight), FontSmall,
-                () => WingSearchAndRescue.Dispatch(inspectPilot, WingCommandManager.Instance?.Wing))
+                () => PersonnelFacade.SearchAndRescue.Dispatch(inspectPilot, WingCommandManager.Instance?.Wing))
                 .WithTooltip("Send the nearest idle rescue-capable wing helicopter to this downed pilot on land. Water rescue uses the native hoist.");
             return airframeBottom - Gap - RowHeight;
         }
 
         private static void RefreshWingPage(WingRegistry wing)
         {
-            List<WingPilot> display = WingPilotRoster.DisplayRoster();
+            List<WingPilot> display = PersonnelFacade.Roster.DisplayRoster();
             int count = display.Count;
 
             SyncPilotRows(pilotRows, pilotRosterArea);
             int first = pilotPager != null ? pilotPager.Refresh(count) : 0;
 
-            if (inspectPilot != null && !WingPilotRoster.Contains(inspectPilot))
+            if (inspectPilot != null && !PersonnelFacade.Roster.Contains(inspectPilot))
                 inspectPilot = count > 0 ? display[0] : null;
             if (inspectPilot == null && count > 0)
                 inspectPilot = display[0];
@@ -279,23 +279,23 @@ namespace WingCommand
             float progress;
             if (kia)
             {
-                rank = WingPilotRoster.RankName(focus.Rank) + "   LOST IN ACTION" +
+                rank = PersonnelFacade.Roster.RankName(focus.Rank) + "   LOST IN ACTION" +
                        (flying != null ? "   IN AIR" : "");
                 progress = 0f;
             }
             else
             {
                 WingRank crewRank = focus.Rank;
-                if (crewRank >= WingPilotRoster.TopRank)
+                if (crewRank >= PersonnelFacade.Roster.TopRank)
                 {
-                    rank = WingPilotRoster.RankName(crewRank) + "   XP " + focus.Xp + "   MAX RANK";
+                    rank = PersonnelFacade.Roster.RankName(crewRank) + "   XP " + focus.Xp + "   MAX RANK";
                     progress = 1f;
                 }
                 else
                 {
-                    int floor = WingPilotRoster.XpForRank(crewRank);
-                    int ceiling = WingPilotRoster.XpForRank(crewRank + 1);
-                    rank = WingPilotRoster.RankName(crewRank) + "   XP " + focus.Xp + " / " + ceiling;
+                    int floor = PersonnelFacade.Roster.XpForRank(crewRank);
+                    int ceiling = PersonnelFacade.Roster.XpForRank(crewRank + 1);
+                    rank = PersonnelFacade.Roster.RankName(crewRank) + "   XP " + focus.Xp + " / " + ceiling;
                     progress = ceiling > floor
                         ? Mathf.Clamp01((focus.Xp - floor) / (float)(ceiling - floor))
                         : 0f;
@@ -308,7 +308,7 @@ namespace WingCommand
             string persona = kia
                 ? "STATUS   KILLED IN ACTION"
                 : focus.RecoveryStatus != PilotRecoveryStatus.None
-                    ? "STATUS   " + WingSearchAndRescue.Status(focus)
+                    ? "STATUS   " + PersonnelFacade.SearchAndRescue.Status(focus)
                     : "RADIO PROFILE   " + focus.Persona.ToString().ToUpperInvariant();
 
             SetWingDetail(identity, rank, stats, persona, progress,
@@ -331,7 +331,7 @@ namespace WingCommand
                     airframeStateLabel.text = kia
                         ? "CAUSE   " + (focus.LossCause ?? "Unknown")
                         : focus.RecoveryStatus != PilotRecoveryStatus.None
-                            ? WingSearchAndRescue.Status(focus)
+                            ? PersonnelFacade.SearchAndRescue.Status(focus)
                             : "ON THE GROUND  ·  AWAITING AN AIRFRAME";
                     airframeStateLabel.color = kia ? Alert() : Friendly();
                 }
@@ -409,7 +409,7 @@ namespace WingCommand
                 pilotPortrait.color = pilot == null
                     ? Color.white
                     : pilot.Lost ? new Color(0.7f, 0.45f, 0.45f, 0.85f) : Color.white;
-                UpdatePortraitAspectFill(pilotPortrait, PilotPortrait.For(pilot), PortraitWidth, PortraitHeight);
+                UpdatePortraitAspectFill(pilotPortrait, PersonnelFacade.Portraits.For(pilot), PortraitWidth, PortraitHeight);
             }
 
             if (pilotKiaOverlay != null) pilotKiaOverlay.gameObject.SetActive(pilot != null && pilot.Lost);
@@ -562,7 +562,7 @@ namespace WingCommand
 
         private static void OnRecruitPilot()
         {
-            WingPilot pilot = WingPilotRoster.RecruitManual();
+            WingPilot pilot = PersonnelFacade.Roster.RecruitManual();
             if (pilot != null)
             {
                 inspectPilot = pilot;
@@ -575,7 +575,7 @@ namespace WingCommand
         {
             if (Input.GetKey(KeyCode.LeftShift) || Input.GetKey(KeyCode.RightShift))
             {
-                WingCustomPilots.OpenFolder();
+                PersonnelFacade.CustomPilots.OpenFolder();
                 return;
             }
 
@@ -584,7 +584,7 @@ namespace WingCommand
 
         private static void OpenCustomPilotsDropdown()
         {
-            List<CustomPilotRecord> pilots = WingCustomPilots.LoadAllCustomPilots(out _);
+            List<CustomPilotRecord> pilots = PersonnelFacade.CustomPilots.LoadAllCustomPilots(out _);
             if (pilots.Count == 0)
             {
                 WingCommandManager.Instance?.Toast("No custom pilots found in folder. Sample file created.");
@@ -594,7 +594,7 @@ namespace WingCommand
             int unrecruitedCount = 0;
             for (int i = 0; i < pilots.Count; i++)
             {
-                if (!WingPilotRoster.ContainsCallsign(pilots[i].Callsign))
+                if (!PersonnelFacade.Roster.ContainsCallsign(pilots[i].Callsign))
                     unrecruitedCount++;
             }
 
@@ -615,7 +615,7 @@ namespace WingCommand
                 CustomPilotRecord record = pilots[i];
                 choices.Add(record);
 
-                bool inSquadron = WingPilotRoster.ContainsCallsign(record.Callsign);
+                bool inSquadron = PersonnelFacade.Roster.ContainsCallsign(record.Callsign);
                 bool isInspected = inspectPilot != null &&
                     string.Equals(inspectPilot.Callsign, record.Callsign, StringComparison.OrdinalIgnoreCase);
 
@@ -627,8 +627,8 @@ namespace WingCommand
                 }
                 else
                 {
-                    WingRank rank = WingPilotRoster.RankFor(record.Xp);
-                    detail = WingPilotRoster.RankName(rank) + " (" + record.Xp + " XP)";
+                    WingRank rank = PersonnelFacade.Roster.RankFor(record.Xp);
+                    detail = PersonnelFacade.Roster.RankName(rank) + " (" + record.Xp + " XP)";
                 }
 
                 popupEntries.Add(new AvKit.PopupEntry(label, detail, isInspected));
@@ -644,9 +644,9 @@ namespace WingCommand
 
                     if (chosen == null)
                     {
-                        WingCustomPilots.ImportAll(out _, out string message);
+                        PersonnelFacade.CustomPilots.ImportAll(out _, out string message);
                         WingCommandManager.Instance?.Toast(message);
-                        List<WingPilot> selectable = WingPilotRoster.SelectablePilots();
+                        List<WingPilot> selectable = PersonnelFacade.Roster.SelectablePilots();
                         if (selectable.Count > 0 && inspectPilot == null)
                         {
                             inspectPilot = selectable[0];
@@ -654,15 +654,15 @@ namespace WingCommand
                     }
                     else
                     {
-                        if (WingPilotRoster.ContainsCallsign(chosen.Callsign))
+                        if (PersonnelFacade.Roster.ContainsCallsign(chosen.Callsign))
                         {
-                            WingPilot existing = WingPilotRoster.FindByCallsign(chosen.Callsign);
+                            WingPilot existing = PersonnelFacade.Roster.FindByCallsign(chosen.Callsign);
                             if (existing != null) inspectPilot = existing;
                             WingCommandManager.Instance?.Toast("Viewing " + chosen.Callsign + " (already recruited)");
                         }
                         else
                         {
-                            WingPilot recruited = WingPilotRoster.ImportCustom(chosen);
+                            WingPilot recruited = PersonnelFacade.Roster.ImportCustom(chosen);
                             if (recruited != null)
                             {
                                 inspectPilot = recruited;

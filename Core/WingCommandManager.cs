@@ -63,15 +63,15 @@ namespace WingCommand
                 WingShopDelivery.Reset();
                 WingAirfield.Reset();
                 WingShop.Reset();
-                WingRecruitment.Reset();
-                WingPilotRoster.Reset();
-                WingKillCredit.Reset();
+                PersonnelFacade.Recruitment.Reset();
+                PersonnelFacade.Roster.Reset();
+                PersonnelFacade.KillCredit.Reset();
                 WingDeliveryTracker.Reset();
                 recruitQueue.Clear();
-                WingRecovery.Reset();
-                WingDeparture.Reset();
+                PersonnelFacade.Recovery.Reset();
+                PersonnelFacade.Departure.Reset();
                 WingSupplyReserve.Reset();
-                WingTakeover.Reset();
+                PersonnelFacade.Takeover.Reset();
                 WingUi.Reset();
                 MfdPresentation.Reset();
                 ManeuverScriptLoader.Reset();
@@ -110,11 +110,11 @@ namespace WingCommand
             FlushRecruitQueue();
 
             // Settle RTB before Prune can misclassify an ejected landing pilot as a combat loss.
-            WingRecovery.Tick(Wing);
-            WingSearchAndRescue.Tick();
+            PersonnelFacade.Recovery.Tick(Wing);
+            PersonnelFacade.SearchAndRescue.Tick();
             Wing.Prune();
             Selection.Prune(Wing);
-            WingTakeover.Tick();
+            PersonnelFacade.Takeover.Tick();
             // Retire completed orders before the single behaviour-arbitration pass.
             Wing.CheckReserves();
             Wing.Tick();
@@ -131,7 +131,7 @@ namespace WingCommand
 
             mapLayer.Update();
 
-            WingKillCredit.Tick();
+            PersonnelFacade.KillCredit.Tick();
             WingDeliveryTracker.Tick();
             WingMarkers.Tick(Wing);
             WingHud.TickStatusPanel(Wing);

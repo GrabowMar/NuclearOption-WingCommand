@@ -164,7 +164,7 @@ namespace WingCommand
                 ? Vector3.Dot(Aircraft.rb.velocity - leader.rb.velocity, toLeader.normalized) : 0f;
             return new WingFlightSituation(in situation,
                 SlotError > 0f ? SlotError : Mathf.Max(0f, leaderDistance), WingTuning.CaptureDistance,
-                closing, leader != null ? leader.speed : 0f, WingPilotRoster.SkillBonus(Aircraft) / 0.24f)
+                closing, leader != null ? leader.speed : 0f, PersonnelFacade.Roster.SkillBonus(Aircraft) / 0.24f)
                 .WithMinimumAirspeed(minimumAirspeed);
         }
 

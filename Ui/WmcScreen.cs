@@ -1029,7 +1029,7 @@ namespace WingCommand
                 name.text = AvTheme.Truncate(pilot.Callsign, 12);
                 name.color = kia ? Alert() : selected ? Green() : Friendly();
                 detail.text = kia ? "KIA" : pilot.RecoveryStatus != PilotRecoveryStatus.None
-                    ? pilot.RecoveryStatus.ToString().ToUpperInvariant() : WingPilotRoster.RankName(pilot.Rank);
+                    ? pilot.RecoveryStatus.ToString().ToUpperInvariant() : PersonnelFacade.Roster.RankName(pilot.Rank);
                 detail.color = kia ? Alert() : Dim();
 
                 kiaOverlay.gameObject.SetActive(kia);

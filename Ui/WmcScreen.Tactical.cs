@@ -483,13 +483,13 @@ namespace WingCommand
         {
             _ = wing;
 
-            if (WingPilotRoster.Contains(inspectPilot)) return;
+            if (PersonnelFacade.Roster.Contains(inspectPilot)) return;
 
             // After removal, prefer the next-flight pilot, then the most senior available.
-            inspectPilot = WingPilotRoster.Selected;
-            if (inspectPilot != null && WingPilotRoster.Contains(inspectPilot)) return;
+            inspectPilot = PersonnelFacade.Roster.Selected;
+            if (inspectPilot != null && PersonnelFacade.Roster.Contains(inspectPilot)) return;
 
-            List<WingPilot> roster = WingPilotRoster.DisplayRoster();
+            List<WingPilot> roster = PersonnelFacade.Roster.DisplayRoster();
             inspectPilot = roster.Count > 0 ? roster[0] : null;
         }
 

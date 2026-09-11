@@ -398,7 +398,7 @@ namespace WingCommand
 
             float total = 0f;
             for (int i = 0; i < recruited.Count; i++)
-                total += WingRecruitment.PriceOf(recruited[i]);
+                total += PersonnelFacade.Recruitment.PriceOf(recruited[i]);
 
             if (WingShop.Allocation < total)
             {
@@ -427,7 +427,7 @@ namespace WingCommand
             string lastReason = null;
             foreach (Aircraft aircraft in recruited)
             {
-                if (WingRecruitment.TryRecruit(wing, aircraft, out _, out string reason)) added++;
+                if (PersonnelFacade.Recruitment.TryRecruit(wing, aircraft, out _, out string reason)) added++;
                 else lastReason = reason;
             }
 

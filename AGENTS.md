@@ -38,6 +38,7 @@ tests/WingCommand.PureTests/  Pure xUnit test suite (net8.0, 570+ tests), mirror
 
 - **The Pure Rule**: `Pure/*.cs` must never reference Unity or game assemblies. The xUnit test project (`tests/WingCommand.PureTests`) compiles `Pure/` against net8.0 to enforce this boundary.
 - **Harmony Patches**: Every patch class must have an explicit `[HarmonyPatch]` attribute or use explicit method targets. Always verify with `nomod asm verify --mod wingcommand` to catch renamed or missing game methods.
+- **Personnel Facade**: Code outside `Personnel/` must call it through `Personnel/PersonnelFacade.cs`, never the internal `WingPilotRoster`/`WingRecruitment`/`WingTakeover`/etc. classes directly. `PersonnelFacade` is a static class with one nested class per internal subsystem (`Roster`, `Recruitment`, `Takeover`, `Recovery`, `SearchAndRescue`, `CustomPilots`, `Portraits`, `KillCredit`, `Departure`, `DepartureChatter`); each member forwards 1:1 to the internal implementation. Files inside `Personnel/` may call each other directly. This is the intended model for the Combat/Economy facades planned as follow-up module-boundary work.
 - **Avionics & Shared UI**:
   - The shared avionics layout and styling kit lives in `nomodkit/shared/avionics` and is linked via `WingCommand.csproj`.
   - MFD bezel slot assignments and cross-mod discovery are handled through `NOAvionics.BezelRegistry`.
