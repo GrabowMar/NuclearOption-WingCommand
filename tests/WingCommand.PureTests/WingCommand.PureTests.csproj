@@ -18,7 +18,7 @@
   <ItemGroup Label="Pure/ is engine-free by convention; link its sources directly rather
                      than referencing WingCommand.csproj, which requires the game's
                      Unity/BepInEx assemblies to be present on disk to build.">
-    <Compile Include="..\..\Pure\*.cs" Link="Pure\%(Filename)%(Extension)" />
+    <Compile Include="..\..\Pure\**\*.cs" Link="Pure\%(RecursiveDir)%(Filename)%(Extension)" />
     <Compile Include="..\..\Core\WingCommandSelection.cs" Link="Core\WingCommandSelection.cs" />
     <Compile Include="..\..\Core\WingCommandManager.Recruit.cs" Link="Core\WingCommandManager.Recruit.cs" />
     <Compile Include="..\..\Core\WingOrderCatalog.cs" Link="Core\WingOrderCatalog.cs" />

@@ -13,10 +13,13 @@ Combat/        Weapons discipline, ROE arbitration, jamming, countermeasures
 Economy/       Squadron store, loadout manager, launch queue, supply reserve
 Comms/         Radio dispatch, subtitle generation, audio cue playback
 Ui/            Cockpit WMC MFD screen, HUD markers, radial command wheel, map layer
-Pure/          Engine-free deterministic domain logic (tested by PureTests)
+Pure/          Engine-free deterministic domain logic (tested by PureTests), split by
+               the module it backs: Pure/Ai (behaviour arbitration engine), Pure/Flight,
+               Pure/Combat, Pure/Economy, Pure/Comms, Pure/Pilots, Pure/Ui
 Interop/       Cross-mod PresenceBoard integration
 Assets/        Embedded PNG icons, pilot layers, and maneuvers.json
-tests/WingCommand.PureTests/  Pure xUnit test suite (net8.0, 570+ tests)
+tests/WingCommand.PureTests/  Pure xUnit test suite (net8.0, 570+ tests), mirroring
+               Pure/'s sub-folders one test file per production file
 ```
 
 ## Start Narrow
