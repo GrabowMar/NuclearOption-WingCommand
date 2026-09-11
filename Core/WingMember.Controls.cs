@@ -373,7 +373,7 @@ namespace WingCommand
             {
                 // Check runway availability before entering native landing, which otherwise ejects
                 // immediately when no runway is usable.
-                if (!WingAirfield.HasLandingRunway(Aircraft))
+                if (!EconomyFacade.Airfield.HasLandingRunway(Aircraft))
                 {
                     WingCommandManager.Instance?.Toast(
                         Name + " has no reachable landing runway - holding station");

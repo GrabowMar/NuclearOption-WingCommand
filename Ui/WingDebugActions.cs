@@ -107,8 +107,8 @@ namespace WingCommand
             {
                 var choices = new List<AircraftDefinition>();
                 foreach (AircraftDefinition definition in aircraft)
-                    if (definition != null && WingShop.IsFlyableAircraft(definition) &&
-                        WingShop.MatchesLeader(definition)) choices.Add(definition);
+                    if (definition != null && EconomyFacade.Shop.IsFlyableAircraft(definition) &&
+                        EconomyFacade.Shop.MatchesLeader(definition)) choices.Add(definition);
                 choices.Sort((a, b) => string.Compare(a.unitName, b.unitName,
                     StringComparison.OrdinalIgnoreCase));
                 foreach (AircraftDefinition definition in choices)
@@ -150,8 +150,8 @@ namespace WingCommand
                             definition = candidate;
                             break;
                         }
-                if (definition == null || !WingShop.IsFlyableAircraft(definition) ||
-                    !WingShop.MatchesLeader(definition))
+                if (definition == null || !EconomyFacade.Shop.IsFlyableAircraft(definition) ||
+                    !EconomyFacade.Shop.MatchesLeader(definition))
                 {
                     Toast("Selected debug aircraft is unavailable or incompatible with your aircraft");
                     return;
@@ -194,7 +194,7 @@ namespace WingCommand
                         prefab: prefab,
                         // Build a separate mutable Loadout for each aircraft; shared containers can
                         // lose ammunition during initialisation.
-                        loadout: WingLoadoutCatalog.Build(
+                        loadout: EconomyFacade.LoadoutCatalog.Build(
                             definition, WingLoadoutChoice.Standard),
                         fuelLevel: 1f,
                         livery: definition == leader.definition ? leader.NetworkLiveryKey : default,

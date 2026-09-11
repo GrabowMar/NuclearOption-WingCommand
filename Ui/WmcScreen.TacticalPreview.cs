@@ -92,7 +92,7 @@ namespace WingCommand
             const float radarW = 108f;
             float radarCenterX = Pad + radarW * 0.5f;
 
-            int totalInWing = (wing != null ? wing.Count : 0) + WingShopDelivery.PendingCount;
+            int totalInWing = (wing != null ? wing.Count : 0) + EconomyFacade.ShopDelivery.PendingCount;
             for (int i = 0; i < formationWingmenDots.Count; i++)
             {
                 Vector3 coord = FormationSolver.SlotCoordinates(i + 1, shape, 1f, 1f);

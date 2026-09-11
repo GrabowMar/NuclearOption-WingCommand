@@ -241,8 +241,8 @@ namespace WingCommand
                 parent, "ANY", new Rect(Pad + modeW + Gap, y, modeW, RowHeight),
                 FontMicro, UiButtonStyle.Quiet,
                 () => {
-                    WingLaunchFields.Mode = HangarLaunchMode.Any;
-                    foreach (Airbase field in WingLaunchFields.Listing) WingLaunchFields.SetAllowed(field, true);
+                    EconomyFacade.LaunchFields.Mode = HangarLaunchMode.Any;
+                    foreach (Airbase field in EconomyFacade.LaunchFields.Listing) EconomyFacade.LaunchFields.SetAllowed(field, true);
                     RefreshLaunchFrom();
                     RefreshShop();
                 })
@@ -264,13 +264,13 @@ namespace WingCommand
         private static void SelectNearestLaunchField()
         {
             RefreshLaunchFrom();
-            WingLaunchFields.Mode = HangarLaunchMode.OnlyNearest;
+            EconomyFacade.LaunchFields.Mode = HangarLaunchMode.OnlyNearest;
             Airbase nearest = null;
-            foreach (Airbase field in WingLaunchFields.Listing)
-                if (nearest == null && (selectedOffer == null || WingLaunchFields.CanProduce(field, selectedOffer)))
+            foreach (Airbase field in EconomyFacade.LaunchFields.Listing)
+                if (nearest == null && (selectedOffer == null || EconomyFacade.LaunchFields.CanProduce(field, selectedOffer)))
                     nearest = field;
-            foreach (Airbase field in WingLaunchFields.Listing)
-                WingLaunchFields.SetAllowed(field, field == nearest);
+            foreach (Airbase field in EconomyFacade.LaunchFields.Listing)
+                EconomyFacade.LaunchFields.SetAllowed(field, field == nearest);
             launchPage = nearest == null ? 0 : IndexOfLaunchField(nearest) / LaunchRowsPerPage;
             RefreshLaunchFrom();
             RefreshShop();
@@ -278,14 +278,14 @@ namespace WingCommand
 
         private static int IndexOfLaunchField(Airbase field)
         {
-            for (int i = 0; i < WingLaunchFields.Listing.Count; i++)
-                if (WingLaunchFields.Listing[i] == field) return i;
+            for (int i = 0; i < EconomyFacade.LaunchFields.Listing.Count; i++)
+                if (EconomyFacade.LaunchFields.Listing[i] == field) return i;
             return 0;
         }
 
         private static void TurnLaunchPage(int direction)
         {
-            int count = WingLaunchFields.Listing.Count;
+            int count = EconomyFacade.LaunchFields.Listing.Count;
             int pages = Mathf.Max(1, Mathf.CeilToInt(count / (float)LaunchRowsPerPage));
             launchPage = Mathf.Clamp(launchPage + direction, 0, pages - 1);
             RefreshLaunchFrom();
@@ -298,14 +298,14 @@ namespace WingCommand
             Aircraft leader = WingCommandManager.Instance?.Wing?.Leader;
             FactionHQ hq = leader != null ? leader.NetworkHQ : null;
             Vector3 from = leader != null ? leader.transform.position : Vector3.zero;
-            WingLaunchFields.RefreshListing(hq, from);
+            EconomyFacade.LaunchFields.RefreshListing(hq, from);
 
-            IReadOnlyList<Airbase> fields = WingLaunchFields.Listing;
+            IReadOnlyList<Airbase> fields = EconomyFacade.LaunchFields.Listing;
             int pages = Mathf.Max(1, Mathf.CeilToInt(fields.Count / (float)LaunchRowsPerPage));
             if (launchPage >= pages) launchPage = pages - 1;
             if (launchPage < 0) launchPage = 0;
 
-            bool nearest = WingLaunchFields.Mode == HangarLaunchMode.OnlyNearest;
+            bool nearest = EconomyFacade.LaunchFields.Mode == HangarLaunchMode.OnlyNearest;
             launchNearestButton?.SetLatched(nearest);
             launchAnyButton?.SetLatched(!nearest);
 
@@ -323,10 +323,10 @@ namespace WingCommand
 
         private static void HoldSelectedReserve()
         {
-            bool held = WingSupplyReserve.Hold(selectedOffer, out string reason);
+            bool held = EconomyFacade.SupplyReserve.Hold(selectedOffer, out string reason);
             WingCommandManager.Instance?.Toast(held
-                ? selectedOffer.unitName + " held for the wing (" + WingSupplyReserve.Count +
-                  "/" + WingSupplyReserve.Capacity + ")"
+                ? selectedOffer.unitName + " held for the wing (" + EconomyFacade.SupplyReserve.Count +
+                  "/" + EconomyFacade.SupplyReserve.Capacity + ")"
                 : reason);
         }
 
@@ -351,7 +351,7 @@ namespace WingCommand
             }
 
             reserveRelease.Clear();
-            bool released = WingSupplyReserve.Release(
+            bool released = EconomyFacade.SupplyReserve.Release(
                 definition, out bool wasOwned, out string reason);
             WingCommandManager.Instance?.Toast(released
                 ? definition.unitName + (wasOwned ? " ownership released" : " released") +
@@ -367,7 +367,7 @@ namespace WingCommand
         {
             if (reserveLabel == null) return;
 
-            if (!WingSupplyReserve.HasFaction)
+            if (!EconomyFacade.SupplyReserve.HasFaction)
             {
                 reserveLabel.text = "NO FACTION";
                 reserveLabel.color = Dim();
@@ -378,20 +378,20 @@ namespace WingCommand
                 return;
             }
 
-            reserveLabel.text = "" + WingSupplyReserve.Count + " / " +
-                                WingSupplyReserve.Capacity;
+            reserveLabel.text = "" + EconomyFacade.SupplyReserve.Count + " / " +
+                                EconomyFacade.SupplyReserve.Capacity;
             reserveLabel.color = Friendly();
 
             if (reserveHintLabel != null)
             {
-                reserveHintLabel.text = WingSupplyReserve.Count >= WingSupplyReserve.Capacity
+                reserveHintLabel.text = EconomyFacade.SupplyReserve.Count >= EconomyFacade.SupplyReserve.Capacity
                     ? "FULL - RELEASE a selected row before holding another."
-                    : WingSupplyReserve.Count > 0
+                    : EconomyFacade.SupplyReserve.Count > 0
                         ? "Select a row to RELEASE it, or HOLD another from faction stock."
                         : "Select an airframe, then HOLD it to protect it from AI.";
             }
 
-            bool host = WingSupplyReserve.IsHost;
+            bool host = EconomyFacade.SupplyReserve.IsHost;
             bool selected = selectedOffer != null;
 
             // Bind confirmation to the originally selected airframe; changing selection disarms
@@ -401,10 +401,10 @@ namespace WingCommand
             reserveReleaseButton?.SetLatched(armed);
             reserveReleaseButton?.SetText(armed ? "?" : "-");
             reserveReleaseButton?.SetEnabled(
-                host && selected && WingSupplyReserve.CountOf(selectedOffer) > 0);
+                host && selected && EconomyFacade.SupplyReserve.CountOf(selectedOffer) > 0);
             reserveHoldButton?.SetEnabled(
-                host && selected && WingSupplyReserve.Count < WingSupplyReserve.Capacity &&
-                WingSupplyReserve.FactionStockOf(selectedOffer) > 0);
+                host && selected && EconomyFacade.SupplyReserve.Count < EconomyFacade.SupplyReserve.Capacity &&
+                EconomyFacade.SupplyReserve.FactionStockOf(selectedOffer) > 0);
         }
 
 
@@ -535,7 +535,7 @@ namespace WingCommand
 
         private static void TurnPage(int direction)
         {
-            IReadOnlyList<WingShop.Offer> offers = WingShop.Catalogue();
+            IReadOnlyList<WingShop.Offer> offers = EconomyFacade.Shop.Catalogue();
             int pages = Mathf.Max(1, Mathf.CeilToInt(offers.Count / (float)ShopGridCapacity));
             shopPage = Mathf.Clamp(shopPage + direction, 0, pages - 1);
             RefreshShop();
@@ -545,17 +545,17 @@ namespace WingCommand
         /// control clickable so rank refusal can explain itself.</summary>
         private static void ToggleExceedLimit()
         {
-            if (!WingShop.MeetsExceedLimitRank)
+            if (!EconomyFacade.Shop.MeetsExceedLimitRank)
             {
                 WingCommandManager.Instance?.Toast(
-                    "Requisitioning past the squadron limit requires rank " + WingShop.ExceedLimitRank);
+                    "Requisitioning past the squadron limit requires rank " + EconomyFacade.Shop.ExceedLimitRank);
                 return;
             }
 
-            WingShop.ExceedLimit = !WingShop.ExceedLimit;
-            WingCommandManager.Instance?.Toast(WingShop.ExceedLimit
+            EconomyFacade.Shop.ExceedLimit = !EconomyFacade.Shop.ExceedLimit;
+            WingCommandManager.Instance?.Toast(EconomyFacade.Shop.ExceedLimit
                 ? "Over-limit requisition allowed at " +
-                  WingShop.ExceedLimitMultiplier.ToString("0.##") + "x list price"
+                  EconomyFacade.Shop.ExceedLimitMultiplier.ToString("0.##") + "x list price"
                 : "Over-limit requisition disallowed");
         }
 
@@ -563,10 +563,10 @@ namespace WingCommand
         /// alter price.</summary>
         private static void CycleSpawnFuel()
         {
-            WingShop.CycleSpawnFuel();
+            EconomyFacade.Shop.CycleSpawnFuel();
             WingCommandManager.Instance?.Toast(
                 "Requisitions launch with " +
-                Mathf.RoundToInt(WingShop.SpawnFuelLevel * 100f) + "% fuel");
+                Mathf.RoundToInt(EconomyFacade.Shop.SpawnFuelLevel * 100f) + "% fuel");
         }
 
         private static void RequisitionSelected()
@@ -577,7 +577,7 @@ namespace WingCommand
                 return;
             }
 
-            bool bought = WingShop.Buy(selectedOffer, out string why, out float paid);
+            bool bought = EconomyFacade.Shop.Buy(selectedOffer, out string why, out float paid);
             WingCommandManager.Instance?.Toast(bought
                 ? selectedOffer.unitName + " requisitioned for " + Grouped(paid) +
                   " - departing friendly base"
@@ -593,7 +593,7 @@ namespace WingCommand
         {
             if (!Plugin.Settings.ShopEnabled.Value || shopTiles.Count == 0) return;
 
-            IReadOnlyList<WingShop.Offer> offers = WingShop.Catalogue();
+            IReadOnlyList<WingShop.Offer> offers = EconomyFacade.Shop.Catalogue();
 
             // Revalidate page bounds on every refresh because changing stock can shrink the catalogue.
             int pages = Mathf.Max(1, Mathf.CeilToInt(offers.Count / (float)ShopGridCapacity));
@@ -631,21 +631,21 @@ namespace WingCommand
         /// <summary>Refresh selected-airframe details and action controls.</summary>
         private static void RefreshOfferDetail(IReadOnlyList<WingShop.Offer> offers)
         {
-            WingShop.PurchaseQuote quote = WingShop.Quote(selectedOffer);
+            WingShop.PurchaseQuote quote = EconomyFacade.Shop.Quote(selectedOffer);
             bool overLimit = quote.OverLimit;
 
             if (exceedLimitButton != null)
             {
                 exceedLimitButton.SetText(
-                    "OVER LIMIT  x" + WingShop.ExceedLimitMultiplier.ToString("0.##"));
-                exceedLimitButton.SetLatched(WingShop.ExceedLimit);
+                    "OVER LIMIT  x" + EconomyFacade.Shop.ExceedLimitMultiplier.ToString("0.##"));
+                exceedLimitButton.SetLatched(EconomyFacade.Shop.ExceedLimit);
             }
 
             if (fullFuelButton != null)
             {
                 // Show the chosen fuel percentage without a permanently lit toggle state.
                 fullFuelButton.SetText(
-                    "FUEL  " + Mathf.RoundToInt(WingShop.SpawnFuelLevel * 100f) + "%");
+                    "FUEL  " + Mathf.RoundToInt(EconomyFacade.Shop.SpawnFuelLevel * 100f) + "%");
                 fullFuelButton.SetLatched(false);
                 fullFuelButton.SetEnabled(true);
             }
@@ -660,8 +660,8 @@ namespace WingCommand
                 else
                 {
                     float cost = quote.Price;
-                    int reservedCount = WingSupplyReserve.CountOf(selectedOffer);
-                    int ownedCount = WingSupplyReserve.OwnedOf(selectedOffer);
+                    int reservedCount = EconomyFacade.SupplyReserve.CountOf(selectedOffer);
+                    int ownedCount = EconomyFacade.SupplyReserve.OwnedOf(selectedOffer);
                     int stock = 0;
                     for (int i = 0; i < offers.Count; i++)
                     {
@@ -692,10 +692,10 @@ namespace WingCommand
                 {
                     // Distinguish saved recovered fit from the future purchase plan in the offer
                     // breakdown.
-                    WingLoadoutChoice fit = WingLoadoutBook.PlannedFor(selectedOffer);
+                    WingLoadoutChoice fit = EconomyFacade.LoadoutBook.PlannedFor(selectedOffer);
                     bool fromReserve = false;
 
-                    if (WingSupplyReserve.PeekLoadout(selectedOffer,
+                    if (EconomyFacade.SupplyReserve.PeekLoadout(selectedOffer,
                                                       out WingLoadoutChoice stored))
                     {
                         fit = stored;
@@ -748,17 +748,17 @@ namespace WingCommand
                 ? "AUTO"
                 : AvTheme.Truncate(pilot.Callsign, 12);
 
-            WingLoadoutChoice fit = WingLoadoutBook.PlannedFor(selectedOffer);
-            bool fromReserve = WingSupplyReserve.PeekLoadout(selectedOffer,
+            WingLoadoutChoice fit = EconomyFacade.LoadoutBook.PlannedFor(selectedOffer);
+            bool fromReserve = EconomyFacade.SupplyReserve.PeekLoadout(selectedOffer,
                                                               out WingLoadoutChoice recoveredFit);
             if (fromReserve) fit = recoveredFit;
 
             string fuel = fromReserve
                 ? "AS RECOVERED"
-                : "FUEL " + Mathf.RoundToInt(WingShop.SpawnFuelLevel * 100f) + "%";
+                : "FUEL " + Mathf.RoundToInt(EconomyFacade.Shop.SpawnFuelLevel * 100f) + "%";
             string fitLabel = fromReserve
                 ? "RESERVE FIT"
-                : AvTheme.Truncate(WingLoadoutCatalog.Label(fit), 16).ToUpperInvariant();
+                : AvTheme.Truncate(EconomyFacade.LoadoutCatalog.Label(fit), 16).ToUpperInvariant();
 
             supplyDispatchAirframeLabel.text = designation + "  ·  " + pilotName;
             supplyDispatchStateLabel.text = quote.CanBuy
@@ -797,17 +797,17 @@ namespace WingCommand
                 return;
             }
 
-            WingLoadoutChoice planned = WingLoadoutBook.PlannedFor(selectedOffer);
+            WingLoadoutChoice planned = EconomyFacade.LoadoutBook.PlannedFor(selectedOffer);
 
             // Display Standard when a planned template has been deleted, matching build fallback.
-            if (planned.IsTemplate && !WingLoadoutTemplates.Exists(planned.TemplateId))
+            if (planned.IsTemplate && !EconomyFacade.LoadoutTemplates.Exists(planned.TemplateId))
             {
-                WingLoadoutBook.Plan(selectedOffer, planned.WithTemplate(null));
-                planned = WingLoadoutBook.PlannedFor(selectedOffer);
+                EconomyFacade.LoadoutBook.Plan(selectedOffer, planned.WithTemplate(null));
+                planned = EconomyFacade.LoadoutBook.PlannedFor(selectedOffer);
             }
 
             shopTemplateButton.SetText(
-                AvTheme.Truncate(WingLoadoutCatalog.Label(planned), 34)
+                AvTheme.Truncate(EconomyFacade.LoadoutCatalog.Label(planned), 34)
                        .ToUpperInvariant());
             shopTemplateButton.SetEnabled(true);
             shopTemplateButton.SetLatched(planned.IsTemplate);
@@ -823,8 +823,8 @@ namespace WingCommand
                 return;
             }
 
-            WingLoadoutChoice planned = WingLoadoutBook.PlannedFor(selectedOffer);
-            IReadOnlyList<LoadoutTemplateRecord> mine = WingLoadoutTemplates.For(selectedOffer);
+            WingLoadoutChoice planned = EconomyFacade.LoadoutBook.PlannedFor(selectedOffer);
+            IReadOnlyList<LoadoutTemplateRecord> mine = EconomyFacade.LoadoutTemplates.For(selectedOffer);
 
             // Use null as the Standard entry's ID.
             var ids = new List<string>(mine.Count + 1) { null };
@@ -854,8 +854,8 @@ namespace WingCommand
 
                 // Read the current plan again when the popup callback runs; captured state may be
                 // stale.
-                WingLoadoutChoice current = WingLoadoutBook.PlannedFor(target);
-                WingLoadoutBook.Plan(target, current.WithTemplate(ids[index]));
+                WingLoadoutChoice current = EconomyFacade.LoadoutBook.PlannedFor(target);
+                EconomyFacade.LoadoutBook.Plan(target, current.WithTemplate(ids[index]));
             });
         }
 
@@ -867,7 +867,7 @@ namespace WingCommand
             int wing = WingCommandManager.Instance?.Wing?.Count ?? 0;
             supplyFundsLabel.text = "YOUR FLIGHT  " + wing + " / " + WingRegistry.WingLimitLabel;
 
-            WingShop.SquadronState squadron = WingShop.Squadron();
+            WingShop.SquadronState squadron = EconomyFacade.Shop.Squadron();
             string text = "AI POOL  " + squadron.Active + " / " + squadron.Limit;
             if (Plugin.Settings.CheatNoWingLimit)
             {
@@ -884,14 +884,14 @@ namespace WingCommand
             }
 
             // Explain capacity refusal and available remedies in persistent status.
-            if (WingShop.ExceedLimit && WingShop.MeetsExceedLimitRank)
+            if (EconomyFacade.Shop.ExceedLimit && EconomyFacade.Shop.MeetsExceedLimitRank)
             {
                 // Keep the surcharge on its button; status only signals over-cap operation.
                 supplySquadronLabel.text = text + "  ·  OVER LIMIT";
             }
-            else if (!WingShop.MeetsExceedLimitRank)
+            else if (!EconomyFacade.Shop.MeetsExceedLimitRank)
             {
-                supplySquadronLabel.text = text + "  ·  FULL (RANK " + WingShop.ExceedLimitRank + "+)";
+                supplySquadronLabel.text = text + "  ·  FULL (RANK " + EconomyFacade.Shop.ExceedLimitRank + "+)";
             }
             else
             {
@@ -960,11 +960,11 @@ namespace WingCommand
                 Aircraft leader = WingCommandManager.Instance?.Wing?.Leader;
                 FactionHQ hq = leader != null ? leader.NetworkHQ : null;
 
-                int owned = WingSupplyReserve.OwnedOf(offer.Definition);
-                float cost = WingShop.CurrentPriceOf(offer.Definition);
-                bool affordable = WingShop.Allocation >= cost;
+                int owned = EconomyFacade.SupplyReserve.OwnedOf(offer.Definition);
+                float cost = EconomyFacade.Shop.CurrentPriceOf(offer.Definition);
+                bool affordable = EconomyFacade.Shop.Allocation >= cost;
                 bool selected = selectedOffer == offer.Definition;
-                bool canSpawn = WingLaunchFields.CanAnyAllowedLaunch(hq, offer.Definition);
+                bool canSpawn = EconomyFacade.LaunchFields.CanAnyAllowedLaunch(hq, offer.Definition);
 
                 Sprite sprite = IconFactory.Aircraft(offer.Definition);
                 icon.sprite = sprite;
@@ -996,9 +996,9 @@ namespace WingCommand
                 }
                 rail.color = selected ? Green() : Color.clear;
 
-                string spawnNotice = " | " + WingHangarStock.AirframeLaunchText(offer.Definition, allowedOnly: true);
+                string spawnNotice = " | " + EconomyFacade.HangarStock.AirframeLaunchText(offer.Definition, allowedOnly: true);
                 if (!canSpawn)
-                    spawnNotice = " | [!] " + WingHangarStock.AirframeLaunchText(offer.Definition, allowedOnly: false);
+                    spawnNotice = " | [!] " + EconomyFacade.HangarStock.AirframeLaunchText(offer.Definition, allowedOnly: false);
                 string costNotice = owned > 0 ? "FREE (" + owned + " owned in reserve)" : "Cost: " + Grouped(cost);
                 hit.WithTooltip(offer.Name + " — " + costNotice + " | Stock: " + offer.Stock + spawnNotice);
                 hit.SetRowHighlight(fill, selected ? WingUi.CardFillSelected : WingUi.CardFill, WingUi.CardFillHover);
@@ -1058,11 +1058,11 @@ namespace WingCommand
                 bound = airbase;
                 if (!go.activeSelf) go.SetActive(true);
 
-                bool allowed = WingLaunchFields.IsAllowed(airbase);
+                bool allowed = EconomyFacade.LaunchFields.IsAllowed(airbase);
                 bool hasAirframe = selectedOffer != null;
-                bool canProduce = hasAirframe && WingLaunchFields.CanProduce(airbase, selectedOffer);
+                bool canProduce = hasAirframe && EconomyFacade.LaunchFields.CanProduce(airbase, selectedOffer);
                 bool jammed = allowed && (!hasAirframe || canProduce) &&
-                              HangarDepartureLane.IsJammed(airbase);
+                              EconomyFacade.DepartureLane.IsJammed(airbase);
 
                 LaunchBaseStatus state = LaunchBaseStatusPolicy.Evaluate(allowed, canProduce, hasAirframe);
                 string badge = LaunchBaseStatusPolicy.BadgeText(state);
@@ -1070,7 +1070,7 @@ namespace WingCommand
                 check.SetLatched(allowed);
                 check.SetText(allowed ? "X" : "");
 
-                name.text = AvTheme.Truncate(WingLaunchFields.DisplayName(airbase), 26);
+                name.text = AvTheme.Truncate(EconomyFacade.LaunchFields.DisplayName(airbase), 26);
                 status.text = jammed ? "JAMMED" : badge;
 
                 switch (state)
@@ -1094,17 +1094,17 @@ namespace WingCommand
                 }
 
                 string tooltip = LaunchBaseStatusPolicy.Tooltip(
-                    WingLaunchFields.DisplayName(airbase),
+                    EconomyFacade.LaunchFields.DisplayName(airbase),
                     selectedOffer != null ? selectedOffer.unitName : null,
                     allowed,
                     canProduce);
-                string stock = WingHangarStock.FieldStockText(airbase);
+                string stock = EconomyFacade.HangarStock.FieldStockText(airbase);
                 if (!string.IsNullOrEmpty(stock)) tooltip += " — " + stock;
                 if (jammed)
                 {
                     status.color = Warning();
                     name.color = Warning();
-                    tooltip = WingLaunchFields.DisplayName(airbase) +
+                    tooltip = EconomyFacade.LaunchFields.DisplayName(airbase) +
                         " — Runway queue blocked by an aircraft that is no longer departing. " +
                         "Choose another launch base or Any.";
                     if (!string.IsNullOrEmpty(stock)) tooltip += " — " + stock;
@@ -1122,7 +1122,7 @@ namespace WingCommand
             private void Toggle()
             {
                 if (bound == null) return;
-                WingLaunchFields.SetAllowed(bound, !WingLaunchFields.IsAllowed(bound));
+                EconomyFacade.LaunchFields.SetAllowed(bound, !EconomyFacade.LaunchFields.IsAllowed(bound));
                 RefreshLaunchFrom();
                 RefreshShop();
             }

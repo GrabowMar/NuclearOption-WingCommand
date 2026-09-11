@@ -440,7 +440,7 @@ namespace WingCommand
 
         private static void RefreshRoster(WingRegistry wing)
         {
-            int pendingCount = WingShopDelivery.PendingCount;
+            int pendingCount = EconomyFacade.ShopDelivery.PendingCount;
             int totalCount = wing.Count + pendingCount;
             bool empty = totalCount == 0;
             if (rosterEmptyLabel != null && rosterEmptyLabel.gameObject.activeSelf != empty)
@@ -469,7 +469,7 @@ namespace WingCommand
                 }
                 else if (index < totalCount)
                 {
-                    rosterRows[i].BindPending(WingShopDelivery.GetPending(index - wing.Count), index + 1);
+                    rosterRows[i].BindPending(EconomyFacade.ShopDelivery.GetPending(index - wing.Count), index + 1);
                 }
                 else
                 {
@@ -630,7 +630,7 @@ namespace WingCommand
                     {
                         WingShopDelivery.PendingDelivery going = boundPending;
                         pendingRelease.Clear();
-                        WingShopDelivery.CancelPending(going);
+                        EconomyFacade.ShopDelivery.CancelPending(going);
                         return;
                     }
 

@@ -96,7 +96,7 @@ namespace WingCommand
                                                     state is AIPilotTakeoffState))
                 return;
 
-            WingAirfield.DrainTakeoffQueue(aircraft);
+            EconomyFacade.Airfield.DrainTakeoffQueue(aircraft);
         }
 #pragma warning restore IDE0051
     }

@@ -400,11 +400,11 @@ namespace WingCommand
             for (int i = 0; i < recruited.Count; i++)
                 total += PersonnelFacade.Recruitment.PriceOf(recruited[i]);
 
-            if (WingShop.Allocation < total)
+            if (EconomyFacade.Shop.Allocation < total)
             {
                 pendingRecruit.Clear();
                 Toast("Assignment costs " + Mathf.RoundToInt(total) + ", have " +
-                      Mathf.RoundToInt(WingShop.Allocation));
+                      Mathf.RoundToInt(EconomyFacade.Shop.Allocation));
                 return;
             }
 

@@ -845,14 +845,14 @@ namespace WingCommand
                 dataBar.SetChip(0, count == 0 ? "NO LINK" : "LINKED " + count, count > 0);
                 dataBar.SetChip(1, wing != null ? wing.Roe.ToString().ToUpperInvariant() : "ROE --",
                                 wing != null && wing.Roe != WingRoe.Hold);
-                dataBar.SetChip(2, WingShop.Allocation > 0f ? "SUPPLY" : "NO FUNDS",
-                                WingShop.Allocation > 0f);
+                dataBar.SetChip(2, EconomyFacade.Shop.Allocation > 0f ? "SUPPLY" : "NO FUNDS",
+                                EconomyFacade.Shop.Allocation > 0f);
             }
 
             if (fundsMetric != null)
             {
-                fundsMetric.Set(Grouped(WingShop.Allocation),
-                                "HOLD " + WingSupplyReserve.Count + " / " + WingSupplyReserve.Capacity,
+                fundsMetric.Set(Grouped(EconomyFacade.Shop.Allocation),
+                                "HOLD " + EconomyFacade.SupplyReserve.Count + " / " + EconomyFacade.SupplyReserve.Capacity,
                                 1f, WingUi.RailCyan);
             }
 

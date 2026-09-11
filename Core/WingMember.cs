@@ -25,11 +25,11 @@ namespace WingCommand
         public WingWeaponPreference WeaponPreference { get; set; } = WingWeaponPreference.Auto;
 
         /// <summary>Recorded loadout configured by this mod.</summary>
-        public WingLoadoutChoice Loadout => WingLoadoutBook.AboardOf(Aircraft);
+        public WingLoadoutChoice Loadout => EconomyFacade.LoadoutBook.AboardOf(Aircraft);
 
         /// <summary>Whether the mod knows this loadout; recruited mission aircraft may carry an unknown
         /// fit.</summary>
-        public bool LoadoutKnown => WingLoadoutBook.IsKnown(Aircraft);
+        public bool LoadoutKnown => EconomyFacade.LoadoutBook.IsKnown(Aircraft);
 
         /// <summary>Squadron pilot record, or null before assignment. Pilot is the separate native state
         /// machine.</summary>
@@ -123,11 +123,11 @@ namespace WingCommand
         {
             if (Pilot == null || Aircraft == null || !Alive) return;
 
-            Airbase field = WingAirfield.FieldUnder(Aircraft);
-            if (field != null) HangarDepartureLane.Reserve(field, Aircraft.transform, this);
+            Airbase field = EconomyFacade.Airfield.FieldUnder(Aircraft);
+            if (field != null) EconomyFacade.DepartureLane.Reserve(field, Aircraft.transform, this);
 
             // Remove the completed landing claim before it blocks takeoff on the same runway.
-            WingAirfield.DrainLandingList(Aircraft);
+            EconomyFacade.Airfield.DrainLandingList(Aircraft);
 
             Pilot.flightInfo.HasTakenOff = false;
             deliveryPending = true;
@@ -144,7 +144,7 @@ namespace WingCommand
             }
 
             Plugin.LogVerbose("[Wing] " + Name + " refitted; relaunching from " +
-                                  (field != null ? WingLaunchFields.DisplayName(field) : "its field"));
+                                  (field != null ? EconomyFacade.LaunchFields.DisplayName(field) : "its field"));
         }
 
         /// <summary>Whether the airframe lacks an autopilot and requires surface-vehicle control,
@@ -307,7 +307,7 @@ namespace WingCommand
             Pilot.flightInfo.HasTakenOff = true;
             deliveryPending = false;
             // Refit owns the departure lane until liftoff.
-            HangarDepartureLane.Release(this);
+            EconomyFacade.DepartureLane.Release(this);
             PersonnelFacade.DepartureChatter.Activated(this);
             // Evaluate the retained order without resetting queued-task clocks or treating takeoff as a
             // new command.
@@ -439,7 +439,7 @@ namespace WingCommand
         {
             taskQueue.Clear();
             AbandonRefit();
-            HangarDepartureLane.Release(this);
+            EconomyFacade.DepartureLane.Release(this);
             if (deliveryPending)
             {
                 // Release roster ownership without interrupting pending native taxi or launch.
@@ -463,7 +463,7 @@ namespace WingCommand
         {
             taskQueue.Clear();
             AbandonRefit();
-            HangarDepartureLane.Release(this);
+            EconomyFacade.DepartureLane.Release(this);
             if (deliveryPending)
             {
                 // Leave a pending delivery under native taxi/launch control.

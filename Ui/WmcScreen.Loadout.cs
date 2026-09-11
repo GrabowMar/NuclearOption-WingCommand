@@ -129,7 +129,7 @@ namespace WingCommand
             {
                 templateNameField = WingUi.InputField(
                     parent, new Rect(left, y, nameWidth, RowHeight),
-                    WingLoadoutTemplates.MaxNameLength, RenameTemplate, LoadoutHint.Name);
+                    EconomyFacade.LoadoutTemplates.MaxNameLength, RenameTemplate, LoadoutHint.Name);
             }
             else
             {
@@ -232,7 +232,7 @@ namespace WingCommand
 
         private static void TurnAirframePage(int direction)
         {
-            IReadOnlyList<WingShop.Offer> offers = WingShop.LoadoutCatalogue();
+            IReadOnlyList<WingShop.Offer> offers = EconomyFacade.Shop.LoadoutCatalogue();
             int pages = Mathf.Max(1, Mathf.CeilToInt(offers.Count / (float)AirframeGridCapacity));
             airframePage = Mathf.Clamp(airframePage + direction, 0, pages - 1);
             RefreshLoadoutPage();
@@ -260,7 +260,7 @@ namespace WingCommand
 
         private static void RefreshAirframeGrid()
         {
-            IReadOnlyList<WingShop.Offer> offers = WingShop.LoadoutCatalogue();
+            IReadOnlyList<WingShop.Offer> offers = EconomyFacade.Shop.LoadoutCatalogue();
 
             if (selectedOffer == null && offers.Count > 0)
                 selectedOffer = offers[0].Definition;
@@ -298,11 +298,11 @@ namespace WingCommand
         {
             if (selectedOffer == null) return null;
 
-            LoadoutTemplateRecord record = WingLoadoutTemplates.ById(editingTemplateId);
+            LoadoutTemplateRecord record = EconomyFacade.LoadoutTemplates.ById(editingTemplateId);
             if (record != null && record.AirframeKey == selectedOffer.jsonKey) return record;
 
             // Fall back to the first remaining template instead of an empty editor.
-            IReadOnlyList<LoadoutTemplateRecord> mine = WingLoadoutTemplates.For(selectedOffer);
+            IReadOnlyList<LoadoutTemplateRecord> mine = EconomyFacade.LoadoutTemplates.For(selectedOffer);
             if (mine.Count == 0)
             {
                 editingTemplateId = null;
@@ -321,7 +321,7 @@ namespace WingCommand
                 return;
             }
 
-            IReadOnlyList<LoadoutTemplateRecord> mine = WingLoadoutTemplates.For(selectedOffer);
+            IReadOnlyList<LoadoutTemplateRecord> mine = EconomyFacade.LoadoutTemplates.For(selectedOffer);
             if (mine.Count == 0)
             {
                 WingCommandManager.Instance?.Toast(
@@ -358,20 +358,20 @@ namespace WingCommand
                 return;
             }
 
-            if (WingLoadoutCatalog.PylonCount(selectedOffer) == 0)
+            if (EconomyFacade.LoadoutCatalog.PylonCount(selectedOffer) == 0)
             {
                 WingCommandManager.Instance?.Toast(
                     selectedOffer.unitName + "'s hardpoints cannot be read on this build");
                 return;
             }
 
-            LoadoutTemplateRecord created = WingLoadoutTemplates.Create(
-                selectedOffer, WingLoadoutTemplates.NextDefaultName(selectedOffer), null);
+            LoadoutTemplateRecord created = EconomyFacade.LoadoutTemplates.Create(
+                selectedOffer, EconomyFacade.LoadoutTemplates.NextDefaultName(selectedOffer), null);
 
             if (created == null)
             {
                 WingCommandManager.Instance?.Toast(
-                    "That airframe already has " + WingLoadoutTemplates.MaxPerAirframe +
+                    "That airframe already has " + EconomyFacade.LoadoutTemplates.MaxPerAirframe +
                     " templates");
                 return;
             }
@@ -390,11 +390,11 @@ namespace WingCommand
                 return;
             }
 
-            LoadoutTemplateRecord copy = WingLoadoutTemplates.Duplicate(source);
+            LoadoutTemplateRecord copy = EconomyFacade.LoadoutTemplates.Duplicate(source);
             if (copy == null)
             {
                 WingCommandManager.Instance?.Toast(
-                    "That airframe already has " + WingLoadoutTemplates.MaxPerAirframe +
+                    "That airframe already has " + EconomyFacade.LoadoutTemplates.MaxPerAirframe +
                     " templates");
                 return;
             }
@@ -413,7 +413,7 @@ namespace WingCommand
             }
 
             string name = doomed.Name;
-            WingLoadoutTemplates.Delete(doomed);
+            EconomyFacade.LoadoutTemplates.Delete(doomed);
             editingTemplateId = null;
             pylonPage = 0;
             SyncNameField();
@@ -427,7 +427,7 @@ namespace WingCommand
             LoadoutTemplateRecord template = EditingTemplate();
             if (template == null) return;
 
-            WingLoadoutTemplates.Rename(template, name);
+            EconomyFacade.LoadoutTemplates.Rename(template, name);
 
             // Synchronise the field with the store's trimmed/defaulted saved name.
             SyncNameField();
@@ -465,10 +465,10 @@ namespace WingCommand
             visiblePylons.Clear();
             if (selectedOffer == null) return;
 
-            int count = WingLoadoutCatalog.PylonCount(selectedOffer);
+            int count = EconomyFacade.LoadoutCatalog.PylonCount(selectedOffer);
             for (int i = 0; i < count; i++)
             {
-                if (WingLoadoutCatalog.MirrorsPrevious(selectedOffer, i)) continue;
+                if (EconomyFacade.LoadoutCatalog.MirrorsPrevious(selectedOffer, i)) continue;
                 visiblePylons.Add(i);
             }
         }
@@ -486,13 +486,13 @@ namespace WingCommand
             LoadoutTemplateRecord template = EditingTemplate();
             if (template == null) return;
 
-            WingLoadoutTemplates.SetMount(template, pylon, key);
+            EconomyFacade.LoadoutTemplates.SetMount(template, pylon, key);
 
-            int count = WingLoadoutCatalog.PylonCount(selectedOffer);
+            int count = EconomyFacade.LoadoutCatalog.PylonCount(selectedOffer);
             for (int i = pylon + 1;
-                 i < count && WingLoadoutCatalog.MirrorsPrevious(selectedOffer, i);
+                 i < count && EconomyFacade.LoadoutCatalog.MirrorsPrevious(selectedOffer, i);
                  i++)
-                WingLoadoutTemplates.SetMount(template, i, key);
+                EconomyFacade.LoadoutTemplates.SetMount(template, i, key);
         }
 
         private static void OpenStorePicker(int pylon, int rowIndex)
@@ -504,11 +504,11 @@ namespace WingCommand
                 return;
             }
 
-            WingLoadoutCatalog.OptionsFor(selectedOffer, pylon, storeScratch);
+            EconomyFacade.LoadoutCatalog.OptionsFor(selectedOffer, pylon, storeScratch);
             if (storeScratch.Count <= 1)
             {
                 WingCommandManager.Instance?.Toast(
-                    WingLoadoutCatalog.PylonName(selectedOffer, pylon) + " takes no stores");
+                    EconomyFacade.LoadoutCatalog.PylonName(selectedOffer, pylon) + " takes no stores");
                 return;
             }
 
@@ -552,7 +552,7 @@ namespace WingCommand
 
         private static void RefreshLoadoutPage()
         {
-            IReadOnlyList<WingShop.Offer> offers = WingShop.LoadoutCatalogue();
+            IReadOnlyList<WingShop.Offer> offers = EconomyFacade.Shop.LoadoutCatalogue();
             ValidateSelectedOffer(offers);
 
             if (selectedOffer == null && offers.Count > 0) selectedOffer = offers[0].Definition;
@@ -579,8 +579,8 @@ namespace WingCommand
 
             FactionHQ hq = WingCommandManager.Instance?.Wing?.Leader?.NetworkHQ;
             Faction faction = hq != null ? hq.faction : null;
-            var liveries = WingLoadoutTemplates.GetLiveries(selectedOffer, faction);
-            int currentIdx = WingLoadoutTemplates.GetLiveryIndex(selectedOffer);
+            var liveries = EconomyFacade.LoadoutTemplates.GetLiveries(selectedOffer, faction);
+            int currentIdx = EconomyFacade.LoadoutTemplates.GetLiveryIndex(selectedOffer);
             if (currentIdx >= liveries.Count) currentIdx = 0;
             liveryLabel.text = liveries[currentIdx].Name.ToUpperInvariant();
         }
@@ -590,19 +590,19 @@ namespace WingCommand
             if (selectedOffer == null) return;
             FactionHQ hq = WingCommandManager.Instance?.Wing?.Leader?.NetworkHQ;
             Faction faction = hq != null ? hq.faction : null;
-            var liveries = WingLoadoutTemplates.GetLiveries(selectedOffer, faction);
+            var liveries = EconomyFacade.LoadoutTemplates.GetLiveries(selectedOffer, faction);
             if (liveries.Count <= 1) return;
-            int current = WingLoadoutTemplates.GetLiveryIndex(selectedOffer);
+            int current = EconomyFacade.LoadoutTemplates.GetLiveryIndex(selectedOffer);
             int next = (current + direction + liveries.Count) % liveries.Count;
-            WingLoadoutTemplates.SetLiveryIndex(selectedOffer, next);
+            EconomyFacade.LoadoutTemplates.SetLiveryIndex(selectedOffer, next);
             RefreshLiveryControl();
         }
 
         private static void RefreshTemplateControls(LoadoutTemplateRecord template)
         {
             bool haveAirframe = selectedOffer != null;
-            bool readable = haveAirframe && WingLoadoutCatalog.PylonCount(selectedOffer) > 0;
-            int saved = haveAirframe ? WingLoadoutTemplates.CountFor(selectedOffer) : 0;
+            bool readable = haveAirframe && EconomyFacade.LoadoutCatalog.PylonCount(selectedOffer) > 0;
+            int saved = haveAirframe ? EconomyFacade.LoadoutTemplates.CountFor(selectedOffer) : 0;
 
             if (templateSelectButton != null)
             {
@@ -615,9 +615,9 @@ namespace WingCommand
             }
 
             templateNewButton?.SetEnabled(readable &&
-                                          saved < WingLoadoutTemplates.MaxPerAirframe);
+                                          saved < EconomyFacade.LoadoutTemplates.MaxPerAirframe);
             templateCopyButton?.SetEnabled(template != null &&
-                                           saved < WingLoadoutTemplates.MaxPerAirframe);
+                                           saved < EconomyFacade.LoadoutTemplates.MaxPerAirframe);
             templateDeleteButton?.SetEnabled(template != null);
             // Refresh name text only when the edited template changes.
             if (!ReferenceEquals(lastNamedTemplate, template))
@@ -653,14 +653,14 @@ namespace WingCommand
             float air = 0f;
             float surface = 0f;
 
-            int count = WingLoadoutCatalog.PylonCount(selectedOffer);
+            int count = EconomyFacade.LoadoutCatalog.PylonCount(selectedOffer);
             for (int i = 0; i < count; i++)
             {
                 string key = template.KeyAt(i);
                 if (string.IsNullOrEmpty(key)) continue;
 
                 WingLoadoutCatalog.StoreOption store =
-                    WingLoadoutCatalog.StoreOn(selectedOffer, i, key);
+                    EconomyFacade.LoadoutCatalog.StoreOn(selectedOffer, i, key);
                 fitted++;
                 mass += store.Mass;
                 air += store.AntiAir;
@@ -740,7 +740,7 @@ namespace WingCommand
             // Build one reusable scratch fit per refresh for consistent exclusion checks. Spawn
             // loadouts remain separately allocated per aircraft.
             Loadout inProgress = template != null
-                ? WingLoadoutCatalog.FillScratch(selectedOffer, template.MountKeys)
+                ? EconomyFacade.LoadoutCatalog.FillScratch(selectedOffer, template.MountKeys)
                 : null;
 
             int first = pylonPage * PylonRowsPerPage;
@@ -757,13 +757,13 @@ namespace WingCommand
                 bool blocked = false;
                 int represented = MirrorCount(pylon);
                 for (int mirror = 0; mirror < represented && !blocked; mirror++)
-                    blocked = WingLoadoutCatalog.IsPylonBlocked(
+                    blocked = EconomyFacade.LoadoutCatalog.IsPylonBlocked(
                         selectedOffer, pylon + mirror, inProgress);
 
                 pylonRows[i].Bind(
                     pylon, i,
-                    WingLoadoutCatalog.PylonName(selectedOffer, pylon),
-                    WingLoadoutCatalog.StoreOn(selectedOffer, pylon, template.KeyAt(pylon)),
+                    EconomyFacade.LoadoutCatalog.PylonName(selectedOffer, pylon),
+                    EconomyFacade.LoadoutCatalog.StoreOn(selectedOffer, pylon, template.KeyAt(pylon)),
                     represented,
                     blocked);
             }
@@ -773,9 +773,9 @@ namespace WingCommand
         private static int MirrorCount(int pylon)
         {
             int count = 1;
-            int total = WingLoadoutCatalog.PylonCount(selectedOffer);
+            int total = EconomyFacade.LoadoutCatalog.PylonCount(selectedOffer);
             for (int i = pylon + 1;
-                 i < total && WingLoadoutCatalog.MirrorsPrevious(selectedOffer, i);
+                 i < total && EconomyFacade.LoadoutCatalog.MirrorsPrevious(selectedOffer, i);
                  i++)
                 count++;
             return count;
@@ -792,7 +792,7 @@ namespace WingCommand
                 return;
             }
 
-            if (!WingLoadoutCatalog.Available)
+            if (!EconomyFacade.LoadoutCatalog.Available)
             {
                 loadoutStatusLabel.text =
                     "Stock station data unreadable on this build - standard fit only.";
@@ -800,7 +800,7 @@ namespace WingCommand
                 return;
             }
 
-            if (WingLoadoutCatalog.PylonCount(selectedOffer) == 0)
+            if (EconomyFacade.LoadoutCatalog.PylonCount(selectedOffer) == 0)
             {
                 loadoutStatusLabel.text =
                     AvTheme.Truncate(selectedOffer.unitName, 18) +

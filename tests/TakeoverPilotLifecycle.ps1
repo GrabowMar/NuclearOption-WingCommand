@@ -38,7 +38,7 @@ public static class PersonnelFacade {
     }
 }
 public static class WingHost { public static void NoteLeader(Aircraft a) {} }
-public static class HangarDepartureLane { public static void Release(WingMember m) {} }
+public static class EconomyFacade { public static class DepartureLane { public static void Release(WingMember m) {} } }
 public static class WingMarkers { public static void Repaint(Aircraft a) {} }
 public class WingRegistry {
     private List<WingMember> members = new List<WingMember>();

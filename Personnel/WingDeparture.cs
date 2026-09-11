@@ -34,7 +34,7 @@ namespace WingCommand
                 Aircraft = member.Aircraft,
                 AircraftId = member.Aircraft.persistentID,
                 Name = member.Name,
-                Owned = WingShop.IsPurchased(member.Aircraft),
+                Owned = EconomyFacade.Shop.IsPurchased(member.Aircraft),
                 LoadoutKnown = member.LoadoutKnown,
                 Loadout = member.Loadout,
             });
@@ -51,7 +51,7 @@ namespace WingCommand
                 Aircraft = aircraft,
                 AircraftId = aircraft.persistentID,
                 Name = name ?? aircraft.unitName ?? "AI",
-                Owned = owned || WingShop.IsPurchased(aircraft),
+                Owned = owned || EconomyFacade.Shop.IsPurchased(aircraft),
                 LoadoutKnown = false,
                 Loadout = WingLoadoutChoice.Standard,
             });

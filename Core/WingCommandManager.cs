@@ -42,7 +42,7 @@ namespace WingCommand
 
         private void FixedUpdate()
         {
-            if (InPlayableState()) WingAirfield.Tick();
+            if (InPlayableState()) EconomyFacade.Airfield.Tick();
         }
 
         private void Update()
@@ -60,9 +60,9 @@ namespace WingCommand
                 WingComms.Reset();
                 CombatFacade.Tactical.Reset();
                 WingMarkers.Reset();
-                WingShopDelivery.Reset();
-                WingAirfield.Reset();
-                WingShop.Reset();
+                EconomyFacade.ShopDelivery.Reset();
+                EconomyFacade.Airfield.Reset();
+                EconomyFacade.Shop.Reset();
                 PersonnelFacade.Recruitment.Reset();
                 PersonnelFacade.Roster.Reset();
                 PersonnelFacade.KillCredit.Reset();
@@ -70,7 +70,7 @@ namespace WingCommand
                 recruitQueue.Clear();
                 PersonnelFacade.Recovery.Reset();
                 PersonnelFacade.Departure.Reset();
-                WingSupplyReserve.Reset();
+                EconomyFacade.SupplyReserve.Reset();
                 PersonnelFacade.Takeover.Reset();
                 WingUi.Reset();
                 MfdPresentation.Reset();
@@ -102,11 +102,11 @@ namespace WingCommand
 
             // Use the local player's aircraft as formation leader.
             Wing.SetLeader(GameManager.GetLocalAircraft(out Aircraft local) ? local : null);
-            WingSupplyReserve.Tick();
-            WingShop.Tick();
+            EconomyFacade.SupplyReserve.Tick();
+            EconomyFacade.Shop.Tick();
             // Advance delivery and flight ownership before UI so panel failures cannot block
             // departures.
-            WingShopDelivery.Tick();
+            EconomyFacade.ShopDelivery.Tick();
             FlushRecruitQueue();
 
             // Settle RTB before Prune can misclassify an ejected landing pilot as a combat loss.

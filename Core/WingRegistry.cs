@@ -120,7 +120,7 @@ namespace WingCommand
         {
             if (member == null || newLeader == null || !members.Remove(member)) return false;
 
-            HangarDepartureLane.Release(member);
+            EconomyFacade.DepartureLane.Release(member);
 
             // Keep the same squadron pilot in the player-controlled replacement seat.
             WingPilot pilot = PersonnelFacade.Roster.Of(member);
@@ -358,9 +358,9 @@ namespace WingCommand
 
                 // Recovery claims successful returns before this pass; remaining removals are losses.
                 PersonnelFacade.Roster.Retire(m, survived: false);
-                WingLoadoutBook.Forget(m.Aircraft);
+                EconomyFacade.LoadoutBook.Forget(m.Aircraft);
                 // Release taxi ownership for ejected pilots even if no state transition occurs.
-                HangarDepartureLane.Release(m);
+                EconomyFacade.DepartureLane.Release(m);
                 CombatFacade.Tactical.Release(m.Aircraft);
                 members.RemoveAt(i);
             }
@@ -422,7 +422,7 @@ namespace WingCommand
         /// debug bypass.</summary>
         public static bool HasRoom(int occupied) =>
             Plugin.Settings.CheatNoWingLimit ||
-            occupied + WingShop.PendingWingSlots < WingFormation.MaxWingSize;
+            occupied + EconomyFacade.Shop.PendingWingSlots < WingFormation.MaxWingSize;
 
         /// <summary>Count label when the wing-limit bypass is active.</summary>
         public static string WingLimitLabel =>
@@ -564,7 +564,7 @@ namespace WingCommand
         {
             if (member == null || !members.Remove(member)) return;
 
-            HangarDepartureLane.Release(member);
+            EconomyFacade.DepartureLane.Release(member);
 
             // Retire the surviving pilot before despawn makes its aircraft ID unavailable.
             PersonnelFacade.Roster.Retire(member, survived: true);

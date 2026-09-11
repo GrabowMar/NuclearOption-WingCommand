@@ -369,7 +369,7 @@ namespace WingCommand
                 (flying.IsPanicking ? "   (DEFENSIVE)" : "");
 
             string loadout = flying.LoadoutKnown
-                ? "LOADOUT " + WingLoadoutCatalog.Label(flying.Loadout) +
+                ? "LOADOUT " + EconomyFacade.LoadoutCatalog.Label(flying.Loadout) +
                   " - fitted at requisition"
                 : "LOADOUT as found - assigned mission aircraft keep their own fit";
 

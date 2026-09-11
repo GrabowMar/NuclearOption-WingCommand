@@ -181,8 +181,8 @@ namespace WingCommand
                 Definition = aircraft != null ? aircraft.definition : null,
                 Hq = aircraft != null ? aircraft.NetworkHQ : null,
                 Name = member.Name,
-                Owned = WingShop.IsPurchased(aircraft),
-                Paid = WingShop.PaidFor(aircraft),
+                Owned = EconomyFacade.Shop.IsPurchased(aircraft),
+                Paid = EconomyFacade.Shop.PaidFor(aircraft),
                 Loadout = member.Loadout,
                 LoadoutKnown = member.LoadoutKnown,
             };
@@ -205,7 +205,7 @@ namespace WingCommand
                 Hq = aircraft != null ? aircraft.NetworkHQ : null,
                 Name = departing.Name,
                 Owned = departing.Owned,
-                Paid = WingShop.PaidFor(departing.AircraftId),
+                Paid = EconomyFacade.Shop.PaidFor(departing.AircraftId),
                 Loadout = departing.Loadout,
                 LoadoutKnown = departing.LoadoutKnown,
             };
@@ -298,11 +298,11 @@ namespace WingCommand
 
                 if (!settlement.OwnershipTransferred)
                 {
-                    if (settlement.Owned) WingShop.TakePurchased(settlement.AircraftId);
+                    if (settlement.Owned) EconomyFacade.Shop.TakePurchased(settlement.AircraftId);
                     settlement.OwnershipTransferred = true;
                 }
 
-                WingLoadoutBook.Forget(settlement.AircraftId);
+                EconomyFacade.LoadoutBook.Forget(settlement.AircraftId);
 
                 settlement.Completed = true;
                 WingDeparture.Forget(settlement.Departing);

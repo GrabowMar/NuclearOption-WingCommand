@@ -133,7 +133,7 @@ public static class UnitRegistry
 namespace WingCommand
 {
     internal enum WingLoadoutChoice { Standard }
-    internal static class WingShop { public static bool IsPurchased(Aircraft a) => false; }
+    internal static class EconomyFacade { internal static class Shop { public static bool IsPurchased(Aircraft a) => false; } }
     internal static class WingRecovery { public static bool IsHome(Aircraft a) => a != null && !a.disabled && a.AtHome; }
     internal enum ChatterPersona { Calm }
     internal enum WingOrder { Formation, OrbitHere, LandHere, Attack }
