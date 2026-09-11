@@ -23,13 +23,13 @@ namespace WingCommand
             Gutter(parent, y, "ROE / ALL");
             holdButton = TacticalButton(parent, "HOLD", TacticalColumn(1), y, w,
                 () => SetRoe(WingRoe.Hold), UiButtonStyle.Toggle)
-                .WithTooltip("HOLD - " + RoeRules.Hint(WingRoe.Hold));
+                .WithTooltip("HOLD - " + CombatFacade.Roe.Hint(WingRoe.Hold));
             tightButton = TacticalButton(parent, "TIGHT", TacticalColumn(2), y, w,
                 () => SetRoe(WingRoe.Tight), UiButtonStyle.Toggle)
-                .WithTooltip("TIGHT - " + RoeRules.Hint(WingRoe.Tight));
+                .WithTooltip("TIGHT - " + CombatFacade.Roe.Hint(WingRoe.Tight));
             freeButton = TacticalButton(parent, "FREE", TacticalColumn(3), y, w,
                 () => SetRoe(WingRoe.Free), UiButtonStyle.Toggle)
-                .WithTooltip("FREE - " + RoeRules.Hint(WingRoe.Free));
+                .WithTooltip("FREE - " + CombatFacade.Roe.Hint(WingRoe.Free));
             y -= TacticalButtonHeight + Gap;
             for (int i = 0; i < preferenceButtons.Length; i++)
             {
@@ -51,7 +51,7 @@ namespace WingCommand
             if (wing == null) return;
 
             wing.Roe = roe;
-            WingCommandManager.Instance?.Toast("ROE: " + RoeRules.Label(roe));
+            WingCommandManager.Instance?.Toast("ROE: " + CombatFacade.Roe.Label(roe));
         }
 
         private static float AddSummary(RectTransform parent, float y)
@@ -430,7 +430,7 @@ namespace WingCommand
         /// <summary>Summarise ROE first, adding weapon preference only when non-Auto.</summary>
         private static string EngagementHint(WingRegistry wing, WingWeaponPreference? shared)
         {
-            string hint = RoeRules.Hint(wing.Roe);
+            string hint = CombatFacade.Roe.Hint(wing.Roe);
 
             if (shared == null) return hint + "  ·  Weapon preference varies across the selection.";
             if (shared.Value == WingWeaponPreference.Auto) return hint;

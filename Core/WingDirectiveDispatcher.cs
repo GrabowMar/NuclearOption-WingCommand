@@ -61,7 +61,7 @@ namespace WingCommand
                     WingOrderCatalog.UnavailableReason(directive.Order));
 
             if (directive.Order == WingOrder.Engage)
-                RoeRules.EnsureFree(wing);
+                CombatFacade.Roe.EnsureFree(wing);
 
             string label = directive.Order == WingOrder.Maneuver
                 ? ManeuverCatalog.Label(directive.Maneuver)
@@ -109,7 +109,7 @@ namespace WingCommand
             {
                 if (!WingOrderCatalog.CanApply(member, WingOrder.FireForEffect)) continue;
                 if (!member.DeliveryPending &&
-                    !WingWeapons.CanStillEngage(member.Aircraft, target)) continue;
+                    !CombatFacade.Weapons.CanStillEngage(member.Aircraft, target)) continue;
                 member.FireForEffect(target, report: false);
                 responders.Add(member);
             }

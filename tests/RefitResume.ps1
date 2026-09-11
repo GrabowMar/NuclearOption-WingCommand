@@ -47,7 +47,7 @@ internal class Settings { public Setting AutoReturnOnEmpty = new Setting(); publ
 internal static class Plugin { public static Settings Settings = new Settings(); }
 internal static class WingTuning { public const float BingoFuel = 0.15f; }
 internal static class WingComms { public enum Call { Bingo, OutOfAmmo } public static void Say(WingMember m, Call c) {} }
-internal static class TacticalCoordinator { public static void ReleaseSelection(Aircraft a) {} }
+internal static class CombatFacade { internal static class Tactical { public static void ReleaseSelection(Aircraft a) {} } }
 internal static class TacticalMapOverlay { public static void Invalidate() {} }
 internal static class PersonnelFacade { internal static class Roster { public static int Sorties; public static void NoteSortie(Aircraft a) { Sorties++; } } }
 internal static class WingOrderRules { public static bool CanQueueWhilePending(WingOrder o) => o != WingOrder.Maneuver; }

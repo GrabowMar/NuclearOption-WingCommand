@@ -58,7 +58,7 @@ namespace WingCommand
                 WingHud.ResetStatusPanel();
                 WmcScreen.Reset();
                 WingComms.Reset();
-                TacticalCoordinator.Reset();
+                CombatFacade.Tactical.Reset();
                 WingMarkers.Reset();
                 WingShopDelivery.Reset();
                 WingAirfield.Reset();

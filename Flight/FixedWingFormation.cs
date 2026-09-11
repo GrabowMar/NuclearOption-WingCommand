@@ -217,7 +217,7 @@ namespace WingCommand
             // Exclude exact-idle airbrake drag when learning deceleration with brakes retracted.
             memory.Recovery.Observe(memory.Airspeed, controls.throttle,
                 stableFlight && !memory.Airbraking && controls.throttle > 0f, dt);
-            float holdBlend = FormationCollision.HoldBlend(RoeRules.Current == WingRoe.Hold, distance, spacing);
+            float holdBlend = FormationCollision.HoldBlend(CombatFacade.Roe.Current == WingRoe.Hold, distance, spacing);
             float aggression = Mathf.Lerp(1f, WingTuning.HoldPositionGain, holdBlend) * member.FlightProfile.CaptureGain;
             float damping = Mathf.Lerp(1f, WingTuning.HoldDampingGain, holdBlend) * member.FlightProfile.DampingScale;
 

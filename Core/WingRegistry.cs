@@ -273,7 +273,7 @@ namespace WingCommand
                     if (free.Count == 0) break;
 
                     int already = assigned.TryGetValue(target, out int count) ? count : 0;
-                    int capacity = WingWeapons.RecommendedAttackers(free[0].Aircraft, target);
+                    int capacity = CombatFacade.Weapons.RecommendedAttackers(free[0].Aircraft, target);
                     if (already >= capacity) continue;
 
                     WingMember nearest = TakeNearest(free, target);
@@ -361,7 +361,7 @@ namespace WingCommand
                 WingLoadoutBook.Forget(m.Aircraft);
                 // Release taxi ownership for ejected pilots even if no state transition occurs.
                 HangarDepartureLane.Release(m);
-                TacticalCoordinator.Release(m.Aircraft);
+                CombatFacade.Tactical.Release(m.Aircraft);
                 members.RemoveAt(i);
             }
         }
@@ -568,7 +568,7 @@ namespace WingCommand
 
             // Retire the surviving pilot before despawn makes its aircraft ID unavailable.
             PersonnelFacade.Roster.Retire(member, survived: true);
-            TacticalCoordinator.Release(member.Aircraft);
+            CombatFacade.Tactical.Release(member.Aircraft);
             WingMarkers.Repaint(member.Aircraft);
         }
 

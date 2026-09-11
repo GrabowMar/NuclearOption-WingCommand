@@ -482,7 +482,7 @@ namespace WingCommand
                     return order + " · BINGO";
                 }
 
-                if (member.Ammo > 0 && WingWeapons.GetGuidedAmmo(member.Aircraft) == 0)
+                if (member.Ammo > 0 && CombatFacade.Weapons.GetGuidedAmmo(member.Aircraft) == 0)
                 {
                     return order + " · WINC";
                 }

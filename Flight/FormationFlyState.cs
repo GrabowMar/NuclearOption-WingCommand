@@ -385,7 +385,7 @@ namespace WingCommand
 
             // Use the larger of ROE spacing and reactive widening, never their product. Always evaluate
             // threat spacing because it also updates the combat-spread warning latch.
-            float roeScale = RoeRules.SpacingScale(RoeRules.Current);
+            float roeScale = CombatFacade.Roe.SpacingScale(CombatFacade.Roe.Current);
             float threatScale = ThreatSpacingScale(leader, dt);
             spacing *= threatScale > 1.001f ? Mathf.Max(roeScale, threatScale) : roeScale;
             spacing *= FormationSolver.SharedFlightSpacing(member.Siblings, leader);
@@ -459,7 +459,7 @@ namespace WingCommand
 
             // Move eligible asymmetric shapes to the outside of sustained turns. Smooth the crossing
             // and retain separation/path avoidance; symmetric shapes stay unchanged.
-            if (RoeRules.Current != WingRoe.Hold && WingFidelity.SmartFormation && mirrorSign != 0 &&
+            if (CombatFacade.Roe.Current != WingRoe.Hold && WingFidelity.SmartFormation && mirrorSign != 0 &&
                 (shape == FormationShape.EchelonRight || shape == FormationShape.EchelonLeft) &&
                 (int)Mathf.Sign(desiredSlotLocal.x) == mirrorSign)
             {
@@ -553,7 +553,7 @@ namespace WingCommand
             // Use one bank for all slots; per-member scaling can make neighbouring targets intersect.
             Vector3 footprint = Vector3.zero;
             FormationSolver.IncludeBankFootprint(ref footprint, smoothedSlotLocal);
-            float fallbackSpacing = WingFormation.SlotSpacing * RoeRules.SpacingScale(RoeRules.Current) *
+            float fallbackSpacing = WingFormation.SlotSpacing * CombatFacade.Roe.SpacingScale(CombatFacade.Roe.Current) *
                 FormationSolver.SharedFlightSpacing(member.Siblings, leader);
             if (member.Siblings != null)
                 foreach (WingMember wingman in member.Siblings)
@@ -714,7 +714,7 @@ namespace WingCommand
             {
                 nearbyThreatLeader = leader;
                 nextNearbyThreatRefresh = now + WingFidelity.Interval(NearbyThreatRefreshSeconds);
-                nearbyThreatPresent = WingWeapons.NearestThreatTo(leader, 8000f) != null;
+                nearbyThreatPresent = CombatFacade.Weapons.NearestThreatTo(leader, 8000f) != null;
             }
 
             return nearbyThreatPresent;
@@ -726,7 +726,7 @@ namespace WingCommand
         {
             Unit jamTarget = member.AssignedTarget;
             if (jamTarget == null) return;
-            WingWeapons.EngageJammer(aircraft, pilot, jamTarget);
+            CombatFacade.Weapons.EngageJammer(aircraft, pilot, jamTarget);
         }
 
         /// <summary>Report unable and return home after sustained, growing separation caused by

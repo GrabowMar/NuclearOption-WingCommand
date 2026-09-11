@@ -285,7 +285,7 @@ namespace WingCommand
                 if (Mgr != null)
                 {
                     Mgr.Wing.Roe = roe;
-                    Mgr.Toast("ROE: " + RoeRules.Label(roe));
+                    Mgr.Toast("ROE: " + CombatFacade.Roe.Label(roe));
                 }
                 RestoreStockWheel();
             });

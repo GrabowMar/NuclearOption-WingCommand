@@ -136,7 +136,7 @@ namespace WingCommand
             // instead of chaff for shared ARH/SARH threat types.
             if (aircraft.countermeasureManager == null) return;
 
-            if (!CountermeasureAccess.TryFindExpendable(
+            if (!CombatFacade.Countermeasures.TryFindExpendable(
                     aircraft.countermeasureManager, threat.GetSeekerType(),
                     out expendableIndex, out string reason) &&
                 !string.IsNullOrEmpty(reason))
@@ -149,13 +149,13 @@ namespace WingCommand
         private void FlyDefensive()
         {
             bool intercept = false;
-            if (semiActive && RoeRules.Current == WingRoe.Hold)
+            if (semiActive && CombatFacade.Roe.Current == WingRoe.Hold)
             {
                 // Keep shooting while defensive; the normal slot engagement loop is suspended here.
                 if (Time.timeSinceLevelLoad >= nextIntercept)
                 {
                     nextIntercept = Time.timeSinceLevelLoad + 1f;
-                    if (WingWeapons.InterceptMissiles(aircraft, pilot, aircraft))
+                    if (CombatFacade.Weapons.InterceptMissiles(aircraft, pilot, aircraft))
                         WingComms.Say(member, WingComms.Call.Defending);
                 }
 
@@ -179,8 +179,8 @@ namespace WingCommand
                         }
                     }
                 }
-                intercept = MissileDefencePolicy.PreferInterception(RoeRules.Current, "SARH",
-                    WingWeapons.HasMissileDefence(aircraft), impactTime, covered, distance, leash);
+                intercept = MissileDefencePolicy.PreferInterception(CombatFacade.Roe.Current, "SARH",
+                    CombatFacade.Weapons.HasMissileDefence(aircraft), impactTime, covered, distance, leash);
             }
 
             Vector3 away = -toThreat;

@@ -188,7 +188,7 @@ namespace WingCommand
             if (Time.timeSinceLevelLoad - lastRelease < ReleaseInterval) return;
             lastRelease = Time.timeSinceLevelLoad;
 
-            WingWeapons.ReleaseCargo(aircraft, pilot);
+            CombatFacade.Weapons.ReleaseCargo(aircraft, pilot);
         }
 
         /// <summary>Report a stalled drop and relinquish the point for native transport

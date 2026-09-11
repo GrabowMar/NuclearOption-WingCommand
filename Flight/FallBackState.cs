@@ -236,7 +236,7 @@ namespace WingCommand
         {
             if (aircraft == null || aircraft.countermeasureManager == null) return;
 
-            if (!CountermeasureAccess.TryFindExpendable(
+            if (!CombatFacade.Countermeasures.TryFindExpendable(
                     aircraft.countermeasureManager, "IR", out flareIndex, out _))
             {
                 flareIndex = -1;

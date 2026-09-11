@@ -228,7 +228,7 @@ namespace WingCommand
             // that would expire before use.
             if (directive.Order == WingOrder.Maneuver && IsPanicking) return;
 
-            TacticalCoordinator.ReleaseSelection(Aircraft);
+            CombatFacade.Tactical.ReleaseSelection(Aircraft);
 
             if (!applyKeepsQueue) { taskQueue.Clear(); AbandonRefit(); }
 
@@ -260,7 +260,7 @@ namespace WingCommand
             // Validate task ownership before changing directive or queue.
             if (!SetDirective(directive, startedRevision)) return;
 
-            TacticalCoordinator.ReleaseSelection(Aircraft);
+            CombatFacade.Tactical.ReleaseSelection(Aircraft);
             if (!applyKeepsQueue) { taskQueue.Clear(); AbandonRefit(); }
             brain.RequestEvaluation();
         }
@@ -386,7 +386,7 @@ namespace WingCommand
 
         /// <summary>Whether a jammer pod is fitted. Recheck stations so mid-mission loadout changes affect
         /// order availability.</summary>
-        public bool CanJam => WingWeapons.HasJammer(Aircraft);
+        public bool CanJam => CombatFacade.Weapons.HasJammer(Aircraft);
 
         /// <summary>Airframe integrity from native part hit points, 0-1; detached parts count as fully
         /// lost.</summary>
@@ -444,7 +444,7 @@ namespace WingCommand
             {
                 // Release roster ownership without interrupting pending native taxi or launch.
                 deliveryPending = false;
-                TacticalCoordinator.Release(Aircraft);
+                CombatFacade.Tactical.Release(Aircraft);
                 return;
             }
 
@@ -468,14 +468,14 @@ namespace WingCommand
             {
                 // Leave a pending delivery under native taxi/launch control.
                 deliveryPending = false;
-                TacticalCoordinator.Release(Aircraft);
+                CombatFacade.Tactical.Release(Aircraft);
                 return;
             }
 
             if (Plugin.Settings.VerboseLogging.Value)
                 Plugin.LogVerbose($"[Wing] {Name} released and sent home: {reason}");
 
-            TacticalCoordinator.Release(Aircraft);
+            CombatFacade.Tactical.Release(Aircraft);
             SetDirective(WingDirective.Simple(WingOrder.ReturnToBase));
 
             // Credit the sortie before releasing the pilot; later settlement no longer owns this seat.
@@ -613,7 +613,7 @@ namespace WingCommand
                 taskQueue.Clear();
                 engageActivityAt = Time.timeSinceLevelLoad;
                 Complete(WingOrderRules.PointTaskCompletion(Order));
-                RoeRules.EnsureFree(owner);
+                CombatFacade.Roe.EnsureFree(owner);
                 return;
             }
 
@@ -645,7 +645,7 @@ namespace WingCommand
             if (next.Order == WingOrder.Engage || next.Order == WingOrder.Attack)
                 engageActivityAt = Time.timeSinceLevelLoad;
 
-            TacticalCoordinator.ReleaseSelection(Aircraft);
+            CombatFacade.Tactical.ReleaseSelection(Aircraft);
             brain.RequestEvaluation();
             TacticalMapOverlay.Invalidate();
             return true;
@@ -722,10 +722,10 @@ namespace WingCommand
             Aircraft leader = Leader;
             bool active =
                 (Order == WingOrder.Attack &&
-                 WingWeapons.CanStillEngage(Aircraft, AssignedTarget)) ||
-                WingWeapons.NearestThreatTo(Aircraft, WingTuning.FreeEngageRange) != null ||
+                 CombatFacade.Weapons.CanStillEngage(Aircraft, AssignedTarget)) ||
+                CombatFacade.Weapons.NearestThreatTo(Aircraft, WingTuning.FreeEngageRange) != null ||
                 (leader != null &&
-                 WingWeapons.NearestThreatTo(leader, WingTuning.FreeEngageRange) != null);
+                 CombatFacade.Weapons.NearestThreatTo(leader, WingTuning.FreeEngageRange) != null);
 
             if (active)
             {

@@ -11,7 +11,7 @@ namespace WingCommand
         private void EnterBehaviour(string behaviourId)
         {
             // The new behaviour owns targeting. Shots already in flight keep their firing slots.
-            TacticalCoordinator.ReleaseSelection(Aircraft);
+            CombatFacade.Tactical.ReleaseSelection(Aircraft);
 
             // Surface members require their registered behaviour because built-ins assume an autopilot.
             // WingSurface publishes their directive destination.

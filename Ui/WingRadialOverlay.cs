@@ -27,7 +27,7 @@ namespace WingCommand
             title.text = selected ? slices[hoveredIndex].Title : "WING COMMAND";
             subtitle.text = selected ? slices[hoveredIndex].Subtitle : $"{wing?.Count ?? 0} WINGMEN\nWHOLE WING";
             if (selected && slices[hoveredIndex].Action == WingAction.CycleRoe && wing != null)
-                subtitle.text = RoeRules.Label(wing.Roe) + " > " + RoeRules.Label(RoeRules.Next(wing.Roe));
+                subtitle.text = CombatFacade.Roe.Label(wing.Roe) + " > " + CombatFacade.Roe.Label(CombatFacade.Roe.Next(wing.Roe));
             hint.text = selected ? "RELEASE TO ORDER" : "MOVE TO SELECT";
             pointer.anchoredPosition = delta;
             for (int i = 0; i < SectorCount; i++)

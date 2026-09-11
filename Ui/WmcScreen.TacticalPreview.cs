@@ -126,7 +126,7 @@ namespace WingCommand
                 }
             }
 
-            string roeName = wing != null ? RoeRules.Label(wing.Roe) : "HOLD";
+            string roeName = wing != null ? CombatFacade.Roe.Label(wing.Roe) : "HOLD";
             string wepName = shared.HasValue ? WingWeaponPreferences.Label(shared.Value) : "MIXED";
             if (wing == null || wing.Count == 0 || WingCommandManager.Instance?.Selection.IsNone == true)
                 wepName = "NONE";

@@ -80,7 +80,7 @@ namespace WingCommand
             // Resolve reflection before patches consult GameAccess.Available.
             GameAccess.Initialise();
             WingHudTint.Initialise();
-            CountermeasureAccess.Initialise();
+            CombatFacade.Countermeasures.Initialise();
 
             // Register built-in behaviours through the public API before the first tick.
             WingAi.FaultReporter = (id, e) => Logger.LogError(

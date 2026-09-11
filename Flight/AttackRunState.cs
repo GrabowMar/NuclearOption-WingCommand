@@ -69,7 +69,7 @@ namespace WingCommand
             }
 
             if (member.Order == WingOrder.FireForEffect &&
-                !WingWeapons.CanStillEngage(aircraft, target))
+                !CombatFacade.Weapons.CanStillEngage(aircraft, target))
             {
                 // Try nearby target classes before ending Splash; stores ineffective here may still
                 // damage another contact.
@@ -99,7 +99,7 @@ namespace WingCommand
         {
             if (member.Order != WingOrder.FireForEffect) return false;
 
-            Unit next = WingWeapons.NextExpendTarget(
+            Unit next = CombatFacade.Weapons.NextExpendTarget(
                 aircraft, lastTargetPos, SplashSweepRadius, member.AssignedTarget);
             if (next == null) return false;
 
@@ -116,7 +116,7 @@ namespace WingCommand
             GlobalPosition targetPos = target.GlobalPosition();
             bool rotary = WingRegistry.IsRotary(aircraft);
             float altitude = rotary ? RotaryAttackAltitude : AttackAltitude;
-            float bombFloor = WingWeapons.BombReleaseFloor(aircraft, target);
+            float bombFloor = CombatFacade.Weapons.BombReleaseFloor(aircraft, target);
             if (bombFloor > 0f) altitude = Mathf.Max(altitude, bombFloor + 150f);
 
             // Aim above surface targets to avoid commanding flight into terrain.
@@ -150,18 +150,18 @@ namespace WingCommand
 
         private void Shoot(Unit target)
         {
-            float interval = WingWeapons.FireInterval(aircraft);
+            float interval = CombatFacade.Weapons.FireInterval(aircraft);
             if (Time.timeSinceLevelLoad - lastFiredTime < interval) return;
 
             // Reuse shared station validity checks. Explicit attacks are independent of incidental ROE;
             // Splash uses the weapon envelope alone as its range gate.
             float range = member.Order == WingOrder.FireForEffect
                 ? float.MaxValue
-                : RoeRules.ExplicitOrderRange();
+                : CombatFacade.Roe.ExplicitOrderRange();
 
             bool fired = member.Order == WingOrder.FireForEffect
-                ? WingWeapons.EngageMassed(aircraft, pilot, target, range)
-                : WingWeapons.EngageSpecific(aircraft, pilot, target, range);
+                ? CombatFacade.Weapons.EngageMassed(aircraft, pilot, target, range)
+                : CombatFacade.Weapons.EngageSpecific(aircraft, pilot, target, range);
             if (fired) lastFiredTime = Time.timeSinceLevelLoad;
         }
     }

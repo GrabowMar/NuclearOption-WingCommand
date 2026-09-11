@@ -135,7 +135,7 @@ namespace WingCommand
 
             var situation = new WingSituation(
                 order: Order,
-                roe: RoeRules.Current,
+                roe: CombatFacade.Roe.Current,
                 deliveryPending: deliveryPending,
                 missileWarned: warned,
                 secondsSinceMissileWarning: brain.SecondsSinceWarning(now),
