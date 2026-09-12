@@ -40,10 +40,10 @@ namespace WingCommand
 
         /// <summary>Steering look-ahead in seconds, with a distance floor; shorter baselines increase
         /// response gain.</summary>
-        private const float LookAheadSeconds = 3.5f;
+        private const float LookAheadSeconds = WingTuning.FormationLookAheadSeconds;
 
         /// <summary>Minimum steering look-ahead distance for slow aircraft.</summary>
-        private const float MinLookAhead = 650f;
+        private const float MinLookAhead = WingTuning.FormationMinLookAhead;
 
 
 
@@ -67,13 +67,13 @@ namespace WingCommand
         internal const float MaxSafeBank = 88f;
 
         /// <summary>Maximum course-change demand during distant-slot interception.</summary>
-        private const float MaxRejoinCommandAngle = 55f;
+        private const float MaxRejoinCommandAngle = WingTuning.FormationRejoinCommandAngle;
 
         /// <summary>Maximum rejoin pitch-up angle to avoid stall-inducing zoom climbs.</summary>
-        private const float MaxRejoinPitchUp = 18f;
+        private const float MaxRejoinPitchUp = WingTuning.FormationRejoinPitchUp;
 
         /// <summary>Maximum commanded rejoin descent angle.</summary>
-        private const float MaxRejoinPitchDown = 15f;
+        private const float MaxRejoinPitchDown = WingTuning.FormationRejoinPitchDown;
 
         /// <summary>Scale leader bank above 1 to compensate for native speed/altitude reductions in
         /// allowed bank.</summary>
@@ -631,8 +631,8 @@ namespace WingCommand
                     float scale = Mathf.Clamp01(aircraft.radarAlt / BankMatchFloor);
                     allowed = Mathf.Lerp(maxAngle * 0.25f, allowed, scale);
                 }
-                float allowedPitchUp = Mathf.Lerp(4.0f, MaxRejoinPitchUp, outOfPosition);
-                float allowedPitchDown = Mathf.Lerp(3.5f, MaxRejoinPitchDown, outOfPosition);
+                float allowedPitchUp = Mathf.Lerp(WingTuning.FormationStationPitchUp, MaxRejoinPitchUp, outOfPosition);
+                float allowedPitchDown = Mathf.Lerp(WingTuning.FormationStationPitchDown, MaxRejoinPitchDown, outOfPosition);
                 FormationControlRules.SafeRejoinDirection(
                     currentDirection.x, currentDirection.y, currentDirection.z,
                     requested.x, requested.y, requested.z,

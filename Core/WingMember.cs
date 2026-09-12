@@ -43,6 +43,7 @@ namespace WingCommand
         private readonly CargoRunState cargoRunState;
         private readonly WaypointTaskState waypointState;
         private readonly AttackRunState attackState;
+        private readonly SplashState splashState;
         private readonly DefensiveManeuverState defensiveState;
         private readonly ManeuverState maneuverState;
 
@@ -171,6 +172,7 @@ namespace WingCommand
             cargoRunState = new CargoRunState(this);
             waypointState = new WaypointTaskState(this);
             attackState = new AttackRunState(this);
+            splashState = new SplashState(this);
             defensiveState = new DefensiveManeuverState(this);
             maneuverState = new ManeuverState(this);
             joinedAt = Time.timeSinceLevelLoad;
@@ -285,6 +287,8 @@ namespace WingCommand
             // transfers targeting authority, including non-attack orders that allow opportunity fire.
             CombatFacade.Weapons.ClearTurretTargets(Aircraft);
 
+            if (Order == WingOrder.FireForEffect && !deliveryPending && !IsSurface)
+                splashState.Prepare();
             RefitPending = false;
             TacticalMapOverlay.Invalidate();
             return true;
@@ -560,14 +564,6 @@ namespace WingCommand
                 WingComms.Say(this, WingComms.Call.FireForEffect, target.unitName);
         }
 
-        /// <summary>Retarget an active Splash run without resolving inside its state update. The attack
-        /// state reads AssignedTarget each frame and need not restart.</summary>
-        internal void RetargetSplash(Unit target)
-        {
-            if (target == null || target.disabled || Order != WingOrder.FireForEffect) return;
-            SetDirective(Directive.Retarget(target));
-        }
-
         /// <summary>Replace or append a map task. Shift appends only to a compatible current map task;
         /// Move replaces Attack or Hold.</summary>
         public void IssueMapTask(WingDirective directive, bool append)
@@ -676,6 +672,18 @@ namespace WingCommand
             if (!IsCommandable || !Plugin.Settings.AutoReturnOnEmpty.Value) return;
             if (IsPanicking) return;
 
+            // Saturation overrides routine bingo/refit/empty-store automation. Near fuel exhaustion
+            // is critical self-preservation and may end the salvo.
+            if (Order == WingOrder.FireForEffect)
+            {
+                if (Fuel <= WingTuning.SplashCriticalFuel)
+                {
+                    WingComms.Say(this, WingComms.Call.Bingo);
+                    Apply(WingOrder.ReturnToBase);
+                }
+                return;
+            }
+
             if (AutoRefit && !IsSurface && Order != WingOrder.ReturnToBase &&
                 Order != WingOrder.LandHere && Order != WingOrder.DeliverCargo &&
                 Order != WingOrder.FallBack && Order != WingOrder.StandDown &&
@@ -760,9 +768,8 @@ namespace WingCommand
         {
             PersonnelFacade.Roster.NoteSurvivedEngagement(Aircraft);
 
-            bool stale = Directive.Order == WingOrder.Maneuver ||
-                         (WingOrderRules.CarriesTarget(Directive.Order) &&
-                          (Directive.Target == null || Directive.Target.disabled));
+            bool stale = WingOrderRules.RetireAfterDefence(Directive.Order,
+                Directive.Target != null && !Directive.Target.disabled);
 
             if (stale && !TryAdvanceQueue(directiveSerial))
                 Complete(WingOrder.Formation);

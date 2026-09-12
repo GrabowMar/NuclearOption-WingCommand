@@ -192,6 +192,29 @@ namespace WingCommand.PureTests
             Assert.Equal(WingBehaviours.MissileBreak, resolution.BehaviourId);
         }
 
+        [Fact]
+        public void SaturationOutranksRoutineHoldsButYieldsToCriticalSurvival()
+        {
+            WingReflexes.RegisterDefaults();
+            var routine = new Reflex("test.routine", WingReflexBand.Safety, 1f) { MinimumSeconds = 20f };
+            var reflexes = new System.Collections.Generic.List<IWingReflex>(WingAi.Reflexes) { routine };
+            var splash = new WingSituation(order: WingOrder.FireForEffect, leaderPresent: false,
+                leaderDistance: 20000f, leashRadius: 1000f, secondsInBehaviour: 0.1f);
+            Assert.Equal("wingcommand.saturation",
+                WingArbiter.Resolve(in splash, routine.Id, false, reflexes).ReflexId);
+            var threatened = new WingSituation(order: WingOrder.FireForEffect, missileWarned: true);
+            Assert.Equal(WingBehaviours.MissileBreak,
+                WingArbiter.Resolve(in threatened, "wingcommand.saturation", false, reflexes).BehaviourId);
+            var terrain = splash.WithFlightSafety(1f, -20f, 0f, 80f);
+            Assert.Equal(WingBehaviours.TerrainAbort,
+                WingArbiter.Resolve(in terrain, "wingcommand.saturation", false, reflexes).BehaviourId);
+            var deck = new WingSituation(order: WingOrder.FireForEffect, deliveryPending: true);
+            Assert.Equal(WingBehaviours.Held,
+                WingArbiter.Resolve(in deck, "wingcommand.saturation", false, reflexes).BehaviourId);
+            Assert.Equal("wingcommand.saturation",
+                WingArbiter.Resolve(in splash, "wingcommand.missile-break", false, reflexes).ReflexId);
+        }
+
         private sealed class Reflex : IWingReflex, IWingReflexLifecycle
         {
             public string Id { get; }

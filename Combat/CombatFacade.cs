@@ -10,12 +10,8 @@ namespace WingCommand
             public static float FireInterval(Aircraft aircraft) => WingWeapons.FireInterval(aircraft);
             public static bool EngageSpecific(Aircraft aircraft, Pilot pilot, Unit target, float maxRange) =>
                 WingWeapons.EngageSpecific(aircraft, pilot, target, maxRange);
-            public static bool EngageMassed(Aircraft aircraft, Pilot pilot, Unit target, float maxRange) =>
-                WingWeapons.EngageMassed(aircraft, pilot, target, maxRange);
             public static bool CanStillEngage(Aircraft aircraft, Unit target) =>
                 WingWeapons.CanStillEngage(aircraft, target);
-            public static float BombReleaseFloor(Aircraft aircraft, Unit target) =>
-                WingWeapons.BombReleaseFloor(aircraft, target);
             public static bool HasJammer(Aircraft aircraft) => WingWeapons.HasJammer(aircraft);
             public static bool EngageJammer(Aircraft aircraft, Pilot pilot, Unit target) =>
                 WingWeapons.EngageJammer(aircraft, pilot, target);
@@ -29,8 +25,6 @@ namespace WingCommand
             public static void ClearTurretTargets(Aircraft aircraft) => WingWeapons.ClearTurretTargets(aircraft);
             public static Unit NearestThreatTo(Aircraft protectee, float range) =>
                 WingWeapons.NearestThreatTo(protectee, range);
-            public static Unit NextExpendTarget(Aircraft aircraft, GlobalPosition near, float radius, Unit exclude) =>
-                WingWeapons.NextExpendTarget(aircraft, near, radius, exclude);
         }
 
         internal static class Roe

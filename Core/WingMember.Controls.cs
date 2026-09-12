@@ -140,9 +140,11 @@ namespace WingCommand
                     break;
 
                 case WingOrder.Attack:
-                case WingOrder.FireForEffect:
-                    // Splash needs an attack run so bombers can reach a valid release geometry.
                     EnterAttack(Directive);
+                    break;
+
+                case WingOrder.FireForEffect:
+                    SwitchTo(splashState);
                     break;
 
                 case WingOrder.JamTarget:

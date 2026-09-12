@@ -71,7 +71,8 @@ namespace WingCommand
 
         /// <summary>Checks the weapon's shot envelope. Callers enforce cadence separately to prevent
         /// firing on every engagement tick.</summary>
-        private static bool ShotIsValid(Aircraft aircraft, WeaponStation station, Unit target)
+        private static bool ShotIsValid(Aircraft aircraft, WeaponStation station, Unit target,
+                                        bool rangeOnly = false)
         {
             WeaponInfo info = station.WeaponInfo;
             if (info == null) return false;
@@ -101,13 +102,12 @@ namespace WingCommand
             float distance = FastMath.Distance(target.GlobalPosition(), aircraft.GlobalPosition());
             if (req.maxRange > 0f && distance > req.maxRange * envelope) return false;
             if (distance < req.minRange) return false;
+            if (rangeOnly) return true;
 
-            if (req.minAltitude > 0f && aircraft.radarAlt < req.minAltitude) return false;
-
-            float maxAltScale = envelope;
-            if ((info.bomb || info.glideBomb) && PersonnelFacade.Roster.HasPerk(aircraft, PilotPerk.Bombardier))
-                maxAltScale *= PilotPerks.BombEnvelopeScale(true);
-            if (req.maxAltitude > 0f && aircraft.radarAlt > req.maxAltitude * maxAltScale) return false;
+            // These are TARGET altitude limits, not launch/release altitude. Match native
+            // CombatAI.AnalyzeTarget, including its distance-scaled minimum altitude.
+            float targetFloor = req.maxRange > 0f ? req.minAltitude * distance / req.maxRange : req.minAltitude;
+            if (target.radarAlt < targetFloor || target.radarAlt > req.maxAltitude) return false;
 
             // Bomb targets lie below the run-in boresight, so skip the missile seeker-cone check.
             if (info.bomb || info.glideBomb) return true;
@@ -128,56 +128,57 @@ namespace WingCommand
 
         /// <summary>Engage the player's designated unit; return true when the engagement is dispatched.
         /// Turret stations dispatch by arming their native aim-and-lock controller.</summary>
-        public static bool EngageSpecific(Aircraft aircraft, Pilot pilot, Unit target, float maxRange) =>
-            EngageDesignated(aircraft, pilot, target, maxRange, massed: false);
-
-        /// <summary>Splash 'Em bypasses TacticalCoordinator's firing cap for massed fire. Stations must
-        /// still match the target and pass their shot envelopes.</summary>
-        public static bool EngageMassed(Aircraft aircraft, Pilot pilot, Unit target, float maxRange) =>
-            EngageDesignated(aircraft, pilot, target, maxRange, massed: true);
-
-        private static bool EngageDesignated(Aircraft aircraft, Pilot pilot, Unit target,
-                                             float maxRange, bool massed)
+        public static bool EngageSpecific(Aircraft aircraft, Pilot pilot, Unit target, float maxRange)
         {
             if (aircraft == null || !aircraft.LocalSim || pilot == null || target == null || target.disabled)
                 return false;
-
             WeaponManager wm = aircraft.weaponManager;
-            if (wm == null) return false;
-
-            WeaponStation current = wm.currentWeaponStation;
-            if (!massed && current != null && current.SalvoInProgress) return false;
-
-            if (FastMath.SquareDistance(target.GlobalPosition(), aircraft.GlobalPosition())
-                > maxRange * maxRange)
+            if (wm == null || (wm.currentWeaponStation != null && wm.currentWeaponStation.SalvoInProgress))
                 return false;
-
-            // Splash interleaves effective stores; measured Attack retains the wing-wide firing cap.
-            if (massed)
-            {
-                WeaponStation station = MassedStationFor(aircraft, target, current);
-                if (station == null || station.SalvoInProgress) return false;
-                return FireStation(aircraft, pilot, target, wm, station) != StationFireAction.None;
-            }
-
+            if (FastMath.SquareDistance(target.GlobalPosition(), aircraft.GlobalPosition()) > maxRange * maxRange)
+                return false;
             WeaponStation chosen = DesignatedStationFor(aircraft, target);
             if (chosen == null) return false;
-
             int capacity = RequiredAttackers(chosen, target);
             float holdDuration = Mathf.Max(FireInterval(aircraft) * 1.5f, 3f);
             if (PersonnelFacade.Roster.HasPerk(aircraft, PilotPerk.TargetMaster))
                 holdDuration *= PilotPerks.ClaimDurationMultiplier(true);
-            if (!TacticalCoordinator.TryClaim(target, aircraft, capacity, holdDuration))
-                return false;
-
+            if (!TacticalCoordinator.TryClaim(target, aircraft, capacity, holdDuration)) return false;
             return FireStation(aircraft, pilot, target, wm, chosen) != StationFireAction.None;
+        }
+
+        /// <summary>Capture range-qualified stores independently of cooldown, nose direction, and
+        /// preferred weapon. They remain committed through defensive interruptions.</summary>
+        internal static bool CanReach(Aircraft aircraft, WeaponStation station, Unit target) =>
+            CanDamage(station, target) && ShotIsValid(aircraft, station, target, rangeOnly: true);
+
+        internal static bool CanDamage(WeaponStation station, Unit target)
+        {
+            if (station == null || station.Cargo || station.WeaponInfo == null || station.Ammo <= 0 ||
+                target == null || target.disabled) return false;
+            RoleIdentity role = station.WeaponInfo.effectiveness;
+            bool air = target.definition != null && target.definition.typeIdentity.air > 0.5f;
+            return (target is Missile ? role.antiMissile : (air ? role.antiAir : role.antiSurface)) > 0f &&
+                (target.definition == null || role.OpportunityAgainst(target.definition.typeIdentity) > 0f);
+        }
+
+        /// <summary>No shared cadence or attacker cap: each station owns its native release interval.</summary>
+        internal static bool FireSaturation(Aircraft aircraft, Pilot pilot, WeaponStation station, Unit target)
+        {
+            if (aircraft == null || !aircraft.LocalSim || pilot == null || aircraft.weaponManager == null ||
+                !CanDamage(station, target) || station.SalvoInProgress) return false;
+            // An armed turret must retain its own aim/lock cycle through cooldowns.
+            if (station.HasTurret() && ReferenceEquals(station.GetStationTarget(), target)) return true;
+            if (!StationCanFire(aircraft, station, target)) return false;
+            return FireStation(aircraft, pilot, target, aircraft.weaponManager, station,
+                massed: true) != StationFireAction.None;
         }
 
         /// <summary>Select and target an offensive station, then either fire the selected fixed
         /// station or let a turret release only after its native aim, lock, and LOS gate succeeds.</summary>
         private static StationFireAction FireStation(Aircraft aircraft, Pilot pilot, Unit target,
                                                      WeaponManager wm, WeaponStation station,
-                                                     bool trackShot = true)
+                                                     bool trackShot = true, bool massed = false)
         {
             if (aircraft == null || pilot == null || target == null || target.disabled || wm == null ||
                 station == null || station.WeaponInfo == null)
@@ -192,7 +193,7 @@ namespace WingCommand
 
             // A previous turret target continues firing autonomously until it is cleared. Retarget it
             // before selecting another station so it cannot keep engaging a stale contact.
-            ClearTurretTargetsExcept(aircraft, station, target);
+            if (!massed) ClearTurretTargetsExcept(aircraft, station, target);
 
             wm.currentWeaponStation = station;
             List<Unit> targets = wm.GetTargetList();
@@ -311,21 +312,7 @@ namespace WingCommand
             WingComms.Say(member, call, target.unitName);
         }
 
-        /// <summary>Choose the most effective ready station that can fire now, preferring a different
-        /// station from the last shot. Reuse the previous one only if no alternative can fire.</summary>
-        private static WeaponStation MassedStationFor(Aircraft aircraft, Unit target,
-                                                      WeaponStation justFired)
-        {
-            bool isAir = target.definition != null && target.definition.typeIdentity.air > 0.5f;
-            TargetClass targetClass = isAir ? TargetClass.Air : TargetClass.Surface;
-
-            WeaponStation pick = BestStationFor(
-                aircraft, targetClass, WingWeaponPreference.Auto, target, justFired);
-            return pick ?? BestStationFor(aircraft, targetClass, WingWeaponPreference.Auto, target);
-        }
-
-        /// <summary>Choose a station for measured Attack using weapon preference. Splash uses
-        /// MassedStationFor to cycle stores.</summary>
+        /// <summary>Choose a station for measured Attack using weapon preference.</summary>
         private static WeaponStation DesignatedStationFor(Aircraft aircraft, Unit target)
         {
             bool isAir = target.definition != null && target.definition.typeIdentity.air > 0.5f;
@@ -339,47 +326,10 @@ namespace WingCommand
         {
             if (aircraft == null || target == null || target.disabled) return false;
 
-            bool isAir = target.definition != null && target.definition.typeIdentity.air > 0.5f;
-            TargetClass targetClass = isAir ? TargetClass.Air : TargetClass.Surface;
-
+            if (aircraft.weaponStations == null) return false;
             foreach (WeaponStation station in aircraft.weaponStations)
-            {
-                if (station == null || station.Cargo || station.WeaponInfo == null) continue;
-                if (station.Ammo <= 0) continue;
-
-                RoleIdentity role = station.WeaponInfo.effectiveness;
-                float value = targetClass == TargetClass.Air ? role.antiAir : role.antiSurface;
-                if (value > 0f) return true;
-            }
-
+                if (CanDamage(station, target)) return true;
             return false;
-        }
-
-        /// <summary>Required height above a surface target to clear bomb release limits. Return zero for
-        /// missile/gun-only loadouts to use the default attack height.</summary>
-        public static float BombReleaseFloor(Aircraft aircraft, Unit target)
-        {
-            if (aircraft == null || aircraft.weaponStations == null || target == null) return 0f;
-
-            bool isAir = target.definition != null && target.definition.typeIdentity.air > 0.5f;
-            if (isAir) return 0f;
-
-            float floor = 0f;
-            foreach (WeaponStation station in aircraft.weaponStations)
-            {
-                if (station == null || station.Cargo || station.WeaponInfo == null) continue;
-                if (station.Ammo <= 0) continue;
-                WeaponInfo info = station.WeaponInfo;
-                if (!info.bomb && !info.glideBomb) continue;
-                if (info.effectiveness.antiSurface <= 0f) continue;
-                float minAlt = info.targetRequirements.minAltitude;
-                if (minAlt > floor) floor = minAlt;
-            }
-
-            if (floor > 0f && PersonnelFacade.Roster.HasPerk(aircraft, PilotPerk.Bombardier))
-                floor *= PilotPerks.BombFloorScale(true);
-
-            return floor;
         }
 
         /// <summary>Whether a weapon station carries a jammer pod. Self-protection RadarJammer
@@ -717,8 +667,7 @@ namespace WingCommand
 
         private static WeaponStation BestStationFor(Aircraft aircraft, TargetClass targetClass,
                                                     WingWeaponPreference preference,
-                                                    Unit target = null,
-                                                    WeaponStation exclude = null)
+                                                    Unit target = null)
         {
             WeaponStation best = null;
             float bestScore = 0f;
@@ -726,14 +675,7 @@ namespace WingCommand
 
             foreach (WeaponStation station in aircraft.weaponStations)
             {
-                if (station == null || station.Cargo) continue;
-                if (station.WeaponInfo == null) continue;
-                if (station.Ammo <= 0 || !station.Ready()) continue;
-                if (station.SafetyIsOn(aircraft)) continue;
-                if (station.WeaponInfo.energy && (aircraft.GetPowerSupply()?.GetCharge() ?? 0f) < 0.6f)
-                    continue;
-                if (station == exclude) continue;
-                if (target != null && !ShotIsValid(aircraft, station, target)) continue;
+                if (!StationCanFire(aircraft, station, target)) continue;
 
                 RoleIdentity role = station.WeaponInfo.effectiveness;
 
@@ -758,6 +700,16 @@ namespace WingCommand
             }
 
             return best;
+        }
+
+        private static bool StationCanFire(Aircraft aircraft, WeaponStation station, Unit target)
+        {
+            if (station == null || station.Cargo || station.WeaponInfo == null ||
+                station.Ammo <= 0 || !station.Ready() || station.SafetyIsOn(aircraft)) return false;
+            if (station.WeaponInfo.energy && (aircraft.GetPowerSupply()?.GetCharge() ?? 0f) < 0.6f)
+                return false;
+            if (target == null) return true;
+            return CanDamage(station, target) && ShotIsValid(aircraft, station, target);
         }
 
         /// <summary>Weight valid stations by preference, excluding missile defence. Close-in preference
@@ -820,41 +772,5 @@ namespace WingCommand
             return best;
         }
 
-        /// <summary>Choose the nearest live enemy within radius of near that remaining stores can damage.
-        /// Different HQs are hostile. Return null when no usable target or ordnance remains.</summary>
-        public static Unit NextExpendTarget(Aircraft aircraft, GlobalPosition near,
-                                            float radius, Unit exclude)
-        {
-            if (aircraft == null) return null;
-
-            FactionHQ hq = aircraft.NetworkHQ;
-            if (hq == null) return null;
-
-            float radiusSq = radius * radius;
-
-            Unit best = null;
-            float bestSq = float.MaxValue;
-
-            List<Unit> all = UnitRegistry.allUnits;
-            if (all == null) return null;
-            for (int i = 0; i < all.Count; i++)
-            {
-                Unit u = all[i];
-                if (u == null || u.disabled || ReferenceEquals(u, exclude) ||
-                    ReferenceEquals(u, aircraft))
-                    continue;
-                // No HQ means neutral; matching HQ means friendly.
-                if (u.NetworkHQ == null || u.NetworkHQ == hq) continue;
-
-                float d = (u.GlobalPosition() - near).sqrMagnitude;
-                if (d > radiusSq || d >= bestSq) continue;
-                if (!CanStillEngage(aircraft, u)) continue;
-
-                bestSq = d;
-                best = u;
-            }
-
-            return best;
-        }
     }
 }

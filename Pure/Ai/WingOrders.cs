@@ -96,9 +96,13 @@ namespace WingCommand
             order == WingOrder.Formation || order == WingOrder.JamTarget;
 
         /// <summary>Detect completed designations even while another behaviour suspends their flight
-        /// state. FireForEffect manages its own rollover and completion in AttackRunState.</summary>
+        /// state. FireForEffect manages its committed salvo and completion in SplashState.</summary>
         public static bool TargetTaskComplete(WingOrder order, bool targetAlive, bool deliveryPending) =>
             !deliveryPending && (order == WingOrder.Attack || order == WingOrder.JamTarget) && !targetAlive;
+
+        /// <summary>Splash owns a target set, so loss of its primary target must not discard survivors.</summary>
+        public static bool RetireAfterDefence(WingOrder order, bool targetAlive) =>
+            order == WingOrder.Maneuver || (order != WingOrder.FireForEffect && CarriesTarget(order) && !targetAlive);
 
         /// <summary>Allow standing orders during pending delivery; reject manoeuvres that would expire
         /// during taxi.</summary>

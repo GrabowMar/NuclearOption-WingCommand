@@ -17,7 +17,15 @@ namespace WingCommand
         public const float FormationRecoveryBank = 25f;
         public const float FormationRecoveryHeading = 30f;
         public const float FormationInitialBraking = 2f;
-        public const float FormationBankRiseRate = 30f;
+        // Selected by tests/FlightTuning/Run.ps1; see its README.txt for model limits.
+        public const float FormationBankRiseRate = 75f;
+        public const float FormationLookAheadSeconds = 3f;
+        public const float FormationMinLookAhead = 450f;
+        public const float FormationRejoinCommandAngle = 55f;
+        public const float FormationRejoinPitchUp = 25f;
+        public const float FormationRejoinPitchDown = 22f;
+        public const float FormationStationPitchUp = 7f;
+        public const float FormationStationPitchDown = 6f;
         public const float FormationBurstSeconds = 8f;
         public const float FormationBurstCooldown = 30f;
         public const float FormationBurstInterval = 0.2f;
@@ -26,15 +34,15 @@ namespace WingCommand
         public const float SlotStack = 20f;
 
         /// <summary>Maximum station-keeping heading correction, in degrees.</summary>
-        public const float CommandAngle = 32f;
+        public const float CommandAngle = 40f;
 
         /// <summary>Settled bank limit with a level leader, in degrees; bounds lift loss and native
         /// elevator suppression. Leader turns may raise it through BankFollowScale.</summary>
-        public const float StationBank = 40f;
+        public const float StationBank = 45f;
 
         /// <summary>Level-leader rejoin bank limit beyond capture, in degrees; retains substantial
         /// vertical lift during pursuit.</summary>
-        public const float PursuitBank = 58f;
+        public const float PursuitBank = 70f;
 
         /// <summary>Altitude below which terrain clearance takes priority over bank matching.</summary>
         public const float BankMatchFloor = 280f;
@@ -175,8 +183,8 @@ namespace WingCommand
         /// immediately.</summary>
         public const float FireInterval = 5f;
 
-        /// <summary>Rapid shot spacing in seconds for Splash 'Em massed fire across ready stations.</summary>
-        public const float SplashFireInterval = 0.35f;
+        /// <summary>Near-exhaustion fuel reserve allowed to interrupt a saturation salvo.</summary>
+        public const float SplashCriticalFuel = 0.03f;
 
         /// <summary>Default maximum assigned shooters per target; effectiveness may reduce it and missiles
         /// receive one interceptor.</summary>

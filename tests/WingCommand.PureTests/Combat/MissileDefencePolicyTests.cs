@@ -5,6 +5,18 @@ namespace WingCommand.PureTests
     public sealed class MissileDefencePolicyTests
     {
         [Theory]
+        [InlineData(20000f, 500f, false)]
+        [InlineData(6000f, 500f, true)]
+        [InlineData(6001f, 500f, false)]
+        [InlineData(1000f, -50f, true)]
+        [InlineData(1001f, -50f, false)]
+        [InlineData(20000f, 0f, false)]
+        public void SaturationOnlyYieldsToCriticalMissiles(float distance, float closing, bool expected)
+        {
+            Assert.Equal(expected, MissileDefencePolicy.InterruptsSaturation(distance, closing));
+        }
+
+        [Theory]
         [InlineData(WingRoe.Hold, "SARH", true, 10f, false, 100f, true)]
         [InlineData(WingRoe.Hold, "SARH", true, 10f, true, 5000f, false)]
         [InlineData(WingRoe.Hold, "SARH", true, 10f, true, 5001f, true)]

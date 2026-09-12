@@ -61,7 +61,7 @@ internal static class Time { public static float timeSinceLevelLoad = 50f; }
 internal class Setting { public bool Value = true; }
 internal class Settings { public Setting AutoReturnOnEmpty = new Setting(); public float BingoFuel = 0.15f; }
 internal static class Plugin { public static Settings Settings = new Settings(); }
-internal static class WingTuning { public const float BingoFuel = 0.15f; }
+internal static class WingTuning { public const float BingoFuel = 0.15f, SplashCriticalFuel = 0.03f; }
 internal static class WingComms { public enum Call { Bingo, OutOfAmmo } public static void Say(WingMember m, Call c) {} }
 internal static class CombatFacade {
     internal static class Tactical { public static void ReleaseSelection(Aircraft a) {} }
@@ -72,6 +72,7 @@ internal static class PersonnelFacade { internal static class Roster { public st
 internal static class WingOrderRules { public static bool CanQueueWhilePending(WingOrder o) { return o != WingOrder.Maneuver; } }
 internal static class WingOrderCatalog { public static bool CanApply(WingMember m, WingOrder o) { return m.Alive; } }
 internal static class FallBackState { public static GlobalPosition FriendlyLoiterPoint(Aircraft a, Vector3 v) { return default(GlobalPosition); } }
+internal class SplashState { public int Prepared; public void Prepare() { Prepared++; } }
 internal class Brain { public void RequestEvaluation() {} }
 internal struct WingDirective {
     public WingOrder Order; public Unit Target; public GlobalPosition Point;
@@ -81,6 +82,7 @@ internal struct WingDirective {
     public bool SameIntentAs(WingDirective other) { return Order == other.Order && Target == other.Target && Point.Id == other.Point.Id; }
 }
 internal class WingMember {
+    internal readonly SplashState splashState = new SplashState();
     private readonly StandingOrder<WingDirective> standingOrder = new StandingOrder<WingDirective>(
         WingDirective.Simple(WingOrder.Formation), (a,b) => a.SameIntentAs(b));
     internal readonly TaskRoute<WingDirective> taskQueue = new TaskRoute<WingDirective>();
@@ -158,6 +160,15 @@ public static class RefitChecks {
         var cargo = new WingMember { AutoRefit=true };
         cargo.Apply(WingOrder.DeliverCargo); cargo.CheckReserves();
         Check(!cargo.RefitPending && cargo.Order==WingOrder.DeliverCargo, "Deliberate cargo task takes priority");
+        var splash = new WingMember { AutoRefit=true };
+        splash.Aircraft.tank.Fuel=0.1f;
+        splash.Apply(new WingDirective { Order=WingOrder.FireForEffect, Target=target });
+        splash.CheckReserves();
+        Check(splash.splashState.Prepared==1, "Snapshot saturation stores when an airborne order is received");
+        Check(!splash.RefitPending && splash.Order==WingOrder.FireForEffect, "Routine bingo and empty-store refit cannot interrupt saturation");
+        splash.Aircraft.tank.Fuel=0.03f; splash.CheckReserves();
+        Check(splash.Order==WingOrder.ReturnToBase, "Critical fuel can interrupt saturation");
+
         var disabled = new WingMember { AutoRefit=true };
         disabled.Apply(a); Plugin.Settings.AutoReturnOnEmpty.Value=false; disabled.CheckReserves();
         Check(!disabled.RefitPending && disabled.Order==WingOrder.MoveToPoint, "Respect global automatic-return switch");

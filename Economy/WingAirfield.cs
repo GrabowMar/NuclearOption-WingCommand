@@ -11,7 +11,7 @@ namespace WingCommand
     {
         /// <summary>Seconds allowed for native taxi before intervening, well before its stuck timer ejects
         /// the pilot.</summary>
-        private const float TaxiGrace = 6f;
+        private const float TaxiGrace = 1f;
 
         /// <summary>Maximum speed considered a stalled taxi departure.</summary>
         private const float StalledSpeed = 1.5f;
@@ -227,12 +227,6 @@ namespace WingCommand
             // Match runway velocity to keep carrier spawns stationary relative to the deck.
             pose.Velocity = runway.GetVelocity();
 
-            Plugin.LogVerbose(
-                "[Airfield] " + definition.unitName + " pose on " +
-                runway.GetName(reverse) + ": len=" + runway.Length.ToString("0") +
-                " level=" + runway.IsLevel() +
-                " thresholdY=" + threshold.position.y.ToString("0.0") +
-                " spawnY=" + position.y.ToString("0.0"));
             return true;
         }
 
@@ -345,6 +339,8 @@ namespace WingCommand
                 if (pilot.currentState is AIPilotTakeoffState)
                 {
                     Report(launch, "entered the stock takeoff run");
+                    // Transfer any fallback claim to native takeoff; do not free an active runway.
+                    launch.Queued = false;
                     Release(launch, i);
                     continue;
                 }
@@ -357,7 +353,9 @@ namespace WingCommand
                 }
 
                 if (Time.timeSinceLevelLoad - launch.SpawnedAt < TaxiGrace) continue;
-                if (aircraft.speed > StalledSpeed) continue;
+                if (aircraft.rb == null ||
+                    (aircraft.rb.velocity - launch.Runway.GetVelocity()).sqrMagnitude >
+                    StalledSpeed * StalledSpeed) continue;
 
                 float dot = Vector3.Dot(aircraft.transform.forward,
                                         launch.Runway.GetDirection(launch.Reverse).normalized);

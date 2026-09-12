@@ -46,7 +46,7 @@ namespace WingCommand
         // Spend bank authority on large course reversals, then relax it as the intercept
         // lines up so the aircraft can recover speed. Caller retains terrain/energy limits.
         public static float InterceptBank(float commandAngle) =>
-            Clamp(Math.Abs(commandAngle) * 2f, 8f, 60f);
+            Clamp(Math.Abs(commandAngle) * 2f, 8f, WingTuning.PursuitBank);
 
         // Convert published stall speed from km/h. AircraftParameters.landingSpeed is an approach
         // target, not stall speed; the VT-7's values differ substantially.

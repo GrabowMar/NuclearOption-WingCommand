@@ -196,7 +196,24 @@ namespace WingCommand
                 MissileWarning warning = Aircraft != null
                     ? Aircraft.GetMissileWarningSystem()
                     : null;
-                return warning != null && warning.IsWarning();
+                if (warning == null || !warning.IsWarning()) return false;
+                if (Order != WingOrder.FireForEffect) return true;
+
+                // A distant warning must not suppress the saturation salvo. Check every tracked
+                // inbound: the nearest missile is not necessarily the first one to arrive.
+                bool tracked = false;
+                if (warning.knownMissiles == null) return true;
+                foreach (Missile missile in warning.knownMissiles)
+                {
+                    if (missile == null || missile.disabled || missile.targetID != Aircraft.persistentID) continue;
+                    tracked = true;
+                    if (missile.rb == null || Aircraft.rb == null) return true;
+                    Vector3 offset = missile.GlobalPosition() - Aircraft.GlobalPosition();
+                    float closing = Vector3.Dot(-offset.normalized, missile.rb.velocity - Aircraft.rb.velocity);
+                    if (MissileDefencePolicy.InterruptsSaturation(offset.magnitude, closing)) return true;
+                }
+                // A live warning without reliable tracking remains a safety override.
+                return !tracked;
             }
         }
 

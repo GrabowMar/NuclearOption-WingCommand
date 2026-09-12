@@ -11,6 +11,8 @@ namespace WingCommand
     internal static class WingShopDelivery
     {
         private static readonly List<Airbase> fieldScratch = new List<Airbase>();
+        private static readonly HashSet<Airbase> dispatchedFields = new HashSet<Airbase>();
+        private static float nextDispatchAt;
 
         // Delivery dispatch.
 
@@ -204,7 +206,7 @@ namespace WingCommand
             public bool DelayReported;
             public float RequestedAt;
             public float ExpiresAt;
-            public float NextAttemptAt;
+            public string LastLaunchBlocker;
             public bool Starting;
 
             /// <summary>Whether the order must wait at Origin. Any-mode orders remain unpinned until a
@@ -344,18 +346,13 @@ namespace WingCommand
             Watch(hq);
             pending.Add(order);
 
-            if (order.Origin != null && CanLaunchNow(order.Origin, definition))
-                Attempt(order);
-            else
-                order.NextAttemptAt = Time.unscaledTime + WingTuning.HangarRetryInterval;
+            // All purchases use the same FIFO pass; a new order cannot jump a waiting departure.
+            if (pending.Count == 1) nextDispatchAt = Time.unscaledTime;
 
             string fieldName = order.Origin != null
                 ? WingLaunchFields.DisplayName(order.Origin) : "an allowed field";
-            Plugin.LogVerbose(order.Claimed
-                ? "[Shop] " + definition.unitName + " ordered from " + fieldName +
-                  " with the " + WingLoadoutCatalog.Label(transaction.Loadout) + " fit"
-                : "[Shop] " + definition.unitName + " queued for " + fieldName +
-                  (pin ? " - it is busy" : " - waiting for any free allowed field"));
+            Plugin.LogVerbose("[Shop] " + definition.unitName + " queued for " + fieldName +
+                " with the " + WingLoadoutCatalog.Label(transaction.Loadout) + " fit");
             return true;
         }
 
@@ -491,11 +488,15 @@ namespace WingCommand
             // Wait for landing traffic and physical runway clearance, including wrecks.
             if (WingAirfield.LaunchSpotBlocked(pose, definition, out string blocker))
             {
-                Plugin.LogVerbose("[Shop] " + definition.unitName + " launch from " +
-                    WingLaunchFields.DisplayName(order.Origin) +
-                    " held - threshold blocked by " + blocker);
+                string hold = WingLaunchFields.DisplayName(order.Origin) + ": " + blocker;
+                if (order.LastLaunchBlocker != hold)
+                {
+                    order.LastLaunchBlocker = hold;
+                    Plugin.LogVerbose("[Shop] " + definition.unitName + " launch held - " + hold);
+                }
                 return;
             }
+            order.LastLaunchBlocker = null;
 
             // Supply a valid loadout because native OnStartClient blindly falls back to loadouts[1];
             // runway spawns lack the hangar's later fitting step.
@@ -803,46 +804,9 @@ namespace WingCommand
                 FailDelivery(order, "field can no longer produce this aircraft");
             }
 
-            // Throttle FIFO retries and require field availability.
+            DispatchPending();
+
             float now = Time.unscaledTime;
-            for (int i = 0; i < pending.Count; i++)
-            {
-                PendingDelivery order = pending[i];
-                if (order.Claimed || order.Starting) continue;
-                if (now < order.NextAttemptAt) continue;
-
-                AircraftDefinition definition = order.Transaction.Definition;
-                Aircraft leader = WingCommandManager.Instance?.Wing?.Leader;
-                Vector3 from = leader != null ? leader.transform.position : Vector3.zero;
-
-                if (!order.Pinned)
-                {
-                    CollectFields(order.Transaction.Hq);
-                    int index = SelectOrigin(definition, from, HangarLaunchMode.Any);
-                    if (index < 0)
-                    {
-                        order.NextAttemptAt = now + WingTuning.HangarRetryInterval;
-                        continue;
-                    }
-                    order.Origin = fieldScratch[index];
-                }
-                else if (order.Origin == null || !CanLaunchNow(order.Origin, definition))
-                {
-                    order.NextAttemptAt = now + WingTuning.HangarRetryInterval;
-                    continue;
-                }
-
-                Attempt(order);
-                // Account for immediate claim removal so the shifted next order is still visited.
-                if (!pending.Contains(order)) { i--; continue; }
-                if (!order.Claimed)
-                {
-                    if (!order.Pinned) order.Origin = null;
-                    order.NextAttemptAt = Time.unscaledTime + WingTuning.HangarRetryInterval;
-                }
-            }
-
-            now = Time.unscaledTime;
             for (int i = pending.Count - 1; i >= 0; i--)
             {
                 PendingDelivery order = pending[i];
@@ -884,6 +848,39 @@ namespace WingCommand
             pending.Remove(order);
         }
 
+        /// <summary>One oldest-first pass per retry interval, one attempt per field. Separate fields
+        /// can depart together; a busy field does not repeatedly scan colliders for every queued order.</summary>
+        private static void DispatchPending()
+        {
+            float now = Time.unscaledTime;
+            if (now < nextDispatchAt) return;
+            nextDispatchAt = now + WingTuning.HangarRetryInterval;
+            dispatchedFields.Clear();
+            Aircraft leader = WingCommandManager.Instance?.Wing?.Leader;
+            Vector3 from = leader != null ? leader.transform.position : Vector3.zero;
+            for (int i = 0; i < pending.Count; i++)
+            {
+                PendingDelivery order = pending[i];
+                if (order.Claimed || order.Starting) continue;
+                AircraftDefinition definition = order.Transaction.Definition;
+                if (!order.Pinned)
+                {
+                    CollectFields(order.Transaction.Hq);
+                    fieldScratch.RemoveAll(field => dispatchedFields.Contains(field));
+                    int index = SelectOrigin(definition, from, HangarLaunchMode.Any);
+                    if (index < 0) continue;
+                    order.Origin = fieldScratch[index];
+                }
+                if (order.Origin == null || !dispatchedFields.Add(order.Origin)) continue;
+                if (!CanLaunchNow(order.Origin, definition)) continue;
+
+                Attempt(order);
+                // Claim removes synchronously; visit the order shifted into this index next.
+                if (!pending.Contains(order)) { i--; continue; }
+                if (!order.Claimed && !order.Pinned) order.Origin = null;
+            }
+        }
+
         public static void Reset()
         {
             pendingFuel.Clear();
@@ -892,6 +889,8 @@ namespace WingCommand
             for (int i = 0; i < pending.Count; i++)
                 pending[i].Transaction?.Rollback("mission reset");
             pending.Clear();
+            dispatchedFields.Clear();
+            nextDispatchAt = 0f;
             fieldScratch.Clear();
             verticalCache.Clear();
             Watch(null);

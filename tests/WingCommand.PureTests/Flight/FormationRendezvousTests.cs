@@ -94,7 +94,7 @@ namespace WingCommand.PureTests
                 desiredSpeed = Clamp(desiredSpeed, minimum, 340f);
                 speed += Clamp((desiredSpeed - speed) / 1.5f, -2f, 3f) * dt;
 
-                float baseline = Math.Max(650f, speed * 3.5f);
+                float baseline = Math.Max(WingTuning.FormationMinLookAhead, speed * WingTuning.FormationLookAheadSeconds);
                 var guidance = FormationGuidance.Horizontal(new Vector2(gx, gz), new Vector2(vx, vz),
                     new Vector2(0f, leaderSpeed), Vector2.UnitY,
                     intercept.Gap, intercept.ArrivalVelocity,
@@ -107,10 +107,12 @@ namespace WingCommand.PureTests
                     az += (baseline - az) * recovery.Blend;
                 }
                 FormationControlRules.SafeRejoinDirection(vx, 0f, vz, ax, 0f, az,
-                    55f, 18f, 15f, 600f, out float sx, out _, out float sz);
+                    WingTuning.FormationRejoinCommandAngle, WingTuning.FormationRejoinPitchUp,
+                    WingTuning.FormationRejoinPitchDown, 600f, out float sx, out _, out float sz);
                 float error = FormationTracking.WrapDegrees(((float)Math.Atan2(sx, sz) - heading) * 180f / (float)Math.PI);
                 float airframeBank = FormationGuidance.AirborneBankLimit(600f, speed, minimum / 1.2f);
-                float bankCeiling = Math.Min(distance > 1500f ? 60f : 40f + 18f * blend, airframeBank);
+                float bankCeiling = Math.Min(distance > 1500f ? WingTuning.PursuitBank :
+                    WingTuning.StationBank + (WingTuning.PursuitBank - WingTuning.StationBank) * blend, airframeBank);
                 bankCeiling += (Math.Min(bankCeiling, 25f) - bankCeiling) * recovery.Blend;
                 float bankDemand = distance > 1500f
                     ? Math.Min(FormationGuidance.InterceptBank(error), bankCeiling)
@@ -170,8 +172,20 @@ namespace WingCommand.PureTests
         public void RapidRollCanAcquireBankAuthorityBeforeTheLeaderFinishesItsTurn()
         {
             Assert.Equal(WingTuning.FormationBankRiseRate, FormationGuidance.BankRiseRate(0.1f));
-            Assert.InRange(FormationGuidance.BankRiseRate((float)Math.PI / 2f), 89.9f, 90.1f);
+            Assert.InRange(FormationGuidance.BankRiseRate((float)Math.PI / 2f), 134.9f, 135.1f);
             Assert.Equal(FormationGuidance.BankRiseRate(2f), FormationGuidance.BankRiseRate(-2f));
+        }
+
+        [Fact]
+        public void SharpInterceptUsesMoreBankButStillRespectsLowSpeedAndTerrain()
+        {
+            float requested = FormationGuidance.InterceptBank(60f);
+            Assert.Equal(70f, requested);
+            Assert.Equal(requested, FormationGuidance.InterceptBank(-60f));
+            Assert.Equal(8f, FormationGuidance.InterceptBank(0f));
+            Assert.True(FormationGuidance.AirborneBankLimit(600f, 200f, 50f) >= requested);
+            Assert.True(FormationGuidance.AirborneBankLimit(600f, 65f, 50f) < requested);
+            Assert.True(FormationGuidance.AirborneBankLimit(80f, 200f, 50f) < requested);
         }
     }
 }

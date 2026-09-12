@@ -5,6 +5,19 @@ namespace WingCommand.PureTests
     public class OrderPolicyTests
     {
         [Fact]
+        public void SplashRetainsOtherTargetsAfterDefenceAndRepeatedOrdersStartFreshSalvos()
+        {
+            Assert.False(WingOrderRules.RetireAfterDefence(WingOrder.FireForEffect, false));
+            Assert.True(WingOrderRules.RetireAfterDefence(WingOrder.Attack, false));
+            Assert.True(WingOrderRules.RetireAfterDefence(WingOrder.Maneuver, true));
+            var target = new Unit();
+            var first = WingDirective.AtTarget(WingOrder.FireForEffect, target);
+            var repeated = WingDirective.AtTarget(WingOrder.FireForEffect, target);
+            Assert.False(first.SameIntentAs(in repeated));
+            Assert.Single(first.Targets);
+        }
+
+        [Fact]
         public void Splash_BypassesLeashAndYieldsWeaponsAuthorityToSafetyBehaviours()
         {
             Assert.False(WingOrderRules.SendsWingmanHunting(WingOrder.FireForEffect));
@@ -47,7 +60,7 @@ namespace WingCommand.PureTests
         [Fact]
         public void FireForEffect_DoesNotRetireTargetTaskImmediatelyWhenTargetDies()
         {
-            // AttackRunState manages its own expenditure and rollover via TryRollToNextExpendTarget
+            // SplashState manages expenditure and the entire designated target set.
             Assert.True(WingOrderRules.CarriesTarget(WingOrder.FireForEffect));
             Assert.False(WingOrderRules.TargetTaskComplete(WingOrder.FireForEffect, targetAlive: false, deliveryPending: false));
         }

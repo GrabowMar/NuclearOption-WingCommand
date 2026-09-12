@@ -295,8 +295,9 @@ namespace WingCommand
                 "to focus that target instead. Shift-right-click queues another.";
 
             public const string FireForEffect =
-                "SPLASH - empty everything that will bear on your locked target. " +
-                "Expends ordnance freely; use it to finish something, not to open on it.";
+                "SPLASH - priority saturation of all designated targets. Immediately commits every " +
+                "in-range weapon and empties those stores at native firing speed. Only critical " +
+                "self-preservation pauses the salvo; it resumes automatically. No short-range run-in.";
 
             public const string Engage =
                 "ENGAGE - hunt independently. Sets rules of engagement to FREE. The wingman " +

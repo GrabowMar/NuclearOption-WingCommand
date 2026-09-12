@@ -11,6 +11,7 @@ namespace WingCommand
             WingAi.Register(new DeliveryHold());
             WingAi.Register(new MissileBreak());
             WingAi.Register(new TerrainAbort());
+            WingAi.Register(new Saturation());
             WingAi.Register(new LeaderLost());
             WingAi.Register(new DeckHold());
             WingAi.Register(new LeashRecall());
@@ -85,6 +86,20 @@ namespace WingCommand
             public float Score(in WingSituation s, bool incumbent) =>
                 TerrainAbortPolicy.ShouldRecover(in s, incumbent)
                     ? 1f : 0f;
+        }
+
+        /// <summary>Explicit saturation outranks every routine band. Delivery safety (1.0),
+        /// terrain recovery (1.0), and missile defence (0.9) remain authoritative.</summary>
+        private sealed class Saturation : IWingReflex, IWingReflexLifecycle
+        {
+            public string Id => "wingcommand.saturation";
+            public WingReflexBand Band => WingReflexBand.Survival;
+            public string BehaviourId => WingBehaviours.Task;
+            public float MinimumSeconds => 0f;
+            public bool RequiresSmartMode => false;
+            public bool InterruptsMinimumHold => true;
+            public bool CanHold(in WingSituation s) => s.Order == WingOrder.FireForEffect && !s.DeliveryPending;
+            public float Score(in WingSituation s, bool incumbent) => CanHold(in s) ? 0.8f : 0f;
         }
 
         /// <summary>Safety hold when no leader exists, preserving standing intent. Restoring a leader

@@ -13,10 +13,6 @@ namespace WingCommand
         /// <summary>Lower surface-attack height for rotary aircraft.</summary>
         private const float RotaryAttackAltitude = 220f;
 
-        /// <summary>Search radius around a destroyed Splash target; expend within the area rather than
-        /// chasing survivors across the map.</summary>
-        private const float SplashSweepRadius = 8000f;
-
         /// <summary>Whether a fixed-wing attacker has overflown the target and is extending away before
         /// turning back in or rejoining.</summary>
         private bool egress;
@@ -26,10 +22,6 @@ namespace WingCommand
 
         /// <summary>Timestamp of the last shot, used to enforce the shared firing interval.</summary>
         private float lastFiredTime;
-        private int splashTargetIndex;
-
-        /// <summary>Last known target position for Splash follow-on searches.</summary>
-        private GlobalPosition lastTargetPos;
 
         public AttackRunState(WingMember member) : base(member)
         {
@@ -39,12 +31,9 @@ namespace WingCommand
         public override void EnterState(Pilot pilot)
         {
             BeginFlight(pilot);
-            lastFiredTime = 0f;
+            lastFiredTime = float.NegativeInfinity;
             egress = false;
             egressUntil = 0f;
-            lastTargetPos = member.AssignedTarget != null
-                ? member.AssignedTarget.GlobalPosition()
-                : aircraft.GlobalPosition();
 
             if (Plugin.Settings.VerboseLogging.Value)
             {
@@ -52,6 +41,21 @@ namespace WingCommand
                 Plugin.LogVerbose(
                     $"[Attack] {aircraft.unitName} running in on " +
                     (target != null ? target.unitName : "(no target)"));
+                if (target != null && aircraft.weaponStations != null)
+                {
+                    Vector3 offset = target.GlobalPosition() - aircraft.GlobalPosition();
+                    foreach (WeaponStation station in aircraft.weaponStations)
+                    {
+                        if (station == null || station.Cargo || station.WeaponInfo == null) continue;
+                        TargetRequirements req = station.WeaponInfo.targetRequirements;
+                        Plugin.LogVerbose($"[AttackEnvelope] {aircraft.unitName} id={aircraft.persistentID} " +
+                            $"weapon={station.WeaponInfo.shortName} ammo={station.Ammo} ready={station.Ready()} " +
+                            $"safety={station.SafetyIsOn(aircraft)} salvo={station.SalvoInProgress} " +
+                            $"distance={offset.magnitude:F0} range={req.minRange:F0}..{req.maxRange:F0} " +
+                            $"launcherAgl={aircraft.radarAlt:F0} targetAgl={target.radarAlt:F0} targetAltitude={req.minAltitude:F0}..{req.maxAltitude:F0} " +
+                            $"angle={Vector3.Angle(aircraft.transform.forward, offset):F1} limit={req.minAlignment:F1}");
+                    }
+                }
             }
         }
 
@@ -61,8 +65,7 @@ namespace WingCommand
             // must release the designation before another behaviour owns the aircraft.
             CombatFacade.Weapons.ClearTurretTargets(aircraft);
             egress = false;
-            lastFiredTime = 0f;
-            splashTargetIndex = 0;
+            lastFiredTime = float.NegativeInfinity;
         }
 
         public override void UpdateState(Pilot pilot)
@@ -75,76 +78,15 @@ namespace WingCommand
 
             Unit target = member.AssignedTarget;
 
-            // After target loss, Splash searches nearby while ordnance remains; other runs rejoin.
             if (target == null || target.disabled)
             {
                 if (target != null) WingComms.Say(member, WingComms.Call.Splash, target.unitName);
-                if (TryRollToNextExpendTarget())
-                {
-                    egress = false;
-                    return;
-                }
-                FinishRun();
+                CompleteTask(WingOrder.Formation);
                 return;
             }
 
-            if (member.Order == WingOrder.FireForEffect &&
-                !CombatFacade.Weapons.CanStillEngage(aircraft, target))
-            {
-                // Try nearby target classes before ending Splash; stores ineffective here may still
-                // damage another contact.
-                if (TryRollToNextExpendTarget())
-                {
-                    egress = false;
-                    return;
-                }
-                FinishRun();
-                return;
-            }
-
-            lastTargetPos = target.GlobalPosition();
             Fly(target);
             Shoot(target);
-        }
-
-        /// <summary>Rejoin after the run. Announce Winchester only when ammunition is empty; no-target
-        /// completion is quiet.</summary>
-        private void FinishRun()
-        {
-            if (member.Ammo <= 0)
-                WingComms.Say(member, WingComms.Call.OutOfAmmo);
-            CompleteTask(WingOrder.Formation);
-        }
-
-        /// <summary>Retarget Splash near the last designation; return false for other orders or an empty
-        /// sweep.</summary>
-        private bool TryRollToNextExpendTarget()
-        {
-            if (member.Order != WingOrder.FireForEffect) return false;
-
-            Unit next = null;
-            var selected = member.Directive.Targets;
-            if (selected != null)
-            {
-                foreach (Unit candidate in selected)
-                    if (candidate != member.AssignedTarget &&
-                        CombatFacade.Weapons.CanStillEngage(aircraft, candidate))
-                    {
-                        next = candidate;
-                        break;
-                    }
-            }
-            else
-                next = CombatFacade.Weapons.NextExpendTarget(
-                    aircraft, lastTargetPos, SplashSweepRadius, member.AssignedTarget);
-            if (next == null) return false;
-
-            member.RetargetSplash(next);
-            lastTargetPos = next.GlobalPosition();
-            if (Plugin.Settings.VerboseLogging.Value)
-                Plugin.LogVerbose(
-                    "[Attack] " + aircraft.unitName + " splash rolling onto " + next.unitName);
-            return true;
         }
 
         private void Fly(Unit target)
@@ -152,8 +94,6 @@ namespace WingCommand
             GlobalPosition targetPos = target.GlobalPosition();
             bool rotary = WingRegistry.IsRotary(aircraft);
             float altitude = rotary ? RotaryAttackAltitude : AttackAltitude;
-            float bombFloor = CombatFacade.Weapons.BombReleaseFloor(aircraft, target);
-            if (bombFloor > 0f) altitude = Mathf.Max(altitude, bombFloor + 150f);
 
             // Aim above surface targets to avoid commanding flight into terrain.
             bool surface = target.definition == null || target.definition.typeIdentity.air <= 0.5f;
@@ -236,41 +176,9 @@ namespace WingCommand
         private void Shoot(Unit target)
         {
             if (egress) return;
-
-            float interval = member.Order == WingOrder.FireForEffect
-                ? WingTuning.SplashFireInterval
-                : CombatFacade.Weapons.FireInterval(aircraft);
-            // A turret designation is accepted before its actual shot. Give native aiming/lock time
-            // before switching targets, as with a measured attack.
-            if (aircraft.weaponManager?.currentWeaponStation?.HasTurret() == true)
-                interval = Mathf.Max(interval, CombatFacade.Weapons.FireInterval(aircraft));
-            if (Time.timeSinceLevelLoad - lastFiredTime < interval) return;
-
-            var selected = member.Directive.Targets;
-            if (member.Order == WingOrder.FireForEffect && selected != null && selected.Count > 0)
-            {
-                for (int attempt = 0; attempt < selected.Count; attempt++)
-                {
-                    int index = (splashTargetIndex + attempt) % selected.Count;
-                    if (!CombatFacade.Weapons.EngageMassed(aircraft, pilot, selected[index], float.MaxValue))
-                        continue;
-                    splashTargetIndex = (index + 1) % selected.Count;
-                    lastFiredTime = Time.timeSinceLevelLoad;
-                    break;
-                }
-                return;
-            }
-
-            // Reuse shared station validity checks. Explicit attacks are independent of incidental ROE;
-            // Splash uses the weapon envelope alone as its range gate.
-            float range = member.Order == WingOrder.FireForEffect
-                ? float.MaxValue
-                : CombatFacade.Roe.ExplicitOrderRange();
-
-            bool fired = member.Order == WingOrder.FireForEffect
-                ? CombatFacade.Weapons.EngageMassed(aircraft, pilot, target, range)
-                : CombatFacade.Weapons.EngageSpecific(aircraft, pilot, target, range);
-            if (fired) lastFiredTime = Time.timeSinceLevelLoad;
+            if (Time.timeSinceLevelLoad - lastFiredTime < CombatFacade.Weapons.FireInterval(aircraft)) return;
+            if (CombatFacade.Weapons.EngageSpecific(aircraft, pilot, target,
+                CombatFacade.Roe.ExplicitOrderRange())) lastFiredTime = Time.timeSinceLevelLoad;
         }
     }
 }

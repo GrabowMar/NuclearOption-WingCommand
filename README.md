@@ -3,7 +3,7 @@
 # ✈ WING COMMAND
 ### Tactical AI wing control for Nuclear Option
 
-[![Release](https://img.shields.io/badge/release-0.9.2.1-blue?style=for-the-badge)](https://github.com/GrabowMar/NuclearOption-WingCommand/releases)
+[![Release](https://img.shields.io/badge/release-0.9.2.2-blue?style=for-the-badge)](https://github.com/GrabowMar/NuclearOption-WingCommand/releases)
 [![Game](https://img.shields.io/badge/Nuclear%20Option-0.34.2-orange?style=for-the-badge)](https://store.steampowered.com/app/2247020/Nuclear_Option/)
 [![BepInEx](https://img.shields.io/badge/BepInEx-5.4.23%2B-lightgrey?style=for-the-badge)](https://github.com/BepInEx/BepInEx/releases)
 [![License](https://img.shields.io/badge/license-MIT-green?style=for-the-badge)](LICENSE)
@@ -72,7 +72,7 @@ when both are installed, Boscali handles the MFD layout.
    Nuclear Option/BepInEx/plugins/WingCommand/WingCommand.dll
    ```
 
-3. Launch and check `BepInEx/LogOutput.log` for `WingCommand 0.9.2.1 loaded.` — if it's missing, see [Troubleshooting](#-troubleshooting).
+3. Launch and check `BepInEx/LogOutput.log` for `WingCommand 0.9.2.2 loaded.` — if it's missing, see [Troubleshooting](#-troubleshooting).
 
 > [!WARNING]
 > Keep the DLL only in `plugins/WingCommand/`. A stray copy in `plugins/` can load the wrong build.
@@ -164,7 +164,7 @@ Unarmed aircraft refit for fuel only.
 |---|---|
 | **Form Up** | Close on assigned slots and hold station on you |
 | **Attack Target** | Hit your locked target immediately, or arm the button and right-click a hostile on the map. Radial sends everyone; scoped WMC distributes contacts and may hold surplus back as cover |
-| **Splash 'Em** | Every selected wingman pours its whole loadout into one target until it's dead or they're dry. WMC only — not a quick call |
+| **Splash 'Em** | Priority saturation of all designated targets with every store already in range, at native firing speed. |
 | **Engage** | Hunt within the configured leash, return if they stray. Sets ROE to FREE |
 | **Seek & Destroy** | Fly to a marked map area, then begin autonomous engagement under the current ROE |
 | **Disengage** | Break on separated headings, countermeasure, egress, then form up |
@@ -181,10 +181,13 @@ defending. Ordinary bingo return ends the task; **AUTO REFIT** preserves it.
 Completed manoeuvres and attacks on destroyed targets return to formation.
 
 **Attack vs Splash:** Attack spreads targets, caps useful attackers and spaces launches.
-Splash concentrates fire on one target without those limits, while retaining weapon
-matching and shot envelopes. It starts without formation recall, continues without a
-leader, and resumes after missile defence or terrain avoidance. Bingo and Winchester
-still recall it.
+Splash immediately commits every in-range weapon across all designated targets and
+expends those stores at their native firing rates, retaining weapon matching and launch
+envelopes. It has no shared shot delay, attacker cap, or run-in to acquire shorter-range
+stores. It overrides formation, leash, routine bingo, and auto-refit. Imminent missile defence,
+terrain/stall recovery, and safe deck departure can pause it; the same salvo resumes
+automatically. Critical fuel (3% or less) may end it. When the committed stores are spent
+or no designated target remains suitable, it advances the queued order or reforms.
 
 **Roster RTB:** after landing at a friendly base, the pilot returns to the pool,
 the airframe returns to faction stock and its purchase allocation is refunded.

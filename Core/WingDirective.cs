@@ -34,7 +34,8 @@ namespace WingCommand
 
         /// <summary>Create a unit-target directive shared by Attack and Splash orders.</summary>
         public static WingDirective AtTarget(WingOrder order, Unit target) =>
-            new WingDirective(order, target, default(GlobalPosition), false);
+            order == WingOrder.FireForEffect ? Splash(new[] { target }, target)
+                : new WingDirective(order, target, default(GlobalPosition), false);
 
         public static WingDirective Splash(System.Collections.Generic.IReadOnlyList<Unit> targets, Unit first)
         {
