@@ -139,7 +139,7 @@ namespace WingCommand
                 WingFidelity.TerrainClearance);
             float holdBlend = FormationCollision.HoldBlend(
                 CombatFacade.Roe.Current == WingRoe.Hold, flat, spacing);
-            float effectiveClimb = leaderState.EffectiveClimb(leaderVel.y, leaderVelFlat.magnitude, holdBlend);
+            float effectiveClimb = leaderState.EffectiveClimb(leaderVel.y, holdBlend);
             desiredAgl += Mathf.Max(0f, effectiveClimb) * AltitudeLeadSeconds;
             if (avoiding && escape.y > 0.1f) desiredAgl += escape.y * 30f;
             float agl = AutopilotMath.RotaryAgl(aircraft, desiredAgl);

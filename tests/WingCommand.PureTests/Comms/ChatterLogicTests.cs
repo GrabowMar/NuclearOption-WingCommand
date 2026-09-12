@@ -44,6 +44,8 @@ namespace WingCommand.PureTests
 
             Assert.False(string.IsNullOrWhiteSpace(single));
             Assert.False(string.IsNullOrWhiteSpace(group));
+            Assert.NotEqual(ChatterDialogue.Acknowledge(ChatterPersona.Professional, "UNKNOWN", seed: 0), single);
+            Assert.NotEqual(ChatterDialogue.GroupAcknowledge(ChatterPersona.Professional, "UNKNOWN", "Two", seed: 0), group);
         }
 
         [Fact]
@@ -57,9 +59,9 @@ namespace WingCommand.PureTests
                 Assert.False(string.IsNullOrWhiteSpace(attack));
                 Assert.False(string.IsNullOrWhiteSpace(fireForEffect));
 
-                // Must not fall through to the default generic "Roger." / "Copy."
-                Assert.DoesNotContain("Apparently so", attack);
-                Assert.DoesNotContain("Apparently so", fireForEffect);
+                string fallback = ChatterDialogue.Acknowledge(persona, "UNKNOWN", seed: 1);
+                Assert.NotEqual(fallback, attack);
+                Assert.NotEqual(fallback, fireForEffect);
             }
         }
 

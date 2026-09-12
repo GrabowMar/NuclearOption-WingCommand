@@ -118,6 +118,9 @@ namespace WingCommand
         private static readonly Dictionary<SpeechKey, float> lastSpoken =
             new Dictionary<SpeechKey, float>();
         private static float nextBanterCheck;
+        private static float nextRoutineCall;
+        private static readonly Dictionary<int, (string Key, float At)> lastAcknowledged =
+            new Dictionary<int, (string Key, float At)>();
 
         public static void Say(WingMember member, Call call, string detail = null)
         {
@@ -126,6 +129,8 @@ namespace WingCommand
             // Suppress noncritical chatter in Performance mode.
             if (!WingFidelity.RichChatter && !Critical(call)) return;
             if (call == Call.Rejoining && PersonnelFacade.DepartureChatter.ReportingLiftoff(member)) return;
+            bool urgent = call == Call.Panic || call == Call.Critical || call == Call.BreakCall;
+            if (!Critical(call) && Time.timeSinceLevelLoad < nextRoutineCall) return;
 
             // Threat-clear reports share one cooldown across the whole wing.
             var key = new SpeechKey(call == Call.DefensiveClear ? null : member, call);
@@ -138,6 +143,7 @@ namespace WingCommand
                 return;
 
             lastSpoken[key] = Time.timeSinceLevelLoad;
+            if (!Critical(call)) nextRoutineCall = Time.timeSinceLevelLoad + 6f;
             string tag = DialogueTag(member.Crew);
             if (!PersonnelFacade.CustomPilots.TryGetEventLine(tag, call.ToString(), detail, out string phrase))
             {
@@ -152,8 +158,7 @@ namespace WingCommand
             else if (call == Call.Unable)
                 WingRadioAudio.Play(WingRadioAudio.Earcon.Unable);
 
-            Broadcast(member, phrase,
-                call == Call.Panic || call == Call.Critical || call == Call.BreakCall);
+            Broadcast(member, phrase, urgent, key: call.ToString());
         }
 
         /// <summary>Acknowledge only accepting aircraft. A single member answers alone; a group uses its
@@ -177,15 +182,30 @@ namespace WingCommand
             ordered.Sort((a, b) => a.Slot.CompareTo(b.Slot));
             if (ordered.Count == 0) return;
 
-            WingRadioAudio.Play(WingRadioAudio.Earcon.Wilco);
-
             WingMember lead = ordered[0];
+            var revisions = new int[ordered.Count];
+            string acknowledgementKey = "ORDER:" + orderName;
+            for (int i = 0; i < ordered.Count; i++)
+            {
+                revisions[i] = ordered[i].OrderRevision;
+                acknowledgementKey += ":" + ordered[i].Slot + "/" + revisions[i];
+            }
+            if (lastAcknowledged.TryGetValue(lead.Slot, out var previous) &&
+                previous.Key == acknowledgementKey && Time.unscaledTime - previous.At < 8f) return;
+            lastAcknowledged[lead.Slot] = (acknowledgementKey, Time.unscaledTime);
+            WingRadioAudio.Play(WingRadioAudio.Earcon.Wilco);
+            System.Func<bool> stillAccepted = () =>
+            {
+                for (int i = 0; i < ordered.Count; i++)
+                    if (!ordered[i].Alive || ordered[i].OrderRevision != revisions[i]) return false;
+                return true;
+            };
             if (ordered.Count > 1)
             {
                 string groupPhrase = ChatterDialogue.GroupAcknowledge(
                     Persona(lead), orderName, OtherNumbers(ordered),
                     Random.Range(0, int.MaxValue));
-                Broadcast(lead, groupPhrase, urgent: false);
+                Broadcast(lead, groupPhrase, urgent: false, stillAccepted, acknowledgementKey);
                 return;
             }
 
@@ -206,7 +226,7 @@ namespace WingCommand
                 phrase = ChatterDialogue.Acknowledge(
                     Persona(lead), orderName, Random.Range(0, int.MaxValue));
 
-            Broadcast(lead, phrase, urgent: false);
+            Broadcast(lead, phrase, urgent: false, stillAccepted, acknowledgementKey);
         }
 
         /// <summary>Assign loss calls to surviving pilots.</summary>
@@ -285,10 +305,14 @@ namespace WingCommand
                                  out ChatterExchange exchange))
                 return;
 
-            Broadcast(first, exchange.Opening, urgent: false);
+            int firstRevision = first.OrderRevision;
+            int secondRevision = second != null ? second.OrderRevision : 0;
+            System.Func<bool> stillBantering = () => CanBanter(first) && first.OrderRevision == firstRevision &&
+                (second == null || (CanBanter(second) && second.OrderRevision == secondRevision));
+            Broadcast(first, exchange.Opening, urgent: false, stillBantering);
 
             if (exchange.Reply != null)
-                Broadcast(second, exchange.Reply, urgent: false);
+                Broadcast(second, exchange.Reply, urgent: false, stillBantering);
         }
 
         private static float nextThreatCheck;
@@ -331,7 +355,9 @@ namespace WingCommand
         public static void Reset()
         {
             lastSpoken.Clear();
+            lastAcknowledged.Clear();
             nextBanterCheck = 0f;
+            nextRoutineCall = 0f;
             nextThreatCheck = 0f;
             PersonnelFacade.DepartureChatter.Reset();
             WingChatterHud.Reset();
@@ -423,14 +449,19 @@ namespace WingCommand
                 ? pilot?.Callsign
                 : pilot.DialogueTag;
 
-        private static void Broadcast(WingMember member, string line, bool urgent)
+        private static void Broadcast(WingMember member, string line, bool urgent,
+                                      System.Func<bool> isRelevant = null, string key = null)
         {
             if (member == null || string.IsNullOrWhiteSpace(line)) return;
             Aircraft aircraft = member.Aircraft;
+            int revision = member.OrderRevision;
+            // Urgent loss reports must survive the aircraft's death and order changes.
+            if (isRelevant == null && !urgent)
+                isRelevant = () => member.Alive && member.OrderRevision == revision;
             WingChatterHud.Enqueue(Identity(member), Context(member), line,
                                    IconFactory.Aircraft(aircraft != null
                                        ? aircraft.definition
-                                       : null), urgent);
+                                       : null), urgent, isRelevant, key);
         }
 
         private static string Identity(WingMember member)

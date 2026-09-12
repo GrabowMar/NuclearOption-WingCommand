@@ -99,6 +99,24 @@ namespace WingCommand.PureTests
         }
 
         [Fact]
+        public void SplashImmediatelyLeavesRecallAndResumesAfterDefenceOutsideTheLeash()
+        {
+            var brain = new WingMemberBrain();
+            Step(brain, 0f, WingOrder.Attack, distance: 20000f);
+            Assert.Equal(WingBehaviours.Rejoin, brain.Current.BehaviourId);
+            var splash = Step(brain, 0.1f, WingOrder.FireForEffect, revision: 1, distance: 20000f);
+            Assert.Equal(WingBehaviours.Task, splash.Resolution.BehaviourId);
+            Assert.True(splash.NeedsControlUpdate);
+            Assert.Equal(WingBehaviours.MissileBreak,
+                Step(brain, 1f, WingOrder.FireForEffect, revision: 1, warned: true, distance: 20000f)
+                    .Resolution.BehaviourId);
+            var resumed = Step(brain, 10f, WingOrder.FireForEffect, revision: 1, distance: 20000f);
+            Assert.Equal(WingBehaviours.Task, resumed.Resolution.BehaviourId);
+            Assert.True(resumed.NeedsControlUpdate);
+            Assert.Equal(1, resumed.OrderRevision);
+        }
+
+        [Fact]
         public void UnavailableExtensionCannotHideFallbackOwnershipOrIgnoreLaterOrders()
         {
             WingAi.FaultReporter = (_, _) => { };

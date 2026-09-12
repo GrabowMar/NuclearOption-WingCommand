@@ -18,10 +18,11 @@ namespace WingCommand
             public string Message;
             public Sprite AirframeIcon;
             public bool Urgent;
-            public float QueuedAt;
+            public string Key;
+            public ChatterLifetime Lifetime;
         }
 
-        private const int MaxQueued = 10;
+        private const int MaxQueued = 3;
         private const float FadeIn = 0.14f;
         private const float FadeOut = 0.24f;
 
@@ -41,7 +42,8 @@ namespace WingCommand
         public static bool IsIdle => current == null && queue.Count == 0;
 
         public static void Enqueue(string identity, string context, string message,
-                                   Sprite airframeIcon, bool urgent = false)
+                                   Sprite airframeIcon, bool urgent = false,
+                                   System.Func<bool> isRelevant = null, string key = null)
         {
             if (string.IsNullOrWhiteSpace(identity) || string.IsNullOrWhiteSpace(message)) return;
 
@@ -52,24 +54,29 @@ namespace WingCommand
                 Message = message.Trim(),
                 AirframeIcon = airframeIcon,
                 Urgent = urgent,
-                QueuedAt = Time.unscaledTime,
+                Key = key,
+                Lifetime = new ChatterLifetime(Time.unscaledTime, urgent, isRelevant),
             };
 
-            if (Same(current, transmission) && Time.unscaledTime - currentAt < 1f) return;
+            Prune();
+            if (Same(current, transmission)) return;
             for (int i = 0; i < queue.Count; i++)
-                if (Same(queue[i], transmission) && Time.unscaledTime - queue[i].QueuedAt < 1f)
+                if (Same(queue[i], transmission))
                     return;
 
             if (queue.Count >= MaxQueued)
             {
                 // Drop routine chatter when busy; preserve urgent calls.
                 if (!urgent) return;
-                queue.RemoveAt(queue.Count - 1);
+                int routine = queue.FindLastIndex(item => !item.Urgent);
+                if (routine < 0) return;
+                queue.RemoveAt(routine);
             }
 
             if (urgent)
             {
-                queue.Insert(0, transmission);
+                int index = queue.FindIndex(item => !item.Urgent);
+                queue.Insert(index < 0 ? queue.Count : index, transmission);
                 if (current != null && !current.Urgent)
                 {
                     current = null;
@@ -81,6 +88,7 @@ namespace WingCommand
 
         public static void Tick()
         {
+            Prune();
             if (Plugin.Settings.Radio.Value == ChatterLevel.Off)
             {
                 queue.Clear();
@@ -141,6 +149,7 @@ namespace WingCommand
 
         private static void ShowNext()
         {
+            Prune();
             Build();
             if (canvasRoot == null || queue.Count == 0) return;
 
@@ -254,7 +263,19 @@ namespace WingCommand
 
         private static Color MessageColor() => AvTheme.Unity(AvTokens.TextPrimary);
 
+        private static void Prune()
+        {
+            for (int i = queue.Count - 1; i >= 0; i--)
+                if (!queue[i].Lifetime.CanStart(Time.unscaledTime)) queue.RemoveAt(i);
+            if (current != null && !current.Lifetime.IsRelevant)
+            {
+                current = null;
+                if (canvasRoot != null) canvasRoot.SetActive(false);
+            }
+        }
+
         private static bool Same(Transmission a, Transmission b) =>
-            a != null && b != null && a.Identity == b.Identity && a.Message == b.Message;
+            a != null && b != null && a.Identity == b.Identity &&
+            (a.Message == b.Message || (a.Key != null && a.Key == b.Key));
     }
 }

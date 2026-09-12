@@ -45,18 +45,25 @@ namespace WingCommand.PureTests
         }
 
         [Fact]
-        public void EffectiveClimbAnticipatesVerticalAccelAndPitchPull()
+        public void ClimbLeadRejectsNoiseAndOnlySlightlyAnticipatesSharpMoves()
         {
-            // Level flight baseline
-            float levelClimb = FormationControlRules.EffectiveClimb(0f, 0f, 0f, 150f, 0f);
-            Assert.Equal(0f, levelClimb);
-
-            // Pull-up with 25 m/s² vertical accel and 0.25 rad/s pitch rate
-            float pullClimbCalm = FormationControlRules.EffectiveClimb(10f, 25f, 0.25f, 150f, 0f);
-            float pullClimbHold = FormationControlRules.EffectiveClimb(10f, 25f, 0.25f, 150f, 1f);
-
-            Assert.True(pullClimbCalm > 20f);
-            Assert.True(pullClimbHold > pullClimbCalm); // Stronger lead in HOLD
+            foreach (float hold in new[] { 0f, 1f })
+            {
+                foreach (float noise in new[] { -2f, 0f, 2f })
+                    Assert.Equal(10f, FormationControlRules.EffectiveClimb(10f, noise, hold));
+                Assert.InRange(FormationControlRules.EffectiveClimb(10f, 2.001f, hold), 10f, 10.0001f);
+                float previous = 10f;
+                for (int accel = 3; accel <= 150; accel++)
+                {
+                    float pull = FormationControlRules.EffectiveClimb(10f, accel, hold);
+                    Assert.InRange(pull, previous, 18f);
+                    Assert.Equal(-pull, FormationControlRules.EffectiveClimb(-10f, -accel, hold));
+                    previous = pull;
+                }
+                // A deliberate pull still responds immediately; a reversal changes lead direction.
+                Assert.InRange(FormationControlRules.EffectiveClimb(10f, 25f, hold), 13f, 15f);
+                Assert.True(FormationControlRules.EffectiveClimb(10f, -25f, hold) < 10f);
+            }
         }
 
         [Fact]

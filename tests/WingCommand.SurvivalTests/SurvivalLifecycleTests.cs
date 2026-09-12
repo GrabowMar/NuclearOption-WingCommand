@@ -13,6 +13,7 @@ namespace WingCommand
             WingDeparture.Reset();
             UnitRegistry.Units.Clear();
             Plugin.Settings = new Config();
+            Plugin.Logger = new Log();
             WingCommandManager.Instance = new WingCommandManager();
             GameManager.LocalPlayer = new Player();
             Time.timeSinceLevelLoad = 0f;
@@ -319,6 +320,51 @@ namespace WingCommand
             typeof(WingPilotFatalDamagePatch).GetMethod("Prefix", BindingFlags.NonPublic | BindingFlags.Static).Invoke(null, args);
             Assert.Equal(55f, args[1]);
             Assert.Null(pilot.LossCause);
+        }
+
+        [Theory]
+        [InlineData(101f, 0f, 0f, 0f, "Projectile")]
+        [InlineData(0f, 101f, 0f, 0f, "Explosion")]
+        [InlineData(0f, 0f, 101f, 0f, "Fire")]
+        [InlineData(0f, 0f, 0f, 101f, "Impact / collision")]
+        [InlineData(60f, 60f, 0f, 0f, "Projectile + Explosion")]
+        public void FatalDamageRetainsCauseAndLateKillerWithoutRecyclingPilot(
+            float projectile, float blast, float fire, float impact, string cause)
+        {
+            var aircraft = Plane();
+            var pilot = WingPilotRoster.Assign(aircraft);
+            string airframe = pilot.LastAircraft;
+            var hook = typeof(WingPilotFatalDamagePatch).GetMethod("Prefix", BindingFlags.NonPublic | BindingFlags.Static);
+            object[] args = { aircraft.Pilot, projectile, blast, fire, impact,
+                projectile + blast + fire + impact, (byte)0 };
+            hook.Invoke(null, args);
+            Assert.Null(pilot.LossCause); // Exactly zero HP is not fatal in the native hook.
+            args[5] = 100f;
+            aircraft.Pilot.ejected = true;
+            hook.Invoke(null, args);
+            Assert.Null(pilot.LossCause);
+            aircraft.Pilot.ejected = false;
+            args[6] = (byte)1;
+            hook.Invoke(null, args);
+            Assert.Null(pilot.LossCause); // Secondary crew must not retire the assigned pilot.
+            args[6] = (byte)0;
+            hook.Invoke(null, args);
+            Assert.Equal(cause, pilot.LossCause);
+
+            aircraft.Pilot.dead = true; // Native death occurs after the prefix.
+            WingPilotRoster.Retire(aircraft.persistentID, false);
+            var killer = Plane(2);
+            killer.definition.unitName = "SAM launcher";
+            WingPilotRoster.RecordKiller(aircraft.persistentID, killer.persistentID);
+            WingPilotRoster.RecordKiller(aircraft.persistentID, 0);
+            WingPilotRoster.Retire(aircraft.persistentID, true); // Late recovery cannot resurrect a loss.
+
+            Assert.True(pilot.Lost);
+            Assert.False(WingPilotRoster.IsFree(pilot));
+            Assert.Null(WingPilotRoster.Of(aircraft));
+            Assert.Equal("SAM launcher", pilot.KilledBy);
+            Assert.Equal(airframe, pilot.LastAircraft);
+            Assert.Contains("cause=" + cause, Assert.Single(Plugin.Logger.Warnings));
         }
 
         [Fact]

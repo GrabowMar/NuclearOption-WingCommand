@@ -81,9 +81,9 @@ namespace WingCommand
     /// <summary>Order metadata for targeting, pursuit bounds, and delivery queuing.</summary>
     internal static class WingOrderRules
     {
-        /// <summary>Hunting orders requiring a pursuit leash; Jam remains in formation.</summary>
+        /// <summary>Hunting orders requiring a pursuit leash; Splash commits independently of formation.</summary>
         public static bool SendsWingmanHunting(WingOrder order) =>
-            order == WingOrder.Engage || order == WingOrder.Attack || order == WingOrder.FireForEffect;
+            order == WingOrder.Engage || order == WingOrder.Attack;
 
         /// <summary>Whether this order carries a unit designation, including slot jobs.</summary>
         public static bool CarriesTarget(WingOrder order) =>

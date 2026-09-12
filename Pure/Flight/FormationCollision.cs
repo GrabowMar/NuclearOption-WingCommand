@@ -4,6 +4,13 @@ namespace WingCommand
 {
     internal static class FormationCollision
     {
+        // Only a newly detected threat extends the hold; replaying an escape must expire.
+        public static bool HoldAvoidance(bool detected, bool threatAlive, float now, ref float until)
+        {
+            if (detected) until = now + 0.35f;
+            return detected || (threatAlive && now < until);
+        }
+
         // Fold inverted bank continuously so angle wrapping cannot jump the slot frame between opposite
         // limits.
         public static float SlotBank(float bankDegrees) => (float)Math.Max(-80d, Math.Min(80d,

@@ -188,6 +188,47 @@ namespace WingCommand.PureTests
             }
         }
 
+        [Theory]
+        [InlineData(0.02f, 1f)]
+        [InlineData(0.06f, 1f)]
+        [InlineData(0.02f, -1f)]
+        [InlineData(0.06f, -1f)]
+        public void RapidMoveReturningToQuietResponseCannotOvershootTheSlot(float dt, float side)
+        {
+            float p = 0f, v = 0f;
+            for (int i = 0; i < (int)(0.3f / dt); i++)
+                FormationTracking.DampedAxis(p, v, side * 10f, 0.12f, 100f, dt, out p, out v);
+            Assert.InRange(p * side, 9f, 10f); // Preserve the rapid response.
+            for (int i = 0; i < (int)(3f / dt); i++)
+            {
+                FormationTracking.DampedAxis(p, v, side * 10f, 0.5f, 100f, dt, out p, out v);
+                Assert.InRange(p * side, 9f, 10f);
+            }
+            Assert.Equal(side * 10f, p);
+            Assert.Equal(0f, v);
+        }
+
+        [Theory]
+        [InlineData(0.02f)]
+        [InlineData(0.06f)]
+        public void CollisionEscapeExpiresAfterLastDetectionAndCanRetrigger(float dt)
+        {
+            float until = 0f;
+            Assert.True(FormationCollision.HoldAvoidance(true, true, 10f, ref until));
+            Assert.Equal(10.35f, until);
+            for (float now = 10f + dt; now < 11f; now += dt)
+            {
+                Assert.Equal(now < 10.35f,
+                    FormationCollision.HoldAvoidance(false, true, now, ref until));
+                Assert.Equal(10.35f, until);
+            }
+            Assert.False(FormationCollision.HoldAvoidance(false, true, until, ref until));
+            Assert.True(FormationCollision.HoldAvoidance(true, true, 11f, ref until));
+            Assert.True(FormationCollision.HoldAvoidance(true, true, 11.2f, ref until));
+            Assert.Equal(11.55f, until, 4);
+            Assert.False(FormationCollision.HoldAvoidance(false, false, 11.21f, ref until));
+        }
+
         [Fact]
         public void BankWrapStaysNearInvertedInsteadOfSwingingThroughLevel()
         {

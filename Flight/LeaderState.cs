@@ -83,9 +83,9 @@ namespace WingCommand
         public float PredictedSpeed(float speed, float leadSeconds) =>
             ThrustModel.PredictSpeed(speed, SpeedRate, leadSeconds, WingTuning.MaxCredibleAccel);
 
-        /// <summary>Predict effective climb anticipating vertical acceleration and pitch rate.</summary>
-        public float EffectiveClimb(float currentClimb, float horizontalSpeed, float holdBlend, float leadSeconds = 0.55f) =>
-            FormationControlRules.EffectiveClimb(currentClimb, VerticalAccel, PitchRate, horizontalSpeed, holdBlend, leadSeconds);
+        /// <summary>Brief, bounded anticipation of measured vertical acceleration.</summary>
+        public float EffectiveClimb(float currentClimb, float holdBlend) =>
+            FormationControlRules.EffectiveClimb(currentClimb, VerticalAccel, holdBlend);
 
         /// <summary>Horizontal acceleration vector for rotary velocity control.</summary>
         public Vector3 FlatAcceleration =>

@@ -28,7 +28,7 @@ namespace WingCommand.PureTests
                      {
                          WingOrder.ReturnToBase, WingOrder.MoveToPoint,
                          WingOrder.SeekAndDestroy, WingOrder.OrbitHere,
-                         WingOrder.StandDown,
+                         WingOrder.StandDown, WingOrder.FireForEffect,
                      })
             {
                 var s = new WingSituation(order: order, leaderDistance: 9000f, leashRadius: 5000f,
@@ -69,6 +69,7 @@ namespace WingCommand.PureTests
         [InlineData(WingOrder.MoveToPoint)]
         [InlineData(WingOrder.SeekAndDestroy)]
         [InlineData(WingOrder.Attack)]
+        [InlineData(WingOrder.FireForEffect)]
         [InlineData(WingOrder.OrbitHere)]
         public void LandingTheLeaderDoesNotInterruptIndependentTasks(WingOrder order)
         {
@@ -81,7 +82,8 @@ namespace WingCommand.PureTests
         [Theory]
         [InlineData(WingOrder.MoveToPoint)]
         [InlineData(WingOrder.SeekAndDestroy)]
-        public void PointTasksContinueWhenTheLeaderIsLost(WingOrder order)
+        [InlineData(WingOrder.FireForEffect)]
+        public void IndependentTasksContinueWhenTheLeaderIsLost(WingOrder order)
         {
             WingReflexes.RegisterDefaults();
             var s = new WingSituation(order: order, leaderPresent: false);

@@ -2,7 +2,8 @@ using System;
 using System.Collections.Generic;
 using System.Reflection;
 
-// Only the Unity/game boundary is faked; production roster and survival methods are linked unchanged.
+// Unity/game types and unrelated subsystem boundaries are faked.
+// Roster, survival hooks and all Pure/ policies are compiled from production sources.
 namespace UnityEngine
 {
     public class Object
@@ -145,7 +146,6 @@ public static class UnitRegistry
 }
 namespace WingCommand
 {
-    internal enum WingLoadoutChoice { Standard }
     internal static class EconomyFacade
     {
         internal static class Shop
@@ -156,8 +156,6 @@ namespace WingCommand
         }
     }
     internal static class WingRecovery { public static bool IsHome(Aircraft a) => a != null && !a.disabled && a.AtHome; }
-    internal enum ChatterPersona { Calm }
-    internal enum WingOrder { Formation, OrbitHere, LandHere, Attack }
     internal class WingDirective
     {
         public WingOrder Order;
@@ -195,7 +193,11 @@ namespace WingCommand
         public Setting<bool> PilotProgression = new Setting<bool>(true), VerboseLogging = new Setting<bool>(false);
         public Setting<float> RankEffect = new Setting<float>(1f);
     }
-    internal class Log { public void LogWarning(string message) {} }
+    internal class Log
+    {
+        public readonly List<string> Warnings = new List<string>();
+        public void LogWarning(string message) => Warnings.Add(message);
+    }
     internal static class Plugin
     {
         public static Config Settings = new Config();
@@ -203,37 +205,6 @@ namespace WingCommand
         public static void LogVerbose(string message) {}
     }
     internal static class PilotPortrait { public static void Reset() {} }
-    internal static class PilotIdentity
-    {
-        public static string Callsign(Func<int, int> random, Func<string, bool> exists) => Guid.NewGuid().ToString();
-        public static string Name(Func<int, int> random) => "Pilot";
-        public static string Background(Func<int, int> random, ChatterPersona persona) => "";
-    }
-    internal class CustomPilotRecord
-    {
-        public string Name, Callsign, ResolvedDialogueTag, Background;
-        public ChatterPersona Persona;
-        public int Xp, Kills, Sorties;
-        public int PortraitVersion = 2;
-        public PortraitBody Body = PortraitBody.Male;
-        public int Face = -1, Hair, Uniform, Accessory, Backdrop;
-        public bool HasCustomPortrait => Face >= 0;
-        public PortraitSelection Selection => PilotPortraitGenerator.Normalize(
-            new PortraitSelection(Body, Face, Hair, Uniform, Accessory, Backdrop));
-    }
-    internal static class WingTuning
-    {
-        public const int XpPerRank = 120, XpPerKill = 25, XpPerSortie = 40, XpPerEngagement = 10;
-        public const float RankEffect = 1f;
-    }
-    internal static class PilotSelectionPolicy
-    {
-        public static int NextIndex(int start, int count, Func<int, bool> free)
-        {
-            for (int i = 1; i <= count; i++) if (free((start + i) % count)) return (start + i) % count;
-            return count == 0 ? -1 : (start + 1) % count;
-        }
-    }
     internal static class WingComms
     {
         public enum Call { Splash }

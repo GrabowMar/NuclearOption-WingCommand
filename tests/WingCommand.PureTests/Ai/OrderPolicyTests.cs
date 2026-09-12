@@ -5,9 +5,11 @@ namespace WingCommand.PureTests
     public class OrderPolicyTests
     {
         [Fact]
-        public void Splash_RunUsesLeashAndYieldsWeaponsAuthorityToSafetyBehaviours()
+        public void Splash_BypassesLeashAndYieldsWeaponsAuthorityToSafetyBehaviours()
         {
-            Assert.True(WingOrderRules.SendsWingmanHunting(WingOrder.FireForEffect));
+            Assert.False(WingOrderRules.SendsWingmanHunting(WingOrder.FireForEffect));
+            Assert.True(WingOrderRules.SendsWingmanHunting(WingOrder.Attack));
+            Assert.True(WingOrderRules.SendsWingmanHunting(WingOrder.Engage));
             Assert.False(WingOrderRules.SendsWingmanHunting(WingOrder.JamTarget));
             Assert.Equal(OrderEngagementAuthority.ExplicitTarget,
                 OrderRoePolicy.Authority(WingOrder.FireForEffect));

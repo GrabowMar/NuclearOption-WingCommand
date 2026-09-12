@@ -104,6 +104,7 @@ namespace WingCommand
                 // Keep independent destination orders active without a leader.
                 switch (s.Order)
                 {
+                    case WingOrder.FireForEffect:
                     case WingOrder.ReturnToBase:
                     case WingOrder.LandHere:
                     case WingOrder.DeliverCargo:

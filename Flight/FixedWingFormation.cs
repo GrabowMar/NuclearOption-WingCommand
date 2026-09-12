@@ -80,7 +80,7 @@ namespace WingCommand
         private const float BankFollowScale = 1.7f;
 
         /// <summary>Seconds of turn-rate feed-forward to offset filtered leader-track lag.</summary>
-        private const float TurnLeadSeconds = 0.85f;
+        private const float TurnLeadSeconds = 0.15f;
 
 
 
@@ -249,7 +249,10 @@ namespace WingCommand
             bool isAvoiding = FormationCollisionGuard.TryAvoid(aircraft, leader, members, spacing,
                 out Vector3 escape, out collisionThreat, out predictedMiss, memory.AvoidanceThreat);
 
-            if (!isAvoiding && memory.FlightSeconds < memory.AvoidanceUntil && memory.AvoidanceThreat != null && !memory.AvoidanceThreat.disabled)
+            bool holdAvoidance = FormationCollision.HoldAvoidance(isAvoiding,
+                memory.AvoidanceThreat != null && !memory.AvoidanceThreat.disabled,
+                memory.FlightSeconds, ref memory.AvoidanceUntil);
+            if (!isAvoiding && holdAvoidance)
             {
                 isAvoiding = true;
                 collisionThreat = memory.AvoidanceThreat;
@@ -262,7 +265,6 @@ namespace WingCommand
                 memory.AvoidanceThreat = collisionThreat;
                 memory.AvoidanceEscape = escape;
                 memory.AvoidanceMiss = predictedMiss;
-                memory.AvoidanceUntil = memory.FlightSeconds + 0.35f;
 
                 // Apply positive throttle to retract arrival airbrakes and maintain energy during escape
                 controls.throttle = Mathf.Max(0.7f, controls.throttle);
@@ -304,9 +306,7 @@ namespace WingCommand
             }
             memory.AvoidanceThreat = null;
 
-            Vector3 leaderV = leader.rb != null ? leader.rb.velocity : Vector3.zero;
-            float leaderH = Mathf.Sqrt(leaderV.x * leaderV.x + leaderV.z * leaderV.z);
-            float effectiveLeaderClimb = leaderState.EffectiveClimb(leaderVel.y, leaderH, holdBlend);
+            float effectiveLeaderClimb = leaderState.EffectiveClimb(leaderVel.y, holdBlend);
 
             Steer(aircraft, leader, slotPos, toSlot, distance,
                                        leaderVel, drift, aggression, damping, spacing,
@@ -586,7 +586,9 @@ namespace WingCommand
             float maxCorrection = horizontal.MaxCorrection;
             Vector3 flatCorrection = new Vector3(horizontal.Correction.X, 0f, horizontal.Correction.Y);
             // Correct altitude proportionally and damp relative slot climb.
-            float vertDrift = (aircraft.rb != null ? aircraft.rb.velocity.y : 0f) - leaderClimb;
+            // Anticipation belongs in the aim only. Damping predicted climb as if it were measured
+            // adds the same lead again, amplified by the drift gain.
+            float vertDrift = drift.y;
 
             float maxVerticalCorrection = Mathf.Lerp(20f, maxCorrection, outOfPosition);
             float verticalCorrection = FormationControlRules.KinematicVerticalCorrection(

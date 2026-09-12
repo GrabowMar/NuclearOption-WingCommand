@@ -191,6 +191,13 @@ namespace WingCommand
             double decay = Math.Exp(-omega * dt);
             nextPosition = (float)(effectiveTarget + (change + c * dt) * decay);
             nextVelocity = (float)((velocity - omega * c * dt) * decay);
+            // Returning from the fast response retains momentum from a stiffer spring. Stop at the
+            // target instead of letting that stored velocity carry the slot past the leader's move.
+            if ((target - position) * (nextPosition - target) > 0f)
+            {
+                nextPosition = target;
+                nextVelocity = 0f;
+            }
         }
     }
 }

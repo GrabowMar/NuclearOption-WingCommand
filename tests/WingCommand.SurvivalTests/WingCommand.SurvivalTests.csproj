@@ -17,7 +17,7 @@
     <Compile Include="../../Personnel/WingSurvivalPerks.cs" Link="Runtime/WingSurvivalPerks.cs" />
     <Compile Include="../../Personnel/WingPilotLoss.cs" Link="Runtime/WingPilotLoss.cs" />
     <Compile Include="../../Personnel/WingDeparture.cs" Link="Runtime/WingDeparture.cs" />
-    <Compile Include="../../Pure/Pilots/PilotPortraitGenerator.cs" Link="Runtime/PilotPortraitGenerator.cs" />
-    <Compile Include="../../Pure/Pilots/PilotPerks.cs" Link="Runtime/PilotPerks.cs" />
+    <!-- Use real policies and data types rather than copies in GameBoundary. -->
+    <Compile Include="../../Pure/**/*.cs" Link="Pure/%(RecursiveDir)%(Filename)%(Extension)" />
   </ItemGroup>
 </Project>

@@ -175,16 +175,17 @@ namespace WingCommand
 
             if (divergingClimb || severePitchHigh)
             {
-                // Preserve safe maneuvering floor (35 deg) during moderate deficits; only collapse toward
-                // levelBank during extreme climb rates or violent zoom divergences.
+                // Preserve turning during moderate pitch corrections, including fast jet climbs.
                 float safeRecoveryCeiling = Math.Max(levelBankDeg, 35f);
                 float baseAllowed = Math.Min(requestedBankDeg, safeRecoveryCeiling);
 
-                // Severe climbs (>15 m/s) or high pitch (>25 deg) collapse smoothly toward levelBank.
-                if (verticalSpeed > 15f || currentPitchDeg > 25f)
+                // Absolute climb speed does not measure divergence from the commanded flight path.
+                // Level the wings only for an extreme pitch deficit, not an ordinary climbing rejoin.
+                if (pitchDeficit > 25f)
                 {
-                    float extremeScale = Math.Max(0f, Math.Min(1f, Math.Max((verticalSpeed - 15f) / 15f, (currentPitchDeg - 25f) / 15f)));
-                    return levelBankDeg + (baseAllowed - levelBankDeg) * (1f - extremeScale);
+                    float extremeScale = Math.Min(1f, (pitchDeficit - 25f) / 15f);
+                    float recoveryFloor = Math.Min(levelBankDeg, baseAllowed);
+                    return recoveryFloor + (baseAllowed - recoveryFloor) * (1f - extremeScale);
                 }
 
                 return baseAllowed;
@@ -250,15 +251,16 @@ namespace WingCommand
             return rawThrottle;
         }
 
-        /// <summary>Anticipate climb rate from vertical acceleration and pitch rate, especially in HOLD.</summary>
-        public static float EffectiveClimb(float climbRate, float verticalAccel, float pitchRate,
-                                           float horizontalSpeed, float holdBlend, float leadSeconds = 0.55f)
+        /// <summary>Reject small acceleration noise but retain a short lead for deliberate manoeuvres.
+        /// Body pitch is not vertical flight-path rotation during banked flight; adding it to measured
+        /// vertical acceleration double-counts pull-ups and can invent climbs in turns.</summary>
+        public static float EffectiveClimb(float climbRate, float verticalAccel, float holdBlend)
         {
-            float accelRise = verticalAccel * leadSeconds;
-            float pitchRise = Math.Max(0f, horizontalSpeed) * (float)Math.Sin(pitchRate * leadSeconds);
-            float leadWeight = 0.5f + 0.5f * Math.Max(0f, Math.Min(1f, holdBlend));
-            float predicted = climbRate + (accelRise + pitchRise) * leadWeight;
-            return Math.Max(-150f, Math.Min(250f, predicted));
+            float blend = Math.Max(0f, Math.Min(1f, (Math.Abs(verticalAccel) - 2f) / 10f));
+            blend *= blend * (3f - 2f * blend);
+            float leadSeconds = 0.15f + 0.05f * Math.Max(0f, Math.Min(1f, holdBlend));
+            float lead = verticalAccel * leadSeconds * blend;
+            return climbRate + Math.Max(-8f, Math.Min(8f, lead));
         }
 
         /// <summary>Compute target bank blending navigation turn demand with leader bank matching and roll rate lead.</summary>

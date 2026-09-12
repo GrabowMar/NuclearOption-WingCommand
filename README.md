@@ -504,6 +504,10 @@ dotnet test tests/WingCommand.PureTests/WingCommand.PureTests.csproj
 dotnet test tests/WingCommand.SurvivalTests/WingCommand.SurvivalTests.csproj
 ```
 
+For both suites plus the standalone integration and portrait checks on Windows,
+run `pwsh -NoProfile -File tests/Run.ps1` (PowerShell 7).
+These checks cover logic and simulated game boundaries; flight feel and Unity UI still need in-game testing.
+
 Tests run without a game install. The plugin is written to
 `bin/Release/netstandard2.1/WingCommand.dll`. Attach **`WingCommand.dll`** to GitHub
 releases for NOMM and manual installs.
