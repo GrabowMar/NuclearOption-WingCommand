@@ -1,9 +1,5 @@
 using System;
-using UnityEngine;
 using UnityEngine.EventSystems;
-
-// Unity calls OnDisable by reflection, so suppress IDE0051 in this file.
-#pragma warning disable IDE0051
 
 namespace WingCommand
 {
@@ -110,20 +106,5 @@ namespace WingCommand
                 // ForceRelease covers failed deselection.
             }
         }
-    }
-
-    /// <summary>Publishes hover help for non-button fields through WingButton's shared status-note
-    /// channel.</summary>
-    internal sealed class WingHoverNote : MonoBehaviour, IPointerEnterHandler, IPointerExitHandler
-    {
-        public string Note { get; set; }
-
-        public void OnPointerEnter(PointerEventData eventData) =>
-            WingButton.PublishExternal(Note, entering: true);
-
-        public void OnPointerExit(PointerEventData eventData) =>
-            WingButton.PublishExternal(Note, entering: false);
-
-        private void OnDisable() => WingButton.PublishExternal(Note, entering: false);
     }
 }

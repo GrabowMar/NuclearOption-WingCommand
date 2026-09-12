@@ -20,47 +20,45 @@ dist/
 # Generated build metadata
 build/
 
-# Local documentation
-docs/
-
-# Unpublished local agent skills and definitions
+# Local agent tools, skills, sessions, and memory
 .opencode/
 .agents/
-
-# Local skill copies managed by nomod skills
-.claude/skills/
-
-# Local nomodkit sessions and caches
+.codex/
 .nomodkit/
-
-# Local agent & LLM configuration, sessions, and memory
 .claude/
 .cursor/
 .cursorrules
 .gemini/
 .copilot/
 .openhands/
+.serena/
+.windsurf/
+.windsurfrules
 .aider*
 .chat/
 .prompts/
 prompts/
 *.prompt
 *.prompt.md
+.github/agents/
+.github/prompts/
+.github/skills/
+.mcp.json
+.mcp.local.json
 
-# Excluded CI workflow files
-.github/workflows/
+# Keep Markdown documentation local, except the public root README
+*.md
+!/README.md
 
-# Local agent instructions
-CLAUDE.md
-AGENTS.md
-GEMINI.md
-COPILOT.md
-.github/copilot-instructions.md
+# Generated portrait exports; source art, runtime atlas and README preview are tracked
+/Assets/Pilots/*-faces.png
+/Assets/Pilots/*-hair.png
+/Assets/Pilots/*-uniforms.png
+/Assets/Pilots/compatibility.png
 
 # Debug artifacts, binaries, and test results
 .dll-backup/
 .artifacts/
-tests/.artifacts/
 *.dll
 *.pdb
 *.exe

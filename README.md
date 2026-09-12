@@ -27,16 +27,8 @@
 
 ## What it does
 
-Wing Command works independently of Boscali Summer. On its own, WMC fills the available
-side area beside its normal bezel button, keeping clear of the screen edges and bottom
-controls. With Boscali Summer loaded, WMC registers its panel and lets Boscali own
-the layout. Wing Command does not replace stock MFD pages, resize the map, or
-rearrange other panels and bezel buttons. SET belongs to Boscali Summer.
-
-The six-sector command wheel uses embedded PNG icons. Aerobatic routines use editable
-[JSON phase presets](Assets/README.md); tactical turns retain the native autopilot.
-
-Vanilla gives you one semi-autonomous wingman. WingCommand turns your wing into a squadron:
+WingCommand turns your wing into a squadron. It works independently of Boscali Summer;
+when both are installed, Boscali handles the MFD layout.
 
 - 🎯 **Tactical control** — select wingmen on the map, build a scope, issue scoped orders
 - 🔧 **Loadout editor** — per-pylon templates from the airframe's own stores, saved across missions
@@ -84,9 +76,6 @@ Vanilla gives you one semi-autonomous wingman. WingCommand turns your wing into 
 
 > [!WARNING]
 > Keep the DLL only in `plugins/WingCommand/`. A stray copy in `plugins/` can load the wrong build.
-
-Settings live in `BepInEx/config/com.marci.wingcommand.cfg`. Edit them in-game with
-[ConfigurationManager](https://github.com/BepInEx/BepInEx.ConfigurationManager) (**F1**).
 
 ## 🚀 Quick start
 
@@ -138,56 +127,36 @@ Wing Command
 | H+ / H- / S+ / S- | Change Move altitude and speed |
 | Click the armed button again / Escape | Cancel the armed order |
 
-Left-click on hostile, friendly non-wing, ground and naval icons behaves as in stock.
-Right-click is the wing order: the armed WMC command, or a move if none is armed. Closing
-WMC or switching tabs stops intercepting wing-icon clicks. Map moves are temporary routes —
-at the final point every wingman returns to formation. **Seek & Destroy** instead begins
-autonomous engagement after reaching its marked area.
-
-Wing icons keep the stock faction fill and gain a thin, unfilled ring with space around
-the aircraft silhouette. **Clear Targets** does not remove the ring or change WMC command selection. Selected command recipients
-also have brackets while Tactical is open. `UI/Highlight` controls the outlines.
+Other map icons retain their stock left-click behaviour. Closing Tactical restores
+normal wing-icon clicks. Move routes end by rejoining; Seek & Destroy starts
+engagement at the destination. Selected recipients show brackets; **Clear Targets**
+does not clear command selection.
 
 ## Tactical pages, flight groups and patrols
 
-Tactical uses one four-column command grid with consistent button heights, widths and spacing. Orders have three
-pages: **Combat**, **Tasking**, and **Route**. The lower selector switches between
-**Formation** (whole flight) and **Manoeuvres** (selected aircraft), with aerobatics first.
-Both pages retain the formation diagram and live order, ROE and weapon readouts.
-Changing the order page disarms an active map placement tool. Switching these pages does
-not change command selection or any aircraft's standing order.
+Tactical has **Combat**, **Tasking** and **Route** order pages, plus **Formation**
+and **Manoeuvres** selectors. Changing pages disarms map placement without changing
+your selection or standing orders. Formation and ROE apply to the whole flight.
 
-**FLIGHT [+]** expands the roster from three to six aircraft per page; **FLIGHT [-]**
-collapses it again. Page arrows reach larger wings, and the expanded panel scrolls with
-the mouse wheel or its right-hand scrollbar. The status/help strip stays pinned below it.
-Click a roster row to select; Shift-click adds or removes a member.
+**FLIGHT [+]** expands the roster from three to six aircraft per page and reveals
+flight groups. Use page arrows or scroll for larger wings.
 
-Groups are optional and appear **only while FLIGHT is expanded**. There are no default
-groups. Select aircraft, press **CREATE GROUP**, enter a name and **SAVE**. Up to three
-groups can be created per mission. Click a saved group to recall it; **EDIT GROUP**
-updates its name and membership using the current selection. **DELETE GROUP** removes
-it without releasing aircraft. With Flight expanded, **Ctrl+1/2/3** recalls existing
-groups and **Ctrl+Shift+1/2/3** updates their selection; shortcuts never create groups.
-Lost or released aircraft are pruned from groups; mission exit removes all groups.
-ROE and formation shape still apply to the whole flight.
+- Select aircraft, press **CREATE GROUP**, enter a name and **SAVE**. Up to three groups per mission.
+- Click a group to recall it; **EDIT GROUP** saves its name and current selection. **DELETE GROUP** leaves the aircraft assigned.
+- While expanded, **Ctrl+1/2/3** recalls groups; **Ctrl+Shift+1/2/3** updates membership. Lost aircraft are pruned; groups reset on mission exit.
 
-To create a patrol, select a flight, open **Orders → Route**, and right-click the map for
-the first Move point. Shift-right-click adds points. With at least two distinct queued
-Move points, switch **PATROL** on. The route repeats in order and its closing leg appears
-on the map. Wingmen use the existing ROE weapons policy while following the route.
-Turning Patrol off flies the remaining legs once, then rejoins. A replacement order
-cancels the loop. ALT and SPD controls adjust the selected Move routes as before.
+**Patrol:** on Route, right-click a Move point and Shift-right-click to add more.
+With at least two distinct points, enable **PATROL** to loop. Turning it off finishes
+the remaining route, then rejoins; a replacement order cancels the loop.
 
-**Refit** now remembers the current task, remaining route, patrol loop and Move settings.
-After native landing, rearming and takeoff, it resumes that plan. Destroyed or now-friendly
-targets are skipped; with nothing valid to resume, the aircraft forms up. A new command
-or roster RTB cancels the saved plan, including a repeated RTB command.
+**Refit** saves the current task, route, patrol and Move settings, then resumes after
+landing, rearming and takeoff. Invalid targets are skipped. A new order or roster RTB
+cancels the saved plan.
 
-**AUTO REFIT** on the Route page opts selected aircraft into refit-and-resume when fuel
-reaches bingo or their fitted combat stores are empty. It requires
-`Engagement/AutoReturnOnEmpty` and leaves deliberate landing, cargo, disengagement,
-manoeuvre and Stand Down tasks alone. Unarmed aircraft refit for fuel only. It is off
-by default; it does not coordinate staggered replacements between flights.
+**AUTO REFIT** opts selected aircraft into refit-and-resume at bingo fuel or empty
+combat stores. It is off by default, requires `Engagement/AutoReturnOnEmpty`, and
+leaves deliberate landing, cargo, disengagement, manoeuvre and Stand Down tasks alone.
+Unarmed aircraft refit for fuel only.
 
 ## 📋 Orders
 
@@ -207,28 +176,24 @@ by default; it does not coordinate staggered replacements between flights.
 | **Roster RTB** | On an individual roster row, dismiss a wingman home; its plane and pilot return to their pools after recovery |
 | **Formation dial** | Swap between the six shapes on the fly |
 
-Orders stick through missile defence and leash recall, including new orders issued while
-defending. Idle Attack/Engage aircraft regroup temporarily and resume when combat becomes
-available again. Ordinary bingo return ends the current task; optional AUTO REFIT preserves it.
-Interrupted manoeuvres and target orders whose target has died finish by returning to formation.
+Orders survive missile defence and temporary recall, including orders issued while
+defending. Ordinary bingo return ends the task; **AUTO REFIT** preserves it.
+Completed manoeuvres and attacks on destroyed targets return to formation.
 
-Holding aircraft circle in the same direction on separate radii, spaced by formation slot.
+**Attack vs Splash:** Attack spreads targets, caps useful attackers and spaces launches.
+Splash concentrates fire on one target without those limits, while retaining weapon
+matching and shot envelopes. It starts without formation recall, continues without a
+leader, and resumes after missile defence or terrain avoidance. Bingo and Winchester
+still recall it.
 
-**Roster RTB completes.** Down and shut down at a friendly base, the pilot leaves the cockpit
-(not scored as a death), the airframe returns to faction stock, allocation spent on a
-purchased aircraft is refunded, and the squadron pilot returns to the pool. Set
-`Engagement/RtbReturnsToReserve = false` to park on the apron instead of despawning.
-
-**Splash 'Em vs Attack.** Attack is measured — spread designations, a useful-attacker cap,
-surplus held as cover, seconds between launches. Splash 'Em drops all of that: one target,
-no cap, sustained volley through missiles → rockets → gun. It keeps weapon/target matching
-and shot envelopes, so it empties a loadout on something worth emptying it on. Bingo and
-Winchester still recall it.
+**Roster RTB:** after landing at a friendly base, the pilot returns to the pool,
+the airframe returns to faction stock and its purchase allocation is refunded.
+Set `Engagement/RtbReturnsToReserve = false` to park instead of despawning.
 
 ## 🎯 Rules of engagement
 
-Orders choose the flight task and explicit combat intent. During formation, holding and
-temporary recall, ROE controls incidental fire.
+ROE controls incidental fire during formation, holding and temporary recall.
+Explicit Attack and Splash orders authorize their designated targets.
 
 | ROE | Weapons policy | Under fire |
 |---|---|---|
@@ -236,13 +201,9 @@ temporary recall, ROE controls incidental fire.
 | **Escort** | Air threats around the formation | Prioritises the threat to you |
 | **Free** | Any valid opportunity target in range | Fires while holding the current task |
 
-No ROE leaves formation. Every wingman still ducks its slot briefly to dodge an inbound
-missile regardless of ROE — self-preservation always wins, and the interrupt resumes the
-standing order.
-
-An active Attack or Splash order authorizes its designated target. During a temporary
-recall, the target is remembered but firing follows ROE until the attack resumes. Missile
-interception remains available during Jam and when optional opportunity scans are disabled.
+ROE does not change the flight task. Missile defence takes priority, then resumes
+the standing order. During Attack recall, the target is remembered but firing follows
+ROE until the attack resumes. Missile interception remains available during Jam.
 
 ## 🛩️ Formations
 
@@ -255,63 +216,22 @@ interception remains available during Jam and when optional opportunity scans ar
 | **Finger Four** | Asymmetric four-ship elements, repeated for larger wings |
 | **Vic** | Balanced V for compact groups |
 
-Echelon Left, Diamond, Ladder and Wall still parse from old config files but aren't in the
-selector. Slots are leader-local and transition gradually. In hard turns, lateral spacing
-compresses and trail depth grows so wingmen aren't given impossible speed demands.
-Near terrain, the formation limits its shared tilt to keep the low outer slots above the ground.
-Separation predicts the closest approach over four seconds, adds vertical deconfliction near
-terrain, and bounds corrections. Threat spacing widens the formation only during a missile
-warning or with hostiles near, then settles back. You don't babysit spacing.
+Slots transition smoothly, compress during hard turns and keep clear of terrain.
+Wingmen adjust spacing, throttle and braking for closure, aircraft condition and
+pilot experience; terrain and collision avoidance take priority.
 
-If you stay below a fixed-wing member's safe flying speed, it announces **holding wide**
-and flies a shallow circuit at formation altitude. It automatically rejoins after you
-maintain enough speed. A nearby, aligned aircraft that overshoots flies a separated lane
-alongside you until you pass it, then eases back into its slot. Distant aircraft keep closing
-on a curved rendezvous path, even when ahead of you or on the opposite heading. Closure
-speed controls braking as they reach their slots. Distant joins aim farther ahead along your
-predicted flight path and use full throttle while the remaining gap allows safe deceleration.
-Fitted airbrakes help shed excessive closure, then retract before matching your speed; low
-airspeed, hard banks, climbs and terrain warnings restrict their use. The standing formation order is preserved.
-Braking and engine-response estimates adapt per wingman from stable flight samples;
-terrain and collision avoidance retain priority over formation corrections.
+- **Slow leader:** fixed-wing followers announce **holding wide** and circle safely until you maintain enough speed.
+- **Overshoot:** nearby, aligned followers take a separated lane until you pass; distant aircraft use a curved rendezvous to catch up.
+- **Leader landing:** formation followers orbit the field and rejoin after takeoff. Explicit orders stay active.
+- **Departures and returns:** aircraft use native taxi, takeoff and landing states. Purchases are queued per field; refit replenishes and relaunches from the landing position.
 
-The minimum formation speed uses the airframe's published stall speed with a safety margin,
-converted from km/h, rather than its AI landing-approach speed. The VT-7's formation floor
-is 216 km/h; its much higher nominal landing parameter does not force it to fly past a
-slower leader. Turn authority uses the same airspeed envelope, and native flight-assist
-filtering runs once per steering command.
-
-Distance, relative closure, forward airspeed, fuel, damage, pilot experience and ROE jointly
-adjust capture effort and damping. Aircraft condition can widen the whole formation while
-each pilot retains its own control response. Smooth leader tracking filters small attitude
-changes, responds faster to large turns and roll reversals, and keeps slot motion continuous.
-Hard maneuvers still respect each airframe's turning and speed limits.
-
-Requisitioned fixed-wing aircraft — VTOL jets included, since the game still taxis them —
-are placed on the takeoff threshold of the nearest allowed field that stocks the airframe,
-and depart under the game's own taxi and takeoff states. Helicopters and tiltwings come out
-of a hangar or helipad exactly as the faction's own do. One departure at a time per field,
-so two purchases never occupy the same strip; Supply reports a jammed field before a purchase
-spends allocation. Nothing is moved once it exists, and no ground steering is overridden:
-WingCommand chooses the pose and then gets out of the way.
-
-Return To Base, dismissal and refit all fly the stock approach home. After landing, RTB
-disembarks immediately and returns the airframe through the game's own Returned path, so it
-is not scored as a kill. Refit parks on the pad, skips that eject, replenishes, and launches
-again from that pose. WingCommand gives back its own runway queue entries whenever a departure
-ends without taking off, so an interrupted launch cannot jam the strip for the rest of the
-mission.
-
-With verbose logging enabled, instability triggers an eight-second diagnostic burst at
-five samples per second, with a thirty-second interval between burst starts. The
-`[FormationControl]` records include time, aircraft ID, recovery mode, control inputs,
-airspeed margin, terrain-warning urgency, learned response estimates, airbrake demand and
-intercept prediction time.
+Echelon Left, Diamond, Ladder and Wall remain readable from old configs but are
+absent from the selector. With verbose logging enabled, instability triggers short
+`[FormationControl]` diagnostic bursts; include these when reporting flight issues.
 
 ## 🔫 Preferred weapon
 
-Which of a wingman's own stores it reaches for first. Set per selection on **WMC → Tactical**;
-shown in the roster and HUD strip.
+Set per selection on **WMC → Tactical**; shown in the roster and HUD.
 
 | Setting | Effect |
 |---|---|
@@ -320,125 +240,64 @@ shown in the roster and HUD strip.
 | **A-G** | Prefers surface contacts and anti-surface stores |
 | **GUNS** | Prefers close-in stores, saving standoff weapons |
 
-Always a bias, never a restriction: an empty, unready or out-of-range preferred store falls
-back to the usual choice, and nothing here makes a wingman hold fire when it has an alternative.
+Preferences are a bias: unavailable or out-of-range stores fall back to another
+usable weapon.
 
 ## 🧰 Loadouts
 
-**WMC → Loadout** builds named templates pylon by pylon; **WMC → Supply** picks which one the
-next requisition flies with.
+Build named templates on **WMC → Loadout**, then choose one in Supply's **FIT** row
+before requisitioning.
 
-- Pick the airframe, press **+** for an empty template.
-- **PYLONS** is the airframe's own hardpoints under its own names. Click one to choose a
-  store, from the same list the game's aircraft menu offers. WingCommand adds no weapons.
-- **Empty is a choice** — leave a station clean for the weight.
-- A left/right pair is one row and moves together (the game won't let them differ).
-- A pylon ruled out by the rest of your fit reads `BLOCKED` and goes inert — the airframe's
-  own exclusion rule, asked of the game.
-- Name it in **NAME** (flight controls are held off while typing). Saved to config, survives
-  restarts, up to eight per airframe.
+1. Pick an airframe and press **+** for a new template.
+2. Select a pylon and choose from the aircraft's own stores, or leave it empty. Paired pylons move together; incompatible fits show `BLOCKED`.
+3. Name and save it. Up to eight templates per airframe persist in config.
 
-**Flying one:** the **FIT** row on Supply picks **STANDARD FIT** — the player's current
-default for that airframe this mission, the same loadout the game applies when you start in
-it — or a saved template.
+**STANDARD FIT** uses the aircraft menu's current mission loadout. Templates apply
+when an aircraft is created; existing AI keeps its equipment. Deleting a template
+leaves airborne aircraft untouched and resets pending selections to Standard.
+Loadouts do not change the purchase price.
 
-- Equipment is fitted at aircraft creation, so one already airborne can't be refitted — the
-  **Wing** tab shows what each carries.
-- An active mission aircraft assigned from the map flies **as found** and can't be refitted.
-- STANDARD is re-read at requisition time, so a change in the aircraft menu applies to the
-  next new airframe. A template chosen on Supply applies instead of STANDARD.
-- Deleting a template doesn't disturb anything flying it; a purchase order pointing at a
-  deleted template falls back to STANDARD.
-- Loadouts don't change price. A requisition is list price.
-
-**Cargo:** a transport carries whatever cargo pod is on its cargo pylon. **Deliver Cargo
-takes a drop point** — press it, right-click the map, same as Hold/Land; helicopters set the load
-down there, fixed-wing run in and release over it. Press it again while armed to give up the
-point and use the game's own supply route. Either way the run finishes: the wingman calls
-the delivery when the cargo leaves and rejoins when empty; one that can't drop says so and
-brings it back.
+**Deliver Cargo:** choose the order and right-click a drop point. Helicopters set
+cargo down; fixed-wing aircraft release on a pass. Click the armed button again to
+use the game's supply route instead. Empty aircraft rejoin; failed drops are reported.
 
 ## 🛒 Squadron supply
 
-Built on Nuclear Option's existing economy, not a separate one:
+Supply uses the game's faction stock and your allocation. Costs are previewed
+before confirmation; failed recruitment or launches roll back the purchase.
 
-- **One aircraft, one price** — list value, nothing compounds with wing size.
-- Reassigning an active AI costs a flat **25%** of list value (`Shop/RecruitmentCostPercent`);
-  releasing and reassigning the same persistent aircraft doesn't charge twice.
-- Price is paid from your allocation; declared aircraft consume faction mission supply. Rank,
-  mission restrictions and fixed-wing/rotary compatibility are respected.
-- Requisitioned aircraft launch from a friendly airbase and fly out under their own power —
-  from a stocking hangar via the game's own airbase spawn (door, taxi, takeoff). Supply's
-  **LAUNCH FROM** list (5 fields per page, checkboxes) chooses which bases may spawn.
-  **ONLY NEAREST** queues at the closest checked field that stocks the airframe.
-  **ANY** launches immediately from the closest checked field with a free hangar, and waits
-  unpinned if every allowed pad is busy. They show as departing immediately, commandable
-  once the stock takeoff has finished.
-- Queued requisitions can be cancelled before a hangar accepts them. Once a launch is
-  accepted, it stays reserved until the aircraft arrives or the native launch fails;
-  a slow door sequence does not trigger a refund while an aircraft is still on its way.
-- **Wing Reserve** holds up to three specific airframes across all types. `HOLD` pulls one
-  faction airframe out of AI-accessible stock; `RELEASE` returns it. It doesn't create supply.
-- **Releasing a wingman sends it home** (`REL` on the Wing roster) — it flies the stock
-  pattern back, stops counting against the squadron limit immediately, and on landing the
-  airframe returns to faction stock, the pilot returns to the pool, and purchase allocation
-  is refunded.
-- A paid requisition is refunded on RTB rather than held as a free relaunch. Manual
-  **HOLD** / **RELEASE** on Supply still parks faction stock in the three-slot reserve.
-- Every purchase and assignment previews its fee. Credits and supply move only after
-  recruitment or spawn succeeds. The 25% map-assignment fee is not refunded on RTB.
+- **Requisition:** aircraft list price, including the chosen loadout. Purchases queue through a compatible airfield or hangar.
+- **Assign existing AI:** 25% of list value by default (`Shop/RecruitmentCostPercent`); the same persistent aircraft is not charged twice.
+- **Wing Reserve:** **HOLD** keeps up to three airframes out of AI-accessible stock; **RELEASE** returns them.
+- **Release a wingman:** it stops counting against your wing limit and flies home. Successful recovery returns its pilot and airframe, refunding purchase allocation. Assignment fees are not refunded.
 
-**Squadron capacity.** Missions cap airborne faction AI, and the cap shrinks per friendly
-player — single-player often leaves zero room. Supply shows it as `SQUADRON active / limit`.
-**OVER LIMIT** permits requisitioning past the cap at **3× list price**, needs **rank 3**,
-and allows **4 over-limit airframes airborne at once** (`Shop/ExceedSquadronLimit*`). It's
-permission, not a mode: with room to spare it changes nothing, and the surcharge only hits a
-purchase that actually exceeds the limit. The allowance counts *your* still-flying over-limit
-purchases, not how far the faction as a whole is over.
+**Squadron capacity:** missions cap airborne faction AI, with less room per friendly
+player. Supply shows `SQUADRON active / limit`. **OVER LIMIT** requires rank 3 and
+permits four extra purchases airborne at once, at **3× list price**. The surcharge
+applies only when the purchase exceeds the cap.
 
 ## 🧠 AI coordination and self-preservation
 
-**Deconfliction.** Locally-simulated AI shares short-lived target reservations. Stock
-opportunity/threat/weapon/range/bravery logic still decides whether a contact is worth
-attacking; commitments nudge the next pilot toward a comparable unsaturated target. Explicit
-wing attacks estimate useful attackers and hold the rest as cover; missile defence assigns
-one interceptor per inbound. No target becomes artificially immune.
+**Deconfliction:** AI shares target reservations to spread fire across comparable
+threats. Explicit attacks keep surplus aircraft as cover; missile defence assigns
+one interceptor per inbound. Native weapon, range and threat checks still apply.
 
-**When you land.** A slot is measured from the leader, so a leader on the runway puts every
-slot on the runway. Wingmen holding formation recognise you're on the deck (low, gear down)
-and orbit the field instead, rejoining once you're airborne. An explicit order is untouched.
-
-**Defensive panic.** On its own missile warning a wingman calls the threat and goes
-defensive: terrain-aware beam/notch + chaff + jamming for radar, away/beam + flares for IR,
-a conservative mix for unknown, different steering for fixed-wing vs rotary. Once the warning
-stays clear for the configured interval it calls clear and resumes the queued order —
-including one issued while defensive. Shown as `DEFENSIVE` / `DEF`.
+**Defensive response:** wingmen react to their own missile warnings with appropriate
+steering, countermeasures and jamming. They call **DEFENSIVE**, then resume the queued
+order after the warning clears—including commands issued during evasion.
 
 ## 🎖️ Pilots and radio
 
-**WMC → Wing** shows each wingman's callsign, name, background, rank and record.
+**WMC → Wing** shows callsign, background, rank, record and a generated portrait.
+Pilot Studio, Wing and Supply share the same appearance, including imported pilots.
 
-- Pilots belong to the squadron. Successful base recovery returns them to the pool with
-  their record. Released RTB pilots remain assigned until recovery; killed pilots don't return.
-- Experience comes from kills, completed sorties and engagements survived; rank rises through
-  Rookie → Wingman → Veteran → Ace → Legend.
-- Rank has a small real effect — at the top, ~12% more weapon reach and off-boresight and
-  ~12% faster shot cycling, plus modest formation-control adjustments in Smart mode.
-  `Pilot/RankEffect = 0` keeps the record and earned perks but disables their effects.
-- Each promotion grants **one random, unique survival perk from a pool of 24**. Promotions crossed in one XP
-  award all count; imported experienced pilots receive perks for their existing ranks.
-  Rookie / Wingman / Veteran / Ace / Legend require **0 / 120 / 360 / 720 / 1200 XP** and
-  hold **0 / 1 / 2 / 3 / 4 perks**. XP awards remain 25 per kill, 40 per recovered sortie,
-  and 10 per survived engagement. The 24 dossier badges show actual earned perks;
-  hover for the effect and whether it is earned.
-- Random recruits draw from 80 surnames, 26 initials and 96 callsigns, with varied service
-  backgrounds, personal habits and radio styles. Callsigns stay unique within the roster.
-- Portraits use a modular dossier atlas with six original faces, six hair layers, and four
-  BDF/PALA flight and dress uniforms for each male/female pool. Both factions share the
-  mixed face pool. Accessories have been removed; old equipment fields are safely ignored.
-  Pilot Studio, Wing and Supply show the same stable appearance, including imported pilots.
-  The small atlas is embedded in the DLL; portraits are composed once on demand and released
-  when the mission resets. No image service, extra runtime dependency or shader is required.
+Pilots retain their records through aircraft changes **within the current mission**;
+there is no campaign save. Recovery returns them to the pool, while killed pilots stay lost.
+
+- **Ranks:** Rookie → Wingman → Veteran → Ace → Legend at **0 / 120 / 360 / 720 / 1200 XP**.
+- **XP:** 25 per kill, 40 per recovered sortie and 10 per survived engagement.
+- **Perks:** one unique random perk per promotion, up to four. Imported veterans receive their earned ranks' perks.
+- **Rank effects:** modest weapon and formation bonuses. `RankEffect = 0` disables effects; `PilotProgression = false` also stops XP. Records remain available.
 
 | Perk | Survival effect |
 |---|---|
@@ -467,73 +326,39 @@ including one issued while defensive. Shown as `DEFENSIVE` / `DEF`.
 | **SURVIVALIST** | 60% less incoming projectile, blast and fire damage to the dismounted pilot before native armour calculations. |
 | **PATHFINDER** | 35% independent escape chance with a 60-second return delay; with Commando, 67.5% chance and 60 seconds. One roll per ejection. |
 
-Missile guidance-error chances combine as independent chances, with an 80% cap and one roll per missile/pilot pair at first encounter. Conditional evasion perks use the altitude, seeker and flight angle at that encounter; changing conditions does not grant another roll. Fuel savings multiply, with a floor of 25% normal consumption. Damage resistances multiply. No perk guarantees aircraft survival.
+Guidance-error perks combine independently up to an 80% cap, with one roll per
+missile/pilot pair at first encounter. Fuel savings multiply down to a 25% consumption
+floor; damage resistances also multiply. No perk guarantees survival.
 
-Perk percentages are fixed while effects are enabled; `RankEffect` scales the existing rank
-bonuses. `PilotProgression = false` disables XP awards and perk effects. SAR status tracking
-continues to distinguish survivors from KIA. Records and earned perks last through aircraft
-changes **within the current mission**; this does not add a campaign save system.
+**Search and rescue:** confirmed survivors become **DOWNED** and cannot be reassigned.
+Friendly rescue restores the same pilot; enemy capture shows **CAPTURED**, confirmed
+death **KIA**, and an unknown disappearance **MIA**.
 
-**Search and rescue.** Ejection creates a **DOWNED** roster entry once the game's living
-survivor is confirmed. That pilot cannot be selected or assigned until rescued. Friendly
-native rescue (player or AI) and return at a friendly base restore the same pilot with their
-XP, perks and record. Enemy capture shows **CAPTURED**; a confirmed death after ejection
-shows **KIA**. A lost survivor signal shows **MIA**, never an automatic rescue. Disabled
-aircraft receive a short grace period for the game's delayed ejection sequence.
+Downed pilots have a red map outline and **SAR · CALLSIGN** label. On Wing:
 
-Downed pilots are outlined in red on the tactical map and carry a persistent
-**SAR · CALLSIGN** label. On **WMC → Wing**, inspect a downed pilot and click **AIR SAR** to send the nearest
-eligible idle wing helicopter to their landing position. It must have native capture capacity,
-more than 25% fuel, and be in Formation or Hold/Orbit. It uses the existing Land Here approach;
-the native game performs the rescue when a suitable friendly unit stops nearby. This is an
-explicit order and leaves the helicopter at the landing site afterward. Landing failure,
-terrain and enemy fire can still prevent rescue. Player aircraft and native AI can also rescue
-normally without this button. **Water rescues use the game's helicopter hoist**; automated
-hoist operation is not included.
+- **AIR SAR** sends the nearest eligible idle wing helicopter with capture capacity and over 25% fuel. It lands nearby for native pickup and stays there afterward. Terrain and enemy fire can prevent rescue; water hoists remain manual.
+- **LOCAL 10M** costs 10,000,000 funds immediately and takes five mission minutes. Death or capture cancels recovery without a refund.
 
-Alternatively, click **LOCAL 10M** to organize a local recovery team. It deducts 10,000,000
-funds immediately and returns the pilot to the pool after five mission minutes. The WING page
-shows the remaining time. Death or enemy capture still settles the pilot before the team arrives;
-the fee is not refunded.
-
-The implementation audit and manual flight checks are in [SURVIVAL-SYSTEM.md](SURVIVAL-SYSTEM.md).
-
-**Radio.** Calls use frameless subtitles at top centre, not the game-message feed — speaker
-as `M. "COBALT" ADEYEMI`, a smaller line for flight position and aircraft. A command to
-several aircraft gets one element acknowledgement from its lead; skipped aircraft don't
-answer as if they complied. Urgent missile/damage/loss calls jump the queue. Each pilot
-carries a persona (professional, aggressive, calm, dry) that picks between lines for the same
-event — a small seam for later mission dialogue. Transmissions can be tailored in
-settings (`Comms/Radio`: `Off`, `Text`, `TextAndTone`). With `TextAndTone`, each call opens
-with the game's native radio click. The mod no longer writes ordinary notices into the
-game's message boxes.
-
-Delivered wingmen report taxiing, takeoff and airborne once per phase. Departure reports
-use an idle channel with at least five seconds between them across the wing, replace stale
-phases with current ones, and yield to urgent calls. An airborne rejoin report also replaces
-the ordinary rejoining acknowledgement for that departure.
+**Radio:** pilot-specific subtitles and optional radio clicks report commands, threats,
+losses and departures. Group orders get one lead acknowledgement; urgent calls take
+priority. Configure `Comms/Radio` as `Off`, `Text` or `TextAndTone`.
 
 ## 💀 Takeover
 
-Killed or ejected with wingmen still flying, they hold in a safe orbit and a takeover window
-opens (number keys work). Pick one and you spawn a fresh copy of that aircraft — same
-airframe, loadout, fuel, livery and motion — and take the stick, with the AI source removed
-to avoid reusing its AI/network state. Normal respawn and defeat flows still work. Single-player
-and host; `Engagement/TakeoverOnDeath`.
+After you are killed or eject, surviving wingmen hold in orbit and a takeover window
+opens. Pick one (number keys work) to continue with its airframe, loadout, fuel,
+livery and motion. Available in single-player and as host; controlled by
+`Engagement/TakeoverOnDeath`. Normal respawn remains available.
 
 ## 🗺️ HUD and map
 
-- Wingmen use a thin green map ring; active wing targets have amber rings. Rings keep a
-  clear gap around the icon and a one-pixel stroke across map zoom levels.
-  Tactical command selection adds brackets. Native faction fills, type and heading remain visible.
-- The compact roster shows order/state and live **slot error**, and hides while the map is open.
-- On the maximised map, a line runs from every tasked wingman to its point. A Shift-queued
-  route draws as a chain (current leg bright, queue dimmed, a dot per pending point); an
-  attack draws to its target in amber.
+- Wingmen have green outline rings; their targets have amber rings. Tactical selection adds brackets while preserving native faction fills and headings.
+- The compact roster shows order/state and live **slot error**, hiding while the map is open.
+- Map lines show destinations, queued route legs and attack targets.
 
-Slot error: small and steady = established; rising and falling = correction/throttle gain
-too aggressive; continually climbing = can't keep up or not under local control; `-` = not
-on a formation order.
+**Slot error:** small and steady means established; oscillating suggests excessive
+correction; continually growing means the follower cannot keep up or lacks local
+control. `-` means it is not following a formation order.
 
 ## 💡 Tips
 
@@ -548,41 +373,23 @@ on a formation order.
 
 ## ❓ FAQ
 
-**Multiplayer?** Only as **host** — Nuclear Option's AI is host-controlled.
+**Multiplayer?** Single-player and host only; AI is host-controlled.
 
-**Vanilla wingman controls?** Still there as advanced settings, unbound by default.
+**Other mods?** BOTE radial submenus are supported. Boscali Summer is optional and
+handles MFD layout when installed; otherwise WMC fits beside the native bezel.
 
-**Works with BOTE?** Yes, designed to coexist with its radial submenus.
+**Templates?** No extra loadout charge. They live in config under
+`Loadout/SavedTemplates`. A `BLOCKED` pylon means another fitted store excludes it.
 
-**Boscali Summer required?** No. Boscali owns MFD layout when installed.
-Standalone, the vanilla panels stay intact and
-WMC fits beside the native bezel. Wing Command does not control map wallpaper, grid,
-or background opacity; appearance stays with vanilla or the mod providing it.
+**Mixed helicopters and jets?** No. Supply and recruitment filter incompatible types.
 
-**Do templates cost extra?** No. A requisition is list price whatever you hang on it.
+**Full squadron?** Check `SQUADRON active/limit`; **OVER LIMIT** becomes available at rank 3.
 
-**Where are templates saved?** `com.marci.wingcommand.cfg`, under `Loadout/SavedTemplates`.
-Clearing that value deletes them all.
+**Buying the same aircraft again?** RTB refunds its purchase allocation and returns it
+to stock. Requisitioning it again is a new purchase.
 
-**Why is a pylon `BLOCKED`?** Something else you've fitted rules it out — the airframe's own
-exclusion rule. Clear the blocking store and it comes back.
-
-**Helicopters and jets in one formation?** No — they fly too differently. The shop and
-recruit lists hide incompatible types.
-
-**Bought an aircraft but the squadron's at its limit — scammed?** No. Missions cap airborne
-AI and the cap shrinks with more players. Push past it with **OVER LIMIT** at rank 3.
-
-**Charged twice for the same aircraft?** No — an RTB landing refunds the allocation spent on
-that airframe and returns it to faction stock. Requisitioning it again is a new purchase.
-
-**Shaky formation?** Wingmen use filtered leader motion and curved approaches to their
-slots. Repeated large corrections after small stick movements are a bug; report the
-airframe, formation, ROE, and slot error. A growing gap can also mean the leader exceeds
-the follower's speed or turn capability.
-
-**Newest game update?** Check the badges above for the targeted version. If the radial hook
-breaks after an update, a fallback keybind is under advanced settings until the mod is patched.
+**Game updates?** The badges show the targeted version. If a native radial hook breaks,
+use the command-wheel keybind until the mod is updated.
 
 ## 🔧 Troubleshooting
 
@@ -674,46 +481,32 @@ tactical rules, hotkeys, and appearance can be configured.
 | Debug | `FreePlanePurchases` | `false` | Requisitioned aircraft cost no allocation |
 | Debug | `DisableWingSizeLimit` | `false` | Ignore 3-wingman squadron cap |
 
-
-The Debug cheats are F1-only, off by default, and unsupported. Squadron size is capped at 3 wingmen by design (matching HUD and WMC layout); `DisableWingSizeLimit` bypasses this for testing. Global AI `SkillScale` / `BraveryScale`, player-specific target protection, `WingPriceGrowth`, `RecruitRange`, and `AdditionalWingReservePerType` are retired and ignored.
-
-The former `MFD/BackgroundOpacity`, `CheckeredGrid`, `CustomImageEnabled`, and
-`CustomImageFile` settings are also retired and ignored. Existing image files are untouched.
+Debug cheats are F1-only, off by default and unsupported. The normal cap is three
+wingmen; `DisableWingSizeLimit` bypasses it for testing. Retired settings are ignored.
 
 ## 🔩 Implementation
 
-WingCommand adds no custom network messages. It drives aircraft through the game's existing
-pilot states and autopilot, uses the stock economy and supply calls, and limits Harmony
-patches to UI dispatch, marker colour, missile-warning repair and AI target deconfliction.
-Loadout options come from the airframe's own `WeaponManager.hardpointSets`; pylon exclusion
-is the game's own `HardpointSet.BlockedByOtherHardpoint`. This mod defines no weapons.
-Private game members for the native radial integration are resolved through reflection; a
-game update that renames one is logged, with the fallback interface left available.
+WingCommand uses native pilot states, autopilot, economy and supply calls, with
+Harmony patches for integration. It adds no weapons or custom network messages.
 
-The codebase map and development guidance are in [ARCHITECTURE.md](ARCHITECTURE.md). Much of the mod is
-developed with AI coding assistance under maintainer direction, review and live flight
-testing. Contributions and test reports welcome.
+Developed with AI coding assistance, maintainer review and live flight testing.
+Contributions and test reports welcome.
 
 ## 🏗️ Building
 
-Requires the .NET 8 SDK, BepInEx 5, a local Nuclear Option install, and the shared avionics
-sources from a `nomodkit` checkout (defaults to `../nomodkit`). Custom paths can be passed
-as `-p:GameDir="C:\path\to\Nuclear Option" -p:NomodKitDir="C:\path\to\nomodkit"`.
+Requires the **.NET 8 SDK**, **BepInEx 5**, and a local Nuclear Option install.
+Avionics sources are included. For a custom game path, pass
+`-p:GameDir="C:\path\to\Nuclear Option"`.
 
 ```powershell
 dotnet build WingCommand.csproj -c Release
-dotnet test tests/WingCommand.PureTests
+dotnet test tests/WingCommand.PureTests/WingCommand.PureTests.csproj
+dotnet test tests/WingCommand.SurvivalTests/WingCommand.SurvivalTests.csproj
 ```
 
-Release assets:
-
-```bash
-nomod package --mod wingcommand
-```
-
-→ `dist/WingCommand.dll` and `dist/WingCommand-<version>.zip`. Attach **`WingCommand.dll` first**
-to a GitHub release — NOMM installs the bare DLL; the ZIP is for manual installs. The package
-script reads the version from the built assembly and prints SHA-256 hashes.
+Tests run without a game install. The plugin is written to
+`bin/Release/netstandard2.1/WingCommand.dll`. Attach **`WingCommand.dll`** to GitHub
+releases for NOMM and manual installs.
 
 ## Licence
 
