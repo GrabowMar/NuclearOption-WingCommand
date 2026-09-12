@@ -45,5 +45,74 @@ namespace WingCommand.PureTests
             Assert.False(string.IsNullOrWhiteSpace(single));
             Assert.False(string.IsNullOrWhiteSpace(group));
         }
+
+        [Fact]
+        public void AttackAndFireForEffectHaveSpecificAcknowledgements()
+        {
+            foreach (ChatterPersona persona in (ChatterPersona[])System.Enum.GetValues(typeof(ChatterPersona)))
+            {
+                string attack = ChatterDialogue.Acknowledge(persona, "ATTACK", seed: 1);
+                string fireForEffect = ChatterDialogue.Acknowledge(persona, "FIREFOREFFECT", seed: 1);
+
+                Assert.False(string.IsNullOrWhiteSpace(attack));
+                Assert.False(string.IsNullOrWhiteSpace(fireForEffect));
+
+                // Must not fall through to the default generic "Roger." / "Copy."
+                Assert.DoesNotContain("Apparently so", attack);
+                Assert.DoesNotContain("Apparently so", fireForEffect);
+            }
+        }
+
+        [Fact]
+        public void EveryFlightEventProducesValidLinesAcrossAllPersonas()
+        {
+            string[] eventNames =
+            {
+                "ENGAGING", "DEFENDING", "BREAKCALL", "SPLASH", "WINCHESTER", "BINGO",
+                "REJOINING", "TAXIING", "DEPARTING", "AIRBORNE", "AIRBORNEREJOINING",
+                "DETACHED", "FALLINGBACK", "HOLDING", "COVERING", "ORBITING", "DELIVERING",
+                "DELIVERED", "NODROPOFF", "FIREFOREFFECT", "EXPENDED", "OUTOFAMMO", "DOWN",
+                "UNABLE", "SLOWLEADER", "PANIC", "DEFENSIVECLEAR", "JAMMING", "JAMMINGOFF",
+                "MANEUVERING", "MANEUVERDONE", "DAMAGED", "CRITICAL", "RECOVERED", "UNABLEORDER",
+                "FOX1", "FOX2", "FOX3", "MAGNUM", "RIFLE",
+            };
+
+            foreach (ChatterPersona persona in (ChatterPersona[])System.Enum.GetValues(typeof(ChatterPersona)))
+            {
+                for (int i = 0; i < eventNames.Length; i++)
+                {
+                    string lineWithoutDetail = ChatterDialogue.Event(persona, eventNames[i], null, seed: 42);
+                    Assert.False(string.IsNullOrWhiteSpace(lineWithoutDetail));
+
+                    string lineWithDetail = ChatterDialogue.Event(persona, eventNames[i], "Target-Alpha", seed: 42);
+                    Assert.False(string.IsNullOrWhiteSpace(lineWithDetail));
+                }
+            }
+        }
+
+        [Fact]
+        public void SoloAmbientModeReturnsExchangeWithNullReply()
+        {
+            for (int seed = 0; seed < 50; seed++)
+            {
+                ChatterExchange exchange = ChatterDialogue.Ambient(seed, repliesAllowed: false);
+                Assert.False(string.IsNullOrWhiteSpace(exchange.Opening));
+                Assert.Null(exchange.Reply);
+            }
+        }
+
+        [Fact]
+        public void GroupAcknowledgeProducesValidCallsForAllOrders()
+        {
+            foreach (ChatterPersona persona in (ChatterPersona[])System.Enum.GetValues(typeof(ChatterPersona)))
+            {
+                foreach (WingOrder order in (WingOrder[])System.Enum.GetValues(typeof(WingOrder)))
+                {
+                    string groupLine = ChatterDialogue.GroupAcknowledge(persona, order.ToString(), "Two and Three", seed: 5);
+                    Assert.False(string.IsNullOrWhiteSpace(groupLine));
+                    Assert.Contains("Two and Three", groupLine);
+                }
+            }
+        }
     }
 }

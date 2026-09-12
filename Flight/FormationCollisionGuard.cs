@@ -6,7 +6,8 @@ namespace WingCommand
     internal static class FormationCollisionGuard
     {
         public static bool TryAvoid(Aircraft self, Aircraft leader, IReadOnlyList<WingMember> members,
-            float spacing, out Vector3 escape, out Aircraft threat, out float miss)
+            float spacing, out Vector3 escape, out Aircraft threat, out float miss,
+            Aircraft currentThreat = null)
         {
             escape = Vector3.zero;
             threat = null;
@@ -27,8 +28,10 @@ namespace WingCommand
                 float physicalRadius = Mathf.Max(WingTuning.CollisionMinimumRadius,
                     LaunchSafety.Clearance(selfSize, otherSize));
                 // Limit predictive repulsion for stable compressed formations while retaining physical
-                // clearance.
-                float radius = Mathf.Max(physicalRadius, Mathf.Min(spacing * 0.85f, relative.magnitude * 0.75f));
+                // clearance. Apply 30% hysteresis to an incumbent threat to prevent chatter.
+                float hysteresis = (currentThreat != null && other == currentThreat) ? 1.30f : 1.0f;
+                float radius = Mathf.Max(physicalRadius * hysteresis,
+                    Mathf.Min(spacing * 0.85f * hysteresis, relative.magnitude * 0.75f * hysteresis));
                 float score = FormationCollision.Threat(relative.x, relative.y, relative.z,
                     velocity.x, velocity.y, velocity.z, radius, out float time, out float predictedMiss);
                 if (score <= strongest) continue;

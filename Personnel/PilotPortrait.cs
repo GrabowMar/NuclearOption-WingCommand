@@ -13,27 +13,52 @@ namespace WingCommand
 
         public static Sprite Sprite => For(null);
 
+        /// <summary>Renders a semantic selection. Atlas tile IDs never escape the compositor.</summary>
+        public static Sprite ForSelection(PortraitSelection selection)
+        {
+            selection = PilotPortraitGenerator.Normalize(selection);
+            string key = $"Custom_{(int)selection.Body}_{selection.Face}_{selection.Hair}_{selection.Uniform}_{selection.Backdrop}";
+            if (portraits.TryGetValue(key, out Sprite portrait)) return portrait;
+            if (!LoadLayers()) return null;
+
+            portrait = Create(key, PilotPortraitGenerator.Compose(selection, layers));
+            portraits.Add(key, portrait);
+            return portrait;
+        }
+
+        public static Sprite ForCustom(PortraitBody body, int face, int hair, int uniform, int accessory, int backdrop) =>
+            ForSelection(new PortraitSelection(body, face, hair, uniform, accessory, backdrop));
+
         public static Sprite For(WingPilot pilot)
         {
+            if (pilot != null && pilot.HasCustomPortrait)
+                return ForSelection(pilot.PortraitSelection.Value);
+
             string identity = pilot == null ? "WingCommand" : pilot.Name + "|" + pilot.Callsign;
             if (portraits.TryGetValue(identity, out Sprite portrait)) return portrait;
             if (!LoadLayers()) return null;
 
+            portrait = Create(identity, PilotPortraitGenerator.Compose(identity, layers));
+            portraits.Add(identity, portrait);
+            return portrait;
+        }
+
+        private static Sprite Create(string key, byte[] pixels)
+        {
             var texture = new Texture2D(PilotPortraitGenerator.Width, PilotPortraitGenerator.Height,
                                         TextureFormat.RGBA32, mipChain: false)
             {
-                name = "WingCommand_Pilot_" + identity,
+                name = "WingCommand_Pilot_" + key,
                 filterMode = FilterMode.Bilinear,
                 wrapMode = TextureWrapMode.Clamp,
                 hideFlags = HideFlags.HideAndDontSave,
             };
-            texture.LoadRawTextureData(PilotPortraitGenerator.Compose(identity, layers));
+            texture.LoadRawTextureData(pixels);
             texture.Apply(updateMipmaps: false, makeNoLongerReadable: true);
-            portrait = UnityEngine.Sprite.Create(texture, new Rect(0, 0, texture.width, texture.height),
-                                                 new Vector2(0.5f, 0.5f), 100f);
+            Sprite portrait = UnityEngine.Sprite.Create(texture, new Rect(0, 0, texture.width, texture.height),
+                                                        new Vector2(0.5f, 0.5f), 100f);
             portrait.name = texture.name;
             portrait.hideFlags = HideFlags.HideAndDontSave;
-            portraits.Add(identity, portrait);
             return portrait;
         }
 

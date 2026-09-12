@@ -57,6 +57,7 @@ namespace WingCommand
         private float moveAltitude;
         private float moveSpeed;
         private bool deliveryPending;
+        private float nextDepartureReport;
 
         private readonly CargoProgressTracker cargoProgress = new CargoProgressTracker();
         private float lastIntegrity;
@@ -279,6 +280,11 @@ namespace WingCommand
             }
             else changed = standingOrder.Set(directive);
             if (!changed) return true;
+
+            // Turrets keep firing independently after a designation. A real directive revision
+            // transfers targeting authority, including non-attack orders that allow opportunity fire.
+            CombatFacade.Weapons.ClearTurretTargets(Aircraft);
+
             RefitPending = false;
             TacticalMapOverlay.Invalidate();
             return true;
@@ -302,7 +308,17 @@ namespace WingCommand
                     parameters.landingSpeed) : 0f;
             if (!IsSurface && !LaunchSafety.CanHandOff(Pilot.flightInfo.HasTakenOff, takingOff,
                 WingRegistry.IsRotary(Aircraft), Aircraft.radarAlt, forwardAirspeed,
-                parameters != null ? parameters.takeoffSpeed : 0f, minimumAirspeed)) return false;
+                parameters != null ? parameters.takeoffSpeed : 0f, minimumAirspeed))
+            {
+                if (Aircraft.radarAlt >= 8f && Time.timeSinceLevelLoad >= nextDepartureReport)
+                {
+                    nextDepartureReport = Time.timeSinceLevelLoad + 15f;
+                    Plugin.Logger.LogInfo($"[Departure] {Crew?.Callsign ?? Name} waiting for handoff: " +
+                        $"native={Pilot.currentState?.GetType().Name} complete={Pilot.flightInfo.HasTakenOff} " +
+                        $"agl={Aircraft.radarAlt:F1} forwardSpeed={forwardAirspeed:F1} minimum={minimumAirspeed:F1}");
+                }
+                return false;
+            }
 
             Pilot.flightInfo.HasTakenOff = true;
             deliveryPending = false;
@@ -313,7 +329,9 @@ namespace WingCommand
             // new command.
             brain.RequestEvaluation();
             Resolve(force: true);
-            Plugin.LogVerbose("[Wing] " + Name + " vanilla takeoff handoff; flying " + Order);
+            Plugin.Logger.LogInfo($"[Departure] {Crew?.Callsign ?? Name} handoff: order={Order} " +
+                $"controller={Pilot.currentState?.GetType().Name} behaviour={brain.Current.BehaviourId} " +
+                $"agl={Aircraft.radarAlt:F1} forwardSpeed={forwardAirspeed:F1}");
             return true;
         }
 
@@ -547,7 +565,7 @@ namespace WingCommand
         internal void RetargetSplash(Unit target)
         {
             if (target == null || target.disabled || Order != WingOrder.FireForEffect) return;
-            SetDirective(WingDirective.AtTarget(WingOrder.FireForEffect, target));
+            SetDirective(Directive.Retarget(target));
         }
 
         /// <summary>Replace or append a map task. Shift appends only to a compatible current map task;

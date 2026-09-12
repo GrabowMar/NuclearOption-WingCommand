@@ -2,12 +2,14 @@ using System;
 using TMPro;
 using UnityEngine;
 using UnityEngine.UI;
+using NOAvionics.Ui;
 
 namespace WingCommand
 {
     internal static partial class WmcScreen
     {
-        private const float TacticalButtonHeight = RowHeight;
+        private const float TacticalButtonHeight = 28f;
+        private const float TacticalGap = 4f;
         private const float TacticalCellWidth = (PanelWidth - Pad * 2f - Gap * 3f) / 4f;
         private static float TacticalColumn(int column) => Pad + column * (TacticalCellWidth + Gap);
         internal static bool TacticalFlightExpanded => TacticalCommandModeActive && rosterExpanded;
@@ -17,11 +19,10 @@ namespace WingCommand
         private static RectTransform tacticalViewport, tacticalContent, tacticalCommands, tacticalScrollTrack;
         private static ScrollRect tacticalScroll;
         private static float tacticalTop, tacticalCommandsTop, tacticalCollapsedHeight;
-        private static readonly RectTransform[] orderPages = new RectTransform[3];
-        private static readonly WingButton[] orderTabs = new WingButton[3];
-        private static readonly RectTransform[] geometryPages = new RectTransform[2];
-        private static readonly WingButton[] geometryTabs = new WingButton[2];
-        private static int orderPage, geometryPage;
+        private static readonly RectTransform[] tacticalDeckPages = new RectTransform[3];
+        private static readonly WingButton[] tacticalDeckTabs = new WingButton[3];
+        private static readonly float[] tacticalDeckBottoms = new float[3];
+        private static int tacticalDeck;
         private static readonly ManeuverKind[] TacticalManeuvers = {
             ManeuverKind.BarrelRoll, ManeuverKind.AileronRoll, ManeuverKind.Loop,
             ManeuverKind.WingWaggle, ManeuverKind.Immelmann, ManeuverKind.SplitS,
@@ -65,6 +66,7 @@ namespace WingCommand
             Stretch(thumbRect);
             thumb.GetComponent<Image>().color = WingUi.RailEmerald;
             var scrollbar = track.GetComponent<Scrollbar>();
+            AvInput.StripNavigation(scrollbar);
             scrollbar.direction = Scrollbar.Direction.BottomToTop;
             scrollbar.handleRect = thumbRect;
             scrollbar.targetGraphic = thumb.GetComponent<Image>();
@@ -76,13 +78,12 @@ namespace WingCommand
             tacticalCommandsTop = y;
             BuildFlightGroups(tacticalContent);
             tacticalCommands = PageRoot(tacticalContent, "TacticalCommands");
-            float end = AddEngagementSection(tacticalCommands, 0f);
-            end = AddActions(tacticalCommands, end);
-            end = AddFlightGeometry(tacticalCommands, end);
+            float end = AddTacticalDecks(tacticalCommands, 0f);
             Place(tacticalCommands, new Rect(0f, y, PanelWidth, -end));
             tacticalCollapsedHeight = -y - end;
             ReflowTactical();
-            return top - tacticalCollapsedHeight;
+            // Reserve the tallest compact deck so switching tabs does not introduce overflow.
+            return top + y + Mathf.Min(tacticalDeckBottoms);
         }
 
         private static void FitTacticalViewport()
@@ -90,7 +91,7 @@ namespace WingCommand
             if (tacticalViewport == null) return;
             float height = panelHeight + tacticalTop - Pad - StatusStripHeight - Space2;
             Place(tacticalViewport, new Rect(0f, tacticalTop, PanelWidth, Mathf.Max(RowHeight, height)));
-            Place(tacticalScrollTrack, new Rect(PanelWidth - 9f, tacticalTop, 5f, Mathf.Max(RowHeight, height)));
+            Place(tacticalScrollTrack, new Rect(PanelWidth - 12f, tacticalTop, 8f, Mathf.Max(RowHeight, height)));
         }
 
         private static void ToggleRosterExpanded()
@@ -125,55 +126,58 @@ namespace WingCommand
             }
         }
 
-        private static float AddTacticalTabs(RectTransform parent, float y, string[] labels,
-            RectTransform[] roots, WingButton[] tabs, Action<int> select)
+        private static float AddTacticalDecks(RectTransform parent, float y)
         {
-            float w = TacticalCellWidth;
-            for (int i = 0; i < labels.Length; i++)
+            float deckTabWidth = (PanelWidth - Pad * 2f - Gap * 2f) / 3f;
+            tacticalDeckTabs[0] = WingUi.Button(parent, "DIRECTIVES",
+                new Rect(Pad, y, deckTabWidth, RowHeight), FontSmall, UiButtonStyle.Tab,
+                () => SetTacticalDeck(0));
+            tacticalDeckTabs[1] = WingUi.Button(parent, "GEOMETRY",
+                new Rect(Pad + deckTabWidth + Gap, y, deckTabWidth, RowHeight), FontSmall, UiButtonStyle.Tab,
+                () => SetTacticalDeck(1));
+            tacticalDeckTabs[2] = WingUi.Button(parent, "ROUTE / NODES",
+                new Rect(Pad + (deckTabWidth + Gap) * 2f, y, deckTabWidth, RowHeight), FontSmall, UiButtonStyle.Tab,
+                () => SetTacticalDeck(2));
+            string[] icons = { "tasking", "formation", "move" };
+            for (int i = 0; i < tacticalDeckTabs.Length; i++)
             {
-                int index = i;
-                tabs[i] = WingUi.Button(parent, labels[i], new Rect(Pad + i * (w + Gap), y, w, RowHeight),
-                    FontSmall, UiButtonStyle.Tab, () => select(index));
-                roots[i] = PageRoot(parent, labels[i]);
+                AddSprite((RectTransform)tacticalDeckTabs[i].transform, "DeckIcon", IconFactory.Get(icons[i]),
+                    new Rect(6f, -7f, 16f, 16f), WingUi.RailCyan);
+                tacticalDeckTabs[i].GetComponentInChildren<TMP_Text>().margin = new Vector4(24f, 0f, 4f, 0f);
             }
-            return y - RowHeight - Gap;
+            y -= RowHeight + Gap;
+
+            tacticalDeckPages[0] = PageRoot(parent, "DeckDirectives");
+            tacticalDeckPages[1] = PageRoot(parent, "DeckGeometryRoute");
+            tacticalDeckPages[2] = PageRoot(parent, "DeckRouteNodes");
+
+            tacticalDeckBottoms[0] = AddDirectivesDeck(tacticalDeckPages[0], y);
+            tacticalDeckBottoms[1] = AddGeometryDeck(tacticalDeckPages[1], y);
+            tacticalDeckBottoms[2] = AddRouteNodesDeck(tacticalDeckPages[2], y);
+
+            SetTacticalDeck(tacticalDeck);
+            return tacticalDeckBottoms[tacticalDeck];
         }
 
-        private static void SetOrderPage(int index)
+        private static void SetTacticalDeck(int index)
         {
-            orderPage = index;
-            for (int i = 0; i < orderPages.Length; i++)
+            index = Mathf.Clamp(index, 0, tacticalDeckPages.Length - 1);
+            tacticalDeck = index;
+            for (int i = 0; i < tacticalDeckPages.Length; i++)
             {
-                orderPages[i]?.gameObject.SetActive(i == index);
-                orderTabs[i]?.SetLatched(i == index);
+                tacticalDeckPages[i]?.gameObject.SetActive(i == index);
+                tacticalDeckTabs[i]?.SetLatched(i == index);
+            }
+            float bottom = tacticalDeckBottoms[index];
+            if (tacticalCommands != null && bottom < 0f)
+            {
+                tacticalCommands.sizeDelta = new Vector2(PanelWidth, -bottom);
+                tacticalCollapsedHeight = -tacticalCommandsTop - bottom;
+                ReflowTactical();
             }
             // A hidden armed button must not leave a surprising map-click action behind.
             WingCommandManager.Instance?.CancelMapOrder(notify: false);
             nextRefresh = 0f;
-        }
-
-        private static void SetGeometryPage(int index)
-        {
-            geometryPage = index;
-            for (int i = 0; i < geometryPages.Length; i++)
-            {
-                geometryPages[i]?.gameObject.SetActive(i == index);
-                geometryTabs[i]?.SetLatched(i == index);
-            }
-            nextRefresh = 0f;
-        }
-
-        private static float AddRouteControls(RectTransform parent, float y)
-        {
-            float w = TacticalCellWidth;
-            patrolButton = TacticalButton(parent, "PATROL OFF", Pad, y, w,
-                () => WingCommandManager.Instance?.SetPatrolRoute(!ScopeAllPatrolling()), UiButtonStyle.Toggle)
-                .WithTooltip("Queue at least two Move points with Shift-right-click, then enable PATROL to loop them. Turning it off finishes the remaining route once.");
-            autoRefitButton = TacticalButton(parent, "AUTO REFIT OFF", Pad + w + Gap, y, w,
-                () => WingCommandManager.Instance?.SetAutoRefit(!ScopeAllAutoRefit()), UiButtonStyle.Toggle)
-                .WithTooltip("Selected aircraft refuel/rearm at bingo or empty combat stores, then resume their task. Skips deliberate land, cargo and retreat tasks. Requires AutoReturnOnEmpty in settings.");
-            y -= TacticalButtonHeight + Gap;
-            return y;
         }
 
         private static bool ScopeAllPatrolling() => ScopeAll(member => member.PatrolRoute);
@@ -192,6 +196,7 @@ namespace WingCommand
             if (manager == null) return;
             var scope = manager.Commands.Scope(wholeWing: false);
             RefreshFlightGroups(wing, scope);
+            RefreshRouteNodes(scope);
             bool allPatrol = scope.Count > 0, allRefit = scope.Count > 0;
             bool anyPatrol = false, anyRefit = false, canPatrol = false, canRefit = false;
             foreach (WingMember member in scope)
@@ -229,18 +234,19 @@ namespace WingCommand
         private static void ResetTacticalNavigation()
         {
             rosterExpanded = false;
-            orderPage = geometryPage = 0;
+            tacticalDeck = 0;
             tacticalViewport = tacticalContent = tacticalCommands = tacticalScrollTrack = null;
             tacticalScroll = null;
             rosterExpandButton = patrolButton = autoRefitButton = null;
             ResetFlightGroups();
             ResetTacticalPreview();
+            ResetTacticalBento();
             routeLabel = null;
             formationButtons = null;
-            Array.Clear(orderPages, 0, orderPages.Length);
-            Array.Clear(orderTabs, 0, orderTabs.Length);
-            Array.Clear(geometryPages, 0, geometryPages.Length);
-            Array.Clear(geometryTabs, 0, geometryTabs.Length);
+            ResetRouteNodes();
+            Array.Clear(tacticalDeckPages, 0, tacticalDeckPages.Length);
+            Array.Clear(tacticalDeckTabs, 0, tacticalDeckTabs.Length);
+            Array.Clear(tacticalDeckBottoms, 0, tacticalDeckBottoms.Length);
             Array.Clear(maneuverButtons, 0, maneuverButtons.Length);
         }
     }

@@ -107,8 +107,11 @@ namespace WingCommand
             radar = seekerType == "SARH" || seekerType == "ARH";
 
             // Native ejectors own dispensing cadence; the pulser restores the selected expendable.
+            float cmWindow = WingTuning.ChaffWindowSeconds;
+            if (PersonnelFacade.Roster.HasPerk(aircraft, PilotPerk.EarlyWarning))
+                cmWindow += PilotPerks.EarlyWarningReactionLead(true);
             SetCountermeasures(expendableIndex >= 0 &&
-                (infrared || impactTime < WingTuning.ChaffWindowSeconds));
+                (infrared || impactTime < cmWindow));
             if (radar) jammer.Pulse(aircraft);
             return true;
         }
@@ -249,9 +252,13 @@ namespace WingCommand
 
             if (!rotary)
             {
-                float bankLimit = terminal
-                    ? FixedWingFormation.MaxSafeBank
-                    : WingTuning.DefensiveBankAllowed;
+                bool hasBreakTurn = PersonnelFacade.Roster.HasPerk(aircraft, PilotPerk.BreakTurn);
+                float bankLimit = SharpTurnPolicy.DefensiveBankLimit(terminal, hasBreakTurn, aircraft.radarAlt);
+
+                if (terminal && hasBreakTurn)
+                {
+                    controlInputs.brake = 1f;
+                }
 
                 aircraft.autopilot.AutoAim(
                     destination: destination,

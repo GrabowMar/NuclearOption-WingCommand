@@ -16,9 +16,56 @@ namespace WingCommand
         public int Xp { get; set; }
         public int Kills { get; set; }
         public int Sorties { get; set; }
+        public int PortraitVersion { get; set; } = 2;
+        public PortraitBody Body { get; set; } = PortraitBody.Male;
+        public int Face { get; set; } = -1;
+        public int Hair { get; set; }
+        public int Uniform { get; set; }
+        public int Accessory { get; set; }
+        public int Backdrop { get; set; }
+
+        public bool HasCustomPortrait => Face >= 0;
+
+        /// <summary>Canonical v2 selection. This is safe to persist and pass through live roster state.</summary>
+        public PortraitSelection Selection => PilotPortraitGenerator.Normalize(
+            new PortraitSelection(Body, Face, Hair, Uniform, Accessory, Backdrop));
+
+        public void ApplySelection(PortraitSelection selection)
+        {
+            selection = PilotPortraitGenerator.Normalize(selection);
+            PortraitVersion = 2;
+            Body = selection.Body;
+            Face = selection.Face;
+            Hair = selection.Hair;
+            Uniform = selection.Uniform;
+            Accessory = selection.Accessory;
+            Backdrop = selection.Backdrop;
+        }
 
         public string ResolvedDialogueTag =>
             !string.IsNullOrWhiteSpace(DialogueTag) ? DialogueTag.Trim().ToUpperInvariant() : Callsign.Trim().ToUpperInvariant();
+
+        public CustomPilotRecord Clone(string newCallsign = null)
+        {
+            return new CustomPilotRecord
+            {
+                Name = Name,
+                Callsign = newCallsign ?? Callsign,
+                DialogueTag = DialogueTag,
+                Persona = Persona,
+                Background = Background,
+                Xp = Xp,
+                Kills = Kills,
+                Sorties = Sorties,
+                PortraitVersion = PortraitVersion,
+                Body = Body,
+                Face = Face,
+                Hair = Hair,
+                Uniform = Uniform,
+                Accessory = Accessory,
+                Backdrop = Backdrop,
+            };
+        }
     }
 
     /// <summary>Decoded custom radio line or exchange.</summary>
@@ -182,6 +229,16 @@ namespace WingCommand
       ""event"": ""BreakCall"",
       ""speakerTag"": ""VALKYRIE"",
       ""text"": ""Lead, missile break break! Hard right now!""
+    },
+    {
+      ""event"": ""Damaged"",
+      ""speakerTag"": ""SPECTRE"",
+      ""text"": ""Damage to port avionics. ECM remains operational.""
+    },
+    {
+      ""event"": ""Maneuvering"",
+      ""speakerTag"": ""VALKYRIE"",
+      ""text"": ""Executing {0}. Keep your eyes open, Lead!""
     }
   ]
 }";
@@ -211,7 +268,17 @@ namespace WingCommand
             int kills = GetInt(dict, "kills", 0);
             int sorties = GetInt(dict, "sorties", 0);
 
-            return new CustomPilotRecord
+            int face = GetInt(dict, "face", -1);
+            int hair = GetInt(dict, "hair", -1);
+            int uniform = GetInt(dict, "uniform", -1);
+            int accessory = GetInt(dict, "accessory", 0);
+            int backdrop = GetInt(dict, "backdrop", -1);
+            int portraitVersion = GetInt(dict, "portraitVersion", 0);
+            PortraitBody body = string.Equals(GetString(dict, "body"), "female", StringComparison.OrdinalIgnoreCase)
+                ? PortraitBody.Female
+                : PortraitBody.Male;
+
+            var record = new CustomPilotRecord
             {
                 Name = name.Trim(),
                 Callsign = callsign.Trim().ToUpperInvariant(),
@@ -222,6 +289,125 @@ namespace WingCommand
                 Kills = Math.Max(0, kills),
                 Sorties = Math.Max(0, sorties),
             };
+
+            if (face >= 0)
+            {
+                PortraitSelection selection = portraitVersion >= 2
+                    ? new PortraitSelection(body, face, hair, uniform, accessory, backdrop)
+                    : PilotPortraitGenerator.FromLegacySelection(face, hair, uniform, backdrop);
+                record.ApplySelection(selection);
+            }
+            return record;
+        }
+
+        public static string Encode(IEnumerable<CustomPilotRecord> pilots, IEnumerable<CustomChatterRecord> chatters = null)
+        {
+            var sb = new StringBuilder();
+            sb.AppendLine("{");
+            sb.AppendLine("  \"pilots\": [");
+
+            bool firstPilot = true;
+            if (pilots != null)
+            {
+                foreach (CustomPilotRecord p in pilots)
+                {
+                    if (p == null || string.IsNullOrWhiteSpace(p.Callsign)) continue;
+                    if (!firstPilot) sb.AppendLine(",");
+                    firstPilot = false;
+
+                    sb.AppendLine("    {");
+                    sb.AppendLine($"      \"name\": \"{EscapeJson(p.Name)}\",");
+                    sb.AppendLine($"      \"callsign\": \"{EscapeJson(p.Callsign)}\",");
+                    sb.AppendLine($"      \"dialogueTag\": \"{EscapeJson(p.ResolvedDialogueTag)}\",");
+                    sb.AppendLine($"      \"persona\": \"{p.Persona}\",");
+                    sb.AppendLine($"      \"background\": \"{EscapeJson(p.Background)}\",");
+                    sb.AppendLine($"      \"xp\": {p.Xp},");
+                    sb.AppendLine($"      \"kills\": {p.Kills},");
+                    sb.Append($"      \"sorties\": {p.Sorties}");
+
+                    if (p.HasCustomPortrait)
+                    {
+                        PortraitSelection selection = p.Selection;
+                        sb.AppendLine(",");
+                        sb.AppendLine("      \"portraitVersion\": 2,");
+                        sb.AppendLine($"      \"body\": \"{PilotPortraitGenerator.BodyLabel(selection.Body).ToLowerInvariant()}\",");
+                        sb.AppendLine($"      \"face\": {selection.Face},");
+                        sb.AppendLine($"      \"hair\": {selection.Hair},");
+                        sb.AppendLine($"      \"uniform\": {selection.Uniform},");
+                        sb.Append($"      \"backdrop\": {selection.Backdrop}");
+                    }
+                    sb.AppendLine();
+                    sb.Append("    }");
+                }
+            }
+            sb.AppendLine();
+            sb.Append("  ]");
+
+            if (chatters != null)
+            {
+                bool anyChatter = false;
+                var chatterSb = new StringBuilder();
+                foreach (CustomChatterRecord c in chatters)
+                {
+                    if (c == null) continue;
+                    if (anyChatter) chatterSb.AppendLine(",");
+                    anyChatter = true;
+
+                    chatterSb.AppendLine("    {");
+                    if (c.IsAmbientExchange)
+                    {
+                        chatterSb.AppendLine($"      \"speakerTag\": \"{EscapeJson(c.SpeakerTag)}\",");
+                        chatterSb.AppendLine($"      \"opening\": \"{EscapeJson(c.Opening)}\",");
+                        chatterSb.AppendLine($"      \"reply\": \"{EscapeJson(c.Reply)}\",");
+                        chatterSb.Append($"      \"replyTag\": \"{EscapeJson(c.ReplyTag)}\"");
+                    }
+                    else if (c.IsEventLine)
+                    {
+                        chatterSb.AppendLine($"      \"event\": \"{EscapeJson(c.Event)}\",");
+                        chatterSb.AppendLine($"      \"speakerTag\": \"{EscapeJson(c.SpeakerTag)}\",");
+                        chatterSb.Append($"      \"text\": \"{EscapeJson(c.Text)}\"");
+                    }
+                    chatterSb.AppendLine();
+                    chatterSb.Append("    }");
+                }
+
+                if (anyChatter)
+                {
+                    sb.AppendLine(",");
+                    sb.AppendLine("  \"chatters\": [");
+                    sb.Append(chatterSb.ToString());
+                    sb.AppendLine();
+                    sb.Append("  ]");
+                }
+            }
+
+            sb.AppendLine();
+            sb.AppendLine("}");
+            return sb.ToString();
+        }
+
+        public static string EncodeSingle(CustomPilotRecord pilot)
+        {
+            if (pilot == null) return "";
+            return Encode(new[] { pilot });
+        }
+
+        public static string RemovePilot(string json, string callsign, out bool removed)
+        {
+            CustomPilotPayload payload = Decode(json);
+            removed = payload.Pilots.RemoveAll(p =>
+                string.Equals(p.Callsign, callsign, StringComparison.OrdinalIgnoreCase)) > 0;
+            return removed ? Encode(payload.Pilots, payload.Chatters) : json;
+        }
+
+        private static string EscapeJson(string str)
+        {
+            if (string.IsNullOrEmpty(str)) return "";
+            return str.Replace("\\", "\\\\")
+                      .Replace("\"", "\\\"")
+                      .Replace("\n", "\\n")
+                      .Replace("\r", "\\r")
+                      .Replace("\t", "\\t");
         }
 
         private static CustomChatterRecord ParseChatter(Dictionary<string, object> dict)

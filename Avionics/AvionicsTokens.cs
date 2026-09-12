@@ -162,8 +162,8 @@ namespace NOAvionics
         public const float FontMicro = 10f;
 
         // --------------------------------------------------------------------- layout
-        public const float PanelWidth = 512f;
-        public const float PanelInnerWidth = 484f; // 512 - 2 * Pad
+        public const float PanelWidth = 480f;
+        public const float PanelInnerWidth = 452f; // 480 - 2 * Pad
         public const float PanelHeight = 596f;
 
         /// <summary>

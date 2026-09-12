@@ -13,6 +13,6 @@ namespace WingCommand
 
         /// <summary>Normal roster limit used by geometry, HUD, and economy; debug bypass may exceed
         /// it.</summary>
-        public const int MaxWingSize = 3;
+        public const int MaxWingSize = 4;
     }
 }

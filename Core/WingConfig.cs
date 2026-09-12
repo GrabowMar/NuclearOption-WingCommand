@@ -33,6 +33,7 @@ namespace WingCommand
         public ConfigEntry<KeyCode> QuickEngageKey { get; private set; }
         public ConfigEntry<KeyCode> QuickDisengageKey { get; private set; }
         public ConfigEntry<KeyCode> QuickAttackKey { get; private set; }
+        public ConfigEntry<KeyCode> QuickBreakKey { get; private set; }
         public ConfigEntry<KeyCode> CycleRoeKey { get; private set; }
 
         // AI settings.
@@ -165,8 +166,9 @@ namespace WingCommand
         private void BindMode(ConfigFile c)
         {
             AiSharpTurns = c.Bind("AI", "AiSharpTurns", true,
-                "Enable stronger turns for airborne AI with sufficient speed and terrain clearance. " +
-                "Applies on the next steering update, including non-wing AI.");
+                "Enable sharp, rapid combat manoeuvres (high-bank slice turns, corner-speed airbraking, " +
+                "coordinated rudder kicks, and elevated pitch authority) for fixed-wing aircraft with sufficient " +
+                "speed and terrain clearance. Applies on the next steering update.");
             AiTargetSpreading = c.Bind("AI", "AiTargetSpreading", true,
                 "Spread locally simulated AI across comparable targets. Applies on the next target " +
                 "selection, including non-wing AI. Performance mode still disables this feature.");
@@ -307,6 +309,8 @@ namespace WingCommand
                 Advanced("Optional hotkey: order the whole wing to fall back / disengage."));
             QuickAttackKey = c.Bind("Keys", "QuickAttackTarget", KeyCode.None,
                 Advanced("Optional hotkey: order the wing to attack the player's currently targeted unit."));
+            QuickBreakKey = c.Bind("Keys", "QuickBreak", KeyCode.None,
+                Advanced("Optional hotkey: order the whole wing to execute a defensive break turn."));
             CycleRoeKey = c.Bind("Keys", "CycleRoe", KeyCode.None,
                 Advanced("Optional hotkey: cycle wing Rules of Engagement (Hold -> Tight -> Free)."));
         }

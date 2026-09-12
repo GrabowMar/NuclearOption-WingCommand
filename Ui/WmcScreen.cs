@@ -29,10 +29,12 @@ namespace WingCommand
         private const float Space5 = WingUi.Space5;
         private const float Space6 = WingUi.Space6;
 
-        private const float FontMicro = WingUi.FontMicro;
-        private const float FontSmall = WingUi.FontSmall;
-        private const float FontBody = WingUi.FontBody;
-        private const float FontLead = WingUi.FontLead;
+        // The panel is scaled beside the map bezel; one logical point of headroom keeps its
+        // dense readouts legible after that fit without enlarging HUD/radial typography.
+        private const float FontMicro = WingUi.FontMicro + 1f;
+        private const float FontSmall = WingUi.FontSmall + 1f;
+        private const float FontBody = WingUi.FontBody + 1f;
+        private const float FontLead = WingUi.FontLead + 1f;
 
         /// <summary>Single-line text-block height for hints, status, and readouts.</summary>
         private const float LineHeight = Space4;
@@ -48,8 +50,8 @@ namespace WingCommand
 
         /// <summary>Visible flight rows matching normal wing capacity; larger debug rosters
         /// paginate.</summary>
-        private const int RosterRowsPerPage = 3;
-        private const int SquadronRowsPerPage = 6;
+        private const int RosterRowsPerPage = 4;
+        private const int SquadronRowsPerPage = 4;
 
         private enum Page
         {
@@ -95,6 +97,7 @@ namespace WingCommand
         private static WingButton jamButton;
         private static WingButton seekAndDestroyButton;
         private static WingButton attackButton;
+        private static WingButton splashButton;
         private static WingButton holdHereButton;
         private static readonly WingButton[] preferenceButtons =
             new WingButton[WingWeaponPreferences.All.Length];
@@ -272,6 +275,7 @@ namespace WingCommand
             reserveHintLabel = null;
             reserveReleaseButton = null;
             reserveHoldButton = null;
+            reserveRelease.Clear();
             offerDetailLabel = null;
             offerLoadoutLabel = null;
             exceedLimitButton = null;
@@ -296,6 +300,7 @@ namespace WingCommand
             jamButton = null;
             seekAndDestroyButton = null;
             attackButton = null;
+            splashButton = null;
             holdHereButton = null;
 
             for (int i = 0; i < preferenceButtons.Length; i++) preferenceButtons[i] = null;
@@ -317,6 +322,7 @@ namespace WingCommand
             templateNewButton = null;
             templateCopyButton = null;
             templateDeleteButton = null;
+            templateDeletion.Clear();
             pylonArea = null;
             pylonPrevButton = null;
             pylonNextButton = null;
@@ -347,15 +353,13 @@ namespace WingCommand
             pilotPortrait = null;
             pilotPortraitFrame = null;
             pilotCardRail = null;
-            pilotKiaOverlay = null;
-            pilotSkillIcons.Clear();
+            pilotSkillCards.Clear();
+            pilotSkillsEmptyLabel = null;
             airframeCardRail = null;
-            airframeTypeLabel = null;
-            airframeStateLabel = null;
-            airframeOrderLabel = null;
-            airframeLoadoutLabel = null;
-            airframeWeaponsLabel = null;
+            airframeNameLabel = null;
+            airframeSlotLabel = null;
             airframeSilhouette = null;
+            sarButton = null;
             inspectPilot = null;
 
             lastTooltip = null;
@@ -494,10 +498,12 @@ namespace WingCommand
             pageHeights[(int)Page.Loadout] = Mathf.Abs(loadoutY) + stripBlock + Pad;
             pageHeights[(int)Page.Wing] = Mathf.Abs(wingY) + stripBlock + Pad;
 
-            // Use the shared fixed height for every tab.
+            // Use one fixed height for every tab, but honour the viewport ceiling. Tactical owns
+            // the only overflow and scrolls it; the fixed Supply/Loadout/Wing layouts fit below it.
             panelHeight = AvTokens.PanelHeight;
             for (int i = 0; i < PageCount; i++)
                 panelHeight = Mathf.Max(panelHeight, pageHeights[i]);
+            panelHeight = Mathf.Min(panelHeight, AvTokens.PanelHeightMax);
 
             FitTacticalViewport();
 
@@ -548,7 +554,7 @@ namespace WingCommand
             y -= bar.height + Space2;
 
             // Keep funds and minimum flight fuel visible above tabs on every page.
-            const float metricHeight = 72f;
+            const float metricHeight = 64f;
             var metrics = new Rect(Pad, y, inner, metricHeight);
             AvStyled.Box(parent, metrics, "metrics");
             float half = inner * 0.5f;
@@ -582,6 +588,8 @@ namespace WingCommand
 
         private static void SetPage(Page next)
         {
+            if (next != Page.Tactical) RosterRow.Disarm();
+            if (next != Page.Loadout) templateDeletion.Clear();
             page = next;
 
             for (int i = 0; i < PageCount; i++)
@@ -673,15 +681,13 @@ namespace WingCommand
             }
         }
 
-        // Compact identity/state/fuel/ammunition columns; other details have dedicated controls or
-        // dossier readouts.
+        // Compact identity and directive state columns; stores and fuel telemetry
+        // are monitored in the Tactical Bento deck below.
         private static readonly Column[] RosterColumns =
         {
-            new Column("PLANE", 28f, 58f),
-            new Column("CALLSIGN", 90f, 90f),
-            new Column("STATE", 184f, 62f),
-            new Column("FUEL", 250f, 38f, rightAligned: true),
-            new Column("AMMO", 292f, 38f, rightAligned: true),
+            new Column("PLANE", 52f, 54f),
+            new Column("CALLSIGN", 110f, 80f),
+            new Column("STATE", 194f, 84f),
         };
 
         /// <summary>Pilot-list header geometry.</summary>
@@ -1042,7 +1048,7 @@ namespace WingCommand
         }
 
         /// <summary>Per-control arm/confirm state bound to subject and timeout. Changing subject disarms;
-        /// RTB and reserve release do not share confirmation.</summary>
+        /// destructive controls keep independent confirmation state.</summary>
         private sealed class Confirmation
         {
             private const float ArmSeconds = 3f;

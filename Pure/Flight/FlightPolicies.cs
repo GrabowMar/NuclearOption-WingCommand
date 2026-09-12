@@ -103,9 +103,9 @@ namespace WingCommand
             AllowsRecovery(s.Order);
 
         public static bool TerrainThreat(in WingSituation s, bool incumbent) =>
-            (incumbent && s.RadarAlt < AbortReleaseAlt) ||
+            (incumbent && s.RadarAlt < AbortReleaseAlt && (s.VerticalSpeed < 5f || s.TerrainUrgency > 0f)) ||
             ImmediateDanger(s.RadarAlt, s.VerticalSpeed, s.TerrainUrgency) ||
-            ShouldAbort(s.RadarAlt, s.LeaderDistance, s.Order, incumbent, s.DeliveryPending);
+            ShouldAbort(s.RadarAlt, s.LeaderDistance, s.Order, incumbent, s.DeliveryPending, s.VerticalSpeed);
 
         /// <summary>Keep the existing recovery controller until a defensive exit is upright, no longer
         /// diving, and has enough forward airspeed to turn toward a task.</summary>
@@ -117,12 +117,14 @@ namespace WingCommand
 
         public static bool ShouldAbort(
             float radarAlt, float leaderDistance, WingOrder order,
-            bool incumbent, bool deliveryPending)
+            bool incumbent, bool deliveryPending, float verticalSpeed = -1f)
         {
             if (deliveryPending) return false;
             if (!AllowsAbort(order)) return false;
             // Exclude apron altitude from pull-up triggers so taxi keeps native ownership.
             if (radarAlt < 8f) return false;
+            // An aircraft climbing positively with clear forward terrain is not in terrain abort.
+            if (verticalSpeed >= 1f) return false;
 
             float alt = incumbent ? AbortReleaseAlt : AbortAlt;
             float range = incumbent ? ReleaseRange : GrabRange;

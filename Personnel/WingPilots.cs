@@ -32,10 +32,12 @@ namespace WingCommand
         public bool Lost;
         public PilotRecoveryStatus RecoveryStatus;
         public readonly List<PilotPerk> Perks = new List<PilotPerk>();
-        public bool SecondChanceUsed;
         public string LastAircraft;
         public string LossCause;
         public string KilledBy;
+        /// <summary>Semantic appearance choices. Renderer-only atlas IDs are resolved at draw time.</summary>
+        public PortraitSelection? PortraitSelection;
+        public bool HasCustomPortrait => PortraitSelection.HasValue;
 
         public WingRank Rank => WingPilotRoster.RankFor(Xp);
     }
@@ -229,7 +231,6 @@ namespace WingCommand
 
             reserved.Remove(pilot);
             assigned[id] = pilot;
-            pilot.SecondChanceUsed = false;
             losses.Remove(id);
             pilot.LastAircraft = aircraft.definition != null ? aircraft.definition.unitName : aircraft.unitName;
             pilot.LossCause = null;
@@ -290,9 +291,11 @@ namespace WingCommand
             WingCommandManager.Instance?.Toast(
                 pilot.Callsign + " (" + pilot.Name + ") was lost - " + RankName(pilot.Rank) +
                 ", " + pilot.Kills + " kill(s)");
-            Plugin.LogVerbose(
+            Plugin.Logger.LogWarning(
                 "[Pilot] " + pilot.Callsign + " lost after " + pilot.Sorties + " sortie(s), " +
-                pilot.Xp + " XP");
+                pilot.Xp + " XP; aircraft=" + pilot.LastAircraft +
+                "; cause=" + (pilot.LossCause ?? "unknown") +
+                "; killer=" + (pilot.KilledBy ?? "unknown"));
         }
 
         internal static void RecordKiller(PersistentID killedID, PersistentID killerID)
@@ -346,12 +349,27 @@ namespace WingCommand
                 Sorties = record.Sorties,
             };
 
+            if (record.HasCustomPortrait)
+            {
+                pilot.PortraitSelection = record.Selection;
+            }
+
             roster.Add(pilot);
             GrantPerks(pilot);
             pool.Add(pilot);
             if (selectedPilot == null) selectedPilot = pilot;
             created++;
             return pilot;
+        }
+
+        /// <summary>Remove an unassigned pilot from the squadron roster.</summary>
+        public static bool RemoveFromSquadron(WingPilot pilot)
+        {
+            if (pilot == null || IsFlying(pilot) || IsReserved(pilot)) return false;
+            pool.Remove(pilot);
+            bool removed = roster.Remove(pilot);
+            if (selectedPilot == pilot) AdvanceSelected(null);
+            return removed;
         }
 
         private static WingPilot Create()
@@ -449,7 +467,6 @@ namespace WingCommand
             if (pilot == null) return;
 
             pilot.Sorties++;
-            pilot.SecondChanceUsed = false;
             Award(aircraft, WingTuning.XpPerSortie, "sortie");
         }
 
@@ -493,11 +510,14 @@ namespace WingCommand
 
         /// <summary>Pilot weapon-envelope scale, never below 1.</summary>
         public static float EnvelopeScale(Aircraft aircraft) => (1f + SkillBonus(aircraft) * 0.5f) *
-            (WingSurvivalPerks.Has(aircraft, PilotPerk.Standoff) ? 1.25f : 1f);
+            (WingSurvivalPerks.Has(aircraft, PilotPerk.Standoff) ? 1.30f : 1f);
 
         /// <summary>Pilot shot-interval scale, never above 1.</summary>
         public static float ReactionScale(Aircraft aircraft) => (1f - SkillBonus(aircraft) * 0.5f) *
-            (WingSurvivalPerks.Has(aircraft, PilotPerk.QuickDraw) ? 0.65f : 1f);
+            (WingSurvivalPerks.Has(aircraft, PilotPerk.QuickDraw) ? 0.60f : 1f);
+
+        public static bool HasPerk(Aircraft aircraft, PilotPerk perk) => WingSurvivalPerks.Has(aircraft, perk);
+        public static bool HasPerk(WingPilot pilot, PilotPerk perk) => WingSurvivalPerks.Has(pilot, perk);
 
         // Roster presentation.
 

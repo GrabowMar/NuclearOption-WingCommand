@@ -96,9 +96,9 @@ namespace WingCommand
             order == WingOrder.Formation || order == WingOrder.JamTarget;
 
         /// <summary>Detect completed designations even while another behaviour suspends their flight
-        /// state.</summary>
+        /// state. FireForEffect manages its own rollover and completion in AttackRunState.</summary>
         public static bool TargetTaskComplete(WingOrder order, bool targetAlive, bool deliveryPending) =>
-            !deliveryPending && CarriesTarget(order) && !targetAlive;
+            !deliveryPending && (order == WingOrder.Attack || order == WingOrder.JamTarget) && !targetAlive;
 
         /// <summary>Allow standing orders during pending delivery; reject manoeuvres that would expire
         /// during taxi.</summary>
@@ -159,7 +159,7 @@ namespace WingCommand
 
         /// <summary>Armed orders requiring a hostile cursor target.</summary>
         public static bool PicksTarget(WingOrder order) =>
-            order == WingOrder.Attack;
+            order == WingOrder.Attack || order == WingOrder.FireForEffect;
 
         /// <summary>Orders eligible for queued follow-ons, including Hold once its orbit is
         /// reached.</summary>
@@ -232,7 +232,7 @@ namespace WingCommand
                     : MapOrderButtonIntent.Disarm;
             }
 
-            if (order == WingOrder.Attack && hasPlayerTargets)
+            if ((order == WingOrder.Attack || order == WingOrder.FireForEffect) && hasPlayerTargets)
                 return MapOrderButtonIntent.ExecuteAndArm;
 
             return MapOrderButtonIntent.Arm;
@@ -242,6 +242,8 @@ namespace WingCommand
         {
             if (order == WingOrder.Attack)
                 return "ATTACK TARGET ARMED · RIGHT-CLICK A HOSTILE · SHIFT QUEUES";
+            if (order == WingOrder.FireForEffect)
+                return "SPLASH 'EM ARMED · RIGHT-CLICK A HOSTILE · SHIFT QUEUES";
             if (order == WingOrder.DeliverCargo)
                 return "DELIVER CARGO ARMED · RIGHT-CLICK MAP · SHIFT QUEUES, OR PRESS AGAIN FOR THE STANDARD ROUTE";
             if (order == WingOrder.OrbitHere)

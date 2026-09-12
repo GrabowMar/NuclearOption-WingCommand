@@ -322,4 +322,31 @@ namespace WingCommand
             !string.IsNullOrEmpty(value)
             && string.Equals(value, key, StringComparison.OrdinalIgnoreCase);
     }
+
+    /// <summary>Guards auto-RTB candidate selection so wing members, player aircraft, and pending deliveries
+    /// are never sacrificed to make room for new requisitions.</summary>
+    internal static class AutoRtbCandidatePolicy
+    {
+        public static bool IsCandidateEligible(bool disabled,
+                                               bool sameHq,
+                                               bool hasPlayer,
+                                               bool isWingMemberOrLeader,
+                                               bool isRecruitPending,
+                                               bool isPurchased,
+                                               bool isDeparting,
+                                               bool isPilotUnavailable,
+                                               bool isLanding)
+        {
+            if (disabled) return false;
+            if (!sameHq) return false;
+            if (hasPlayer) return false;
+            if (isWingMemberOrLeader) return false;
+            if (isRecruitPending) return false;
+            if (isPurchased) return false;
+            if (isDeparting) return false;
+            if (isPilotUnavailable) return false;
+            if (isLanding) return false;
+            return true;
+        }
+    }
 }

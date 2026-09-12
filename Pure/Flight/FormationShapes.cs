@@ -50,5 +50,24 @@ namespace WingCommand
                 default:                          return shape.ToString();
             }
         }
+
+        /// <summary>Brief tactical doctrine role for every shape.</summary>
+        public static string Role(FormationShape shape)
+        {
+            switch (shape)
+            {
+                case FormationShape.EchelonRight: return "Off-axis radar & free egress right";
+                case FormationShape.EchelonLeft:  return "Off-axis radar & free egress left";
+                case FormationShape.LineAbreast:  return "Frontal sweep & simultaneous lock";
+                case FormationShape.Trail:        return "Narrow corridor & terrain masking";
+                case FormationShape.CombatSpread: return "Mutual missile defense & wide scan";
+                case FormationShape.FingerFour:   return "Two-element paired combat sweep";
+                case FormationShape.Vic:          return "Flight symmetry & leader cohesion";
+                case FormationShape.Diamond:      return "Tight perimeter & concentrated mass";
+                case FormationShape.Ladder:       return "Layered altitude & stepped escort";
+                case FormationShape.Wall:         return "Full-aspect barrier combat sweep";
+                default:                          return "Standard tactical formation";
+            }
+        }
     }
 }

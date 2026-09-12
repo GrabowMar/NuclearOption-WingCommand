@@ -63,6 +63,18 @@ namespace WingCommand
             if (member != null && member.Alive) selected.Add(member);
         }
 
+        public void SelectSlots(WingRegistry wing, int minSlot, int maxSlot)
+        {
+            selected.Clear();
+            CurrentMode = Mode.Explicit;
+            if (wing == null) return;
+            foreach (WingMember member in wing.Members)
+            {
+                if (member != null && member.Alive && member.Slot >= minSlot && member.Slot <= maxSlot)
+                    selected.Add(member);
+            }
+        }
+
         public void ClickMember(WingMember member, bool toggle, WingRegistry wing = null)
         {
             if (member == null || !member.Alive) return;

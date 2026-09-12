@@ -34,9 +34,12 @@ namespace WingCommand
             float verticalSpeed = Aircraft.rb != null ? Aircraft.rb.velocity.y : 0f;
             float terrainUrgency = Aircraft.autopilot?.GetTerrainWarningSystem()?.urgency ?? 0f;
             // Urgent terrain telemetry must not wait for the optional Performance decision cadence.
+            float effectiveAlt = Aircraft.radarAlt;
+            if (PersonnelFacade.Roster.HasPerk(Aircraft, PilotPerk.TerrainHugger))
+                effectiveAlt -= PilotPerks.TerrainFloorOffset(true);
             bool terrainDanger = !deliveryPending && !IsSurface &&
                 TerrainAbortPolicy.AllowsRecovery(Order) &&
-                TerrainAbortPolicy.ImmediateDanger(Aircraft.radarAlt, verticalSpeed, terrainUrgency);
+                TerrainAbortPolicy.ImmediateDanger(effectiveAlt, verticalSpeed, terrainUrgency);
             bool controlLost = !deliveryPending &&
                 ((enteredState is WingPilotState && !ReferenceEquals(Pilot.currentState, enteredState)) ||
                  IsRegisteredBehaviourStale(IsSurface ? WingBehaviours.Surface : brain.Current.BehaviourId));

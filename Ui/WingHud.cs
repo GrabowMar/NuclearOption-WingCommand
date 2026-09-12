@@ -80,22 +80,48 @@ namespace WingCommand
         private static int lastStatusCount = -1;
         private static readonly List<StatusRow> statusRows = new List<StatusRow>();
 
+        private static RectTransform ribbonRoot;
+        private static CombatHUD ribbonHud;
+        private static Canvas ribbonCanvas;
+        private static float nextRibbonRefresh;
+        private static int lastRibbonCount = -1;
+        private static readonly List<RibbonPip> ribbonPips = new List<RibbonPip>();
+
         /// <summary>Build inside the native HUD canvas to inherit font, scale, theme, and resolution
         /// behaviour.</summary>
         public static void TickStatusPanel(WingRegistry wing)
         {
             CombatHUD hud = SceneSingleton<CombatHUD>.i;
             DynamicMap map = SceneSingleton<DynamicMap>.i;
-            bool visible = Plugin.Settings.ShowHud.Value && wing.Count > 0 &&
-                           !DynamicMap.mapMaximized && hud != null && hud.isActiveAndEnabled &&
-                           map != null && map.gameObject.activeInHierarchy;
-            if (!visible)
+            bool mapOpen = map != null && map.gameObject.activeInHierarchy && !DynamicMap.mapMaximized;
+            bool hudActive = hud != null && hud.isActiveAndEnabled;
+            bool wingActive = Plugin.Settings.ShowHud.Value && wing != null && wing.Count > 0;
+
+            if (!wingActive || !hudActive)
             {
-                if (statusRoot != null) statusRoot.gameObject.SetActive(false);
+                if (statusRoot != null && statusRoot.gameObject.activeSelf) statusRoot.gameObject.SetActive(false);
+                if (ribbonRoot != null && ribbonRoot.gameObject.activeSelf) ribbonRoot.gameObject.SetActive(false);
                 return;
             }
 
-            // Resolve scene canvas hierarchy only at creation or when the HUD instance changes.
+            if (mapOpen)
+            {
+                if (ribbonRoot != null && ribbonRoot.gameObject.activeSelf)
+                    ribbonRoot.gameObject.SetActive(false);
+
+                TickDockedMapPanel(wing, hud, map);
+            }
+            else
+            {
+                if (statusRoot != null && statusRoot.gameObject.activeSelf)
+                    statusRoot.gameObject.SetActive(false);
+
+                TickCombatRibbon(wing, hud);
+            }
+        }
+
+        private static void TickDockedMapPanel(WingRegistry wing, CombatHUD hud, DynamicMap map)
+        {
             Canvas canvas = statusRoot != null && statusHud == hud
                 ? statusCanvas
                 : hud.GetComponentInParent<Canvas>();
@@ -122,8 +148,48 @@ namespace WingCommand
             RefreshStatusPanel(wing);
         }
 
+        private static void TickCombatRibbon(WingRegistry wing, CombatHUD hud)
+        {
+            Canvas canvas = ribbonRoot != null && ribbonHud == hud
+                ? ribbonCanvas
+                : hud.GetComponentInParent<Canvas>();
+            if (canvas == null)
+            {
+                if (ribbonRoot != null) ribbonRoot.gameObject.SetActive(false);
+                return;
+            }
+
+            if (ribbonRoot == null || ribbonCanvas != canvas)
+            {
+                ResetCombatRibbon();
+                BuildCombatRibbon(hud, canvas);
+            }
+
+            if (ribbonRoot == null) return;
+            if (!ribbonRoot.gameObject.activeSelf) ribbonRoot.gameObject.SetActive(true);
+
+            PositionCombatRibbon(canvas);
+
+            if (Time.unscaledTime < nextRibbonRefresh && lastRibbonCount == wing.Count) return;
+            nextRibbonRefresh = Time.unscaledTime + 0.2f;
+            lastRibbonCount = wing.Count;
+            RefreshCombatRibbon(wing);
+        }
+
+        public static void ResetCombatRibbon()
+        {
+            if (ribbonRoot != null) Object.Destroy(ribbonRoot.gameObject);
+            ribbonRoot = null;
+            ribbonHud = null;
+            ribbonCanvas = null;
+            ribbonPips.Clear();
+            nextRibbonRefresh = 0f;
+            lastRibbonCount = -1;
+        }
+
         public static void ResetStatusPanel()
         {
+            ResetCombatRibbon();
             if (statusRoot != null) Object.Destroy(statusRoot.gameObject);
             statusRoot = null;
             statusTitle = null;
@@ -140,6 +206,54 @@ namespace WingCommand
             }
             nextStatusRefresh = 0f;
             lastStatusCount = -1;
+        }
+
+        private static void BuildCombatRibbon(CombatHUD hud, Canvas canvas)
+        {
+            TMP_Text template = hud.GetComponentInChildren<TMP_Text>(includeInactive: true);
+            if (template != null) WingUi.Font = template.font;
+            ribbonHud = hud;
+            ribbonCanvas = canvas;
+
+            var root = new GameObject("WingCommand_Ribbon", typeof(RectTransform));
+            ribbonRoot = root.GetComponent<RectTransform>();
+            ribbonRoot.SetParent(canvas.transform, worldPositionStays: false);
+            ribbonRoot.SetAsLastSibling();
+
+            PositionCombatRibbon(canvas);
+        }
+
+        private static void PositionCombatRibbon(Canvas canvas)
+        {
+            if (ribbonRoot == null) return;
+            ribbonRoot.anchorMin = ribbonRoot.anchorMax = new Vector2(0f, 0f);
+            ribbonRoot.pivot = new Vector2(0f, 0f);
+
+            Vector3 basePos = new Vector3(24f, 180f, 0f);
+            if (Plugin.Settings != null)
+                basePos += new Vector3(Plugin.Settings.WingHudX.Value, Plugin.Settings.WingHudY.Value, 0f);
+
+            ribbonRoot.anchoredPosition = basePos;
+            ribbonRoot.localRotation = Quaternion.identity;
+            ribbonRoot.localScale = Vector3.one;
+        }
+
+        private static void RefreshCombatRibbon(WingRegistry wing)
+        {
+            while (ribbonPips.Count < wing.Count)
+                ribbonPips.Add(new RibbonPip(ribbonRoot, ribbonPips.Count));
+
+            for (int i = 0; i < ribbonPips.Count; i++)
+            {
+                if (i < wing.Count)
+                {
+                    ribbonPips[i].Place(i);
+                    ribbonPips[i].Bind(wing.Members[i], wing.Leader);
+                }
+                else ribbonPips[i].Hide();
+            }
+
+            ribbonRoot.sizeDelta = new Vector2(142f, wing.Count * 30f);
         }
 
         private static void BuildStatusPanel(CombatHUD hud, Canvas canvas, DynamicMap map)
@@ -450,76 +564,172 @@ namespace WingCommand
             {
                 if (go.activeSelf) go.SetActive(false);
             }
+        }
 
-            private static bool IsDamaged(Aircraft aircraft)
+        private static bool IsDamaged(Aircraft aircraft)
+        {
+            if (aircraft == null || aircraft.partLookup == null) return false;
+            foreach (UnitPart part in aircraft.partLookup)
             {
-                if (aircraft == null || aircraft.partLookup == null) return false;
-                foreach (UnitPart part in aircraft.partLookup)
-                {
-                    if (part != null && (part.IsDetached() || part.hitPoints < 99.5f))
-                        return true;
-                }
-                return false;
+                if (part != null && (part.IsDetached() || part.hitPoints < 99.5f))
+                    return true;
+            }
+            return false;
+        }
+
+        private static float HealthFraction(Aircraft aircraft)
+        {
+            if (aircraft == null || aircraft.partLookup == null || aircraft.partLookup.Count == 0) return 0f;
+            float sum = 0f;
+            int count = 0;
+            foreach (UnitPart part in aircraft.partLookup)
+            {
+                if (part == null) continue;
+                count++;
+                if (!part.IsDetached())
+                    sum += Mathf.Clamp01(part.hitPoints / 100f);
+            }
+            return count > 0 ? sum / count : 0f;
+        }
+
+        /// <summary>Order abbreviation with non-default weapon preference; omit AUTO to keep status concise.</summary>
+        private static string StateText(WingMember member)
+        {
+            if (member == null) return string.Empty;
+
+            string delivery = WingDeliveryTracker.GetDeliveryTag(member.Aircraft);
+            if (delivery != null) return delivery;
+
+            string order = OrderCode(member);
+
+            if (IsDamaged(member.Aircraft))
+            {
+                return order + " · DMG";
             }
 
-            /// <summary>Order abbreviation with non-default weapon preference; omit AUTO to keep status concise.</summary>
-            private static string StateText(WingMember member)
+            if (member.Fuel <= (Plugin.Settings != null ? Plugin.Settings.BingoFuel : WingTuning.BingoFuel))
             {
-                if (member == null) return string.Empty;
+                return order + " · BINGO";
+            }
 
-                string delivery = WingDeliveryTracker.GetDeliveryTag(member.Aircraft);
-                if (delivery != null) return delivery;
+            if (member.Ammo > 0 && CombatFacade.Weapons.GetGuidedAmmo(member.Aircraft) == 0)
+            {
+                return order + " · WINC";
+            }
+
+            return member.WeaponPreference == WingWeaponPreference.Auto
+                ? order
+                : order + " · " + WingWeaponPreferences.ShortLabel(member.WeaponPreference);
+        }
+
+        private static string OrderCode(WingMember member)
+        {
+            // Display active override behaviour first; null falls back to the standing order.
+            string behaviour = WingBehaviourLabels.ShortCode(member.Behaviour.BehaviourId);
+            if (behaviour != null) return behaviour;
+
+            // Use host short-code overrides directly; HUD space is narrower than catalogue labels.
+            string host = WingHost.Current.ShortLabelFor(member.Order);
+            if (host != null) return host;
+
+            switch (member.Order)
+            {
+                case WingOrder.Engage:       return "ENG";
+                case WingOrder.ReturnToBase: return "RTB";
+                case WingOrder.FallBack:    return "FALL";
+                case WingOrder.OrbitHere:   return "CAP";
+                case WingOrder.DeliverCargo: return "CARGO";
+                case WingOrder.LandHere:    return "LAND";
+                case WingOrder.Attack:      return "ATK";
+                case WingOrder.FireForEffect: return "SPLASH";
+                case WingOrder.SeekAndDestroy: return "S&D";
+                case WingOrder.JamTarget:   return "JAM";
+                case WingOrder.Maneuver:    return "MNVR";
+                case WingOrder.StandDown:   return "WAIT";
+                default:                    return "FORM";
+            }
+        }
+
+        private sealed class RibbonPip
+        {
+            private readonly GameObject go;
+            private readonly RectTransform rect;
+            private readonly Image pipRail;
+            private readonly TMP_Text title;
+            private readonly TMP_Text stats;
+
+            public RibbonPip(RectTransform parent, int index)
+            {
+                go = new GameObject("RibbonPip_" + (index + 1), typeof(RectTransform));
+                rect = go.GetComponent<RectTransform>();
+                rect.SetParent(parent, worldPositionStays: false);
+
+                Image bg = go.AddComponent<Image>();
+                bg.color = new Color(0.015f, 0.035f, 0.04f, 0.78f);
+                bg.raycastTarget = false;
+
+                var railObj = new GameObject("Rail", typeof(RectTransform), typeof(Image));
+                RectTransform railRect = railObj.GetComponent<RectTransform>();
+                railRect.SetParent(rect, worldPositionStays: false);
+                WingUi.Place(railRect, new Rect(0f, 0f, 3f, 26f));
+                pipRail = railObj.GetComponent<Image>();
+                pipRail.raycastTarget = false;
+
+                title = WingUi.Label(rect, "", new Rect(7f, -2f, 134f, 14f),
+                                     WingMarkers.MemberColor, WingUi.FontSmall, FontStyles.Bold,
+                                     TextAlignmentOptions.Left);
+
+                stats = WingUi.Label(rect, "", new Rect(7f, -14f, 134f, 12f),
+                                     WingUi.TextPrimary, WingUi.FontMicro, FontStyles.Normal,
+                                     TextAlignmentOptions.Left);
+            }
+
+            public void Place(int index)
+            {
+                WingUi.Place(rect, new Rect(0f, index * 29f, 142f, 26f));
+            }
+
+            public void Bind(WingMember member, Aircraft leader)
+            {
+                if (!go.activeSelf) go.SetActive(true);
+
+                Aircraft aircraft = member.Aircraft;
+                float health = HealthFraction(aircraft);
+                int healthPct = Mathf.RoundToInt(health * 100f);
+                int fuelPct = Mathf.RoundToInt(member.Fuel * 100f);
+
+                float range = aircraft != null && leader != null
+                    ? Mathf.Sqrt(FastMath.SquareDistance(
+                        aircraft.GlobalPosition(), leader.GlobalPosition()))
+                    : 0f;
+
+                string call = member.Crew != null && !string.IsNullOrWhiteSpace(member.Crew.Callsign)
+                    ? member.Crew.Callsign.ToUpperInvariant()
+                    : (aircraft != null && aircraft.definition != null ? aircraft.definition.code : "WNG");
 
                 string order = OrderCode(member);
+                title.text = $"{member.Slot} {call} · {order}";
+                stats.text = $"H:{healthPct}%  F:{fuelPct}%  {UnitConverter.DistanceReading(range)}";
 
-                if (IsDamaged(member.Aircraft))
-                {
-                    return order + " · DMG";
-                }
+                bool damaged = IsDamaged(aircraft);
+                float bingo = Plugin.Settings != null ? Plugin.Settings.BingoFuel : WingTuning.BingoFuel;
+                bool lowStores = member.Fuel <= bingo || member.Ammo <= 0;
 
-                if (member.Fuel <= (Plugin.Settings != null ? Plugin.Settings.BingoFuel : WingTuning.BingoFuel))
-                {
-                    return order + " · BINGO";
-                }
+                Color color = !member.Alive || healthPct < 25 || member.IsPanicking
+                    ? AvTheme.Alert
+                    : (damaged || healthPct < 60 || lowStores)
+                        ? AvTheme.Warning
+                        : WingMarkers.MemberColor;
 
-                if (member.Ammo > 0 && CombatFacade.Weapons.GetGuidedAmmo(member.Aircraft) == 0)
-                {
-                    return order + " · WINC";
-                }
-
-                return member.WeaponPreference == WingWeaponPreference.Auto
-                    ? order
-                    : order + " · " + WingWeaponPreferences.ShortLabel(member.WeaponPreference);
+                pipRail.color = color;
+                title.color = color;
+                stats.color = (!member.Alive || healthPct < 25) ? AvTheme.Alert : WingUi.TextPrimary;
             }
 
-            private static string OrderCode(WingMember member)
+            public void Hide()
             {
-                // Display active override behaviour first; null falls back to the standing order.
-                string behaviour = WingBehaviourLabels.ShortCode(member.Behaviour.BehaviourId);
-                if (behaviour != null) return behaviour;
-
-                // Use host short-code overrides directly; HUD space is narrower than catalogue labels.
-                string host = WingHost.Current.ShortLabelFor(member.Order);
-                if (host != null) return host;
-
-                switch (member.Order)
-                {
-                    case WingOrder.Engage:       return "ENG";
-                    case WingOrder.ReturnToBase: return "RTB";
-                    case WingOrder.FallBack:    return "FALL";
-                    case WingOrder.OrbitHere:   return "CAP";
-                    case WingOrder.DeliverCargo: return "CARGO";
-                    case WingOrder.LandHere:    return "LAND";
-                    case WingOrder.Attack:      return "ATK";
-                    case WingOrder.FireForEffect: return "SPLASH";
-                    case WingOrder.SeekAndDestroy: return "S&D";
-                    case WingOrder.JamTarget:   return "JAM";
-                    case WingOrder.Maneuver:    return "MNVR";
-                    case WingOrder.StandDown:   return "WAIT";
-                    default:                    return "FORM";
-                }
+                if (go.activeSelf) go.SetActive(false);
             }
-
         }
 
         private static Image StatusIcon(RectTransform parent, Rect rect)

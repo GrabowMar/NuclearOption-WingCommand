@@ -1,9 +1,38 @@
 using System.Collections.Generic;
+using System.Linq;
 
 namespace WingCommand
 {
     internal partial class WingCommandManager
     {
+        internal bool CanControlAircraft(WingMember member) =>
+            member != null && Wing.Members.Contains(member) && member.IsCommandable &&
+            member.Aircraft != null && member.Aircraft.LocalSim && member.Aircraft.Player == null &&
+            !member.Aircraft.HasEjected();
+
+        internal void ToggleMemberRadar(WingMember member)
+        {
+            if (!CanControlAircraft(member) || member.Aircraft.radar == null) return;
+            // The player RPC requires ownership; server-owned wing AI has no player owner.
+            if (member.Aircraft.IsServer)
+            {
+                bool enabled = !member.Aircraft.radar.activated;
+                member.Aircraft.UserCode_CmdToggleRadar_1821461427();
+                member.Aircraft.radar.activated = enabled;
+            }
+            else
+                member.Aircraft.CmdToggleRadar();
+            Toast(member.Name + ": radar toggle requested");
+        }
+
+        internal void EjectMember(WingMember member)
+        {
+            if (!CanControlAircraft(member) || member.IsSurface) return;
+            member.AbandonRefit();
+            member.Aircraft.StartEjectionSequence();
+            Toast(member.Name + ": ejection initiated");
+        }
+
         internal void Execute(WingAction action) => Execute(action, wholeWing: true);
 
         /// <summary>Execute a UI action. Radial and hotkeys target the whole wing; WMC and map pass
@@ -93,6 +122,10 @@ namespace WingCommand
                     Toast("ROE: " + CombatFacade.Roe.Label(Wing.Roe));
                     break;
                 }
+
+                case WingAction.DefensiveBreak:
+                    ExecuteManeuver(ManeuverKind.BreakLeft, wholeWing);
+                    break;
             }
         }
 
@@ -133,8 +166,13 @@ namespace WingCommand
 
         internal void AttackUnit(Unit target, bool append = false)
         {
+            IssueTargetOrder(WingOrder.Attack, target, append);
+        }
+
+        internal void IssueTargetOrder(WingOrder order, Unit target, bool append = false)
+        {
             if (target == null || target.disabled) return;
-            IssueMapTask(WingDirective.Attack(target), WingOrder.Attack, append);
+            IssueMapTask(WingDirective.AtTarget(order, target), order, append);
         }
 
         private void IssueMapTask(WingDirective directive, WingOrder order, bool append)
@@ -208,8 +246,11 @@ namespace WingCommand
                     return;
 
                 case MapOrderButtonIntent.ExecuteAndArm:
-                    Show(Commands.Attack(CurrentPlayerTargets(), wholeWing: false,
-                                         forceAll: false));
+                    if (order == WingOrder.FireForEffect)
+                        Show(Commands.FireForEffect(CurrentPlayerTargets(), wholeWing: false));
+                    else
+                        Show(Commands.Attack(CurrentPlayerTargets(), wholeWing: false,
+                                             forceAll: false));
                     mapLayer?.ArmPointOrder(order);
                     return;
 

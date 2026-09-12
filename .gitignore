@@ -5,6 +5,8 @@ obj/
 # Editor settings and user state
 .vs/
 .idea/
+.vscode/
+.history/
 *.user
 *.suo
 
@@ -21,8 +23,9 @@ build/
 # Local documentation
 docs/
 
-# Unpublished local agent skills
+# Unpublished local agent skills and definitions
 .opencode/
+.agents/
 
 # Local skill copies managed by nomod skills
 .claude/skills/
@@ -30,20 +33,46 @@ docs/
 # Local nomodkit sessions and caches
 .nomodkit/
 
-# Local agent configuration
+# Local agent & LLM configuration, sessions, and memory
 .claude/
+.cursor/
+.cursorrules
+.gemini/
+.copilot/
+.openhands/
+.aider*
+.chat/
+.prompts/
+prompts/
+*.prompt
+*.prompt.md
 
 # Excluded CI workflow files
 .github/workflows/
 
 # Local agent instructions
 CLAUDE.md
+AGENTS.md
+GEMINI.md
+COPILOT.md
+.github/copilot-instructions.md
 
 # Debug artifacts, binaries, and test results
 .dll-backup/
+.artifacts/
+tests/.artifacts/
 *.dll
 *.pdb
 *.exe
 *.log
+*.binlog
 TestResults/
 *.trx
+
+# Temporary files, patches, and backups
+*.tmp
+*.bak
+*.orig
+*.rej
+*.patch
+*.diff

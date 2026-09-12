@@ -26,73 +26,110 @@ namespace WingCommand.PureTests
         }
 
         [Fact]
-        public void HairAndUniformAlwaysMatchTheFacePool()
+        public void SelectionsAreStableAndResolveOnlyToTheirBodySpecificAssetPools()
         {
-            var combinations = new HashSet<(int, int, int)>();
+            var faces = new HashSet<int>();
+            var facesByFaction = new[] { new HashSet<int>(), new HashSet<int>() };
             for (int i = 0; i < 2000; i++)
             {
-                string identity = "pilot " + i;
-                var parts = PilotPortraitGenerator.Select(identity);
-                Assert.Equal(parts, PilotPortraitGenerator.Select(identity));
-                Assert.InRange(parts.Face, 0, 5);
-                if (parts.Hair != -1)
-                    Assert.InRange(parts.Hair, parts.Face < 3 ? 6 : 10, parts.Face < 3 ? 9 : 13);
-                Assert.InRange(parts.Uniform, parts.Face < 3 ? 14 : 16, parts.Face < 3 ? 15 : 17);
-                combinations.Add((parts.Face, parts.Hair, parts.Uniform));
+                PortraitSelection selection = PilotPortraitGenerator.Select("pilot " + i);
+                Assert.Equal(selection, PilotPortraitGenerator.Select("pilot " + i));
+                Assert.InRange(selection.Face, 0, PilotPortraitGenerator.FacesPerBody - 1);
+                Assert.InRange(selection.Hair, 0, PilotPortraitGenerator.HairCount - 1);
+                Assert.InRange(selection.Uniform, 0, PilotPortraitGenerator.UniformCount - 1);
+                Assert.Equal(0, selection.Accessory);
+
+                ResolvedPortraitParts parts = PilotPortraitGenerator.Resolve(selection);
+                bool female = selection.Body == PortraitBody.Female;
+                Assert.InRange(parts.FaceTile, female ? 6 : 0, female ? 11 : 5);
+                Assert.InRange(parts.UniformTile, female ? 28 : 24, female ? 31 : 27);
+                if (parts.HairTile >= 0) Assert.InRange(parts.HairTile, female ? 18 : 12, female ? 23 : 17);
+
+                faces.Add(parts.FaceTile);
+                facesByFaction[selection.Uniform / 2].Add(parts.FaceTile);
             }
-            Assert.Equal(60, combinations.Count);
+            Assert.Equal(12, faces.Count);
+            Assert.All(facesByFaction, pool => Assert.Equal(12, pool.Count));
         }
 
         [Fact]
-        public void PortraitsAreStableOpaqueAndBlendRegisteredLayersInOrder()
+        public void LegacySelectionsMigrateToSemanticGenderedChoices()
         {
-            int width = PilotPortraitGenerator.Width, height = PilotPortraitGenerator.Height;
+            PortraitSelection rawFemale = PilotPortraitGenerator.FromLegacySelection(4, 2, 1, 2);
+            Assert.Equal(PortraitBody.Female, rawFemale.Body);
+            Assert.Equal(1, rawFemale.Face);
+            Assert.Equal(3, rawFemale.Hair);
+            Assert.Equal(1, rawFemale.Uniform);
+            Assert.Equal(2, rawFemale.Backdrop);
+
+            PortraitSelection badExport = PilotPortraitGenerator.FromLegacySelection(1, 8, 15, 1);
+            Assert.Equal(PortraitBody.Male, badExport.Body);
+            Assert.Equal(3, badExport.Hair);
+            Assert.Equal(1, badExport.Uniform);
+            Assert.Equal(0, badExport.Accessory);
+        }
+
+        [Fact]
+        public void PortraitsAreStableOpaqueAndHairIsRenderedLast()
+        {
+            int width = PilotPortraitGenerator.Width;
+            int height = PilotPortraitGenerator.Height;
             var atlas = new byte[PilotPortraitGenerator.AtlasWidth * PilotPortraitGenerator.AtlasHeight * 4];
-            var blank = PilotPortraitGenerator.Compose("A. Brennan|TALLY", atlas);
-            Assert.Equal(blank, PilotPortraitGenerator.Compose("A. Brennan|TALLY", atlas));
-            Assert.Throws<ArgumentException>(() => PilotPortraitGenerator.Compose("test", new byte[8]));
+            var selection = new PortraitSelection(PortraitBody.Male, 0, 1, 0, 1, 0);
+            var blank = PilotPortraitGenerator.Compose(selection, atlas);
+            Assert.Equal(blank, PilotPortraitGenerator.Compose(selection, atlas));
+            Assert.Throws<ArgumentException>(() => PilotPortraitGenerator.Compose(selection, new byte[8]));
 
-            // Half-transparent uniform covers the face; transparent hair leaves it intact.
-            for (int tile = 0; tile < 20; tile++)
-            {
-                int p = ((4 - tile / 4) * height * width * 4 + tile % 4 * width) * 4;
-                atlas[p + ((tile >= 14 && tile < 18) ? 0 : 2)] = 240;
-                atlas[p + 3] = (byte)((tile >= 14 && tile < 18) ? 128 : tile < 6 ? 255 : 0);
-            }
-            var output = PilotPortraitGenerator.Compose("A. Brennan|TALLY", atlas);
-            Assert.Equal(output, PilotPortraitGenerator.Compose("A. Brennan|TALLY", atlas));
-            Assert.Equal(width * height * 4, output.Length);
-            Assert.InRange(output[0], (byte)75, (byte)100);
-            Assert.InRange(output[2], (byte)85, (byte)115);
-            Assert.Equal(blank[4], output[4]);
-            for (int p = 3; p < output.Length; p += 4) Assert.Equal(255, output[p]);
+            ResolvedPortraitParts parts = PilotPortraitGenerator.Resolve(selection);
+            SetPixel(atlas, parts.FaceTile, 50, 50, 240, 0, 0, 255);
+            SetPixel(atlas, parts.UniformTile, 50, 50, 0, 240, 0, 255);
+            SetPixel(atlas, parts.HairTile, 50, 50, 0, 0, 240, 255);
+            var withHair = PilotPortraitGenerator.Compose(
+                new PortraitSelection(PortraitBody.Male, 0, 1, 0, 0, 0), atlas);
+            var withoutHair = PilotPortraitGenerator.Compose(
+                new PortraitSelection(PortraitBody.Male, 0, 0, 0, 0, 0), atlas);
 
-            for (int tile = 6; tile < 14; tile++)
+            int sample = (50 * width + 50) * 4;
+            Assert.True(withHair[sample + 2] > withoutHair[sample + 2]);
+            Assert.True(withHair[sample + 2] > withHair[sample + 1]);
+            Assert.Equal(width * height * 4, withHair.Length);
+            for (int p = 3; p < withHair.Length; p += 4) Assert.Equal(255, withHair[p]);
+        }
+
+        [Fact]
+        public void RetiredEquipmentCannotChangeThePortraitOrHideHair()
+        {
+            var atlas = new byte[PilotPortraitGenerator.AtlasWidth * PilotPortraitGenerator.AtlasHeight * 4];
+            foreach (PortraitBody body in new[] { PortraitBody.Male, PortraitBody.Female })
             {
-                int p = ((4 - tile / 4) * height * width * 4 + tile % 4 * width) * 4;
-                atlas[p] = 0; atlas[p + 1] = 240; atlas[p + 2] = 0; atlas[p + 3] = 255;
-            }
-            bool sawHair = false;
-            for (int i = 0; i < 20; i++)
-            {
-                var topped = PilotPortraitGenerator.Compose("pilot " + i, atlas);
-                if (topped[1] > 100)
+                for (int hair = 1; hair < PilotPortraitGenerator.HairCount; hair++)
                 {
-                    sawHair = true;
-                    Assert.True(topped[1] > topped[0] * 3 && topped[1] > topped[2] * 3);
+                    var loose = new PortraitSelection(body, 0, hair, 0, 0, 0);
+                    SetPixel(atlas, PilotPortraitGenerator.Resolve(loose).HairTile, 15, 150, 255, 0, 0, 255);
+                    Assert.NotEqual(PilotPortraitGenerator.Compose(new PortraitSelection(body, 0, 0, 0, 0, 0), atlas),
+                        PilotPortraitGenerator.Compose(loose, atlas));
+                    for (int equipment = 1; equipment <= 8; equipment++)
+                    {
+                        var selection = new PortraitSelection(body, 0, hair, 0, equipment, 0);
+                        Assert.Equal(PilotPortraitGenerator.Compose(loose, atlas),
+                            PilotPortraitGenerator.Compose(selection, atlas));
+                        Assert.Equal(0, selection.Accessory);
+                        Assert.Equal(hair, selection.Hair);
+                    }
                 }
             }
-            Assert.True(sawHair);
+        }
 
-            for (int face = 0; face < 6; face++)
-            {
-                int p = (((4 - face / 4) * height + 50) * width * 4 + face % 4 * width + 50) * 4;
-                atlas[p] = (byte)(face * 40);
-                atlas[p + 3] = 255;
-            }
-            var variants = new HashSet<byte>();
-            for (int i = 0; i < 100; i++) variants.Add(PilotPortraitGenerator.Compose("pilot " + i, atlas)[(50 * width + 50) * 4]);
-            Assert.Equal(6, variants.Count);
+        private static void SetPixel(byte[] atlas, int tile, int x, int y, byte r, byte g, byte b, byte a)
+        {
+            int left = tile % PilotPortraitGenerator.AtlasColumns * PilotPortraitGenerator.Width;
+            int bottom = PilotPortraitGenerator.AtlasHeight -
+                (tile / PilotPortraitGenerator.AtlasColumns + 1) * PilotPortraitGenerator.Height;
+            int p = ((bottom + y) * PilotPortraitGenerator.AtlasWidth + left + x) * 4;
+            atlas[p] = r;
+            atlas[p + 1] = g;
+            atlas[p + 2] = b;
+            atlas[p + 3] = a;
         }
     }
 }

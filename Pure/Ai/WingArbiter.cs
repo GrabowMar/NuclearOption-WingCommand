@@ -99,7 +99,8 @@ namespace WingCommand
                 if (hasWinner && reflex.Band > winningBand) continue;
 
                 if (!hasWinner || reflex.Band < winningBand || score > winningScore ||
-                    (score == winningScore && string.CompareOrdinal(reflex.Id, winner.Id) < 0))
+                    (score == winningScore && (reflex.Priority > winner.Priority ||
+                     (reflex.Priority == winner.Priority && string.CompareOrdinal(reflex.Id, winner.Id) < 0))))
                 {
                     winner = reflex;
                     hasWinner = true;

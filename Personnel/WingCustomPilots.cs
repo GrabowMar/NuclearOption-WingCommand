@@ -165,6 +165,84 @@ namespace WingCommand
             return newPilotsCount;
         }
 
+        /// <summary>Save custom pilots to a JSON file in the Pilots directory.</summary>
+        public static bool SaveCustomPilots(IEnumerable<CustomPilotRecord> pilots, string fileName = "custom_pilots.json")
+        {
+            try
+            {
+                EnsurePilotsDirectory();
+                string path = Path.Combine(PilotsDirectory, fileName);
+                string json = CustomPilotCodec.Encode(pilots);
+                File.WriteAllText(path, json);
+                Plugin.LogVerbose($"[CustomPilots] Saved pilots to {path}");
+                return true;
+            }
+            catch (Exception e)
+            {
+                Plugin.Logger.LogWarning($"[CustomPilots] Failed to save {fileName}: {e.Message}");
+                return false;
+            }
+        }
+
+        /// <summary>Save or update a single pilot record in the primary custom pilots file.</summary>
+        public static bool SaveOrUpdatePilot(CustomPilotRecord pilot, string fileName = "custom_pilots.json")
+        {
+            if (pilot == null || string.IsNullOrWhiteSpace(pilot.Callsign)) return false;
+            try
+            {
+                EnsurePilotsDirectory();
+                string path = Path.Combine(PilotsDirectory, fileName);
+                var existing = new List<CustomPilotRecord>();
+                if (File.Exists(path))
+                {
+                    CustomPilotPayload payload = CustomPilotCodec.Decode(File.ReadAllText(path));
+                    existing.AddRange(payload.Pilots);
+                }
+
+                int index = existing.FindIndex(p => string.Equals(p.Callsign, pilot.Callsign, StringComparison.OrdinalIgnoreCase));
+                if (index >= 0)
+                {
+                    existing[index] = pilot;
+                }
+                else
+                {
+                    existing.Add(pilot);
+                }
+
+                return SaveCustomPilots(existing, fileName);
+            }
+            catch (Exception e)
+            {
+                Plugin.Logger.LogWarning($"[CustomPilots] Failed to save pilot {pilot.Callsign}: {e.Message}");
+                return false;
+            }
+        }
+
+        /// <summary>Delete a custom pilot by callsign from every file in the Pilots directory.</summary>
+        public static bool DeleteCustomPilot(string callsign)
+        {
+            if (string.IsNullOrWhiteSpace(callsign)) return false;
+            try
+            {
+                EnsurePilotsDirectory();
+                bool deleted = false;
+                foreach (string path in Directory.GetFiles(PilotsDirectory, "*.json", SearchOption.AllDirectories))
+                {
+                    string json = CustomPilotCodec.RemovePilot(File.ReadAllText(path), callsign, out bool removed);
+                    if (!removed) continue;
+
+                    File.WriteAllText(path, json);
+                    deleted = true;
+                }
+                return deleted;
+            }
+            catch (Exception e)
+            {
+                Plugin.Logger.LogWarning($"[CustomPilots] Failed to delete pilot {callsign}: {e.Message}");
+                return false;
+            }
+        }
+
         private static void RegisterEventLine(string speakerTag, string eventName, string text)
         {
             string tag = string.IsNullOrWhiteSpace(speakerTag) ? "*" : speakerTag.Trim().ToUpperInvariant();

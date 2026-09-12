@@ -41,6 +41,10 @@ namespace WingCommand
         /// survival-critical behaviour.</summary>
         bool RequiresSmartMode { get; }
 
+        /// <summary>Relative priority when breaking score ties within the same band. Higher values win;
+        /// identical priorities fall back to deterministic ID string comparison.</summary>
+        int Priority => 0;
+
         /// <summary>Score from 0 (inactive) to 1 (maximum urgency), compared within this band. Use
         /// incumbent for stateless entry/release hysteresis. Do not throw; score, metadata, and lifecycle
         /// faults are reported once and disable the extension for the mission.</summary>

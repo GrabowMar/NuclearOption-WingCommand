@@ -78,13 +78,46 @@ namespace WingCommand
             WrapDegrees(bank + WrapDegrees(observed - bank) *
                 (1f - (float)Math.Exp(-Math.Max(0f, dt) / Math.Max(0.001f, responseSeconds))));
 
+        public static float ManeuverIntensity(float pitchRate, float rollRate, float turnRate)
+        {
+            float totalRate = (float)Math.Sqrt(pitchRate * pitchRate + rollRate * rollRate + turnRate * turnRate);
+            if (totalRate <= 0.05f) return 0f;
+            float blend = Math.Max(0f, Math.Min(1f, (totalRate - 0.05f) / 0.35f));
+            return blend * blend * (3f - 2f * blend);
+        }
+
         // Accelerate tracking only for large manoeuvre error; retain quiet-flight filtering against
         // stick noise.
         public static float TrackResponse(float errorDegrees, float quietSeconds) =>
             ManeuverResponse(errorDegrees, quietSeconds, 0.10f, 2f, 12f);
 
+        public static float ResponsiveTrackTime(float errorDegrees, float quietSeconds,
+            float maneuverIntensity = 0f, float holdBlend = 0f)
+        {
+            float baseTime = TrackResponse(errorDegrees, quietSeconds);
+            float minTime = Math.Min(quietSeconds, 0.06f);
+            float factor = Math.Max(maneuverIntensity, holdBlend * 0.75f);
+            return baseTime + (minTime - baseTime) * factor;
+        }
+
         public static float BankResponse(float errorDegrees, float quietSeconds) =>
             ManeuverResponse(WrapDegrees(errorDegrees), quietSeconds, 0.12f, 8f, 45f);
+
+        public static float ResponsiveBankTime(float errorDegrees, float quietSeconds,
+            float maneuverIntensity = 0f, float holdBlend = 0f)
+        {
+            float baseTime = BankResponse(errorDegrees, quietSeconds);
+            float minTime = Math.Min(quietSeconds, 0.05f);
+            float factor = Math.Max(maneuverIntensity, holdBlend * 0.85f);
+            return baseTime + (minTime - baseTime) * factor;
+        }
+
+        public static float ResponsiveSlotTime(float defaultSeconds, float holdBlend, float maneuverIntensity)
+        {
+            const float FastSlotSeconds = 0.12f;
+            float urgency = Math.Max(0f, Math.Min(1f, Math.Max(holdBlend, maneuverIntensity)));
+            return defaultSeconds + (FastSlotSeconds - defaultSeconds) * urgency;
+        }
 
         private static float ManeuverResponse(float error, float quiet, float fast,
             float begin, float full)

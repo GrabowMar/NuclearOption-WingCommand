@@ -5,14 +5,27 @@ $taskingSource = Get-Content "$PSScriptRoot/../Core/WingMember.Tasking.cs" -Raw
 $methods = foreach ($name in @('RequestRefit', 'AbandonRefit', 'CompleteRefit', 'SetDirective', 'TryAdvanceQueue', 'CheckReserves')) {
     $match = [regex]::Match($memberSource, "(?ms)^        (?:public|internal|private) (?:void|bool) $name\(.*?^        }")
     if (!$match.Success) { throw "Missing member method: $name" }
-    $match.Value
+    $match.Value.Replace(
+        'if (!taskQueue.Advance(startedRevision, directiveSerial, out WingDirective next)) return false;',
+        'WingDirective next; if (!taskQueue.Advance(startedRevision, directiveSerial, out next)) return false;')
 }
 $apply = [regex]::Match($memberSource, '(?ms)^        public void Apply\(WingDirective directive\).*?^        }').Value
 $resume = [regex]::Match($taskingSource, '(?ms)^        private bool CanResumeAfterRefit\(.*?^        }').Value
-$stores = [regex]::Match($taskingSource, '(?ms)^        private bool CombatStoresEmpty\s*\{.*?^        }').Value
+$stores = [regex]::Match($taskingSource, '(?ms)^        private bool CombatStoresEmpty\s*\{.*?^        }').Value.Replace(
+    'Aircraft?.weaponStations == null', 'Aircraft == null || Aircraft.weaponStations == null')
 if (!$apply -or !$resume -or !$stores) { throw 'Missing production apply/resume/store transition' }
 $pure = foreach ($file in @('Flight/TaskRoute', 'Ai/StandingOrder')) {
-    (Get-Content "$PSScriptRoot/../Pure/$file.cs" -Raw) -replace '(?m)^using .*;\r?\n', ''
+    $text = (Get-Content "$PSScriptRoot/../Pure/$file.cs" -Raw) -replace '(?m)^using .*;\r?\n', ''
+    $text = $text.Replace('public int Count => legs.Count;', 'public int Count { get { return legs.Count; } }')
+    $text = $text.Replace('public T this[int index] => legs[index];', 'public T this[int index] { get { return legs[index]; } }')
+    $text = $text.Replace('public void Add(T leg) => legs.Add(leg);', 'public void Add(T leg) { legs.Add(leg); }')
+    $text = $text.Replace('public void CancelSuspension() => suspended = null;', 'public void CancelSuspension() { suspended = null; }')
+    $text = $text.Replace('next = default;', 'next = default(T);')
+    $text = $text.Replace('public IEnumerator<T> GetEnumerator() => legs.GetEnumerator();', 'public IEnumerator<T> GetEnumerator() { return legs.GetEnumerator(); }')
+    $text = $text.Replace('IEnumerator IEnumerable.GetEnumerator() => GetEnumerator();', 'IEnumerator IEnumerable.GetEnumerator() { return GetEnumerator(); }')
+    $text = $text.Replace('this.sameIntent = sameIntent ?? throw new ArgumentNullException(nameof(sameIntent));',
+        'if (sameIntent == null) throw new ArgumentNullException("sameIntent"); this.sameIntent = sameIntent;')
+    $text
 }
 $boundary = @'
 using System;
@@ -22,7 +35,10 @@ namespace WingCommand {
 internal enum WingOrder { Formation, ReturnToBase, Maneuver, FallBack, Attack, FireForEffect,
     JamTarget, MoveToPoint, Engage, StandDown, LandHere, DeliverCargo, SeekAndDestroy }
 internal struct GlobalPosition { public int Id; }
-internal struct Vector3 { public static Vector3 forward => new Vector3(); public static Vector3 operator -(Vector3 v) => v; }
+internal struct Vector3 {
+    public static Vector3 forward { get { return new Vector3(); } }
+    public static Vector3 operator -(Vector3 v) { return v; }
+}
 internal class Transform { public Vector3 forward; }
 internal class Unit { public bool disabled; public object NetworkHQ; }
 internal class Aircraft : Unit {
@@ -30,36 +46,39 @@ internal class Aircraft : Unit {
     public float NetworkfuelLevel;
     public readonly FuelTank tank = new FuelTank();
     public readonly List<WeaponStation> weaponStations = new List<WeaponStation> { new WeaponStation() };
-    public FuelTank[] GetFuelTanks() => new[] { tank };
-    public float GetFuelLevel() => tank.Fuel;
+    public FuelTank[] GetFuelTanks() { return new[] { tank }; }
+    public float GetFuelLevel() { return tank.Fuel; }
     public void RpcRearm(RearmEventArgs args) {
         for (int i = 0; i < args.Stations.Length; i++) weaponStations[i].Ammo += args.Stations[i];
     }
 }
 internal class Pilot { public bool dead, ejected; }
 internal class FuelTank { public float Fuel; public void Refuel(float v) { Fuel = v; } }
-internal class WeaponStation { public int FullAmmo = 4, Ammo; public bool Cargo; public int GetAmmoTotal() => Ammo; }
+internal class WeaponStation { public int FullAmmo = 4, Ammo; public bool Cargo; public int GetAmmoTotal() { return Ammo; } }
 internal class RearmEventArgs { public Aircraft Rearmer; public int[] Stations; }
-internal static class Mathf { public static int Max(int a, int b) => Math.Max(a,b); }
+internal static class Mathf { public static int Max(int a, int b) { return Math.Max(a,b); } }
 internal static class Time { public static float timeSinceLevelLoad = 50f; }
 internal class Setting { public bool Value = true; }
 internal class Settings { public Setting AutoReturnOnEmpty = new Setting(); public float BingoFuel = 0.15f; }
 internal static class Plugin { public static Settings Settings = new Settings(); }
 internal static class WingTuning { public const float BingoFuel = 0.15f; }
 internal static class WingComms { public enum Call { Bingo, OutOfAmmo } public static void Say(WingMember m, Call c) {} }
-internal static class CombatFacade { internal static class Tactical { public static void ReleaseSelection(Aircraft a) {} } }
+internal static class CombatFacade {
+    internal static class Tactical { public static void ReleaseSelection(Aircraft a) {} }
+    internal static class Weapons { public static void ClearTurretTargets(Aircraft a) {} }
+}
 internal static class TacticalMapOverlay { public static void Invalidate() {} }
 internal static class PersonnelFacade { internal static class Roster { public static int Sorties; public static void NoteSortie(Aircraft a) { Sorties++; } } }
-internal static class WingOrderRules { public static bool CanQueueWhilePending(WingOrder o) => o != WingOrder.Maneuver; }
-internal static class WingOrderCatalog { public static bool CanApply(WingMember m, WingOrder o) => m.Alive; }
-internal static class FallBackState { public static GlobalPosition FriendlyLoiterPoint(Aircraft a, Vector3 v) => default; }
+internal static class WingOrderRules { public static bool CanQueueWhilePending(WingOrder o) { return o != WingOrder.Maneuver; } }
+internal static class WingOrderCatalog { public static bool CanApply(WingMember m, WingOrder o) { return m.Alive; } }
+internal static class FallBackState { public static GlobalPosition FriendlyLoiterPoint(Aircraft a, Vector3 v) { return default(GlobalPosition); } }
 internal class Brain { public void RequestEvaluation() {} }
 internal struct WingDirective {
     public WingOrder Order; public Unit Target; public GlobalPosition Point;
     public bool HasPoint;
-    public static WingDirective Simple(WingOrder o) => new WingDirective { Order = o };
-    public static WingDirective AtPoint(WingOrder o, GlobalPosition p) => new WingDirective { Order = o, Point = p, HasPoint = true };
-    public bool SameIntentAs(WingDirective other) => Order == other.Order && Target == other.Target && Point.Id == other.Point.Id;
+    public static WingDirective Simple(WingOrder o) { return new WingDirective { Order = o }; }
+    public static WingDirective AtPoint(WingOrder o, GlobalPosition p) { return new WingDirective { Order = o, Point = p, HasPoint = true }; }
+    public bool SameIntentAs(WingDirective other) { return Order == other.Order && Target == other.Target && Point.Id == other.Point.Id; }
 }
 internal class WingMember {
     private readonly StandingOrder<WingDirective> standingOrder = new StandingOrder<WingDirective>(
@@ -70,18 +89,18 @@ internal class WingMember {
     private readonly Brain brain = new Brain();
     internal bool IsSurface, IsPanicking, AutoRefit;
     private float joinedAt;
-    internal float Fuel => Aircraft.GetFuelLevel();
+    internal float Fuel { get { return Aircraft.GetFuelLevel(); } }
     internal int Ammo { get { int total=0; foreach(var s in Aircraft.weaponStations) if (!s.Cargo) total+=s.Ammo; return total; } }
-    internal bool Alive => !Pilot.dead && !Pilot.ejected;
-    internal bool IsCommandable => Alive && !deliveryPending;
+    internal bool Alive { get { return !Pilot.dead && !Pilot.ejected; } }
+    internal bool IsCommandable { get { return Alive && !deliveryPending; } }
     internal bool RefitPending { get; private set; }
     internal Aircraft Aircraft = new Aircraft();
     internal Pilot Pilot = new Pilot();
     internal int Launches;
-    internal int directiveSerial => standingOrder.Revision;
-    internal WingDirective Directive => standingOrder.Current;
-    internal WingOrder Order => Directive.Order;
-    internal void Apply(WingOrder order) => Apply(WingDirective.Simple(order));
+    internal int directiveSerial { get { return standingOrder.Revision; } }
+    internal WingDirective Directive { get { return standingOrder.Current; } }
+    internal WingOrder Order { get { return Directive.Order; } }
+    internal void Apply(WingOrder order) { Apply(WingDirective.Simple(order)); }
     private void Resolve(bool force) {}
     private void BeginRefitDeparture() { Launches++; deliveryPending = true; }
 '@
@@ -146,6 +165,7 @@ public static class RefitChecks {
 }
 }
 '@
-Add-Type -TypeDefinition ($boundary + ($methods -join "`n") + $apply + $resume + $stores + $checks + ($pure -join "`n")) -IgnoreWarnings -WarningAction SilentlyContinue
+$definition = @($boundary, ($methods -join "`n"), $apply, $resume, $stores, $checks, ($pure -join "`n")) -join "`n"
+Add-Type -TypeDefinition $definition -IgnoreWarnings -WarningAction SilentlyContinue
 [WingCommand.RefitChecks]::Run()
 Write-Output 'Refit resume lifecycle checks passed.'

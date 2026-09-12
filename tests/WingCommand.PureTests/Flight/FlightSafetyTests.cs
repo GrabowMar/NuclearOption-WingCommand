@@ -17,6 +17,33 @@ namespace WingCommand.PureTests
                 radarAlt, 600f, WingOrder.Formation, incumbent: false, deliveryPending: false));
         }
 
+        [Theory]
+        [InlineData(10f, 5f, false)]
+        [InlineData(25f, 15f, false)]
+        [InlineData(25f, -2f, true)]
+        [InlineData(25f, 0f, true)]
+        public void ClimboutAircraftAreNotTerrainAborts(float radarAlt, float verticalSpeed, bool expected)
+        {
+            Assert.Equal(expected, TerrainAbortPolicy.ShouldAbort(
+                radarAlt, 600f, WingOrder.Formation, incumbent: false, deliveryPending: false, verticalSpeed: verticalSpeed));
+        }
+
+        [Fact]
+        public void TakeoffClimboutDoesNotTriggerTerrainAbortReflex()
+        {
+            WingAi.Clear();
+            WingReflexes.RegisterDefaults();
+            try
+            {
+                var climbout = new WingSituation(order: WingOrder.Formation, missileWarned: false,
+                    radarAlt: 25f, leaderDistance: 2000f, leaderPresent: true, airspeed: 85f, secondsInBehaviour: 0.1f)
+                    .WithFlightSafety(terrainUrgency: 0f, verticalSpeed: 15f, bankAngle: 0f, minimumAirspeed: 60f);
+                var decision = WingArbiter.Resolve(in climbout, "wingcommand.delivery-hold", true, WingAi.Reflexes);
+                Assert.Equal(WingBehaviours.Task, decision.BehaviourId);
+            }
+            finally { WingAi.Clear(); }
+        }
+
         [Fact]
         public void TerrainRecoveryPreemptsMissileHoldButEvasionStillHoldsThroughWarningGaps()
         {

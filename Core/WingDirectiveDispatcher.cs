@@ -92,7 +92,7 @@ namespace WingCommand
             return new WingDispatchResult(applied, WithQueued(message, responders), responders, WingOrder.Attack);
         }
 
-        /// <summary>Assign the entire scope to expend on one target, bypassing Attack's distribution and
+        /// <summary>Assign the entire selection to each member, bypassing Attack's distribution and
         /// useful-attacker cap.</summary>
         public WingDispatchResult FireForEffect(IReadOnlyList<Unit> targets, bool wholeWing)
         {
@@ -108,9 +108,16 @@ namespace WingCommand
             foreach (WingMember member in scope)
             {
                 if (!WingOrderCatalog.CanApply(member, WingOrder.FireForEffect)) continue;
-                if (!member.DeliveryPending &&
-                    !CombatFacade.Weapons.CanStillEngage(member.Aircraft, target)) continue;
-                member.FireForEffect(target, report: false);
+                Unit first = null;
+                foreach (Unit candidate in targets)
+                    if (candidate != null && !candidate.disabled && (member.DeliveryPending ||
+                        CombatFacade.Weapons.CanStillEngage(member.Aircraft, candidate)))
+                    {
+                        first = candidate;
+                        break;
+                    }
+                if (first == null) continue;
+                member.Apply(WingDirective.Splash(targets, first));
                 responders.Add(member);
             }
 
@@ -121,7 +128,7 @@ namespace WingCommand
                     WingOrderCatalog.UnavailableReason(WingOrder.FireForEffect));
 
             string message = ScopePrefix(wholeWing, applied) + ": splash 'em on " +
-                             target.unitName;
+                             (targets.Count > 1 ? targets.Count + " selected targets" : target.unitName);
             if (skipped > 0) message += " (" + skipped + " unable)";
             return new WingDispatchResult(applied, WithQueued(message, responders), responders, WingOrder.FireForEffect);
         }

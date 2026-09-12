@@ -45,7 +45,7 @@
   ink:             #02120B;
 
   /* Geometry */
-  panel-width:     512;
+  panel-width:     480;
   pad:             14;
   gap:             8;
 }
@@ -67,34 +67,34 @@
 .section.band { background: band; }
 
 .section-title      { font: micro bold; color: text-dim; tracking: 18; }
-.section-title-note  { font: micro; color: text-muted; tracking: 10; }
+.section-title-note  { font: micro; color: text-dim; tracking: 10; }
 
 /* ------------------------------------------------------------ 4. data bar */
 
 .databar   { height: 30; background: #000000 33; border: 1 hairline; }
 .id-tag    { background: accent; color: ink; font: 15 bold; tracking: 16; pad: 0 12; align: center; }
-.databar-state { font: small; color: text-dim; tracking: 10; pad: 0 12; }
+.databar-state { font: 12; color: text-dim; tracking: 10; pad: 0 12; }
 .databar-state-key { font: small bold; color: text-primary; tracking: 10; }
 
-.chip        { font: micro; color: text-dim; tracking: 9; border: 1 hairline;
+.chip        { font: 10.5; color: text-dim; tracking: 9; border: 1 hairline;
                background: #000000 47; sprite: control; align: center; }
 .chip.live   { color: rail-ready; border: 1 #00FF9D 66; }
 .chip.warn   { color: rail-caution; border: 1 #F59E0B 66; }
 
 /* -------------------------------------------------------------- 5. metrics */
 
-.metrics       { height: 58; border: 1 hairline; }
+.metrics       { height: 64; border: 1 hairline; }
 .metric        { pad: 9 14 10 14; }
-.metric-key    { font: micro; color: text-muted; tracking: 16; }
+.metric-key    { font: 11; color: text-dim; tracking: 16; }
 .metric-value  { font: 25 bold; color: text-primary; tabular: on; tracking: 1; }
-.metric-unit   { font: micro; color: text-dim; tracking: 10; }
-.metric-cap    { font: micro; color: text-muted; tracking: 8; align: right; }
+.metric-unit   { font: 11; color: text-dim; tracking: 10; }
+.metric-cap    { font: 11; color: text-dim; tracking: 8; align: right; }
 .metric-track  { height: 3; background: #FFFFFF 12; }
 
 /* ----------------------------------------------------------------- 6. tabs */
 
 .tabbar   { height: 30; border: 1 hairline; }
-.tab      { font: small; color: text-muted; tracking: 16; background: #000000 33; align: center; }
+.tab      { font: 12; color: text-dim; tracking: 16; background: #000000 33; align: center; }
 .tab:hover   { color: accent; }
 .tab:latched { color: text-primary; background: #00000000; rail: 2 accent; }
 
@@ -108,7 +108,7 @@
 .row:disabled { color: text-muted; }
 
 .row-name     { font: 12.5 bold; color: text-primary; tracking: 5; }
-.row-sub      { font: micro; color: text-muted; tracking: 4; wrap: on; }
+.row-sub      { font: micro; color: text-dim; tracking: 4; wrap: on; }
 .row-sub.ok   { color: rail-ready; }
 .row-sub.warn { color: rail-caution; }
 .row-sub.bad  { color: rail-danger; }
@@ -142,7 +142,7 @@
 .bar-inert     { background: rail-inert; }
 
 /* Key/value pairs for the logistics readouts: label left, figure right, on one line. */
-.kv-key        { font: micro; color: text-muted; tracking: 14; }
+.kv-key        { font: micro; color: text-dim; tracking: 14; }
 .kv-value      { font: small bold; color: text-primary; align: right; }
 .kv-value.warn { color: rail-caution; }
 .kv-value.bad  { color: rail-danger; }
@@ -164,7 +164,7 @@
 /* -------------------------------------------------------- 9. status strip */
 
 .status       { height: 44; background: #000000 4d; border: 1 hairline; pad: 9 14; }
-.status-text  { font: 10.5 ; color: text-dim; wrap: on; }
+.status-text  { font: 11.5 ; color: text-dim; wrap: on; }
 
 /* ------------------------------------------------------------- 10. cards */
 

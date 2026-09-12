@@ -17,8 +17,16 @@ namespace WingCommand
         /// chasing survivors across the map.</summary>
         private const float SplashSweepRadius = 8000f;
 
+        /// <summary>Whether a fixed-wing attacker has overflown the target and is extending away before
+        /// turning back in or rejoining.</summary>
+        private bool egress;
+
+        /// <summary>Timestamp until which egress flight geometry is maintained.</summary>
+        private float egressUntil;
+
         /// <summary>Timestamp of the last shot, used to enforce the shared firing interval.</summary>
         private float lastFiredTime;
+        private int splashTargetIndex;
 
         /// <summary>Last known target position for Splash follow-on searches.</summary>
         private GlobalPosition lastTargetPos;
@@ -32,6 +40,8 @@ namespace WingCommand
         {
             BeginFlight(pilot);
             lastFiredTime = 0f;
+            egress = false;
+            egressUntil = 0f;
             lastTargetPos = member.AssignedTarget != null
                 ? member.AssignedTarget.GlobalPosition()
                 : aircraft.GlobalPosition();
@@ -47,6 +57,12 @@ namespace WingCommand
 
         public override void LeaveState()
         {
+            // Native turrets continue firing after target assignment. An interrupted or completed run
+            // must release the designation before another behaviour owns the aircraft.
+            CombatFacade.Weapons.ClearTurretTargets(aircraft);
+            egress = false;
+            lastFiredTime = 0f;
+            splashTargetIndex = 0;
         }
 
         public override void UpdateState(Pilot pilot)
@@ -63,7 +79,11 @@ namespace WingCommand
             if (target == null || target.disabled)
             {
                 if (target != null) WingComms.Say(member, WingComms.Call.Splash, target.unitName);
-                if (TryRollToNextExpendTarget()) return;
+                if (TryRollToNextExpendTarget())
+                {
+                    egress = false;
+                    return;
+                }
                 FinishRun();
                 return;
             }
@@ -73,7 +93,11 @@ namespace WingCommand
             {
                 // Try nearby target classes before ending Splash; stores ineffective here may still
                 // damage another contact.
-                if (TryRollToNextExpendTarget()) return;
+                if (TryRollToNextExpendTarget())
+                {
+                    egress = false;
+                    return;
+                }
                 FinishRun();
                 return;
             }
@@ -87,9 +111,8 @@ namespace WingCommand
         /// completion is quiet.</summary>
         private void FinishRun()
         {
-            WingComms.Say(member, member.Ammo <= 0
-                ? WingComms.Call.OutOfAmmo
-                : WingComms.Call.Expended);
+            if (member.Ammo <= 0)
+                WingComms.Say(member, WingComms.Call.OutOfAmmo);
             CompleteTask(WingOrder.Formation);
         }
 
@@ -99,8 +122,21 @@ namespace WingCommand
         {
             if (member.Order != WingOrder.FireForEffect) return false;
 
-            Unit next = CombatFacade.Weapons.NextExpendTarget(
-                aircraft, lastTargetPos, SplashSweepRadius, member.AssignedTarget);
+            Unit next = null;
+            var selected = member.Directive.Targets;
+            if (selected != null)
+            {
+                foreach (Unit candidate in selected)
+                    if (candidate != member.AssignedTarget &&
+                        CombatFacade.Weapons.CanStillEngage(aircraft, candidate))
+                    {
+                        next = candidate;
+                        break;
+                    }
+            }
+            else
+                next = CombatFacade.Weapons.NextExpendTarget(
+                    aircraft, lastTargetPos, SplashSweepRadius, member.AssignedTarget);
             if (next == null) return false;
 
             member.RetargetSplash(next);
@@ -134,7 +170,56 @@ namespace WingCommand
                 return;
             }
 
+            Vector3 toTarget = targetPos - aircraft.GlobalPosition();
+            float distanceSq = toTarget.sqrMagnitude;
+            float forwardDot = Vector3.Dot(aircraft.transform.forward, toTarget.normalized);
+
+            // Break-off / egress check: if we overflew the target (target is behind us) or passed inside
+            // close range with a high aspect angle, commit to an egress leg rather than stalling or pulling high-G inverted.
+            if (!egress)
+            {
+                if ((distanceSq < 800f * 800f && forwardDot < 0.2f) ||
+                    (forwardDot < -0.1f && distanceSq < 2500f * 2500f))
+                {
+                    egress = true;
+                    egressUntil = Time.timeSinceLevelLoad + 6f;
+                }
+            }
+            else
+            {
+                if (Time.timeSinceLevelLoad > egressUntil || distanceSq > 3500f * 3500f)
+                {
+                    egress = false;
+                }
+            }
+
+            if (egress)
+            {
+                // Fly straight-ahead climbing egress along current forward vector with terrain following active
+                Vector3 fwd = aircraft.transform.forward;
+                GlobalPosition egressAim = aircraft.GlobalPosition() + (fwd + Vector3.up * 0.15f) * 4000f;
+                controlInputs.throttle = 1f;
+                aircraft.autopilot.AutoAim(
+                    destination: egressAim,
+                    aimVelocity: true,
+                    ignoreCollisions: false,
+                    runwayAlign: false,
+                    effort: 1.5f,
+                    bankAllowed: AutopilotMath.PursuitBank(),
+                    followTerrain: true,
+                    altitudeHold: Mathf.Max(aircraft.radarAlt, altitude),
+                    targetVelocity: Vector3.zero);
+                return;
+            }
+
             controlInputs.throttle = 1f;
+
+            float holdAlt = surface ? altitude : targetPos.y;
+
+            // Follow terrain during approach so wingmen never clip terrain. Disable terrain following
+            // only when actively diving at a surface target within delivery range to avoid premature pullup.
+            bool divingAttack = surface && forwardDot > 0.85f && distanceSq < 2500f * 2500f;
+            bool followTerrain = !divingAttack;
 
             aircraft.autopilot.AutoAim(
                 destination: aim,
@@ -143,15 +228,38 @@ namespace WingCommand
                 runwayAlign: false,
                 effort: 2f,
                 bankAllowed: AutopilotMath.PursuitBank(),
-                followTerrain: false,
-                altitudeHold: AutopilotMath.CruiseHold(aircraft, altitude),
+                followTerrain: followTerrain,
+                altitudeHold: AutopilotMath.CruiseHold(aircraft, holdAlt),
                 targetVelocity: target.rb != null ? target.rb.velocity : Vector3.zero);
         }
 
         private void Shoot(Unit target)
         {
-            float interval = CombatFacade.Weapons.FireInterval(aircraft);
+            if (egress) return;
+
+            float interval = member.Order == WingOrder.FireForEffect
+                ? WingTuning.SplashFireInterval
+                : CombatFacade.Weapons.FireInterval(aircraft);
+            // A turret designation is accepted before its actual shot. Give native aiming/lock time
+            // before switching targets, as with a measured attack.
+            if (aircraft.weaponManager?.currentWeaponStation?.HasTurret() == true)
+                interval = Mathf.Max(interval, CombatFacade.Weapons.FireInterval(aircraft));
             if (Time.timeSinceLevelLoad - lastFiredTime < interval) return;
+
+            var selected = member.Directive.Targets;
+            if (member.Order == WingOrder.FireForEffect && selected != null && selected.Count > 0)
+            {
+                for (int attempt = 0; attempt < selected.Count; attempt++)
+                {
+                    int index = (splashTargetIndex + attempt) % selected.Count;
+                    if (!CombatFacade.Weapons.EngageMassed(aircraft, pilot, selected[index], float.MaxValue))
+                        continue;
+                    splashTargetIndex = (index + 1) % selected.Count;
+                    lastFiredTime = Time.timeSinceLevelLoad;
+                    break;
+                }
+                return;
+            }
 
             // Reuse shared station validity checks. Explicit attacks are independent of incidental ROE;
             // Splash uses the weapon envelope alone as its range gate.

@@ -8,6 +8,9 @@ namespace WingCommand
             bool rotary, float altitude, float forwardAirspeed, float takeoffSpeed,
             float minimumAirspeed = 0f)
         {
+            // Keep fixed-wing departures in the protected climb to the native 75 m exit height.
+            // Speed alone must not start a formation turn immediately above the runway.
+            if (!rotary && altitude < 75f) return false;
             // Native fixed-wing takeoff completes at 75 m AGL even below flying speed. Let its next
             // native state convert the nozzles and accelerate before formation starts turning.
             if (nativeTakeoffComplete) return rotary || forwardAirspeed >= minimumAirspeed;
@@ -19,7 +22,7 @@ namespace WingCommand
             if (rotary) return false;
 
             // Require runway clearance before formation may turn.
-            return altitude >= 8f && takeoffSpeed > 0f &&
+            return takeoffSpeed > 0f &&
                 forwardAirspeed >= Math.Max(minimumAirspeed,
                     takeoffSpeed * WingTuning.LaunchSpeedMargin);
         }

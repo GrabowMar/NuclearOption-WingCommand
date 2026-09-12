@@ -21,7 +21,8 @@ namespace WingCommand.PureTests
         {
             // 100 m/s total motion with only 40 m/s along the nose remains below launch speed.
             Assert.False(LaunchSafety.CanHandOff(false, true, false, 40f, 40f, 70f, 60f));
-            Assert.True(LaunchSafety.CanHandOff(false, true, false, 40f, 90f, 70f, 60f));
+            Assert.False(LaunchSafety.CanHandOff(false, true, false, 40f, 90f, 70f, 60f));
+            Assert.True(LaunchSafety.CanHandOff(false, true, false, 75f, 90f, 70f, 60f));
         }
 
         [Theory]

@@ -18,18 +18,22 @@ namespace WingCommand
         public static Unit ShotTarget;
         public static Allow ShotAllow;
         public static int Shots;
+        public static int TurretTargetClears;
+        public static bool EngageResult = true;
+        public static bool EngageSpecificResult = true;
         public static float FireInterval(Aircraft aircraft) => 5f;
+        public static void ClearTurretTargets(Aircraft aircraft) => TurretTargetClears++;
         public static bool Engage(Aircraft aircraft, Pilot pilot, Allow allow, float range)
         {
             ShotAllow = allow;
             Shots++;
-            return true;
+            return EngageResult;
         }
         public static bool EngageSpecific(Aircraft aircraft, Pilot pilot, Unit target, float range)
         {
             ShotTarget = target;
             Shots++;
-            return true;
+            return EngageSpecificResult;
         }
     }
 
@@ -75,6 +79,9 @@ namespace WingCommand.PureTests
             WingWeapons.ShotTarget = null;
             WingWeapons.ShotAllow = WingWeapons.Allow.None;
             WingWeapons.Shots = 0;
+            WingWeapons.TurretTargetClears = 0;
+            WingWeapons.EngageResult = true;
+            WingWeapons.EngageSpecificResult = true;
         }
 
         public void Dispose() => WingFidelity.Begin(WingMode.Smart);
@@ -92,6 +99,7 @@ namespace WingCommand.PureTests
             var member = new WingMember { Order = order, BehaviourId = behaviour, AssignedTarget = target };
             Assert.False(Run(member));
             Assert.Equal(0, WingWeapons.Shots);
+            Assert.Equal(1, WingWeapons.TurretTargetClears);
             Assert.Same(target, member.AssignedTarget);
             Assert.Equal(order, member.Order);
         }
@@ -115,6 +123,7 @@ namespace WingCommand.PureTests
             var member = new WingMember { BehaviourId = WingBehaviours.Rejoin, AssignedTarget = new Unit() };
             Assert.False(Run(member));
             Assert.Equal(0, WingWeapons.Shots);
+            Assert.Equal(1, WingWeapons.TurretTargetClears);
         }
 
         [Fact]
@@ -145,6 +154,30 @@ namespace WingCommand.PureTests
             var member = new WingMember { AssignedTarget = new Unit { disabled = true } };
             Assert.False(Run(member));
             Assert.Equal(0, WingWeapons.Shots);
+        }
+
+        [Fact]
+        public void FailedExplicitSelectionClearsAnEarlierTurretDesignation()
+        {
+            RoeRules.Current = WingRoe.Hold;
+            WingWeapons.EngageSpecificResult = false;
+            var member = new WingMember { Order = WingOrder.Attack, AssignedTarget = new Unit() };
+
+            Assert.False(Run(member));
+            Assert.Equal(1, WingWeapons.Shots);
+            Assert.Equal(1, WingWeapons.TurretTargetClears);
+        }
+
+        [Fact]
+        public void FailedOpportunitySelectionClearsAnEarlierTurretDesignation()
+        {
+            RoeRules.Current = WingRoe.Free;
+            WingWeapons.EngageResult = false;
+            var member = new WingMember { Order = WingOrder.Formation };
+
+            Assert.False(Run(member));
+            Assert.Equal(1, WingWeapons.Shots);
+            Assert.Equal(1, WingWeapons.TurretTargetClears);
         }
 
         [Theory]

@@ -94,5 +94,17 @@ namespace WingCommand.PureTests
             Assert.Equal(WingMapPresentation.OutlineKind.None, target.Outline);
             Assert.False(target.CommandBrackets);
         }
+
+        [Fact]
+        public void DownedPilotAlwaysGetsDistinctSarOutline()
+        {
+            WingMapPresentation appearance = WingMapPresentation.Resolve(
+                isWingMember: false, isWingTarget: true, highlightWing: false,
+                highlightTargets: false, tacticalActive: false, commandSelected: false,
+                isDowned: true);
+
+            Assert.Equal(WingMapPresentation.OutlineKind.Downed, appearance.Outline);
+            Assert.False(appearance.CommandBrackets);
+        }
     }
 }

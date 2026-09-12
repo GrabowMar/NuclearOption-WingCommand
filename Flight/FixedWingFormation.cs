@@ -28,6 +28,10 @@ namespace WingCommand
             public bool ModeChanged;
             public bool Airbraking;
             public FormationIntercept.Plan Intercept;
+            public float AvoidanceUntil;
+            public Aircraft AvoidanceThreat;
+            public float AvoidanceMiss;
+            public Vector3 AvoidanceEscape;
         }
 
         /// <summary>Effort above 1 bypasses AutopilotPlane's additional squared speed reduction of turn
@@ -242,12 +246,27 @@ namespace WingCommand
                                               leaderSpeed, drift, aggression, damping, rejoin, outOfPosition,
                                               slotVelocity, leaderState, memory);
 
-            if (FormationCollisionGuard.TryAvoid(aircraft, leader, members, spacing,
-                out Vector3 escape, out collisionThreat, out predictedMiss))
+            bool isAvoiding = FormationCollisionGuard.TryAvoid(aircraft, leader, members, spacing,
+                out Vector3 escape, out collisionThreat, out predictedMiss, memory.AvoidanceThreat);
+
+            if (!isAvoiding && memory.FlightSeconds < memory.AvoidanceUntil && memory.AvoidanceThreat != null && !memory.AvoidanceThreat.disabled)
             {
-                // Apply positive throttle to retract arrival airbrakes before collision escape; native
-                // AutoAim may add power.
-                controls.throttle = Mathf.Max(0.1f, controls.throttle);
+                isAvoiding = true;
+                collisionThreat = memory.AvoidanceThreat;
+                escape = memory.AvoidanceEscape;
+                predictedMiss = memory.AvoidanceMiss;
+            }
+
+            if (isAvoiding)
+            {
+                memory.AvoidanceThreat = collisionThreat;
+                memory.AvoidanceEscape = escape;
+                memory.AvoidanceMiss = predictedMiss;
+                memory.AvoidanceUntil = memory.FlightSeconds + 0.35f;
+
+                // Apply positive throttle to retract arrival airbrakes and maintain energy during escape
+                controls.throttle = Mathf.Max(0.7f, controls.throttle);
+                controls.brake = 0f;
                 memory.Airbraking = false;
                 Vector3 current = aircraft.rb.velocity.sqrMagnitude > 1f
                     ? aircraft.rb.velocity.normalized : aircraft.transform.forward;
@@ -283,11 +302,16 @@ namespace WingCommand
                 // Return before slot pursuit or roll trim can oppose escape.
                 return;
             }
+            memory.AvoidanceThreat = null;
+
+            Vector3 leaderV = leader.rb != null ? leader.rb.velocity : Vector3.zero;
+            float leaderH = Mathf.Sqrt(leaderV.x * leaderV.x + leaderV.z * leaderV.z);
+            float effectiveLeaderClimb = leaderState.EffectiveClimb(leaderVel.y, leaderH, holdBlend);
 
             Steer(aircraft, leader, slotPos, toSlot, distance,
                                        leaderVel, drift, aggression, damping, spacing,
                                        outOfPosition, leaderState,
-                                       leaderVel.y, throttle, report,
+                                       effectiveLeaderClimb, throttle, report,
                                        rejoin.Holding, controls, memory);
             // Observe final native throttle after exclusion-zone escape rather than restoring the
             // arrival request.
@@ -389,7 +413,8 @@ namespace WingCommand
                 !rejoin.Holding && memory.Recovery.Mode != FormationRecoveryMode.SlowLeader, memory.Airbraking);
             controls.throttle = FormationControlRules.ClimbThrottleCap(energy.Throttle,
                 verticalSpeed - (leaderState.Velocity + slotVelocity).y, toSlot.y,
-                airspeed: memory.Airspeed, minimumSpeed: FormationClosure.LoadedMinimum(memory.MinimumAirspeed, BankOf(aircraft)));
+                airspeed: memory.Airspeed, minimumSpeed: FormationClosure.LoadedMinimum(memory.MinimumAirspeed, BankOf(aircraft)),
+                gap: gap, distance: distance);
             memory.Airbraking = controls.throttle == 0f;
 
             return new ThrottleState(gap, closing, desiredSpeed, controls.throttle,
@@ -436,7 +461,7 @@ namespace WingCommand
                              aggression, damping, spacing, outOfPosition, leaderState,
                              leaderClimb, holding, memory);
 
-            bool intercept = !holding && distance > Mathf.Max(WingTuning.CaptureDistance * 2f, 1500f);
+            bool intercept = !holding && (distance > Mathf.Max(WingTuning.CaptureDistance * 1.5f, spacing * 3.0f) || outOfPosition > 0.35f);
             // Retain curved rendezvous and bounded closure at all ranges, including overshoot recovery.
 
             float bankAllowed =
@@ -453,7 +478,28 @@ namespace WingCommand
             if (!intercept)
                 bankAllowed = Mathf.Lerp(bankAllowed, Mathf.Min(bankAllowed, WingTuning.FormationRecoveryBank), memory.Recovery.Blend);
             bankAllowed = WingFlightProfile.LimitBank(bankAllowed, LevelBank, memory.BankScale);
-            bankAllowed = Mathf.Min(bankAllowed, memory.Bank + FormationGuidance.BankRiseRate(leaderState.BankRate) * memory.Dt);
+
+            // Cap bank ceiling when pitched up or climbing to prevent elevator cross-coupling into zoom climbs
+            float vertSpeed = aircraft.rb != null ? aircraft.rb.velocity.y : 0f;
+            if (aircraft.transform.forward.y > 0.15f || vertSpeed > 5f)
+            {
+                bankAllowed = Mathf.Min(bankAllowed, 55f);
+            }
+
+            // Unify climb-arrest bank restriction across all modes
+            Vector3 velDir = aircraft.rb != null && aircraft.rb.velocity.sqrMagnitude > 1f
+                ? aircraft.rb.velocity : aircraft.transform.forward;
+            float velH = Mathf.Sqrt(velDir.x * velDir.x + velDir.z * velDir.z);
+            float pitchVel = Mathf.Atan2(velDir.y, Mathf.Max(1f, velH)) * Mathf.Rad2Deg;
+            Vector3 aimDir = aim.Point - aircraft.GlobalPosition();
+            float aimH = Mathf.Sqrt(aimDir.x * aimDir.x + aimDir.z * aimDir.z);
+            float pitchAim = Mathf.Atan2(aimDir.y, Mathf.Max(1f, aimH)) * Mathf.Rad2Deg;
+            bankAllowed = FormationControlRules.PitchDownBankAuthority(
+                pitchVel, pitchAim, vertSpeed, toSlot.y, bankAllowed, LevelBank);
+
+            float holdBlend = FormationCollision.HoldBlend(CombatFacade.Roe.Current == WingRoe.Hold, distance, spacing);
+            float riseRate = FormationGuidance.BankRiseRate(leaderState.BankRate) * (1f + 0.8f * holdBlend);
+            bankAllowed = Mathf.Min(bankAllowed, memory.Bank + riseRate * memory.Dt);
             memory.Bank = bankAllowed;
             aircraft.autopilot.AutoAim(
                 destination: aim.Point,
@@ -466,10 +512,10 @@ namespace WingCommand
                 // Unused by the plane overload when followTerrain=false; destination height supplies
                 // vertical command. Rotary uses followTerrain=true, where altitudeHold remains active.
                 altitudeHold: 0f,
-                targetVelocity: leaderVel);
+                targetVelocity: Vector3.zero);
 
-            // Native AutoAim already applies stability filtering; do not filter actuator outputs again
-            // or corrupt PID history.
+            // Native AutoAim owns actuator signs and stability filtering. Do not overwrite its
+            // pitch/roll outputs with geometric commands after filtering.
             if (Plugin.Settings.VerboseLogging.Value)
             {
                 bool terrain = (aircraft.autopilot.GetTerrainWarningSystem()?.urgency ?? 0f) > 0f;
@@ -542,8 +588,9 @@ namespace WingCommand
             // Correct altitude proportionally and damp relative slot climb.
             float vertDrift = (aircraft.rb != null ? aircraft.rb.velocity.y : 0f) - leaderClimb;
 
+            float maxVerticalCorrection = Mathf.Lerp(20f, maxCorrection, outOfPosition);
             float verticalCorrection = FormationControlRules.KinematicVerticalCorrection(
-                toSlot.y, vertDrift, maxCorrection,
+                toSlot.y, vertDrift, maxVerticalCorrection,
                 VerticalPositionGain, VerticalDriftDamping, aggression, damping);
 
             // Prevent low-altitude corrections from commanding descent.
@@ -582,12 +629,14 @@ namespace WingCommand
                     float scale = Mathf.Clamp01(aircraft.radarAlt / BankMatchFloor);
                     allowed = Mathf.Lerp(maxAngle * 0.25f, allowed, scale);
                 }
+                float allowedPitchUp = Mathf.Lerp(4.0f, MaxRejoinPitchUp, outOfPosition);
+                float allowedPitchDown = Mathf.Lerp(3.5f, MaxRejoinPitchDown, outOfPosition);
                 FormationControlRules.SafeRejoinDirection(
                     currentDirection.x, currentDirection.y, currentDirection.z,
                     requested.x, requested.y, requested.z,
                     allowed,
-                    MaxRejoinPitchUp,
-                    MaxRejoinPitchDown,
+                    allowedPitchUp,
+                    allowedPitchDown,
                     aircraft.radarAlt,
                     out float sx, out float sy, out float sz);
 
@@ -679,7 +728,9 @@ namespace WingCommand
             // Allow genuine leader-bank demand above the settled ceiling so turns do not force
             // followers wide.
             maxBank = Mathf.Max(maxBank, leaderBankMag * BankFollowScale + LevelBank);
-            maxBank = Mathf.Min(maxBank, MaxSafeBank);
+            float safeCeiling = (aircraft.transform.forward.y > 0.15f || (aircraft.rb != null && aircraft.rb.velocity.y > 5f))
+                ? 55f : MaxSafeBank;
+            maxBank = Mathf.Min(maxBank, safeCeiling);
 
             // Limit sink-related bank reduction by terrain clearance; a high-altitude descent is not a
             // terrain emergency.
