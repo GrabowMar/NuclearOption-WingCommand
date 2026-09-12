@@ -22,6 +22,7 @@
     <Compile Include="..\..\Core\WingCommandSelection.cs" Link="Core\WingCommandSelection.cs" />
     <Compile Include="..\..\Core\WingCommandManager.Recruit.cs" Link="Core\WingCommandManager.Recruit.cs" />
     <Compile Include="..\..\Core\WingOrderCatalog.cs" Link="Core\WingOrderCatalog.cs" />
+    <Compile Include="..\..\Core\WingDirective.cs" Link="Core\WingDirective.cs" />
     <Compile Include="..\..\Personnel\WingKillCredit.cs" Link="Personnel\WingKillCredit.cs" />
     <Compile Include="..\..\Combat\TacticalCoordinator.cs" Link="Combat\TacticalCoordinator.cs" />
     <Compile Include="..\..\Combat\SlotEngagement.cs" Link="Combat\SlotEngagement.cs" />

@@ -25,6 +25,28 @@ namespace WingCommand
             Postings[next(Postings.Length)] + " " + Habits[next(Habits.Length)] + " " +
             RadioHabits[(int)persona][next(RadioHabits[(int)persona].Length)];
 
+        [ThreadStatic]
+        private static Random threadRandom;
+        private static Random Rng => threadRandom ?? (threadRandom = new Random());
+
+        public static string RandomName(Random rng = null)
+        {
+            var r = rng ?? Rng;
+            return Name(r.Next);
+        }
+
+        public static string RandomCallsign(Func<string, bool> taken = null, Random rng = null)
+        {
+            var r = rng ?? Rng;
+            return Callsign(r.Next, taken ?? (_ => false));
+        }
+
+        public static string RandomBackground(ChatterPersona persona, Random rng = null)
+        {
+            var r = rng ?? Rng;
+            return Background(r.Next, persona);
+        }
+
         private static readonly string[] Surnames =
         {
             "Brennan", "Okonkwo", "Haldor", "Petrov", "Mancini", "Rask", "Oyelaran", "Steiner",
@@ -47,12 +69,12 @@ namespace WingCommand
             "COBALT", "COPPER", "CROW", "DASH", "DEADEYE", "DECOY", "DINGO", "DOWNSHIFT",
             "DRIFTER", "DUSTOFF", "ECHO", "EMBER", "FABLE", "FALCON", "FERRITE", "FLINT",
             "FOGHORN", "FOXGLOVE", "FROST", "GADFLY", "GANNET", "GASKET", "GHOST", "GLINT",
-            "GOSHAWK", "GROUSE", "HALO", "HATCH", "HERON", "HUSH", "IBIS", "JACKDAW",
-            "JAVELIN", "KESTREL", "KITE", "LATCH", "LOCKSTEP", "MAGPIE", "MARLIN", "MICA",
+            "GOSHAWK", "GROUSE", "HALO", "HATCH", "HATCHET", "HERON", "HUSH", "IBIS", "JACKDAW",
+            "JAVELIN", "KESTREL", "KITE", "LATCH", "LOCKSTEP", "MAGPIE", "MARLIN", "MERIDIAN", "MICA",
             "MOTH", "NEEDLE", "NICKEL", "NOMAD", "OARLOCK", "ONYX", "OSPREY", "PATCH",
             "PEREGRINE", "PIPER", "QUARRY", "QUILL", "RATCHET", "REDTAIL", "RELAY", "RIVET",
             "ROOK", "RUDDER", "SALT", "SHINGLE", "SLATE", "SPARROW", "SPECTER", "SPOOL",
-            "STITCH", "TANGENT", "THIMBLE", "THISTLE", "TORCH", "TRACER", "WREN", "ZIPPER",
+            "STITCH", "TANGENT", "THIMBLE", "THISTLE", "TORCH", "TRACER", "VALKYRIE", "WREN", "ZIPPER",
         };
 
         private static readonly string[] Postings =

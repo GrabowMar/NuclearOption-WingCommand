@@ -130,6 +130,14 @@ namespace WingCommand
         private float leaderThrottle;
         private bool leaderThrottleKnown;
 
+        private Vector3 lastLeaderVel;
+        private float leaderVerticalAccel;
+        private float leaderPitchRate;
+        private float leaderRollRate;
+        private float leaderYawRate;
+        private float leaderPitch;
+        private float leaderRawBank;
+
         /// <summary>Last geometry-update time. Differentiate over actual elapsed time because Performance
         /// mode skips physics ticks.</summary>
         private float lastGeometryTime;
@@ -166,6 +174,42 @@ namespace WingCommand
         /// sway.</summary>
         private LeaderState TrackLeader(Aircraft leader, float dt)
         {
+            Vector3 leaderVel = leader.rb != null ? leader.rb.velocity : Vector3.zero;
+            if (leader.rb != null)
+            {
+                Vector3 omega = leader.rb.angularVelocity;
+                leaderPitchRate = -Vector3.Dot(omega, leader.transform.right);
+                leaderRollRate = Vector3.Dot(omega, leader.transform.forward);
+                leaderYawRate = Vector3.Dot(omega, leader.transform.up);
+            }
+            else
+            {
+                leaderPitchRate = 0f;
+                leaderRollRate = 0f;
+                leaderYawRate = 0f;
+            }
+
+            Vector3 fwd = leader.transform.forward;
+            float fwdH = Mathf.Sqrt(fwd.x * fwd.x + fwd.z * fwd.z);
+            leaderPitch = Mathf.Atan2(fwd.y, Mathf.Max(0.001f, fwdH)) * Mathf.Rad2Deg;
+
+            float observedBank = FixedWingFormation.BankOf(leader);
+            leaderRawBank = observedBank;
+
+            if (trackedLeader != leader)
+            {
+                lastLeaderVel = leaderVel;
+                leaderVerticalAccel = 0f;
+            }
+            else if (dt > 0.0001f)
+            {
+                float measuredVertAccel = (leaderVel.y - lastLeaderVel.y) / dt;
+                leaderVerticalAccel = Mathf.Lerp(leaderVerticalAccel,
+                    Mathf.Clamp(measuredVertAccel, -80f, 150f),
+                    1f - Mathf.Exp(-dt / 0.10f));
+                lastLeaderVel = leaderVel;
+            }
+
             Vector3 instant = leader.rb != null && leader.rb.velocity.sqrMagnitude > 1f
                 ? leader.rb.velocity.normalized
                 : leader.transform.forward;
@@ -187,14 +231,19 @@ namespace WingCommand
                 flatLeaderTrack = Flatten(instant);
                 leaderTurnRate = 0f;
                 leaderSpeedRate = 0f;
-                leaderBank = FixedWingFormation.BankOf(leader);
-                leaderBankRate = 0f;
+                leaderBank = observedBank;
+                leaderBankRate = leaderRollRate;
                 lastLeaderSpeed = leader.speed;
                 return State();
             }
 
-            float trackResponse = FormationTracking.TrackResponse(
-                Vector3.Angle(smoothedLeaderDir, instant), LeaderTrackSmoothing);
+            float holdBlend = FormationCollision.HoldBlend(
+                CombatFacade.Roe.Current == WingRoe.Hold, member.SlotError, WingFormation.SlotSpacing);
+            float intensity = FormationTracking.ManeuverIntensity(
+                leaderPitchRate, leaderRollRate, leaderTurnRate);
+
+            float trackResponse = FormationTracking.ResponsiveTrackTime(
+                Vector3.Angle(smoothedLeaderDir, instant), LeaderTrackSmoothing, intensity, holdBlend);
             smoothedLeaderDir = Vector3.Slerp(
                 smoothedLeaderDir, instant,
                 1f - Mathf.Exp(-dt / trackResponse)).normalized;
@@ -225,15 +274,11 @@ namespace WingCommand
                 Mathf.Clamp(rate, -WingTuning.MaxCredibleAccel, WingTuning.MaxCredibleAccel),
                 1f - Mathf.Exp(-dt / WingTuning.SpeedRateSmoothing));
 
-            float previousBank = leaderBank;
-            float observedBank = FixedWingFormation.BankOf(leader);
-            float bankResponse = FormationTracking.BankResponse(observedBank - leaderBank, BankSmoothing);
+            float bankResponse = FormationTracking.ResponsiveBankTime(
+                observedBank - leaderBank, BankSmoothing, intensity, holdBlend);
             leaderBank = FormationTracking.SmoothBank(
                 leaderBank, observedBank, bankResponse, dt);
-            leaderBankRate = Mathf.Lerp(leaderBankRate,
-                Mathf.Clamp(Mathf.DeltaAngle(previousBank, leaderBank) * Mathf.Deg2Rad / dt,
-                    -Mathf.PI, Mathf.PI),
-                1f - Mathf.Exp(-dt / bankResponse));
+            leaderBankRate = Mathf.Lerp(leaderBankRate, leaderRollRate, 1f - Mathf.Exp(-dt / bankResponse));
 
             return State();
         }
@@ -242,7 +287,9 @@ namespace WingCommand
         private LeaderState State() =>
             new LeaderState(smoothedLeaderDir, flatLeaderTrack, LeaderTurnRate,
                             leaderSpeedRate, leaderBank, leaderBankRate, lastLeaderSpeed, leaderThrottle,
-                            leaderThrottleKnown);
+                            leaderThrottleKnown,
+                            leaderPitchRate, leaderRollRate, leaderYawRate,
+                            leaderVerticalAccel, leaderPitch, leaderRawBank);
 
         /// <summary>Briefly smooth leader throttle for immediate acceleration/deceleration anticipation
         /// without propagating AI throttle chatter.</summary>
@@ -309,6 +356,13 @@ namespace WingCommand
             lastLeaderSpeed = 0f;
             leaderThrottleKnown = false;
             lastGeometryTime = 0f;
+            lastLeaderVel = Vector3.zero;
+            leaderVerticalAccel = 0f;
+            leaderPitchRate = 0f;
+            leaderRollRate = 0f;
+            leaderYawRate = 0f;
+            leaderPitch = 0f;
+            leaderRawBank = 0f;
 
             if (Plugin.Settings.VerboseLogging.Value)
                 Plugin.LogVerbose($"[Formation] {aircraft.unitName} id={aircraft.GetInstanceID()} entering slot {member.Slot}");
@@ -387,6 +441,8 @@ namespace WingCommand
             // threat spacing because it also updates the combat-spread warning latch.
             float roeScale = CombatFacade.Roe.SpacingScale(CombatFacade.Roe.Current);
             float threatScale = ThreatSpacingScale(leader, dt);
+            if (PersonnelFacade.Roster.HasPerk(aircraft, PilotPerk.CombatSpread) && threatScale > 1.001f)
+                threatScale *= PilotPerks.CombatSpreadScale(true, true);
             spacing *= threatScale > 1.001f ? Mathf.Max(roeScale, threatScale) : roeScale;
             spacing *= FormationSolver.SharedFlightSpacing(member.Siblings, leader);
 
@@ -396,6 +452,8 @@ namespace WingCommand
 
             Vector3 toSlot = slotPos - aircraft.GlobalPosition();
             float distance = toSlot.magnitude;
+            if (PersonnelFacade.Roster.HasPerk(aircraft, PilotPerk.WingmanInstinct))
+                distance /= PilotPerks.FormationRejoinScale(true);
 
             member.SlotError = distance;
             CheckAbleToKeepUp(leader, distance);
@@ -426,7 +484,18 @@ namespace WingCommand
             {
                 RotaryFormation.Mode mode = RotaryFormation.Fly(
                     aircraft, leader, slotPos, toSlot, distance, spacing,
-                    lastRotaryMode, leaderState, out float horizontalError);
+                    lastRotaryMode, leaderState, member.Siblings,
+                    out float horizontalError,
+                    out Aircraft collisionThreat, out float predictedMiss);
+
+                int threatId = collisionThreat != null ? collisionThreat.GetInstanceID() : 0;
+                if (threatId != collisionThreatId)
+                {
+                    Plugin.LogVerbose("[Formation] " + aircraft.unitName + " id=" + aircraft.GetInstanceID() +
+                        (threatId == 0 ? " collision avoidance clear; resuming slot" :
+                        " collision avoidance priority: neighbor=" + threatId + " predicted miss=" + predictedMiss.ToString("F0") + " m"));
+                    collisionThreatId = threatId;
+                }
 
                 ReportRotaryMode(mode, distance, horizontalError);
             }
@@ -450,6 +519,8 @@ namespace WingCommand
             float combatSpreadTarget =
                 WingFidelity.SmartFormation && leaderMissileThreat
                     ? CombatSpreadBackScale : 1f;
+            if (PersonnelFacade.Roster.HasPerk(aircraft, PilotPerk.CombatSpread) && combatSpreadTarget > 1f)
+                combatSpreadTarget *= PilotPerks.CombatSpreadScale(true, true);
             combatSpread = Mathf.Lerp(combatSpread, combatSpreadTarget,
                 1f - Mathf.Exp(-dt / CombatSpreadEaseSeconds));
 
@@ -504,17 +575,22 @@ namespace WingCommand
             }
             else
             {
+                float holdBlend = FormationCollision.HoldBlend(
+                    CombatFacade.Roe.Current == WingRoe.Hold, member.SlotError, spacing);
+                float slotResponse = FormationTracking.ResponsiveSlotTime(
+                    FormationTracking.SlotResponseSeconds, holdBlend, leaderState.ManeuverIntensity);
+
                 // Track a bounded continuous slot curve and its derivative so bank changes cannot
                 // create position and velocity spikes.
                 float speedLimit = WingTuning.SlotVelocityLimit / Mathf.Sqrt(3f);
                 FormationTracking.DampedAxis(smoothedSlotOffset.x, slotVelocity.x, desiredOffset.x,
-                    FormationTracking.SlotResponseSeconds, speedLimit, dt,
+                    slotResponse, speedLimit, dt,
                     out smoothedSlotOffset.x, out slotVelocity.x);
                 FormationTracking.DampedAxis(smoothedSlotOffset.y, slotVelocity.y, desiredOffset.y,
-                    FormationTracking.SlotResponseSeconds, speedLimit, dt,
+                    slotResponse, speedLimit, dt,
                     out smoothedSlotOffset.y, out slotVelocity.y);
                 FormationTracking.DampedAxis(smoothedSlotOffset.z, slotVelocity.z, desiredOffset.z,
-                    FormationTracking.SlotResponseSeconds, speedLimit, dt,
+                    slotResponse, speedLimit, dt,
                     out smoothedSlotOffset.z, out slotVelocity.z);
             }
             // Do not add climb velocity again to slot position; steering handles climb and throttle

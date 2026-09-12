@@ -21,6 +21,7 @@ namespace WingCommand
         private static AvKit.Popup customPilotsPopup;
         private static float customPilotsRowY;
         private static WingButton sarButton;
+        private static WingButton localSarButton;
 
         private static TMP_Text pilotIdentityLabel;
         private static TMP_Text pilotRankLabel;
@@ -37,21 +38,44 @@ namespace WingCommand
         private static Image pilotCardRail;
         private static Image[] pilotPortraitFrame;
         private static Image pilotKiaOverlay;
-        private static readonly List<PilotSkillIcon> pilotSkillIcons = new List<PilotSkillIcon>();
+        private static readonly List<PilotSkillCard> pilotSkillCards = new List<PilotSkillCard>();
+        private static TMP_Text pilotSkillsEmptyLabel;
         private static Image airframeCardRail;
 
-        private static TMP_Text airframeTypeLabel;
-        private static TMP_Text airframeStateLabel;
-        private static TMP_Text airframeOrderLabel;
-        private static TMP_Text airframeLoadoutLabel;
-        private static TMP_Text airframeWeaponsLabel;
         private static Image airframeSilhouette;
+        private static TMP_Text airframeNameLabel;
+        private static TMP_Text airframeSlotLabel;
+
+        private static RectTransform squadronViewRoot;
 
         // Wing-page construction.
 
         /// <summary>Squadron dossier and explicit SAR dispatch. SUPPLY chooses the next pilot; aircraft
         /// details follow the inspected pilot or show recovery status.</summary>
         private static float AddWingPage(RectTransform parent, float y)
+        {
+            squadronViewRoot = new GameObject("SquadronViewRoot", typeof(RectTransform)).GetComponent<RectTransform>();
+            squadronViewRoot.SetParent(parent, worldPositionStays: false);
+            squadronViewRoot.anchorMin = Vector2.zero;
+            squadronViewRoot.anchorMax = Vector2.one;
+            squadronViewRoot.offsetMin = Vector2.zero;
+            squadronViewRoot.offsetMax = Vector2.zero;
+
+            customStudioRoot = new GameObject("CustomStudioRoot", typeof(RectTransform)).GetComponent<RectTransform>();
+            customStudioRoot.SetParent(parent, worldPositionStays: false);
+            customStudioRoot.anchorMin = Vector2.zero;
+            customStudioRoot.anchorMax = Vector2.one;
+            customStudioRoot.offsetMin = Vector2.zero;
+            customStudioRoot.offsetMax = Vector2.zero;
+            customStudioRoot.gameObject.SetActive(false);
+
+            float studioBottom = BuildCustomPilotsStudio(customStudioRoot, y);
+            float squadronBottom = BuildSquadronView(squadronViewRoot, y);
+
+            return Mathf.Min(squadronBottom, studioBottom);
+        }
+
+        private static float BuildSquadronView(RectTransform parent, float y)
         {
             y = Heading(parent, y, "SQUADRON");
             y = ColumnHeaders(parent, y, PilotColumns);
@@ -74,14 +98,15 @@ namespace WingCommand
 
             WingUi.Button(parent, "CUSTOM PILOTS",
                 new Rect(Pad + buttonW + Gap, y, buttonW, RowHeight), FontSmall, OnCustomPilots)
-                .WithTooltip("Select custom pilots to recruit from files (Shift-click opens folder)");
+                .WithTooltip("Open Pilot Studio. Ctrl-click opens the quick list; Shift-click opens the pilot folder.");
 
             y -= RowHeight + Gap;
 
             y = Heading(parent, y, "PILOT DOSSIER");
             float w = PanelWidth - Pad * 2f;
 
-            WingUi.TacticalCard(parent, new Rect(Pad, y, w, 154f), WingUi.RailCyan);
+            var (_, dossierRail) = WingUi.TacticalCard(parent, new Rect(Pad, y, w, 180f), WingUi.RailCyan);
+            pilotCardRail = dossierRail;
             y -= 8f;
             const float portraitX = Pad + 8f;
             const float portraitGap = Space3;
@@ -113,7 +138,6 @@ namespace WingCommand
             pilotKiaOverlay.gameObject.SetActive(false);
 
             pilotPortraitFrame = Outline(parent, new Rect(portraitX, y, PortraitWidth, PortraitHeight), RankColor(WingRank.Rookie));
-            pilotCardRail = null;
 
             // Pilot identity, skills, and biography column.
             float dossierX = portraitX + PortraitWidth + portraitGap;
@@ -140,82 +164,85 @@ namespace WingCommand
                                       FontMicro, FontStyles.Normal, TextAlignmentOptions.Left);
             detailY -= LineHeight + 3f;
 
-            // Skill icons with descriptive hover help.
-            const float skillSize = 20f;
-            const float skillGap = 4f;
-            pilotSkillIcons.Clear();
-            int perkColumns = Mathf.Max(1, Mathf.FloorToInt((dossierW + skillGap) / (skillSize + skillGap)));
-            string[] perkIcons = {
-                "maneuver", "cover", "rejoin", "attack", "cargo", "rejoin", "cover", "cover",
-                "land", "rejoin", "orbit", "move", "land", "jam", "maneuver", "maneuver",
-                "jam", "maneuver", "jam", "tasking", "attack", "attack", "cargo", "move"
-            };
-            for (int i = 0; i < PilotPerks.Count; i++)
-                pilotSkillIcons.Add(new PilotSkillIcon(parent,
-                    new Rect(dossierX + (skillSize + skillGap) * (i % perkColumns),
-                        detailY - (skillSize + skillGap) * (i / perkColumns), skillSize, skillSize),
-                    perkIcons[i], PilotPerks.Name((PilotPerk)i), PilotPerks.Description((PilotPerk)i)));
-            detailY -= ((PilotPerks.Count + perkColumns - 1) / perkColumns) * (skillSize + skillGap);
-
-            // Biography within the dossier column.
-            pilotBackgroundLabel = Label(parent, "", new Rect(dossierX, detailY, dossierW, 38f),
+            // Biography within the dossier column - full comfortable height without cramped skill icons!
+            const float bioH = 78f;
+            pilotBackgroundLabel = Label(parent, "", new Rect(dossierX, detailY, dossierW, bioH),
                                          Friendly(), FontMicro, FontStyles.Normal,
                                          TextAlignmentOptions.TopLeft);
             pilotBackgroundLabel.enableWordWrapping = true;
             pilotBackgroundLabel.overflowMode = TextOverflowModes.Ellipsis;
 
-            y = Mathf.Min(y - PortraitHeight, detailY - 38f) - Space4;
+            y = Mathf.Min(y - PortraitHeight, detailY - bioH) - Space4;
 
-            y = Heading(parent, y, "AIRFRAME");
-            float airframeRailY = y;
-            WingUi.TacticalCard(parent, new Rect(Pad, y, w, 170f), WingUi.RailEmerald);
-            y -= Space2;
+            // Dedicated Pilot Skills & Perks Section
+            y = Heading(parent, y, "PILOT SKILLS & PERKS");
+            const float skillsCardH = 88f;
+            WingUi.TacticalCard(parent, new Rect(Pad, y, w, skillsCardH), WingUi.RailCyan);
 
-            float airframeTextX = Pad + 8f;
-            float airframeTextW = w - 116f;
+            pilotSkillsEmptyLabel = Label(parent, "NO ABILITIES EARNED YET\nCombat sorties and promotions unlock tactical perks & survival skills.",
+                new Rect(Pad + Space3, y - 46f, w - Space6, 40f),
+                Dim(), FontMicro, FontStyles.Italic, TextAlignmentOptions.Center);
+            pilotSkillsEmptyLabel.gameObject.SetActive(false);
 
-            Color ghost = WingColor();
-            ghost.a = 0f;
+            pilotSkillCards.Clear();
+            float colW = (w - Space4 - Gap) * 0.5f;
+            const float cardPitchY = 40f;
+            const float cardH = 36f;
+            for (int r = 0; r < 2; r++)
+            {
+                float rowY = y - 4f - r * cardPitchY;
+                for (int c = 0; c < 2; c++)
+                {
+                    float cardX = Pad + Space2 + c * (colW + Gap);
+                    pilotSkillCards.Add(new PilotSkillCard(parent, new Rect(cardX, rowY, colW, cardH)));
+                }
+            }
+
+            y -= skillsCardH + Gap;
+
+            // Compact Deduplicated Airframe Assignment Section
+            y = Heading(parent, y, "AIRFRAME ASSIGNMENT");
+            const float airframeCardH = 46f;
+            var (_, airframeRail) = WingUi.TacticalCard(parent, new Rect(Pad, y, w, airframeCardH), WingUi.RailEmerald);
+            airframeCardRail = airframeRail;
+
+            const float silW = 38f;
             airframeSilhouette = AddSprite(parent, "AirframeSilhouette",
                       IconFactory.Get("airframe"),
-                      new Rect(PanelWidth - Pad - 104f, y - 26f, 96f, 96f), ghost);
+                      new Rect(Pad + 6f, y - 4f, silW, silW), WingColor());
 
-            airframeTypeLabel = Label(parent, "", new Rect(airframeTextX, y, airframeTextW, LineHeight), Friendly(),
-                                      FontLead, FontStyles.Normal, TextAlignmentOptions.Left);
-            y -= LineHeight + 2f;
-            airframeStateLabel = Label(parent, "", new Rect(airframeTextX, y, airframeTextW, LineHeight), Friendly(),
-                                       FontSmall, FontStyles.Normal, TextAlignmentOptions.Left);
-            y -= LineHeight + 2f;
-            airframeOrderLabel = Label(parent, "", new Rect(airframeTextX, y, airframeTextW, LineHeight), Friendly(),
-                                       FontSmall, FontStyles.Normal, TextAlignmentOptions.Left);
-            y -= LineHeight + 2f;
-            airframeLoadoutLabel = Label(parent, "", new Rect(airframeTextX, y, airframeTextW, LineHeight), Dim(),
-                                         FontMicro, FontStyles.Normal, TextAlignmentOptions.Left);
-            y -= LineHeight + 2f;
-            airframeWeaponsLabel = Label(parent, "", new Rect(airframeTextX, y, airframeTextW, 64f), Friendly(),
-                                         FontMicro, FontStyles.Normal, TextAlignmentOptions.TopLeft);
-            airframeTypeLabel.enableAutoSizing = true;
-            airframeTypeLabel.fontSizeMin = FontMicro;
-            airframeStateLabel.enableAutoSizing = true;
-            airframeStateLabel.fontSizeMin = FontMicro;
-            airframeOrderLabel.enableAutoSizing = true;
-            airframeOrderLabel.fontSizeMin = FontMicro;
-            airframeWeaponsLabel.enableWordWrapping = true;
-            airframeWeaponsLabel.overflowMode = TextOverflowModes.Ellipsis;
+            float airframeTextX = Pad + 6f + silW + 8f;
+            const float sarW = 82f;
+            const float sarGap = 4f;
+            float sarActionsW = sarW * 2f + sarGap;
+            float airframeTextW = w - (6f + silW + 8f) - sarActionsW - Space2;
 
-            float airframeBottom = airframeRailY - 170f;
-            airframeCardRail = Rule(parent,
-                new Rect(Pad, airframeRailY, 3f, airframeRailY - airframeBottom),
-                FrameColor());
-            sarButton = WingUi.Button(parent, "DISPATCH SAR",
-                new Rect(Pad, airframeBottom - Gap, PanelWidth - Pad * 2f, RowHeight), FontSmall,
+            airframeNameLabel = Label(parent, "", new Rect(airframeTextX, y - 4f, airframeTextW, 18f), Friendly(),
+                                      FontSmall, FontStyles.Bold, TextAlignmentOptions.Left);
+            airframeSlotLabel = Label(parent, "", new Rect(airframeTextX, y - 24f, airframeTextW, 16f), Dim(),
+                                      FontMicro, FontStyles.Normal, TextAlignmentOptions.Left);
+
+            float sarX = Pad + w - sarActionsW - 4f;
+            sarButton = WingUi.Button(parent, "AIR SAR",
+                new Rect(sarX, y - 9f, sarW, 28f), FontSmall, UiButtonStyle.Danger,
                 () => PersonnelFacade.SearchAndRescue.Dispatch(inspectPilot, WingCommandManager.Instance?.Wing))
                 .WithTooltip("Send the nearest idle rescue-capable wing helicopter to this downed pilot on land. Water rescue uses the native hoist.");
-            return airframeBottom - Gap - RowHeight;
+            sarButton.gameObject.SetActive(false);
+
+            localSarButton = WingUi.Button(parent, "LOCAL 10M",
+                new Rect(sarX + sarW + sarGap, y - 9f, sarW, 28f), FontSmall, UiButtonStyle.Default,
+                OnLocalRecovery)
+                .WithTooltip("Organize local recovery for 10,000,000 funds. Completes in five mission minutes; the pilot remains at risk until then.");
+            localSarButton.gameObject.SetActive(false);
+
+            y -= airframeCardH + Gap;
+            return y;
         }
 
         private static void RefreshWingPage(WingRegistry wing)
         {
+            if (customStudioRoot != null && customStudioRoot.gameObject.activeSelf) return;
+
             List<WingPilot> display = PersonnelFacade.Roster.DisplayRoster();
             int count = display.Count;
 
@@ -245,15 +272,49 @@ namespace WingCommand
             }
 
             WingPilot focus = inspectPilot;
-            sarButton?.SetEnabled(focus != null && !focus.Lost && focus.RecoveryStatus == PilotRecoveryStatus.Downed);
+            bool downed = focus != null && !focus.Lost && focus.RecoveryStatus == PilotRecoveryStatus.Downed;
+            bool recoverable = downed || (focus != null && !focus.Lost &&
+                focus.RecoveryStatus == PilotRecoveryStatus.Missing);
+            float localRemaining = recoverable
+                ? PersonnelFacade.SearchAndRescue.LocalRecoveryRemaining(focus)
+                : -1f;
+            if (sarButton != null)
+            {
+                sarButton.gameObject.SetActive(recoverable);
+                sarButton.SetEnabled(downed);
+                sarButton.SetLatched(false);
+                sarButton.WithTooltip(downed
+                    ? "Send an idle rescue-capable wing helicopter to this downed pilot on land."
+                    : "AIR SAR requires a confirmed survivor location. Use LOCAL SAR to search for a missing pilot.");
+            }
+            if (localSarButton != null)
+            {
+                bool active = localRemaining >= 0f;
+                localSarButton.gameObject.SetActive(recoverable);
+                localSarButton.SetEnabled(recoverable && !active &&
+                    EconomyFacade.Shop.Allocation >= PersonnelFacade.SearchAndRescue.LocalRecoveryCost);
+                localSarButton.SetLatched(active);
+                if (active)
+                {
+                    int seconds = Mathf.CeilToInt(localRemaining);
+                    localSarButton.SetText((seconds / 60).ToString("00") + ":" +
+                        (seconds % 60).ToString("00"));
+                }
+                else
+                {
+                    localSarButton.SetText("LOCAL 10M");
+                }
+            }
+
             if (focus == null)
             {
-                SetWingDetail("NO PILOT", "", "", "", 0f,
-                    "Pick a pilot from the squadron list above, or requisition aircraft " +
-                    "on the SUPPLY tab.",
-                    "NO AIRFRAME", "", "", "", "");
+                SetWingDetail("NO PILOT SELECTED", "", "", "", 0f,
+                    "Recruit a pilot using RECRUIT RANDOM or CUSTOM PILOTS above, or requisition an aircraft on the SUPPLY tab.",
+                    "NO AIRFRAME", "Select a pilot above to inspect active flight assignment");
                 SetSilhouetteAlpha(0f);
                 RenderPilotVisual(null);
+                if (pilotSkillsEmptyLabel != null) pilotSkillsEmptyLabel.gameObject.SetActive(false);
+                for (int i = 0; i < pilotSkillCards.Count; i++) pilotSkillCards[i].Hide();
                 return;
             }
 
@@ -311,30 +372,54 @@ namespace WingCommand
                     ? "STATUS   " + PersonnelFacade.SearchAndRescue.Status(focus)
                     : "RADIO PROFILE   " + focus.Persona.ToString().ToUpperInvariant();
 
-            SetWingDetail(identity, rank, stats, persona, progress,
-                          focus.Background, kia ? focus.LastAircraft ?? "Unknown aircraft" : "",
-                          "", kia ? "KILLED BY   " + (focus.KilledBy ?? "Unknown") : "", "", "");
-
             if (pilotIdentityLabel != null) pilotIdentityLabel.color = kia ? Alert() : Green();
+
+            // Bind dedicated pilot skills & perks
+            List<PilotPerk> perks = focus.Perks;
+            int perkCount = (perks != null && !kia) ? perks.Count : 0;
+            if (pilotSkillsEmptyLabel != null)
+                pilotSkillsEmptyLabel.gameObject.SetActive(perkCount == 0);
+
+            int maxCards = pilotSkillCards.Count;
+            for (int i = 0; i < maxCards; i++)
+            {
+                if (i < maxCards - 1 && i < perkCount)
+                {
+                    pilotSkillCards[i].Bind(perks[i]);
+                }
+                else if (i == maxCards - 1 && perkCount > maxCards)
+                {
+                    pilotSkillCards[i].BindExtra(perkCount - (maxCards - 1));
+                }
+                else if (i < perkCount)
+                {
+                    pilotSkillCards[i].Bind(perks[i]);
+                }
+                else
+                {
+                    pilotSkillCards[i].Hide();
+                }
+            }
 
             if (flying == null)
             {
-                SetSilhouetteAlpha(0f);
+                SetSilhouetteAlpha(0.25f);
                 if (airframeSilhouette != null) airframeSilhouette.sprite = IconFactory.Get("airframe");
-                if (airframeTypeLabel != null)
-                {
-                    airframeTypeLabel.text = kia ? "AIRCRAFT   " + (focus.LastAircraft ?? "Unknown aircraft") : "NO AIRFRAME";
-                    airframeTypeLabel.color = kia ? Alert() : Dim();
-                }
-                if (airframeStateLabel != null)
-                {
-                    airframeStateLabel.text = kia
-                        ? "CAUSE   " + (focus.LossCause ?? "Unknown")
-                        : focus.RecoveryStatus != PilotRecoveryStatus.None
-                            ? PersonnelFacade.SearchAndRescue.Status(focus)
-                            : "ON THE GROUND  ·  AWAITING AN AIRFRAME";
-                    airframeStateLabel.color = kia ? Alert() : Friendly();
-                }
+                string planeName = kia ? (focus.LastAircraft ?? "Unknown aircraft") :
+                    focus.RecoveryStatus == PilotRecoveryStatus.Missing ? "LOCATION UNKNOWN" : "ON THE GROUND";
+                string slotStatus = kia
+                    ? "CAUSE: " + (focus.LossCause ?? "Unknown")
+                    : focus.RecoveryStatus != PilotRecoveryStatus.None
+                        ? PersonnelFacade.SearchAndRescue.Status(focus)
+                        : "AWAITING AIRFRAME ASSIGNMENT";
+
+                SetWingDetail(identity, rank, stats, persona, progress, focus.Background, planeName, slotStatus);
+                if (airframeNameLabel != null)
+                    airframeNameLabel.color = kia ? Alert() : Dim();
+                if (airframeSlotLabel != null)
+                    airframeSlotLabel.color = kia ? Alert() : Friendly();
+                if (airframeCardRail != null)
+                    airframeCardRail.color = kia ? Alert() : WingUi.RailEmerald;
                 return;
             }
 
@@ -347,47 +432,22 @@ namespace WingCommand
                 airframeSilhouette.sprite = planeSprite;
             }
 
-            SetSilhouetteAlpha(0.45f);
+            SetSilhouetteAlpha(1.0f);
 
-            string type = definition != null
-                ? AvTheme.Truncate(definition.unitName, 22) + "   SLOT " + flying.Slot
-                : "AIRFRAME   SLOT " + flying.Slot;
+            string assignedName = definition != null
+                ? definition.unitName
+                : flying.Name;
+            string assignedSlot = "SLOT " + flying.Slot + (flying.IsFlightLead ? " · FLIGHT LEAD" : "");
+            if (aircraft != null && !aircraft.LocalSim)
+                assignedSlot += " (REMOTE)";
 
-            float fuel = flying.Fuel;
-            int ammo = flying.Ammo;
-            float integrity = flying.Integrity;
-            string state =
-                "FUEL " + Mathf.RoundToInt(fuel * 100f) + "%" +
-                "   AMMO " + ammo +
-                "   HULL " + Mathf.RoundToInt(integrity * 100f) + "%" +
-                (flying.CanDeliverCargo ? "   CARGO " + flying.CargoAmmo : "");
-
-            string order =
-                "ORDER " + WingOrderCatalog.ShortLabel(flying.Order) +
-                "   WEAPONS " + WingWeaponPreferences.Label(flying.WeaponPreference) +
-                (flying.DeliveryPending ? "   (DEPARTING)" : "") +
-                (flying.IsPanicking ? "   (DEFENSIVE)" : "");
-
-            string loadout = flying.LoadoutKnown
-                ? "LOADOUT " + EconomyFacade.LoadoutCatalog.Label(flying.Loadout) +
-                  " - fitted at requisition"
-                : "LOADOUT as found - assigned mission aircraft keep their own fit";
-
-            SetWingDetail(identity, rank, stats, persona, progress,
-                          focus.Background, type, state, order, loadout,
-                          WeaponManifest(aircraft));
-
-            if (airframeStateLabel != null)
-            {
-                bool poor = fuel <= (Plugin.Settings != null ? Plugin.Settings.BingoFuel : WingTuning.BingoFuel) ||
-                            ammo <= 0 || integrity < 0.75f;
-                airframeStateLabel.color = poor ? Warning() : Friendly();
-                if (airframeCardRail != null)
-                    airframeCardRail.color = poor ? Warning() : MemberFrameColor();
-            }
-
-            if (airframeTypeLabel != null && aircraft != null && !aircraft.LocalSim)
-                airframeTypeLabel.text = type + "   (NOT LOCALLY SIMULATED)";
+            SetWingDetail(identity, rank, stats, persona, progress, focus.Background, assignedName, assignedSlot);
+            if (airframeNameLabel != null)
+                airframeNameLabel.color = Green();
+            if (airframeSlotLabel != null)
+                airframeSlotLabel.color = Friendly();
+            if (airframeCardRail != null)
+                airframeCardRail.color = WingUi.RailEmerald;
         }
 
         /// <summary>Set faint aircraft-silhouette opacity or hide it on empty pages.</summary>
@@ -426,14 +486,6 @@ namespace WingCommand
                         pilotPortraitFrame[i].color = frameColor;
                 }
             }
-
-            if (pilotSkillIcons.Count > 0)
-            {
-                for (int i = 0; i < pilotSkillIcons.Count; i++)
-                {
-                    pilotSkillIcons[i].SetActive(pilot != null && pilot.Perks.Contains((PilotPerk)i));
-                }
-            }
         }
 
         private static void UpdatePortraitAspectFill(Image image, Sprite sprite, float containerW, float containerH)
@@ -456,105 +508,106 @@ namespace WingCommand
 
         private static void SetWingDetail(string identity, string rank, string stats,
                                           string persona, float progress, string background,
-                                          string type, string state, string order, string loadout,
-                                          string weapons)
+                                          string airframeName, string airframeSlot)
         {
             if (pilotIdentityLabel != null) pilotIdentityLabel.text = identity;
             if (pilotRankLabel != null) pilotRankLabel.text = rank;
             if (pilotStatsLabel != null) pilotStatsLabel.text = stats;
             if (pilotPersonaLabel != null) pilotPersonaLabel.text = persona;
             if (pilotBackgroundLabel != null) pilotBackgroundLabel.text = background;
-            if (airframeTypeLabel != null)
-            {
-                airframeTypeLabel.text = type;
-                airframeTypeLabel.color = Friendly();
-            }
-            if (airframeStateLabel != null) airframeStateLabel.text = state;
-            if (airframeOrderLabel != null) airframeOrderLabel.text = order;
-            if (airframeLoadoutLabel != null) airframeLoadoutLabel.text = loadout;
-            if (airframeWeaponsLabel != null) airframeWeaponsLabel.text = weapons;
+            if (airframeNameLabel != null) airframeNameLabel.text = airframeName;
+            if (airframeSlotLabel != null) airframeSlotLabel.text = airframeSlot;
 
             if (pilotXpBar != null)
                 pilotXpBar.rectTransform.sizeDelta =
                     new Vector2(Mathf.Max(0f, pilotXpBarWidth * Mathf.Clamp01(progress)), 3f);
         }
 
-        /// <summary>Summarise live stores grouped by weapon definition.</summary>
-        private static string WeaponManifest(Aircraft aircraft)
-        {
-            if (aircraft == null || aircraft.weaponStations == null) return "WEAPONS   —";
-
-            var names = new List<string>();
-            var ammo = new List<int>();
-            var stations = new List<int>();
-
-            foreach (WeaponStation station in aircraft.weaponStations)
-            {
-                if (station == null || station.Cargo) continue;
-
-                string name = station.WeaponInfo != null ? station.WeaponInfo.name : "STORE";
-                if (string.IsNullOrEmpty(name)) name = "STORE";
-                name = name.Replace("(Clone)", "").Replace("_", " ").Trim().ToUpperInvariant();
-
-                int index = names.IndexOf(name);
-                if (index < 0)
-                {
-                    names.Add(name);
-                    ammo.Add(Mathf.Max(0, station.Ammo));
-                    stations.Add(1);
-                }
-                else
-                {
-                    ammo[index] += Mathf.Max(0, station.Ammo);
-                    stations[index]++;
-                }
-            }
-
-            if (names.Count == 0) return "WEAPONS   UNARMED";
-
-            string result = "WEAPONS   ";
-            for (int i = 0; i < names.Count; i++)
-            {
-                if (i > 0) result += "   ·   ";
-                string count = stations[i] > 1 ? stations[i] + "x " : "";
-                result += count + AvTheme.Truncate(names[i], 20) + "  [" + ammo[i] + "]";
-            }
-            return result;
-        }
-
-        private sealed class PilotSkillIcon
+        private sealed class PilotSkillCard
         {
             public readonly Image Fill;
             public readonly Image[] Outline;
             public readonly Image Icon;
+            public readonly TMP_Text TitleLabel;
+            public readonly TMP_Text DescLabel;
             public readonly WingButton Hit;
-            public readonly string Title;
-            public readonly string Description;
+            public string Title { get; private set; }
+            public string Description { get; private set; }
 
-            public PilotSkillIcon(RectTransform parent, Rect rect, string key, string title, string description)
+            public PilotSkillCard(RectTransform parent, Rect rect)
             {
-                Title = title;
-                Description = description;
+                Fill = Panel(parent, rect, WingUi.CardFillSelected);
+                Outline = WingUi.Outline(parent, rect, Green());
 
-                Fill = Panel(parent, rect, WingUi.CardFill);
-                Outline = WingUi.Outline(parent, rect, FrameColor());
-                Icon = AddSprite(parent, "Skill_" + key, IconFactory.Get(key),
-                                 new Rect(rect.x + 2f, rect.y - 2f, rect.width - 4f, rect.height - 4f),
-                                 Dim());
-                Hit = HitButton(parent, rect, () => WingCommandManager.Instance?.Toast(title + ": " + description));
-                Hit.WithTooltip(title + " — " + description);
+                const float iconSize = 28f;
+                Icon = AddSprite(parent, "SkillIcon", null,
+                                 new Rect(rect.x + 4f, rect.y - 4f, iconSize, iconSize),
+                                 WingUi.RailEmerald);
+
+                float textX = rect.x + 4f + iconSize + 6f;
+                float textW = rect.width - (4f + iconSize + 6f) - 4f;
+                TitleLabel = Label(parent, "", new Rect(textX, rect.y - 2f, textW, 16f),
+                                   Green(), FontSmall, FontStyles.Bold, TextAlignmentOptions.Left);
+                DescLabel = Label(parent, "", new Rect(textX, rect.y - 18f, textW, 16f),
+                                  Dim(), FontMicro, FontStyles.Normal, TextAlignmentOptions.Left);
+                DescLabel.overflowMode = TextOverflowModes.Ellipsis;
+
+                Hit = HitButton(parent, rect, () => {
+                    if (!string.IsNullOrEmpty(Title))
+                        WingCommandManager.Instance?.Toast(Title + ": " + Description);
+                });
+                SetVisible(false);
             }
 
-            public void SetActive(bool active)
+            public void Bind(PilotPerk perk)
             {
-                Hit.WithTooltip((active ? "EARNED: " : "NOT EARNED: ") + Title + " — " + Description);
-                Icon.color = active ? Green() : new Color(0.35f, 0.5f, 0.45f, 0.35f);
-                Color frame = active ? Green() : FrameColor();
+                Title = PilotPerks.Name(perk);
+                Description = PilotPerks.Description(perk);
+                string key = PilotPerks.IconKey(perk);
+                if (Icon != null)
+                {
+                    Icon.sprite = IconFactory.Get(key);
+                    Icon.color = WingUi.RailEmerald;
+                }
+                if (TitleLabel != null) TitleLabel.text = Title;
+                if (DescLabel != null) DescLabel.text = Description;
+                Hit.WithTooltip(Title + " — " + Description);
+                SetVisible(true);
+            }
+
+            public void BindExtra(int extraCount)
+            {
+                Title = $"+{extraCount} MORE";
+                Description = "Additional combat perks active";
+                if (Icon != null)
+                {
+                    Icon.sprite = IconFactory.Get("rank_legend");
+                    Icon.color = WingUi.RailEmerald;
+                }
+                if (TitleLabel != null) TitleLabel.text = Title;
+                if (DescLabel != null) DescLabel.text = Description;
+                Hit.WithTooltip($"+{extraCount} additional combat perks active");
+                SetVisible(true);
+            }
+
+            public void Hide()
+            {
+                SetVisible(false);
+            }
+
+            private void SetVisible(bool visible)
+            {
+                if (Fill != null && Fill.gameObject.activeSelf != visible) Fill.gameObject.SetActive(visible);
+                if (Icon != null && Icon.gameObject.activeSelf != visible) Icon.gameObject.SetActive(visible);
+                if (TitleLabel != null && TitleLabel.gameObject.activeSelf != visible) TitleLabel.gameObject.SetActive(visible);
+                if (DescLabel != null && DescLabel.gameObject.activeSelf != visible) DescLabel.gameObject.SetActive(visible);
+                if (Hit != null && Hit.gameObject.activeSelf != visible) Hit.gameObject.SetActive(visible);
                 if (Outline != null)
                 {
                     for (int i = 0; i < Outline.Length; i++)
                     {
-                        if (Outline[i] != null) Outline[i].color = frame;
+                        if (Outline[i] != null && Outline[i].gameObject.activeSelf != visible)
+                            Outline[i].gameObject.SetActive(visible);
                     }
                 }
             }
@@ -571,6 +624,12 @@ namespace WingCommand
             }
         }
 
+        private static void OnLocalRecovery()
+        {
+            PersonnelFacade.SearchAndRescue.OrganizeLocalRecovery(inspectPilot);
+            RefreshWingPage(WingCommandManager.Instance?.Wing);
+        }
+
         private static void OnCustomPilots()
         {
             if (Input.GetKey(KeyCode.LeftShift) || Input.GetKey(KeyCode.RightShift))
@@ -578,8 +637,13 @@ namespace WingCommand
                 PersonnelFacade.CustomPilots.OpenFolder();
                 return;
             }
+            if (Input.GetKey(KeyCode.LeftControl) || Input.GetKey(KeyCode.RightControl))
+            {
+                OpenCustomPilotsDropdown();
+                return;
+            }
 
-            OpenCustomPilotsDropdown();
+            ShowPilotStudioView();
         }
 
         private static void OpenCustomPilotsDropdown()

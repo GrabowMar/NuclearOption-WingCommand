@@ -180,13 +180,14 @@ namespace WingCommand
                     aircraft.GlobalPosition().z + breakDir.z * 8000f);
 
                 controlInputs.throttle = 1f;
+                float breakBank = SharpTurnPolicy.SafeBankCeiling(135f, aircraft.radarAlt);
                 aircraft.autopilot.AutoAim(
                     destination: dest,
                     aimVelocity: true,
                     ignoreCollisions: false,
                     runwayAlign: false,
                     effort: 2f,
-                    bankAllowed: FixedWingFormation.MaxSafeBank,
+                    bankAllowed: breakBank,
                     followTerrain: false,
                     altitudeHold: AutopilotMath.CruiseHold(aircraft, entryRadarAlt),
                     targetVelocity: Vector3.zero);
@@ -227,13 +228,14 @@ namespace WingCommand
                     aircraft.GlobalPosition().z + notchDirection.z * 8000f);
 
                 controlInputs.throttle = 1f;
+                float notchBank = SharpTurnPolicy.SafeBankCeiling(120f, aircraft.radarAlt);
                 aircraft.autopilot.AutoAim(
                     destination: dest,
                     aimVelocity: true,
                     ignoreCollisions: false,
                     runwayAlign: false,
                     effort: 2f,
-                    bankAllowed: FixedWingFormation.MaxSafeBank,
+                    bankAllowed: notchBank,
                     followTerrain: false,
                     altitudeHold: AutopilotMath.CruiseHold(aircraft, entryRadarAlt),
                     targetVelocity: Vector3.zero);

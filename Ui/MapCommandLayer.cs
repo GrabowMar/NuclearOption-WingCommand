@@ -185,10 +185,10 @@ namespace WingCommand
                     manager?.IssuePointOrder(armedOrder, point, append: true);
                     break;
                 case MapClickIntent.AttackTarget:
-                    manager?.AttackUnit(target, append: false);
+                    manager?.IssueTargetOrder(armedOrder, target, append: false);
                     break;
                 case MapClickIntent.QueueAttackTarget:
-                    manager?.AttackUnit(target, append: true);
+                    manager?.IssueTargetOrder(armedOrder, target, append: true);
                     break;
                 case MapClickIntent.NeedTarget:
                     Toast("Right-click a hostile on the map");
@@ -375,18 +375,7 @@ namespace WingCommand
                 return;
             }
 
-            recruited.Clear();
-
-            foreach (MapIcon icon in map.selectedIcons)
-            {
-                if (!WingRegistry.HasRoom(wing.Count + recruited.Count)) break;
-                if (!(icon is UnitMapIcon unitIcon)) continue;
-                if (!(unitIcon.unit is Aircraft aircraft)) continue;
-                if (aircraft == wing.Leader || aircraft.Player != null) continue;
-                if (aircraft.disabled || wing.Contains(aircraft)) continue;
-                if (DynamicMap.GetFactionMode(aircraft.NetworkHQ) != FactionMode.Friendly) continue;
-                recruited.Add(aircraft);
-            }
+            float total = SelectedAssignmentCost() ?? 0f;
 
             if (recruited.Count == 0)
             {
@@ -395,10 +384,6 @@ namespace WingCommand
                 else Toast("No eligible friendly AI aircraft selected");
                 return;
             }
-
-            float total = 0f;
-            for (int i = 0; i < recruited.Count; i++)
-                total += PersonnelFacade.Recruitment.PriceOf(recruited[i]);
 
             if (EconomyFacade.Shop.Allocation < total)
             {
@@ -441,6 +426,31 @@ namespace WingCommand
                 Toast("Wing is full");
             else
                 Toast("No eligible friendly AI aircraft selected");
+        }
+
+        internal float? SelectedAssignmentCost()
+        {
+            DynamicMap map = SceneSingleton<DynamicMap>.i;
+            if (map == null || wing.Leader == null) return null;
+
+            recruited.Clear();
+
+            foreach (MapIcon icon in map.selectedIcons)
+            {
+                if (!WingRegistry.HasRoom(wing.Count + recruited.Count)) break;
+                if (!(icon is UnitMapIcon unitIcon)) continue;
+                if (!(unitIcon.unit is Aircraft aircraft)) continue;
+                if (aircraft == wing.Leader || aircraft.Player != null) continue;
+                if (aircraft.disabled || wing.Contains(aircraft)) continue;
+                if (DynamicMap.GetFactionMode(aircraft.NetworkHQ) != FactionMode.Friendly) continue;
+                recruited.Add(aircraft);
+            }
+
+            float total = 0f;
+            for (int i = 0; i < recruited.Count; i++)
+                total += PersonnelFacade.Recruitment.PriceOf(recruited[i]);
+
+            return recruited.Count > 0 ? (float?)total : null;
         }
 
         private static bool SameAircraft(List<Aircraft> a, List<Aircraft> b)

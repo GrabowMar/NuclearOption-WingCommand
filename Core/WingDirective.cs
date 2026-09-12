@@ -8,6 +8,7 @@ namespace WingCommand
     {
         public readonly WingOrder Order;
         public readonly Unit Target;
+        public readonly System.Collections.Generic.IReadOnlyList<Unit> Targets;
         public readonly GlobalPosition Point;
         public readonly bool HasPoint;
 
@@ -15,10 +16,12 @@ namespace WingCommand
         public readonly ManeuverKind Maneuver;
 
         private WingDirective(WingOrder order, Unit target, GlobalPosition point, bool hasPoint,
-                              ManeuverKind maneuver = ManeuverKind.WingWaggle)
+                              ManeuverKind maneuver = ManeuverKind.WingWaggle,
+                              System.Collections.Generic.IReadOnlyList<Unit> targets = null)
         {
             Order = order;
             Target = target;
+            Targets = targets;
             Point = point;
             HasPoint = hasPoint;
             Maneuver = maneuver;
@@ -32,6 +35,19 @@ namespace WingCommand
         /// <summary>Create a unit-target directive shared by Attack and Splash orders.</summary>
         public static WingDirective AtTarget(WingOrder order, Unit target) =>
             new WingDirective(order, target, default(GlobalPosition), false);
+
+        public static WingDirective Splash(System.Collections.Generic.IReadOnlyList<Unit> targets, Unit first)
+        {
+            // The HUD reuses its target list; the order must own its snapshot.
+            var snapshot = new System.Collections.Generic.List<Unit>();
+            foreach (Unit target in targets)
+                if (target != null && !target.disabled && !snapshot.Contains(target)) snapshot.Add(target);
+            return new WingDirective(WingOrder.FireForEffect, first, default, false,
+                targets: snapshot.AsReadOnly());
+        }
+
+        public WingDirective Retarget(Unit target) =>
+            new WingDirective(Order, target, Point, HasPoint, Maneuver, Targets);
 
         public static WingDirective AtPoint(WingOrder order, GlobalPosition point) =>
             new WingDirective(order, null, point, true);
@@ -50,6 +66,7 @@ namespace WingCommand
         public bool SameIntentAs(in WingDirective other) =>
             Order == other.Order &&
             ReferenceEquals(Target, other.Target) &&
+            ReferenceEquals(Targets, other.Targets) &&
             HasPoint == other.HasPoint &&
             Maneuver == other.Maneuver &&
             (!HasPoint || SamePoint(Point, other.Point));

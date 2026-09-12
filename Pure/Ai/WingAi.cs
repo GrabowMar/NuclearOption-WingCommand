@@ -16,11 +16,13 @@ namespace WingCommand
             public readonly WingReflexBand Band;
             public readonly float MinimumSeconds;
             public readonly bool RequiresSmartMode;
+            public readonly int Priority;
             public ReflexSnapshot(IWingReflex source, string id, string behaviourId,
-                WingReflexBand band, float minimumSeconds, bool requiresSmartMode)
+                WingReflexBand band, float minimumSeconds, bool requiresSmartMode, int priority = 0)
             {
                 Source = source; Id = id; BehaviourId = behaviourId; Band = band;
                 MinimumSeconds = minimumSeconds; RequiresSmartMode = requiresSmartMode;
+                Priority = priority;
             }
         }
 
@@ -55,7 +57,10 @@ namespace WingCommand
             updated.RemoveAll(item => string.Equals(item.Id, candidate.Id, StringComparison.Ordinal));
             updated.Add(candidate);
             updated.Sort((a, b) => a.Band != b.Band
-                ? a.Band.CompareTo(b.Band) : string.CompareOrdinal(a.Id, b.Id));
+                ? a.Band.CompareTo(b.Band)
+                : a.Priority != b.Priority
+                    ? b.Priority.CompareTo(a.Priority)
+                    : string.CompareOrdinal(a.Id, b.Id));
             Publish(updated);
             faulted.Remove(candidate.Id);
             unavailableBehaviours.Remove(candidate.Id);
@@ -98,13 +103,14 @@ namespace WingCommand
                 string behaviourId = reflex.BehaviourId;
                 float minimum = reflex.MinimumSeconds;
                 bool smart = reflex.RequiresSmartMode;
+                int priority = reflex.Priority;
                 if (band < WingReflexBand.Survival || band > WingReflexBand.Task)
                     throw new InvalidOperationException("A reflex needs a valid precedence band.");
                 if (string.IsNullOrWhiteSpace(behaviourId))
                     throw new InvalidOperationException("A reflex needs a BehaviourId.");
                 if (minimum < 0f || float.IsNaN(minimum) || float.IsInfinity(minimum))
                     throw new InvalidOperationException("MinimumSeconds must be finite and nonnegative.");
-                snapshot = new ReflexSnapshot(reflex, id, behaviourId, band, minimum, smart);
+                snapshot = new ReflexSnapshot(reflex, id, behaviourId, band, minimum, smart, priority);
                 return true;
             }
             catch (Exception e)

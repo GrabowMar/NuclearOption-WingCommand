@@ -75,6 +75,12 @@ namespace WingCommand
             foreach (WingMember member in Wing.Members) WingMarkers.Repaint(member.Aircraft);
         }
 
+        internal void SelectPair(int minSlot, int maxSlot)
+        {
+            Selection.SelectSlots(Wing, minSlot, maxSlot);
+            foreach (WingMember member in Wing.Members) WingMarkers.Repaint(member.Aircraft);
+        }
+
         /// <summary>Release a map-selected member to native AI.</summary>
         internal void RemoveMember(WingMember member)
         {
@@ -103,6 +109,8 @@ namespace WingCommand
         }
 
         /// <summary>Recruit the current map selection.</summary>
+        internal float? SelectedAssignmentCost() => mapLayer?.SelectedAssignmentCost();
+
         internal void AddSelectedFromMap()
         {
             mapLayer?.AddSelected();

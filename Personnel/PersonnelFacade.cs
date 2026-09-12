@@ -41,6 +41,9 @@ namespace WingCommand
             public static WingRank RankFor(int xp) => WingPilotRoster.RankFor(xp);
             public static WingPilot FindByCallsign(string callsign) => WingPilotRoster.FindByCallsign(callsign);
             public static WingPilot ImportCustom(CustomPilotRecord record) => WingPilotRoster.ImportCustom(record);
+            public static bool RemoveFromSquadron(WingPilot pilot) => WingPilotRoster.RemoveFromSquadron(pilot);
+            public static bool HasPerk(Aircraft aircraft, PilotPerk perk) => WingPilotRoster.HasPerk(aircraft, perk);
+            public static bool HasPerk(WingPilot pilot, PilotPerk perk) => WingPilotRoster.HasPerk(pilot, perk);
         }
 
         internal static class Recruitment
@@ -70,9 +73,16 @@ namespace WingCommand
 
         internal static class SearchAndRescue
         {
+            public const float LocalRecoveryCost = WingSearchAndRescue.LocalRecoveryCost;
             public static void Tick() => WingSearchAndRescue.Tick();
             public static void Dispatch(WingPilot pilot, WingRegistry wing) =>
                 WingSearchAndRescue.Dispatch(pilot, wing);
+            public static bool OrganizeLocalRecovery(WingPilot pilot) =>
+                WingSearchAndRescue.OrganizeLocalRecovery(pilot);
+            public static float LocalRecoveryRemaining(WingPilot pilot) =>
+                WingSearchAndRescue.LocalRecoveryRemaining(pilot);
+            public static WingPilot PilotOf(PilotDismounted native) => WingSearchAndRescue.PilotOf(native);
+            public static void CollectDowned(List<Unit> into) => WingSearchAndRescue.CollectDowned(into);
             public static string Status(WingPilot pilot) => WingSearchAndRescue.Status(pilot);
         }
 
@@ -86,6 +96,11 @@ namespace WingCommand
                 WingCustomPilots.LoadAllCustomPilots(out chattersCount);
             public static int ImportAll(out int chattersCount, out string message) =>
                 WingCustomPilots.ImportAll(out chattersCount, out message);
+            public static bool SaveCustomPilots(IEnumerable<CustomPilotRecord> pilots, string fileName = "custom_pilots.json") =>
+                WingCustomPilots.SaveCustomPilots(pilots, fileName);
+            public static bool SaveOrUpdatePilot(CustomPilotRecord pilot, string fileName = "custom_pilots.json") =>
+                WingCustomPilots.SaveOrUpdatePilot(pilot, fileName);
+            public static bool DeleteCustomPilot(string callsign) => WingCustomPilots.DeleteCustomPilot(callsign);
         }
 
         internal static class Portraits
@@ -93,6 +108,9 @@ namespace WingCommand
             public static void Reset() => PilotPortrait.Reset();
             public static Sprite Sprite => PilotPortrait.Sprite;
             public static Sprite For(WingPilot pilot) => PilotPortrait.For(pilot);
+            public static Sprite ForCustom(int face, int hair, int uniform, int backdrop) =>
+                PilotPortrait.ForSelection(PilotPortraitGenerator.FromLegacySelection(face, hair, uniform, backdrop));
+            public static Sprite ForSelection(PortraitSelection selection) => PilotPortrait.ForSelection(selection);
         }
 
         internal static class KillCredit

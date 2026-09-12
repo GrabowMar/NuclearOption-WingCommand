@@ -67,7 +67,15 @@ namespace WingCommand
                 queue.RemoveAt(queue.Count - 1);
             }
 
-            if (urgent) queue.Insert(0, transmission);
+            if (urgent)
+            {
+                queue.Insert(0, transmission);
+                if (current != null && !current.Urgent)
+                {
+                    current = null;
+                    ShowNext();
+                }
+            }
             else queue.Add(transmission);
         }
 
@@ -139,7 +147,7 @@ namespace WingCommand
             current = queue[0];
             queue.RemoveAt(0);
             currentAt = Time.unscaledTime;
-            currentDuration = Mathf.Clamp(2.35f + current.Message.Length * 0.018f, 2.65f, 4.1f);
+            currentDuration = Mathf.Clamp(2.5f + current.Message.Length * 0.024f, 2.8f, 5.0f);
 
             // Play the click when the subtitle appears; queued lines may wait seconds.
             WingRadioAudio.Transmission();
@@ -191,7 +199,7 @@ namespace WingCommand
             card.SetParent(canvasRoot.transform, worldPositionStays: false);
             card.anchorMin = card.anchorMax = new Vector2(0.5f, 1f);
             card.pivot = new Vector2(0.5f, 1f);
-            card.sizeDelta = new Vector2(900f, 88f);
+            card.sizeDelta = new Vector2(940f, 96f);
             card.anchoredPosition = new Vector2(0f, -26f);
             card.localScale = Vector3.one;
 
@@ -201,7 +209,7 @@ namespace WingCommand
             group.blocksRaycasts = false;
 
             Color cyan = Cyan();
-            identityLabel = WingUi.Label(card, "", new Rect(0f, -1f, 900f, 22f),
+            identityLabel = WingUi.Label(card, "", new Rect(0f, -1f, 940f, 22f),
                 cyan, AvTokens.FontLead, FontStyles.Bold, TextAlignmentOptions.Center);
             identityLabel.characterSpacing = 0.8f;
 
@@ -212,13 +220,13 @@ namespace WingCommand
             contextIcon.preserveAspect = true;
             contextIcon.raycastTarget = false;
 
-            contextLabel = WingUi.Label(card, "", new Rect(ContextGroupShift, -21f, 900f, 16f),
+            contextLabel = WingUi.Label(card, "", new Rect(ContextGroupShift, -21f, 940f, 16f),
                 Cyan(0.62f), AvTokens.FontMicro, FontStyles.Normal, TextAlignmentOptions.Center);
             contextLabel.characterSpacing = 1.8f;
-            messageLabel = WingUi.Label(card, "", new Rect(0f, -42f, 900f, 30f),
+            messageLabel = WingUi.Label(card, "", new Rect(0f, -40f, 920f, 48f),
                 MessageColor(), AvTokens.FontTitle, FontStyles.Italic,
                 TextAlignmentOptions.Center);
-            messageLabel.enableWordWrapping = false;
+            messageLabel.enableWordWrapping = true;
             messageLabel.overflowMode = TextOverflowModes.Ellipsis;
 
             canvasRoot.SetActive(false);
@@ -232,7 +240,7 @@ namespace WingCommand
 
             const float size = ContextIconSize;
             const float gap = ContextIconGap;
-            float textWidth = Mathf.Min(780f, contextLabel.GetPreferredValues(contextLabel.text).x);
+            float textWidth = Mathf.Min(820f, contextLabel.GetPreferredValues(contextLabel.text).x);
             float labelCentre = (card.rect.width + size + gap) * 0.5f;
             float x = labelCentre - textWidth * 0.5f - gap - size;
             WingUi.Place(contextIcon.rectTransform, new Rect(x, -21f, size, size));

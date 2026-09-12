@@ -47,6 +47,7 @@ namespace WingCommand
                     Reassert(member.Aircraft);
             }
             foreach (Unit unit in WingMarkers.EngagedTargets) Reassert(unit);
+            foreach (Unit unit in WingMarkers.DownedPilots) Reassert(unit);
         }
 
         private static void Reassert(Unit unit)
@@ -72,17 +73,20 @@ namespace WingCommand
                 isPlayer, nativeSelected, member != null, tactical);
 
             HighlightMode highlight = Plugin.Settings.Highlight.Value;
+            WingPilot downedPilot = PersonnelFacade.SearchAndRescue.PilotOf(icon.unit as PilotDismounted);
             WingMapPresentation presentation = WingMapPresentation.Resolve(
                 isWingMember: member != null,
                 isWingTarget: WingMarkers.RoleOf(icon.unit) == WingMarkers.Role.Target,
                 highlightWing: highlight != HighlightMode.Off,
                 highlightTargets: highlight == HighlightMode.WingAndTargets,
                 tacticalActive: tactical,
-                commandSelected: commandSelected);
+                commandSelected: commandSelected,
+                isDowned: downedPilot != null);
 
             // Keep wing identity in a separate outline so native faction, target, filter, and theme
             // repainting remains authoritative.
-            WingMarkerBadge.Apply(icon.iconImage, presentation);
+            WingMarkerBadge.Apply(icon.iconImage, presentation,
+                downedPilot != null ? "SAR · " + downedPilot.Callsign : null);
         }
 
         private static bool IsSelected(UnitMapIcon icon)

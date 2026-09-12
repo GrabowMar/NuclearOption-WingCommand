@@ -35,7 +35,11 @@ namespace WingCommand
             WingWeapons.Allow roeAllow = RoeRules.WeaponsFree(roe, aircraft);
             StationFireMode mode = OrderRoePolicy.StationFire(authority, roe,
                 roeAllow == WingWeapons.Allow.MissilesOnly, WingFidelity.OpportunityFire);
-            if (mode == StationFireMode.None) return false;
+            if (mode == StationFireMode.None)
+            {
+                WingWeapons.ClearTurretTargets(aircraft);
+                return false;
+            }
 
             bool orderOwnsWeapons = authority == OrderEngagementAuthority.ExplicitTarget ||
                                     authority == OrderEngagementAuthority.AutonomousCombat;
@@ -47,6 +51,9 @@ namespace WingCommand
             bool coveringLeader = false;
             if (mode == StationFireMode.MissileDefence)
             {
+                // Do not let an old surface designation continue firing while defensive interception
+                // owns the weapons pass.
+                WingWeapons.ClearTurretTargets(aircraft);
                 // Interception still obeys the mode-scaled check interval. DefensiveManeuverState
                 // handles evasion without throttling.
                 fired = Time.timeSinceLevelLoad - lastFired >= 1f &&
@@ -60,7 +67,12 @@ namespace WingCommand
                     case StationFireMode.DesignatedTarget:
                         Unit assigned = member.AssignedTarget;
                         if (assigned != null && !assigned.disabled)
+                        {
                             fired = WingWeapons.EngageSpecific(aircraft, pilot, assigned, range);
+                            if (!fired) WingWeapons.ClearTurretTargets(aircraft);
+                        }
+                        else
+                            WingWeapons.ClearTurretTargets(aircraft);
                         break;
                     case StationFireMode.ProtectWing:
                         Unit threat = RoeRules.PriorityTarget(roe, aircraft, leader, range);
@@ -68,11 +80,15 @@ namespace WingCommand
                         {
                             fired = WingWeapons.EngageSpecific(aircraft, pilot, threat, range);
                             coveringLeader = fired;
+                            if (!fired) WingWeapons.ClearTurretTargets(aircraft);
                         }
+                        else
+                            WingWeapons.ClearTurretTargets(aircraft);
                         break;
                     case StationFireMode.Opportunity:
                         fired = WingWeapons.Engage(aircraft, pilot,
                             WingWeapons.Allow.AirAndGround, range);
+                        if (!fired) WingWeapons.ClearTurretTargets(aircraft);
                         break;
                 }
             }

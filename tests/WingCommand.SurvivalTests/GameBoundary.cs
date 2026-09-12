@@ -35,6 +35,9 @@ namespace UnityEngine
     public static class Mathf
     {
         public static float Clamp(float v, float min, float max) => Math.Clamp(v, min, max);
+        public static float Max(float a, float b) => Math.Max(a, b);
+        public static float Round(float v) => MathF.Round(v);
+        public static int CeilToInt(float v) => (int)MathF.Ceiling(v);
     }
     public static class Time { public static float timeSinceLevelLoad; }
     public static class Random
@@ -96,6 +99,16 @@ public class Aircraft : Unit {
 public class MissileWarning { public bool Active; public bool IsWarning() => Active; }
 public class AircraftDefinition { public string unitName = "helo"; public int captureCapacity = 1; }
 public class FactionHQ {}
+public class Player
+{
+    public float Allocation;
+    public void AddAllocation(float amount) => Allocation += amount;
+}
+public static class GameManager
+{
+    public static Player LocalPlayer = new Player();
+    public static bool GetLocalPlayer(out Player player) { player = LocalPlayer; return player != null; }
+}
 public class Pilot
 {
     public Aircraft aircraft;
@@ -133,7 +146,15 @@ public static class UnitRegistry
 namespace WingCommand
 {
     internal enum WingLoadoutChoice { Standard }
-    internal static class EconomyFacade { internal static class Shop { public static bool IsPurchased(Aircraft a) => false; } }
+    internal static class EconomyFacade
+    {
+        internal static class Shop
+        {
+            public static bool IsPurchased(Aircraft a) => false;
+            public static float PaidFor(PersistentID id) => 0f;
+            public static float CurrentPriceOf(AircraftDefinition definition) => 0f;
+        }
+    }
     internal static class WingRecovery { public static bool IsHome(Aircraft a) => a != null && !a.disabled && a.AtHome; }
     internal enum ChatterPersona { Calm }
     internal enum WingOrder { Formation, OrbitHere, LandHere, Attack }
@@ -193,6 +214,12 @@ namespace WingCommand
         public string Name, Callsign, ResolvedDialogueTag, Background;
         public ChatterPersona Persona;
         public int Xp, Kills, Sorties;
+        public int PortraitVersion = 2;
+        public PortraitBody Body = PortraitBody.Male;
+        public int Face = -1, Hair, Uniform, Accessory, Backdrop;
+        public bool HasCustomPortrait => Face >= 0;
+        public PortraitSelection Selection => PilotPortraitGenerator.Normalize(
+            new PortraitSelection(Body, Face, Hair, Uniform, Accessory, Backdrop));
     }
     internal static class WingTuning
     {

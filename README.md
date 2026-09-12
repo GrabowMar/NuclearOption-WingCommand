@@ -391,7 +391,7 @@ Built on Nuclear Option's existing economy, not a separate one:
 **Squadron capacity.** Missions cap airborne faction AI, and the cap shrinks per friendly
 player — single-player often leaves zero room. Supply shows it as `SQUADRON active / limit`.
 **OVER LIMIT** permits requisitioning past the cap at **3× list price**, needs **rank 3**,
-and allows **3 over-limit airframes airborne at once** (`Shop/ExceedSquadronLimit*`). It's
+and allows **4 over-limit airframes airborne at once** (`Shop/ExceedSquadronLimit*`). It's
 permission, not a mode: with room to spare it changes nothing, and the surcharge only hits a
 purchase that actually exceeds the limit. The allowance counts *your* still-flying over-limit
 purchases, not how far the faction as a whole is over.
@@ -433,9 +433,10 @@ including one issued while defensive. Shown as `DEFENSIVE` / `DEF`.
   hover for the effect and whether it is earned.
 - Random recruits draw from 80 surnames, 26 initials and 96 callsigns, with varied service
   backgrounds, personal habits and radio styles. Callsigns stay unique within the roster.
-- Experimental portraits retain six generated faces, with separate male/female pools of
-  four hairstyles (plus bald) and two uniforms each. Wing and Supply show the same face for
-  an identity, including imported pilots.
+- Portraits use a modular dossier atlas with six original faces, six hair layers, and four
+  BDF/PALA flight and dress uniforms for each male/female pool. Both factions share the
+  mixed face pool. Accessories have been removed; old equipment fields are safely ignored.
+  Pilot Studio, Wing and Supply show the same stable appearance, including imported pilots.
   The small atlas is embedded in the DLL; portraits are composed once on demand and released
   when the mission resets. No image service, extra runtime dependency or shader is required.
 
@@ -480,7 +481,8 @@ XP, perks and record. Enemy capture shows **CAPTURED**; a confirmed death after 
 shows **KIA**. A lost survivor signal shows **MIA**, never an automatic rescue. Disabled
 aircraft receive a short grace period for the game's delayed ejection sequence.
 
-On **WMC → Wing**, inspect a downed pilot and click **DISPATCH SAR** to send the nearest
+Downed pilots are outlined in red on the tactical map and carry a persistent
+**SAR · CALLSIGN** label. On **WMC → Wing**, inspect a downed pilot and click **AIR SAR** to send the nearest
 eligible idle wing helicopter to their landing position. It must have native capture capacity,
 more than 25% fuel, and be in Formation or Hold/Orbit. It uses the existing Land Here approach;
 the native game performs the rescue when a suitable friendly unit stops nearby. This is an
@@ -488,6 +490,11 @@ explicit order and leaves the helicopter at the landing site afterward. Landing 
 terrain and enemy fire can still prevent rescue. Player aircraft and native AI can also rescue
 normally without this button. **Water rescues use the game's helicopter hoist**; automated
 hoist operation is not included.
+
+Alternatively, click **LOCAL 10M** to organize a local recovery team. It deducts 10,000,000
+funds immediately and returns the pilot to the pool after five mission minutes. The WING page
+shows the remaining time. Death or enemy capture still settles the pilot before the team arrives;
+the fee is not refunded.
 
 The implementation audit and manual flight checks are in [SURVIVAL-SYSTEM.md](SURVIVAL-SYSTEM.md).
 
@@ -626,7 +633,7 @@ tactical rules, hotkeys, and appearance can be configured.
 | Section | Setting | Default | Purpose |
 |---|---|---:|---|
 | AI | `Mode` | `Smart` | `Smart` (full AI passes) or `Performance` (lean updates for heavy MP hosts) |
-| AI | `AiSharpTurns` | `true` | Enable stronger AI turns; changes apply on the next steering update. |
+| AI | `AiSharpTurns` | `true` | Enable sharp, rapid combat manoeuvres (high-bank slice turns, corner-speed airbraking, coordinated rudder kicks, elevated pitch authority) for fixed-wing aircraft. |
 | AI | `AiTargetSpreading` | `true` | Enable AI target spreading on the next target selection; still disabled in Performance mode. |
 | AI | `AiMissileWarningRepair` | `true` | Repair warning subscriptions on the next combat entry. Disabling leaves existing subscriptions intact. |
 | Formation | `Shape` | `EchelonRight` | Initial formation at mission start |

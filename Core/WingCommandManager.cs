@@ -207,6 +207,7 @@ namespace WingCommand
         CycleRoe,
         JamMyTarget,
         StandDown,
+        DefensiveBreak,
     }
 
     internal struct RadialSlice
@@ -215,13 +216,18 @@ namespace WingCommand
         public readonly string Subtitle;
         public readonly WingAction Action;
         public readonly string IconKey;
+        public readonly bool Available;
+        public readonly bool RequiresTarget;
 
-        public RadialSlice(string title, string subtitle, WingAction action, string iconKey)
+        public RadialSlice(string title, string subtitle, WingAction action, string iconKey,
+                           bool available = true, bool requiresTarget = false)
         {
             Title = title;
             Subtitle = subtitle;
             Action = action;
             IconKey = iconKey;
+            Available = available;
+            RequiresTarget = requiresTarget;
         }
     }
 }

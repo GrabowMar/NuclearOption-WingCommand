@@ -27,6 +27,7 @@ namespace WingCommand
         {
             public string Id => "wingcommand.delivery-hold";
             public WingReflexBand Band => WingReflexBand.Survival;
+            public int Priority => 100;
             public string BehaviourId => WingBehaviours.Held;
             public float MinimumSeconds => 0f;
             public bool RequiresSmartMode => false;
@@ -43,6 +44,7 @@ namespace WingCommand
         {
             public string Id => "wingcommand.missile-break";
             public WingReflexBand Band => WingReflexBand.Survival;
+            public int Priority => 40;
             public string BehaviourId => WingBehaviours.MissileBreak;
             public float MinimumSeconds => WingTuning.PanicMinimumSeconds;
             public bool RequiresSmartMode => false;
@@ -50,7 +52,7 @@ namespace WingCommand
             public bool CanHold(in WingSituation s) => !s.DeliveryPending &&
                 s.RadarAlt >= WingTuning.PanicFloorAlt &&
                 (s.MissileWarned || s.SecondsSinceMissileWarning < WingTuning.PanicClearSeconds);
-            public bool InterruptsMinimumHold => false;
+            public bool InterruptsMinimumHold => true;
 
             public float Score(in WingSituation s, bool incumbent)
             {
@@ -72,6 +74,7 @@ namespace WingCommand
         {
             public string Id => "wingcommand.terrain-abort";
             public WingReflexBand Band => WingReflexBand.Survival;
+            public int Priority => 50;
             public string BehaviourId => WingBehaviours.TerrainAbort;
             public float MinimumSeconds => 1.5f;
             public bool RequiresSmartMode => false;

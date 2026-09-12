@@ -412,7 +412,8 @@ namespace NOAvionics.Ui
         public static TMP_InputField InputField(
             RectTransform parent, Rect area, int characterLimit,
             Action<string> onChanged, Action onFocus = null, Action onBlur = null,
-            string tooltip = null, string placeholderText = "NAME")
+            string tooltip = null, string placeholderText = "NAME",
+            TMP_InputField.LineType lineType = TMP_InputField.LineType.SingleLine)
         {
             var go = new GameObject("InputField", typeof(RectTransform), typeof(Image));
             var rt = go.GetComponent<RectTransform>();
@@ -429,20 +430,26 @@ namespace NOAvionics.Ui
             viewport.SetParent(rt, worldPositionStays: false);
             Place(viewport, new Rect(AvTokens.Space2, 0f, area.width - AvTokens.Space2 * 2f, area.height));
 
+            bool multiline = lineType != TMP_InputField.LineType.SingleLine;
+            TextAlignmentOptions alignment = multiline
+                ? TextAlignmentOptions.TopLeft
+                : TextAlignmentOptions.Left;
             TMP_Text text = Label(viewport, "", new Rect(0f, 0f, area.width - AvTokens.Space2 * 2f, area.height),
-                                  AvTheme.Friendly, AvTokens.FontBody, FontStyles.Normal, TextAlignmentOptions.Left);
+                                  AvTheme.Friendly, AvTokens.FontBody, FontStyles.Normal, alignment);
             text.raycastTarget = false;
+            text.enableWordWrapping = multiline;
 
             TMP_Text placeholder = Label(viewport, placeholderText, new Rect(0f, 0f, area.width - AvTokens.Space2 * 2f, area.height),
-                                         AvTheme.Disabled, AvTokens.FontBody, FontStyles.Italic, TextAlignmentOptions.Left);
+                                         AvTheme.Disabled, AvTokens.FontBody, FontStyles.Italic, alignment);
             placeholder.raycastTarget = false;
+            placeholder.enableWordWrapping = multiline;
 
             var field = go.AddComponent<TMP_InputField>();
             field.textViewport = viewport;
             field.textComponent = text;
             field.placeholder = placeholder;
             AvInput.StripNavigation(field);
-            field.lineType = TMP_InputField.LineType.SingleLine;
+            field.lineType = lineType;
             field.characterLimit = characterLimit;
             field.richText = false;
             field.restoreOriginalTextOnEscape = true;
@@ -454,6 +461,8 @@ namespace NOAvionics.Ui
             if (onChanged != null) field.onEndEdit.AddListener(v => onChanged(v));
             if (onFocus != null) field.onSelect.AddListener(_ => onFocus());
             if (onBlur != null) field.onDeselect.AddListener(_ => onBlur());
+            if (!string.IsNullOrEmpty(tooltip))
+                go.AddComponent<AvTooltipTarget>().Initialise(tooltip);
 
             return field;
         }

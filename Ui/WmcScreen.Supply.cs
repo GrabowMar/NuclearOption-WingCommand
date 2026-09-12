@@ -13,12 +13,13 @@ namespace WingCommand
     /// <summary>SUPPLY page for funds, purchases, launch choices, and reserve airframes.</summary>
     internal static partial class WmcScreen
     {
+        private static TMP_Text assignmentCostLabel;
         /// <summary>Keep funds and capacity limits visible so disabled purchases have an
         /// explanation.</summary>
         private static float AddSupplyStatus(RectTransform parent, float y)
         {
             float w = PanelWidth - Pad * 2f;
-            const float reserveBlockW = 142f;
+            const float reserveBlockW = 154f;
             float textW = w - reserveBlockW - Gap;
 
             supplyFundsLabel = Label(parent, "", new Rect(Pad, y, textW, LineHeight),
@@ -42,8 +43,8 @@ namespace WingCommand
                                  new Rect(ctrlX + 38f, ctrlY, 34f, LineHeight * 2f + 2f),
                                  Friendly(), FontSmall, FontStyles.Bold, TextAlignmentOptions.Center);
 
-            const float btnW = 24f;
-            const float btnH = 28f;
+            const float btnW = 30f;
+            const float btnH = 30f;
             float btnY = ctrlY - (LineHeight * 2f + 2f - btnH) * 0.5f;
 
             reserveReleaseButton = WingUi.Button(parent, "-",
@@ -65,35 +66,9 @@ namespace WingCommand
         /// excludes lost pilots and advances after assignment.</summary>
         private static float AddPilotSelection(RectTransform parent, float y)
         {
-            y = Heading(parent, y, "NEXT PILOT");
-            Hint(parent, y, "Who flies the next requisitioned or assigned airframe.");
-            y -= LineHeight + Space1;
-
-            const float portrait = 56f;
-            const float w = PanelWidth - Pad * 2f;
-            const float stepperW = 76f;
-
-            var (_, sRail) = WingUi.TacticalCard(parent, new Rect(Pad, y, portrait, portrait), RankColor(WingRank.Rookie));
-            supplyPilotRail = sRail;
-            var portraitMask = new GameObject("SupplyPilotPortraitMask", typeof(RectTransform), typeof(RectMask2D));
-            var portraitRect = portraitMask.GetComponent<RectTransform>();
-            portraitRect.SetParent(parent, worldPositionStays: false);
-            Place(portraitRect, new Rect(Pad + 3f, y - 3f, portrait - 6f, portrait - 6f));
-            // Frame the face: crop side margins and headroom inside the 50px square.
-            supplyPilotPortrait = AddSprite(portraitRect, "SupplyPilotPortrait", PersonnelFacade.Portraits.Sprite,
-                                            new Rect(-5f, 8f, 60f, 90f), Color.white);
-
-            float dossierX = Pad + portrait + Space3;
-            float dossierW = w - portrait - Space3 - stepperW - Gap;
-            supplyPilotNameLabel = Label(parent, "", new Rect(dossierX, y, dossierW, Space5), Green(),
-                                         FontSmall, FontStyles.Bold, TextAlignmentOptions.Left);
-            float detailY = y - Space5;
-            supplyPilotRankLabel = Label(parent, "", new Rect(dossierX, detailY, dossierW, LineHeight),
-                                         Friendly(), FontMicro, FontStyles.Normal, TextAlignmentOptions.Left);
-            detailY -= LineHeight;
-            supplyPilotStatusLabel = Label(parent, "", new Rect(dossierX, detailY, dossierW, LineHeight),
-                                           Friendly(), FontMicro, FontStyles.Normal, TextAlignmentOptions.Left);
-
+            const float stepperW = 112f;
+            Label(parent, "NEXT PILOT", new Rect(Pad, y, PanelWidth - Pad * 2f - stepperW - Gap, RowHeight),
+                  Friendly(), FontSmall, FontStyles.Bold, TextAlignmentOptions.Left);
             float stepperX = PanelWidth - Pad - stepperW;
             Panel(parent, new Rect(stepperX, y, stepperW, RowHeight), RowColor());
             Outline(parent, new Rect(stepperX, y, stepperW, RowHeight), FrameColor());
@@ -112,7 +87,7 @@ namespace WingCommand
                                             FontBody, UiButtonStyle.Quiet, () => CycleSupplyPilot(1))
                 .WithTooltip("Next available pilot");
 
-            return y - portrait - Space2;
+            return y - RowHeight - Space2;
         }
 
         /// <summary>Cycle selectable pilots in either direction with wraparound.</summary>
@@ -207,7 +182,7 @@ namespace WingCommand
             y = Heading(parent, y, "ACTIVE AIRCRAFT ASSIGNMENT");
 
             WingUi.Button(parent, "ASSIGN SELECTED",
-                          new Rect(Pad, y, PanelWidth - Pad * 2f, RowHeight),
+                          new Rect(Pad, y, (PanelWidth - Pad * 2f) * 0.6f, RowHeight),
                           FontSmall, UiButtonStyle.Quiet,
                           () =>
                           {
@@ -215,11 +190,15 @@ namespace WingCommand
                               RefreshSupplyPilot();
                           })
                 .WithTooltip(OrderHint.AssignSelected);
+            float costX = Pad + (PanelWidth - Pad * 2f) * 0.6f + Gap;
+            assignmentCostLabel = Label(parent, "— CR",
+                new Rect(costX, y, PanelWidth - Pad - costX, RowHeight), Dim(),
+                FontSmall, FontStyles.Normal, TextAlignmentOptions.Right);
             return y - (RowHeight + Gap);
         }
 
-        private const int LaunchRowsPerPage = 5;
-        private const float LaunchRowHeight = 22f;
+        private const int LaunchRowsPerPage = 3;
+        private const float LaunchRowHeight = 28f;
         private const float LaunchCheckWidth = 20f;
 
         /// <summary>Build enabled launch-field and nearest/any routing controls.</summary>
@@ -417,7 +396,7 @@ namespace WingCommand
         /// <summary>Build airframe tiles followed by fit, fuel, and purchase controls.</summary>
         private static float AddShop(RectTransform parent, float y)
         {
-            if (!Plugin.Settings.ShopEnabled.Value) return y;
+            if (!Plugin.Settings.ShopEnabled.Value) return AddDispatchBrief(parent, y);
 
             shopTemplatePopup = new AvKit.Popup(parent, PanelWidth);
 
@@ -473,7 +452,7 @@ namespace WingCommand
             const float buyWidth = WingUi.ButtonPrimary;
             float exceedWidth = PanelWidth - Pad * 2f - Gap - buyWidth;
             exceedLimitButton = WingUi.Button(parent, "", new Rect(Pad, y, exceedWidth, RowHeight),
-                                              FontBody, UiButtonStyle.Quiet, ToggleExceedLimit)
+                                              FontBody, UiButtonStyle.Toggle, ToggleExceedLimit)
                                  .WithTooltip(OrderHint.OverLimit);
             requisitionButton = WingUi.Button(parent, "REQUISITION",
                                               new Rect(PanelWidth - Pad - buyWidth, y,
@@ -488,28 +467,58 @@ namespace WingCommand
         /// <summary>Compact pre-purchase summary of aircraft, pilot, fit, and launch permission.</summary>
         private static float AddDispatchBrief(RectTransform parent, float y)
         {
-            const float height = 64f;
-            const float iconSize = 42f;
+            const float height = 108f;
+            const float portrait = 56f;
+            const float iconSize = 38f;
             float w = PanelWidth - Pad * 2f;
-            float textX = Pad + Space3;
-            float iconX = Pad + w - iconSize - Space2;
-            float textW = iconX - textX - Space2;
+            float left = Pad + Space3;
+            float pilotY = y - 24f;
+            float dividerX = Pad + w * 0.64f;
+            float aircraftX = dividerX + Space3;
+            float aircraftW = Pad + w - Space3 - aircraftX;
 
             var (_, rail) = WingUi.TacticalCard(parent, new Rect(Pad, y, w, height), WingUi.RailCyan);
             supplyDispatchRail = rail;
-
-            Label(parent, "DISPATCH", new Rect(textX, y - Space2, textW, LineHeight),
+            Label(parent, "NEXT DISPATCH", new Rect(left, y - 4f, w - Space3 * 2f, LineHeight),
                   WingUi.RailCyan, FontMicro, FontStyles.Bold, TextAlignmentOptions.Left);
-            supplyDispatchAirframeLabel = Label(parent, "", new Rect(textX, y - 26f, textW, LineHeight),
-                                                Friendly(), FontSmall, FontStyles.Bold,
-                                                TextAlignmentOptions.Left);
-            supplyDispatchStateLabel = Label(parent, "", new Rect(textX, y - 44f, textW, LineHeight),
-                                             Dim(), FontMicro, FontStyles.Normal,
-                                             TextAlignmentOptions.Left);
-            supplyDispatchStateLabel.overflowMode = TextOverflowModes.Ellipsis;
 
+            var (_, pilotRail) = WingUi.TacticalCard(parent,
+                new Rect(left, pilotY, portrait, portrait), RankColor(WingRank.Rookie));
+            supplyPilotRail = pilotRail;
+            var portraitMask = new GameObject("SupplyPilotPortraitMask", typeof(RectTransform), typeof(RectMask2D));
+            var portraitRect = portraitMask.GetComponent<RectTransform>();
+            portraitRect.SetParent(parent, worldPositionStays: false);
+            Place(portraitRect, new Rect(left + 3f, pilotY - 3f, portrait - 6f, portrait - 6f));
+            supplyPilotPortrait = AddSprite(portraitRect, "SupplyPilotPortrait", PersonnelFacade.Portraits.Sprite,
+                new Rect(-5f, 8f, 60f, 90f), Color.white);
+
+            float dossierX = left + portrait + Space2;
+            float dossierW = dividerX - Space2 - dossierX;
+            supplyPilotNameLabel = Label(parent, "", new Rect(dossierX, pilotY, dossierW, Space5),
+                Green(), FontSmall, FontStyles.Bold, TextAlignmentOptions.Left);
+            supplyPilotRankLabel = Label(parent, "", new Rect(dossierX, pilotY - Space5, dossierW, LineHeight),
+                Friendly(), FontMicro, FontStyles.Normal, TextAlignmentOptions.Left);
+            supplyPilotStatusLabel = Label(parent, "", new Rect(dossierX, pilotY - Space5 - LineHeight, dossierW, LineHeight),
+                Friendly(), FontMicro, FontStyles.Normal, TextAlignmentOptions.Left);
+            foreach (TMP_Text label in new[] { supplyPilotNameLabel, supplyPilotRankLabel, supplyPilotStatusLabel })
+            {
+                label.enableWordWrapping = false;
+                label.overflowMode = TextOverflowModes.Ellipsis;
+            }
+
+            Rule(parent, new Rect(dividerX, pilotY, 1f, portrait), FrameColor());
             supplyDispatchIcon = AddSprite(parent, "DispatchAirframeIcon", IconFactory.Get("airframe"),
-                                            new Rect(iconX, y - Space2, iconSize, iconSize), Dim());
+                new Rect(aircraftX + (aircraftW - iconSize) * 0.5f, pilotY, iconSize, iconSize), Dim());
+            supplyDispatchAirframeLabel = Label(parent, "", new Rect(aircraftX, pilotY - 40f, aircraftW, LineHeight),
+                Friendly(), FontSmall, FontStyles.Bold, TextAlignmentOptions.Center);
+            supplyDispatchAirframeLabel.enableWordWrapping = false;
+            supplyDispatchAirframeLabel.overflowMode = TextOverflowModes.Ellipsis;
+
+            Rule(parent, new Rect(left, y - 84f, w - Space3 * 2f, 1f), FrameColor());
+            supplyDispatchStateLabel = Label(parent, "", new Rect(left, y - 88f, w - Space3 * 2f, LineHeight),
+                Dim(), FontMicro, FontStyles.Normal, TextAlignmentOptions.Left);
+            supplyDispatchStateLabel.enableWordWrapping = false;
+            supplyDispatchStateLabel.overflowMode = TextOverflowModes.Ellipsis;
             return y - height - Gap;
         }
 
@@ -739,14 +748,9 @@ namespace WingCommand
                 return;
             }
 
-            string designation = !string.IsNullOrEmpty(selectedOffer.code)
-                ? selectedOffer.code + "  " + AvTheme.Truncate(selectedOffer.unitName, 16)
-                : AvTheme.Truncate(selectedOffer.unitName, 21);
-
-            WingPilot pilot = PersonnelFacade.Roster.Selected;
-            string pilotName = pilot == null
-                ? "AUTO"
-                : AvTheme.Truncate(pilot.Callsign, 12);
+            string designation = !string.IsNullOrEmpty(selectedOffer.unitName)
+                ? selectedOffer.unitName
+                : selectedOffer.code;
 
             WingLoadoutChoice fit = EconomyFacade.LoadoutBook.PlannedFor(selectedOffer);
             bool fromReserve = EconomyFacade.SupplyReserve.PeekLoadout(selectedOffer,
@@ -760,7 +764,7 @@ namespace WingCommand
                 ? "RESERVE FIT"
                 : AvTheme.Truncate(EconomyFacade.LoadoutCatalog.Label(fit), 16).ToUpperInvariant();
 
-            supplyDispatchAirframeLabel.text = designation + "  ·  " + pilotName;
+            supplyDispatchAirframeLabel.text = designation;
             supplyDispatchStateLabel.text = quote.CanBuy
                 ? "ALLOWED  ·  " + fitLabel + "  ·  " + fuel
                 : "BLOCKED — " +
@@ -862,6 +866,13 @@ namespace WingCommand
         /// <summary>Refresh funds, wing occupancy, and faction AI capacity.</summary>
         private static void RefreshSupplyStatus()
         {
+            if (assignmentCostLabel != null)
+            {
+                float? cost = WingCommandManager.Instance?.SelectedAssignmentCost();
+                assignmentCostLabel.text = cost.HasValue ? Grouped(cost.Value) + " CR" : "— CR";
+                assignmentCostLabel.color = !cost.HasValue ? Dim() :
+                    cost.Value > EconomyFacade.Shop.Allocation ? Warning() : Friendly();
+            }
             if (supplyFundsLabel == null) return;
 
             int wing = WingCommandManager.Instance?.Wing?.Count ?? 0;
@@ -933,10 +944,16 @@ namespace WingCommand
                 float textWidth = rect.width - textLeft - 2f;
                 code = Label(rt, "", new Rect(textLeft, -2f, textWidth, 16f), Friendly(),
                              FontMicro, FontStyles.Bold, TextAlignmentOptions.Left);
+                code.enableAutoSizing = true;
+                code.fontSizeMin = 6.5f;
+                code.fontSizeMax = FontMicro;
                 code.overflowMode = TextOverflowModes.Ellipsis;
 
                 priceStock = Label(rt, "", new Rect(textLeft, -18f, textWidth, 14f), Green(),
                                    FontMicro, FontStyles.Normal, TextAlignmentOptions.Left);
+                priceStock.enableAutoSizing = true;
+                priceStock.fontSizeMin = 6.5f;
+                priceStock.fontSizeMax = FontMicro;
                 priceStock.overflowMode = TextOverflowModes.Ellipsis;
 
                 hit = HitButton(rt, new Rect(0f, 0f, rect.width, rect.height), () =>
@@ -971,7 +988,7 @@ namespace WingCommand
                 icon.color = selected ? Color.white : (canSpawn ? (affordable ? Color.white : Dim()) : Dim());
 
                 string codeStr = !string.IsNullOrEmpty(offer.Definition.code) ? offer.Definition.code : offer.Name;
-                code.text = AvTheme.Truncate(codeStr, 7);
+                code.text = AvTheme.Truncate(codeStr, 9);
                 code.color = selected ? Green() : (canSpawn ? (affordable ? Friendly() : Dim()) : Dim());
 
                 if (owned > 0)
@@ -1034,7 +1051,7 @@ namespace WingCommand
                     FontMicro, UiButtonStyle.Quiet, Toggle)
                     .WithTooltip("Allow launches from this field");
 
-                const float statusWidth = 60f;
+                const float statusWidth = 66f;
                 float nameWidth = rect.width - LaunchCheckWidth - Space1 - statusWidth - Space1;
 
                 name = Label(rt, "",
@@ -1068,7 +1085,7 @@ namespace WingCommand
                 string badge = LaunchBaseStatusPolicy.BadgeText(state);
 
                 check.SetLatched(allowed);
-                check.SetText(allowed ? "X" : "");
+                check.SetText(allowed ? "ON" : "--");
 
                 name.text = AvTheme.Truncate(EconomyFacade.LaunchFields.DisplayName(airbase), 26);
                 status.text = jammed ? "JAMMED" : badge;
@@ -1102,7 +1119,7 @@ namespace WingCommand
                 if (!string.IsNullOrEmpty(stock)) tooltip += " — " + stock;
                 if (jammed)
                 {
-                    status.color = Warning();
+                    status.color = Alert();
                     name.color = Warning();
                     tooltip = EconomyFacade.LaunchFields.DisplayName(airbase) +
                         " — Runway queue blocked by an aircraft that is no longer departing. " +

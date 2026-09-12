@@ -351,8 +351,8 @@ namespace WingCommand
                 if (m.Alive) continue;
                 if (PersonnelFacade.Recovery.HoldsDeath(m)) continue;
 
-                if (Plugin.Settings.VerboseLogging.Value)
-                    Plugin.LogVerbose("[Wing] lost " + m.Name + ": " + LostReason(m));
+                Plugin.Logger.LogWarning("[Wing] lost " + m.Name + ": " + LostReason(m) +
+                    " [order=" + m.Order + ", damage=" + (m.Crew?.LossCause ?? "unknown") + "]");
 
                 WingComms.ReportLoss(m, members);
 

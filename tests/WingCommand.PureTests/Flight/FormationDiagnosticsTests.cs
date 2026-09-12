@@ -20,5 +20,15 @@ namespace WingCommand.PureTests
             Assert.True(recovery.ReportStateChanged("StaggerHold", false));
             Assert.False(recovery.ReportStateChanged("StaggerHold", false));
         }
+
+        [Fact]
+        public void EveryFormationShapeHasPrettyNameAndTacticalRole()
+        {
+            foreach (FormationShape shape in FormationShapes.All)
+            {
+                Assert.False(string.IsNullOrWhiteSpace(FormationShapes.Pretty(shape)));
+                Assert.False(string.IsNullOrWhiteSpace(FormationShapes.Role(shape)));
+            }
+        }
     }
 }

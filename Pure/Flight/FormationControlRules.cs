@@ -11,12 +11,13 @@ namespace WingCommand
             Math.Max(0f, horizontalDistance) *
             (slotClimb / Math.Max(1f, horizontalSpeed) + verticalCorrection / Math.Max(1f, lookAhead));
 
-        // Account for native altitude/vertical bank amplification up to 1.2 each; do not compensate
-        // protective low-speed or low-altitude reductions.
+        // Native AutoAim scales bankAllowed by Clamp(radarAlt * 0.003f - 1f, 0.6f, 1.2f).
+        // Scale desiredDegrees by the inverse so native autopilot respects the intended angle without
+        // artificially suppressing high-altitude maneuvering.
         public static float BankInput(float desiredDegrees, float radarAltitude)
         {
             float altitudeFactor = Math.Max(0.6f, Math.Min(1.2f, radarAltitude * 0.003f - 1f));
-            return Math.Max(0f, desiredDegrees) / Math.Max(1f, altitudeFactor * 1.2f);
+            return Math.Max(0f, desiredDegrees) / altitudeFactor;
         }
 
         public static float HorizontalAngle(float vx, float vz, float ax, float az)
@@ -160,29 +161,33 @@ namespace WingCommand
             return Math.Max(-maxStationClosure, Math.Min(overspeedCap, rawClosure));
         }
 
-        /// <summary>Restrict bank toward level when pitch-down recovery is needed. Native pursuit may
-        /// otherwise request inversion, leaving the aircraft at knife-edge with suppressed elevator
-        /// authority and unable to arrest climb.</summary>
+        /// <summary>Restrict bank toward level when pitch-down recovery is needed to arrest an uncontrolled
+        /// climb or severe nose-high divergence. Normal descents retain full bank authority.</summary>
         public static float PitchDownBankAuthority(
             float currentPitchDeg, float demandedPitchDeg,
             float verticalSpeed, float verticalError,
             float requestedBankDeg, float levelBankDeg)
         {
             float pitchDeficit = currentPitchDeg - demandedPitchDeg;
+            // Only engage when actively climbing above the slot or severely nose-high relative to demand.
             bool divergingClimb = verticalSpeed > 2f && verticalError < -5f;
+            bool severePitchHigh = currentPitchDeg > 10f && pitchDeficit > 8f;
 
-            if (divergingClimb || pitchDeficit > 0f)
+            if (divergingClimb || severePitchHigh)
             {
-                // Reach levelBank at a 3-degree pitch deficit; diverging climb collapses authority
-                // immediately.
-                float deficitScale = Math.Max(0f, Math.Min(1f, pitchDeficit / 3f));
-                if (divergingClimb)
+                // Preserve safe maneuvering floor (35 deg) during moderate deficits; only collapse toward
+                // levelBank during extreme climb rates or violent zoom divergences.
+                float safeRecoveryCeiling = Math.Max(levelBankDeg, 35f);
+                float baseAllowed = Math.Min(requestedBankDeg, safeRecoveryCeiling);
+
+                // Severe climbs (>15 m/s) or high pitch (>25 deg) collapse smoothly toward levelBank.
+                if (verticalSpeed > 15f || currentPitchDeg > 25f)
                 {
-                    float climbScale = Math.Max(0f, Math.Min(1f, verticalSpeed / 10f));
-                    deficitScale = Math.Max(deficitScale, Math.Max(0.5f, climbScale));
+                    float extremeScale = Math.Max(0f, Math.Min(1f, Math.Max((verticalSpeed - 15f) / 15f, (currentPitchDeg - 25f) / 15f)));
+                    return levelBankDeg + (baseAllowed - levelBankDeg) * (1f - extremeScale);
                 }
-                float safeExcess = Math.Max(0f, requestedBankDeg - levelBankDeg);
-                return levelBankDeg + safeExcess * (1f - deficitScale);
+
+                return baseAllowed;
             }
 
             return requestedBankDeg;
@@ -223,13 +228,18 @@ namespace WingCommand
         }
 
         /// <summary>Limit throttle while climbing away above the slot so excess upward energy can
-        /// dissipate.</summary>
+        /// dissipate. Never cap throttle during normal rejoins unless in a severe runaway zoom climb.</summary>
         public static float ClimbThrottleCap(float rawThrottle, float verticalSpeed, float verticalError,
                                              float maxCap = 0.45f, float airspeed = float.MaxValue,
-                                             float minimumSpeed = 0f)
+                                             float minimumSpeed = 0f, float gap = 0f, float distance = 0f)
         {
-            // Preserve recovery power below minimum safe airspeed.
+            // Preserve recovery power below minimum safe airspeed
             if (airspeed < minimumSpeed) return 1f;
+
+            // Never cap throttle during normal rejoins, UNLESS climbing violently above the slot.
+            bool runawayZoomClimb = verticalSpeed > 15f && verticalError < -80f;
+            if (!runawayZoomClimb && (gap > 80f || distance > 200f)) return rawThrottle;
+
             if (verticalSpeed > 2f && verticalError < -30f)
             {
                 // Tighten the throttle cap with increasing altitude divergence.
@@ -238,6 +248,56 @@ namespace WingCommand
                 return Math.Min(rawThrottle, Math.Max(0.2f, effectiveCap));
             }
             return rawThrottle;
+        }
+
+        /// <summary>Anticipate climb rate from vertical acceleration and pitch rate, especially in HOLD.</summary>
+        public static float EffectiveClimb(float climbRate, float verticalAccel, float pitchRate,
+                                           float horizontalSpeed, float holdBlend, float leadSeconds = 0.55f)
+        {
+            float accelRise = verticalAccel * leadSeconds;
+            float pitchRise = Math.Max(0f, horizontalSpeed) * (float)Math.Sin(pitchRate * leadSeconds);
+            float leadWeight = 0.5f + 0.5f * Math.Max(0f, Math.Min(1f, holdBlend));
+            float predicted = climbRate + (accelRise + pitchRise) * leadWeight;
+            return Math.Max(-150f, Math.Min(250f, predicted));
+        }
+
+        /// <summary>Compute target bank blending navigation turn demand with leader bank matching and roll rate lead.</summary>
+        public static float TargetBank(float turnBank, float leaderBank, float leaderRollRate,
+                                       float holdBlend, float outOfPosition, float bankAllowed,
+                                       float leadSeconds = 0.25f)
+        {
+            float anticipatedLeaderBank = leaderBank + leaderRollRate * (180f / (float)Math.PI) * leadSeconds;
+            float stationWeight = Math.Max(0f, Math.Min(1f, 1f - outOfPosition));
+            float matchWeight = stationWeight * (0.6f + 0.4f * Math.Max(0f, Math.Min(1f, holdBlend)));
+            float blended = turnBank * (1f - matchWeight) + anticipatedLeaderBank * matchWeight;
+            return Math.Max(-bankAllowed, Math.Min(bankAllowed, blended));
+        }
+
+        /// <summary>Calculate signed shortest bank error in degrees.</summary>
+        public static float BankError(float ownBank, float targetBank) =>
+            FormationTracking.WrapDegrees(targetBank - ownBank);
+
+        /// <summary>Calculate proportional-derivative roll demand for bank matching without raw stick passthrough.</summary>
+        public static float RollFeedforward(float bankErrorDeg, float leaderRollRateRad, float ownRollRateRad,
+                                            float holdBlend, float outOfPosition)
+        {
+            float p = Math.Max(-1f, Math.Min(1f, bankErrorDeg / 28f));
+            float rateDiff = leaderRollRateRad - ownRollRateRad;
+            float d = Math.Max(-0.6f, Math.Min(0.6f, rateDiff / 2.0f));
+            float demand = p * 0.75f + d * 0.25f;
+            float stationScale = Math.Max(0f, Math.Min(1f, (1f - outOfPosition) * (0.5f + 0.5f * holdBlend)));
+            return Math.Max(-1f, Math.Min(1f, demand * stationScale));
+        }
+
+        /// <summary>Calculate pitch demand assist for rapid pull-ups / push-overs without raw stick passthrough.</summary>
+        public static float PitchFeedforward(float pitchRateErrorRad, float verticalAccel,
+                                             float holdBlend, float outOfPosition)
+        {
+            float rateDemand = Math.Max(-0.8f, Math.Min(0.8f, pitchRateErrorRad / 1.2f));
+            float accelDemand = Math.Max(-0.4f, Math.Min(0.4f, verticalAccel / 25f));
+            float demand = rateDemand * 0.65f + accelDemand * 0.35f;
+            float scale = Math.Max(0f, Math.Min(1f, (1f - outOfPosition) * (0.4f + 0.6f * holdBlend)));
+            return Math.Max(-1f, Math.Min(1f, demand * scale));
         }
     }
 }

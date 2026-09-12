@@ -196,6 +196,7 @@ namespace WingCommand
                     Plugin.LogVerbose($"[FormationChange] {WingFormation.Shape} -> {captured}");
                     WingFormation.Shape = captured;
                     Mgr?.Toast("Formation: " + FormationShapes.Pretty(captured));
+                    WingRadioAudio.Transmission();
                     RestoreStockWheel();
                 });
                 formations.Add(Icon(entry, "shape_" + captured));
@@ -286,6 +287,7 @@ namespace WingCommand
                 {
                     Mgr.Wing.Roe = roe;
                     Mgr.Toast("ROE: " + CombatFacade.Roe.Label(roe));
+                    WingRadioAudio.Play(WingRadioAudio.Earcon.RoeCycle);
                 }
                 RestoreStockWheel();
             });
@@ -295,15 +297,56 @@ namespace WingCommand
 
         // Menu swapping.
 
-        private static void ShowCommanderMenu() => Swap(commanderMenu, submenu: true);
+        private static void ShowCommanderMenu()
+        {
+            if (commanderMenu != null && commanderMenu.Length >= 5)
+            {
+                Unit target = null;
+                CombatHUD hud = SceneSingleton<CombatHUD>.i;
+                if (hud != null)
+                {
+                    List<Unit> targets = hud.GetTargetList();
+                    if (targets != null && targets.Count > 0 && targets[0] != null && !targets[0].disabled)
+                        target = targets[0];
+                }
+
+                string targetSuffix = target != null ? $" ({target.unitName})" : " (No Target)";
+                commanderMenu[1].DisplayName = WingOrderCatalog.Label(WingOrder.Attack) + targetSuffix;
+                commanderMenu[4].DisplayName = WingOrderCatalog.Label(WingOrder.FireForEffect) + targetSuffix;
+            }
+            Swap(commanderMenu, submenu: true);
+        }
 
         private static void ShowSecondaryMenu() => Swap(secondaryMenu, submenu: true);
 
-        private static void ShowFormationMenu() => Swap(formationMenu, submenu: true);
+        private static void ShowFormationMenu()
+        {
+            if (formationMenu != null)
+            {
+                FormationShape current = WingFormation.Shape;
+                for (int i = 0; i < FormationShapes.Core.Length && i < formationMenu.Length; i++)
+                {
+                    FormationShape shape = FormationShapes.Core[i];
+                    string pretty = FormationShapes.Pretty(shape);
+                    formationMenu[i].DisplayName = (shape == current) ? $"▶ {pretty} (Active)" : pretty;
+                }
+            }
+            Swap(formationMenu, submenu: true);
+        }
 
         private static void ShowCombatManeuverMenu() => Swap(combatManeuverMenu, submenu: true);
 
-        private static void ShowRoeMenu() => Swap(roeMenu, submenu: true);
+        private static void ShowRoeMenu()
+        {
+            if (roeMenu != null && roeMenu.Length >= 3 && Mgr?.Wing != null)
+            {
+                WingRoe current = Mgr.Wing.Roe;
+                roeMenu[0].DisplayName = current == WingRoe.Hold ? "▶ Hold (Active)" : "Hold";
+                roeMenu[1].DisplayName = current == WingRoe.Tight ? "▶ Tight (Active)" : "Tight";
+                roeMenu[2].DisplayName = current == WingRoe.Free ? "▶ Free (Active)" : "Free";
+            }
+            Swap(roeMenu, submenu: true);
+        }
 
         internal static void RestoreStockWheel()
         {

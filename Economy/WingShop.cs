@@ -327,7 +327,7 @@ namespace WingCommand
 
         /// <summary>Maximum simultaneous player-purchased over-cap aircraft.</summary>
         public static int ExceedLimitAllowance =>
-            Mathf.Clamp(WingTuning.ExceedLimitAllowance, 1, 3);
+            Mathf.Clamp(WingTuning.ExceedLimitAllowance, 1, 4);
 
         // Track full-price aircraft ownership separately from discounted command-right assignment of
         // mission aircraft.
@@ -628,10 +628,12 @@ namespace WingCommand
             if (quote.AutoRtbCandidate != null)
             {
                 Aircraft candidate = quote.AutoRtbCandidate;
-                WingMember member = WingCommandManager.Instance?.Wing?.Find(candidate);
-                if (member != null)
+                WingRegistry wing = WingCommandManager.Instance?.Wing;
+                if (wing != null && (wing.Leader == candidate || wing.Find(candidate) != null))
                 {
-                    member.SendHome("auto-RTB to free squadron slot for requisition");
+                    Plugin.Logger.LogWarning(
+                        "[Shop] Auto-RTB candidate was a wing member (" +
+                        candidate.unitName + "); aborting auto-RTB to preserve flight");
                 }
                 else
                 {
@@ -643,9 +645,9 @@ namespace WingCommand
                         if (landing != null) pilot.SwitchState(landing);
                     }
                     PersonnelFacade.Departure.Begin(candidate);
+                    WingCommandManager.Instance?.Toast(
+                        "Ordered " + candidate.unitName + " to RTB to free squadron slot");
                 }
-                WingCommandManager.Instance?.Toast(
-                    "Ordered " + candidate.unitName + " to RTB to free squadron slot");
             }
 
             if (!BeginTransaction(definition, quote, out PurchaseTransaction transaction,
@@ -893,8 +895,9 @@ namespace WingCommand
             return true;
         }
 
-        /// <summary>Find the active friendly AI nearest a friendly base for an at-capacity return
-        /// order.</summary>
+        /// <summary>Find the active unassigned friendly AI nearest a friendly base for an at-capacity
+        /// return order. Never selects the player, wing members, purchased airframes, or pending
+        /// deliveries.</summary>
         public static Aircraft FindClosestAiToAirbase(FactionHQ hq)
         {
             if (hq == null) return null;
@@ -912,20 +915,33 @@ namespace WingCommand
             Aircraft best = null;
             float bestDistSq = float.MaxValue;
             List<Aircraft> all = UnitRegistry.allAircraft;
+            WingRegistry wing = WingCommandManager.Instance?.Wing;
 
             for (int i = 0; i < all.Count; i++)
             {
                 Aircraft a = all[i];
-                if (a == null || a.disabled) continue;
-                if (a.NetworkHQ != hq) continue;
-                if (a.Player != null) continue;
-                if (PersonnelFacade.Departure.Contains(a)) continue;
+                if (a == null) continue;
 
                 Pilot pilot = WingRegistry.PrimaryPilot(a);
-                if (pilot == null || pilot.dead || pilot.ejected) continue;
-                if (pilot.currentState != null &&
-                    (pilot.currentState == pilot.AILandingState || pilot.currentState == pilot.AIHeloLandingState))
+                bool pilotUnavailable = pilot == null || pilot.dead || pilot.ejected;
+                bool isLanding = pilot != null && pilot.currentState != null &&
+                    (pilot.currentState == pilot.AILandingState || pilot.currentState == pilot.AIHeloLandingState);
+                bool isWingMemberOrLeader = wing != null && (wing.Leader == a || wing.Find(a) != null);
+                bool isRecruitPending = WingCommandManager.Instance != null && WingCommandManager.Instance.IsRecruitPending(a);
+
+                if (!AutoRtbCandidatePolicy.IsCandidateEligible(
+                        disabled: a.disabled,
+                        sameHq: a.NetworkHQ == hq,
+                        hasPlayer: a.Player != null,
+                        isWingMemberOrLeader: isWingMemberOrLeader,
+                        isRecruitPending: isRecruitPending,
+                        isPurchased: IsPurchased(a),
+                        isDeparting: PersonnelFacade.Departure.Contains(a),
+                        isPilotUnavailable: pilotUnavailable,
+                        isLanding: isLanding))
+                {
                     continue;
+                }
 
                 Vector3 pos = a.transform.position;
                 float dForA = float.MaxValue;

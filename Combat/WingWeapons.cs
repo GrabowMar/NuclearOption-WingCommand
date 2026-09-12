@@ -9,8 +9,19 @@ namespace WingCommand
     {
         /// <summary>Shared shot interval for formation, orbit, and attack runs, shortened by pilot
         /// experience.</summary>
-        public static float FireInterval(Aircraft aircraft) =>
-            WingTuning.FireInterval * PersonnelFacade.Roster.ReactionScale(aircraft);
+        public static float FireInterval(Aircraft aircraft)
+        {
+            float interval = WingTuning.FireInterval * PersonnelFacade.Roster.ReactionScale(aircraft);
+            if (aircraft != null && aircraft.weaponManager != null &&
+                aircraft.weaponManager.currentWeaponStation != null &&
+                aircraft.weaponManager.currentWeaponStation.Weapons != null &&
+                aircraft.weaponManager.currentWeaponStation.Weapons.Count > 1 &&
+                PersonnelFacade.Roster.HasPerk(aircraft, PilotPerk.SalvoSpecialist))
+            {
+                interval *= PilotPerks.SalvoDelayScale(true);
+            }
+            return interval;
+        }
 
         /// <summary>This member's weapon preference, or Auto if the aircraft is not commandable.</summary>
         private static WingWeaponPreference PreferenceOf(Aircraft aircraft)
@@ -29,7 +40,8 @@ namespace WingCommand
             GroundOnly,
         }
 
-        /// <summary>Engage the highest-value allowed target; return true if fired.</summary>
+        /// <summary>Engage the highest-value allowed target; return true when a fixed station fires or
+        /// a native turret has been armed to fire after it acquires its own lock.</summary>
         public static bool Engage(Aircraft aircraft, Pilot pilot, Allow allow, float maxRange)
         {
             if (aircraft == null || !aircraft.LocalSim || pilot == null || allow == Allow.None) return false;
@@ -48,13 +60,13 @@ namespace WingCommand
             Unit target = ChooseTarget(aircraft, allow, maxRange,
                                        out WeaponStation station, out int capacity);
             if (target == null || station == null) return false;
-            if (!TacticalCoordinator.TryClaim(
-                    target, aircraft, capacity,
-                    Mathf.Max(FireInterval(aircraft) * 1.5f, 3f)))
+            float claimDuration = Mathf.Max(FireInterval(aircraft) * 1.5f, 3f);
+            if (PersonnelFacade.Roster.HasPerk(aircraft, PilotPerk.TargetMaster))
+                claimDuration *= PilotPerks.ClaimDurationMultiplier(true);
+            if (!TacticalCoordinator.TryClaim(target, aircraft, capacity, claimDuration))
                 return false;
 
-            FireStation(aircraft, pilot, target, wm, station);
-            return true;
+            return FireStation(aircraft, pilot, target, wm, station) != StationFireAction.None;
         }
 
         /// <summary>Checks the weapon's shot envelope. Callers enforce cadence separately to prevent
@@ -70,28 +82,52 @@ namespace WingCommand
             // envelope.
             float envelope = PersonnelFacade.Roster.EnvelopeScale(aircraft);
 
+            if (info.gun && PersonnelFacade.Roster.HasPerk(aircraft, PilotPerk.Marksman))
+                envelope *= PilotPerks.GunRangeMultiplier(true);
+
+            if (info.missile && aircraft.radarAlt >= 4000f && PersonnelFacade.Roster.HasPerk(aircraft, PilotPerk.ApexHunter))
+                envelope *= PilotPerks.HighAltitudeRangeMultiplier(aircraft.radarAlt, true);
+
+            if (target != null && target.rb != null && aircraft.rb != null)
+            {
+                Vector3 relVel = target.rb.velocity - aircraft.rb.velocity;
+                Vector3 toTarg = (aircraft.GlobalPosition() - target.GlobalPosition()).normalized;
+                float closing = Vector3.Dot(relVel, toTarg);
+                float dot = Vector3.Dot(aircraft.rb.velocity.normalized, target.rb.velocity.normalized);
+                if (PilotPerks.IsHeadOn(closing, dot) && PersonnelFacade.Roster.HasPerk(aircraft, PilotPerk.HeadOnJoust))
+                    envelope *= PilotPerks.HeadOnRangeMultiplier(true);
+            }
+
             float distance = FastMath.Distance(target.GlobalPosition(), aircraft.GlobalPosition());
             if (req.maxRange > 0f && distance > req.maxRange * envelope) return false;
             if (distance < req.minRange) return false;
 
             if (req.minAltitude > 0f && aircraft.radarAlt < req.minAltitude) return false;
-            if (req.maxAltitude > 0f && aircraft.radarAlt > req.maxAltitude * envelope) return false;
+
+            float maxAltScale = envelope;
+            if ((info.bomb || info.glideBomb) && PersonnelFacade.Roster.HasPerk(aircraft, PilotPerk.Bombardier))
+                maxAltScale *= PilotPerks.BombEnvelopeScale(true);
+            if (req.maxAltitude > 0f && aircraft.radarAlt > req.maxAltitude * maxAltScale) return false;
 
             // Bomb targets lie below the run-in boresight, so skip the missile seeker-cone check.
             if (info.bomb || info.glideBomb) return true;
 
-            // minAlignment is the maximum permitted off-boresight angle.
+            // minAlignment is the maximum permitted off-boresight angle. Snapshot expands this for missiles.
             if (req.minAlignment > 0f)
             {
                 Vector3 toTarget = target.GlobalPosition() - aircraft.GlobalPosition();
-                if (Vector3.Angle(aircraft.transform.forward, toTarget) > req.minAlignment * envelope)
+                float alignScale = envelope;
+                if (info.missile && PersonnelFacade.Roster.HasPerk(aircraft, PilotPerk.Snapshot))
+                    alignScale *= PilotPerks.OffBoresightMultiplier(true);
+                if (Vector3.Angle(aircraft.transform.forward, toTarget) > req.minAlignment * alignScale)
                     return false;
             }
 
             return true;
         }
 
-        /// <summary>Engage the player's designated unit; return true if fired.</summary>
+        /// <summary>Engage the player's designated unit; return true when the engagement is dispatched.
+        /// Turret stations dispatch by arming their native aim-and-lock controller.</summary>
         public static bool EngageSpecific(Aircraft aircraft, Pilot pilot, Unit target, float maxRange) =>
             EngageDesignated(aircraft, pilot, target, maxRange, massed: false);
 
@@ -110,7 +146,7 @@ namespace WingCommand
             if (wm == null) return false;
 
             WeaponStation current = wm.currentWeaponStation;
-            if (current != null && current.SalvoInProgress) return false;
+            if (!massed && current != null && current.SalvoInProgress) return false;
 
             if (FastMath.SquareDistance(target.GlobalPosition(), aircraft.GlobalPosition())
                 > maxRange * maxRange)
@@ -120,29 +156,43 @@ namespace WingCommand
             if (massed)
             {
                 WeaponStation station = MassedStationFor(aircraft, target, current);
-                if (station == null) return false;
-                FireStation(aircraft, pilot, target, wm, station);
-                return true;
+                if (station == null || station.SalvoInProgress) return false;
+                return FireStation(aircraft, pilot, target, wm, station) != StationFireAction.None;
             }
 
             WeaponStation chosen = DesignatedStationFor(aircraft, target);
             if (chosen == null) return false;
 
             int capacity = RequiredAttackers(chosen, target);
-            if (!TacticalCoordinator.TryClaim(
-                    target, aircraft, capacity,
-                    Mathf.Max(FireInterval(aircraft) * 1.5f, 3f)))
+            float holdDuration = Mathf.Max(FireInterval(aircraft) * 1.5f, 3f);
+            if (PersonnelFacade.Roster.HasPerk(aircraft, PilotPerk.TargetMaster))
+                holdDuration *= PilotPerks.ClaimDurationMultiplier(true);
+            if (!TacticalCoordinator.TryClaim(target, aircraft, capacity, holdDuration))
                 return false;
 
-            FireStation(aircraft, pilot, target, wm, chosen);
-            return true;
+            return FireStation(aircraft, pilot, target, wm, chosen) != StationFireAction.None;
         }
 
-        /// <summary>Select, target, notify, and fire an offensive station.</summary>
-        private static void FireStation(Aircraft aircraft, Pilot pilot, Unit target,
-                                        WeaponManager wm, WeaponStation station)
+        /// <summary>Select and target an offensive station, then either fire the selected fixed
+        /// station or let a turret release only after its native aim, lock, and LOS gate succeeds.</summary>
+        private static StationFireAction FireStation(Aircraft aircraft, Pilot pilot, Unit target,
+                                                     WeaponManager wm, WeaponStation station,
+                                                     bool trackShot = true)
         {
-            int guidedBefore = GetGuidedAmmo(aircraft);
+            if (aircraft == null || pilot == null || target == null || target.disabled || wm == null ||
+                station == null || station.WeaponInfo == null)
+                return StationFireAction.None;
+
+            WeaponInfo info = station.WeaponInfo;
+            StationFireAction action = StationFirePolicy.Decide(
+                hasLiveTarget: true,
+                hasTurret: station.HasTurret(),
+                stationReady: station.Ready());
+            if (action == StationFireAction.None) return action;
+
+            // A previous turret target continues firing autonomously until it is cleared. Retarget it
+            // before selecting another station so it cannot keep engaging a stale contact.
+            ClearTurretTargetsExcept(aircraft, station, target);
 
             wm.currentWeaponStation = station;
             List<Unit> targets = wm.GetTargetList();
@@ -151,15 +201,30 @@ namespace WingCommand
             wm.TargetListChanged();
 
             pilot.SetPrimaryTarget(target);
-            pilot.Fire();
+            if (action == StationFireAction.ArmNativeTurret)
+            {
+                Plugin.LogVerbose("[Weapons] " + aircraft.unitName + " armed turret " +
+                                  info.shortName + " on " + target.unitName + "; waiting for native lock");
+                return action;
+            }
+
+            int guidedBefore = trackShot ? GetGuidedAmmo(aircraft) : 0;
+
+            // Helo combat leaves guns linked. Pilot.Fire would then release every fixed gun instead of
+            // this selected station (and skip the selected turret); fire only the chosen fixed gun.
+            if (info.gun)
+                station.Fire(aircraft, target);
+            else
+                pilot.Fire();
+
+            if (!trackShot) return action;
+
             PersonnelFacade.KillCredit.NoteShot(aircraft, target);
 
-            if (station != null && station.WeaponInfo != null)
-            {
-                float dist = FastMath.Distance(aircraft.GlobalPosition(), target.GlobalPosition());
-                float speed = Mathf.Max(station.WeaponInfo.muzzleVelocity, station.WeaponInfo.maxSpeed, 350f);
-                WingDeliveryTracker.TrackShot(aircraft, target, station.WeaponInfo.shortName, dist / speed);
-            }
+            float dist = FastMath.Distance(aircraft.GlobalPosition(), target.GlobalPosition());
+            float speed = Mathf.Max(info.muzzleVelocity, info.maxSpeed, 350f);
+            WingDeliveryTracker.TrackShot(aircraft, target, info.shortName, dist / speed);
+            TryCallShotBrevity(aircraft, target, info);
 
             if (guidedBefore > 0 && GetGuidedAmmo(aircraft) == 0)
             {
@@ -169,6 +234,81 @@ namespace WingCommand
                     WingComms.Say(member, WingComms.Call.Expended);
                 }
             }
+
+            return action;
+        }
+
+        /// <summary>Stop turret stations that Wing Command has aimed at an old target. Turrets keep
+        /// firing independently after a designation, so a safety handoff or cancelled attack must
+        /// explicitly clear them.</summary>
+        public static void ClearTurretTargets(Aircraft aircraft)
+        {
+            if (aircraft == null || !aircraft.LocalSim || aircraft.weaponStations == null) return;
+
+            WeaponManager wm = aircraft.weaponManager;
+            WeaponStation current = wm != null ? wm.currentWeaponStation : null;
+            if (current != null && current.HasTurret())
+            {
+                List<Unit> targets = wm.GetTargetList();
+                if (targets != null && targets.Count > 0)
+                {
+                    targets.Clear();
+                    wm.TargetListChanged();
+                }
+            }
+
+            ClearTurretTargetsExcept(aircraft, null, null);
+        }
+
+        /// <summary>Clear armed turrets other than an explicitly retained station/target pair.</summary>
+        private static void ClearTurretTargetsExcept(Aircraft aircraft, WeaponStation keep, Unit target)
+        {
+            if (aircraft == null || aircraft.weaponStations == null) return;
+
+            foreach (WeaponStation station in aircraft.weaponStations)
+            {
+                if (station == null || !station.HasTurret() || station.Turrets == null) continue;
+
+                // GetStationTarget() only reports one of a station's targets. Inspect each turret so
+                // a multi-turret station cannot retain an independently armed barrel.
+                for (int index = 0; index < station.Turrets.Count; index++)
+                {
+                    Turret turret = station.Turrets[index];
+                    if (turret == null || turret.GetTarget() == null) continue;
+                    if (ReferenceEquals(station, keep) && ReferenceEquals(turret.GetTarget(), target))
+                        continue;
+
+                    // The bulk SetStationTargets API exposes ReadOnlySpan from the game's legacy
+                    // mscorlib, which cannot be referenced by this netstandard plugin. The per-turret
+                    // network API has the same native clear effect and is safe across that boundary.
+                    aircraft.SetStationTurretTarget(station.Number, (byte)index, PersistentID.None);
+                }
+            }
+        }
+
+        private static void TryCallShotBrevity(Aircraft aircraft, Unit target, WeaponInfo info)
+        {
+            if (info == null || target == null || aircraft == null) return;
+            if (!info.missile && !info.laserGuided) return;
+
+            WingMember member = WingCommandManager.Instance?.Wing?.Find(aircraft);
+            if (member == null) return;
+
+            bool isAir = target.definition != null && target.definition.typeIdentity.air > 0.5f;
+            bool isAntiRadar = info.effectiveness.antiRadar > 0.3f ||
+                               (target.definition != null && target.definition.typeIdentity.radar > 0.25f);
+
+            WingComms.Call call;
+            if (isAir)
+            {
+                call = info.targetRequirements.minIR > 0f ? WingComms.Call.Fox2 : WingComms.Call.Fox3;
+            }
+            else
+            {
+                call = isAntiRadar ? WingComms.Call.Magnum : WingComms.Call.Rifle;
+            }
+
+            WingComms.Say(member, call, target.unitName);
         }
 
         /// <summary>Choose the most effective ready station that can fire now, preferring a different
@@ -235,6 +375,9 @@ namespace WingCommand
                 float minAlt = info.targetRequirements.minAltitude;
                 if (minAlt > floor) floor = minAlt;
             }
+
+            if (floor > 0f && PersonnelFacade.Roster.HasPerk(aircraft, PilotPerk.Bombardier))
+                floor *= PilotPerks.BombFloorScale(true);
 
             return floor;
         }
@@ -354,16 +497,11 @@ namespace WingCommand
                 return false;
             }
 
-            wm.currentWeaponStation = station;
-            List<Unit> targets = wm.GetTargetList();
-            targets.Clear();
-            // Fire only at this inbound; the native result can include aircraft and surface targets
-            // forbidden under Hold.
-            targets.Add(incoming);
             interceptTargets.Clear();
-            wm.TargetListChanged();
-            pilot.Fire();
-            return true;
+            // Fire only at this inbound; the native result can include aircraft and surface targets
+            // forbidden under Hold. A turret still waits for its own acquisition gate.
+            return FireStation(aircraft, pilot, incoming, wm, station, trackShot: false) !=
+                StationFireAction.None;
         }
 
         // Target selection.
@@ -424,6 +562,14 @@ namespace WingCommand
                 // Use native effectiveness to reject mismatched weapons and targets.
                 float score = candidate.WeaponInfo.effectiveness.OpportunityAgainst(id);
                 if (score <= 0f) continue;
+
+                if (id.radar > 0.25f)
+                {
+                    if (PersonnelFacade.Roster.HasPerk(aircraft, PilotPerk.WildWeasel))
+                        score *= PilotPerks.SeadPriorityMultiplier(true, true);
+                    if (PersonnelFacade.Roster.HasPerk(aircraft, PilotPerk.Burnthrough))
+                        score *= 1.25f;
+                }
 
                 float distance = FastMath.Distance(unit.GlobalPosition(), from);
                 if (distance > maxRange) continue;
@@ -682,12 +828,15 @@ namespace WingCommand
             if (aircraft == null) return null;
 
             FactionHQ hq = aircraft.NetworkHQ;
+            if (hq == null) return null;
+
             float radiusSq = radius * radius;
 
             Unit best = null;
             float bestSq = float.MaxValue;
 
             List<Unit> all = UnitRegistry.allUnits;
+            if (all == null) return null;
             for (int i = 0; i < all.Count; i++)
             {
                 Unit u = all[i];

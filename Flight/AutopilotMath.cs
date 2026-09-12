@@ -15,13 +15,16 @@ namespace WingCommand
             forward.y = 0f;
             if (forward.sqrMagnitude < 0.0001f) forward = Vector3.forward;
             forward.Normalize();
+            float vertSpeed = aircraft.rb != null ? aircraft.rb.velocity.y : 0f;
+            float urgency = aircraft.autopilot.GetTerrainWarningSystem()?.urgency ?? 0f;
+            bool immediateDanger = TerrainAbortPolicy.ImmediateDanger(aircraft.radarAlt, vertSpeed, urgency);
+            bool sinking = vertSpeed < -5f;
+            bool lowTerrain = aircraft.radarAlt < TerrainAbortPolicy.AbortAlt;
+
             bool rotary = WingRegistry.IsRotary(aircraft);
-            bool danger = aircraft.radarAlt < TerrainAbortPolicy.AbortReleaseAlt ||
-                TerrainAbortPolicy.ImmediateDanger(aircraft.radarAlt,
-                aircraft.rb != null ? aircraft.rb.velocity.y : 0f,
-                aircraft.autopilot.GetTerrainWarningSystem()?.urgency ?? 0f);
+
             // A gentle forward recovery restores energy; use the existing climb demand near terrain.
-            float climb = danger || rotary ? 250f : 50f;
+            float climb = (immediateDanger || sinking || lowTerrain || rotary) ? 250f : 50f;
             GlobalPosition destination = aircraft.GlobalPosition() + forward * 800f + Vector3.up * climb;
             if (rotary)
             {
@@ -30,9 +33,13 @@ namespace WingCommand
                 return;
             }
             inputs.throttle = 1f;
+            inputs.brake = 0f;
             aircraft.autopilot.AutoAim(destination, true, false, false, 2f,
                 FormationControlRules.BankInput(12f, aircraft.radarAlt), false,
                 CruiseHold(aircraft, aircraft.radarAlt + climb), Vector3.zero);
+
+            // Keep native actuator signs and filtering. Positive raw pitch is nose-down;
+            // forcing a positive "pull" here reverses the native terrain-escape command.
         }
 
         /// <summary>Clamp fixed-wing held altitude to the airframe turn-radius floor and 8 km

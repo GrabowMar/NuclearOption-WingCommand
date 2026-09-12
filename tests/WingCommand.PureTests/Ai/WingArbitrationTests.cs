@@ -159,10 +159,42 @@ namespace WingCommand.PureTests
             Assert.False(old.SameAs(in next));
         }
 
+        [Fact]
+        public void PriorityBreaksTiesBeforeAlphabeticalId()
+        {
+            // Both have identical band and score; "z" has higher priority than "a".
+            // Without priority, "a" would win due to string comparison.
+            // With priority, "z" must win.
+            var a = new Reflex("a.reflex", WingReflexBand.Survival, 0.9f) { Priority = 10 };
+            var z = new Reflex("z.reflex", WingReflexBand.Survival, 0.9f) { Priority = 50 };
+            var s = new WingSituation();
+            Assert.Equal(z.Id, WingArbiter.Resolve(in s, null, true, new IWingReflex[] { a, z }).ReflexId);
+            Assert.Equal(z.Id, WingArbiter.Resolve(in s, null, true, new IWingReflex[] { z, a }).ReflexId);
+        }
+
+        [Fact]
+        public void BuiltInMissileBreakInterruptsActiveHold()
+        {
+            WingReflexes.RegisterDefaults();
+            // Wingman is currently holding in leash-recall with secondsInBehaviour < MinimumSeconds
+            var s = new WingSituation(
+                order: WingOrder.Formation,
+                leaderDistance: 6000f,
+                leashRadius: 5000f,
+                secondsInBehaviour: 0.5f,
+                radarAlt: 500f,
+                missileWarned: true);
+
+            var resolution = WingArbiter.Resolve(in s, "wingcommand.leash-recall", true, WingAi.Reflexes);
+            Assert.Equal("wingcommand.missile-break", resolution.ReflexId);
+            Assert.Equal(WingBehaviours.MissileBreak, resolution.BehaviourId);
+        }
+
         private sealed class Reflex : IWingReflex, IWingReflexLifecycle
         {
             public string Id { get; }
             public WingReflexBand Band { get; }
+            public int Priority { get; set; }
             public string BehaviourId => Id;
             public float MinimumSeconds { get; set; }
             public bool RequiresSmartMode => false;

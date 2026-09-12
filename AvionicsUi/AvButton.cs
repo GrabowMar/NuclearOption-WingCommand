@@ -12,7 +12,7 @@ namespace NOAvionics.Ui
     /// and publishes hover tooltips to the panel status strip.
     /// </summary>
     public class AvButton : MonoBehaviour, IPointerClickHandler, IPointerEnterHandler,
-                            IPointerExitHandler, IPointerDownHandler, IPointerUpHandler
+                             IPointerExitHandler, IPointerDownHandler, IPointerUpHandler
     {
         private AvButtonStyle style;
         private Image fill;
@@ -52,7 +52,10 @@ namespace NOAvionics.Ui
 
         public AvButton WithTooltip(string text)
         {
+            string previous = tooltip;
             tooltip = text;
+            if (hovered && HoveredTooltip == previous)
+                HoveredTooltip = string.IsNullOrEmpty(tooltip) ? null : tooltip;
             return this;
         }
 
@@ -200,6 +203,36 @@ namespace NOAvionics.Ui
             pressed = false;
             PublishTooltip(entering: false);
             Apply();
+        }
+    }
+
+    /// <summary>Publishes status-strip help for interactive controls that are not avionics buttons.</summary>
+    public sealed class AvTooltipTarget : MonoBehaviour, IPointerEnterHandler, IPointerExitHandler
+    {
+        private string tooltip;
+        private bool hovered;
+
+        public void Initialise(string text) => tooltip = text;
+
+        public void OnPointerEnter(PointerEventData eventData)
+        {
+            hovered = true;
+            AvButton.PublishExternal(tooltip, entering: true);
+        }
+
+        public void OnPointerExit(PointerEventData eventData)
+        {
+            hovered = false;
+            AvButton.PublishExternal(tooltip, entering: false);
+        }
+
+#pragma warning disable IDE0051 // Unity message
+        private void OnDisable()
+#pragma warning restore IDE0051
+        {
+            if (!hovered) return;
+            hovered = false;
+            AvButton.PublishExternal(tooltip, entering: false);
         }
     }
 }

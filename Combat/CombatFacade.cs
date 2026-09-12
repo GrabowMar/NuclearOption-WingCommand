@@ -26,6 +26,7 @@ namespace WingCommand
             public static int RecommendedAttackers(Aircraft aircraft, Unit target) =>
                 WingWeapons.RecommendedAttackers(aircraft, target);
             public static bool HasMissileDefence(Aircraft aircraft) => WingWeapons.HasMissileDefence(aircraft);
+            public static void ClearTurretTargets(Aircraft aircraft) => WingWeapons.ClearTurretTargets(aircraft);
             public static Unit NearestThreatTo(Aircraft protectee, float range) =>
                 WingWeapons.NearestThreatTo(protectee, range);
             public static Unit NextExpendTarget(Aircraft aircraft, GlobalPosition near, float radius, Unit exclude) =>

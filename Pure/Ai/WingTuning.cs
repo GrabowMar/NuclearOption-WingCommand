@@ -146,7 +146,7 @@ namespace WingCommand
 
         /// <summary>Fraction of leash radius required for release after recall, providing wide
         /// hysteresis.</summary>
-        public const float LeashReleaseFraction = 0.35f;
+        public const float LeashReleaseFraction = 0.60f;
 
         /// <summary>Minimum recall hold in seconds; higher-priority survival still preempts
         /// immediately.</summary>
@@ -174,6 +174,9 @@ namespace WingCommand
         /// <summary>Base shot spacing in seconds; prevents repeated engagement ticks from emptying stores
         /// immediately.</summary>
         public const float FireInterval = 5f;
+
+        /// <summary>Rapid shot spacing in seconds for Splash 'Em massed fire across ready stations.</summary>
+        public const float SplashFireInterval = 0.35f;
 
         /// <summary>Default maximum assigned shooters per target; effectiveness may reduce it and missiles
         /// receive one interceptor.</summary>
@@ -233,7 +236,7 @@ namespace WingCommand
 
         /// <summary>Concurrent over-cap purchase allowance, freed on loss or recovery rather than consumed
         /// permanently.</summary>
-        public const int ExceedLimitAllowance = 3;
+        public const int ExceedLimitAllowance = 4;
 
         // Pilot progression uses a shared triangular rank curve.
 

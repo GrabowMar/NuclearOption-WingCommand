@@ -281,5 +281,39 @@ namespace WingCommand.PureTests
             Assert.Equal(1f, FormationTracking.HorizontalTrackWeight(0f, 0.2f));
             Assert.Equal(1.5f, FormationTracking.TrackTurnRate(0f, 1f, 1f, 0f, 0.02f, 1.5f));
         }
+
+        [Fact]
+        public void ManeuverIntensityRejectsNoiseAndDetectsActiveRotation()
+        {
+            Assert.Equal(0f, FormationTracking.ManeuverIntensity(0.01f, 0.01f, 0.01f));
+            float active = FormationTracking.ManeuverIntensity(0.3f, 0.2f, 0.1f);
+            Assert.InRange(active, 0.5f, 1.0f);
+            Assert.Equal(1f, FormationTracking.ManeuverIntensity(0.5f, 0.5f, 0.5f));
+        }
+
+        [Fact]
+        public void ResponsiveFiltersSharpenUnderManeuverAndHold()
+        {
+            float calmTrack = FormationTracking.ResponsiveTrackTime(1f, 0.35f, 0f, 0f);
+            float holdTrack = FormationTracking.ResponsiveTrackTime(1f, 0.35f, 0f, 1f);
+            float activeTrack = FormationTracking.ResponsiveTrackTime(1f, 0.35f, 1f, 0f);
+            Assert.Equal(0.35f, calmTrack);
+            Assert.True(holdTrack < calmTrack);
+            Assert.True(activeTrack < calmTrack);
+            Assert.InRange(activeTrack, 0.06f, 0.10f);
+
+            float calmBank = FormationTracking.ResponsiveBankTime(2f, 0.45f, 0f, 0f);
+            float holdBank = FormationTracking.ResponsiveBankTime(2f, 0.45f, 0f, 1f);
+            float activeBank = FormationTracking.ResponsiveBankTime(2f, 0.45f, 1f, 0f);
+            Assert.Equal(0.45f, calmBank);
+            Assert.True(holdBank < calmBank);
+            Assert.True(activeBank < calmBank);
+            Assert.InRange(activeBank, 0.05f, 0.08f);
+
+            float calmSlot = FormationTracking.ResponsiveSlotTime(0.5f, 0f, 0f);
+            float holdSlot = FormationTracking.ResponsiveSlotTime(0.5f, 1f, 0f);
+            Assert.Equal(0.5f, calmSlot);
+            Assert.InRange(holdSlot, 0.11f, 0.13f);
+        }
     }
 }

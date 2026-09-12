@@ -10,8 +10,10 @@ namespace WingCommand
         /// members.</summary>
         private void EnterBehaviour(string behaviourId)
         {
-            // The new behaviour owns targeting. Shots already in flight keep their firing slots.
+            // The new behaviour owns targeting. Shots already in flight keep their firing slots, but
+            // an autonomous turret must not retain a designation across the handoff.
             CombatFacade.Tactical.ReleaseSelection(Aircraft);
+            CombatFacade.Weapons.ClearTurretTargets(Aircraft);
 
             // Surface members require their registered behaviour because built-ins assume an autopilot.
             // WingSurface publishes their directive destination.

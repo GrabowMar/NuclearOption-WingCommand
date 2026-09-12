@@ -5,12 +5,13 @@ namespace WingCommand.PureTests
     public class MapOrderPolicyTests
     {
         [Theory]
+        [InlineData(WingOrder.Attack)]
+        [InlineData(WingOrder.FireForEffect)]
         [InlineData(WingOrder.OrbitHere)]
         [InlineData(WingOrder.LandHere)]
         [InlineData(WingOrder.SeekAndDestroy)]
         [InlineData(WingOrder.DeliverCargo)]
-        [InlineData(WingOrder.Attack)]
-        public void MapArmableOrdersStayInSyncWithTheCatalog(WingOrder order)
+        public void ArmedOrdersAreIdentifiedConsistently(WingOrder order)
         {
             Assert.True(MapOrderPolicy.ArmsOnMap(order));
             Assert.Equal(WingOrderCatalog.TakesPoint(order), MapOrderPolicy.PlacesPoint(order));
@@ -22,7 +23,6 @@ namespace WingCommand.PureTests
             Assert.False(MapOrderPolicy.ArmsOnMap(WingOrder.Formation));
             Assert.False(MapOrderPolicy.ArmsOnMap(WingOrder.Engage));
             Assert.False(MapOrderPolicy.ArmsOnMap(WingOrder.FallBack));
-            Assert.False(MapOrderPolicy.ArmsOnMap(WingOrder.FireForEffect));
             Assert.False(MapOrderPolicy.ArmsOnMap(WingOrder.JamTarget));
             Assert.Equal(MapOrderButtonIntent.Ignore,
                 MapOrderPolicy.ResolveButton(WingOrder.Formation, alreadyArmedWithThis: false,
@@ -56,20 +56,22 @@ namespace WingCommand.PureTests
                 MapOrderPolicy.ResolveRightClick(true, order, MapPointerKind.Enemy, shift: true));
         }
 
-        [Fact]
-        public void ArmedAttackUsesTheClickedHostileAndOtherwiseAsksForATarget()
+        [Theory]
+        [InlineData(WingOrder.Attack)]
+        [InlineData(WingOrder.FireForEffect)]
+        public void ArmedAttackUsesTheClickedHostileAndOtherwiseAsksForATarget(WingOrder order)
         {
             Assert.Equal(MapClickIntent.AttackTarget,
-                MapOrderPolicy.ResolveRightClick(true, WingOrder.Attack, MapPointerKind.Enemy,
+                MapOrderPolicy.ResolveRightClick(true, order, MapPointerKind.Enemy,
                                                  shift: false));
             Assert.Equal(MapClickIntent.QueueAttackTarget,
-                MapOrderPolicy.ResolveRightClick(true, WingOrder.Attack, MapPointerKind.Enemy,
+                MapOrderPolicy.ResolveRightClick(true, order, MapPointerKind.Enemy,
                                                  shift: true));
             Assert.Equal(MapClickIntent.NeedTarget,
-                MapOrderPolicy.ResolveRightClick(true, WingOrder.Attack, MapPointerKind.Empty,
+                MapOrderPolicy.ResolveRightClick(true, order, MapPointerKind.Empty,
                                                  shift: false));
             Assert.Equal(MapClickIntent.NeedTarget,
-                MapOrderPolicy.ResolveRightClick(true, WingOrder.Attack, MapPointerKind.Other,
+                MapOrderPolicy.ResolveRightClick(true, order, MapPointerKind.Other,
                                                  shift: false));
         }
 
@@ -103,17 +105,19 @@ namespace WingCommand.PureTests
             Assert.False(MapOrderPolicy.ArmsOnMap(WingOrder.Engage));
         }
 
-        [Fact]
-        public void AttackButtonExecutesImmediatelyWhenTargetsAreAlreadyChosen()
+        [Theory]
+        [InlineData(WingOrder.Attack)]
+        [InlineData(WingOrder.FireForEffect)]
+        public void AttackButtonExecutesImmediatelyWhenTargetsAreAlreadyChosen(WingOrder order)
         {
             Assert.Equal(MapOrderButtonIntent.ExecuteAndArm,
-                MapOrderPolicy.ResolveButton(WingOrder.Attack, alreadyArmedWithThis: false,
+                MapOrderPolicy.ResolveButton(order, alreadyArmedWithThis: false,
                                              hasPlayerTargets: true));
             Assert.Equal(MapOrderButtonIntent.Arm,
-                MapOrderPolicy.ResolveButton(WingOrder.Attack, alreadyArmedWithThis: false,
+                MapOrderPolicy.ResolveButton(order, alreadyArmedWithThis: false,
                                              hasPlayerTargets: false));
             Assert.Equal(MapOrderButtonIntent.Disarm,
-                MapOrderPolicy.ResolveButton(WingOrder.Attack, alreadyArmedWithThis: true,
+                MapOrderPolicy.ResolveButton(order, alreadyArmedWithThis: true,
                                              hasPlayerTargets: true));
         }
 
@@ -136,6 +140,7 @@ namespace WingCommand.PureTests
         {
             Assert.Contains("RIGHT-CLICK MAP", MapOrderPolicy.ArmPrompt(WingOrder.OrbitHere));
             Assert.Contains("RIGHT-CLICK A HOSTILE", MapOrderPolicy.ArmPrompt(WingOrder.Attack));
+            Assert.Contains("RIGHT-CLICK A HOSTILE", MapOrderPolicy.ArmPrompt(WingOrder.FireForEffect));
             Assert.Contains("PRESS AGAIN", MapOrderPolicy.ArmPrompt(WingOrder.DeliverCargo));
         }
     }

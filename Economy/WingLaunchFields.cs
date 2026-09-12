@@ -99,11 +99,12 @@ namespace WingCommand
         public static string DisplayName(Airbase airbase)
         {
             if (airbase == null) return "FIELD";
-            string name = airbase.name;
-            if (string.IsNullOrEmpty(name)) return "FIELD";
-            if (name.EndsWith("(Clone)"))
-                name = name.Substring(0, name.Length - 7).TrimEnd();
-            return name;
+            // Use the same live mission name as the game's map and airbase list.
+            var saved = airbase.SavedAirbase;
+            if (!string.IsNullOrWhiteSpace(saved?.DisplayName)) return saved.DisplayName;
+
+            return AirbaseNameFormatter.Format(
+                !string.IsNullOrWhiteSpace(saved?.UniqueName) ? saved.UniqueName : airbase.name);
         }
 
         public static void Reset()

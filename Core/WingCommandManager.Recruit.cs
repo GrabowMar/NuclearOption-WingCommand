@@ -21,6 +21,18 @@ namespace WingCommand
 
         private readonly List<PendingRecruit> recruitQueue = new List<PendingRecruit>();
 
+        /// <summary>Whether an aircraft is currently awaiting takeoff or airborne activation in the recruit
+        /// queue.</summary>
+        internal bool IsRecruitPending(Aircraft aircraft)
+        {
+            if (aircraft == null) return false;
+            for (int i = 0; i < recruitQueue.Count; i++)
+            {
+                if (recruitQueue[i].Aircraft == aircraft) return true;
+            }
+            return false;
+        }
+
         /// <summary>Add deliveries to the roster immediately, but let native taxi and launch AI retain
         /// controls until airborne.</summary>
         internal void QueueRecruit(Aircraft aircraft, WingPilot preferredPilot = null)

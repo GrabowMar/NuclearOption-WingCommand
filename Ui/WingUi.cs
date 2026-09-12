@@ -138,6 +138,10 @@ namespace WingCommand
 
             TMP_Text label = Label(rt, text, new Rect(0f, 0f, rect.width, rect.height),
                                    Green, fontSize, FontStyles.Bold, TextAlignmentOptions.Center);
+            label.enableAutoSizing = true;
+            label.fontSizeMin = Mathf.Min(fontSize, Mathf.Max(FontMicro, fontSize - 2f));
+            label.fontSizeMax = fontSize;
+            label.margin = new Vector4(Space1, 0f, Space1, 0f);
 
             WingButton behaviour = go.AddComponent<WingButton>();
             behaviour.Initialise(style, fill, frame, underline, label, onClick);
@@ -161,13 +165,15 @@ namespace WingCommand
         }
 
         public static TMP_InputField InputField(RectTransform parent, Rect rect, int characterLimit,
-                                                Action<string> onChanged, string tooltip = null,
-                                                string placeholderText = "NAME")
+                                                 Action<string> onChanged, string tooltip = null,
+                                                 string placeholderText = "NAME",
+                                                 TMP_InputField.LineType lineType = TMP_InputField.LineType.SingleLine)
         {
             return AvKit.InputField(parent, rect, characterLimit, onChanged,
                                     onFocus: WingKeyboardGuard.Capture,
                                     onBlur: WingKeyboardGuard.Release,
-                                    tooltip: tooltip, placeholderText: placeholderText);
+                                    tooltip: tooltip, placeholderText: placeholderText,
+                                    lineType: lineType);
         }
 
         public static Sprite PanelSprite() => AvSprites.Panel;

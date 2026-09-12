@@ -17,6 +17,9 @@ namespace WingCommand
 
             /// <summary>Current wing engagement target.</summary>
             Target,
+
+            /// <summary>Living squadron pilot awaiting rescue.</summary>
+            Downed,
         }
 
         // Poll weapon managers for engaged targets periodically rather than each frame.
@@ -25,15 +28,20 @@ namespace WingCommand
         private static readonly List<Unit> engaged = new List<Unit>();
         private static readonly List<Unit> scratch = new List<Unit>();
         private static readonly List<Unit> repaint = new List<Unit>();
+        private static readonly List<Unit> downed = new List<Unit>();
+        private static readonly List<Unit> downedScratch = new List<Unit>();
         private static float nextPoll;
 
         /// <summary>Engaged units from the latest poll.</summary>
         public static IReadOnlyList<Unit> EngagedTargets => engaged;
+        public static IReadOnlyList<Unit> DownedPilots => downed;
 
         public static void Reset()
         {
             engaged.Clear();
             scratch.Clear();
+            downed.Clear();
+            downedScratch.Clear();
             nextPoll = 0f;
         }
 
@@ -44,6 +52,7 @@ namespace WingCommand
             nextPoll = Time.unscaledTime + WingFidelity.Interval(TargetPollInterval);
 
             CollectTargets(wing);
+            CollectDowned();
 
             if (!SameAsEngaged())
             {
@@ -59,6 +68,19 @@ namespace WingCommand
                 engaged.Clear();
                 engaged.AddRange(scratch);
 
+                foreach (Unit u in repaint) Repaint(u);
+                repaint.Clear();
+            }
+
+            if (!Same(downed, downedScratch))
+            {
+                repaint.Clear();
+                repaint.AddRange(downed);
+                foreach (Unit u in downedScratch)
+                    if (!repaint.Contains(u)) repaint.Add(u);
+
+                downed.Clear();
+                downed.AddRange(downedScratch);
                 foreach (Unit u in repaint) Repaint(u);
                 repaint.Clear();
             }
@@ -85,6 +107,12 @@ namespace WingCommand
                 if (target == null || target.disabled) continue;
                 if (!scratch.Contains(target)) scratch.Add(target);
             }
+        }
+
+        private static void CollectDowned()
+        {
+            downedScratch.Clear();
+            PersonnelFacade.SearchAndRescue.CollectDowned(downedScratch);
         }
 
         /// <summary>Prefer explicit assignments. Count autonomous weapon targets only during active combat
@@ -120,6 +148,14 @@ namespace WingCommand
             return true;
         }
 
+        private static bool Same(List<Unit> first, List<Unit> second)
+        {
+            if (first.Count != second.Count) return false;
+            for (int i = 0; i < first.Count; i++)
+                if (!second.Contains(first[i])) return false;
+            return true;
+        }
+
         /// <summary>Resolve a unit's wing symbology role.</summary>
         public static Role RoleOf(Unit unit)
         {
@@ -127,6 +163,9 @@ namespace WingCommand
 
             WingCommandManager mgr = WingCommandManager.Instance;
             if (mgr == null) return Role.None;
+
+            for (int i = 0; i < downed.Count; i++)
+                if (downed[i] == unit) return Role.Downed;
 
             // Membership takes precedence if a wingman is also targeted.
             if (unit is Aircraft aircraft && mgr.Wing.Contains(aircraft))
@@ -158,6 +197,8 @@ namespace WingCommand
         private static Color targetColor = new Color(1f, 0.69f, 0.13f);
         private static string targetFrom;
 
+        public static Color DownedColor => new Color(1f, 0.22f, 0.18f);
+
         /// <summary>Wing-member colour cached per distinct configuration value.</summary>
         public static Color MemberColor
         {
@@ -182,7 +223,8 @@ namespace WingCommand
 
         public static Color ColorFor(Role role)
         {
-            return role == Role.Member ? MemberColor : TargetColor;
+            return role == Role.Member ? MemberColor :
+                role == Role.Downed ? DownedColor : TargetColor;
         }
 
         private static void Parse(string raw, ref string cachedFrom, ref Color cached,

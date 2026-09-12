@@ -50,8 +50,11 @@ namespace WingCommand
             bool overspeed = closing > safeClosure + (wasBraking ? -3f : 3f);
             // Release brakes before closure reaches zero to allow spool-up; separate thresholds prevent
             // chatter.
+            // Terminal energy-shedding and airbraking applies only within the arrival envelope.
+            // Long-range intercepts (distance >= 1500m) maintain pursuit cruise power.
             float loadedMinimum = LoadedMinimum(minimumAirspeed, bankDegrees);
-            bool canShedEnergy = allowBraking && !terrainWarning && radarAltitude > 250f &&
+            float maxArrivalBrakeDistance = Math.Max(1500f, spacing * 6f);
+            bool canShedEnergy = allowBraking && distance < maxArrivalBrakeDistance && !terrainWarning && radarAltitude > 250f &&
                 Math.Abs(bankDegrees) < 50f && verticalSpeed < 5f &&
                 airspeed > loadedMinimum + (wasBraking ? 8f : 15f);
             bool brake = canShedEnergy &&

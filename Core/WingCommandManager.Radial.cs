@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using UnityEngine;
 
 namespace WingCommand
@@ -9,41 +10,49 @@ namespace WingCommand
         private Vector2 radialDelta;
         private int hoveredSlice = -1;
 
-        private static RadialSlice[] slices;
-        private static int slicesRevision = -1;
+        private static readonly RadialSlice[] liveSlices = new RadialSlice[6];
 
-        /// <summary>Six overlay sectors, rebuilt on WingHost.Revision changes so host-specific order
-        /// labels stay current.</summary>
-        private static RadialSlice[] Slices
+        private RadialSlice[] GetCurrentSlices()
         {
-            get
-            {
-                if (slices != null && slicesRevision == WingHost.Revision) return slices;
-                slicesRevision = WingHost.Revision;
-                slices = BuildSlices();
-                return slices;
-            }
-        }
+            List<Unit> targets = CurrentPlayerTargets();
+            bool hasTarget = targets != null && targets.Count > 0;
+            string targetName = hasTarget ? targets[0].unitName : null;
 
-        private static RadialSlice[] BuildSlices() => new[]
-        {
-            new RadialSlice(WingOrderCatalog.Label(WingOrder.Formation).ToUpperInvariant(),
-                WingHost.Current.IsSurfaceVehicle ? "RETURN TO YOUR STATION" : "RETURN TO FORMATION",
-                WingAction.Rejoin, "rejoin"),
-            new RadialSlice(WingOrderCatalog.Label(WingOrder.Attack).ToUpperInvariant(),
-                "ATTACK YOUR LOCKED TARGET",
-                WingAction.AttackMyTarget, "attack"),
-            new RadialSlice(WingOrderCatalog.Label(WingOrder.Engage).ToUpperInvariant(),
+            string formationName = FormationShapes.Pretty(WingFormation.Shape).ToUpperInvariant();
+            liveSlices[0] = new RadialSlice(
+                WingOrderCatalog.Label(WingOrder.Formation).ToUpperInvariant(),
+                WingHost.Current.IsSurfaceVehicle ? "RETURN TO YOUR STATION" : $"RETURN TO {formationName}",
+                WingAction.Rejoin, "rejoin", available: true);
+
+            liveSlices[1] = new RadialSlice(
+                WingOrderCatalog.Label(WingOrder.Attack).ToUpperInvariant(),
+                RadialSelection.FormatTargetSubtitle(hasTarget, targetName, "NO TARGET DESIGNATED"),
+                WingAction.AttackMyTarget, "attack", available: hasTarget, requiresTarget: true);
+
+            liveSlices[2] = new RadialSlice(
+                WingOrderCatalog.Label(WingOrder.Engage).ToUpperInvariant(),
                 WingHost.Current.IsSurfaceVehicle ? "PROVIDE CLOSE AIR SUPPORT" : "SEARCH FOR AND ENGAGE HOSTILES",
-                WingAction.Engage, "engage"),
-            new RadialSlice(WingOrderCatalog.Label(WingOrder.FallBack).ToUpperInvariant(),
+                WingAction.Engage, "engage", available: true);
+
+            liveSlices[3] = new RadialSlice(
+                WingOrderCatalog.Label(WingOrder.FallBack).ToUpperInvariant(),
                 WingHost.Current.IsSurfaceVehicle ? "BREAK CONTACT" : "BREAK OFF AND FLY DEFENSIVELY",
-                WingAction.FallBack, "fallback"),
-            new RadialSlice(WingOrderCatalog.Label(WingOrder.FireForEffect).ToUpperInvariant(),
-                "FIRE A FULL SALVO AT YOUR LOCKED TARGET",
-                WingAction.FireForEffect, "attack"),
-            new RadialSlice("CYCLE ROE", "RULES OF ENGAGEMENT", WingAction.CycleRoe, "posture"),
-        };
+                WingAction.FallBack, "fallback", available: true);
+
+            liveSlices[4] = new RadialSlice(
+                WingOrderCatalog.Label(WingOrder.FireForEffect).ToUpperInvariant(),
+                RadialSelection.FormatTargetSubtitle(hasTarget, targetName, "NO TARGET DESIGNATED"),
+                WingAction.FireForEffect, "attack", available: hasTarget, requiresTarget: true);
+
+            liveSlices[5] = new RadialSlice(
+                "CYCLE ROE",
+                Wing != null
+                    ? RadialSelection.FormatRoeTransition(CombatFacade.Roe.Label(Wing.Roe), CombatFacade.Roe.Label(CombatFacade.Roe.Next(Wing.Roe)))
+                    : "RULES OF ENGAGEMENT",
+                WingAction.CycleRoe, "posture", available: true);
+
+            return liveSlices;
+        }
 
         private Vector2 radialMousePosition;
 
@@ -76,13 +85,20 @@ namespace WingCommand
             if (radialOpen)
             {
                 AccumulateRadialDelta();
-                hoveredSlice = RadialSelection.FromPointer(radialDelta.x, radialDelta.y, hoveredSlice, Slices.Length);
+                RadialSlice[] currentSlices = GetCurrentSlices();
+                int nextHovered = RadialSelection.FromPointer(radialDelta.x, radialDelta.y, hoveredSlice, currentSlices.Length);
+                if (nextHovered != hoveredSlice)
+                {
+                    hoveredSlice = nextHovered;
+                    if (hoveredSlice >= 0)
+                        WingRadioAudio.Play(WingRadioAudio.Earcon.RadialTick);
+                }
                 if (Input.GetKeyUp(key))
                 {
                     CloseRadial(apply: true);
                     return;
                 }
-                WingRadialOverlay.Show(Slices, hoveredSlice, Wing, radialDelta);
+                WingRadialOverlay.Show(currentSlices, hoveredSlice, Wing, radialDelta);
             }
             else
             {
@@ -144,6 +160,10 @@ namespace WingCommand
                 Input.GetKeyDown(Plugin.Settings.QuickAttackKey.Value))
                 Execute(WingAction.AttackMyTarget);
 
+            if (Plugin.Settings.QuickBreakKey.Value != KeyCode.None &&
+                Input.GetKeyDown(Plugin.Settings.QuickBreakKey.Value))
+                Execute(WingAction.DefensiveBreak);
+
             if (Plugin.Settings.CycleRoeKey.Value != KeyCode.None &&
                 Input.GetKeyDown(Plugin.Settings.CycleRoeKey.Value))
                 Execute(WingAction.CycleRoe);
@@ -151,10 +171,26 @@ namespace WingCommand
 
         private void CloseRadial(bool apply)
         {
-            if (apply && hoveredSlice >= 0 && hoveredSlice < Slices.Length)
+            if (apply && hoveredSlice >= 0)
             {
-                WingRadioAudio.Transmission();
-                Execute(Slices[hoveredSlice].Action);
+                RadialSlice[] currentSlices = GetCurrentSlices();
+                if (hoveredSlice < currentSlices.Length)
+                {
+                    RadialSlice chosen = currentSlices[hoveredSlice];
+                    if (chosen.Available)
+                    {
+                        WingRadioAudio.Transmission();
+                        Execute(chosen.Action);
+                    }
+                    else
+                    {
+                        WingRadioAudio.Play(WingRadioAudio.Earcon.Unable);
+                        if (chosen.RequiresTarget)
+                            Toast("Cannot order: No target locked on HUD");
+                        else
+                            Toast("Order unavailable");
+                    }
+                }
             }
 
             radialOpen = false;

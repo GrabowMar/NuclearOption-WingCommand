@@ -1,5 +1,6 @@
 using System.Collections.Generic;
 using HarmonyLib;
+using NuclearOption.Networking;
 using UnityEngine;
 
 namespace WingCommand
@@ -7,6 +8,9 @@ namespace WingCommand
     /// <summary>Bridge native dismounted-pilot outcomes to squadron records. Never revive a native casualty.</summary>
     internal static class WingSearchAndRescue
     {
+        public const float LocalRecoveryCost = 10_000_000f;
+        public const float LocalRecoveryDuration = 300f;
+
         private sealed class Survivor
         {
             public WingPilot Pilot;
@@ -16,6 +20,8 @@ namespace WingCommand
             public bool EscapeRolled;
             public bool EscapeCompleting;
             public float EscapeAt = float.PositiveInfinity;
+            public bool LocalRecoveryCompleting;
+            public float LocalRecoveryAt = float.PositiveInfinity;
         }
 
         private static readonly Dictionary<PersistentID, Survivor> survivors = new Dictionary<PersistentID, Survivor>();
@@ -28,6 +34,14 @@ namespace WingCommand
             native != null && native.pilotNumber == 0 &&
             survivors.TryGetValue(native.parentUnit, out Survivor survivor) && survivor.Native == native
                 ? survivor.Pilot : null;
+
+        internal static void CollectDowned(List<Unit> into)
+        {
+            foreach (Survivor survivor in survivors.Values)
+                if (survivor.Native != null && !survivor.Native.disabled &&
+                    survivor.Pilot.RecoveryStatus == PilotRecoveryStatus.Downed)
+                    into.Add(survivor.Native);
+        }
 
         internal static void Track(PilotDismounted native)
         {
@@ -79,6 +93,22 @@ namespace WingCommand
             WingPilotRoster.SettleRescue(id, survivor.Pilot, status, killed, message);
         }
 
+        private static void AwardRescueBounty(PersistentID id, WingPilot pilot)
+        {
+            float value = EconomyFacade.Shop.PaidFor(id);
+            if (value <= 0f && UnitRegistry.TryGetUnit(id, out Unit u) && u is Aircraft a && a.definition != null)
+                value = EconomyFacade.Shop.CurrentPriceOf(a.definition);
+            if (value <= 0f) value = 500f;
+
+            float bounty = Mathf.Round(value * 0.5f);
+            if (bounty > 0f && GameManager.GetLocalPlayer(out Player player) && player != null)
+            {
+                player.AddAllocation(bounty);
+                string call = pilot != null && !string.IsNullOrWhiteSpace(pilot.Callsign) ? pilot.Callsign : "Pilot";
+                WingCommandManager.Instance?.Toast($"CSAR: {call} rescued! +${bounty:F0} bounty awarded");
+            }
+        }
+
         internal static void Observe(PilotDismounted native)
         {
             if (native == null || !native.IsServer || native.pilotNumber != 0) return;
@@ -87,8 +117,13 @@ namespace WingCommand
             else if (native.unitState == Unit.UnitState.Returned)
             {
                 bool escaped = survivors.TryGetValue(native.parentUnit, out Survivor survivor) && survivor.EscapeCompleting;
+                bool local = survivors.TryGetValue(native.parentUnit, out survivor) && survivor.LocalRecoveryCompleting;
+                if (!escaped && !local && survivors.TryGetValue(native.parentUnit, out Survivor s))
+                    AwardRescueBounty(native.parentUnit, s.Pilot);
                 Settle(native.parentUnit, PilotRecoveryStatus.None, false,
-                    escaped ? "independent escape — returned to pilot pool" : "rescued — returned to pilot pool");
+                    escaped ? "independent escape — returned to pilot pool" :
+                    local ? "local recovery complete — returned to pilot pool" :
+                    "rescued — returned to pilot pool");
             }
         }
 
@@ -97,6 +132,10 @@ namespace WingCommand
             if (ReferenceEquals(native, null) || !native.IsServer || captor == null || native.pilotNumber != 0) return;
             if (native.animationState == PilotDismounted.PilotState.dead) return;
             bool friendly = native.NetworkHQ != null && captor.NetworkHQ == native.NetworkHQ;
+            if (friendly && survivors.TryGetValue(native.parentUnit, out Survivor survivor))
+            {
+                AwardRescueBounty(native.parentUnit, survivor.Pilot);
+            }
             Settle(native.parentUnit, friendly ? PilotRecoveryStatus.None : PilotRecoveryStatus.Captured,
                 false, friendly ? "rescued — returned to pilot pool" : "captured — unavailable");
         }
@@ -122,12 +161,35 @@ namespace WingCommand
                         }
                         if (Time.timeSinceLevelLoad < survivor.PendingUntil) continue;
                     }
-                    Settle(id, PilotRecoveryStatus.Missing, false, "MIA — survivor signal lost");
+                    if (Time.timeSinceLevelLoad >= survivor.LocalRecoveryAt)
+                    {
+                        Settle(id, PilotRecoveryStatus.None, false,
+                            "local search complete — returned to pilot pool");
+                        continue;
+                    }
+                    // Keep the record for local searches and delayed native ejection callbacks.
+                    if (!float.IsPositiveInfinity(survivor.PendingUntil))
+                    {
+                        survivor.PendingAircraft = null;
+                        survivor.PendingUntil = float.PositiveInfinity;
+                        WingPilotRoster.SettleRescue(id, survivor.Pilot, PilotRecoveryStatus.Missing,
+                            false, "MIA — survivor signal lost; local SAR available");
+                    }
                     continue;
                 }
                 if (!native.IsServer) continue;
                 Observe(native);
                 if (!survivors.ContainsKey(id) || native.disabled) continue;
+                if (Time.timeSinceLevelLoad >= survivor.LocalRecoveryAt)
+                {
+                    survivor.LocalRecoveryCompleting = true;
+                    native.NetworkunitState = Unit.UnitState.Returned;
+                    native.Networkdisabled = true;
+                    Object.Destroy(native.gameObject);
+                    Settle(id, PilotRecoveryStatus.None, false,
+                        "local recovery complete — returned to pilot pool");
+                    continue;
+                }
                 bool landed = native.animationState == PilotDismounted.PilotState.landing &&
                               native.radarAlt <= 3f && native.speed < 3f && !native.IsSlung();
                 if (!landed) continue;
@@ -135,15 +197,13 @@ namespace WingCommand
                 {
                     // Roll once, including failure; gaining/toggling a perk cannot reroll this ejection.
                     survivor.EscapeRolled = true;
-                    bool pathfinder = WingSurvivalPerks.Has(survivor.Pilot, PilotPerk.Pathfinder);
                     float chance = PilotPerks.EscapeChance(
-                        WingSurvivalPerks.Has(survivor.Pilot, PilotPerk.Commando), pathfinder);
+                        WingSurvivalPerks.Has(survivor.Pilot, PilotPerk.Commando));
                     if (chance > 0f && Random.value < chance)
-                        survivor.EscapeAt = Time.timeSinceLevelLoad + (pathfinder ? 60f : PilotPerks.EscapeDelay);
+                        survivor.EscapeAt = Time.timeSinceLevelLoad + PilotPerks.EscapeDelay;
                 }
                 if (Time.timeSinceLevelLoad < survivor.EscapeAt ||
-                    (!WingSurvivalPerks.Has(survivor.Pilot, PilotPerk.Commando) &&
-                     !WingSurvivalPerks.Has(survivor.Pilot, PilotPerk.Pathfinder))) continue;
+                    !WingSurvivalPerks.Has(survivor.Pilot, PilotPerk.Commando)) continue;
                 // Use the native returned state, which also synchronizes the survivor's disappearance.
                 survivor.EscapeCompleting = true;
                 native.NetworkunitState = Unit.UnitState.Returned;
@@ -157,13 +217,63 @@ namespace WingCommand
         {
             if (pilot == null) return "";
             if (pilot.Lost) return "KIA";
+            float localRemaining = LocalRecoveryRemaining(pilot);
+            if (localRemaining >= 0f)
+                return "LOCAL SAR — " + FormatTime(localRemaining) + " REMAINING";
             switch (pilot.RecoveryStatus)
             {
-                case PilotRecoveryStatus.Downed: return "DOWNED — AWAITING SAR";
+                case PilotRecoveryStatus.Downed:
+                    return "DOWNED — AWAITING SAR";
                 case PilotRecoveryStatus.Captured: return "CAPTURED";
                 case PilotRecoveryStatus.Missing: return "MIA";
                 default: return "AVAILABLE";
             }
+        }
+
+        public static float LocalRecoveryRemaining(WingPilot pilot)
+        {
+            foreach (Survivor survivor in survivors.Values)
+                if (survivor.Pilot == pilot && !float.IsPositiveInfinity(survivor.LocalRecoveryAt))
+                    return Mathf.Max(0f, survivor.LocalRecoveryAt - Time.timeSinceLevelLoad);
+            return -1f;
+        }
+
+        private static string FormatTime(float seconds)
+        {
+            int total = Mathf.CeilToInt(seconds);
+            return (total / 60).ToString("00") + ":" + (total % 60).ToString("00");
+        }
+
+        public static bool OrganizeLocalRecovery(WingPilot pilot)
+        {
+            Survivor survivor = null;
+            foreach (Survivor candidate in survivors.Values)
+                if (candidate.Pilot == pilot) { survivor = candidate; break; }
+
+            PilotDismounted native = survivor?.Native;
+            if (pilot == null || pilot.Lost || survivor == null ||
+                (pilot.RecoveryStatus != PilotRecoveryStatus.Downed &&
+                 pilot.RecoveryStatus != PilotRecoveryStatus.Missing) ||
+                (native != null && (native.disabled || !native.IsServer ||
+                    native.animationState == PilotDismounted.PilotState.dead)) ||
+                (native == null && pilot.RecoveryStatus != PilotRecoveryStatus.Missing) ||
+                !float.IsPositiveInfinity(survivor.LocalRecoveryAt)) return false;
+
+            if (!GameManager.GetLocalPlayer(out Player player) || player == null)
+            {
+                WingCommandManager.Instance?.Toast("LOCAL SAR: no player funds available");
+                return false;
+            }
+            if (player.Allocation < LocalRecoveryCost)
+            {
+                WingCommandManager.Instance?.Toast("LOCAL SAR requires 10,000,000 funds");
+                return false;
+            }
+
+            player.AddAllocation(-LocalRecoveryCost);
+            survivor.LocalRecoveryAt = Time.timeSinceLevelLoad + LocalRecoveryDuration;
+            WingCommandManager.Instance?.Toast("LOCAL SAR organized for " + pilot.Callsign + " — ETA 05:00");
+            return true;
         }
 
         /// <summary>Explicit player dispatch only. Use native capture after a safe land-in-place approach.</summary>

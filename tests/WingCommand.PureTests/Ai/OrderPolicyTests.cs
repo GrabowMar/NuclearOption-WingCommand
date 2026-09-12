@@ -34,13 +34,20 @@ namespace WingCommand.PureTests
 
         [Theory]
         [InlineData(WingOrder.Attack)]
-        [InlineData(WingOrder.FireForEffect)]
         [InlineData(WingOrder.JamTarget)]
         public void CompletedDesignationsRetireIndependentlyOfWhichReflexOwnsFlight(WingOrder order)
         {
             Assert.True(WingOrderRules.TargetTaskComplete(order, targetAlive: false, deliveryPending: false));
             Assert.False(WingOrderRules.TargetTaskComplete(order, targetAlive: true, deliveryPending: false));
             Assert.False(WingOrderRules.TargetTaskComplete(order, targetAlive: false, deliveryPending: true));
+        }
+
+        [Fact]
+        public void FireForEffect_DoesNotRetireTargetTaskImmediatelyWhenTargetDies()
+        {
+            // AttackRunState manages its own expenditure and rollover via TryRollToNextExpendTarget
+            Assert.True(WingOrderRules.CarriesTarget(WingOrder.FireForEffect));
+            Assert.False(WingOrderRules.TargetTaskComplete(WingOrder.FireForEffect, targetAlive: false, deliveryPending: false));
         }
 
         [Fact]

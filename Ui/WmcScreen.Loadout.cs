@@ -28,13 +28,14 @@ namespace WingCommand
         private static WingButton templateNewButton;
         private static WingButton templateCopyButton;
         private static WingButton templateDeleteButton;
+        private static readonly Confirmation templateDeletion = new Confirmation();
         private static RectTransform pylonArea;
         private static WingButton pylonPrevButton;
         private static WingButton pylonNextButton;
         private static TMP_Text pylonPageLabel;
         private static readonly List<PylonRow> pylonRows = new List<PylonRow>();
 
-        private const int AirframeGridRows = 4;
+        private const int AirframeGridRows = 3;
         private const int AirframeGridCols = 4;
         private const int AirframeGridCapacity = AirframeGridRows * AirframeGridCols; // Airframe grid capacity.
         private const float AirframeTileHeight = 36f;
@@ -66,7 +67,7 @@ namespace WingCommand
 
         /// <summary>Visible pylon rows per page, sized for common airframes without excess empty
         /// space.</summary>
-        private const int PylonRowsPerPage = 6;
+        private const int PylonRowsPerPage = 5;
 
         // Loadout-page construction.
 
@@ -224,6 +225,7 @@ namespace WingCommand
         private static void SelectAirframe(AircraftDefinition def)
         {
             if (def == null || selectedOffer == def) return;
+            templateDeletion.Clear();
             selectedOffer = def;
             editingTemplateId = null;
             pylonPage = 0;
@@ -325,7 +327,7 @@ namespace WingCommand
             if (mine.Count == 0)
             {
                 WingCommandManager.Instance?.Toast(
-                    "No templates for " + selectedOffer.unitName + " yet - press + to make one");
+                    "No templates for " + selectedOffer.unitName + " yet - select NEW to make one");
                 return;
             }
 
@@ -344,6 +346,7 @@ namespace WingCommand
             loadoutPopup?.Show(new Rect(x, y - RowHeight, width, 0f), popupEntries, index =>
             {
                 if (index < 0 || index >= ids.Count) return;
+                templateDeletion.Clear();
                 editingTemplateId = ids[index];
                 pylonPage = 0;
                 SyncNameField();
@@ -377,6 +380,7 @@ namespace WingCommand
             }
 
             editingTemplateId = created.Id;
+            templateDeletion.Clear();
             pylonPage = 0;
             SyncNameField();
         }
@@ -400,6 +404,7 @@ namespace WingCommand
             }
 
             editingTemplateId = copy.Id;
+            templateDeletion.Clear();
             SyncNameField();
         }
 
@@ -413,6 +418,15 @@ namespace WingCommand
             }
 
             string name = doomed.Name;
+            if (!templateDeletion.IsArmedFor(doomed))
+            {
+                templateDeletion.Arm(doomed);
+                WingCommandManager.Instance?.Toast("Select DEL again within 3 seconds to delete " + name);
+                RefreshTemplateControls(doomed);
+                return;
+            }
+
+            templateDeletion.Clear();
             EconomyFacade.LoadoutTemplates.Delete(doomed);
             editingTemplateId = null;
             pylonPage = 0;
@@ -618,7 +632,13 @@ namespace WingCommand
                                           saved < EconomyFacade.LoadoutTemplates.MaxPerAirframe);
             templateCopyButton?.SetEnabled(template != null &&
                                            saved < EconomyFacade.LoadoutTemplates.MaxPerAirframe);
-            templateDeleteButton?.SetEnabled(template != null);
+            if (templateDeleteButton != null)
+            {
+                bool deleteArmed = templateDeletion.IsArmedFor(template);
+                templateDeleteButton.SetEnabled(template != null);
+                templateDeleteButton.SetLatched(deleteArmed);
+                templateDeleteButton.SetText(deleteArmed ? "DEL?" : "DEL");
+            }
             // Refresh name text only when the edited template changes.
             if (!ReferenceEquals(lastNamedTemplate, template))
             {
@@ -812,7 +832,7 @@ namespace WingCommand
             if (template == null)
             {
                 loadoutStatusLabel.text =
-                    "Press + to start a template for " +
+                    "Select NEW to start a template for " +
                     AvTheme.Truncate(selectedOffer.unitName, 18) + ".";
                 loadoutStatusLabel.color = Dim();
                 return;
@@ -855,7 +875,7 @@ namespace WingCommand
                 "Copy this template, so a variation can be made without losing the original.";
 
             public const string Delete =
-                "Delete this template for good. Aircraft already flying it keep their fit.";
+                "Select twice within three seconds to delete this template. Aircraft already flying it keep their fit.";
 
             public const string Name =
                 "Name the template. Flight controls are held off while you type here.";
@@ -907,6 +927,9 @@ namespace WingCommand
 
                 name = Label(rt, "", new Rect(textLeft, -18f, textWidth, 14f), Dim(),
                              FontMicro, FontStyles.Normal, TextAlignmentOptions.Left);
+                name.enableAutoSizing = true;
+                name.fontSizeMin = 6.5f;
+                name.fontSizeMax = FontMicro;
                 name.overflowMode = TextOverflowModes.Ellipsis;
 
                 hit = HitButton(rt, new Rect(0f, 0f, rect.width, rect.height), () =>
@@ -936,7 +959,12 @@ namespace WingCommand
                 code.text = AvTheme.Truncate(codeStr, 7);
                 code.color = selected ? Green() : Friendly();
 
-                name.text = def.unitName;
+                string nameStr = def.unitName;
+                if (!string.IsNullOrEmpty(def.code) && nameStr.StartsWith(def.code, StringComparison.OrdinalIgnoreCase))
+                {
+                    nameStr = nameStr.Substring(def.code.Length).TrimStart(' ', '-', '_');
+                }
+                name.text = nameStr;
                 name.color = selected ? Friendly() : Dim();
 
                 fill.color = selected ? WingUi.CardFillSelected : WingUi.CardFill;
@@ -1018,8 +1046,8 @@ namespace WingCommand
 
                 bool empty = fitted.IsEmpty;
                 store.text = empty ? "— EMPTY —" : fitted.Label;
-                store.color = empty ? Dim() : Friendly();
-                name.color = Friendly();
+                store.color = empty ? Dim() : WingUi.RailCyan;
+                name.color = empty ? Dim() : Friendly();
 
                 hit.SetEnabled(true);
                 hit.WithTooltip(pylonName + " / " + (empty ? "Empty" : fitted.Label) + ". " + LoadoutHint.Pylon);

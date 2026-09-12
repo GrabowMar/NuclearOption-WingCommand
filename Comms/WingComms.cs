@@ -57,6 +57,26 @@ namespace WingCommand
             Departing,
             Airborne,
             AirborneRejoining,
+            Fox1,
+            Fox2,
+            Fox3,
+            Magnum,
+            Rifle,
+        }
+
+        private static bool IsBrevity(Call call)
+        {
+            switch (call)
+            {
+                case Call.Fox1:
+                case Call.Fox2:
+                case Call.Fox3:
+                case Call.Magnum:
+                case Call.Rifle:
+                    return true;
+                default:
+                    return false;
+            }
         }
 
         /// <summary>Calls retained in Performance mode. Order acknowledgements are handled separately;
@@ -85,6 +105,8 @@ namespace WingCommand
         }
 
         private const float RepeatCooldown = 12f;
+        private const float BreakCallCooldown = 6f;
+        private const float BrevityCooldown = 8f;
         private const float RoutineRepeatCooldown = 60f;
         private const float ThreatClearCooldown = 120f;
         private const float BanterCheckMin = 160f;
@@ -108,6 +130,8 @@ namespace WingCommand
             // Threat-clear reports share one cooldown across the whole wing.
             var key = new SpeechKey(call == Call.DefensiveClear ? null : member, call);
             float cooldown = call == Call.DefensiveClear ? ThreatClearCooldown :
+                call == Call.BreakCall ? BreakCallCooldown :
+                IsBrevity(call) ? BrevityCooldown :
                 Critical(call) ? RepeatCooldown : RoutineRepeatCooldown;
             if (lastSpoken.TryGetValue(key, out float last) &&
                 Time.timeSinceLevelLoad - last < cooldown)
@@ -120,8 +144,16 @@ namespace WingCommand
                 phrase = ChatterDialogue.Event(
                     Persona(member), call.ToString(), detail, Random.Range(0, int.MaxValue));
             }
+
+            if (call == Call.Defending || call == Call.BreakCall || call == Call.Panic)
+                WingRadioAudio.Play(WingRadioAudio.Earcon.ThreatAlarm);
+            else if (call == Call.Splash)
+                WingRadioAudio.Play(WingRadioAudio.Earcon.Splash);
+            else if (call == Call.Unable)
+                WingRadioAudio.Play(WingRadioAudio.Earcon.Unable);
+
             Broadcast(member, phrase,
-                call == Call.Panic || call == Call.Critical);
+                call == Call.Panic || call == Call.Critical || call == Call.BreakCall);
         }
 
         /// <summary>Acknowledge only accepting aircraft. A single member answers alone; a group uses its
@@ -144,6 +176,8 @@ namespace WingCommand
                 if (members[i] != null) ordered.Add(members[i]);
             ordered.Sort((a, b) => a.Slot.CompareTo(b.Slot));
             if (ordered.Count == 0) return;
+
+            WingRadioAudio.Play(WingRadioAudio.Earcon.Wilco);
 
             WingMember lead = ordered[0];
             if (ordered.Count > 1)
