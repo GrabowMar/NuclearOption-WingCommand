@@ -20,7 +20,7 @@ namespace WingCommand
     {
         public const string PluginGuid = "com.marci.wingcommand";
         public const string PluginName = "Wing Command";
-        public const string PluginVersion = "0.9.2.2";
+        public const string PluginVersion = "0.9.2.6";
 
         internal static Plugin Instance { get; private set; }
         internal static new ManualLogSource Logger { get; private set; }
@@ -95,6 +95,10 @@ namespace WingCommand
                 typeof(AiCombatTweak),
                 typeof(AiSharpTurnPatch),
                 typeof(AiTargetDeconflictionPatch),
+                typeof(Interop.WingSquad.SurvivorSpawnPatch),
+                typeof(Interop.WingSquad.SurvivorStatePatch),
+                typeof(Interop.WingSquad.SurvivorDisabledPatch),
+                typeof(Interop.WingSquad.SurvivorCapturePatch),
                 typeof(WingMapWaypointPatch),
                 typeof(WingMapSelectionPatch),
                 typeof(WingMapTint.MapIconColorPatch),

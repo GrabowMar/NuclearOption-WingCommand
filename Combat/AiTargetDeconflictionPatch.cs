@@ -16,6 +16,7 @@ namespace WingCommand
         private static void Postfix(Unit searcher, float bravery, List<WeaponStation> stationList,
                                     ref CombatAI.TargetSearchResults __result)
         {
+            if (Interop.WingSquad.TrySelectTarget(searcher, stationList, ref __result)) return;
             if (!WingFidelity.Deconfliction || !Plugin.Settings.AiTargetSpreading.Value) return;
             if (!(searcher is Aircraft aircraft) || aircraft.Player != null || !aircraft.LocalSim) return;
             if (aircraft.NetworkHQ == null || stationList == null || stationList.Count == 0)

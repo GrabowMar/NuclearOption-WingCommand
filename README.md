@@ -526,3 +526,22 @@ releases for NOMM and manual installs.
 **[⬆ Back to top](#-wing-command)** • Made for the Nuclear Option community
 
 </div>
+
+### Boscali Summer ace integration (0.9.2.4)
+
+The public `WingSquad` API now assigns real perks to hostile ace leaders and exposes
+`AbilityMask(Aircraft)` for host-authored UI snapshots. Bits 0–3 identify Toughness,
+Countermeasures, Notch Expert and Ghost. Tiers 1–4 progressively add these perks;
+tier 5 retains all four. The existing perk hooks and progression settings control
+actual effects. Enemy pilots use a separate bounded registry and never enter the
+recruitable roster. Cleanup and scene reset discard their registrations.
+
+Ace ingress now uses the current map perimeter and ground-airbase ownership, with
+formation/player clearance and no nearby fallback. Tier aircraft are fixed to
+T/A-30, CT-7, FS-12, FS-20 and KR-67. Complete native flights are required; failed
+flights roll back. Available in the 0.9.2.5 companion build.
+
+Version 0.9.2.6 adds `SpawnWingAt` for Boscali Summer's host-selected ingress.
+Boscali's Command control grid now owns territory selection and nearest-edge ranking;
+Wing Command validates placement bounds and runs native spawning. The old `SpawnWing`
+entry point remains compatible for other callers.

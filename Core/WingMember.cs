@@ -317,7 +317,7 @@ namespace WingCommand
                 if (Aircraft.radarAlt >= 8f && Time.timeSinceLevelLoad >= nextDepartureReport)
                 {
                     nextDepartureReport = Time.timeSinceLevelLoad + 15f;
-                    Plugin.Logger.LogInfo($"[Departure] {Crew?.Callsign ?? Name} waiting for handoff: " +
+                    Plugin.LogVerbose($"[Departure] {Crew?.Callsign ?? Name} waiting for handoff: " +
                         $"native={Pilot.currentState?.GetType().Name} complete={Pilot.flightInfo.HasTakenOff} " +
                         $"agl={Aircraft.radarAlt:F1} forwardSpeed={forwardAirspeed:F1} minimum={minimumAirspeed:F1}");
                 }
@@ -333,7 +333,7 @@ namespace WingCommand
             // new command.
             brain.RequestEvaluation();
             Resolve(force: true);
-            Plugin.Logger.LogInfo($"[Departure] {Crew?.Callsign ?? Name} handoff: order={Order} " +
+            Plugin.LogVerbose($"[Departure] {Crew?.Callsign ?? Name} handoff: order={Order} " +
                 $"controller={Pilot.currentState?.GetType().Name} behaviour={brain.Current.BehaviourId} " +
                 $"agl={Aircraft.radarAlt:F1} forwardSpeed={forwardAirspeed:F1}");
             return true;

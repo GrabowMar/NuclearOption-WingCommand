@@ -29,6 +29,48 @@ namespace WingCommand
             return aircraft;
         }
 
+        [Theory]
+        [InlineData(1, 1)]
+        [InlineData(2, 3)]
+        [InlineData(3, 7)]
+        [InlineData(4, 15)]
+        [InlineData(5, 15)]
+        public void HostileAcePerksUseExistingHooksWithoutRecruitingPilot(int tier, int expected)
+        {
+            var aircraft = Plane();
+            WingSurvivalPerks.RegisterAce(aircraft, tier);
+            Assert.Null(WingPilotRoster.Of(aircraft));
+            Assert.Equal(expected, WingSurvivalPerks.AceAbilityMask(aircraft));
+            float p = 100, b = 20, f = 10, impact = 8, hp = 100;
+            WingSurvivalPerks.ProtectPilotDamage(aircraft, ref p, ref b, ref f, ref impact, ref hp);
+            Assert.Equal(50f, p);
+            Assert.Equal(10f, b);
+            Assert.Equal(100f, hp);
+            aircraft.IsServer = false;
+            Assert.Equal(0, WingSurvivalPerks.AceAbilityMask(aircraft));
+            aircraft.IsServer = true;
+            Plugin.Settings.PilotProgression.Value = false;
+            Assert.Equal(0, WingSurvivalPerks.AceAbilityMask(aircraft));
+            Plugin.Settings.PilotProgression.Value = true;
+            WingSurvivalPerks.RemoveAce(aircraft);
+            Assert.Equal(0, WingSurvivalPerks.AceAbilityMask(aircraft));
+            Assert.False(WingSurvivalPerks.Has(aircraft, PilotPerk.Toughness));
+        }
+
+        [Fact]
+        public void AceGuidanceUsesItsSeparatePilotAndResetClearsPerks()
+        {
+            var aircraft = Plane();
+            WingSurvivalPerks.RegisterAce(aircraft, 4);
+            var missile = new Missile { targetID = aircraft.persistentID };
+            GlobalPosition aim = default;
+            WingSurvivalPerks.BiasGuidance(missile, ref aim);
+            WingSurvivalPerks.BiasGuidance(missile, ref aim);
+            Assert.Equal(1, Random.Rolls);
+            WingSurvivalPerks.Reset();
+            Assert.Equal(0, WingSurvivalPerks.AceAbilityMask(aircraft));
+        }
+
         private static PilotDismounted Eject(Aircraft aircraft)
         {
             var native = new PilotDismounted {

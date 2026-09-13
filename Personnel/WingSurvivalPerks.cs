@@ -16,7 +16,38 @@ namespace WingCommand
         // Weak keys let destroyed native missiles leave memory without a scene-wide scan.
         private static ConditionalWeakTable<Missile, MissileRolls> rolls = new ConditionalWeakTable<Missile, MissileRolls>();
 
-        public static void Reset() => rolls = new ConditionalWeakTable<Missile, MissileRolls>();
+        // Separate from the recruitable roster: hostile pilots must never enter the player pool.
+        private static readonly Dictionary<Aircraft, WingPilot> aces = new Dictionary<Aircraft, WingPilot>();
+        private static readonly PilotPerk[] acePerks = {
+            PilotPerk.Toughness, PilotPerk.Countermeasures, PilotPerk.NotchExpert, PilotPerk.Ghost };
+
+        internal static void RegisterAce(Aircraft aircraft, int tier)
+        {
+            if (aircraft == null || !aircraft.IsServer || aces.Count >= 16) return;
+            var pilot = new WingPilot();
+            for (int i = 0; i < Math.Min(Math.Max(tier, 1), acePerks.Length); i++)
+                pilot.Perks.Add(acePerks[i]);
+            aces[aircraft] = pilot;
+        }
+
+        internal static void RemoveAce(Aircraft aircraft)
+        { if (!ReferenceEquals(aircraft, null)) aces.Remove(aircraft); }
+
+        internal static void ClearAces() => aces.Clear();
+
+        internal static int AceAbilityMask(Aircraft aircraft)
+        {
+            if (aircraft == null || !aces.ContainsKey(aircraft)) return 0;
+            int mask = 0;
+            for (int i = 0; i < acePerks.Length; i++) if (Has(aircraft, acePerks[i])) mask |= 1 << i;
+            return mask;
+        }
+
+        private static WingPilot PilotOf(Aircraft aircraft) => WingPilotRoster.Of(aircraft) ??
+            (aircraft != null && aces.TryGetValue(aircraft, out WingPilot pilot) ? pilot : null);
+
+        public static void Reset()
+        { rolls = new ConditionalWeakTable<Missile, MissileRolls>(); ClearAces(); }
 
         public static bool Has(WingPilot pilot, PilotPerk perk) =>
             pilot != null && !pilot.Lost && Plugin.Settings != null &&
@@ -25,7 +56,7 @@ namespace WingCommand
 
         public static bool Has(Aircraft aircraft, PilotPerk perk) =>
             aircraft != null && !aircraft.disabled && aircraft.IsServer && aircraft.LocalSim &&
-            Has(WingPilotRoster.Of(aircraft), perk);
+            Has(PilotOf(aircraft), perk);
 
         internal static void ProtectPilotDamage(Aircraft aircraft, ref float pierce, ref float blast,
                                                 ref float fire, ref float impact, ref float hitPoints)
@@ -42,7 +73,7 @@ namespace WingCommand
             if (missile == null || !missile.IsServer || !missile.LocalSim || missile.disabled ||
                 !UnitRegistry.TryGetUnit(missile.targetID, out Unit target) || !(target is Aircraft aircraft) ||
                 aircraft.disabled) return;
-            WingPilot pilot = WingPilotRoster.Of(aircraft);
+            WingPilot pilot = PilotOf(aircraft);
             if (!Has(aircraft, PilotPerk.Ghost) && !Has(aircraft, PilotPerk.NotchExpert)) return;
             MissileRolls perMissile = rolls.GetValue(missile, _ => new MissileRolls());
             if (!perMissile.Offsets.TryGetValue(pilot, out Vector3 offset))
