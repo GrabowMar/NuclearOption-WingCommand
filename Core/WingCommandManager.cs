@@ -52,6 +52,7 @@ namespace WingCommand
                 // Run teardown once on entering menus; resets may destroy UI, clear caches, or roll
                 // back purchases.
                 if (resetForNonPlayableState) return;
+                Plugin.Logger.LogInfo(new WingDiagnostic(WingDiagnosticEvent.WingReset, Wing.Count));
 
                 if (radialOpen) CloseRadial(apply: false);
                 WingRadialOverlay.Reset();
@@ -91,6 +92,8 @@ namespace WingCommand
             {
                 // Snapshot fidelity on mission entry; setting changes apply next mission.
                 WingFidelity.Begin(Plugin.Settings.Mode.Value);
+                Plugin.Logger.LogInfo(new WingDiagnostic(WingDiagnosticEvent.MissionStarted,
+                    WingFidelity.Mode == WingMode.Performance ? 1 : 0));
                 WingFormation.Shape = Plugin.Settings.FormationShape.Value;
                 WingFormation.SlotSpacing = Plugin.Settings.FormationSpacing.Value;
 

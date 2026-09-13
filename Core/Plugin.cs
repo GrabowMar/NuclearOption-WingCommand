@@ -53,6 +53,7 @@ namespace WingCommand
         {
             Instance = this;
             Logger = base.Logger;
+            WingLogExport.Start(Logger);
             Settings = new WingConfig(Config);
             Settings.VerboseLogging.SettingChanged += OnLoggingChanged;
             Settings.AiSharpTurns.SettingChanged += OnAiSettingChanged;
@@ -125,6 +126,7 @@ namespace WingCommand
 
             Logger.LogInfo($"{PluginName} {PluginVersion} loaded. " +
                 $"mvid={typeof(Plugin).Assembly.ManifestModule.ModuleVersionId}");
+            Logger.LogInfo(new WingDiagnostic(WingDiagnosticEvent.PluginReady, 0));
 
             // Log effective player settings: existing BepInEx values override new defaults. Resolve the
             // initial fidelity budget here; mission start snapshots it again. Tuning constants are
@@ -156,6 +158,7 @@ namespace WingCommand
             }
 
             names.Sort(System.StringComparer.Ordinal);
+            Logger.LogInfo(new WingDiagnostic(WingDiagnosticEvent.PatchesInstalled, names.Count));
             LogVerbose($"Harmony patched {names.Count} method(s): {string.Join(", ", names.ToArray())}");
 
             // Name expected patches so game API changes produce missing-patch diagnostics.
@@ -186,18 +189,23 @@ namespace WingCommand
 
         private void OnLoggingChanged(object sender, EventArgs e)
         {
+            Logger.LogInfo(new WingDiagnostic(WingDiagnosticEvent.VerboseLoggingChanged, Settings.VerboseLogging.Value ? 1 : 0));
             Logger.LogInfo($"Debug action logging {(Settings.VerboseLogging.Value ? "enabled" : "disabled")}. " +
                            $"Wing Command {PluginVersion}; mode={Settings.Mode.Value}");
         }
 
         private void OnAiSettingChanged(object sender, EventArgs e)
         {
+            Logger.LogInfo(new WingDiagnostic(WingDiagnosticEvent.AiSettingsChanged,
+                (Settings.AiSharpTurns.Value ? 1 : 0) | (Settings.AiTargetSpreading.Value ? 2 : 0)
+                | (Settings.AiMissileWarningRepair.Value ? 4 : 0)));
             if (sender is ConfigEntryBase entry)
                 LogAction($"setting={entry.Definition.Section}/{entry.Definition.Key} value={entry.BoxedValue}");
         }
 
         private void OnDestroy()
         {
+            WingLogExport.Stop(Logger);
             if (Settings != null) Settings.VerboseLogging.SettingChanged -= OnLoggingChanged;
             if (Settings != null)
             {

@@ -359,6 +359,17 @@ namespace WingCommand
 
         private void BindDebug(ConfigFile c)
         {
+            c.Bind("Debug", "ExportLogs", false,
+                new ConfigDescription(
+                    "Export the latest 4096 Wing Command log events from this session beside WingCommand.dll. " +
+                    "Includes safe mod diagnostics, selected settings, severity and code locations; other message bodies are omitted. " +
+                    "Replaces WingCommand-logs.txt. No upload; no debug cheats required.", null,
+                    new ConfigurationManagerAttributes
+                    {
+                        DispName = "Export logs", Order = 65, IsAdvanced = false,
+                        CustomDrawer = WingLogExport.DrawButton, HideDefaultButton = true,
+                    }));
+
             // Use a display-only entry as the category banner; ConfigurationManager has no header API.
             // Its stored value is unused.
             DebugWarning = c.Bind("Debug", "DebugWarningBanner", false,

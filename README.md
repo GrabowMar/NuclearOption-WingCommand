@@ -478,6 +478,7 @@ tactical rules, hotkeys, and appearance can be configured.
 | UI | `TacticalPauseScale` | `0.25` | Simulation time-scale during tactical pause (`0.0` = full pause) |
 | UI | `ExternalHitmarkerAudio` | `true` | Hitmarker audio confirmation in 3rd-person/orbit view |
 | Debug | `EnableDebugActions` | `false` | Master switch for development cheats (host-only) |
+| Debug | `ExportLogs` | — | F1 “Export Wing Command logs” button: saves `WingCommand-logs.txt` beside `WingCommand.dll`, replacing the previous export. Includes the latest 4,096 mod log events from the current session: severity, elapsed time, code locations, and allowlisted lifecycle/settings events. Includes the WC build ID and selected numeric/boolean/enum mod settings. Other message bodies are omitted for privacy; no player data, other mods' logs, or uploads. Independent of cheats. |
 | Debug | `VerboseLogging` | `false` | F1 “Debug action logging” switch, visible without advanced settings. Applies immediately; logs action requests/results, frame numbers, state transitions and flight diagnostics to BepInEx `LogOutput.log`. Independent of cheats. |
 | Debug | `DebugSpawnAircraft` | empty | F1 aircraft selector: override the debug spawn type using compatible catalogue aircraft, including modded planes, without faction stock or rank requirements. Empty uses your current aircraft. |
 | Debug | `SpawnDebugWing` | — | F1 button: spawn a full wing of the selected debug aircraft in formation; requires flying above 80 m and host authority |
