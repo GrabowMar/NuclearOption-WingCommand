@@ -8,15 +8,18 @@ namespace WingCommand
     /// be handed back without a bump.</summary>
     internal sealed class Pidf
     {
-        public float Kp, Ki, Kd;
+        public float Kp { get; set; }
+        public float Ki { get; set; }
+        public float Kd { get; set; }
         /// <summary>Setpoint weight on the proportional term (1 = standard).</summary>
-        public float B = 1f;
+        public float B { get; set; } = 1f;
         /// <summary>Setpoint weight on the derivative term (0 = no kick on setpoint steps).</summary>
-        public float C;
-        public float DerivativeTau = 0.05f;
-        public float OutMin = -1f, OutMax = 1f;
+        public float C { get; set; }
+        public float DerivativeTau { get; set; } = 0.05f;
+        public float OutMin { get; set; } = -1f;
+        public float OutMax { get; set; } = 1f;
         /// <summary>Output rate limit in output units per second; infinity disables it.</summary>
-        public float MaxRate = float.PositiveInfinity;
+        public float MaxRate { get; set; } = float.PositiveInfinity;
 
         private float integral, derivative, previousDerivativeInput;
         private bool primed;
