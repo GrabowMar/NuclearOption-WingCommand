@@ -1,50 +1,41 @@
-using BepInEx;
-using BepInEx.Configuration;
-using BepInEx.Logging;
 using System;
-using System.Collections.Generic;
-using System.Reflection;
 using System.Runtime.CompilerServices;
+using BepInEx;
+using BepInEx.Logging;
 using HarmonyLib;
 using NOAvionics.Ui;
 using UnityEngine;
 
-// Unity calls Awake and OnDestroy by reflection, so suppress IDE0051 in this file.
+// Unity calls Awake and OnDestroy by reflection.
 #pragma warning disable IDE0051
 
 namespace WingCommand
 {
-    /// <summary>Initialises configuration and Harmony patches, and owns the persistent manager.</summary>
+    /// <summary>Loads settings, applies the patch manifest and creates the persistent runtime host.</summary>
     [BepInPlugin(PluginGuid, PluginName, PluginVersion)]
     public class Plugin : BaseUnityPlugin
     {
         public const string PluginGuid = "com.marci.wingcommand";
         public const string PluginName = "Wing Command";
-        public const string PluginVersion = "0.9.2.6";
+        public const string PluginVersion = "1.0.0";
+        public const string PluginPrerelease = "alpha.0";
 
         internal static Plugin Instance { get; private set; }
         internal static new ManualLogSource Logger { get; private set; }
         internal static WingConfig Settings { get; private set; }
 
-        /// <summary>Log diagnostics only when Debug/VerboseLogging is enabled. Keep errors, warnings, and
-        /// the startup message on Logger.</summary>
+        /// <summary>Diagnostics shown only with Debug/VerboseLogging enabled.</summary>
         internal static void LogVerbose(string message)
         {
-            WriteVerbose(message);
+            if (Settings == null || !Settings.VerboseLogging.Value) return;
+            Logger?.LogInfo($"[frame={Time.frameCount}] {message}");
         }
 
         internal static void LogAction(string message,
                                        [CallerMemberName] string caller = "",
                                        [CallerFilePath] string source = "")
         {
-            if (Settings == null || !Settings.VerboseLogging.Value) return;
-            WriteVerbose($"[Action] [{System.IO.Path.GetFileNameWithoutExtension(source)}.{caller}] {message}");
-        }
-
-        private static void WriteVerbose(string message)
-        {
-            if (Settings == null || !Settings.VerboseLogging.Value) return;
-            Logger?.LogInfo($"[frame={Time.frameCount}] {message}");
+            LogVerbose($"[Action] [{System.IO.Path.GetFileNameWithoutExtension(source)}.{caller}] {message}");
         }
 
         private Harmony harmony;
@@ -56,170 +47,34 @@ namespace WingCommand
             WingLogExport.Start(Logger);
             Settings = new WingConfig(Config);
             Settings.VerboseLogging.SettingChanged += OnLoggingChanged;
-            Settings.AiSharpTurns.SettingChanged += OnAiSettingChanged;
-            Settings.AiTargetSpreading.SettingChanged += OnAiSettingChanged;
-            Settings.AiMissileWarningRepair.SettingChanged += OnAiSettingChanged;
 
-            // Both plugins load avionics.avss from the same config directory, with an embedded fallback
-            // for missing overrides.
-            AvStyleHost.Configure(BepInEx.Paths.ConfigPath, LogVerbose, Logger.LogWarning);
-
-
-            if (Settings.CheatFreePurchases || Settings.CheatNoWingLimit || Settings.CheatBypassRank)
-            {
-                Logger.LogWarning(
-                    "Unsafe Debug cheats are enabled: " +
-                    $"FreePlanePurchases={Settings.CheatFreePurchases}, " +
-                    $"DisableWingSizeLimit={Settings.CheatNoWingLimit}, " +
-                    $"BypassRankRequirement={Settings.CheatBypassRank}. " +
-                    "These options may break mission balance, UI, formations or the mod itself.");
-            }
-
-            if (!FormationSolver.ValidateGeometry(64, out string geometryProblem))
-                Logger.LogError("Formation geometry validation failed: " + geometryProblem);
-
-            // Resolve reflection before patches consult GameAccess.Available.
-            GameAccess.Initialise();
-            WingHudTint.Initialise();
-            CombatFacade.Countermeasures.Initialise();
-
-            // Register built-in behaviours through the public API before the first tick.
-            WingAi.FaultReporter = (id, e) => Logger.LogError(
-                $"[Wing] AI provider '{id}' failed and has been disabled for this mission: " +
-                $"{e.GetType().Name} - {e.Message}");
-            WingReflexes.RegisterDefaults();
-            PersonnelFacade.CustomPilots.EnsurePilotsDirectory();
+            // Both plugins load avionics.avss from the shared config directory with an embedded fallback.
+            AvStyleHost.Configure(Paths.ConfigPath, LogVerbose, Logger.LogWarning);
 
             harmony = new Harmony(PluginGuid);
-            Type[] patchTypes =
-            {
-                typeof(AiCombatTweak),
-                typeof(AiSharpTurnPatch),
-                typeof(WingmanOverdrivePatch),
-                typeof(AiTargetDeconflictionPatch),
-                typeof(Interop.WingSquad.SurvivorSpawnPatch),
-                typeof(Interop.WingSquad.SurvivorStatePatch),
-                typeof(Interop.WingSquad.SurvivorDisabledPatch),
-                typeof(Interop.WingSquad.SurvivorCapturePatch),
-                typeof(WingMapWaypointPatch),
-                typeof(WingMapSelectionPatch),
-                typeof(WingMapTint.MapIconColorPatch),
-                typeof(WingMapTint.ShowAirbasePatch),
-                typeof(WingHudTint.UpdateColorPatch),
-                typeof(CombatHUDHitAudioPatch),
-                typeof(WingRadialMenuPatches),
-                typeof(WingRadialMenuPatches.AwakePatch),
-                typeof(WingMenuActionPatches),
-                typeof(WingTakeoverPatches),
-                typeof(WingInboundTaxiPatch),
-                typeof(WingRefitEjectPatch),
-                typeof(WingTakeoffQueuePatch),
-                typeof(HangarDeliveryCompletionPatch),
-                typeof(WingHangarSpawnGuard),
-            };
-            for (int i = 0; i < patchTypes.Length; i++)
-                harmony.PatchAll(patchTypes[i]);
-            ReportPatches();
+            PatchManifest.Apply(harmony, Logger);
 
-            var go = new GameObject("WingCommandManager");
-            go.hideFlags = HideFlags.HideAndDontSave;
+            var go = new GameObject("WingCommandRuntime") { hideFlags = HideFlags.HideAndDontSave };
             DontDestroyOnLoad(go);
-            go.AddComponent<WingCommandManager>();
+            go.AddComponent<WingRuntime>();
 
-            Logger.LogInfo($"{PluginName} {PluginVersion} loaded. " +
+            Logger.LogInfo($"{PluginName} {PluginVersion}-{PluginPrerelease} loaded. " +
                 $"mvid={typeof(Plugin).Assembly.ManifestModule.ModuleVersionId}");
             Logger.LogInfo(new WingDiagnostic(WingDiagnosticEvent.PluginReady, 0));
-
-            // Log effective player settings: existing BepInEx values override new defaults. Resolve the
-            // initial fidelity budget here; mission start snapshots it again. Tuning constants are
-            // identified by the loaded module's MVID, even if a deployed file is later replaced.
-            WingFidelity.Begin(Settings.Mode.Value);
-            LogVerbose(
-                "Effective settings: " +
-                $"Mode={Settings.Mode.Value} [{WingFidelity.Summary()}] " +
-                $"Shape={WingFormation.Shape} " +
-                $"Doctrine={Settings.Doctrine.Value} " +
-                $"WingmanOverdrive={Settings.WingmanOverdrive.Value} " +
-                $"WingmanPursuitBoost={Settings.WingmanPursuitBoost.Value} " +
-                $"AutoReturnOnEmpty={Settings.AutoReturnOnEmpty.Value} " +
-                $"RtbReturnsToReserve={Settings.RtbReturnsToReserve.Value} " +
-                $"TakeoverOnDeath={Settings.TakeoverOnDeath.Value} " +
-                $"Radio={Settings.Radio.Value} " +
-                $"PilotProgression={Settings.PilotProgression.Value} " +
-                $"Shop={Settings.ShopEnabled.Value} " +
-                $"Highlight={Settings.Highlight.Value}");
-        }
-
-        /// <summary>Log patched methods at startup. Harmony silently skips classes missing a class-level
-        /// HarmonyPatch attribute.</summary>
-        private void ReportPatches()
-        {
-            var patched = new List<MethodBase>(harmony.GetPatchedMethods());
-            var names = new List<string>(patched.Count);
-            foreach (MethodBase m in patched)
-            {
-                if (m != null) names.Add(m.DeclaringType?.Name + "." + m.Name);
-            }
-
-            names.Sort(System.StringComparer.Ordinal);
-            Logger.LogInfo(new WingDiagnostic(WingDiagnosticEvent.PatchesInstalled, names.Count));
-            LogVerbose($"Harmony patched {names.Count} method(s): {string.Join(", ", names.ToArray())}");
-
-            // Name expected patches so game API changes produce missing-patch diagnostics.
-            string[] expected =
-            {
-                "RadialMenuMain.OpenMenu",
-                "RadialMenuMain.SetupMain",
-                "RadialMenuAction.AllowedOnAircraft",
-                "RadialMenuAction.TriggerAction",
-                "MapIcon.UpdateColor",
-                "UnitMapIcon.UpdateIcon",
-                "HUDUnitMarker.UpdateColor",
-                "AIPilotCombatModes.EnterState",
-                "FlyByWire.Filter",
-                "CombatAI.ChooseHQTarget",
-                "GameManager.FinishGame",
-                // Both airfield patches depend on Pilot.SwitchState; losing them breaks apron pilot
-                // retention and runway cleanup.
-                "Pilot.SwitchState",
-                "Hangar.DoorSequenceCarrier",
-                "Hangar.TrySpawnAircraft",
-            };
-
-            foreach (string want in expected)
-            {
-                if (!names.Contains(want))
-                    Logger.LogWarning($"Expected Harmony patch missing: {want}");
-            }
+            LogVerbose($"Effective settings: Mode={Settings.Mode.Value} DevTools={Settings.DevTools.Value} " +
+                $"DataRoot={WingConfig.DataRoot}");
         }
 
         private void OnLoggingChanged(object sender, EventArgs e)
         {
-            Logger.LogInfo(new WingDiagnostic(WingDiagnosticEvent.VerboseLoggingChanged, Settings.VerboseLogging.Value ? 1 : 0));
-            Logger.LogInfo($"Debug action logging {(Settings.VerboseLogging.Value ? "enabled" : "disabled")}. " +
-                           $"Wing Command {PluginVersion}; mode={Settings.Mode.Value}");
-        }
-
-        private void OnAiSettingChanged(object sender, EventArgs e)
-        {
-            Logger.LogInfo(new WingDiagnostic(WingDiagnosticEvent.AiSettingsChanged,
-                (Settings.AiSharpTurns.Value ? 1 : 0) | (Settings.AiTargetSpreading.Value ? 2 : 0)
-                | (Settings.AiMissileWarningRepair.Value ? 4 : 0)));
-            if (sender is ConfigEntryBase entry)
-                LogAction($"setting={entry.Definition.Section}/{entry.Definition.Key} value={entry.BoxedValue}");
+            Logger.LogInfo(new WingDiagnostic(WingDiagnosticEvent.VerboseLoggingChanged,
+                Settings.VerboseLogging.Value ? 1 : 0));
         }
 
         private void OnDestroy()
         {
             WingLogExport.Stop(Logger);
             if (Settings != null) Settings.VerboseLogging.SettingChanged -= OnLoggingChanged;
-            if (Settings != null)
-            {
-                Settings.AiSharpTurns.SettingChanged -= OnAiSettingChanged;
-                Settings.AiTargetSpreading.SettingChanged -= OnAiSettingChanged;
-                Settings.AiMissileWarningRepair.SettingChanged -= OnAiSettingChanged;
-            }
-            PersonnelFacade.Portraits.Reset();
             harmony?.UnpatchSelf();
         }
     }

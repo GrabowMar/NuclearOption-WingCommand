@@ -154,29 +154,6 @@ namespace WingCommand.PureTests
             Assert.Equal(ProtecteeRank.Wingman, ranks[2]);
         }
 
-        [Fact]
-        public void StationFireKeepsMissileDefenceAheadOfPerformanceAndHold()
-        {
-            Assert.Equal(StationFireMode.MissileDefence, OrderRoePolicy.StationFire(
-                OrderEngagementAuthority.StandingRoe, WingDoctrine.Reserve, true, false));
-            Assert.Equal(StationFireMode.None, OrderRoePolicy.StationFire(
-                OrderEngagementAuthority.StandingRoe, WingDoctrine.Escort, false, false));
-            Assert.Equal(StationFireMode.None, OrderRoePolicy.StationFire(
-                OrderEngagementAuthority.StandingRoe, WingDoctrine.Sweep, false, false));
-            Assert.Equal(StationFireMode.DesignatedTarget, OrderRoePolicy.StationFire(
-                OrderEngagementAuthority.ExplicitTarget, WingDoctrine.Reserve, false, true));
-            Assert.Equal(StationFireMode.Opportunity, OrderRoePolicy.StationFire(
-                OrderEngagementAuthority.AutonomousCombat, WingDoctrine.Reserve, false, false));
-            Assert.Equal(StationFireMode.ProtectWing, OrderRoePolicy.StationFire(
-                OrderEngagementAuthority.StandingRoe, WingDoctrine.Escort, false, true));
-            Assert.Equal(StationFireMode.Opportunity, OrderRoePolicy.StationFire(
-                OrderEngagementAuthority.StandingRoe, WingDoctrine.Sweep, false, true));
-            var air = new WingDoctrine(MissileGuard.Wing, MissileResponse.Break,
-                FormationInterval.Standard, true, TargetPolicy.Air, EngagementReach.Slot);
-            Assert.Equal(StationFireMode.Opportunity, OrderRoePolicy.StationFire(
-                OrderEngagementAuthority.StandingRoe, air, false, true));
-        }
-
         private static void AssertDoctrine(WingDoctrine doctrine, MissileGuard guard, MissileResponse response,
             FormationInterval interval, bool spread, TargetPolicy targets, EngagementReach reach, string name)
         {

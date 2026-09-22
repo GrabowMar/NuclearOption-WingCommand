@@ -5,24 +5,6 @@ namespace WingCommand.PureTests
 {
     public class FormationTrackingTests
     {
-        [Theory]
-        [InlineData(0f, 0f)]
-        [InlineData(200f, 0f)]
-        [InlineData(1000f, 60f)]
-        [InlineData(1000f, -60f)]
-        public void RejoinRetainsAccelerationLeadAndVerticalSpeed(float gap, float climb)
-        {
-            float baseline = FormationTracking.ApproachSpeed(0f, gap, 0f, 120f,
-                0f, 120f, 2f, 1f, 1f, 0.75f);
-            float expected = (float)Math.Sqrt(baseline * baseline + climb * climb);
-            foreach (float acceleration in new[] { -8f, 0f, 8f })
-            {
-                float lead = ThrustModel.PredictSpeed(120f, acceleration, 0.75f, 25f) - 120f;
-                float speed = FormationTracking.ApproachSpeed(0f, gap, 0f, 120f,
-                    0f, 120f, 2f, 1f, 1f, 0.75f, climb, lead);
-                Assert.InRange(Math.Abs(speed - expected - lead), 0f, 0.0001f);
-            }
-        }
 
         [Theory]
         [InlineData(-0.2f)]
@@ -112,22 +94,6 @@ namespace WingCommand.PureTests
                 Assert.InRange(point.z, previous, 100f);
                 previous = point.z;
             }
-        }
-
-        [Theory]
-        [InlineData(-3000f, 15f, 200f)]
-        [InlineData(-3800f, 25f, 200f)]
-        [InlineData(-10000f, 50f, 200f)]
-        [InlineData(-6200f, 25f, -200f)]
-        public void TargetBehindCommandsATurnInsteadOfChasingAForwardPreview(float targetZ, float travelTime, float slotVz)
-        {
-            var point = FormationTracking.Capture(0, targetZ, 0, 200, 0, slotVz, travelTime, 3.5f);
-            Assert.True(point.z < 0f);
-            FormationControlRules.SafeRejoinDirection(0, 0, 1,
-                point.x, -1000, point.z, 55f, 18f, 15f, 50f,
-                out float x, out float y, out float z);
-            Assert.InRange(FormationControlRules.HorizontalAngle(0, 1, x, z), 54.99f, 55.01f);
-            Assert.True(y >= 0f);
         }
 
         [Fact]

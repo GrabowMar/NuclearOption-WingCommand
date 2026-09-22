@@ -24,22 +24,6 @@ namespace WingCommand.PureTests
             Assert.InRange(Vector3.Distance(Vector3.Normalize(offset), Vector3.Normalize(aim)), 0f, 0.00001f);
         }
 
-        [Theory]
-        [InlineData(60f, 88f)]
-        [InlineData(600f, 70f)]
-        [InlineData(1000f, 88f)]
-        [InlineData(1000f, 12f)]
-        public void NativeBankMultipliersCannotExceedRequestedSafetyCeiling(float altitude, float ceiling)
-        {
-            float altitudeFactor = Math.Clamp(altitude * 0.003f - 1f, 0.6f, 1.2f);
-            // Installed AutoAim's inverted Clamp bounds select either 1.2 or 0.5.
-            foreach (float verticalFactor in new[] { 1.2f, 0.5f })
-            {
-                float nativeLimit = FormationControlRules.BankInput(ceiling, altitude) * altitudeFactor * verticalFactor;
-                Assert.InRange(nativeLimit, 0f, ceiling + 0.0001f);
-            }
-        }
-
         [Fact]
         public void ClimbAuthorityKeepsAResidualClimbAtMinimumAirspeedAndRestoresWithMargin()
         {

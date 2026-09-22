@@ -5,6 +5,12 @@ namespace WingCommand.PureTests
 {
     public class ChatterLogicTests
     {
+        private static readonly string[] OrderNames =
+        {
+            "Formation", "Engage", "ReturnToBase", "FallBack", "OrbitHere", "DeliverCargo", "LandHere",
+            "Attack", "FireForEffect", "MoveToPoint", "JamTarget", "Maneuver", "SeekAndDestroy", "StandDown",
+        };
+
         [Theory]
         [InlineData("John Smith", "Maverick", "John \"MAVERICK\" SMITH")]
         [InlineData("Cher", "Ace", "\"ACE\" CHER")]
@@ -26,10 +32,10 @@ namespace WingCommand.PureTests
         [Fact]
         public void EveryOrderHasARadioAcknowledgementLine()
         {
-            foreach (WingOrder order in System.Enum.GetValues(typeof(WingOrder)))
+            foreach (string order in OrderNames)
             {
                 string line = ChatterDialogue.Acknowledge(
-                    ChatterPersona.Professional, order.ToString(), seed: 0);
+                    ChatterPersona.Professional, order, seed: 0);
                 Assert.False(string.IsNullOrWhiteSpace(line));
             }
         }
@@ -108,9 +114,9 @@ namespace WingCommand.PureTests
         {
             foreach (ChatterPersona persona in (ChatterPersona[])System.Enum.GetValues(typeof(ChatterPersona)))
             {
-                foreach (WingOrder order in (WingOrder[])System.Enum.GetValues(typeof(WingOrder)))
+                foreach (string order in OrderNames)
                 {
-                    string groupLine = ChatterDialogue.GroupAcknowledge(persona, order.ToString(), "Two and Three", seed: 5);
+                    string groupLine = ChatterDialogue.GroupAcknowledge(persona, order, "Two and Three", seed: 5);
                     Assert.False(string.IsNullOrWhiteSpace(groupLine));
                     Assert.Contains("Two and Three", groupLine);
                 }

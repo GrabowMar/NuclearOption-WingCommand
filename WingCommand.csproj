@@ -4,7 +4,10 @@
     <TargetFramework>netstandard2.1</TargetFramework>
     <AssemblyName>WingCommand</AssemblyName>
     <RootNamespace>WingCommand</RootNamespace>
-    <Version>0.9.2.6</Version>
+    <Version>1.0.0</Version>
+    <!-- Milestone prerelease tag; keep in step with Plugin.PluginPrerelease. -->
+    <VersionPrerelease>alpha.0</VersionPrerelease>
+    <InformationalVersion>$(Version)-$(VersionPrerelease)</InformationalVersion>
     <LangVersion>latest</LangVersion>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
     <DebugType>portable</DebugType>
@@ -39,6 +42,85 @@
            Text="Could not find Plugin.PluginVersion in Core/Plugin.cs. If it moved, update this check." />
     <Error Condition="'$(_DeclaredVersion)' != '$(Version)'"
            Text="Version mismatch: csproj &lt;Version&gt; is '$(Version)' but Plugin.PluginVersion is '$(_DeclaredVersion)'. Bump both." />
+    <PropertyGroup>
+      <_DeclaredPrerelease>$([System.Text.RegularExpressions.Regex]::Match($(_PluginSource), 'PluginPrerelease\s*=\s*"([^"]*)"').Groups[1].Value)</_DeclaredPrerelease>
+    </PropertyGroup>
+    <Error Condition="'$(_DeclaredPrerelease)' != '$(VersionPrerelease)'"
+           Text="Prerelease mismatch: csproj &lt;VersionPrerelease&gt; is '$(VersionPrerelease)' but Plugin.PluginPrerelease is '$(_DeclaredPrerelease)'. Bump both." />
+  </Target>
+
+  <!-- Files not yet ported to the 1.0 architecture. Each names the milestone that restores it.
+       Release builds of a non-prerelease version must have an empty quarantine. -->
+  <ItemGroup Label="Quarantine">
+    <Quarantine Include="Ui\WingMenuAction.cs" Milestone="M1" />
+    <Quarantine Include="Economy\WingLoadoutBook.cs" Milestone="M3" />
+    <Quarantine Include="Combat\CombatFacade.cs" Milestone="M5" />
+    <Quarantine Include="Combat\SplashSalvo.cs" Milestone="M5" />
+    <Quarantine Include="Economy\HangarDepartureLane.cs" Milestone="M3" />
+    <Quarantine Include="Economy\WingHangarStock.cs" Milestone="M3" />
+    <Quarantine Include="Economy\WingLoadout.cs" Milestone="M3" />
+    <Quarantine Include="Combat\AiCombatTweak.cs" Milestone="M5" />
+    <Quarantine Include="Combat\DoctrineLive.cs" Milestone="M5" />
+    <Quarantine Include="Combat\TacticalCoordinator.cs" Milestone="M5" />
+    <Quarantine Include="Combat\WingWeapons.cs" Milestone="M5" />
+    <Quarantine Include="Comms\WingChatterHud.cs" Milestone="M4" />
+    <Quarantine Include="Comms\WingRadioAudio.cs" Milestone="M4" />
+    <Quarantine Include="Economy\WingAirfield.cs" Milestone="M3" />
+    <Quarantine Include="Economy\WingLaunchFields.cs" Milestone="M3" />
+    <Quarantine Include="Economy\WingLoadoutTemplates.cs" Milestone="M3" />
+    <Quarantine Include="Interop\WingSquad.cs" Milestone="M1" />
+    <Quarantine Include="Personnel\WingCustomPilots.cs" Milestone="M3" />
+    <Quarantine Include="Personnel\WingKillCredit.cs" Milestone="M3" />
+    <Quarantine Include="Personnel\WingPilotLoss.cs" Milestone="M3" />
+    <Quarantine Include="Ui\CombatHUDHitAudioPatch.cs" Milestone="M7" />
+    <Quarantine Include="Ui\WingMarkerBadge.cs" Milestone="M4" />
+    <Quarantine Include="Economy\HangarDeliveryCompletionPatch.cs" Milestone="M3" />
+    <Quarantine Include="Economy\EconomyFacade.cs" Milestone="M3" />
+    <Quarantine Include="Economy\WingShopDelivery.cs" Milestone="M3" />
+    <Quarantine Include="Economy\WingShop.cs" Milestone="M3" />
+    <Quarantine Include="Personnel\PilotPortrait.cs" Milestone="M3" />
+    <Quarantine Include="Personnel\WingSurvivalPerks.cs" Milestone="M3" />
+    <Quarantine Include="Ui\WmcScreen.CustomPilots.cs" Milestone="M3" />
+    <Quarantine Include="Ui\WmcScreen.Loadout.cs" Milestone="M3" />
+    <Quarantine Include="Ui\WmcScreen.Shell.cs" Milestone="M7" />
+    <Quarantine Include="Ui\WmcScreen.Supply.cs" Milestone="M3" />
+    <Quarantine Include="Ui\WmcScreen.TacticalPreview.cs" Milestone="M4" />
+    <Quarantine Include="Combat\SlotEngagement.cs" Milestone="M5" />
+    <Quarantine Include="Comms\WingComms.cs" Milestone="M4" />
+    <Quarantine Include="Core\WingCommandSelection.cs" Milestone="M4" />
+    <Quarantine Include="Interop\WingInterop.cs" Milestone="M1" />
+    <Quarantine Include="Personnel\PersonnelFacade.cs" Milestone="M3" />
+    <Quarantine Include="Personnel\WingDeparture.cs" Milestone="M3" />
+    <Quarantine Include="Personnel\WingDepartureChatter.cs" Milestone="M3" />
+    <Quarantine Include="Personnel\WingPilots.cs" Milestone="M3" />
+    <Quarantine Include="Personnel\WingRecovery.cs" Milestone="M3" />
+    <Quarantine Include="Personnel\WingRecruitment.cs" Milestone="M3" />
+    <Quarantine Include="Personnel\WingSearchAndRescue.cs" Milestone="M3" />
+    <Quarantine Include="Personnel\WingTakeover.cs" Milestone="M3" />
+    <Quarantine Include="Ui\MapCommandLayer.cs" Milestone="M4" />
+    <Quarantine Include="Ui\TacticalMapOverlay.cs" Milestone="M4" />
+    <Quarantine Include="Ui\WingDebugActions.cs" Milestone="M7" />
+    <Quarantine Include="Ui\WingHud.cs" Milestone="M1" />
+    <Quarantine Include="Ui\WingHudTint.cs" Milestone="M1" />
+    <Quarantine Include="Ui\WingMapTint.cs" Milestone="M4" />
+    <Quarantine Include="Ui\WingMarkers.cs" Milestone="M4" />
+    <Quarantine Include="Ui\WingRadialMenu.cs" Milestone="M1" />
+    <Quarantine Include="Ui\WingRadialOverlay.cs" Milestone="M1" />
+    <Quarantine Include="Ui\WmcScreen.Groups.cs" Milestone="M4" />
+    <Quarantine Include="Ui\WmcScreen.RouteNodes.cs" Milestone="M4" />
+    <Quarantine Include="Ui\WmcScreen.Tactical.cs" Milestone="M4" />
+    <Quarantine Include="Ui\WmcScreen.TacticalBento.cs" Milestone="M4" />
+    <Quarantine Include="Ui\WmcScreen.TacticalNavigation.cs" Milestone="M4" />
+    <Quarantine Include="Ui\WmcScreen.Wing.cs" Milestone="M7" />
+    <Quarantine Include="Ui\WmcScreen.cs" Milestone="M7" />
+  </ItemGroup>
+  <ItemGroup>
+    <Compile Remove="@(Quarantine)" />
+  </ItemGroup>
+  <Target Name="CheckQuarantine" BeforeTargets="CoreCompile">
+    <Error Condition="'$(Configuration)' == 'Release' And '$(VersionPrerelease)' == '' And '@(Quarantine)' != ''"
+           Text="Quarantine is not empty; a final release cannot ship with unported files: @(Quarantine)" />
+    <Message Importance="high" Condition="'@(Quarantine)' != ''" Text="Quarantined (not compiled): @(Quarantine->Count()) file(s)" />
   </Target>
 
   <ItemGroup Label="BepInEx / Harmony">

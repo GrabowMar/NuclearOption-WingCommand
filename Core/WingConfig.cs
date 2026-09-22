@@ -1,500 +1,67 @@
+using System.IO;
+using BepInEx;
 using BepInEx.Configuration;
-using UnityEngine;
 
 namespace WingCommand
 {
-    /// <summary>Squadron radio detail preference.</summary>
-    internal enum ChatterLevel
+    /// <summary>Wing Command 1.0 settings. The first 1.0 launch archives the 0.9 file beside itself so every
+    /// key starts from its 1.0 default (BepInEx only applies defaults to keys it has not seen). Data files
+    /// (formations, profiles, roster) live under <see cref="DataRoot"/>.</summary>
+    internal sealed class WingConfig
     {
-        Off,
-        Text,
-        TextAndTone,
-    }
+        internal const int SchemaVersion = 1;
+        private const string SchemaMarker = "SchemaVersion = 1";
 
-    /// <summary>Display scope for wing outlines and HUD tints.</summary>
-    internal enum HighlightMode
-    {
-        Off,
-        Wing,
-        WingAndTargets,
-    }
+        internal static string DataRoot => Path.Combine(Paths.ConfigPath, "WingCommand", "v1");
 
-    /// <summary>Player preferences and feature permissions. Internal tuning belongs in WingTuning; Mode
-    /// selects the WingFidelity behaviour budget.</summary>
-    internal class WingConfig
-    {
-        // Formation settings.
-        public ConfigEntry<FormationShape> FormationShape { get; private set; }
-        public ConfigEntry<float> FormationSpacing { get; private set; }
-
-        // Key bindings.
-        public ConfigEntry<KeyCode> RadialKey { get; private set; }
-        public ConfigEntry<KeyCode> QuickRejoinKey { get; private set; }
-        public ConfigEntry<KeyCode> QuickEngageKey { get; private set; }
-        public ConfigEntry<KeyCode> QuickDisengageKey { get; private set; }
-        public ConfigEntry<KeyCode> QuickAttackKey { get; private set; }
-        public ConfigEntry<KeyCode> QuickBreakKey { get; private set; }
-        public ConfigEntry<KeyCode> CyclePatternKey { get; private set; }
-
-        // AI settings.
-        public ConfigEntry<WingMode> Mode { get; private set; }
-        public ConfigEntry<bool> AiSharpTurns { get; private set; }
-        public ConfigEntry<bool> WingmanOverdrive { get; private set; }
-        public ConfigEntry<bool> WingmanPursuitBoost { get; private set; }
-        public ConfigEntry<bool> AiTargetSpreading { get; private set; }
-        public ConfigEntry<bool> AiMissileWarningRepair { get; private set; }
-        public ConfigEntry<bool> ProtectHangarSpawns { get; private set; }
-
-        // Engagement settings.
-        public ConfigEntry<string> Doctrine { get; private set; }
-        public ConfigEntry<bool> AutoReturnOnEmpty { get; private set; }
-        public ConfigEntry<bool> RtbReturnsToReserve { get; private set; }
-        public ConfigEntry<bool> TakeoverOnDeath { get; private set; }
-        public ConfigEntry<float> LeashDistance { get; private set; }
-        public ConfigEntry<int> MaxWingmenPerTarget { get; private set; }
-        public ConfigEntry<float> BingoFuelThreshold { get; private set; }
-
-        // Radio settings.
-        public ConfigEntry<ChatterLevel> Radio { get; private set; }
-
-        // Pilot settings.
-        public ConfigEntry<bool> PilotProgression { get; private set; }
-        public ConfigEntry<float> RankEffect { get; private set; }
-
-        // Shop settings.
-        public ConfigEntry<bool> ShopEnabled { get; private set; }
-        public ConfigEntry<float> RecruitmentCostPercent { get; private set; }
-
-        // Loadout persistence.
-        public ConfigEntry<string> LoadoutTemplates { get; private set; }
-
-        // Display settings.
-        public ConfigEntry<bool> ShowHud { get; private set; }
-        public ConfigEntry<int> WingHudX { get; private set; }
-        public ConfigEntry<int> WingHudY { get; private set; }
-        public ConfigEntry<bool> UseMfdPanel { get; private set; }
-        public ConfigEntry<bool> MapCommandEnabled { get; private set; }
-        public ConfigEntry<HighlightMode> Highlight { get; private set; }
-        public ConfigEntry<string> WingIconColor { get; private set; }
-        public ConfigEntry<string> WingTargetColor { get; private set; }
-        public ConfigEntry<bool> TacticalPauseInSingleplayer { get; private set; }
-        public ConfigEntry<float> TacticalPauseScale { get; private set; }
-        public ConfigEntry<bool> ExternalHitmarkerAudio { get; private set; }
-
-        // Debug controls.
-        /// <summary>Display-only carrier for the Debug warning banner; its value is unused.</summary>
-        public ConfigEntry<bool> DebugWarning { get; private set; }
-        public ConfigEntry<bool> EnableDebugActions { get; private set; }
-
-        /// <summary>Display-only carrier for the spawn button; CustomDrawer handles the action.</summary>
-        public ConfigEntry<bool> SpawnDebugWing { get; private set; }
-        public ConfigEntry<string> DebugSpawnAircraft { get; private set; }
-        public ConfigEntry<bool> FreePlanePurchases { get; private set; }
-        public ConfigEntry<bool> DisableWingSizeLimit { get; private set; }
-        public ConfigEntry<bool> BypassRankRequirement { get; private set; }
-        public ConfigEntry<bool> VerboseLogging { get; private set; }
-
-        // Read cheats through these accessors so EnableDebugActions gates every debug feature
-        // consistently.
-        public bool CheatFreePurchases => EnableDebugActions.Value && FreePlanePurchases.Value;
-        public bool CheatNoWingLimit => EnableDebugActions.Value && DisableWingSizeLimit.Value;
-        public bool CheatBypassRank => EnableDebugActions.Value && BypassRankRequirement.Value;
-
-        public float BingoFuel => BingoFuelThreshold != null ? BingoFuelThreshold.Value : WingTuning.BingoFuel;
-        public float RecruitmentCostRate => RecruitmentCostPercent != null ? RecruitmentCostPercent.Value : WingTuning.RecruitmentCostRate;
-
-        private const string HexHelp = "Six-digit hex, with or without the leading #.";
-
-        /// <summary>Validate colours when binding so BepInEx logs malformed values and restores the
-        /// default.</summary>
-        private sealed class HexColourValue : AcceptableValueBase
-        {
-            public HexColourValue() : base(typeof(string)) { }
-
-            private static bool IsSixDigitHex(string value)
-            {
-                if (string.IsNullOrEmpty(value)) return false;
-                string digits = value[0] == '#' ? value.Substring(1) : value;
-                if (digits.Length != 6) return false;
-
-                foreach (char c in digits)
-                {
-                    bool hex = (c >= '0' && c <= '9')
-                               || (c >= 'a' && c <= 'f')
-                               || (c >= 'A' && c <= 'F');
-                    if (!hex) return false;
-                }
-                return true;
-            }
-
-            public override object Clamp(object value) => IsValid(value) ? value : "#FFFFFF";
-
-            public override bool IsValid(object value) => IsSixDigitHex(value as string);
-
-            public override string ToDescriptionString() => "# Expects " + HexHelp;
-        }
-
-        private static readonly HexColourValue HexColour = new HexColourValue();
-
-        private static ConfigDescription Advanced(string text, AcceptableValueBase values = null) =>
-            new ConfigDescription(text, values,
-                new ConfigurationManagerAttributes { IsAdvanced = true });
+        public ConfigEntry<WingMode> Mode { get; }
+        public ConfigEntry<bool> VerboseLogging { get; }
+        public ConfigEntry<bool> DevTools { get; }
 
         public WingConfig(ConfigFile c)
         {
-            // Preserve bind order because BepInEx uses it in saved configs. Removed keys remain
-            // orphaned until its next save.
-            BindMode(c);
-            BindFormation(c);
-            BindEngagement(c);
-            BindComms(c);
-            BindPilots(c);
-            BindShop(c);
-            BindLoadout(c);
-            BindKeys(c);
-            BindUi(c);
-            BindDebug(c);
+            ArchiveLegacy(c);
+            c.Bind("Meta", "SchemaVersion", SchemaVersion, new ConfigDescription(
+                "Settings schema written by Wing Command. Do not edit.", null,
+                new ConfigurationManagerAttributes { Browsable = false }));
+
+            Mode = c.Bind("AI", "Mode", WingMode.Smart, new ConfigDescription(
+                "Smart runs the full AI. Performance halves guidance rate and decision cadence for AI-led " +
+                "wings (player-led formations always run at full rate). Applies at the next mission start.",
+                null, new ConfigurationManagerAttributes { Order = 100 }));
+
+            DevTools = c.Bind("Debug", "DevTools", false, new ConfigDescription(
+                "Enable developer tools: debug overlay, telemetry recorder, step tests and calibration.",
+                null, new ConfigurationManagerAttributes { IsAdvanced = true, Order = 70 }));
+
+            c.Bind("Debug", "ExportLogs", false, new ConfigDescription(
+                "Export the latest Wing Command log events from this session beside WingCommand.dll " +
+                "(WingCommand-logs.txt). Safe diagnostics only; no upload.", null,
+                new ConfigurationManagerAttributes
+                {
+                    DispName = "Export logs",
+                    CustomDrawer = WingLogExport.DrawButton,
+                    HideDefaultButton = true,
+                    Order = 65,
+                }));
+
+            VerboseLogging = c.Bind("Debug", "VerboseLogging", false, new ConfigDescription(
+                "Log decisions, state transitions and flight diagnostics. Applies immediately.",
+                null, new ConfigurationManagerAttributes { DispName = "Debug action logging", Order = 60 }));
+
+            Directory.CreateDirectory(DataRoot);
         }
 
-        private void BindFormation(ConfigFile c)
+        /// <summary>Move a pre-1.0 settings file aside once, then reload the now-empty file so orphaned
+        /// 0.9 keys and values cannot leak into 1.0.</summary>
+        private static void ArchiveLegacy(ConfigFile c)
         {
-            FormationShape = c.Bind("Formation", "Shape", WingCommand.FormationShape.EchelonRight,
-                "The formation geometry the wing assumes at the start of a mission.");
-            FormationSpacing = c.Bind("Formation", "Spacing", 120f,
-                new ConfigDescription(
-                    "Standard lateral and longitudinal distance between formation slots, in metres.",
-                    new AcceptableValueRange<float>(50f, 300f)));
-        }
-
-        private void BindMode(ConfigFile c)
-        {
-            AiSharpTurns = c.Bind("AI", "AiSharpTurns", true,
-                "Enable sharp, rapid combat manoeuvres (high-bank slice turns, corner-speed airbraking, " +
-                "coordinated rudder kicks, and elevated pitch authority) for fixed-wing aircraft with sufficient " +
-                "speed and terrain clearance. Applies on the next steering update.");
-            WingmanOverdrive = c.Bind("AI", "WingmanOverdrive", true,
-                "Raise the fly-by-wire G and angle-of-attack limits for AI wingmen while a Wing " +
-                "Command pilot state flies them, so they can pull harder to hold formation and " +
-                "mirror player manoeuvres. A deliberate AI advantage: your own aircraft keeps " +
-                "stock limits, and a wingman you take over returns to stock handling. " +
-                "Applies on the next flight update.");
-            WingmanPursuitBoost = c.Bind("AI", "WingmanPursuitBoost", true,
-                "Apply extra acceleration to AI wingmen chasing your aircraft from behind so they can " +
-                "close a blown slot even when you are running at maximum speed. A deliberate AI " +
-                "advantage: applies only while chasing a player-led formation and only at full " +
-                "throttle. Applies on the next flight update.");
-            AiTargetSpreading = c.Bind("AI", "AiTargetSpreading", true,
-                "Spread locally simulated AI across comparable targets. Applies on the next target " +
-                "selection, including non-wing AI. Performance mode still disables this feature.");
-            AiMissileWarningRepair = c.Bind("AI", "AiMissileWarningRepair", true,
-                "Repair AI missile-warning subscriptions when entering combat. Applies on the next " +
-                "combat entry, including non-wing AI; disabling does not undo existing subscriptions.");
-            ProtectHangarSpawns = c.Bind("AI", "ProtectHangarSpawns", true,
-                "Hold any AI aircraft spawn off a hangar whose pad or roll-out is physically " +
-                "blocked by a parked aircraft, ground vehicle or wreck; the airbase then tries " +
-                "its next hangar instead of spawning the aircraft into the blockage, where it " +
-                "would sit unable to start and eventually eject. Player spawns are never affected, " +
-                "and a clear pad is unchanged. Host or single-player only.");
-            // Put the shared behaviour-budget switch at the top of settings.
-            Mode = c.Bind("AI", "Mode", WingMode.Smart,
-                new ConfigDescription(
-                    "Smart is the full behaviour and the default. Performance is a lean " +
-                    "profile for busy missions and multiplayer hosts, where the host " +
-                    "simulates every AI wingman: coarser formation updates, no manoeuvre or " +
-                    "jam orders, minimal radio, and the expensive target-coordination and " +
-                    "opportunity-scanning passes turned off. Applies at the start of a mission.",
-                    null,
-                    new ConfigurationManagerAttributes { Order = 100 }));
-        }
-
-        private void BindEngagement(ConfigFile c)
-        {
-            string raw = ReadConfigText(c);
-            WingDoctrine initial = WingDoctrine.FromConfigText(raw);
-            Doctrine = c.Bind("Engagement", "Doctrine", initial.ToString(),
-                "Standing doctrine the wing starts a mission with. Reserve, Escort, Sweep, " +
-                "or six fields: Guard,Response,Interval,Spread,Targets,Reach. " +
-                "An old DefaultRoe of Hold, Tight, Free, or Escort is read once when Doctrine is absent.");
-            if (!WingDoctrine.TryParse(Doctrine.Value, out _))
-                Doctrine.Value = initial.ToString();
-            AutoReturnOnEmpty = c.Bind("Engagement", "AutoReturnOnEmpty", true,
-                "Wingmen return to base on their own once out of ammunition or down to " +
-                "bingo fuel, instead of holding station empty.");
-            RtbReturnsToReserve = c.Bind("Engagement", "RtbReturnsToReserve", true,
-                "A wingman that completes a Return To Base order leaves the cockpit, " +
-                "returns its airframe to faction stock, refunds the allocation spent on it, " +
-                "and puts its pilot back in the squadron pool. Turn this off to park on the " +
-                "apron instead of despawning. Host or single-player only.");
-            TakeoverOnDeath = c.Bind("Engagement", "TakeoverOnDeath", true,
-                "When your pilot dies or ejects, offer control of a surviving aircraft in " +
-                "your wing. Host or single-player only; mission failures unrelated to the " +
-                "player's aircraft are never suppressed.");
-            LeashDistance = c.Bind("Engagement", "LeashDistance", 5000f,
-                new ConfigDescription(
-                    "Maximum distance (in metres) wingmen may stray from the leader to pursue targets before breaking off and rejoining.",
-                    new AcceptableValueRange<float>(2000f, 15000f)));
-            MaxWingmenPerTarget = c.Bind("Engagement", "MaxWingmenPerTarget", 2,
-                new ConfigDescription(
-                    "Maximum number of wingmen that can simultaneously engage the same target.",
-                    new AcceptableValueRange<int>(1, 4)));
-            BingoFuelThreshold = c.Bind("Engagement", "BingoFuel", 0.15f,
-                new ConfigDescription(
-                    "Fuel fraction at which wingmen call bingo and automatically return to base when AutoReturnOnEmpty is active.",
-                    new AcceptableValueRange<float>(0.05f, 0.40f)));
-        }
-
-        private static string ReadConfigText(ConfigFile c)
-        {
-            try
-            {
-                string path = c.ConfigFilePath;
-                if (string.IsNullOrEmpty(path) || !System.IO.File.Exists(path)) return "";
-                return System.IO.File.ReadAllText(path);
-            }
-            catch (System.IO.IOException) { return ""; }
-            catch (System.UnauthorizedAccessException) { return ""; }
-        }
-
-        private static bool RawHasKey(string text, string key) => RawValue(text, key) != null;
-
-        private static string RawValue(string text, string key)
-        {
-            if (string.IsNullOrEmpty(text) || string.IsNullOrEmpty(key)) return null;
-            string[] lines = text.Split(new[] { '\r', '\n' }, System.StringSplitOptions.RemoveEmptyEntries);
-            for (int i = 0; i < lines.Length; i++)
-            {
-                string line = lines[i].Trim();
-                if (line.Length == 0 || line[0] == '#' || line[0] == ';') continue;
-                int eq = line.IndexOf('=');
-                if (eq <= 0) continue;
-                if (!line.Substring(0, eq).Trim().Equals(key, System.StringComparison.OrdinalIgnoreCase))
-                    continue;
-                return line.Substring(eq + 1).Trim();
-            }
-            return null;
-        }
-
-        private void BindComms(ConfigFile c)
-        {
-            // Use a new enum key because legacy booleans cannot parse as ChatterLevel; existing
-            // installations receive the new default.
-            Radio = c.Bind("Comms", "Radio", ChatterLevel.TextAndTone,
-                "Squadron radio. Text shows named, pilot-specific transmissions for orders, " +
-                "engagements, defensive calls, Winchester and rejoins; TextAndTone opens " +
-                "each one with the game's own radio click, the same sound mission and HQ " +
-                "messages use. Performance mode cuts the traffic to essentials either way.");
-        }
-
-        private void BindPilots(ConfigFile c)
-        {
-            PilotProgression = c.Bind("Pilot", "PilotProgression", true,
-                "Wing pilots keep a callsign, a record and a rank that rises with kills, " +
-                "completed sorties and engagements survived. Rank has a small effect on how " +
-                "well they shoot: a Legend gets roughly 12% more weapon reach and cycles " +
-                "shots about 12% faster than a rookie. Each promotion grants one random survival perk.");
-            RankEffect = c.Bind("Pilot", "RankEffect", 1.0f,
-                new ConfigDescription(
-                    "Multiplier on pilot rank benefits (weapon reach, reaction cadence and formation control). Set to 0 to disable rank and perk effects. Survival perks use fixed percentages whenever effects are enabled.",
-                    new AcceptableValueRange<float>(0f, 2.0f)));
-        }
-
-        private void BindShop(ConfigFile c)
-        {
-            ShopEnabled = c.Bind("Shop", "ShopEnabled", true,
-                "Allow buying wingmen. Aircraft are priced from the same value the player's " +
-                "own aircraft menu uses, paid for out of your allocation, and drawn from " +
-                "your faction's stock - so a purchase competes with the mission's own AI.");
-            RecruitmentCostPercent = c.Bind("Shop", "RecruitmentCostPercent", 0.25f,
-                new ConfigDescription(
-                    "Fraction of an airframe's list price charged when recruiting active friendly mission AI into the wing (0.0 = free).",
-                    new AcceptableValueRange<float>(0f, 1.0f)));
-        }
-
-        private void BindLoadout(ConfigFile c)
-        {
-            // LOADOUT writes templates, but keep the setting visible for manual reset. Parsing drops
-            // only malformed records.
-            LoadoutTemplates = c.Bind("Loadout", "SavedTemplates", "",
-                Advanced("Saved per-pylon loadout templates, written by the WMC LOADOUT tab. " +
-                         "One record per template as airframe|id|name|store keys, records " +
-                         "separated by semicolons. Clear this to delete every saved template. " +
-                         "STANDARD FIT is the live player default for this mission and is not stored here."));
-        }
-
-        private void BindKeys(ConfigFile c)
-        {
-            // Optional extra wheel key; native radial availability is independent.
-            RadialKey = c.Bind("Keys", "WingMenu", KeyCode.C,
-                "Hold to open Wing Command's wheel, aim at an order, then release to confirm. " +
-                "Right-click cancels. Set None to disable the shortcut. " +
-                "The Wing Command slice remains available in the game's radial menu.");
-            QuickRejoinKey = c.Bind("Keys", "QuickRejoin", KeyCode.None,
-                Advanced("Optional hotkey: order the whole wing to rejoin formation."));
-            QuickEngageKey = c.Bind("Keys", "QuickEngage", KeyCode.None,
-                Advanced("Optional hotkey: order the whole wing to engage."));
-            QuickDisengageKey = c.Bind("Keys", "QuickDisengage", KeyCode.None,
-                Advanced("Optional hotkey: order the whole wing to fall back / disengage."));
-            QuickAttackKey = c.Bind("Keys", "QuickAttackTarget", KeyCode.None,
-                Advanced("Optional hotkey: order the wing to attack the player's currently targeted unit."));
-            QuickBreakKey = c.Bind("Keys", "QuickBreak", KeyCode.None,
-                Advanced("Optional hotkey: order the whole wing to execute a defensive break turn."));
-            string rawKeys = ReadConfigText(c);
-            bool hasPatternKey = RawHasKey(rawKeys, "CyclePattern");
-            CyclePatternKey = c.Bind("Keys", "CyclePattern", KeyCode.None,
-                Advanced("Optional hotkey: cycle wing doctrine (Reserve -> Escort -> Sweep)."));
-            if (!hasPatternKey &&
-                System.Enum.TryParse(RawValue(rawKeys, "CycleRoe"), out KeyCode migrated) &&
-                migrated != KeyCode.None)
-                CyclePatternKey.Value = migrated;
-        }
-
-        private void BindUi(ConfigFile c)
-        {
-            ShowHud = c.Bind("UI", "ShowWingHud", true,
-                "Draw the compact wing status readout beside the tactical map while you have " +
-                "wingmen assigned.");
-            WingHudX = c.Bind("UI", "WingHudX", 0,
-                new ConfigDescription(
-                    "Horizontal offset from the minimap in HUD units (scales with the game's UI). " +
-                    "Positive moves right; negative moves left. Applies immediately. Reset X and Y to 0 to dock beside the map.",
-                    new AcceptableValueRange<int>(-4000, 4000),
-                    new ConfigurationManagerAttributes { DispName = "Wing HUD X offset", Order = 2 }));
-            WingHudY = c.Bind("UI", "WingHudY", 0,
-                new ConfigDescription(
-                    "Vertical offset from the minimap in HUD units (scales with the game's UI). " +
-                    "Positive moves up; negative moves down. Applies immediately. Reset X and Y to 0 to dock beside the map.",
-                    new AcceptableValueRange<int>(-4000, 4000),
-                    new ConfigurationManagerAttributes { DispName = "Wing HUD Y offset", Order = 1 }));
-            UseMfdPanel = c.Bind("UI", "UseMfdPanel", true,
-                "Add a WMC screen to the cockpit MFD bezel, alongside BDF/MAP/HUD.");
-            MapCommandEnabled = c.Bind("UI", "MapCommands", true,
-                "Enable tactical wing selection and point tasking on the maximised map.");
-
-            // Share identity highlighting between map outlines and HUD tints.
-            Highlight = c.Bind("UI", "Highlight", HighlightMode.WingAndTargets,
-                "Wing outlines your wingmen's map icons and tints their in-cockpit HUD " +
-                "markers; WingAndTargets also " +
-                "marks the units they are engaging.");
-            WingIconColor = c.Bind("UI", "WingMemberColor", "#39FF65",
-                Advanced("Hex colour for wingmen's roster markers, map outlines and HUD. " +
-                         HexHelp, HexColour));
-            WingTargetColor = c.Bind("UI", "WingTargetColor", "#FFB020",
-                Advanced("Hex colour for units your wing is engaging. " + HexHelp, HexColour));
-            TacticalPauseInSingleplayer = c.Bind("UI", "TacticalPauseInSingleplayer", false,
-                "Slow down game time while the tactical command screen is active in singleplayer for tactical planning.");
-            TacticalPauseScale = c.Bind("UI", "TacticalPauseScale", 0.25f,
-                new ConfigDescription(
-                    "Game speed time-scale while tactical pause in singleplayer is active (0.0 = full pause, 0.25 = slow-mo).",
-                    new AcceptableValueRange<float>(0f, 0.5f)));
-            ExternalHitmarkerAudio = c.Bind("UI", "ExternalHitmarkerAudio", true,
-                "Play hitmarker audio confirmation when landing hits in 3rd-person external/orbit camera views.");
-        }
-
-        private void BindDebug(ConfigFile c)
-        {
-            c.Bind("Debug", "ExportLogs", false,
-                new ConfigDescription(
-                    "Export the latest 4096 Wing Command log events from this session beside WingCommand.dll. " +
-                    "Includes safe mod diagnostics, selected settings, severity and code locations; other message bodies are omitted. " +
-                    "Replaces WingCommand-logs.txt. No upload; no debug cheats required.", null,
-                    new ConfigurationManagerAttributes
-                    {
-                        DispName = "Export logs", Order = 65, IsAdvanced = false,
-                        CustomDrawer = WingLogExport.DrawButton, HideDefaultButton = true,
-                    }));
-
-            // Use a display-only entry as the category banner; ConfigurationManager has no header API.
-            // Its stored value is unused.
-            DebugWarning = c.Bind("Debug", "DebugWarningBanner", false,
-                new ConfigDescription(
-                    "Display only. The Debug settings are cheats: unbalanced, barely tested, " +
-                    "and liable to break mission or mod progression.",
-                    null,
-                    new ConfigurationManagerAttributes
-                    {
-                        Order = 50,
-                        CustomDrawer = WingDebugActions.DrawWarning,
-                        HideSettingName = true,
-                        HideDefaultButton = true,
-                    }));
-
-            // Expose the master switch beside the debug actions it gates.
-            EnableDebugActions = c.Bind("Debug", "EnableDebugActions", false,
-                new ConfigDescription(
-                    "Allow the development-only actions below. They are cheats and host-only.",
-                    null,
-                    new ConfigurationManagerAttributes
-                    {
-                        DispName = "Enable debug actions",
-                        Order = 40,
-                    }));
-            DebugSpawnAircraft = c.Bind("Debug", "DebugSpawnAircraft", "",
-                new ConfigDescription(
-                    "DEBUG CHEAT: Override the aircraft used by the debug spawn button. " +
-                    "Choose a catalogue aircraft regardless of faction stock or rank. " +
-                    "Empty uses your current aircraft. Requires EnableDebugActions; host-only.",
-                    null,
-                    new ConfigurationManagerAttributes
-                    {
-                        DispName = "Debug spawn aircraft",
-                        Order = 35,
-                        CustomDrawer = WingDebugActions.DrawAircraftSelector,
-                    }));
-            SpawnDebugWing = c.Bind("Debug", "SpawnDebugWing", false,
-                new ConfigDescription(
-                    "DEBUG CHEAT: Spawn a full wing of the selected debug aircraft, already in " +
-                    "formation slots, and assign them. Requires the switch above.",
-                    null,
-                    new ConfigurationManagerAttributes
-                    {
-                        DispName = "Spawn debug wing",
-                        Order = 30,
-                        CustomDrawer = WingDebugActions.DrawSpawnButton,
-
-                        // The stored value is unused for this action button, so hide reset.
-                        HideDefaultButton = true,
-                    }));
-            FreePlanePurchases = c.Bind("Debug", "FreePlanePurchases", false,
-                new ConfigDescription(
-                    "DEBUG CHEAT: Requisitioned aircraft cost no allocation. Stock, rank and " +
-                    "squadron-cap rules still apply. This is unbalanced, insufficiently tested, " +
-                    "and may break mission or mod progression.",
-                    null,
-                    new ConfigurationManagerAttributes
-                    {
-                        DispName = "Free plane purchases",
-                        Order = 20,
-                    }));
-            DisableWingSizeLimit = c.Bind("Debug", "DisableWingSizeLimit", false,
-                new ConfigDescription(
-                    "DEBUG CHEAT: Ignore the wing size limit when assigning or requisitioning aircraft. " +
-                    "Formation geometry, HUD layout, performance and mission scripting are not " +
-                    "supported for an unlimited wing and may break.",
-                    null,
-                    new ConfigurationManagerAttributes
-                    {
-                        DispName = "Disable wing size limit",
-                        Order = 10,
-                    }));
-            BypassRankRequirement = c.Bind("Debug", "BypassRankRequirement", false,
-                new ConfigDescription(
-                    "DEBUG CHEAT: Ignore the player-rank requirement when requisitioning " +
-                    "aircraft, and the rank gate on exceeding the squadron limit. Mission " +
-                    "and mod progression are built around these gates and are not tested " +
-                    "without them.",
-                    null,
-                    new ConfigurationManagerAttributes
-                    {
-                        DispName = "Bypass rank requirement",
-                        Order = 15,
-                    }));
-            VerboseLogging = c.Bind("Debug", "VerboseLogging", false,
-                new ConfigDescription(
-                    "Log command requests, results, state transitions and flight diagnostics to the " +
-                    "BepInEx console and LogOutput.log. Applies immediately; does not require debug cheats. " +
-                    "Disable after reproducing an issue to reduce log volume.",
-                    null,
-                    new ConfigurationManagerAttributes { DispName = "Debug action logging", IsAdvanced = false, Order = 60 }));
+            string path = c.ConfigFilePath;
+            if (!File.Exists(path)) return;
+            if (File.ReadAllText(path).Contains(SchemaMarker)) return;
+            File.Copy(path, path + ".0.9.bak", overwrite: true);
+            File.WriteAllText(path, string.Empty);
+            c.Reload();
         }
     }
 }

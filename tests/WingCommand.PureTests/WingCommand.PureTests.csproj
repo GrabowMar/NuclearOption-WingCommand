@@ -20,15 +20,15 @@
                      Unity/BepInEx assemblies to be present on disk to build.">
     <Compile Include="..\..\Pure\**\*.cs" Link="Pure\%(RecursiveDir)%(Filename)%(Extension)" />
     <Compile Include="..\..\Avionics\*.cs" Link="Avionics\%(Filename)%(Extension)" />
-    <Compile Include="..\..\Core\WingCommandSelection.cs" Link="Core\WingCommandSelection.cs" />
-    <Compile Include="..\..\Core\WingCommandManager.Recruit.cs" Link="Core\WingCommandManager.Recruit.cs" />
-    <Compile Include="..\..\Core\WingOrderCatalog.cs" Link="Core\WingOrderCatalog.cs" />
-    <Compile Include="..\..\Core\WingDirective.cs" Link="Core\WingDirective.cs" />
-    <Compile Include="..\..\Personnel\WingKillCredit.cs" Link="Personnel\WingKillCredit.cs" />
-    <Compile Include="..\..\Combat\TacticalCoordinator.cs" Link="Combat\TacticalCoordinator.cs" />
-    <Compile Include="..\..\Combat\SlotEngagement.cs" Link="Combat\SlotEngagement.cs" />
-    <Compile Include="..\..\Economy\HangarDepartureLane.cs" Link="Economy\HangarDepartureLane.cs" />
-    <Compile Include="..\..\Flight\HoverAssist.cs" Link="Flight\HoverAssist.cs" />
+    <Compile Include="..\..\Agents\HoverAssist.cs" Link="Agents\HoverAssist.cs" />
+  </ItemGroup>
+
+  <!-- Tests whose production subject is quarantined in WingCommand.csproj; restored with it. -->
+  <ItemGroup Label="Quarantine">
+    <Compile Remove="WingKillCreditTests.cs" /> <!-- M3 -->
+    <Compile Remove="HangarDepartureLaneTests.cs" /> <!-- M3 -->
+    <Compile Remove="Ui\MapInputTests.cs" /> <!-- M4 -->
+    <Compile Remove="Ui\WingMapPresentationTests.cs" /> <!-- M4 -->
   </ItemGroup>
 
 </Project>

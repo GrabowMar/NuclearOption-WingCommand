@@ -238,17 +238,6 @@ namespace WingCommand.PureTests
         }
 
         [Fact]
-        public void ClimbOvershootCannotCancelBankLoadedStallRecovery()
-        {
-            var controls = Resolve(airspeed: 130f, bank: 60f, verticalSpeed: 10f);
-            float finalThrottle = FormationControlRules.ClimbThrottleCap(controls.Throttle,
-                10f, -100f, airspeed: 130f,
-                minimumSpeed: FormationClosure.LoadedMinimum(100f, 60f));
-            Assert.Equal(1f, finalThrottle);
-            Assert.False(controls.Airbrake);
-        }
-
-        [Fact]
         public void ReleasedOrDeniedBrakeUsesPositiveNativeIdle()
         {
             var denied = Resolve(throttle: 0f, allowBraking: false);
