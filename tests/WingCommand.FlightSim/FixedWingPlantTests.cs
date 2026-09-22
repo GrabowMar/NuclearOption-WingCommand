@@ -108,5 +108,32 @@ namespace WingCommand.FlightSim
             Assert.False(idle.AirbrakeOpen);
             Assert.True(braked.AirbrakeOpen);
         }
+
+        [Fact]
+        public void AboveCornerSpeedFullStickRollsFasterThanTheRateLoop()
+        {
+            var slow = LevelAt(160f, 1000f);
+            var fast = LevelAt(320f, 1000f);
+            var right = new PlantInput(0f, 1f, 0.6f);
+            for (int i = 0; i < 60; i++)
+            {
+                slow.Step(right, 1f / 60f);
+                fast.Step(right, 1f / 60f);
+            }
+            Assert.True(fast.RollRateDps > slow.RollRateDps * 1.2f,
+                $"fast {fast.RollRateDps:0} vs slow {slow.RollRateDps:0} deg/s");
+        }
+
+        [Fact]
+        public void SensorReportsLevelFlightAsOneGWingsLevel()
+        {
+            var plant = LevelAt(200f, 2000f);
+            plant.Step(new PlantInput(0f, 0f, plant.TrimThrottle()), 1f / 60f);
+            AircraftState s = SimSensor.Read(plant, 1f / 60f);
+            Assert.Equal(1f, s.Nz, 2);
+            Assert.Equal(0f, s.BankDeg, 3);
+            Assert.Equal(200f, s.Tas, 0);
+            Assert.True(s.FbwActive);
+        }
     }
 }

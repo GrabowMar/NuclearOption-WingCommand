@@ -30,8 +30,12 @@ namespace WingCommand.FlightSim
         public float AfterburnerThrottle = 0.9f;
         public float GLimit = 9f;
         public float NegativeGLimit = 3f;
-        public float RollRateMaxDps = 210f;
-        public float PitchRateMaxDps = 25f;
+        public float CornerSpeed = 170f;
+        /// <summary>FBW maxRollAngularVel (rad/s). The FBW commands half of it (native units quirk).</summary>
+        public float MaxRollAngularVel = 6f;
+        /// <summary>FBW maxPitchAngularVel (rad/s): pure-rate pitch below corner q.</summary>
+        public float MaxPitchAngularVel = 1f;
+        public float RollRateMaxDps => 0.5f * MaxRollAngularVel * 57.29578f;
         public float RollLagS = 0.18f;
         public float LoadLagS = 0.25f;
         public float EngineLagS = 1.6f;
@@ -65,6 +69,7 @@ namespace WingCommand.FlightSim
         public float LoadFactor { get; private set; }
         public float ThrottleActual { get; private set; }
         public bool AirbrakeOpen { get; private set; }
+        public Vec3 Acceleration { get; private set; }
 
         public float HeadingDeg
         {
@@ -96,17 +101,27 @@ namespace WingCommand.FlightSim
 
         public void Step(in PlantInput input, float dt)
         {
-            // Roll: rate command through a first-order lag.
-            float rollCmd = Clamp(input.Roll, -1f, 1f) * p.RollRateMaxDps * Deg;
+            float qbar = Isa.DynamicPressure(Position.Y, Speed);
+            float qRatio = Isa.Density(Position.Y) * Speed * Speed / (Isa.SeaLevelDensity * p.CornerSpeed * p.CornerSpeed);
+            float remap = 1f / Math.Max(qRatio, 1f);
+
+            // Roll: at or below corner speed a rate loop on 0.5·maxRollAngularVel; above it the FBW blends
+            // toward direct stick, whose surface authority grows with dynamic pressure.
+            float stickRoll = Clamp(input.Roll, -1f, 1f);
+            float rateLoop = stickRoll * 0.5f * p.MaxRollAngularVel;
+            float direct = rateLoop * qRatio;
+            float rollCmd = Lerp(direct, rateLoop, remap);
             rollRate += (rollCmd - rollRate) * Math.Min(1f, dt / p.RollLagS);
             bank = WrapPi(bank + rollRate * dt);
 
-            // Pitch: rate command -> load factor, limited by structure and available lift.
-            float qbar = Isa.DynamicPressure(Position.Y, Speed);
+            // Pitch: g-command at speed, pure rate at low dynamic pressure; limited by structure and lift.
             float liftLimit = qbar * p.WingAreaM2 * p.ClMax / (p.MassKg * G);
             float nMax = Math.Min(p.GLimit, liftLimit);
             float nMin = -Math.Min(p.NegativeGLimit, liftLimit);
-            float pitchRate = Clamp(input.Pitch, -1f, 1f) * p.PitchRateMaxDps * Deg;
+            float stickPitch = Clamp(input.Pitch, -1f, 1f);
+            float gCommand = stickPitch * p.GLimit * G / Math.Max(Speed, 0.75f * p.CornerSpeed);
+            if (qRatio < 1f) gCommand *= Clamp(qRatio, 0.3f, 1f);
+            float pitchRate = qRatio > 1.2f ? gCommand : Lerp(stickPitch * p.MaxPitchAngularVel, gCommand, Clamp01(qRatio - 0.2f));
             float nCmd = Speed * pitchRate / G + (float)(Math.Cos(gamma) * Math.Cos(bank));
             nCmd = Clamp(nCmd, nMin, nMax);
             LoadFactor += (nCmd - LoadFactor) * Math.Min(1f, dt / p.LoadLagS);
@@ -126,9 +141,11 @@ namespace WingCommand.FlightSim
             float cosGamma = Math.Max((float)Math.Cos(gamma), 0.05f);
             float headingDot = G / v * LoadFactor * (float)Math.Sin(bank) / cosGamma;
 
+            Vec3 before = Velocity;
             Speed = Math.Max(1f, Speed + speedDot * dt);
             gamma = Clamp(gamma + gammaDot * dt, -1.55f, 1.55f);
             heading += headingDot * dt;
+            Acceleration = (Velocity - before) / dt;
             Position += Velocity * dt;
         }
 
@@ -154,6 +171,8 @@ namespace WingCommand.FlightSim
         }
 
         private static float Clamp(float v, float lo, float hi) => v < lo ? lo : v > hi ? hi : v;
+        private static float Lerp(float a, float b, float t) => a + (b - a) * t;
+        private static float Clamp01(float v) => Clamp(v, 0f, 1f);
 
         private static float WrapPi(float a)
         {
