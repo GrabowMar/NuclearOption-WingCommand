@@ -1,0 +1,104 @@
+using Xunit;
+
+namespace WingCommand.PureTests
+{
+    public class ConstraintChainTests
+    {
+        private const float Dt = 1f / 60f;
+        private static readonly AirframeProfile Fighter = new AirframeProfile();
+
+        private static AircraftState At(float altitude, float speed = 200f, float vy = 0f, float bank = 0f) => new AircraftState
+        {
+            Pos = new Vec3(0f, altitude, 0f), Vel = new Vec3(0f, vy, speed), Tas = speed, BankDeg = bank, Nz = 1f,
+        };
+
+        private static LimitContext Floor(float floorY, float clearance = 60f, float aggression = 0f) =>
+            new LimitContext { FloorY = floorY, Clearance = clearance, Aggression = aggression };
+
+        [Fact]
+        public void TerrainFloorRaisesADescentCommandAndSaysSo()
+        {
+            var chain = new ConstraintChain();
+            var report = new BindingReport();
+            var g = new GuidanceCommand { VelCmd = new Vec3(0f, -40f, 200f) };
+            // 50 m above the floor with 60 m clearance: 10 m inside the margin, so a climb is required.
+            chain.ApplyAccel(ref g, At(50f), Floor(0f), Fighter, ref report);
+            Assert.True(g.VelCmd.Y > -40f);
+            Assert.True(g.Accel.Y > 0f);
+            Assert.Equal(ConstraintId.Terrain, report.VerticalBy);
+        }
+
+        [Fact]
+        public void UnknownFloorLeavesTheCommandAlone()
+        {
+            var chain = new ConstraintChain();
+            var report = new BindingReport();
+            var g = new GuidanceCommand { VelCmd = new Vec3(0f, -40f, 200f) };
+            chain.ApplyAccel(ref g, At(100f), Floor(float.NaN), Fighter, ref report);
+            Assert.Equal(-40f, g.VelCmd.Y);
+            Assert.Equal(ConstraintId.None, report.VerticalBy);
+        }
+
+        [Fact]
+        public void BankCeilingFollowsAggressionAndIsAttributed()
+        {
+            var chain = new ConstraintChain();
+            var report = new BindingReport();
+            var a = new AttitudeCommand { BankDeg = 85f, Nz = 1f };
+            chain.ApplyAttitude(ref a, At(3000f, bank: 0f), Floor(float.NaN, aggression: 0f), Fighter, Dt, ref report);
+            Assert.Equal(ConstraintId.Envelope, report.BankBy);
+            Assert.Equal(85f, report.BankRequested);
+            Assert.Equal(60f, report.BankAllowed);
+            Assert.StartsWith("BANK Envelope 60/85", report.Describe());
+        }
+
+        [Fact]
+        public void LoadFactorIsLimitedByLiftAtLowSpeed()
+        {
+            var chain = new ConstraintChain();
+            var report = new BindingReport();
+            var a = new AttitudeCommand { Nz = 6f };
+            chain.ApplyAttitude(ref a, At(3000f, speed: 80f), Floor(float.NaN), Fighter, Dt, ref report);
+            Assert.True(a.Nz <= Fighter.LiftLimitedG(80f) + 1e-3f);
+            Assert.Equal(ConstraintId.Envelope, report.NzBy);
+        }
+
+        [Fact]
+        public void GcasTriggersInASteepDescentNearTheFloorAndReleasesWhenClimbing()
+        {
+            var chain = new ConstraintChain();
+            var report = new BindingReport();
+            var a = new AttitudeCommand { BankDeg = 70f, Nz = 1f };
+            // 200 m up, sinking 80 m/s at 90° bank: roll-out + pull loses ~83 m, leaving (200−83−30)/80 ≈ 1.1 s.
+            chain.ApplyAttitude(ref a, At(200f, vy: -80f, bank: 90f), Floor(0f), Fighter, Dt, ref report);
+            Assert.True(a.Gcas);
+            Assert.True(report.GcasActive);
+            Assert.True(chain.GcasActive);
+            var b = new AttitudeCommand { BankDeg = 70f, Nz = 1f };
+            var r2 = new BindingReport();
+            chain.ApplyAttitude(ref b, At(400f, vy: 20f), Floor(0f), Fighter, Dt, ref r2);
+            Assert.False(chain.GcasActive);
+        }
+
+        [Fact]
+        public void AuthoritySlewsAStepInBankCommand()
+        {
+            var chain = new ConstraintChain();
+            chain.Track(At(3000f));
+            var report = new BindingReport();
+            var a = new AttitudeCommand { BankDeg = 60f, Nz = 1f };
+            chain.ApplyAttitude(ref a, At(3000f), Floor(float.NaN, aggression: 1f), Fighter, Dt, ref report);
+            Assert.Equal(Fighter.RollRateMaxDps * Dt, a.BankDeg, 3);
+            Assert.Equal(ConstraintId.Authority, report.BankBy);
+        }
+
+        [Fact]
+        public void AuthoritySlewTakesShortestWayAcross180()
+        {
+            // From 179° toward −170° is +11° across ±180, so a 2° step lands on −179°, not 177°.
+            Assert.Equal(-179f, ConstraintChain.SlewBank(179f, -170f, 2f), 3);
+            Assert.Equal(179f, ConstraintChain.SlewBank(-179f, 170f, 2f), 3);
+            Assert.Equal(12f, ConstraintChain.SlewBank(10f, 60f, 2f), 3);
+        }
+    }
+}
