@@ -25,6 +25,14 @@ namespace WingCommand.FlightSim
             Apply(Pipeline.Step(g, s, ctx, profile, dt), dt);
         }
 
+        public void StepHold(in HoldSpec hold, float dt)
+        {
+            AircraftState s = SimSensor.Read(plant, dt);
+            GuidanceCommand g = HoldGuidance.Evaluate(hold, s, profile);
+            var ctx = new LimitContext { FloorY = float.NaN, Clearance = 60f, Aggression = 0f };
+            Apply(Pipeline.Step(g, s, ctx, profile, dt), dt);
+        }
+
         private void Apply(ControlOutput o, float dt)
         {
             Last = o;
