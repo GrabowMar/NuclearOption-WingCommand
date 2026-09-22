@@ -39,5 +39,45 @@ namespace WingCommand.PureTests
             Assert.Equal(0f, notch.x);
             Assert.Equal(1f, notch.z);
         }
+
+        [Theory]
+        [InlineData(80f, 70f, true)]
+        [InlineData(500f, 70f, true)]
+        [InlineData(500f, 120f, false)]
+        [InlineData(800f, 60f, false)]
+        public void ClimboutUsesAltitudeAndSlowSpeed(float radarAlt, float airspeed, bool expected)
+        {
+            Assert.Equal(expected, RadarDefenceGeometry.IsClimbout(radarAlt, airspeed));
+        }
+
+        [Fact]
+        public void ClimboutIgnoresRwrPaintWithoutANearMissile()
+        {
+            Assert.False(RadarDefenceGeometry.AllowEvadeCommit(
+                climbout: true, hasNearMissile: false, impactSeconds: 2f, missileDistance: 500f));
+        }
+
+        [Fact]
+        public void ClimboutIgnoresADistantInbound()
+        {
+            Assert.False(RadarDefenceGeometry.AllowEvadeCommit(
+                climbout: true, hasNearMissile: true, impactSeconds: 12f, missileDistance: 8000f));
+        }
+
+        [Theory]
+        [InlineData(3f, 8000f)]
+        [InlineData(12f, 500f)]
+        public void ClimboutCommitsForCloseTimeOrRange(float impactSeconds, float missileDistance)
+        {
+            Assert.True(RadarDefenceGeometry.AllowEvadeCommit(
+                true, true, impactSeconds, missileDistance));
+        }
+
+        [Fact]
+        public void AirborneNearMissileAlwaysCommits()
+        {
+            Assert.True(RadarDefenceGeometry.AllowEvadeCommit(
+                climbout: false, hasNearMissile: true, impactSeconds: 20f, missileDistance: 20000f));
+        }
     }
 }

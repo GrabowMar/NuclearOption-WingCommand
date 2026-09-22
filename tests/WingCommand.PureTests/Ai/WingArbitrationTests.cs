@@ -175,6 +175,59 @@ namespace WingCommand.PureTests
         }
 
         [Fact]
+        public void ClimboutRwrPaintDoesNotStartAMissileBreak()
+        {
+            WingReflexes.RegisterDefaults();
+            var s = new WingSituation(
+                order: WingOrder.Formation,
+                missileWarned: true,
+                radarAlt: 80f,
+                airspeed: 70f,
+                takeoffSpeed: 70f,
+                leaderDistance: 200f,
+                leaderPresent: true,
+                secondsInBehaviour: 0.1f)
+                .WithFlightSafety(0f, 15f, 0f, 60f);
+            Assert.Equal(WingBehaviours.Task,
+                WingArbiter.Resolve(in s, null, true, WingAi.Reflexes).BehaviourId);
+        }
+
+        [Fact]
+        public void ClimboutStillBreaksForACloseInbound()
+        {
+            WingReflexes.RegisterDefaults();
+            var s = new WingSituation(
+                order: WingOrder.Formation,
+                missileWarned: true,
+                radarAlt: 80f,
+                airspeed: 70f,
+                leaderDistance: 200f,
+                leaderPresent: true,
+                secondsInBehaviour: 0.1f)
+                .WithFlightSafety(0f, 15f, 0f, 60f)
+                .WithMissileProximity(true, 3f, 400f);
+            Assert.Equal(WingBehaviours.MissileBreak,
+                WingArbiter.Resolve(in s, null, true, WingAi.Reflexes).BehaviourId);
+        }
+
+        [Fact]
+        public void ClimboutKeepsAnAlreadyOwnedBreak()
+        {
+            WingReflexes.RegisterDefaults();
+            var s = new WingSituation(
+                order: WingOrder.Formation,
+                missileWarned: true,
+                radarAlt: 80f,
+                airspeed: 70f,
+                leaderDistance: 200f,
+                leaderPresent: true,
+                secondsInBehaviour: 0.5f)
+                .WithFlightSafety(0f, 15f, 0f, 60f);
+            Assert.Equal(WingBehaviours.MissileBreak,
+                WingArbiter.Resolve(in s, "wingcommand.missile-break", true, WingAi.Reflexes).BehaviourId);
+        }
+
+        [Fact]
         public void BuiltInMissileBreakInterruptsActiveHold()
         {
             WingReflexes.RegisterDefaults();

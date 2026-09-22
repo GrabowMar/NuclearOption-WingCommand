@@ -87,7 +87,7 @@ namespace WingCommand.PureTests
             Assert.Equal(OrderEngagementAuthority.DefensiveOnly,
                 OrderRoePolicy.AuthorityFor(WingBehaviours.MissileBreak, WingOrder.MoveToPoint, patrol: true));
             Assert.Equal(StationFireMode.None,
-                OrderRoePolicy.StationFire(OrderEngagementAuthority.StandingRoe, WingRoe.Hold, false, true));
+                OrderRoePolicy.StationFire(OrderEngagementAuthority.StandingRoe, WingDoctrine.Reserve, false, true));
         }
     }
 }

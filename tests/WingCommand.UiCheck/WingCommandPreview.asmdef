@@ -1,0 +1,5 @@
+{
+  "name": "WingCommandProductionPreview",
+  "references": ["Unity.TextMeshPro", "Unity.ugui"],
+  "includePlatforms": ["Editor"]
+}

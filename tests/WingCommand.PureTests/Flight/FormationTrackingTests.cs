@@ -68,21 +68,6 @@ namespace WingCommand.PureTests
             Assert.Equal(10f, point.y);
         }
 
-        [Theory]
-        [InlineData(-120f)]
-        [InlineData(120f)]
-        public void InsideAndOutsideSlotsStayOnTheirOwnTurnRadius(float lateral)
-        {
-            // Rotate the aft-offset slot around the leader's right-turn centre at x=1000 without
-            // double-counting offset velocity.
-            var point = FormationTracking.FutureSlotOffset(0f, 0f, 100f,
-                lateral, 20f, -100f, 0.1f, 5f);
-            double expectedRadius = Math.Sqrt(Math.Pow(1000f - lateral, 2) + 10000d);
-            double radius = Math.Sqrt(Math.Pow(1000f - point.x, 2) + point.z * point.z);
-            Assert.InRange(Math.Abs(radius - expectedRadius), 0d, 0.001d);
-            Assert.Equal(20f, point.y);
-        }
-
         [Fact]
         public void PredictionDoesNotJumpAtTheOldTurnActivationThreshold()
         {
@@ -249,6 +234,41 @@ namespace WingCommand.PureTests
             Assert.Equal(0.02f, FormationTracking.QuietTurnRate(0.02f, 0.006f));
             Assert.Equal(-FormationTracking.QuietTurnRate(0.009f, 0.006f),
                 FormationTracking.QuietTurnRate(-0.009f, 0.006f));
+        }
+
+        [Theory]
+        [InlineData(250f, 10f)]
+        [InlineData(250f, 15f)]
+        [InlineData(350f, 10f)]
+        [InlineData(350f, 15f)]
+        public void ShallowFastTurnsSurviveTheNoiseFilter(float speed, float bank)
+        {
+            float rate = 9.81f * (float)Math.Tan(bank * Math.PI / 180d) / speed;
+            Assert.Equal(rate, FormationTracking.QuietTurnRate(rate, 0.006f, speed));
+            Assert.Equal(-rate, FormationTracking.QuietTurnRate(-rate, 0.006f, speed));
+        }
+
+        [Theory]
+        [InlineData(60f)]
+        [InlineData(100f)]
+        [InlineData(250f)]
+        [InlineData(350f)]
+        public void SmallLateralAccelerationNoiseRemainsRejected(float speed)
+        {
+            float rate = 0.1f / speed;
+            Assert.Equal(0f, FormationTracking.QuietTurnRate(rate, 0.006f, speed));
+            Assert.Equal(0f, FormationTracking.QuietTurnRate(-rate, 0.006f, speed));
+        }
+
+        [Theory]
+        [InlineData(0f)]
+        [InlineData(60f)]
+        [InlineData(100f)]
+        public void SlowFlightRetainsItsExistingTurnNoiseBand(float speed)
+        {
+            foreach (float rate in new[] { -0.02f, -0.009f, -0.0059f, 0f, 0.0059f, 0.009f, 0.02f })
+                Assert.Equal(FormationTracking.QuietTurnRate(rate, 0.006f),
+                    FormationTracking.QuietTurnRate(rate, 0.006f, speed));
         }
 
         [Theory]

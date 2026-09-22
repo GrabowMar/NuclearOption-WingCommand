@@ -288,6 +288,45 @@ namespace WingCommand
             return false;
         }
 
+        /// <summary>Whether this hangar's spawn point or roll-out is physically blocked by another
+        /// aircraft, ground vehicle or wreck; names the nearest blocker for the log. Native's own
+        /// 30 m door rule frees a pad while the previous aircraft is still on the roll-out, so a
+        /// second spawn there lands on top of it and the taxi or lift that follows cannot start.</summary>
+        internal static bool IsHangarPathBlocked(Hangar hangar, out string blocker)
+        {
+            blocker = null;
+            Transform spawn = hangar != null ? hangar.GetSpawnTransform() : null;
+            if (spawn == null) return false;
+
+            Vector3 door = spawn.position;
+            Vector3 exitEnd = door + spawn.forward * HangarLaunchPolicy.ExitPathMeters;
+            float clearance = HangarLaunchPolicy.PathClearanceMeters;
+            float nearest = float.MaxValue;
+
+            List<Unit> units = UnitRegistry.allUnits;
+            for (int i = 0; i < units.Count; i++)
+            {
+                Unit unit = units[i];
+                if (unit == null || !(unit is Aircraft || unit is GroundVehicle)) continue;
+
+                Vector3 position = unit.transform.position;
+                if (!HangarLaunchPolicy.PathBlocked(
+                        position.x, position.y, position.z,
+                        door.x, door.y, door.z,
+                        exitEnd.x, exitEnd.y, exitEnd.z,
+                        clearance))
+                    continue;
+
+                float distance = Vector3.Distance(position, door);
+                if (distance >= nearest) continue;
+                nearest = distance;
+                blocker = (unit.disabled ? unit.unitName + " (wreck)" : unit.unitName) +
+                          " " + distance.ToString("0") + " m from a pad door";
+            }
+
+            return blocker != null;
+        }
+
         // Departure monitoring.
 
         /// <summary>Watch runway placement until later physics updates confirm departure.</summary>

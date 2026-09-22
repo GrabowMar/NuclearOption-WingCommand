@@ -136,9 +136,10 @@ namespace WingCommand
                 ? FormationGuidance.MinimumAirspeed(Aircraft.definition.aircraftInfo?.stallSpeed ?? 0f, p.landingSpeed)
                 : 0f;
 
+            TryNearestInbound(out bool nearMissile, out float missileDistance, out float missileImpact);
             var situation = new WingSituation(
                 order: Order,
-                roe: CombatFacade.Roe.Current,
+                doctrine: DoctrineLive.Current,
                 deliveryPending: deliveryPending,
                 missileWarned: warned,
                 secondsSinceMissileWarning: brain.SecondsSinceWarning(now),
@@ -160,7 +161,8 @@ namespace WingCommand
                 .WithFlightSafety(Aircraft.autopilot?.GetTerrainWarningSystem()?.urgency ?? 0f,
                     Aircraft.rb != null ? Aircraft.rb.velocity.y : 0f,
                     !isRotary && !IsSurface ? FixedWingFormation.BankOf(Aircraft) : 0f,
-                    minimumAirspeed, brain.Defensive);
+                    minimumAirspeed, brain.Defensive)
+                .WithMissileProximity(nearMissile, missileImpact, missileDistance);
 
             Vector3 toLeader = leader != null ? leader.GlobalPosition() - Aircraft.GlobalPosition() : Vector3.zero;
             float closing = leader?.rb != null && Aircraft.rb != null && toLeader.sqrMagnitude > 1f
@@ -186,6 +188,34 @@ namespace WingCommand
             sampledAmmo = Ammo;
             sampledIntegrity = Integrity;
             sampledFuel = Fuel;
+        }
+
+        private bool TryNearestInbound(out bool near, out float distance, out float impact)
+        {
+            near = false;
+            distance = 99999f;
+            impact = 999f;
+            MissileWarning warning = Aircraft != null ? Aircraft.GetMissileWarningSystem() : null;
+            if (warning == null || warning.knownMissiles == null) return false;
+
+            foreach (Missile missile in warning.knownMissiles)
+            {
+                if (missile == null || missile.disabled || missile.targetID != Aircraft.persistentID)
+                    continue;
+                Vector3 offset = missile.GlobalPosition() - Aircraft.GlobalPosition();
+                float range = offset.magnitude;
+                float closing = 1f;
+                if (missile.rb != null && Aircraft.rb != null && offset.sqrMagnitude > 1f)
+                    closing = Mathf.Max(Vector3.Dot(-offset.normalized, missile.rb.velocity - Aircraft.rb.velocity), 1f);
+                float tti = range / closing;
+                if (!near || range < distance)
+                {
+                    near = true;
+                    distance = range;
+                    impact = tti;
+                }
+            }
+            return near;
         }
 
         /// <summary>Whether an airborne missile currently targets this aircraft.</summary>

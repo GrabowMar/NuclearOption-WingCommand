@@ -69,7 +69,7 @@ namespace WingCommand
             {
                 title.text = "WING COMMAND";
                 subtitle.text = wing != null
-                    ? RadialSelection.FormatSquadronSubtitle(wing.Count, CombatFacade.Roe.Label(wing.Roe), FormationShapes.Pretty(WingFormation.Shape))
+                    ? RadialSelection.FormatSquadronSubtitle(wing.Count, wing.Doctrine.PatternName, FormationShapes.Pretty(WingFormation.Shape))
                     : "WHOLE WING";
             }
 

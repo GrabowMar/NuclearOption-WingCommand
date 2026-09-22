@@ -152,7 +152,9 @@ namespace WingCommand
         private void FlyDefensive()
         {
             bool intercept = false;
-            if (semiActive && CombatFacade.Roe.Current == WingRoe.Hold)
+            WingDoctrine doctrine = DoctrineLive.Current;
+            if (semiActive && doctrine.Guard != MissileGuard.Off &&
+                doctrine.Response == MissileResponse.Press)
             {
                 // Keep shooting while defensive; the normal slot engagement loop is suspended here.
                 if (Time.timeSinceLevelLoad >= nextIntercept)
@@ -182,7 +184,7 @@ namespace WingCommand
                         }
                     }
                 }
-                intercept = MissileDefencePolicy.PreferInterception(CombatFacade.Roe.Current, "SARH",
+                intercept = MissileDefencePolicy.PreferInterception(doctrine.Response, doctrine.Guard, "SARH",
                     CombatFacade.Weapons.HasMissileDefence(aircraft), impactTime, covered, distance, leash);
             }
 

@@ -7,9 +7,9 @@ namespace WingCommand
         public static bool InterruptsSaturation(float distance, float closingSpeed) =>
             distance <= 1000f || (closingSpeed > 0f && distance / closingSpeed <= WingTuning.ChaffWindowSeconds);
 
-        public static bool PreferInterception(WingRoe roe, string seeker, bool armed,
-            float impactSeconds, bool hasCover, float playerDistance, float leashRadius) =>
-            roe == WingRoe.Hold && seeker == "SARH" && armed && impactSeconds > 3f &&
-            !(hasCover && playerDistance >= 0f && leashRadius > 0f && playerDistance <= leashRadius);
+        public static bool PreferInterception(MissileResponse response, MissileGuard guard, string seeker,
+            bool armed, float impactSeconds, bool hasCover, float playerDistance, float leashRadius) =>
+            WingDoctrineRules.PreferInterception(response, guard, seeker, armed, impactSeconds,
+                hasCover, playerDistance, leashRadius);
     }
 }

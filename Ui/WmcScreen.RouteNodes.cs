@@ -1,6 +1,7 @@
 using System.Collections.Generic;
 using TMPro;
 using UnityEngine;
+using UnityEngine.UI;
 using NOAvionics.Ui;
 
 namespace WingCommand
@@ -8,38 +9,80 @@ namespace WingCommand
     internal static partial class WmcScreen
     {
         private const int NodeRows = 4;
+        private const float RouteControlHeight = 22f;
         private static readonly TMP_Text[] nodeLabels = new TMP_Text[NodeRows];
+        private static readonly RectTransform[] nodeRoots = new RectTransform[NodeRows];
+        private static readonly Image[] nodeRails = new Image[NodeRows];
         private static TMP_Text nodePageLabel;
         private static WingButton nodePrevious, nodeNext, skipNode, clearNodes;
         private static WingMember routeInspected;
         private static int nodePage;
+        private static float routeNodeRowHeight;
 
         private static float AddRouteNodesDeck(RectTransform parent, float y)
         {
-            y = Heading(parent, y, "ROUTE / SELECTED AIRCRAFT");
-            y = AddRouteControls(parent, y);
-            Hint(parent, y, "Right-click: replace route. Shift-right-click: append a node.");
-            y -= LineHeight + Gap;
-            y = Heading(parent, y, "QUEUED NODES / CURRENT LEG FIRST");
+            float avail = Mathf.Max(220f, tacticalDeckAvail);
+            const float h = RouteControlHeight;
+            routeLabel = Label(parent, "", new Rect(Pad, y, ContentWidth, 14f),
+                Friendly(), FontMicro, FontStyles.Bold, TextAlignmentOptions.MidlineLeft);
+            y -= 14f + TacticalGap;
+
+            float sw = (ContentWidth - TacticalGap) * 0.5f;
+            Stepper(parent, Pad, y, sw, out altValueLabel,
+                () => WingCommandManager.Instance?.StepMoveHeight(-1),
+                () => WingCommandManager.Instance?.StepMoveHeight(1),
+                OrderHint.HeightDown + "  " + OrderHint.HeightUp, h);
+            Stepper(parent, Pad + sw + TacticalGap, y, sw, out spdValueLabel,
+                () => WingCommandManager.Instance?.StepMoveSpeed(-1),
+                () => WingCommandManager.Instance?.StepMoveSpeed(1),
+                OrderHint.SpeedDown + "  " + OrderHint.SpeedUp, h);
+            y -= h + TacticalGap;
+
+            patrolButton = TacticalButton(parent, "PATROL OFF", Pad, y, sw,
+                () => WingCommandManager.Instance?.SetPatrolRoute(!ScopeAllPatrolling()))
+                .WithTooltip("Queue at least two Move points with Shift-left-click, then enable PATROL to loop them. Turning it off finishes the remaining route once.");
+            autoRefitButton = TacticalButton(parent, "AUTO REFIT OFF", Pad + sw + TacticalGap, y, sw,
+                () => WingCommandManager.Instance?.SetAutoRefit(!ScopeAllAutoRefit()))
+                .WithTooltip("Selected aircraft refuel and rearm at bingo or empty stores, then resume their task. Skips deliberate land, cargo and retreat tasks.");
+            y -= h + TacticalGap;
+
+            // Pin the pager and actions to the viewport foot so the node list fills what remains.
+            // The action buttons are taller than the pager row; their foot must land on the
+            // content bottom or the bottom scroll position masks them.
+            float foot = -avail;
+            float buttonsY = foot + TacticalButtonHeight;
+            float pagerY = buttonsY + TacticalGap + h;
+            float listSpace = y - (pagerY + TacticalGap);
+            float pitch = Mathf.Max(h + 2f, listSpace / NodeRows);
+            routeNodeRowHeight = pitch - TacticalGap;
+
             for (int i = 0; i < NodeRows; i++)
             {
-                float rowY = y - i * RowPitch;
-                WingUi.TacticalCard(parent, new Rect(Pad, rowY, PanelWidth - Pad * 2f, RowHeight), WingUi.RailCyan);
-                AddSprite(parent, "NodeIcon" + i, IconFactory.Get("move"), new Rect(Pad + 6f, rowY - 7f, 16f, 16f), Dim());
-                nodeLabels[i] = Label(parent, "", new Rect(Pad + 28f, rowY, PanelWidth - Pad * 2f - 36f, RowHeight),
-                    Friendly(), FontSmall, FontStyles.Normal, TextAlignmentOptions.Left);
+                float rowY = y - i * pitch;
+                nodeRoots[i] = PageRoot(parent, "RouteNode" + i);
+                Place(nodeRoots[i], new Rect(Pad, rowY, ContentWidth, routeNodeRowHeight));
+                var (_, rail) = WingUi.TacticalCard(nodeRoots[i],
+                    new Rect(0f, 0f, ContentWidth, routeNodeRowHeight), WingUi.RailInert);
+                nodeRails[i] = rail;
+                nodeLabels[i] = Label(nodeRoots[i], "",
+                    new Rect(Space2, 0f, ContentWidth - Space2 * 2f, routeNodeRowHeight),
+                    WingUi.TextPrimary, FontMicro, FontStyles.Normal, TextAlignmentOptions.MidlineLeft);
             }
-            y -= NodeRows * RowPitch + Gap;
-            nodePrevious = Pager(parent, y, "<", () => { nodePage = Mathf.Max(0, nodePage - 1); nextRefresh = 0f; });
-            nodePageLabel = PagerLabel(parent, y);
-            nodeNext = Pager(parent, y, ">", () => { nodePage++; nextRefresh = 0f; });
-            y -= RowHeight + Gap;
-            float half = (PanelWidth - Pad * 2f - Gap) * 0.5f;
-            skipNode = TacticalButton(parent, "SKIP CURRENT", Pad, y, half, () => EditInspectedRoute(false))
+
+            RectTransform pagerRoot = PageRoot(parent, "RoutePager");
+            Place(pagerRoot, new Rect(Pad, pagerY, ContentWidth, h));
+            (nodePrevious, nodePageLabel, nodeNext) = PagerRow(pagerRoot, 0f, ContentWidth,
+                () => { nodePage = Mathf.Max(0, nodePage - 1); nextRefresh = 0f; },
+                () => { nodePage++; nextRefresh = 0f; },
+                OrderHint.Pager, h);
+
+            float half = (ContentWidth - TacticalGap) * 0.5f;
+            skipNode = TacticalButton(parent, "SKIP CURRENT", Pad, buttonsY, half, () => EditInspectedRoute(false))
                 .WithTooltip("Complete the current node immediately. Continue to the next node, or form up when the route ends.");
-            clearNodes = TacticalButton(parent, "CLEAR / FORM UP", Pad + half + Gap, y, half, () => EditInspectedRoute(true))
+            clearNodes = TacticalButton(parent, "CLEAR / FORM UP", Pad + half + TacticalGap, buttonsY, half,
+                () => EditInspectedRoute(true))
                 .WithTooltip("Cancel this aircraft's route and return to formation. Select exactly one aircraft first.");
-            return y - TacticalButtonHeight - Gap;
+            return foot;
         }
 
         private static void RefreshRouteNodes(List<WingMember> scope)
@@ -61,15 +104,36 @@ namespace WingCommand
             for (int i = 0; i < NodeRows; i++)
             {
                 int index = nodePage * NodeRows + i;
+                nodeRoots[i].gameObject.SetActive(index < count || i == 0);
+                nodeRails[i].color = index == 0 && count > 0 ? Green() : WingUi.RailInert;
                 if (index >= count)
                 {
                     nodeLabels[i].text = i == 0 ? (member == null ? "Choose a flight row above" :
-                        member.RefitPending ? "REFITTING / ROUTE SAVED" : "No route. Right-click the map to begin.") : "";
+                        member.RefitPending ? "REFITTING / ROUTE SAVED" : "No route. Left-click the map to begin.") : "";
                     continue;
                 }
                 WingDirective node = member.Route[index];
-                nodeLabels[i].text = (index == 0 ? "> " : "  ") + (index + 1) + "  " + WingOrderCatalog.Label(node.Order) +
+                string text = (index == 0 ? "CURRENT · " : "QUEUED · ") + (index + 1) + "  " +
+                    WingOrderCatalog.Label(node.Order) +
                     (node.Target != null ? " / " + node.Target.unitName : node.HasPoint ? " / MAP POINT" : "");
+                if (routeNodeRowHeight >= 44f)
+                {
+                    string detail;
+                    if (node.HasPoint)
+                    {
+                        Vector3 point = node.Point.AsVector3();
+                        float range = member.Aircraft != null
+                            ? Vector3.Distance(member.Aircraft.transform.position, point) : 0f;
+                        detail = "RNG " + TacticalBentoRules.FormatDistance(range) +
+                            " · ALT " + TacticalBentoRules.FormatAltitude(point.y);
+                    }
+                    else
+                    {
+                        detail = "ALT " + TacticalBentoRules.FormatAltitude(member.ResolvedMoveAltitude);
+                    }
+                    text += "\n<size=10>" + detail + " · SPD " + (member.ResolvedMoveSpeed * 100f).ToString("0") + "%</size>";
+                }
+                nodeLabels[i].text = text;
             }
         }
 
@@ -90,9 +154,12 @@ namespace WingCommand
         {
             routeInspected = null;
             nodePage = 0;
+            routeNodeRowHeight = 0f;
             nodePageLabel = null;
             nodePrevious = nodeNext = skipNode = clearNodes = null;
             System.Array.Clear(nodeLabels, 0, nodeLabels.Length);
+            System.Array.Clear(nodeRoots, 0, nodeRoots.Length);
+            System.Array.Clear(nodeRails, 0, nodeRails.Length);
         }
     }
 }

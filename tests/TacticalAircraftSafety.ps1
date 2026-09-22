@@ -9,8 +9,10 @@ function Extract([string]$source, [string]$pattern) {
     $match.Value
 }
 $confirmation = Extract $screen '(?ms)^        private sealed class Confirmation.*?^        }'
+$confirmation = $confirmation -replace '(?s)\bpublic bool IsArmedFor\(object candidate\) =>\s*(.*?);', 'public bool IsArmedFor(object candidate) { return $1; }' -replace '(?s)\bpublic void Clear\(\) =>\s*(.*?);', 'public void Clear() { $1; }'
 $confirmEject = Extract $tactical '(?ms)^            private void ConfirmEject\(\).*?^            }'
 $guard = Extract $orders '(?ms)^        internal bool CanControlAircraft\(.*?;'
+$guard = $guard -replace "(?s)\s*=>\s*", " { return " -replace ";\s*$", "; }"
 $actions = foreach ($name in @('ToggleMemberRadar', 'EjectMember')) {
     Extract $orders "(?ms)^        internal void $name\(.*?^        }"
 }
@@ -95,6 +97,6 @@ $checks = @'
     }
 }
 '@
-Add-Type -TypeDefinition ($boundary + $guard + ($actions -join "`n") + "`n}`npublic class TacticalAircraftSafetyChecks {`n" + $confirmation + $confirmEject + $checks) -IgnoreWarnings -WarningAction SilentlyContinue
+Add-Type -TypeDefinition ($boundary + "`n" + $guard + "`n" + ($actions -join "`n") + "`n}`npublic class TacticalAircraftSafetyChecks {`n" + $confirmation + $confirmEject + $checks) -IgnoreWarnings -WarningAction SilentlyContinue
 [TacticalAircraftSafetyChecks]::Run()
 Write-Output 'Tactical aircraft safety checks passed.'

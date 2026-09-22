@@ -8,14 +8,23 @@ namespace WingCommand
         /// <summary>Player's retained standing order.</summary>
         public readonly WingOrder Order;
 
-        /// <summary>Standing wing ROE.</summary>
-        public readonly WingRoe Roe;
+        /// <summary>Standing wing doctrine. Reserve when the caller does not supply one.</summary>
+        public readonly WingDoctrine Doctrine;
 
         /// <summary>Native delivery taxi/launch still owns this aircraft.</summary>
         public readonly bool DeliveryPending;
 
         /// <summary>An airborne missile targets this member.</summary>
         public readonly bool MissileWarned;
+
+        /// <summary>A tracked inbound is aimed at this aircraft. RWR paint alone is false.</summary>
+        public readonly bool NearMissile;
+
+        /// <summary>Predicted seconds to the nearest inbound; large when none.</summary>
+        public readonly float MissileImpactSeconds;
+
+        /// <summary>Slant range to the nearest inbound in metres; large when none.</summary>
+        public readonly float MissileDistance;
 
         /// <summary>Seconds since a live warning, zero while active; bridges brief tracking gaps during
         /// defence.</summary>
@@ -96,13 +105,25 @@ namespace WingCommand
 
         public WingSituation WithEngagementIdle(float seconds) => new WingSituation(in this, seconds);
 
+        private WingSituation(in WingSituation basis, bool nearMissile, float impactSeconds, float distance)
+        {
+            this = basis;
+            NearMissile = nearMissile;
+            MissileImpactSeconds = impactSeconds;
+            MissileDistance = distance;
+        }
+
+        public WingSituation WithMissileProximity(bool nearMissile, float impactSeconds = 999f,
+            float distance = 99999f) =>
+            new WingSituation(in this, nearMissile, impactSeconds, distance);
+
         /// <summary>Explicit benign default: airborne, leader present, no missile warning. Optional
         /// arguments alone do not supply a struct's parameterless construction defaults.</summary>
         public WingSituation() : this(order: WingOrder.Formation) { }
 
         public WingSituation(
             WingOrder order = WingOrder.Formation,
-            WingRoe roe = WingRoe.Hold,
+            WingDoctrine? doctrine = null,
             bool deliveryPending = false,
             bool missileWarned = false,
             float secondsSinceMissileWarning = 999f,
@@ -122,10 +143,13 @@ namespace WingCommand
             float secondsInBehaviour = 0f)
         {
             Order = order;
-            Roe = roe;
+            Doctrine = doctrine ?? WingDoctrine.Reserve;
             DeliveryPending = deliveryPending;
             MissileWarned = missileWarned;
             SecondsSinceMissileWarning = missileWarned ? 0f : secondsSinceMissileWarning;
+            NearMissile = false;
+            MissileImpactSeconds = 999f;
+            MissileDistance = 99999f;
             LeaderOnDeck = leaderOnDeck;
             LeaderPresent = leaderPresent;
             TargetAlive = targetAlive;

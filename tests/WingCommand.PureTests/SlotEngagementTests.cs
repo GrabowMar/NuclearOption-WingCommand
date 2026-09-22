@@ -37,19 +37,14 @@ namespace WingCommand
         }
     }
 
-    internal static class RoeRules
+    internal static class DoctrineLive
     {
-        public static WingRoe Current;
+        public static WingDoctrine Current { get; set; } = WingDoctrine.Reserve;
         public static bool MissileDefenceAvailable;
         public static Unit Threat;
         public static int PrioritySearches;
-        public static WingWeapons.Allow WeaponsFree(WingRoe roe, Aircraft aircraft) =>
-            MissileDefenceAvailable ? WingWeapons.Allow.MissilesOnly :
-            roe == WingRoe.Free ? WingWeapons.Allow.AirAndGround :
-            roe == WingRoe.Tight ? WingWeapons.Allow.AirOnly : WingWeapons.Allow.None;
-        public static float ExplicitOrderRange() => 20000f;
-        public static float EngageRange(WingRoe roe) => 10000f;
-        public static Unit PriorityTarget(WingRoe roe, Aircraft aircraft, Aircraft leader, float range)
+        public static bool MissileShotAvailable(Aircraft aircraft) => MissileDefenceAvailable;
+        public static Unit PriorityTarget(Aircraft aircraft, Aircraft leader, float range)
         {
             PrioritySearches++;
             return Threat;
@@ -72,10 +67,10 @@ namespace WingCommand.PureTests
         {
             WingFidelity.Begin(WingMode.Smart);
             UnityEngine.Time.timeSinceLevelLoad = 20f;
-            RoeRules.Current = WingRoe.Hold;
-            RoeRules.MissileDefenceAvailable = false;
-            RoeRules.Threat = null;
-            RoeRules.PrioritySearches = 0;
+            DoctrineLive.Current = WingDoctrine.Reserve;
+            DoctrineLive.MissileDefenceAvailable = false;
+            DoctrineLive.Threat = null;
+            DoctrineLive.PrioritySearches = 0;
             WingWeapons.ShotTarget = null;
             WingWeapons.ShotAllow = WingWeapons.Allow.None;
             WingWeapons.Shots = 0;
@@ -107,19 +102,19 @@ namespace WingCommand.PureTests
         [Fact]
         public void TightSelectsAProtectiveThreatInsteadOfTheSuspendedGroundDesignation()
         {
-            RoeRules.Current = WingRoe.Tight;
-            RoeRules.Threat = new Unit();
+            DoctrineLive.Current = WingDoctrine.Escort;
+            DoctrineLive.Threat = new Unit();
             var assigned = new Unit();
             var member = new WingMember { BehaviourId = WingBehaviours.Rejoin, AssignedTarget = assigned };
             Assert.True(Run(member));
-            Assert.Same(RoeRules.Threat, WingWeapons.ShotTarget);
+            Assert.Same(DoctrineLive.Threat, WingWeapons.ShotTarget);
             Assert.Same(assigned, member.AssignedTarget);
         }
 
         [Fact]
         public void TightHasNoOpportunityFallbackWhenThereIsNoProtectiveThreat()
         {
-            RoeRules.Current = WingRoe.Tight;
+            DoctrineLive.Current = WingDoctrine.Escort;
             var member = new WingMember { BehaviourId = WingBehaviours.Rejoin, AssignedTarget = new Unit() };
             Assert.False(Run(member));
             Assert.Equal(0, WingWeapons.Shots);
@@ -129,7 +124,7 @@ namespace WingCommand.PureTests
         [Fact]
         public void FreeReconsidersOpportunityTargetsDuringRecallWithoutUsingExplicitAuthority()
         {
-            RoeRules.Current = WingRoe.Free;
+            DoctrineLive.Current = WingDoctrine.Sweep;
             var member = new WingMember { BehaviourId = WingBehaviours.Rejoin, AssignedTarget = new Unit() };
             Assert.True(Run(member));
             Assert.Null(WingWeapons.ShotTarget);
@@ -150,7 +145,7 @@ namespace WingCommand.PureTests
         [Fact]
         public void ExpiredDesignationCannotTurnIntoAnOpportunityOrder()
         {
-            RoeRules.Current = WingRoe.Free;
+            DoctrineLive.Current = WingDoctrine.Sweep;
             var member = new WingMember { AssignedTarget = new Unit { disabled = true } };
             Assert.False(Run(member));
             Assert.Equal(0, WingWeapons.Shots);
@@ -159,7 +154,7 @@ namespace WingCommand.PureTests
         [Fact]
         public void FailedExplicitSelectionClearsAnEarlierTurretDesignation()
         {
-            RoeRules.Current = WingRoe.Hold;
+            DoctrineLive.Current = WingDoctrine.Reserve;
             WingWeapons.EngageSpecificResult = false;
             var member = new WingMember { Order = WingOrder.Attack, AssignedTarget = new Unit() };
 
@@ -171,7 +166,7 @@ namespace WingCommand.PureTests
         [Fact]
         public void FailedOpportunitySelectionClearsAnEarlierTurretDesignation()
         {
-            RoeRules.Current = WingRoe.Free;
+            DoctrineLive.Current = WingDoctrine.Sweep;
             WingWeapons.EngageResult = false;
             var member = new WingMember { Order = WingOrder.Formation };
 
@@ -188,33 +183,33 @@ namespace WingCommand.PureTests
         public void MissileDefencePreemptsEveryStationWeaponsTaskEvenInPerformanceMode(WingOrder order)
         {
             WingFidelity.Begin(WingMode.Performance);
-            RoeRules.Current = WingRoe.Free;
-            RoeRules.MissileDefenceAvailable = true;
+            DoctrineLive.Current = WingDoctrine.Sweep;
+            DoctrineLive.MissileDefenceAvailable = true;
             var member = new WingMember { Order = order, AssignedTarget = new Unit() };
             Assert.True(Run(member));
             Assert.Null(WingWeapons.ShotTarget);
             Assert.Equal(WingWeapons.Allow.MissilesOnly, WingWeapons.ShotAllow);
-            Assert.Equal(0, RoeRules.PrioritySearches);
+            Assert.Equal(0, DoctrineLive.PrioritySearches);
         }
 
         [Theory]
-        [InlineData(WingRoe.Tight)]
-        [InlineData(WingRoe.Free)]
-        public void PerformanceModeSuppressesDiscretionaryFireDuringRecall(WingRoe roe)
+        [InlineData(true)]
+        [InlineData(false)]
+        public void PerformanceModeSuppressesDiscretionaryFireDuringRecall(bool cover)
         {
             WingFidelity.Begin(WingMode.Performance);
-            RoeRules.Current = roe;
-            RoeRules.Threat = new Unit();
+            DoctrineLive.Current = cover ? WingDoctrine.Escort : WingDoctrine.Sweep;
+            DoctrineLive.Threat = new Unit();
             var member = new WingMember { BehaviourId = WingBehaviours.Rejoin, AssignedTarget = new Unit() };
             Assert.False(Run(member));
             Assert.Equal(0, WingWeapons.Shots);
-            Assert.Equal(0, RoeRules.PrioritySearches);
+            Assert.Equal(0, DoctrineLive.PrioritySearches);
         }
 
         [Fact]
         public void MissileInterceptionKeepsItsShortCadenceAfterAnOffensiveShot()
         {
-            RoeRules.Current = WingRoe.Free;
+            DoctrineLive.Current = WingDoctrine.Sweep;
             var member = new WingMember { Order = WingOrder.Formation };
             var engagement = new SlotEngagement(0.5f);
             var aircraft = new Aircraft();
@@ -222,7 +217,7 @@ namespace WingCommand.PureTests
             Assert.True(engagement.Run(member, aircraft, pilot, aircraft));
             UnityEngine.Time.timeSinceLevelLoad += 1f;
             Assert.False(engagement.Run(member, aircraft, pilot, aircraft));
-            RoeRules.MissileDefenceAvailable = true;
+            DoctrineLive.MissileDefenceAvailable = true;
             UnityEngine.Time.timeSinceLevelLoad += 0.5f;
             Assert.True(engagement.Run(member, aircraft, pilot, aircraft));
             Assert.Equal(WingWeapons.Allow.MissilesOnly, WingWeapons.ShotAllow);

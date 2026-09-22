@@ -18,113 +18,149 @@
    =========================================================================== */
 
 :root {
-  /* Surfaces — a deep dark green-slate cockpit ground, deep enough that a busy map
-     underneath does not read through the text on top of it. */
-  ground:          #030504 f8;
-  surface:         #060C0A f0;
-  surface-raised:  #0A1410 f5;
-  surface-inert:   #040806 b0;
-  band:            #FFFFFF 06;
+  /* Neutral surfaces; only operational state wears the live game palette. */
+  ground:             #06090A fb;
+  surface-sunken:     #080B0D f8;
+  surface:            #0C1113 fa;
+  surface-raised:     #131A1C fa;
+  surface-inert:      #080B0D f0;
+  band:               #FFFFFF 04;
+  surface-track:      #FFFFFF 14;
 
-  /* Edges */
-  hairline:        #2EA56B 4d;
-  frame:           #387059 8c;
+  /* --- Structural Edges & Bezel Framing --- */
+  border-subtle:      #2E3B40 80;
+  hairline:           #2E3B40 a6;
+  frame:              #475C63 d9;
+  border-active:      accent;
 
-  /* Status rails. Literal on purpose: a mission theme must not be able to
-     turn "armed" and "ready" into the same colour. */
-  rail-ready:      #00FF9D;
-  rail-caution:    #F59E0B;
-  rail-danger:     #EF4444;
-  rail-info:       #00E5FF;
-  rail-inert:      #26403A 80;
+  /* State follows the player's vanilla theme. Info remains a quiet blue-grey. */
+  rail-ready:         accent;
+  rail-caution:       warning;
+  rail-danger:        alert;
+  rail-info:          #80C2D9;
+  rail-inert:         #40545C a6;
 
-  /* Type */
-  text-primary:    #EBFFF5;
-  text-dim:        #9EB7AB;
-  text-muted:      #57706A;
-  ink:             #02120B;
+  /* --- Calibrated Phosphor Bloom & Washes --- */
+  rail-ready-glow:    accent 14;
+  rail-ready-edge:    accent 80;
+  rail-caution-glow:  warning 14;
+  rail-caution-edge:  warning 80;
+  rail-danger-glow:   alert 14;
+  rail-danger-edge:   alert 80;
+  rail-info-glow:     #80C2D9 14;
+  rail-info-edge:     #80C2D9 80;
 
-  /* Geometry */
-  panel-width:     480;
-  pad:             14;
-  gap:             8;
+  /* --- Photopic Typography & Ink --- */
+  text-primary:       #EBF2F5;
+  text-dim:           #ADBFC7;
+  text-muted:         #788F99;
+  ink:                #010C06;
+
+  /* --- Panel Geometry --- */
+  panel-width:        480;
+  pad:                14;
+  gap:                8;
 }
 
 /* ---------------------------------------------------------------- 1. panel */
 
 /* Fill fades from ground-dark to see-through over the panel's own bottom
    stretch (baked into the "panel" sprite, not tunable from here). */
-.panel        { sprite: panel; border: 1 frame; ticks: on; }
+.panel        { sprite: panel; border: 1 frame; ticks: off; }
 
-/* The spine: one accent stroke the whole content hangs off, replacing a frame
-   around every group. */
-.spine        { width: 3; background: accent; }
-.spine-tick   { width: 9; height: 1; background: accent c0; }
+/* The spine: refined into an elegant structural rail rather than a glaring laser bar,
+   with crisp accent ticks at section heads. */
+.spine        { width: 1; background: hairline; }
+.spine-tick   { width: 5; height: 1; background: frame; }
 
 /* ------------------------------------------------------------ 2. sections */
 
-.section      { pad: 12 14; gap: 8; }
+.section      { pad: 10 12; gap: 8; }
 .section.band { background: band; }
 
-.section-title      { font: micro bold; color: text-dim; tracking: 18; }
-.section-title-note  { font: micro; color: text-dim; tracking: 10; }
+/* Section headers sit one step above body copy: 11px bold, no more tracking than the
+   data under them so they read as headings instead of faint decoration. */
+.section-title      { font: 11 bold; color: text-primary; tracking: 1; }
+.section-title-note  { font: 11; color: text-dim; tracking: 0; }
+
+/* ------------------------------------------------------- 2b. page heading */
+
+/* The panel's own headline: large enough to name the page at a glance, with a
+   tracked subtitle under it. Sits above the scroll area and never moves. */
+.page-title    { font: 18 bold; color: text-primary; tracking: 1; }
+.page-subtitle { font: 11; color: text-dim; tracking: 0; }
 
 /* ------------------------------------------------------------ 4. data bar */
 
-.databar   { height: 30; background: #000000 33; border: 1 hairline; }
-.id-tag    { background: accent; color: ink; font: 15 bold; tracking: 16; pad: 0 12; align: center; }
-.databar-state { font: 12; color: text-dim; tracking: 10; pad: 0 12; }
-.databar-state-key { font: small bold; color: text-primary; tracking: 10; }
+.databar           { height: 54; }
+.id-tag            { color: text-primary; font: 14 bold; tracking: 2; align: center; }
+.databar-state     { font: 13; color: text-dim; tracking: 1; }
+.databar-state-key { font: 13 bold; color: text-primary; tracking: 1; }
 
-.chip        { font: 10.5; color: text-dim; tracking: 9; border: 1 hairline;
-               background: #000000 47; sprite: control; align: center; }
-.chip.live   { color: rail-ready; border: 1 #00FF9D 66; }
-.chip.warn   { color: rail-caution; border: 1 #F59E0B 66; }
+.chip        { font: 11; color: text-dim; tracking: 0; background: surface-raised; }
+.chip.live   { color: text-primary; }
+.chip.warn   { color: warning; }
+.chip.danger { color: alert; }
+.chip.info   { color: rail-info; }
+.chip.inert  { color: text-muted; background: surface-inert; }
 
 /* -------------------------------------------------------------- 5. metrics */
 
-.metrics       { height: 64; border: 1 hairline; }
-.metric        { pad: 9 14 10 14; }
-.metric-key    { font: 11; color: text-dim; tracking: 16; }
-.metric-value  { font: 25 bold; color: text-primary; tabular: on; tracking: 1; }
-.metric-unit   { font: 11; color: text-dim; tracking: 10; }
-.metric-cap    { font: 11; color: text-dim; tracking: 8; align: right; }
-.metric-track  { height: 3; background: #FFFFFF 12; }
+.metrics       { height: 64; background: surface; }
+.metric        { pad: 4 10; background: surface; }
+.metric-key    { font: 10.5; color: text-dim; tracking: 0; }
+.metric-value  { font: 21 bold; color: text-primary; tabular: on; tracking: 0; }
+.metric-unit   { font: 10.5; color: text-dim; tracking: 0; }
+.metric-cap    { font: 10.5; color: text-dim; tracking: 0; align: right; }
+.metric-track  { height: 2; background: surface-track; }
+
+/* One hero reading per page — a tuned frequency, a countdown. Sized between the
+   metric value and a display face, tabular so it does not jitter as it changes. */
+.readout       { font: 26 bold; color: text-primary; tabular: on; tracking: 0; }
+.readout-unit  { font: 11; color: text-dim; tracking: 0; }
 
 /* ----------------------------------------------------------------- 6. tabs */
 
-.tabbar   { height: 30; border: 1 hairline; }
-.tab      { font: 12; color: text-dim; tracking: 16; background: #000000 33; align: center; }
-.tab:hover   { color: accent; }
-.tab:latched { color: text-primary; background: #00000000; rail: 2 accent; }
+.tabbar      { height: 30; border: 1 hairline; background: surface-sunken; }
+.tab         { font: 11 bold; color: text-dim; tracking: 1; background: surface-sunken; border: 1 hairline; align: center; }
+.tab:hover   { color: text-primary; background: #0E1E2C c0; border: 1 accent 80; }
+.tab:latched { color: text-primary; background: accent 28; border: 1 accent; rail: 2 accent; }
 
 /* ------------------------------------------------------------ 7. list rows */
 
 /* Rows size to their own copy. This is what ends the ellipsis: a description
    that needs two lines gets two lines instead of being cut. */
-.row          { pad: 8 0; gap: 10; border: 1 #2EA56B 21; }
-.row:hover    { background: surface-raised; }
-.row:armed    { background: #00FF9D 0c; ticks: on; }
-.row:disabled { color: text-muted; }
+.row          { pad: 8 12; gap: 8; background: surface; }
+.row:hover    { background: surface-raised; border: 1 hairline; }
+.row:armed    { background: rail-ready-glow; border: 1 rail-ready-edge; }
+.row:disabled { color: text-muted; border: 1 border-subtle 40; background: surface-inert; }
 
-.row-name     { font: 12.5 bold; color: text-primary; tracking: 5; }
-.row-sub      { font: micro; color: text-dim; tracking: 4; wrap: on; }
-.row-sub.ok   { color: rail-ready; }
-.row-sub.warn { color: rail-caution; }
-.row-sub.bad  { color: rail-danger; }
+.row-name       { font: 12 bold; color: text-primary; tracking: 0; }
+.row-sub        { font: 11; color: text-dim; tracking: 0; wrap: on; }
+.row-main       { font: 12; color: text-primary; tracking: 0; wrap: on; }
+.row-sub.ok     { color: rail-ready; }
+.row-sub.warn   { color: rail-caution; }
+.row-sub.bad    { color: rail-danger; }
+.row-main.warn  { color: rail-caution; }
 
-.row-value      { font: lead bold; color: text-primary; tabular: on; align: right; }
-.row-value-unit { font: 8.5 ; color: text-muted; tracking: 14; align: right; }
+.row-value      { font: 13 bold; color: text-primary; tabular: on; align: right; }
+.row-value.ok   { color: rail-ready; }
+.row-value.warn { color: rail-caution; }
+.row-value.bad  { color: rail-danger; }
+.row-value-unit { font: 11; color: text-dim; tracking: 0; align: right; }
+
+/* Explanatory copy under a heading: dim, wrapped, never ellipsised. */
+.hint           { font: 11.5; color: text-dim; tracking: 0; wrap: on; }
 
 /* State lives on the rail; what a thing *is* lives on its glyph. Colour is
    therefore never the only carrier of meaning. */
-.rail          { width: 3; }
-.rail.ready    { background: rail-ready; }
-.rail.armed    { background: rail-caution; }
-.rail.cooling  { background: rail-caution; }
-.rail.danger   { background: rail-danger; }
-.rail.locked   { background: rail-inert; }
-.rail.info     { background: rail-info; }
+.rail           { width: 3; }
+.rail.ready     { background: rail-ready; }
+.rail.armed     { background: rail-caution; }
+.rail.cooling   { background: rail-caution; }
+.rail.danger    { background: rail-danger; }
+.rail.locked    { background: rail-inert; }
+.rail.info      { background: rail-info; }
 /* A sector or node under opposing pressure. Separate from :armed so a frontline
    reading amber never means "you have armed something". */
 .rail.contested { background: rail-caution; }
@@ -135,51 +171,82 @@
 /* A share bar: one track, several fills laid end to end. Used for the theater
    control split, where a single-fill progress bar cannot show that the ground
    between two sides is neither side's. */
-.bar           { height: 6; background: #FFFFFF 12; }
+.bar           { height: 6; background: surface-track; }
 .bar-friendly  { background: accent; }
 .bar-contested { background: rail-caution; }
 .bar-hostile   { background: rail-danger; }
 .bar-inert     { background: rail-inert; }
 
 /* Key/value pairs for the logistics readouts: label left, figure right, on one line. */
-.kv-key        { font: micro; color: text-dim; tracking: 14; }
-.kv-value      { font: small bold; color: text-primary; align: right; }
+.kv-key        { font: 11; color: text-dim; tracking: 0; }
+.kv-value      { font: 12 bold; color: text-primary; align: right; }
+.kv-value.ok   { color: rail-ready; }
 .kv-value.warn { color: rail-caution; }
 .kv-value.bad  { color: rail-danger; }
 
 /* ------------------------------------------------------------- 8. controls */
 
-.btn          { font: micro; color: text-dim; tracking: 13; border: 1 frame;
-                background: #000000 4d; sprite: control; align: center; }
-.btn:hover    { color: text-primary; border: 1 accent; }
-.btn:latched  { color: text-primary; }
-/* Button fills, frames and text come from the tested four-state paint machine in
-   AvionicsTokens (rest / hover / pressed / latched), not from here — a button has to
-   stay readable in states a stylesheet cannot see. The sheet sets its type only. */
+.btn, .button, .toggle { font: 11 bold; color: text-primary; tracking: 0; border: 1 frame;
+                         background: surface-raised; sprite: control; align: center; }
+.btn:hover             { color: text-primary; border: 1 accent; background: #132435 f0; }
+.btn:latched           { color: text-primary; background: accent 40; border: 1 accent; }
+.btn:disabled          { color: text-muted; border: 1 hairline 40; background: surface-inert; }
+.btn.confirm           { color: ink; background: rail-ready; border: 1 #FFFFFF 99; font: 11 bold; }
+.btn.confirm:hover     { color: #000000; background: #33FFB8; border: 1 #FFFFFF; }
 
-.badge        { font: 9 ; color: text-dim; tracking: 13; border: 1 hairline; pad: 2 6; align: center; }
-.badge.on     { color: rail-ready; border: 1 #00FF9D 73; }
-.badge.aff    { color: rail-caution; border: 1 #F59E0B 73; }
+.badge                 { font: 11; color: text-dim; tracking: 0; border: 1 hairline; pad: 2 6; align: center; }
+.badge.on              { color: rail-ready; border: 1 rail-ready-edge; background: rail-ready-glow; }
+.badge.aff             { color: rail-caution; border: 1 rail-caution-edge; background: rail-caution-glow; }
 
 /* -------------------------------------------------------- 9. status strip */
 
-.status       { height: 44; background: #000000 4d; border: 1 hairline; pad: 9 14; }
-.status-text  { font: 11.5 ; color: text-dim; wrap: on; }
+.status       { height: 56; background: surface; pad: 8 12; }
+.status-text  { font: 12; color: text-dim; wrap: on; tracking: 0; }
+.status.armed { border: 1 rail-caution-edge; background: #140E04 f0; }
+.status.alert { border: 1 rail-danger-edge; background: #140505 f0; }
 
 /* ------------------------------------------------------------- 10. cards */
 
 /* Kept for the surfaces that genuinely are objects — a pilot dossier, a
    now-playing card. Ordinary groups use .section instead. */
-.card         { background: surface; sprite: card; border: 1 hairline; pad: 8; gap: 4; }
-.card:hover   { background: surface-raised; }
-.card.inert   { background: surface-inert; }
-.card.focused { ticks: on; }
+.card         { background: surface-raised; border: 1 hairline; pad: 12; gap: 8; }
+.card:hover   { background: #0C1A28 f8; border: 1 frame; }
+.card.inert   { background: surface-inert; border: 1 hairline 40; }
+.card.focused { border: 1 accent; background: surface-raised; }
 
-/* ------------------------------------------------ 11. reskinned stock panels */
+/* ------------------------------------------------------------ 11. dossier */
+
+/* A paper personnel file rendered on glass: form numbers, clause rules with
+   dotted leaders and rubber stamps. Wing Command never asks for these; the SQD
+   pages and the STR chain-of-command dossier both do. */
+
+.file-form     { font: 11; color: text-dim; tracking: 0; }
+.file-title    { font: 16 bold; color: text-primary; tracking: 0; }
+.file-meta     { font: 11; color: text-dim; tracking: 0; }
+.leader        { font: 11; color: text-dim; tracking: 0; }
+.form-key      { font: 11; color: text-dim; tracking: 0; }
+.form-value    { font: 12 bold; color: text-primary; align: right; }
+.photo-cap     { font: 11; color: text-dim; tracking: 0; }
+
+/* A stamp is ink on the file, not a control: inert until a state says otherwise. */
+.stamp         { font: 10.5 bold; color: text-muted; tracking: 8; border: 1 #57706A 99; }
+.stamp.ok      { color: rail-ready; border: 1 rail-ready-edge; background: rail-ready-glow; }
+.stamp.warn    { color: rail-caution; border: 1 rail-caution-edge; background: rail-caution-glow; }
+.stamp.bad     { color: rail-danger; border: 1 rail-danger-edge; background: rail-danger-glow; }
+.stamp.info    { color: rail-info; border: 1 rail-info-edge; background: rail-info-glow; }
+
+/* A punched filing hole in the binding margin. */
+.punch         { background: #000000 f0; border: 1 frame 99; }
+
+/* What the file will not show: redaction bars, and a watermark behind the record. */
+.redact        { background: #57706A 59; }
+.watermark     { font: 24 bold; color: accent 14; tracking: 12; }
+
+/* ------------------------------------------------ 12. reskinned stock panels */
 
 /* The game's own map panels — BDF, PALA, TGT, MIS, MAP — docked into the left
    column. Their contents and titles stay the game's; this only supplies the
    same top-to-bottom fade as .panel (via AvSprites.GroundGradient, also not
    tunable from here) plus a hairline edge, so the rows read as an instrument
    instead of as green text floating over the terrain. */
-.stock-panel   { }
+.stock-panel   { background: surface-sunken; border: 1 hairline; }

@@ -138,4 +138,46 @@ namespace WingCommand.PureTests
             Assert.False(RecoverySettlementPolicy.NativeLoadoutReplaces(6));
         }
     }
+
+    public class HangarLaunchPolicyTests
+    {
+        [Fact]
+        public void AParkedAircraftOnTheRollOutBlocksThePad()
+        {
+            // The next nose must not spawn into the tail the 30 m door rule just released.
+            Assert.True(HangarLaunchPolicy.PathBlocked(
+                px: 0f, py: 0f, pz: 75f,
+                padX: 0f, padY: 0f, padZ: 0f,
+                exitX: 0f, exitY: 0f, exitZ: HangarLaunchPolicy.ExitPathMeters,
+                clearance: HangarLaunchPolicy.PathClearanceMeters));
+        }
+
+        [Fact]
+        public void APointPastTheRollOutEndMeasuresFromTheEnd()
+        {
+            Assert.True(HangarLaunchPolicy.PathBlocked(0f, 0f, 170f, 0f, 0f, 0f, 0f, 0f, 150f, 40f));
+            Assert.False(HangarLaunchPolicy.PathBlocked(0f, 0f, 191f, 0f, 0f, 0f, 0f, 0f, 150f, 40f));
+        }
+
+        [Fact]
+        public void APointBehindThePadMeasuresFromTheSpawnPoint()
+        {
+            Assert.True(HangarLaunchPolicy.PathBlocked(0f, 0f, -30f, 0f, 0f, 0f, 0f, 0f, 150f, 40f));
+            Assert.False(HangarLaunchPolicy.PathBlocked(0f, 0f, -41f, 0f, 0f, 0f, 0f, 0f, 150f, 40f));
+        }
+
+        [Fact]
+        public void TheCorridorEdgeIsInclusive()
+        {
+            Assert.True(HangarLaunchPolicy.PathBlocked(40f, 0f, 75f, 0f, 0f, 0f, 0f, 0f, 150f, 40f));
+            Assert.False(HangarLaunchPolicy.PathBlocked(40.5f, 0f, 75f, 0f, 0f, 0f, 0f, 0f, 150f, 40f));
+        }
+
+        [Fact]
+        public void ADegenerateSegmentMeasuresFromThePadPoint()
+        {
+            Assert.Equal(25f, HangarLaunchPolicy.SegmentDistanceSquared(
+                3f, 4f, 0f, 0f, 0f, 0f, 0f, 0f, 0f));
+        }
+    }
 }

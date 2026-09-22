@@ -127,6 +127,9 @@ namespace WingCommand
                     "Native radial menu integration unavailable (" + e.Message +
                     "). Falling back to the standalone wheel; bind Keys/FallbackRadialMenu to use it.");
             }
+
+            // Optional and independent: failure only disables wingman overdrive.
+            InitialiseFlyByWireLimits();
         }
 
         private static AccessTools.FieldRef<TClass, TField> Field<TClass, TField>(string name)

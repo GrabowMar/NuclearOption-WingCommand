@@ -409,12 +409,14 @@ namespace WingCommand
             if (airbase == null || airbase.disabled) return false;
             if (!HangarDepartureLane.IsFree(airbase)) return false;
             return LaunchesVertically(definition)
-                ? SelectClearHangar(airbase, definition) != null
+                ? SelectClearHangar(airbase, definition, out _) != null
                 : WingAirfield.HasTakeoffRunway(airbase, definition);
         }
 
-        private static Hangar SelectClearHangar(Airbase airbase, AircraftDefinition definition)
+        private static Hangar SelectClearHangar(Airbase airbase, AircraftDefinition definition,
+                                                out string blocker)
         {
+            blocker = null;
             if (airbase == null || airbase.disabled || definition == null) return null;
             IList<Hangar> hangars = airbase.hangars;
             if (hangars == null) return null;
@@ -427,6 +429,9 @@ namespace WingCommand
                 if (!hangar.CanSpawnAircraft(WingHangarStock.NativeDefinition(hangar, definition)))
                     continue;
                 if (HangarClaimedByPending(hangar)) continue;
+                // Native's 30 m door rule releases a pad while the previous aircraft still sits on
+                // its roll-out; spawning there leaves the new aircraft unable to start.
+                if (WingAirfield.IsHangarPathBlocked(hangar, out blocker)) continue;
                 return hangar;
             }
 
@@ -570,8 +575,18 @@ namespace WingCommand
             AircraftDefinition definition = order.Transaction.Definition;
             if (hq == null || definition == null) return;
 
-            Hangar selected = SelectClearHangar(order.Origin, definition);
-            if (selected == null) return;
+            Hangar selected = SelectClearHangar(order.Origin, definition, out string blocker);
+            if (selected == null)
+            {
+                if (!string.IsNullOrEmpty(blocker) && order.LastLaunchBlocker != blocker)
+                {
+                    order.LastLaunchBlocker = blocker;
+                    Plugin.LogVerbose("[Shop] " + definition.unitName + " pad launch held - " +
+                        WingLaunchFields.DisplayName(order.Origin) + ": " + blocker);
+                }
+                return;
+            }
+            order.LastLaunchBlocker = null;
             if (!HangarDepartureLane.Reserve(order.Origin, selected, order)) return;
 
             // Reserve the specific pad before native code can synchronously register the aircraft.

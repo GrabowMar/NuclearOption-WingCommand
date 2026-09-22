@@ -14,7 +14,7 @@ namespace WingCommand
         private PersistentID? takeoverPilotAircraftId;
 
         /// <summary>Wing-wide standing weapons policy.</summary>
-        public WingRoe Roe { get; set; } = WingRoe.Hold;
+        public WingDoctrine Doctrine { get; set; } = WingDoctrine.Reserve;
 
         public IReadOnlyList<WingMember> Members => members;
         public int Count => members.Count;

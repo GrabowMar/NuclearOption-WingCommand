@@ -117,9 +117,8 @@ namespace WingCommand
 
                 case WingAction.CycleRoe:
                 {
-                    // Cycle all three ROE levels without a submenu.
-                    Wing.Roe = CombatFacade.Roe.Next(Wing.Roe);
-                    Toast("ROE: " + CombatFacade.Roe.Label(Wing.Roe));
+                    Wing.Doctrine = Wing.Doctrine.NextPattern();
+                    Toast(Wing.Doctrine.PatternName);
                     break;
                 }
 

@@ -27,15 +27,10 @@ namespace WingCommand
                 WingWeapons.NearestThreatTo(protectee, range);
         }
 
-        internal static class Roe
+        internal static class Doctrine
         {
-            public static WingRoe Current => RoeRules.Current;
-            public static WingRoe Next(WingRoe roe) => RoeRules.Next(roe);
-            public static string Label(WingRoe roe) => RoeRules.Label(roe);
-            public static string Hint(WingRoe roe) => RoeRules.Hint(roe);
-            public static void EnsureFree(WingRegistry wing) => RoeRules.EnsureFree(wing);
-            public static float SpacingScale(WingRoe roe) => RoeRules.SpacingScale(roe);
-            public static float ExplicitOrderRange() => RoeRules.ExplicitOrderRange();
+            public static WingDoctrine Current => DoctrineLive.Current;
+            public static float ExplicitOrderRange() => WingDoctrineRules.ExplicitOrderRange();
         }
 
         internal static class Countermeasures

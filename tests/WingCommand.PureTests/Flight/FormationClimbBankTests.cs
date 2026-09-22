@@ -6,6 +6,20 @@ namespace WingCommand.PureTests
     public class FormationClimbBankTests
     {
         [Theory]
+        // At 900 km/h, four degrees of flight-path pitch already means 17 m/s climb.
+        // Absolute climb rate and a small height error do not imply a runaway zoom.
+        [InlineData(4f, 3f, 17.4f, -20f, 70f)]
+        [InlineData(12f, 11f, 52f, -10f, 70f)]
+        [InlineData(25f, 25f, 105.7f, -10f, 70f)]
+        [InlineData(4f, 3f, 17.4f, -20f, 12f)]
+        public void CommandedClimbingTurnsRetainTheirSafeBankCeiling(
+            float pitch, float demand, float climb, float heightError, float ceiling)
+        {
+            Assert.Equal(ceiling, FormationControlRules.PitchDownBankAuthority(
+                pitch, demand, climb, heightError, ceiling, 8f));
+        }
+
+        [Theory]
         // Recorded FS-20 post-departure intercepts: fast climbs still need to turn.
         [InlineData(35.1f, 18f, 86.9f, 981f, 55f, 35f)]
         [InlineData(13.8f, 1f, 54.9f, -133f, 55f, 35f)]

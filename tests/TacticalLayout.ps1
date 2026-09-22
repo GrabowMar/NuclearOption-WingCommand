@@ -22,9 +22,13 @@ $methods = foreach ($name in @('ToggleRosterExpanded', 'ReflowTactical', 'FitTac
 }
 $rosterRows = Get-ConstExpression $screen 'RosterRowsPerPage'
 $expandedRows = Get-ConstExpression $source 'ExpandedRosterRows'
-$rowPitch = Get-ConstExpression $tokens 'RowPitch'
+$tacticalRosterHeight = Get-ConstExpression $source 'TacticalRosterHeight'
+$tacticalRosterPitch = Get-ConstExpression $source 'TacticalRosterPitch'
+$tacticalButtonHeight = Get-ConstExpression $source 'TacticalButtonHeight'
+$tacticalGap = Get-ConstExpression $source 'TacticalGap'
 $rowHeight = Get-ConstExpression $tokens 'RowHeight'
 $panelWidth = Get-ConstExpression $tokens 'PanelWidth'
+$pageWidth = Get-ConstExpression $screen 'PageWidth'
 $panelHeight = Get-ConstExpression $tokens 'PanelHeightMax'
 $pad = Get-ConstExpression $tokens 'Pad'
 $gap = Get-ConstExpression $tokens 'Gap'
@@ -37,24 +41,27 @@ using System;
 class Vector2 { public float x,y; public Vector2(float x,float y) { this.x=x; this.y=y; } }
 class Rect { public float x,y,width,height; public Rect(float x,float y,float w,float h) { this.x=x; this.y=y; width=w; height=h; } }
 class GameObject { public bool Active; public void SetActive(bool b) { Active=b; } }
-class RectTransform { public Vector2 anchoredPosition=new Vector2(0,0), sizeDelta=new Vector2(0,0); public GameObject gameObject=new GameObject(); }
+class RectTransform { public Vector2 anchoredPosition=new Vector2(0,0), sizeDelta=new Vector2(0,0); public GameObject gameObject=new GameObject(); public Rect rect { get { return new Rect(0,0,sizeDelta.x,sizeDelta.y); } } }
 class ScrollRect { public float verticalNormalizedPosition; public void StopMovement() {} }
 class WingButton { public bool Latched; public void SetLatched(bool b) { Latched=b; } }
 class WingCommandManager { public static WingCommandManager Instance=new WingCommandManager(); public int Cancellations; public void CancelMapOrder(bool notify) { Cancellations++; } }
 static class Mathf {
     public static float Max(float a,float b) { return Math.Max(a,b); }
     public static int Clamp(int v,int min,int max) { return Math.Min(Math.Max(v,min),max); }
+    public static float Clamp(float v,float min,float max) { return Math.Min(Math.Max(v,min),max); }
 }
 public static class TacticalLayoutChecks {
 '@ + @"
     const int RosterRowsPerPage=$rosterRows, ExpandedRosterRows=$expandedRows;
-    const float RowPitch=$rowPitch, RowHeight=$rowHeight, PanelWidth=$panelWidth, Pad=$pad, Gap=$gap,
-        Space2=$space2, Space5=$space5, StatusStripHeight=$statusStripHeight, TacticalButtonHeight=RowHeight;
+    const float RowHeight=$rowHeight, PanelWidth=$panelWidth, PageWidth=$pageWidth, Pad=$pad, Gap=$gap,
+        Space2=$space2, Space5=$space5, StatusStripHeight=$statusStripHeight,
+        TacticalButtonHeight=$tacticalButtonHeight, TacticalGap=$tacticalGap,
+        TacticalRosterHeight=$tacticalRosterHeight, TacticalRosterPitch=$tacticalRosterPitch;
     const float FlightGroupsHeight=$flightGroupsHeight;
 "@ + @'
     static bool rosterExpanded;
     static int rosterPage, tacticalDeck;
-    static float nextRefresh, panelHeight=__PANEL_HEIGHT__, tacticalTop=-174, tacticalCommandsTop=-226, tacticalCollapsedHeight=700;
+    static float nextRefresh, panelHeight=__PANEL_HEIGHT__, tacticalTop=-186, tacticalCommandsTop=-226, tacticalCollapsedHeight=700;
     static RectTransform flightGroupsRoot=new RectTransform();
     static RectTransform rosterArea=new RectTransform(), tacticalCommands=new RectTransform(), tacticalContent=new RectTransform(),
         tacticalViewport=new RectTransform(), tacticalScrollTrack=new RectTransform();
@@ -70,22 +77,32 @@ public static class TacticalLayoutChecks {
 $checks = @'
     static void Check(bool pass,string message) { if (!pass) throw new Exception(message); }
     public static void Run() {
+        foreach (float height in new[] {420f,596f,896f}) {
+            panelHeight=height;
+            FitTacticalViewport(); ReflowTactical();
+            Check(tacticalViewport.sizeDelta.y>=TacticalRosterHeight, "Small panels retain a usable scrolling body");
+            Check(tacticalTop-tacticalViewport.sizeDelta.y==-(height-Pad-StatusStripHeight-Space2), "Every panel size reserves the fixed footer");
+            Check(tacticalContent.sizeDelta.y>tacticalViewport.sizeDelta.y, "Long decks scroll rather than shrink their controls");
+        }
         FitTacticalViewport(); ReflowTactical();
         float viewportHeight=tacticalViewport.sizeDelta.y;
-        float extra=(ExpandedRosterRows-RosterRowsPerPage)*RowPitch;
+        float extra=(ExpandedRosterRows-RosterRowsPerPage)*TacticalRosterPitch;
         Check(RosterRowsPerPage==4 && ExpandedRosterRows==6, "Tactical roster uses four compact rows and six expanded rows");
-        Check(rosterArea.sizeDelta.y==RosterRowsPerPage*RowPitch && tacticalCommands.anchoredPosition.y==tacticalCommandsTop, "Default roster rows");
+        Check(TacticalRosterHeight>=26f && TacticalRosterPitch>=TacticalRosterHeight+4f, "Roster identity and actions occupy compact readable lanes");
+        Check(rosterArea.sizeDelta.y==RosterRowsPerPage*TacticalRosterPitch && tacticalCommands.anchoredPosition.y==tacticalCommandsTop, "Default roster rows");
         Check(!flightGroupsRoot.gameObject.Active, "Collapsed flight has no group controls");
-        Check(tacticalViewport.sizeDelta.x==PanelWidth && tacticalContent.sizeDelta.x==PanelWidth, "Viewport and content use the current panel width");
-        Check(tacticalScrollTrack.anchoredPosition.x==PanelWidth-12f && tacticalScrollTrack.sizeDelta.x==8f, "Scroll track stays on the panel edge");
+        Check(tacticalViewport.sizeDelta.x==PageWidth && tacticalContent.sizeDelta.x==PageWidth, "Viewport and content reserve the same scrollbar gutter");
+        Check(PanelWidth-PageWidth==8f, "Content reserves an eight-pixel scrollbar gutter");
+        Check(tacticalScrollTrack.anchoredPosition.x>=PageWidth && tacticalScrollTrack.sizeDelta.x==4f &&
+            tacticalScrollTrack.anchoredPosition.x+tacticalScrollTrack.sizeDelta.x<=PanelWidth, "Scroll track never covers content");
         Check(tacticalTop-viewportHeight==-(panelHeight-Pad-StatusStripHeight-Space2), "Viewport ends above pinned footer");
         int compactPage=3;
         int first=compactPage*RosterRowsPerPage;
         rosterPage=compactPage; ToggleRosterExpanded();
         int expandedPage=first/ExpandedRosterRows;
         Check(rosterExpanded && rosterPage==expandedPage, "Expansion preserves the first visible aircraft page");
-        Check(rosterArea.sizeDelta.y==ExpandedRosterRows*RowPitch && tacticalCommands.anchoredPosition.y==tacticalCommandsTop-extra-FlightGroupsHeight, "Expanded rows push commands down without overlap");
-        Check(tacticalContent.sizeDelta.y==tacticalCollapsedHeight+extra+FlightGroupsHeight && tacticalViewport.sizeDelta.y==viewportHeight, "Only scroll content grows");
+        Check(rosterArea.sizeDelta.y==ExpandedRosterRows*TacticalRosterPitch && tacticalCommands.anchoredPosition.y==tacticalCommandsTop-extra-FlightGroupsHeight, "Expanded rows push commands down without overlap");
+        Check(tacticalContent.sizeDelta.y==Math.Max(tacticalViewport.sizeDelta.y, tacticalCollapsedHeight+extra+FlightGroupsHeight) && tacticalViewport.sizeDelta.y==viewportHeight, "Only scroll content grows");
         Check(flightGroupsRoot.gameObject.Active && flightGroupsRoot.anchoredPosition.y==tacticalCommandsTop-extra, "Groups follow expanded aircraft rows");
         nextRefresh=5f; SetTacticalDeck(0);
         float directivesHeight=tacticalContent.sizeDelta.y;
@@ -93,13 +110,19 @@ $checks = @'
         SetTacticalDeck(1);
         Check(tacticalDeckPages.Length==3 && tacticalDeckTabs.Length==3, "Tactical navigation has three decks");
         for (int i=0;i<3;i++) Check(tacticalDeckPages[i].gameObject.Active==(i==1) && tacticalDeckTabs[i].Latched==(i==1), "Exactly one tactical deck");
-        Check(tacticalCommands.sizeDelta.y==-tacticalDeckBottoms[1] && tacticalContent.sizeDelta.y>directivesHeight && tacticalContent.sizeDelta.y==tacticalCollapsedHeight+extra+FlightGroupsHeight, "Geometry deck grows only the scroll content to its active height");
+        Check(tacticalCommands.sizeDelta.y==-tacticalDeckBottoms[1] && tacticalContent.sizeDelta.y>directivesHeight && tacticalContent.sizeDelta.y==Math.Max(tacticalViewport.sizeDelta.y, tacticalCollapsedHeight+extra+FlightGroupsHeight), "Geometry deck grows only the scroll content to its active height");
         Check(WingCommandManager.Instance.Cancellations==2 && rosterPage==expandedPage && tacticalDeck==1 && nextRefresh==0f, "Deck switches disarm the map tool without changing roster pagination");
         SetTacticalDeck(2);
         for (int i=0;i<3;i++) Check(tacticalDeckPages[i].gameObject.Active==(i==2) && tacticalDeckTabs[i].Latched==(i==2), "Route nodes is an independent deck");
         Check(tacticalCommands.sizeDelta.y==-tacticalDeckBottoms[2], "Route nodes uses its own height");
+        tacticalContent.anchoredPosition=new Vector2(0f,100f);
+        SetTacticalDeck(1);
+        Check(tacticalContent.anchoredPosition.y==100f, "Deck switches preserve the visible command position");
+        tacticalContent.anchoredPosition=new Vector2(0f,10000f);
+        SetTacticalDeck(2);
+        Check(tacticalContent.anchoredPosition.y==Mathf.Max(0f,tacticalContent.sizeDelta.y-tacticalViewport.rect.height), "Shorter decks clamp the scroll position to visible content");
         ToggleRosterExpanded();
-        Check(!rosterExpanded && rosterPage==compactPage && tacticalContent.sizeDelta.y==tacticalCollapsedHeight, "Collapse restores compact layout and aligned page");
+        Check(!rosterExpanded && rosterPage==compactPage && tacticalContent.sizeDelta.y==Math.Max(tacticalViewport.sizeDelta.y, tacticalCollapsedHeight), "Collapse restores compact layout and aligned page");
         Check(!flightGroupsRoot.gameObject.Active, "Collapsing hides group controls again");
     }
 }

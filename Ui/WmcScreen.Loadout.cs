@@ -4,42 +4,68 @@ using NuclearOption.SavedMission;
 using NuclearOption.UIStyleSystem;
 using TMPro;
 using UnityEngine;
-using UnityEngine.EventSystems;
 using UnityEngine.UI;
 using NOAvionics.Ui;
 
 namespace WingCommand
 {
-    /// <summary>LOADOUT page for persistent pylon-template editing.</summary>
+    /// <summary>LOADOUT page: build summary, airframe grid, template bar and flexible hardpoint rows.
+    /// Everything here edits saved presets; SUPPLY applies a preset to a purchase. No control on this
+    /// page changes an aircraft that is already flying.</summary>
     internal static partial class WmcScreen
     {
-        // Template editing state; current airborne fits are displayed on WING.
+        // ---------------------------------------------------------------- page state
+
         private static TMP_Text loadoutStatusLabel;
         private static TMP_Text loadoutProfileTitle;
         private static Image loadoutProfileRail;
         private static Image loadoutProfileIcon;
+        private static TMP_Text loadoutSavedLabel;
+        private static TMP_Text loadoutChainLabel;
+        private static TMP_Text hardpointCaptionLabel;
+
+        // Build-anchor readouts: station count with pips, total mass and role.
+        private static TMP_Text loadoutStationsLabel;
+        private static TMP_Text loadoutMassLabel;
+        private static TMP_Text loadoutRoleLabel;
+        private static StationPips loadoutStationPips;
+
         private static TMP_Text templateLabel;
-        private static TMP_Text liveryLabel;
         private static TMP_InputField templateNameField;
         private static TMP_Text templateSummaryLabel;
+        private static TMP_Text liveryLabel;
+        private static RectTransform pylonPagerRoot;
+        private static float pylonAreaFull;
+
+        /// <summary>Rows plus card footer between the column headers and the pager, derived from
+        /// BodyHeight at build.</summary>
+        private static float pylonRegion;
+
+        private static TMP_Text airframeEmptyLabel;
         private static WingButton templateSelectButton;
-        private static RectTransform pylonEmptyCard;
-        private static TMP_Text pylonEmptyLabel;
         private static WingButton templateNewButton;
         private static WingButton templateCopyButton;
         private static WingButton templateDeleteButton;
         private static readonly Confirmation templateDeletion = new Confirmation();
+
         private static RectTransform pylonArea;
+        private static RectTransform pylonEmptyCard;
+        private static Image pylonEmptyRail;
+        private static TMP_Text pylonEmptyLabel;
+        private static WingButton pylonEmptyHit;
+        private static Image hardpointFooterRule;
+        private static TMP_Text hardpointTotalLabel;
+        private static TMP_Text hardpointMassLabel;
+        private static TMP_Text hardpointNoteLabel;
         private static WingButton pylonPrevButton;
         private static WingButton pylonNextButton;
         private static TMP_Text pylonPageLabel;
         private static readonly List<PylonRow> pylonRows = new List<PylonRow>();
 
-        private const int AirframeGridRows = 3;
-        private const int AirframeGridCols = 4;
-        private const int AirframeGridCapacity = AirframeGridRows * AirframeGridCols; // Airframe grid capacity.
-        private const float AirframeTileHeight = 36f;
-        private const float AirframeTileGap = 4f;
+        /// <summary>Bounded body viewport for the whole page; content coordinates start at the body
+        /// top. The store popup lives on this content so it clamps to the visible body.</summary>
+        private static RectTransform loadoutBody;
+        private static ScrollRect loadoutScroll;
 
         private static int airframePage;
         private static RectTransform airframePager;
@@ -48,9 +74,23 @@ namespace WingCommand
         private static TMP_Text airframePageLabel;
         private static readonly List<AirframeTile> airframeTiles = new List<AirframeTile>();
 
+        /// <summary>Current pylon page for the edited airframe.</summary>
+        private static int pylonPage;
+
+        /// <summary>Pylon-list origin for row-aligned store popups, content-local.</summary>
+        private static float pylonAreaY;
+
+        /// <summary>Visible pylon rows and their height, derived from BodyHeight at build.</summary>
+        private static int pylonRowsVisible = PylonRowMinRows;
+        private static float pylonRowHeight = PylonRowMinHeight;
+        private static float airframeTileHeight = AirframeTileShort;
+
+        /// <summary>Why template actions are unavailable; surfaced in tooltips and the status
+        /// line.</summary>
+        private static string templateDisabledReason;
+
         /// <summary>Popup entries rebuilt when opened.</summary>
-        private static readonly List<AvKit.PopupEntry> popupEntries =
-            new List<AvKit.PopupEntry>();
+        private static readonly List<AvKit.PopupEntry> popupEntries = new List<AvKit.PopupEntry>();
 
         private static readonly List<WingLoadoutCatalog.StoreOption> storeScratch =
             new List<WingLoadoutCatalog.StoreOption>();
@@ -62,12 +102,56 @@ namespace WingCommand
         /// active.</summary>
         private static string editingTemplateId;
 
-        /// <summary>Current pylon page for the edited airframe.</summary>
-        private static int pylonPage;
+        /// <summary>Template last synchronised into the name field.</summary>
+        private static LoadoutTemplateRecord lastNamedTemplate;
 
-        /// <summary>Visible pylon rows per page, sized for common airframes without excess empty
-        /// space.</summary>
-        private const int PylonRowsPerPage = 5;
+        // ---------------------------------------------------------------- geometry
+
+        private const int AirframeGridRows = 2;
+        private const int AirframeGridCols = 3;
+        private const int AirframeGridCapacity = AirframeGridRows * AirframeGridCols;
+        private const float AirframeTileGap = 4f;
+        private const float AirframeTileShort = 40f;
+        private const float AirframeTileTall = 44f;
+
+        /// <summary>Body height above which the roomier tiles are used: 688 at panel 896, 388 at
+        /// panel 596. Pylon row count and height come from the space left below the headers.</summary>
+        private const float TallBodyHeight = 560f;
+
+        private const int PylonRowMinRows = 5;
+        private const int PylonRowMaxRows = 8;
+        private const float PylonRowMinHeight = 36f;
+        private const float PylonRowMaxHeight = 48f;
+        private const float LoadoutRowGap = 4f;
+
+        /// <summary>Pager under the hardpoint list. Livery lives on SUPPLY.</summary>
+        private const float HardpointFooterHeight = LoadoutRowGap + KeyHeight;
+
+        /// <summary>Caption, value and pips of one build-summary readout.</summary>
+        private const float SummaryReadoutHeight = 42f;
+
+        private const float SummaryCardHeight = 124f;
+
+        /// <summary>Card footer under the hardpoint rows: hidden below this height, second line
+        /// (unfitted stations) above the taller one.</summary>
+        private const float FooterMinHeight = 22f;
+        private const float FooterNoteHeight = 40f;
+
+        private const float PylonNameWidth = 168f;
+        private const float PylonStoreX = 180f;
+        private const float PylonStoreWidth = 148f;
+        private const float PylonMassX = 332f;
+        private const float PylonMassWidth = 48f;
+        private const float PylonActionX = 384f;
+        private const float PylonActionWidth = 52f;
+
+        private static readonly Column[] PylonColumns =
+        {
+            new Column("STATION", 8f, PylonNameWidth),
+            new Column("STORE", PylonStoreX, PylonStoreWidth),
+            new Column("MASS", PylonMassX, PylonMassWidth, rightAligned: true),
+            new Column("ACTION", PylonActionX, PylonActionWidth, rightAligned: true),
+        };
 
         // Loadout-page construction.
 
@@ -76,149 +160,291 @@ namespace WingCommand
         /// fits.</summary>
         private static float AddLoadoutPage(RectTransform parent, float y)
         {
-            loadoutPopup = new AvKit.Popup(parent, PanelWidth);
+            float bodyHeight = BodyHeight;
+            BuildViewport(parent, new Rect(0f, y, PageWidth, bodyHeight), "LoadoutViewport",
+                          out loadoutBody, out loadoutScroll);
+            pageScrolls[(int)Page.Loadout] = loadoutScroll;
 
-            y = Heading(parent, y, "AIRFRAME");
-            float airframeGridTop = y;
-            y = AddAirframeGrid(parent, airframeGridTop);
+            loadoutPopup = new AvKit.Popup(loadoutBody, PageWidth);
 
-            // Build pager after tiles so shared-border rounding cannot let a tile intercept its arrows.
-            airframePager = HeaderPager(parent, airframeGridTop + Space5,
-                                        () => TurnAirframePage(-1), () => TurnAirframePage(1),
-                                        out airframePrevButton, out airframePageLabel, out airframeNextButton);
-            airframePager.SetAsLastSibling();
+            float cy = 0f;
+            cy = AddBuildSummary(loadoutBody, cy);
+            cy = AddAirframeGrid(loadoutBody, cy);
+            cy = AddTemplateBar(loadoutBody, cy);
+            cy = AddHardpoints(loadoutBody, cy);
 
-            y = Heading(parent, y, "TEMPLATE");
+            // Reflow pads content by Pad; hand it a pre-padded bottom so a tall body fits exactly
+            // and a short one scrolls to the livery row.
+            Reflow(loadoutScroll, cy + Pad);
+            return y + cy;
+        }
 
-            float left = Pad + GutterWidth;
-            float inner = PanelWidth - Pad - left;
+        /// <summary>Labelled readout: micro caption over a bold value.</summary>
+        private static TMP_Text SummaryReadout(RectTransform parent, string caption, Rect area,
+                                               float valueSize)
+        {
+            Label(parent, caption, new Rect(area.x, area.y, area.width, 12f), Dim(), FontMicro,
+                  FontStyles.Normal, TextAlignmentOptions.Left);
+            return Label(parent, "—", new Rect(area.x, area.y - 13f, area.width, 18f),
+                         WingUi.TextPrimary, valueSize, FontStyles.Bold, TextAlignmentOptions.Left);
+        }
 
-            // Group template selection with clearly labelled new, copy, and delete actions.
-            const float actionWidth = WingUi.ButtonCompact;
-            const float actionBlock = (actionWidth + Gap) * 3f;
+        /// <summary>Build summary: silhouette, designation, template name and saved state, then
+        /// labelled station, mass and role readouts over the airframe -> template -> stations
+        /// chain.</summary>
+        private static float AddBuildSummary(RectTransform parent, float y)
+        {
+            float w = ContentWidth;
+            var (_, rail) = WingUi.TacticalCard(parent, new Rect(Pad, y, w, SummaryCardHeight),
+                                                WingUi.RailCyan);
+            loadoutProfileRail = rail;
 
-            Gutter(parent, y, "TEMPLATE");
-            float selectWidth = inner - actionBlock;
-            templateSelectButton = WingUi.Button(parent, "", new Rect(left, y, selectWidth, RowHeight),
-                                                 FontSmall, UiButtonStyle.Default,
-                                                 () => OpenTemplatePicker(left, y, selectWidth))
-                                        .WithTooltip(LoadoutHint.Select);
-            templateLabel = null;
+            loadoutProfileIcon = AddSprite(parent, "LoadoutProfileAirframe", IconFactory.Get("airframe"),
+                                           new Rect(Pad + Space2, y - Space3 - 4f, 48f, 34f), Dim());
 
-            float actionX = left + selectWidth + Gap;
-            templateNewButton = WingUi.Button(parent, "NEW", new Rect(actionX, y, actionWidth, RowHeight),
-                                              FontSmall, UiButtonStyle.Default, NewTemplate)
-                                     .WithTooltip(LoadoutHint.New);
-            templateCopyButton = WingUi.Button(parent, "COPY",
-                                               new Rect(actionX + actionWidth + Gap, y,
-                                                        actionWidth, RowHeight),
-                                               FontSmall, UiButtonStyle.Default, CopyTemplate)
-                                      .WithTooltip(LoadoutHint.Copy);
-            templateDeleteButton = WingUi.Button(parent, "DEL",
-                                                 new Rect(actionX + (actionWidth + Gap) * 2f, y,
-                                                          actionWidth, RowHeight),
-                                                 FontSmall, UiButtonStyle.Danger, DeleteTemplate)
-                                        .WithTooltip(LoadoutHint.Delete);
-            y -= RowHeight + Gap;
+            float textX = Pad + Space2 + 48f + Space3;
+            float textW = Pad + w - Space3 - textX;
+            const float stateWidth = 112f;
 
-            // Offer rename input only when keyboard capture works; otherwise show the saved/default
-            // name without leaking typing into flight controls.
-            Gutter(parent, y, "NAME");
-            float nameWidth = inner;
+            loadoutProfileTitle = Label(parent, "NO AIRFRAME SELECTED",
+                                        new Rect(textX, y - 6f, textW - stateWidth - Gap, 18f),
+                                        WingUi.TextPrimary, FontLead, FontStyles.Bold,
+                                        TextAlignmentOptions.Left);
+            loadoutProfileTitle.overflowMode = TextOverflowModes.Ellipsis;
+
+            loadoutSavedLabel = Label(parent, "", new Rect(textX + textW - stateWidth, y - 6f,
+                                                            stateWidth, 18f),
+                                      Dim(), FontSmall, FontStyles.Bold, TextAlignmentOptions.Right);
+
+            // Labelled readouts carry the build anchor: station count with pips, mass and role.
+            const float stationW = 140f;
+            const float massX = 230f;
+            const float massW = 88f;
+            const float roleX = 326f;
+            float roleW = textX + textW - roleX;
+            float bandY = y - 30f;
+
+            loadoutStationsLabel = SummaryReadout(parent, "STATIONS",
+                                                  new Rect(textX, bandY, stationW, SummaryReadoutHeight),
+                                                  FontBody);
+            loadoutStationPips = new StationPips(parent, textX, bandY - 33f);
+            loadoutMassLabel = SummaryReadout(parent, "MASS",
+                                              new Rect(massX, bandY, massW, SummaryReadoutHeight),
+                                              FontBody);
+            loadoutRoleLabel = SummaryReadout(parent, "ROLE",
+                                              new Rect(roleX, bandY, roleW, SummaryReadoutHeight),
+                                              FontBody);
+
+            // Role detail: the store mix behind the role word.
+            templateSummaryLabel = Label(parent, "", new Rect(roleX, bandY - 31f, roleW, 12f),
+                                         Dim(), FontMicro, FontStyles.Normal,
+                                         TextAlignmentOptions.Left);
+            templateSummaryLabel.overflowMode = TextOverflowModes.Ellipsis;
+
+            Rule(parent, new Rect(massX - Space2, bandY, 1f, SummaryReadoutHeight), WingUi.BorderSubtle);
+            Rule(parent, new Rect(roleX - Space2, bandY, 1f, SummaryReadoutHeight), WingUi.BorderSubtle);
+
+            Label(parent, "NAME", new Rect(textX, y - 74f, 38f, 26f), Dim(), FontMicro,
+                  FontStyles.Normal, TextAlignmentOptions.MidlineLeft);
+            float nameX = textX + 42f;
+            float nameW = textW - 42f;
 
             if (WingKeyboardGuard.Available)
             {
+                templateLabel = null;
                 templateNameField = WingUi.InputField(
-                    parent, new Rect(left, y, nameWidth, RowHeight),
+                    parent, new Rect(nameX, y - 74f, nameW, 26f),
                     EconomyFacade.LoadoutTemplates.MaxNameLength, RenameTemplate, LoadoutHint.Name);
             }
             else
             {
-                Panel(parent, new Rect(left, y, nameWidth, RowHeight), RowColor());
+                templateNameField = null;
+                Panel(parent, new Rect(nameX, y - 74f, nameW, 26f), RowColor());
                 templateLabel = Label(parent, "",
-                                      new Rect(left + Space2, y, nameWidth - Space4, RowHeight),
+                                      new Rect(nameX + Space2, y - 74f, nameW - Space4, 26f),
                                       Dim(), FontBody, FontStyles.Normal,
-                                      TextAlignmentOptions.Left);
+                                      TextAlignmentOptions.MidlineLeft);
             }
 
-            y -= RowHeight + Gap;
+            loadoutChainLabel = Label(parent, "", new Rect(textX, y - 104f, textW, 14f),
+                                      Dim(), FontMicro, FontStyles.Normal,
+                                      TextAlignmentOptions.Left);
+            loadoutChainLabel.overflowMode = TextOverflowModes.Ellipsis;
 
-            Gutter(parent, y, "LIVERY");
-            Stepper(parent, left, y, nameWidth, out liveryLabel, () => CycleLivery(-1), () => CycleLivery(1),
-                    "Select paint livery for requisitioned aircraft of this type");
+            float bottom = y - SummaryCardHeight;
+            loadoutStatusLabel = Label(parent, "", new Rect(Pad + 2f, bottom - 4f, w - 4f, 14f),
+                                       Dim(), FontMicro, FontStyles.Normal,
+                                       TextAlignmentOptions.Left);
+            loadoutStatusLabel.enableWordWrapping = false;
+            loadoutStatusLabel.overflowMode = TextOverflowModes.Ellipsis;
 
-            y -= RowHeight + Gap;
+            return bottom - 4f - 14f - Gap;
+        }
 
-            y = Heading(parent, y, "PYLONS");
-            y = ColumnHeaders(parent, y, PylonColumns);
+        /// <summary>Airframe picker: header with pager, then a 2x3 tile grid.</summary>
+        private static float AddAirframeGrid(RectTransform parent, float y)
+        {
+            airframeTiles.Clear();
+            float w = ContentWidth;
+            airframeTileHeight = BodyHeight >= TallBodyHeight ? AirframeTileTall : AirframeTileShort;
+
+            float gridTop = SectionHeader(parent, Pad, y, w, "AIRFRAME");
+            float colWidth = (w - (AirframeGridCols - 1) * AirframeTileGap) / AirframeGridCols;
+
+            airframeEmptyLabel = Label(parent,
+                "NO COMPATIBLE AIRFRAMES\nAvailable aircraft types appear here.",
+                new Rect(Pad + Space2, gridTop - Space2, w - Space4,
+                         AirframeGridRows * airframeTileHeight - Space4),
+                Dim(), FontSmall, FontStyles.Normal, TextAlignmentOptions.TopLeft);
+            airframeEmptyLabel.enableWordWrapping = true;
+
+            for (int r = 0; r < AirframeGridRows; r++)
+            {
+                float rowY = gridTop - r * (airframeTileHeight + AirframeTileGap);
+                for (int c = 0; c < AirframeGridCols; c++)
+                {
+                    float tileX = Pad + c * (colWidth + AirframeTileGap);
+                    int index = r * AirframeGridCols + c;
+                    airframeTiles.Add(new AirframeTile(parent,
+                        new Rect(tileX, rowY, colWidth, airframeTileHeight), index));
+                }
+            }
+
+            // Build the pager after tiles so shared-border rounding cannot let a tile intercept its
+            // arrows, then pull it back inside the content column.
+            airframePager = HeaderPager(parent, y - 2f, () => TurnAirframePage(-1),
+                                        () => TurnAirframePage(1), out airframePrevButton,
+                                        out airframePageLabel, out airframeNextButton);
+            Place(airframePager, new Rect(Pad + w - HeaderPagerWidth, y - 2f,
+                                          HeaderPagerWidth, HeaderPagerHeight));
+            airframePager.SetAsLastSibling();
+
+            float gridBottom = gridTop -
+                (AirframeGridRows * airframeTileHeight + (AirframeGridRows - 1) * AirframeTileGap);
+            return gridBottom - Gap;
+        }
+
+        /// <summary>Template bar: selector plus NEW / COPY / DELETE, the destructive control separated
+        /// from the group.</summary>
+        private static float AddTemplateBar(RectTransform parent, float y)
+        {
+            float w = ContentWidth;
+            const float barH = 22f;
+            const float actionW = 64f;
+            const float deleteSeparation = 8f;
+            float selectW = w - (actionW * 3f + 4f * 2f + deleteSeparation);
+            Image track = Panel(parent, new Rect(Pad, y, w - actionW - deleteSeparation, barH), WingUi.CardFill);
+            track.sprite = AvSprites.Slot;
+            track.type = Image.Type.Sliced;
+            track.raycastTarget = false;
+
+            float pickerY = y;
+            templateSelectButton = WingUi.Button(parent, "", new Rect(Pad + 2f, y - 2f, selectW - 4f, barH - 4f),
+                                                 FontMicro, UiButtonStyle.Default,
+                                                 () => OpenTemplatePicker(Pad, pickerY, selectW))
+                                        .WithTooltip(LoadoutHint.Select);
+
+            float x = Pad + selectW + 2f;
+            templateNewButton = WingUi.Button(parent, "NEW", new Rect(x, y - 2f, actionW - 4f, barH - 4f),
+                                              FontMicro, UiButtonStyle.Default, NewTemplate)
+                                     .WithTooltip(LoadoutHint.New);
+            StampKey(templateNewButton, "tasking", WingUi.RailCyan, barH - 4f);
+            x += actionW;
+            templateCopyButton = WingUi.Button(parent, "COPY", new Rect(x, y - 2f, actionW - 4f, barH - 4f),
+                                               FontMicro, UiButtonStyle.Default, CopyTemplate)
+                                      .WithTooltip(LoadoutHint.Copy);
+            StampKey(templateCopyButton, "formation", WingUi.RailCyan, barH - 4f);
+            x += actionW + deleteSeparation;
+            templateDeleteButton = WingUi.Button(parent, "DELETE", new Rect(x, y, actionW, barH),
+                                                 FontMicro, UiButtonStyle.Danger, DeleteTemplate)
+                                        .WithTooltip(LoadoutHint.Delete);
+            StampKey(templateDeleteButton, "fallback", Alert(), barH);
+
+            return y - barH - Gap;
+        }
+
+        /// <summary>Hardpoints: caption, column headers, flexible rows, a card footer carrying the
+        /// fit totals and the pager anchored under the card.</summary>
+        private static float AddHardpoints(RectTransform parent, float y)
+        {
+            float w = ContentWidth;
+
+            float captionBottom = SectionHeader(parent, Pad, y, w, "HARDPOINTS");
+            hardpointCaptionLabel = Label(parent, "", new Rect(Pad + 10f, y - 1f, w - 10f, 14f),
+                                          Dim(), FontMicro, FontStyles.Normal,
+                                          TextAlignmentOptions.Right);
+
+            float rowsTop = ColumnHeaders(parent, captionBottom - 2f, PylonColumns);
+
+            // Fewest rows that fit at the 48-unit ceiling: rows grow from 36 towards 48 with the
+            // body, and the card footer absorbs whatever the page leaves below them.
+            pylonRegion = Mathf.Max(0f, rowsTop - (-BodyHeight + HardpointFooterHeight));
+            pylonRowsVisible = Mathf.Clamp(Mathf.FloorToInt(pylonRegion / PylonRowMaxHeight),
+                                           PylonRowMinRows, PylonRowMaxRows);
+            pylonRowHeight = Mathf.Clamp(pylonRegion / pylonRowsVisible,
+                                         PylonRowMinHeight, PylonRowMaxHeight);
+            pylonAreaFull = Mathf.Max(pylonRegion, pylonRowsVisible * pylonRowHeight);
 
             var area = new GameObject("PylonArea", typeof(RectTransform));
             pylonArea = area.GetComponent<RectTransform>();
             pylonArea.SetParent(parent, worldPositionStays: false);
+            float areaHeight = pylonAreaFull;
+            Place(pylonArea, new Rect(Pad, rowsTop, w, areaHeight));
+            pylonAreaY = rowsTop;
 
-            float areaHeight = RowPitch * PylonRowsPerPage;
-            Place(pylonArea, new Rect(Pad, y, PanelWidth - Pad * 2f, areaHeight));
-            pylonAreaY = y;
+            var (emptyBg, emptyRail) = WingUi.TacticalCard(pylonArea, new Rect(0f, 0f, w, areaHeight),
+                                                           WingUi.RailInert);
+            emptyBg.color = AvTheme.SurfaceInert;
+            pylonEmptyCard = emptyBg.rectTransform;
+            pylonEmptyRail = emptyRail;
+            pylonEmptyLabel = Label(pylonEmptyCard,
+                "NO TEMPLATE SELECTED  ·  CLICK TO CREATE [+ NEW]\nConfigure custom stores and pylon mounts for this airframe.",
+                new Rect(Space4, -(areaHeight - 44f) * 0.5f, w - Space4 * 2f, 44f),
+                Friendly(), FontSmall, FontStyles.Normal, TextAlignmentOptions.Center);
+            pylonEmptyLabel.enableWordWrapping = true;
+            pylonEmptyHit = WingUi.HitButton(pylonEmptyCard, new Rect(0f, 0f, w, areaHeight), NewTemplate)
+                                 .WithTooltip("Click to create a new custom template for this airframe");
 
-            pylonEmptyCard = WingUi.TacticalCard(pylonArea, new Rect(0f, 0f, PanelWidth - Pad * 2f, areaHeight), WingUi.RailInert, hasRail: false).CardFill.rectTransform;
-            pylonEmptyLabel = EmptyNote(pylonEmptyCard, "NO HARDPOINTS DETECTED ON AIRFRAME");
-
-            for (int i = 0; i < PylonRowsPerPage; i++) pylonRows.Add(new PylonRow(pylonArea, i));
-            y -= areaHeight + Gap;
-
-            pylonPrevButton = Pager(parent, y, "<", () => TurnPylonPage(-1));
-            pylonPageLabel = PagerLabel(parent, y);
-            pylonNextButton = Pager(parent, y, ">", () => TurnPylonPage(1));
-            y -= RowHeight + Gap;
-
-            return AddLoadoutProfile(parent, y);
-        }
-
-        /// <summary>Show aggregate mass, role, and next-step feedback below the pylon rows.</summary>
-        private static float AddLoadoutProfile(RectTransform parent, float y)
-        {
-            const float height = 96f;
-            const float iconSize = 58f;
-            float w = PanelWidth - Pad * 2f;
-            float textX = Pad + Space3;
-            float iconX = Pad + w - iconSize - Space2;
-            float textW = iconX - textX - Space2;
-
-            var (_, rail) = WingUi.TacticalCard(parent, new Rect(Pad, y, w, height), WingUi.RailCyan);
-            loadoutProfileRail = rail;
-            loadoutProfileTitle = Label(parent, "LOADOUT PROFILE", new Rect(textX, y - Space2, textW, LineHeight),
-                                        WingUi.RailCyan, FontMicro, FontStyles.Bold,
+            // Card footer: fit totals on the first line, unfitted stations on the second when the
+            // card is tall enough. It is what lets the card reach the pager at the body foot.
+            hardpointFooterRule = Rule(pylonArea, new Rect(1f, -areaHeight, w - 2f, 1f),
+                                       WingUi.BorderSubtle);
+            hardpointTotalLabel = Label(pylonArea, "", new Rect(10f, -areaHeight, w - 20f, 14f),
+                                        Dim(), FontMicro, FontStyles.Normal,
                                         TextAlignmentOptions.Left);
-            templateSummaryLabel = Label(parent, "", new Rect(textX, y - 28f, textW, LineHeight),
-                                         Dim(), FontSmall, FontStyles.Normal,
-                                         TextAlignmentOptions.Left);
-            loadoutStatusLabel = Label(parent, "", new Rect(textX, y - 50f, textW, 30f),
+            hardpointMassLabel = Label(pylonArea, "", new Rect(PylonMassX, -areaHeight,
+                                                               PylonMassWidth, 14f),
                                        Dim(), FontMicro, FontStyles.Normal,
-                                       TextAlignmentOptions.TopLeft);
-            loadoutStatusLabel.enableWordWrapping = true;
-            loadoutStatusLabel.overflowMode = TextOverflowModes.Ellipsis;
-            loadoutProfileIcon = AddSprite(parent, "LoadoutProfileAirframe", IconFactory.Get("airframe"),
-                                           new Rect(iconX, y - Space3, iconSize, iconSize), Dim());
-            return y - height - Gap;
+                                       TextAlignmentOptions.MidlineRight);
+            hardpointNoteLabel = Label(pylonArea, "", new Rect(10f, -areaHeight, w - 20f, 14f),
+                                       Dim(), FontMicro, FontStyles.Normal,
+                                       TextAlignmentOptions.Left);
+            hardpointFooterRule.gameObject.SetActive(false);
+            hardpointTotalLabel.gameObject.SetActive(false);
+            hardpointMassLabel.gameObject.SetActive(false);
+            hardpointNoteLabel.gameObject.SetActive(false);
+
+            pylonRows.Clear();
+            for (int i = 0; i < pylonRowsVisible; i++)
+                pylonRows.Add(new PylonRow(pylonArea, i, pylonRowHeight));
+
+            float pagerY = rowsTop - areaHeight - LoadoutRowGap;
+            pylonPagerRoot = PageRoot(parent, "PylonPager");
+            Place(pylonPagerRoot, new Rect(Pad, pagerY, w, KeyHeight));
+            (pylonPrevButton, pylonPageLabel, pylonNextButton) = PagerRow(
+                pylonPagerRoot, 0f, w, () => TurnPylonPage(-1), () => TurnPylonPage(1),
+                null, KeyHeight);
+
+            return pagerY - KeyHeight;
         }
 
-        /// <summary>Pylon-list origin for row-aligned store popups.</summary>
-        private static float pylonAreaY;
-
-        private static readonly Column[] PylonColumns =
-        {
-            new Column("PYLON", Space2, 140f),
-            // Left-align store names so ellipsis preserves their identifying prefix.
-            new Column("STORE", 152f, PanelWidth - Pad * 2f - 152f - Space2),
-        };
-
-        /// <summary>Create a fixed-height viewport for a page of roster rows.</summary>
+        /// <summary>Fixed-height viewport container used by the pilot roster on WING.</summary>
         private static RectTransform RosterViewport(RectTransform parent, string name, float y, int rowCount = RosterRowsPerPage)
         {
             var area = new GameObject(name, typeof(RectTransform));
             RectTransform rt = area.GetComponent<RectTransform>();
             rt.SetParent(parent, worldPositionStays: false);
-            Place(rt, new Rect(Pad, y, PanelWidth - Pad * 2f, RowPitch * rowCount));
+            Place(rt, new Rect(Pad, y, PageWidth - Pad * 2f, RowPitch * rowCount));
             return rt;
         }
 
@@ -240,30 +466,11 @@ namespace WingCommand
             RefreshLoadoutPage();
         }
 
-        private static float AddAirframeGrid(RectTransform parent, float y)
-        {
-            airframeTiles.Clear();
-            float w = PanelWidth - Pad * 2f;
-            float colWidth = (w - (AirframeGridCols - 1) * AirframeTileGap) / AirframeGridCols;
-
-            for (int r = 0; r < AirframeGridRows; r++)
-            {
-                float rowY = y - r * (AirframeTileHeight + AirframeTileGap);
-                for (int c = 0; c < AirframeGridCols; c++)
-                {
-                    float tileX = Pad + c * (colWidth + AirframeTileGap);
-                    int index = r * AirframeGridCols + c;
-                    airframeTiles.Add(new AirframeTile(parent, new Rect(tileX, rowY, colWidth, AirframeTileHeight), index));
-                }
-            }
-
-            return y - (AirframeGridRows * AirframeTileHeight + (AirframeGridRows - 1) * AirframeTileGap + Gap);
-        }
-
         private static void RefreshAirframeGrid()
         {
             IReadOnlyList<WingShop.Offer> offers = EconomyFacade.Shop.LoadoutCatalogue();
 
+            if (airframeEmptyLabel != null) airframeEmptyLabel.gameObject.SetActive(offers.Count == 0);
             if (selectedOffer == null && offers.Count > 0)
                 selectedOffer = offers[0].Definition;
 
@@ -421,8 +628,9 @@ namespace WingCommand
             if (!templateDeletion.IsArmedFor(doomed))
             {
                 templateDeletion.Arm(doomed);
-                WingCommandManager.Instance?.Toast("Select DEL again within 3 seconds to delete " + name);
+                WingCommandManager.Instance?.Toast("Select DELETE again within 3 seconds to delete " + name);
                 RefreshTemplateControls(doomed);
+                RefreshLoadoutStatus(doomed);
                 return;
             }
 
@@ -539,10 +747,9 @@ namespace WingCommand
                     option.Key == current));
             }
 
-            // Open the store list beside its pylon row.
-            float rowY = pylonAreaY - RowPitch * rowIndex - RowHeight;
-            loadoutPopup?.Show(new Rect(Pad, rowY, PanelWidth - Pad * 2f, 0f), popupEntries,
-                               index =>
+            // Open the store list below its pylon row; the popup clamps itself into the viewport.
+            float rowY = pylonAreaY - pylonRowHeight * rowIndex - pylonRowHeight;
+            loadoutPopup?.Show(new Rect(Pad, rowY, ContentWidth, 0f), popupEntries, index =>
             {
                 if (index < 0 || index >= keys.Count) return;
                 SetStore(pylon, keys[index]);
@@ -579,6 +786,7 @@ namespace WingCommand
             RefreshTemplateControls(template);
             RefreshLiveryControl();
             RefreshPylonRows(template);
+            RefreshTemplateSummary(template);
             RefreshLoadoutStatus(template);
         }
 
@@ -612,11 +820,20 @@ namespace WingCommand
             RefreshLiveryControl();
         }
 
+        /// <summary>Update the template bar; disabled controls carry their reason in the tooltip and
+        /// the status line.</summary>
         private static void RefreshTemplateControls(LoadoutTemplateRecord template)
         {
             bool haveAirframe = selectedOffer != null;
             bool readable = haveAirframe && EconomyFacade.LoadoutCatalog.PylonCount(selectedOffer) > 0;
             int saved = haveAirframe ? EconomyFacade.LoadoutTemplates.CountFor(selectedOffer) : 0;
+            int max = EconomyFacade.LoadoutTemplates.MaxPerAirframe;
+            bool atLimit = saved >= max;
+
+            templateDisabledReason = !haveAirframe ? "Select an airframe to edit its saved presets."
+                : !readable ? "Hardpoint data is unavailable; this airframe uses its standard fit."
+                : atLimit ? "Template limit reached (" + max + ") — delete a template to make room."
+                : null;
 
             if (templateSelectButton != null)
             {
@@ -626,94 +843,208 @@ namespace WingCommand
                     : "NO TEMPLATES");
                 templateSelectButton.SetEnabled(saved > 0);
                 templateSelectButton.SetLatched(template != null);
+                templateSelectButton.WithTooltip(saved > 0
+                    ? LoadoutHint.Select
+                    : "No saved presets for this airframe yet — NEW makes one.");
             }
 
-            templateNewButton?.SetEnabled(readable &&
-                                          saved < EconomyFacade.LoadoutTemplates.MaxPerAirframe);
-            templateCopyButton?.SetEnabled(template != null &&
-                                           saved < EconomyFacade.LoadoutTemplates.MaxPerAirframe);
+            if (templateNewButton != null)
+            {
+                templateNewButton.SetEnabled(readable && !atLimit);
+                templateNewButton.WithTooltip(!haveAirframe ? "Select an airframe first."
+                    : !readable ? "Hardpoint data is unavailable; this airframe uses its standard fit."
+                    : atLimit ? "Template limit reached (" + max + "). Delete a template to make room."
+                    : LoadoutHint.New);
+            }
+
+            if (templateCopyButton != null)
+            {
+                templateCopyButton.SetEnabled(template != null && !atLimit);
+                templateCopyButton.WithTooltip(template == null ? "Select a template to copy."
+                    : atLimit ? "Template limit reached. Delete a template to copy over."
+                    : LoadoutHint.Copy);
+            }
+
             if (templateDeleteButton != null)
             {
                 bool deleteArmed = templateDeletion.IsArmedFor(template);
                 templateDeleteButton.SetEnabled(template != null);
                 templateDeleteButton.SetLatched(deleteArmed);
-                templateDeleteButton.SetText(deleteArmed ? "DEL?" : "DEL");
+                templateDeleteButton.SetText(deleteArmed ? "DELETE?" : "DELETE");
+                templateDeleteButton.WithTooltip(template == null ? "Nothing to delete."
+                    : deleteArmed ? "Press again within 3 seconds to delete " + template.Name +
+                                    ". Aircraft already flying it keep their fit."
+                    : LoadoutHint.Delete);
             }
+
             // Refresh name text only when the edited template changes.
             if (!ReferenceEquals(lastNamedTemplate, template))
             {
                 lastNamedTemplate = template;
                 SyncNameField();
             }
-
-            RefreshTemplateSummary(template);
         }
 
-        /// <summary>Template last synchronised into the name field.</summary>
-        private static LoadoutTemplateRecord lastNamedTemplate;
-
-        /// <summary>Summarise loaded stations, total mass, and role so per-pylon editing exposes the whole
-        /// fit's weight.</summary>
+        /// <summary>Summarise the saved fit into the build-anchor readouts: station count with pips,
+        /// total mass, role and the store mix behind it.</summary>
         private static void RefreshTemplateSummary(LoadoutTemplateRecord template)
         {
             RefreshLoadoutProfileChrome(template);
-            if (templateSummaryLabel == null) return;
+            RefreshHardpointCaption(template);
+            if (loadoutStationsLabel == null) return;
 
-            if (template == null)
+            FitTotals fit = MeasureFit(template);
+            loadoutStationPips?.Set(fit.Fitted, fit.Stations);
+
+            if (selectedOffer == null)
             {
-                templateSummaryLabel.text = selectedOffer == null
-                    ? "NO AIRFRAME SELECTED"
-                    : "NO SAVED TEMPLATE  ·  STANDARD FIT ONLY";
-                templateSummaryLabel.color = selectedOffer == null ? Dim() : Warning();
+                loadoutStationsLabel.text = "—";
+                loadoutStationsLabel.color = Dim();
+                loadoutMassLabel.text = "—";
+                loadoutMassLabel.color = Dim();
+                loadoutRoleLabel.text = "—";
+                loadoutRoleLabel.color = Dim();
+                templateSummaryLabel.text = "";
                 return;
             }
 
-            int fitted = 0;
-            float mass = 0f;
-            float air = 0f;
-            float surface = 0f;
+            if (template == null)
+            {
+                loadoutStationsLabel.text = "0 / " + fit.Stations;
+                loadoutStationsLabel.color = Warning();
+                loadoutMassLabel.text = "—";
+                loadoutMassLabel.color = Dim();
+                loadoutRoleLabel.text = "—";
+                loadoutRoleLabel.color = Dim();
+                templateSummaryLabel.text = "NO SAVED PRESET";
+                templateSummaryLabel.color = Warning();
+                return;
+            }
 
-            int count = EconomyFacade.LoadoutCatalog.PylonCount(selectedOffer);
-            for (int i = 0; i < count; i++)
+            loadoutStationsLabel.text = fit.Fitted + " / " + fit.Stations;
+            loadoutStationsLabel.color = fit.Fitted == 0 ? Warning() : WingUi.TextPrimary;
+            loadoutMassLabel.text = Grouped(fit.Mass) + " kg";
+            loadoutMassLabel.color = fit.Fitted == 0 ? Dim() : WingUi.TextPrimary;
+            loadoutRoleLabel.text = FitRole(fit).ToUpperInvariant();
+            loadoutRoleLabel.color = fit.Fitted == 0 ? Warning() : Friendly();
+            templateSummaryLabel.text = StoreMix(fit);
+            templateSummaryLabel.color = Dim();
+        }
+
+        /// <summary>One pass over the saved fit: stations, fitted count, mass and store mix.</summary>
+        private struct FitTotals
+        {
+            public int Stations;
+            public int Fitted;
+            public float Mass;
+            public int Air;
+            public int Surface;
+            public int Cargo;
+            public float AirScore;
+            public float SurfaceScore;
+        }
+
+        private static FitTotals MeasureFit(LoadoutTemplateRecord template)
+        {
+            var fit = new FitTotals();
+            fit.Stations = selectedOffer != null
+                ? EconomyFacade.LoadoutCatalog.PylonCount(selectedOffer)
+                : 0;
+            if (template == null) return fit;
+
+            for (int i = 0; i < fit.Stations; i++)
             {
                 string key = template.KeyAt(i);
                 if (string.IsNullOrEmpty(key)) continue;
 
                 WingLoadoutCatalog.StoreOption store =
                     EconomyFacade.LoadoutCatalog.StoreOn(selectedOffer, i, key);
-                fitted++;
-                mass += store.Mass;
-                air += store.AntiAir;
-                surface += store.AntiSurface;
+                fit.Fitted++;
+                fit.Mass += store.Mass;
+
+                // StoreOption exposes cargo plus A-A/A-G effectiveness; missile-defence values are
+                // not projected by the catalogue, so they cannot colour the role.
+                if (store.Cargo)
+                {
+                    fit.Cargo++;
+                    continue;
+                }
+                fit.AirScore += store.AntiAir;
+                fit.SurfaceScore += store.AntiSurface;
+                if (store.AntiAir > 0f) fit.Air++;
+                if (store.AntiSurface > 0f) fit.Surface++;
             }
 
-            string role = air <= 0f && surface <= 0f ? "unarmed"
-                : air > surface * 1.5f ? "air-to-air"
-                : surface > air * 1.5f ? "air-to-ground"
-                : "multirole";
-
-            templateSummaryLabel.text =
-                fitted + " of " + count + " pylons  ·  " + Grouped(mass) + " kg  ·  " +
-                role;
-            templateSummaryLabel.color = fitted == 0 ? Warning() : Dim();
+            return fit;
         }
 
-        /// <summary>Refresh selected-airframe title and silhouette even when station data or a template is
-        /// unavailable.</summary>
+        private static string FitRole(FitTotals fit) =>
+            fit.AirScore <= 0f && fit.SurfaceScore <= 0f
+                ? fit.Cargo > 0 ? "transport" : "unarmed"
+                : fit.AirScore > fit.SurfaceScore * 1.5f ? "air-to-air"
+                : fit.SurfaceScore > fit.AirScore * 1.5f ? "air-to-ground"
+                : "multirole";
+
+        /// <summary>Store mix behind the role word, e.g. "A-A 4 · A-G 2".</summary>
+        private static string StoreMix(FitTotals fit)
+        {
+            string mix = "";
+            if (fit.Air > 0) mix = "A-A " + fit.Air;
+            if (fit.Surface > 0) mix += (mix.Length > 0 ? "  ·  " : "") + "A-G " + fit.Surface;
+            if (fit.Cargo > 0) mix += (mix.Length > 0 ? "  ·  " : "") + "CARGO " + fit.Cargo;
+            return mix;
+        }
+
+        /// <summary>Right-aligned caption naming the airframe and template currently edited.</summary>
+        private static void RefreshHardpointCaption(LoadoutTemplateRecord template)
+        {
+            if (hardpointCaptionLabel == null) return;
+
+            if (selectedOffer == null)
+            {
+                hardpointCaptionLabel.text = "NO AIRFRAME";
+                hardpointCaptionLabel.color = Dim();
+                return;
+            }
+
+            string code = !string.IsNullOrEmpty(selectedOffer.code)
+                ? selectedOffer.code
+                : AvTheme.Truncate(selectedOffer.unitName, 12);
+            string preset = template != null
+                ? AvTheme.Truncate(template.Name, 18).ToUpperInvariant()
+                : "NO TEMPLATE";
+
+            hardpointCaptionLabel.text = code + "  ·  " + preset;
+            hardpointCaptionLabel.color = template != null ? Friendly() : Warning();
+        }
+
+        /// <summary>Refresh selected-airframe title, saved state and silhouette even when station data
+        /// or a template is unavailable.</summary>
         private static void RefreshLoadoutProfileChrome(LoadoutTemplateRecord template)
         {
             if (selectedOffer == null)
             {
                 if (loadoutProfileTitle != null)
                 {
-                    loadoutProfileTitle.text = "LOADOUT PROFILE  ·  NO AIRFRAME";
+                    loadoutProfileTitle.text = "NO AIRFRAME SELECTED";
                     loadoutProfileTitle.color = Dim();
                 }
                 if (loadoutProfileRail != null) loadoutProfileRail.color = Dim();
                 if (loadoutProfileIcon != null)
                 {
                     loadoutProfileIcon.sprite = IconFactory.Get("airframe");
+                    loadoutProfileIcon.enabled = loadoutProfileIcon.sprite != null;
                     loadoutProfileIcon.color = Dim();
+                }
+                if (loadoutSavedLabel != null)
+                {
+                    loadoutSavedLabel.text = "—";
+                    loadoutSavedLabel.color = Dim();
+                }
+                if (loadoutChainLabel != null)
+                {
+                    loadoutChainLabel.text = "Pick an airframe, then a saved preset, to see its fit.";
+                    loadoutChainLabel.color = Dim();
                 }
                 return;
             }
@@ -722,40 +1053,89 @@ namespace WingCommand
                 ? selectedOffer.code
                 : AvTheme.Truncate(selectedOffer.unitName, 12);
             string templateName = template != null
-                ? AvTheme.Truncate(template.Name, 14).ToUpperInvariant()
+                ? AvTheme.Truncate(template.Name, 18).ToUpperInvariant()
                 : "NO TEMPLATE";
 
             if (loadoutProfileTitle != null)
             {
-                loadoutProfileTitle.text = "LOADOUT PROFILE  ·  " + designation + "  ·  " + templateName;
-                loadoutProfileTitle.color = template != null ? WingUi.RailCyan : Warning();
+                loadoutProfileTitle.text = designation + "  ·  " + templateName;
+                loadoutProfileTitle.color = template != null ? WingUi.TextPrimary : Dim();
             }
             if (loadoutProfileRail != null)
                 loadoutProfileRail.color = template != null ? WingUi.RailEmerald : Warning();
             if (loadoutProfileIcon != null)
             {
                 loadoutProfileIcon.sprite = IconFactory.Aircraft(selectedOffer);
+                loadoutProfileIcon.enabled = loadoutProfileIcon.sprite != null;
                 loadoutProfileIcon.color = template != null ? Friendly() : Dim();
+            }
+            if (loadoutSavedLabel != null)
+            {
+                loadoutSavedLabel.text = template != null ? "SAVED" : "NO TEMPLATE";
+                loadoutSavedLabel.color = template != null ? Green() : Warning();
+            }
+            if (loadoutChainLabel != null)
+            {
+                int stations = EconomyFacade.LoadoutCatalog.PylonCount(selectedOffer);
+                loadoutChainLabel.text = designation + "  >  " + templateName + "  >  " +
+                    stations + " STATIONS  ·  APPLIED ON SUPPLY · FIT";
+                loadoutChainLabel.color = template != null ? Dim() : Warning();
             }
         }
 
         private static void RefreshPylonRows(LoadoutTemplateRecord template)
         {
-            int pages = Mathf.Max(1, Mathf.CeilToInt(visiblePylons.Count /
-                                                     (float)PylonRowsPerPage));
+            int perPage = Mathf.Max(1, pylonRowsVisible);
+            int pages = Mathf.Max(1, Mathf.CeilToInt(visiblePylons.Count / (float)perPage));
             pylonPage = Mathf.Clamp(pylonPage, 0, pages - 1);
+
+            bool hasPylons = visiblePylons.Count > 0 && template != null;
+            bool creatable = selectedOffer != null &&
+                             EconomyFacade.LoadoutCatalog.PylonCount(selectedOffer) > 0;
+            if (pylonEmptyCard != null) pylonEmptyCard.gameObject.SetActive(!hasPylons);
+            if (pylonEmptyLabel != null)
+            {
+                pylonEmptyLabel.gameObject.SetActive(!hasPylons);
+                pylonEmptyLabel.text = selectedOffer == null ? "SELECT AN AIRFRAME TO VIEW HARDPOINTS"
+                    : visiblePylons.Count == 0 ? "HARDPOINT DATA UNAVAILABLE\nThis airframe flies its standard fit."
+                    : "NO TEMPLATE SELECTED  ·  CLICK TO CREATE [+ NEW]\nConfigure custom stores and pylon mounts for this airframe.";
+                pylonEmptyLabel.enableWordWrapping = true;
+            }
+            if (pylonEmptyHit != null)
+            {
+                // Inert card unless creating a template is actually possible.
+                bool canCreate = !hasPylons && creatable;
+                pylonEmptyHit.SetEnabled(canCreate);
+                pylonEmptyHit.WithTooltip(canCreate
+                    ? "Click to create a new custom template for this airframe"
+                    : selectedOffer == null
+                    ? "Select an airframe first."
+                    : "Hardpoint data is unavailable; this airframe uses its standard fit.");
+            }
+            if (pylonEmptyRail != null)
+                pylonEmptyRail.color = hasPylons || creatable ? WingUi.RailCyan : WingUi.RailInert;
 
             if (pylonPageLabel != null)
                 pylonPageLabel.text = visiblePylons.Count == 0
                     ? "NO READABLE HARDPOINTS"
-                    : PageSummary(visiblePylons.Count, pylonPage, pages, "PYLON", "PYLONS");
+                    : template == null
+                    ? "—"
+                    : PageSummary(visiblePylons.Count, pylonPage, pages, "HARDPOINT", "HARDPOINTS");
 
-            bool hasPylons = visiblePylons.Count > 0;
-            if (pylonEmptyCard != null) pylonEmptyCard.gameObject.SetActive(!hasPylons);
-            if (pylonEmptyLabel != null) pylonEmptyLabel.gameObject.SetActive(!hasPylons);
+            pylonPrevButton?.SetEnabled(hasPylons && pylonPage > 0);
+            pylonNextButton?.SetEnabled(hasPylons && pylonPage < pages - 1);
 
-            pylonPrevButton?.SetEnabled(pylonPage > 0);
-            pylonNextButton?.SetEnabled(pylonPage < pages - 1);
+            int shown = hasPylons ? Mathf.Min(perPage, Mathf.Max(0, visiblePylons.Count - pylonPage * perPage)) : 0;
+            float areaH = pylonAreaFull;
+            if (pylonArea != null)
+            {
+                pylonArea.sizeDelta = new Vector2(pylonArea.sizeDelta.x, areaH);
+                if (pylonEmptyCard != null)
+                    pylonEmptyCard.sizeDelta = new Vector2(ContentWidth, areaH);
+                if (pylonPagerRoot != null)
+                    Place(pylonPagerRoot, new Rect(Pad, pylonAreaY - areaH - LoadoutRowGap, ContentWidth, KeyHeight));
+            }
+            RefreshHardpointFooter(template, shown);
 
             // Build one reusable scratch fit per refresh for consistent exclusion checks. Spawn
             // loadouts remain separately allocated per aircraft.
@@ -763,7 +1143,7 @@ namespace WingCommand
                 ? EconomyFacade.LoadoutCatalog.FillScratch(selectedOffer, template.MountKeys)
                 : null;
 
-            int first = pylonPage * PylonRowsPerPage;
+            int first = pylonPage * perPage;
             for (int i = 0; i < pylonRows.Count; i++)
             {
                 int slot = first + i;
@@ -789,6 +1169,70 @@ namespace WingCommand
             }
         }
 
+        /// <summary>Card footer under the rows: fit totals, then the unfitted stations when the card
+        /// has room. It fills the space the page leaves so the card reaches the pager.</summary>
+        private static void RefreshHardpointFooter(LoadoutTemplateRecord template, int shown)
+        {
+            float rowsHeight = shown * pylonRowHeight;
+            float bandHeight = pylonAreaFull - rowsHeight;
+            bool on = template != null && shown > 0 && bandHeight >= FooterMinHeight;
+            bool twoLines = on && bandHeight >= FooterNoteHeight;
+
+            if (hardpointFooterRule != null) hardpointFooterRule.gameObject.SetActive(on);
+            if (hardpointTotalLabel != null) hardpointTotalLabel.gameObject.SetActive(on);
+            if (hardpointMassLabel != null) hardpointMassLabel.gameObject.SetActive(on);
+            if (hardpointNoteLabel != null) hardpointNoteLabel.gameObject.SetActive(twoLines);
+            if (!on) return;
+
+            float blockHeight = twoLines ? 30f : 14f;
+            float line1Y = -rowsHeight - Mathf.Max(0f, (bandHeight - blockHeight) * 0.5f);
+            // Sit on the last row's own hairline so the table body ends in one 1px line.
+            Place(hardpointFooterRule.rectTransform,
+                  new Rect(0f, -rowsHeight + 1f, ContentWidth, 1f));
+            Place(hardpointTotalLabel.rectTransform,
+                  new Rect(10f, line1Y, PylonStoreX + PylonStoreWidth - 10f, 14f));
+            Place(hardpointMassLabel.rectTransform,
+                  new Rect(PylonMassX, line1Y, PylonMassWidth, 14f));
+
+            FitTotals fit = MeasureFit(template);
+            hardpointTotalLabel.text = "TOTAL  ·  " + fit.Fitted + " / " + fit.Stations + " STATIONS FITTED";
+            hardpointTotalLabel.color = fit.Fitted == 0 ? Dim() : Friendly();
+            hardpointMassLabel.text = Grouped(fit.Mass) + " kg";
+            hardpointMassLabel.color = Dim();
+
+            if (!twoLines) return;
+            Place(hardpointNoteLabel.rectTransform,
+                  new Rect(10f, line1Y - 16f, ContentWidth - 20f, 14f));
+            hardpointNoteLabel.text = EmptyStations(template);
+            hardpointNoteLabel.color = Dim();
+        }
+
+        /// <summary>Visible stations still unarmed, for the card footer; names the complete state
+        /// when there is nothing left to arm.</summary>
+        private static string EmptyStations(LoadoutTemplateRecord template)
+        {
+            if (selectedOffer == null || template == null) return "";
+
+            string names = "";
+            int unarmed = 0;
+            int listed = 0;
+            for (int i = 0; i < visiblePylons.Count; i++)
+            {
+                int pylon = visiblePylons[i];
+                if (!string.IsNullOrEmpty(template.KeyAt(pylon))) continue;
+                unarmed++;
+                if (listed >= 3) continue;
+
+                string name = EconomyFacade.LoadoutCatalog.PylonName(selectedOffer, pylon);
+                names = names.Length == 0 ? name : names + "  ·  " + name;
+                listed++;
+            }
+
+            if (unarmed == 0) return "ALL VISIBLE STATIONS FITTED";
+            if (unarmed > listed) names += "  +" + (unarmed - listed);
+            return "UNARMED  ·  " + names;
+        }
+
         /// <summary>Number of actual stations represented by this visible row.</summary>
         private static int MirrorCount(int pylon)
         {
@@ -801,13 +1245,15 @@ namespace WingCommand
             return count;
         }
 
+        /// <summary>Status line under the build summary. Always names a saved preset as distinct from
+        /// the flying aircraft.</summary>
         private static void RefreshLoadoutStatus(LoadoutTemplateRecord template)
         {
             if (loadoutStatusLabel == null) return;
 
             if (selectedOffer == null)
             {
-                loadoutStatusLabel.text = "No airframe your flight can formate on is in stock.";
+                loadoutStatusLabel.text = "No compatible airframe is available. Join a faction and check stock.";
                 loadoutStatusLabel.color = Dim();
                 return;
             }
@@ -829,17 +1275,32 @@ namespace WingCommand
                 return;
             }
 
+            if (templateDeletion.IsArmedFor(template))
+            {
+                loadoutStatusLabel.text = "CONFIRM: press DELETE again to remove " +
+                    AvTheme.Truncate(template.Name, 18) + " - flying aircraft keep their fit.";
+                loadoutStatusLabel.color = Warning();
+                return;
+            }
+
+            if (!string.IsNullOrEmpty(templateDisabledReason))
+            {
+                loadoutStatusLabel.text = templateDisabledReason;
+                loadoutStatusLabel.color = Warning();
+                return;
+            }
+
             if (template == null)
             {
-                loadoutStatusLabel.text =
-                    "Select NEW to start a template for " +
-                    AvTheme.Truncate(selectedOffer.unitName, 18) + ".";
+                loadoutStatusLabel.text = "Select NEW to start a saved preset for " +
+                    AvTheme.Truncate(selectedOffer.unitName, 16) + ". Apply it on SUPPLY · FIT.";
                 loadoutStatusLabel.color = Dim();
                 return;
             }
 
-            // Explain that saved templates are selected for purchase on SUPPLY.
-            loadoutStatusLabel.text = "Saved — choose it on the SUPPLY tab to fly it.";
+            // Saved presets only; they are applied to a purchase on SUPPLY.
+            loadoutStatusLabel.text =
+                "Saved preset, not the flying aircraft. Apply on SUPPLY · FIT.";
             loadoutStatusLabel.color = Friendly();
         }
 
@@ -890,11 +1351,46 @@ namespace WingCommand
                 "Another store rules this fitted pylon out. Click to clear this pylon.";
         }
 
+        /// <summary>Station pips for the build summary: cells are created once and recoloured,
+        /// because a periodic refresh cannot afford AvKit.PipMeter's per-call objects.</summary>
+        private sealed class StationPips
+        {
+            private const float PipSize = 8f;
+            private const float PipGap = 3f;
+            private const int MaxPips = 12;
+
+            private readonly List<Image> pips = new List<Image>();
+
+            public StationPips(RectTransform parent, float x, float y)
+            {
+                for (int i = 0; i < MaxPips; i++)
+                {
+                    Image pip = AvKit.Panel(parent,
+                                            new Rect(x + i * (PipSize + PipGap), y, PipSize, PipSize),
+                                            Color.clear);
+                    Outline(pip.rectTransform, new Rect(0f, 0f, PipSize, PipSize),
+                            WingUi.BorderSubtle);
+                    pip.gameObject.SetActive(false);
+                    pips.Add(pip);
+                }
+            }
+
+            public void Set(int fitted, int total)
+            {
+                int shown = Mathf.Clamp(total, 0, MaxPips);
+                for (int i = 0; i < pips.Count; i++)
+                {
+                    bool active = i < shown;
+                    if (pips[i].gameObject.activeSelf != active) pips[i].gameObject.SetActive(active);
+                    if (active) pips[i].color = i < fitted ? Green() : Color.clear;
+                }
+            }
+        }
+
         private sealed class AirframeTile
         {
             private readonly GameObject go;
             private readonly Image fill;
-            private readonly Image[] outline;
             private readonly Image rail;
             private readonly Image icon;
             private readonly TMP_Text code;
@@ -913,23 +1409,21 @@ namespace WingCommand
                 fill.color = WingUi.CardFill;
                 fill.raycastTarget = false;
 
-                outline = Outline(rt, new Rect(0f, 0f, rect.width, rect.height), FrameColor());
-                rail = Rule(rt, new Rect(0f, 0f, 3f, rect.height), Color.clear);
+                Outline(rt, new Rect(0f, 0f, rect.width, rect.height), FrameColor());
+                rail = Rule(rt, new Rect(0f, 0f, 2f, rect.height), Color.clear);
 
                 icon = AddSprite(rt, "AirframeIcon", IconFactory.Get("airframe"),
-                                 new Rect(4f, -4f, 28f, 28f), Color.white);
+                                 new Rect(6f, -(rect.height - 22f) * 0.5f, 22f, 22f), Color.white);
 
-                float textLeft = 34f;
-                float textWidth = rect.width - textLeft - 2f;
-                code = Label(rt, "", new Rect(textLeft, -2f, textWidth, 16f), Friendly(),
+                float textLeft = 32f;
+                float textWidth = rect.width - textLeft - Space1;
+                code = Label(rt, "", new Rect(textLeft, -4f, textWidth, 14f), Friendly(),
                              FontMicro, FontStyles.Bold, TextAlignmentOptions.Left);
                 code.overflowMode = TextOverflowModes.Ellipsis;
+                code.enableWordWrapping = false;
 
-                name = Label(rt, "", new Rect(textLeft, -18f, textWidth, 14f), Dim(),
+                name = Label(rt, "", new Rect(textLeft, -18f, textWidth, 12f), Dim(),
                              FontMicro, FontStyles.Normal, TextAlignmentOptions.Left);
-                name.enableAutoSizing = true;
-                name.fontSizeMin = 6.5f;
-                name.fontSizeMax = FontMicro;
                 name.overflowMode = TextOverflowModes.Ellipsis;
 
                 hit = HitButton(rt, new Rect(0f, 0f, rect.width, rect.height), () =>
@@ -953,11 +1447,12 @@ namespace WingCommand
 
                 Sprite sprite = IconFactory.Aircraft(def);
                 icon.sprite = sprite;
+                icon.enabled = sprite != null;
                 icon.color = selected ? Color.white : Dim();
 
                 string codeStr = !string.IsNullOrEmpty(def.code) ? def.code : def.unitName;
-                code.text = AvTheme.Truncate(codeStr, 7);
-                code.color = selected ? Green() : Friendly();
+                code.text = codeStr;
+                code.color = selected ? WingUi.TextPrimary : Friendly();
 
                 string nameStr = def.unitName;
                 if (!string.IsNullOrEmpty(def.code) && nameStr.StartsWith(def.code, StringComparison.OrdinalIgnoreCase))
@@ -968,52 +1463,59 @@ namespace WingCommand
                 name.color = selected ? Friendly() : Dim();
 
                 fill.color = selected ? WingUi.CardFillSelected : WingUi.CardFill;
-                Color frameColor = selected ? Green() : FrameColor();
-                if (outline != null)
-                {
-                    for (int i = 0; i < outline.Length; i++)
-                    {
-                        if (outline[i] != null) outline[i].color = frameColor;
-                    }
-                }
                 rail.color = selected ? Green() : Color.clear;
 
                 hit.WithTooltip(def.unitName + " — Click to edit hardpoint loadout");
-                hit.SetRowHighlight(fill, selected ? WingUi.CardFillSelected : WingUi.CardFill, WingUi.CardFillHover);
+                hit.SetRowHighlight(fill, selected ? WingUi.CardFillSelected : WingUi.CardFill,
+                    selected ? WingUi.CardFillSelectedHover : WingUi.CardFillHover);
             }
         }
 
-        /// <summary>Clickable pylon row with native name and fitted store. Keep blocked stations visible
-        /// with a reason; permit clearing existing conflicting stores.</summary>
+        /// <summary>Clickable pylon row with native name, fitted store, mass, linked/locked state and
+        /// one verb. Keep blocked stations visible with a reason; permit clearing existing conflicting
+        /// stores.</summary>
         private sealed class PylonRow
         {
             private readonly GameObject go;
             private readonly Image fill;
+            private readonly Image rail;
             private readonly TMP_Text name;
             private readonly TMP_Text store;
+            private readonly TMP_Text mass;
+            private readonly TMP_Text action;
             private readonly WingButton hit;
 
-            public PylonRow(RectTransform parent, int index)
+            public PylonRow(RectTransform parent, int index, float rowHeight)
             {
                 float width = parent.rect.width;
-                float y = -index * RowPitch;
+                float y = -index * rowHeight;
 
                 go = new GameObject("Pylon" + index, typeof(RectTransform), typeof(Image));
                 var rt = go.GetComponent<RectTransform>();
                 rt.SetParent(parent, worldPositionStays: false);
-                Place(rt, new Rect(0f, y, width, RowHeight));
+                Place(rt, new Rect(0f, y, width, rowHeight));
 
                 fill = go.GetComponent<Image>();
                 fill.color = WingUi.CardFill;
                 fill.raycastTarget = false;
-                Outline(rt, new Rect(0f, 0f, width, RowHeight), FrameColor());
+                rail = Rule(rt, new Rect(0f, 0f, 3f, rowHeight), WingUi.RailInert);
+                Rule(rt, new Rect(0f, -rowHeight + 1f, width, 1f), WingUi.BorderSubtle);
 
-                name = Label(rt, "", new Rect(Space2, 0f, 140f, RowHeight), Friendly(), FontSmall,
-                             FontStyles.Normal, TextAlignmentOptions.Left);
-                store = Label(rt, "", new Rect(152f, 0f, width - 152f - Space2, RowHeight),
-                              Dim(), FontSmall, FontStyles.Normal, TextAlignmentOptions.Left);
+                float textY = -(rowHeight - 16f) * 0.5f;
+                name = Label(rt, "", new Rect(10f, textY, PylonNameWidth - 4f, 16f), Dim(), FontMicro,
+                             FontStyles.Bold, TextAlignmentOptions.MidlineLeft);
+                store = Label(rt, "", new Rect(PylonStoreX, textY, PylonStoreWidth, 16f),
+                              Friendly(), FontMicro, FontStyles.Normal, TextAlignmentOptions.MidlineLeft);
+                mass = Label(rt, "", new Rect(PylonMassX, textY, PylonMassWidth, 16f),
+                             Dim(), FontMicro, FontStyles.Normal, TextAlignmentOptions.MidlineRight);
+                action = Label(rt, "", new Rect(PylonActionX, textY, PylonActionWidth, 16f),
+                               Dim(), FontMicro, FontStyles.Bold, TextAlignmentOptions.MidlineRight);
+                name.overflowMode = TextOverflowModes.Ellipsis;
+                store.overflowMode = TextOverflowModes.Ellipsis;
+                mass.overflowMode = TextOverflowModes.Ellipsis;
+                action.overflowMode = TextOverflowModes.Ellipsis;
 
-                hit = HitButton(rt, new Rect(0f, 0f, width, RowHeight), null);
+                hit = HitButton(rt, new Rect(0f, 0f, width, rowHeight), null);
                 go.SetActive(false);
             }
 
@@ -1023,35 +1525,54 @@ namespace WingCommand
                 if (!go.activeSelf) go.SetActive(true);
 
                 // Label mirrored pairs explicitly to explain the reduced row count.
-                name.text = mirrors > 1
-                    ? AvTheme.Truncate(pylonName, 20) + "  x" + mirrors
-                    : AvTheme.Truncate(pylonName, 24);
+                name.text = mirrors > 1 ? pylonName + "  ×" + mirrors : pylonName;
+                name.color = WingUi.TextPrimary;
+                name.enableWordWrapping = false;
+                if (rail != null) rail.color = blocked ? Warning() : fitted.IsEmpty ? WingUi.RailInert : Green();
 
                 if (blocked)
                 {
-                    store.text = "— BLOCKED —";
-                    store.color = Warning();
-                    name.color = Dim();
-
-                    // Allow clearing an already-fitted blocked station so the player can repair
-                    // conflicting loadouts.
-                    bool canClear = !fitted.IsEmpty;
-                    hit.SetAction(canClear ? () => SetStore(pylon, null) : (Action)null);
-                    hit.SetEnabled(canClear);
-                    hit.WithTooltip(canClear ? LoadoutHint.BlockedFitted : LoadoutHint.Blocked);
-                    hit.SetRowHighlight(fill, WingUi.CardFill,
-                                        canClear ? WingUi.CardFillHover : WingUi.CardFill);
+                    if (!fitted.IsEmpty)
+                    {
+                        store.text = fitted.Label;
+                        store.color = Warning();
+                        mass.text = fitted.Mass > 0f ? Mathf.RoundToInt(fitted.Mass) + " kg" : "";
+                        mass.color = Warning();
+                        action.text = "CLEAR";
+                        action.color = Warning();
+                        hit.SetEnabled(true);
+                        hit.SetAction(() => SetStore(pylon, null));
+                        hit.WithTooltip(pylonName + " is blocked by another store — click to clear it. " +
+                                        LoadoutHint.BlockedFitted);
+                        hit.SetRowHighlight(fill, WingUi.CardFill, WingUi.CardFillHover);
+                    }
+                    else
+                    {
+                        // Locked with nothing to clear: state only, no dead verb.
+                        store.text = "LOCKED";
+                        store.color = Warning();
+                        mass.text = "";
+                        action.text = "";
+                        hit.SetEnabled(false);
+                        hit.SetAction(null);
+                        hit.WithTooltip(LoadoutHint.Blocked);
+                        hit.SetRowHighlight(fill, WingUi.CardFill, WingUi.CardFill);
+                    }
                     return;
                 }
 
                 bool empty = fitted.IsEmpty;
-                store.text = empty ? "— EMPTY —" : fitted.Label;
-                store.color = empty ? Dim() : WingUi.RailCyan;
-                name.color = empty ? Dim() : Friendly();
+                store.text = empty ? "UNARMED" : fitted.Label;
+                store.color = empty ? Dim() : Friendly();
+                mass.text = !empty && fitted.Mass > 0f ? Mathf.RoundToInt(fitted.Mass) + " kg" : "—";
+                mass.color = Dim();
+                action.text = empty ? "ARM" : "EDIT";
+                action.color = empty ? Green() : Dim();
 
                 hit.SetEnabled(true);
-                hit.WithTooltip(pylonName + " / " + (empty ? "Empty" : fitted.Label) + ". " + LoadoutHint.Pylon);
                 hit.SetAction(() => OpenStorePicker(pylon, rowIndex));
+                hit.WithTooltip(pylonName + " / " + (empty ? "Empty" : fitted.Label) + ". " +
+                                LoadoutHint.Pylon);
                 hit.SetRowHighlight(fill, WingUi.CardFill, WingUi.CardFillHover);
             }
 

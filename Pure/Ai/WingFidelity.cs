@@ -21,6 +21,7 @@ namespace WingCommand
         {
             Mode = mode;
             performance = mode == WingMode.Performance;
+            WingFrameGate.Reset();
         }
 
         /// <summary>Whether the complete Smart behaviour set is enabled.</summary>
@@ -43,13 +44,13 @@ namespace WingCommand
         public static bool SmartFormation => Full;
 
         /// <summary>Enable native target-search deconfliction, a significant host cost.</summary>
-        public static bool Deconfliction => Full;
+        public static bool Deconfliction => Full && !WingFrameGate.Recovering;
 
         /// <summary>Allow station-keeping opportunity target scans and fire.</summary>
         public static bool OpportunityFire => Full;
 
         /// <summary>Enable noncritical calls and ambient banter.</summary>
-        public static bool RichChatter => Full;
+        public static bool RichChatter => Full && !WingFrameGate.Recovering;
 
         /// <summary>Expose manoeuvre commands and menu.</summary>
         public static bool Manoeuvres => Full;

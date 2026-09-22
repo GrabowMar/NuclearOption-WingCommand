@@ -19,6 +19,7 @@ namespace WingCommand.Interop
         private static readonly Dictionary<Aircraft, Aircraft> owned = new Dictionary<Aircraft, Aircraft>();
         private static readonly List<Aircraft> stale = new List<Aircraft>(MaxAircraft);
         private static readonly HashSet<string> portraitKeys = new HashSet<string>();
+        private static readonly HashSet<string> selectionKeys = new HashSet<string>();
         private sealed class Survivor
         {
             internal PilotDismounted Native;
@@ -50,6 +51,192 @@ namespace WingCommand.Interop
             portraitKeys.Add(key);
             return PilotPortrait.For(new WingPilot { Name = name, Callsign = callsign });
         }
+
+        // ---- Companion pilot profile and roster editor ---------------------------------
+        // Additive API. Values are BCL primitives so a companion can invoke these by
+        // reflection; the record order shared by GetCustomPilot/SaveCustomPilot is:
+        // 0 Name, 1 Callsign, 2 DialogueTag, 3 Persona, 4 Background, 5 Xp, 6 Kills,
+        // 7 Sorties, 8 HasPortrait, 9 Body, 10 Face, 11 Hair, 12 Uniform, 13 Accessory,
+        // 14 Backdrop. Portrait and appearance browsing never mutate the roster; only
+        // Save/Delete/Recruit/Discharge touch files or the live squadron.
+
+        public static int PortraitBodyCount => 2;
+        public static int PortraitFaceCount => PilotPortraitGenerator.FacesPerBody;
+        public static int PortraitHairCount => PilotPortraitGenerator.HairCount;
+        public static int PortraitUniformCount => PilotPortraitGenerator.UniformCount;
+        public static int PortraitBackdropCount => PilotPortraitGenerator.BackdropCount;
+
+        public static string PortraitBodyLabel(int body) =>
+            PilotPortraitGenerator.BodyLabel(body == 1 ? PortraitBody.Female : PortraitBody.Male);
+
+        public static string PortraitUniformLabel(int uniform) =>
+            PilotPortraitGenerator.UniformLabel(uniform);
+
+        public static string PersonaLabel(int persona) =>
+            ((ChatterPersona)Clamp(persona, 0, 3)).ToString();
+
+        public static string RankNameForXp(int xp) =>
+            WingPilotRoster.RankName(WingPilotRoster.RankFor(Math.Max(0, xp)));
+
+        /// <summary>Borrow a portrait for an explicit appearance selection. Callers must
+        /// never destroy it.</summary>
+        public static Sprite PortraitForSelection(int body, int face, int hair, int uniform,
+                                                  int accessory, int backdrop)
+        {
+            string key = body + "|" + face + "|" + hair + "|" + uniform + "|" + accessory + "|" + backdrop;
+            if (!selectionKeys.Contains(key) && selectionKeys.Count >= 128) return null;
+            selectionKeys.Add(key);
+            return PilotPortrait.ForSelection(new PortraitSelection(
+                body == 1 ? PortraitBody.Female : PortraitBody.Male, face, hair, uniform, accessory, backdrop));
+        }
+
+        /// <summary>Callsigns of every custom pilot file found on this machine.</summary>
+        public static string[] ListCustomPilots()
+        {
+            List<CustomPilotRecord> records = PersonnelFacade.CustomPilots.LoadAllCustomPilots(out _);
+            var result = new List<string>(Math.Min(records.Count, 128));
+            for (int i = 0; i < records.Count && result.Count < 128; i++)
+            {
+                if (records[i] != null && !string.IsNullOrWhiteSpace(records[i].Callsign))
+                    result.Add(records[i].Callsign.Trim());
+            }
+            return result.ToArray();
+        }
+
+        /// <summary>Flat record for one custom pilot, or null when no file matches.</summary>
+        public static object[] GetCustomPilot(string callsign)
+        {
+            CustomPilotRecord record = FindCustomPilot(callsign);
+            return record == null ? null : Export(record);
+        }
+
+        /// <summary>Flat records for every custom pilot on this machine.</summary>
+        public static object[][] GetCustomPilots()
+        {
+            List<CustomPilotRecord> records = PersonnelFacade.CustomPilots.LoadAllCustomPilots(out _);
+            var result = new List<object[]>(Math.Min(records.Count, 128));
+            for (int i = 0; i < records.Count && result.Count < 128; i++)
+            {
+                if (records[i] != null && !string.IsNullOrWhiteSpace(records[i].Callsign))
+                    result.Add(Export(records[i]));
+            }
+            return result.ToArray();
+        }
+
+        /// <summary>Create or replace one custom pilot file. The live squadron pilot with
+        /// the same callsign is updated in place, matching the Wing Command Pilot Studio.</summary>
+        public static bool SaveCustomPilot(object[] values)
+        {
+            if (values == null || values.Length < 15) return false;
+            try
+            {
+                string callsign = Limit(Convert.ToString(values[1]), 14).Trim().ToUpperInvariant();
+                if (string.IsNullOrWhiteSpace(callsign)) return false;
+                var record = new CustomPilotRecord
+                {
+                    Name = Limit(Convert.ToString(values[0]), 24),
+                    Callsign = callsign,
+                    DialogueTag = Limit(Convert.ToString(values[2]), 24),
+                    Persona = (ChatterPersona)Clamp(Convert.ToInt32(values[3]), 0, 3),
+                    Background = Limit(Convert.ToString(values[4]), 280),
+                    Xp = Math.Max(0, Convert.ToInt32(values[5])),
+                    Kills = Math.Max(0, Convert.ToInt32(values[6])),
+                    Sorties = Math.Max(0, Convert.ToInt32(values[7])),
+                };
+                if (Convert.ToBoolean(values[8]))
+                {
+                    record.ApplySelection(new PortraitSelection(
+                        Convert.ToInt32(values[9]) == 1 ? PortraitBody.Female : PortraitBody.Male,
+                        Convert.ToInt32(values[10]), Convert.ToInt32(values[11]),
+                        Convert.ToInt32(values[12]), Convert.ToInt32(values[13]),
+                        Convert.ToInt32(values[14])));
+                }
+                if (!PersonnelFacade.CustomPilots.SaveOrUpdatePilot(record)) return false;
+                UpdateLivePilot(record);
+                return true;
+            }
+            catch (Exception error)
+            {
+                Plugin.Logger.LogWarning("[WingSquad] Custom pilot save rejected: " + error.Message);
+                return false;
+            }
+        }
+
+        public static bool DeleteCustomPilot(string callsign) =>
+            PersonnelFacade.CustomPilots.DeleteCustomPilot(Limit(callsign, 32));
+
+        public static bool IsPilotRecruited(string callsign) =>
+            WingPilotRoster.ContainsCallsign(Limit(callsign, 32));
+
+        public static bool RecruitCustomPilot(string callsign)
+        {
+            callsign = Limit(callsign, 32);
+            if (string.IsNullOrWhiteSpace(callsign)) return false;
+            if (WingPilotRoster.ContainsCallsign(callsign)) return true;
+            CustomPilotRecord record = FindCustomPilot(callsign);
+            return record != null && WingPilotRoster.ImportCustom(record) != null;
+        }
+
+        public static bool DischargeCustomPilot(string callsign)
+        {
+            WingPilot pilot = WingPilotRoster.FindByCallsign(Limit(callsign, 32));
+            return pilot != null && WingPilotRoster.RemoveFromSquadron(pilot);
+        }
+
+        /// <summary>Import every custom pilot that is not already in the live squadron.</summary>
+        public static int ImportAllCustomPilots() =>
+            PersonnelFacade.CustomPilots.ImportAll(out _, out _);
+
+        private static CustomPilotRecord FindCustomPilot(string callsign)
+        {
+            if (string.IsNullOrWhiteSpace(callsign)) return null;
+            List<CustomPilotRecord> records = PersonnelFacade.CustomPilots.LoadAllCustomPilots(out _);
+            for (int i = 0; i < records.Count; i++)
+            {
+                if (records[i] != null &&
+                    string.Equals(records[i].Callsign, callsign.Trim(), StringComparison.OrdinalIgnoreCase))
+                    return records[i];
+            }
+            return null;
+        }
+
+        private static object[] Export(CustomPilotRecord record)
+        {
+            PortraitSelection selection = record.Selection;
+            return new object[]
+            {
+                record.Name ?? string.Empty,
+                record.Callsign ?? string.Empty,
+                record.DialogueTag ?? string.Empty,
+                (int)record.Persona,
+                record.Background ?? string.Empty,
+                record.Xp,
+                record.Kills,
+                record.Sorties,
+                record.HasCustomPortrait,
+                (int)selection.Body,
+                selection.Face,
+                selection.Hair,
+                selection.Uniform,
+                selection.Accessory,
+                selection.Backdrop,
+            };
+        }
+
+        private static void UpdateLivePilot(CustomPilotRecord record)
+        {
+            WingPilot live = WingPilotRoster.FindByCallsign(record.Callsign);
+            if (live == null) return;
+            live.Name = record.Name;
+            live.Persona = record.Persona;
+            live.DialogueTag = record.DialogueTag;
+            live.Background = record.Background;
+            live.Xp = record.Xp;
+            if (record.HasCustomPortrait) live.PortraitSelection = record.Selection;
+        }
+
+        private static int Clamp(int value, int min, int max) =>
+            value < min ? min : value > max ? max : value;
 
         /// <summary>Spawn an intercept flight through the native server spawner. Index zero is
         /// the ace. Only aircraft created here can receive a target preference through this API.</summary>
@@ -303,6 +490,7 @@ namespace WingCommand.Interop
             WingSurvivalPerks.ClearAces();
             stale.Clear();
             portraitKeys.Clear();
+            selectionKeys.Clear();
             survivors.Clear();
         }
 

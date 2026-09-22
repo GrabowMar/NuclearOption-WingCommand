@@ -12,7 +12,7 @@ namespace NOAvionics.Ui
     /// and publishes hover tooltips to the panel status strip.
     /// </summary>
     public class AvButton : MonoBehaviour, IPointerClickHandler, IPointerEnterHandler,
-                             IPointerExitHandler, IPointerDownHandler, IPointerUpHandler
+                            IPointerExitHandler, IPointerDownHandler, IPointerUpHandler
     {
         private AvButtonStyle style;
         private Image fill;
@@ -129,10 +129,46 @@ namespace NOAvionics.Ui
             Disabled = AvTokens.TextMuted,
         };
 
+        private bool hasCustomColors;
+        private Color customFill;
+        private Color customFrame;
+        private Color customText;
+
+        public void SetCustomColors(Color fill, Color frame, Color text)
+        {
+            hasCustomColors = true;
+            customFill = fill;
+            customFrame = frame;
+            customText = text;
+            Apply();
+        }
+
+        public void ClearCustomColors()
+        {
+            if (!hasCustomColors) return;
+            hasCustomColors = false;
+            Apply();
+        }
+
         public void Apply()
         {
             if (rowFill != null) rowFill.color = hovered && interactable ? rowHover : rowRest;
             if (!decorated) return;
+
+            if (hasCustomColors && interactable)
+            {
+                // A semantic tint must not turn off the shared pointer feedback.
+                float lift = pressed ? 0.18f : hovered ? 0.08f : 0f;
+                if (fill != null) fill.color = Color.Lerp(customFill, Color.white, lift);
+                if (label != null) label.color = hovered || pressed ? Color.white : customText;
+                if (frame != null)
+                {
+                    for (int i = 0; i < frame.Length; i++)
+                        if (frame[i] != null) frame[i].color = hovered || pressed ? Color.white : customFrame;
+                }
+                if (underline != null) underline.color = latched ? customFrame : Color.clear;
+                return;
+            }
 
             AvButtonPaint paint = AvTokens.Paint(style, PaletteInputs, interactable, latched, hovered, pressed);
 
@@ -206,23 +242,55 @@ namespace NOAvionics.Ui
         }
     }
 
-    /// <summary>Publishes status-strip help for interactive controls that are not avionics buttons.</summary>
+    /// <summary>
+    /// Publishes status-strip help for interactive areas that are not avionics buttons,
+    /// and optionally tints a row background while the pointer is inside the area.
+    ///
+    /// <para>A row is read as a row, not as its control: the same help text has to appear
+    /// whether the pointer is over the label or the value box, and the row should react as
+    /// one target.</para>
+    /// </summary>
     public sealed class AvTooltipTarget : MonoBehaviour, IPointerEnterHandler, IPointerExitHandler
     {
         private string tooltip;
         private bool hovered;
+        private Graphic tint;
+        private Color tintRest;
+        private Color tintHover;
 
         public void Initialise(string text) => tooltip = text;
+
+        /// <summary>Help text can change with availability; refresh it without re-hovering.</summary>
+        public void SetText(string text) => tooltip = text;
+
+        /// <summary>Optional background that lights on hover, so the whole row reads as one control.</summary>
+        public void SetTint(Graphic target, Color rest, Color hover)
+        {
+            tint = target;
+            tintRest = rest;
+            tintHover = hover;
+            if (tint != null && !hovered) tint.color = rest;
+        }
 
         public void OnPointerEnter(PointerEventData eventData)
         {
             hovered = true;
+            if (tint != null) tint.color = tintHover;
             AvButton.PublishExternal(tooltip, entering: true);
+        }
+
+        /// <summary>Rest and hover tint for a state that changes after build, e.g. a latched row.</summary>
+        public void SetColors(Color rest, Color hover)
+        {
+            tintRest = rest;
+            tintHover = hover;
+            if (tint != null && !hovered) tint.color = rest;
         }
 
         public void OnPointerExit(PointerEventData eventData)
         {
             hovered = false;
+            if (tint != null) tint.color = tintRest;
             AvButton.PublishExternal(tooltip, entering: false);
         }
 
@@ -232,6 +300,7 @@ namespace NOAvionics.Ui
         {
             if (!hovered) return;
             hovered = false;
+            if (tint != null) tint.color = tintRest;
             AvButton.PublishExternal(tooltip, entering: false);
         }
     }

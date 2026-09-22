@@ -34,16 +34,19 @@ namespace WingCommand
         public ConfigEntry<KeyCode> QuickDisengageKey { get; private set; }
         public ConfigEntry<KeyCode> QuickAttackKey { get; private set; }
         public ConfigEntry<KeyCode> QuickBreakKey { get; private set; }
-        public ConfigEntry<KeyCode> CycleRoeKey { get; private set; }
+        public ConfigEntry<KeyCode> CyclePatternKey { get; private set; }
 
         // AI settings.
         public ConfigEntry<WingMode> Mode { get; private set; }
         public ConfigEntry<bool> AiSharpTurns { get; private set; }
+        public ConfigEntry<bool> WingmanOverdrive { get; private set; }
+        public ConfigEntry<bool> WingmanPursuitBoost { get; private set; }
         public ConfigEntry<bool> AiTargetSpreading { get; private set; }
         public ConfigEntry<bool> AiMissileWarningRepair { get; private set; }
+        public ConfigEntry<bool> ProtectHangarSpawns { get; private set; }
 
         // Engagement settings.
-        public ConfigEntry<WingRoe> DefaultRoe { get; private set; }
+        public ConfigEntry<string> Doctrine { get; private set; }
         public ConfigEntry<bool> AutoReturnOnEmpty { get; private set; }
         public ConfigEntry<bool> RtbReturnsToReserve { get; private set; }
         public ConfigEntry<bool> TakeoverOnDeath { get; private set; }
@@ -169,12 +172,29 @@ namespace WingCommand
                 "Enable sharp, rapid combat manoeuvres (high-bank slice turns, corner-speed airbraking, " +
                 "coordinated rudder kicks, and elevated pitch authority) for fixed-wing aircraft with sufficient " +
                 "speed and terrain clearance. Applies on the next steering update.");
+            WingmanOverdrive = c.Bind("AI", "WingmanOverdrive", true,
+                "Raise the fly-by-wire G and angle-of-attack limits for AI wingmen while a Wing " +
+                "Command pilot state flies them, so they can pull harder to hold formation and " +
+                "mirror player manoeuvres. A deliberate AI advantage: your own aircraft keeps " +
+                "stock limits, and a wingman you take over returns to stock handling. " +
+                "Applies on the next flight update.");
+            WingmanPursuitBoost = c.Bind("AI", "WingmanPursuitBoost", true,
+                "Apply extra acceleration to AI wingmen chasing your aircraft from behind so they can " +
+                "close a blown slot even when you are running at maximum speed. A deliberate AI " +
+                "advantage: applies only while chasing a player-led formation and only at full " +
+                "throttle. Applies on the next flight update.");
             AiTargetSpreading = c.Bind("AI", "AiTargetSpreading", true,
                 "Spread locally simulated AI across comparable targets. Applies on the next target " +
                 "selection, including non-wing AI. Performance mode still disables this feature.");
             AiMissileWarningRepair = c.Bind("AI", "AiMissileWarningRepair", true,
                 "Repair AI missile-warning subscriptions when entering combat. Applies on the next " +
                 "combat entry, including non-wing AI; disabling does not undo existing subscriptions.");
+            ProtectHangarSpawns = c.Bind("AI", "ProtectHangarSpawns", true,
+                "Hold any AI aircraft spawn off a hangar whose pad or roll-out is physically " +
+                "blocked by a parked aircraft, ground vehicle or wreck; the airbase then tries " +
+                "its next hangar instead of spawning the aircraft into the blockage, where it " +
+                "would sit unable to start and eventually eject. Player spawns are never affected, " +
+                "and a clear pad is unchanged. Host or single-player only.");
             // Put the shared behaviour-budget switch at the top of settings.
             Mode = c.Bind("AI", "Mode", WingMode.Smart,
                 new ConfigDescription(
@@ -189,15 +209,14 @@ namespace WingCommand
 
         private void BindEngagement(ConfigFile c)
         {
-            DefaultRoe = c.Bind("Engagement", "DefaultRoe", WingRoe.Hold,
-                "Rules of engagement the wing starts a mission with. Hold limits fire to " +
-                "missile defence only; Tight prioritises threats around the formation; " +
-                "Free may shoot opportunity targets without changing orders.");
-
-            // Migrate Escort to Tight from the raw config; the renamed enum otherwise fails parsing and
-            // becomes Hold.
-            if (DefaultRoe.Value == WingRoe.Hold && FileMentionsLegacyRoe(c, "Escort"))
-                DefaultRoe.Value = WingRoe.Tight;
+            string raw = ReadConfigText(c);
+            WingDoctrine initial = WingDoctrine.FromConfigText(raw);
+            Doctrine = c.Bind("Engagement", "Doctrine", initial.ToString(),
+                "Standing doctrine the wing starts a mission with. Reserve, Escort, Sweep, " +
+                "or six fields: Guard,Response,Interval,Spread,Targets,Reach. " +
+                "An old DefaultRoe of Hold, Tight, Free, or Escort is read once when Doctrine is absent.");
+            if (!WingDoctrine.TryParse(Doctrine.Value, out _))
+                Doctrine.Value = initial.ToString();
             AutoReturnOnEmpty = c.Bind("Engagement", "AutoReturnOnEmpty", true,
                 "Wingmen return to base on their own once out of ammunition or down to " +
                 "bingo fuel, instead of holding station empty.");
@@ -224,27 +243,35 @@ namespace WingCommand
                     new AcceptableValueRange<float>(0.05f, 0.40f)));
         }
 
-        /// <summary>Check the raw file for legacy ROE values; BepInEx exposes no failed-bind
-        /// record.</summary>
-        private static bool FileMentionsLegacyRoe(ConfigFile c, string legacyValue)
+        private static string ReadConfigText(ConfigFile c)
         {
             try
             {
                 string path = c.ConfigFilePath;
-                if (string.IsNullOrEmpty(path) || !System.IO.File.Exists(path)) return false;
-
-                foreach (string line in System.IO.File.ReadAllLines(path))
-                {
-                    string t = line.Trim();
-                    if (t.StartsWith("DefaultRoe", System.StringComparison.Ordinal) &&
-                        t.IndexOf(legacyValue, System.StringComparison.OrdinalIgnoreCase) >= 0)
-                        return true;
-                }
+                if (string.IsNullOrEmpty(path) || !System.IO.File.Exists(path)) return "";
+                return System.IO.File.ReadAllText(path);
             }
-            catch (System.IO.IOException) { }
-            catch (System.UnauthorizedAccessException) { }
+            catch (System.IO.IOException) { return ""; }
+            catch (System.UnauthorizedAccessException) { return ""; }
+        }
 
-            return false;
+        private static bool RawHasKey(string text, string key) => RawValue(text, key) != null;
+
+        private static string RawValue(string text, string key)
+        {
+            if (string.IsNullOrEmpty(text) || string.IsNullOrEmpty(key)) return null;
+            string[] lines = text.Split(new[] { '\r', '\n' }, System.StringSplitOptions.RemoveEmptyEntries);
+            for (int i = 0; i < lines.Length; i++)
+            {
+                string line = lines[i].Trim();
+                if (line.Length == 0 || line[0] == '#' || line[0] == ';') continue;
+                int eq = line.IndexOf('=');
+                if (eq <= 0) continue;
+                if (!line.Substring(0, eq).Trim().Equals(key, System.StringComparison.OrdinalIgnoreCase))
+                    continue;
+                return line.Substring(eq + 1).Trim();
+            }
+            return null;
         }
 
         private void BindComms(ConfigFile c)
@@ -311,8 +338,14 @@ namespace WingCommand
                 Advanced("Optional hotkey: order the wing to attack the player's currently targeted unit."));
             QuickBreakKey = c.Bind("Keys", "QuickBreak", KeyCode.None,
                 Advanced("Optional hotkey: order the whole wing to execute a defensive break turn."));
-            CycleRoeKey = c.Bind("Keys", "CycleRoe", KeyCode.None,
-                Advanced("Optional hotkey: cycle wing Rules of Engagement (Hold -> Tight -> Free)."));
+            string rawKeys = ReadConfigText(c);
+            bool hasPatternKey = RawHasKey(rawKeys, "CyclePattern");
+            CyclePatternKey = c.Bind("Keys", "CyclePattern", KeyCode.None,
+                Advanced("Optional hotkey: cycle wing doctrine (Reserve -> Escort -> Sweep)."));
+            if (!hasPatternKey &&
+                System.Enum.TryParse(RawValue(rawKeys, "CycleRoe"), out KeyCode migrated) &&
+                migrated != KeyCode.None)
+                CyclePatternKey.Value = migrated;
         }
 
         private void BindUi(ConfigFile c)

@@ -193,7 +193,13 @@ namespace NOAvionics.Ui
             {
                 case "panel": return AvSprites.Panel;
                 case "card": return AvSprites.Card;
+                case "glow":
+                case "glowcard": return AvSprites.GlowCard;
                 case "control": return AvSprites.Control;
+                case "slot": return AvSprites.Slot;
+                case "led":
+                case "pip": return AvSprites.Led;
+                case "glass": return AvSprites.Panel;
                 default: return null;
             }
         }

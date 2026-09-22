@@ -45,10 +45,10 @@ namespace WingCommand
                 WingAction.FireForEffect, "attack", available: hasTarget, requiresTarget: true);
 
             liveSlices[5] = new RadialSlice(
-                "CYCLE ROE",
+                "CYCLE DOCTRINE",
                 Wing != null
-                    ? RadialSelection.FormatRoeTransition(CombatFacade.Roe.Label(Wing.Roe), CombatFacade.Roe.Label(CombatFacade.Roe.Next(Wing.Roe)))
-                    : "RULES OF ENGAGEMENT",
+                    ? RadialSelection.FormatPatternTransition(Wing.Doctrine.PatternName, Wing.Doctrine.NextPattern().PatternName)
+                    : "RESERVE  ▶  ESCORT",
                 WingAction.CycleRoe, "posture", available: true);
 
             return liveSlices;
@@ -164,8 +164,8 @@ namespace WingCommand
                 Input.GetKeyDown(Plugin.Settings.QuickBreakKey.Value))
                 Execute(WingAction.DefensiveBreak);
 
-            if (Plugin.Settings.CycleRoeKey.Value != KeyCode.None &&
-                Input.GetKeyDown(Plugin.Settings.CycleRoeKey.Value))
+            if (Plugin.Settings.CyclePatternKey.Value != KeyCode.None &&
+                Input.GetKeyDown(Plugin.Settings.CyclePatternKey.Value))
                 Execute(WingAction.CycleRoe);
         }
 

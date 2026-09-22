@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using NOAvionics;
 using UnityEngine;
 using UnityEngine.UI;
 
@@ -25,26 +26,26 @@ namespace WingCommand
             List<MFDScreen> leftScreens = GameAccess.GetLeftScreens(mfd);
             List<MFDScreen> rightScreens = GameAccess.GetRightScreens(mfd);
 
-            if (TryColumn(preferLeft ? leftButtons : rightButtons,
-                    preferLeft ? leftScreens : rightScreens, out slot))
-                left = preferLeft;
-            else if (TryColumn(preferLeft ? rightButtons : leftButtons,
-                    preferLeft ? rightScreens : leftScreens, out slot))
-                left = !preferLeft;
-            else
+            if (!BezelRegistry.TryClaim(
+                BezelRegistry.Wmc, preferLeft,
+                leftButtons == null ? 0 : leftButtons.Count,
+                rightButtons == null ? 0 : rightButtons.Count,
+                (isLeft, index) => IsFree(
+                    isLeft ? leftButtons : rightButtons,
+                    isLeft ? leftScreens : rightScreens, index),
+                out left, out slot))
                 return false;
 
             buttons = left ? leftButtons : rightButtons;
             screens = left ? leftScreens : rightScreens;
-            return buttons != null && screens != null && slot >= 0 && slot < buttons.Count;
-        }
+            if (buttons != null && screens != null && IsFree(buttons, screens, slot))
+                return true;
 
-        private static bool TryColumn(List<Button> buttons, List<MFDScreen> screens, out int slot)
-        {
+            BezelRegistry.Release(BezelRegistry.Wmc);
+            buttons = null;
+            screens = null;
             slot = -1;
-            if (buttons == null) return false;
-            for (int i = 0; i < buttons.Count; i++)
-                if (IsFree(buttons, screens, i)) { slot = i; return true; }
+            left = preferLeft;
             return false;
         }
 

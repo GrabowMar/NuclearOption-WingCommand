@@ -30,6 +30,25 @@ namespace WingCommand.PureTests
         }
 
         [Fact]
+        public void ContextMenuOffersAttackOnAHostileAndMoveOnEmptyGround()
+        {
+            var dest = new WingOrder[MapOrderPolicy.ContextOrderCap];
+            int enemy = MapOrderPolicy.CopyContextOrders(MapPointerKind.Enemy, rotary: false,
+                canCargo: false, canJam: false, dest);
+            Assert.True(enemy >= 3);
+            Assert.Contains(WingOrder.Attack, dest[..enemy]);
+            Assert.Contains(WingOrder.MoveToPoint, dest[..enemy]);
+            Assert.Contains(WingOrder.ReturnToBase, dest[..enemy]);
+
+            int empty = MapOrderPolicy.CopyContextOrders(MapPointerKind.Empty, rotary: true,
+                canCargo: true, canJam: false, dest);
+            Assert.Contains(WingOrder.MoveToPoint, dest[..empty]);
+            Assert.Contains(WingOrder.OrbitHere, dest[..empty]);
+            Assert.Contains(WingOrder.LandHere, dest[..empty]);
+            Assert.DoesNotContain(WingOrder.Attack, dest[..empty]);
+        }
+
+        [Fact]
         public void UnarmedRightClickIsAlwaysAMoveEvenOverAHostile()
         {
             Assert.Equal(MapClickIntent.Move,
@@ -136,11 +155,11 @@ namespace WingCommand.PureTests
         }
 
         [Fact]
-        public void ArmedPromptsTellThePlayerToRightClickTheMap()
+        public void ArmedPromptsTellThePlayerToLeftClickTheMap()
         {
-            Assert.Contains("RIGHT-CLICK MAP", MapOrderPolicy.ArmPrompt(WingOrder.OrbitHere));
-            Assert.Contains("RIGHT-CLICK A HOSTILE", MapOrderPolicy.ArmPrompt(WingOrder.Attack));
-            Assert.Contains("RIGHT-CLICK A HOSTILE", MapOrderPolicy.ArmPrompt(WingOrder.FireForEffect));
+            Assert.Contains("LEFT-CLICK MAP", MapOrderPolicy.ArmPrompt(WingOrder.OrbitHere));
+            Assert.Contains("LEFT-CLICK A HOSTILE", MapOrderPolicy.ArmPrompt(WingOrder.Attack));
+            Assert.Contains("LEFT-CLICK A HOSTILE", MapOrderPolicy.ArmPrompt(WingOrder.FireForEffect));
             Assert.Contains("PRESS AGAIN", MapOrderPolicy.ArmPrompt(WingOrder.DeliverCargo));
         }
     }

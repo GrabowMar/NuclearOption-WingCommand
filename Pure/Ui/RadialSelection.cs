@@ -37,10 +37,10 @@ namespace WingCommand
             return center - sweep * 0.5f;
         }
 
-        internal static string FormatSquadronSubtitle(int wingCount, string roe, string formation)
+        internal static string FormatSquadronSubtitle(int wingCount, string doctrine, string formation)
         {
             string countLabel = wingCount == 1 ? "1 WINGMAN" : $"{wingCount} WINGMEN";
-            return $"{countLabel}  •  ROE: {roe}\nFORMATION: {formation}";
+            return $"{countLabel}  •  {doctrine}\nFORMATION: {formation}";
         }
 
         internal static string FormatTargetSubtitle(bool hasTarget, string targetName, string fallback = "NO TARGET LOCKED")
@@ -50,8 +50,8 @@ namespace WingCommand
             return fallback;
         }
 
-        internal static string FormatRoeTransition(string currentRoe, string nextRoe) =>
-            $"{currentRoe}  ▶  {nextRoe}";
+        internal static string FormatPatternTransition(string currentPattern, string nextPattern) =>
+            $"{currentPattern}  ▶  {nextPattern}";
 
         internal static string FormatHint(bool inDeadzone, bool isAvailable, bool isTargetRequired = false)
         {

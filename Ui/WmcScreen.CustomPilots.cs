@@ -1,6 +1,5 @@
 using System;
 using System.Collections.Generic;
-using System.IO;
 using NOAvionics.Ui;
 using TMPro;
 using UnityEngine;
@@ -8,22 +7,40 @@ using UnityEngine.UI;
 
 namespace WingCommand
 {
+    /// <summary>Pilot Studio: a two-column editor with the catalog on the left, the record editor on
+    /// the right and the save actions pinned above the status strip.</summary>
     internal static partial class WmcScreen
     {
         // Custom Pilot Studio UI and lifecycle.
 
         private static RectTransform customStudioRoot;
-        private static RectTransform studioTableArea;
+        private static RectTransform studioBody;
+        private static ScrollRect studioScroll;
+        private static bool studioTall;
         private static TMP_Text studioTableEmptyLabel;
-        private static RectTransform studioHeaderPager;
-        private static WingButton studioPrevButton;
-        private static WingButton studioNextButton;
-        private static TMP_Text studioPageLabel;
+        private static TMP_Text studioCatalogCountLabel;
+        private static TMP_Text studioPagerLabel;
+        private static WingButton studioPagerPrev;
+        private static WingButton studioPagerNext;
 
         private static readonly List<StudioPilotRow> studioRows = new List<StudioPilotRow>();
         private static readonly List<CustomPilotRecord> studioPilotsList = new List<CustomPilotRecord>();
         private static int studioCatalogPage;
-        private const int StudioRowsPerPage = 4;
+        private const float StudioPortraitWidth = 56f;
+        private const float StudioPortraitHeight = 76f;
+        private const float StudioTallBodyHeight = 560f;
+        private const float StudioWideBodyHeight = 640f;
+        private const float StudioColumnWidth = 186f;
+        private const float StudioBioHeightMin = 72f;
+
+        // The tall studio absorbs the body's leftover height instead of stranding glass under
+        // the two columns: the catalog lists more rows and the bio field stretches to the footer.
+        private static int StudioRowsPerPage => BodyHeight >= StudioTallBodyHeight ? 6 : 4;
+        private static float StudioRowHeight => BodyHeight >= StudioWideBodyHeight ? 48f : 44f;
+        private static float StudioRowPitch => StudioRowHeight + 2f;
+        private static float StudioPreviewHeight => BodyHeight >= StudioWideBodyHeight ? 148f : 104f;
+        private static float StudioPreviewPortraitHeight =>
+            BodyHeight >= StudioWideBodyHeight ? 96f : StudioPortraitHeight;
 
         // Editor draft pilot.
         private static CustomPilotRecord draftPilot = new CustomPilotRecord();
@@ -48,32 +65,58 @@ namespace WingCommand
         private static TMP_InputField studioBioField;
 
         private static WingButton studioRecruitSelectedButton;
+        private static WingButton studioDeleteButton;
+
+        // Selected preview card.
+        private static Image studioPreviewPortrait;
+        private static Image studioPreviewFrame;
+        private static Image studioPreviewRail;
+        private static TMP_Text studioPreviewName;
+        private static TMP_Text studioPreviewDetail;
+        private static TMP_Text studioPreviewState;
+        private static Image studioPreviewXpBar;
+        private static float studioPreviewXpWidth;
+
+        // Destructive actions keep the shell's three-second two-press confirmation.
+        private static readonly Confirmation studioDeleteConfirm = new Confirmation();
+        private static readonly Confirmation studioDischargeConfirm = new Confirmation();
 
         private sealed class StudioPilotRow
         {
-            public readonly Image Fill;
-            public readonly Image[] Outline;
-            public readonly TMP_Text CallLabel;
-            public readonly TMP_Text NameLabel;
-            public readonly TMP_Text RankLabel;
-            public readonly TMP_Text StatusLabel;
-            public readonly WingButton Hit;
+            private readonly Image Fill;
+            private readonly Image[] Outline;
+            private readonly Image Portrait;
+            private readonly Image Rail;
+            private readonly TMP_Text CallLabel;
+            private readonly TMP_Text NameLabel;
+            private readonly TMP_Text StateLabel;
+            private readonly WingButton Hit;
 
-            public StudioPilotRow(RectTransform parent, float y)
+            public StudioPilotRow(RectTransform parent, float x, float y, float w)
             {
-                float w = PanelWidth - Pad * 2f;
-                Rect rect = new Rect(Pad, y, w, 20f);
+                Rect rect = new Rect(x, y, w, StudioRowHeight);
                 Fill = Panel(parent, rect, WingUi.CardFill);
                 Outline = WingUi.Outline(parent, rect, FrameColor());
+                Rail = Rule(parent, new Rect(x, y, 3f, StudioRowHeight), MemberFrameColor());
 
-                CallLabel = Label(parent, "", new Rect(Pad + 6f, y, 76f, 20f),
-                    Friendly(), FontMicro, FontStyles.Bold, TextAlignmentOptions.Left);
-                NameLabel = Label(parent, "", new Rect(Pad + 86f, y, 114f, 20f),
-                    Dim(), FontMicro, FontStyles.Normal, TextAlignmentOptions.Left);
-                RankLabel = Label(parent, "", new Rect(Pad + 204f, y, 76f, 20f),
-                    Friendly(), FontMicro, FontStyles.Normal, TextAlignmentOptions.Left);
-                StatusLabel = Label(parent, "", new Rect(Pad + 284f, y, w - 290f, 20f),
-                    Green(), FontMicro, FontStyles.Bold, TextAlignmentOptions.Right);
+                Panel(parent, new Rect(x + 6f, y - 4f, 28f, 36f), AvTheme.Surface);
+                var maskGo = new GameObject("StudioRowPortraitMask", typeof(RectTransform), typeof(RectMask2D));
+                RectTransform maskRt = maskGo.GetComponent<RectTransform>();
+                maskRt.SetParent(parent, worldPositionStays: false);
+                Place(maskRt, new Rect(x + 6f, y - 4f, 28f, 36f));
+                Portrait = AddSprite(maskRt, "StudioRowPortrait", null,
+                                     new Rect(0f, 0f, 28f, 36f), Color.white);
+
+                CallLabel = Label(parent, "", new Rect(x + 40f, y - 3f, w - 106f, 18f), Friendly(),
+                                  FontSmall, FontStyles.Bold, TextAlignmentOptions.Left);
+                CallLabel.enableWordWrapping = false;
+                CallLabel.overflowMode = TextOverflowModes.Ellipsis;
+                NameLabel = Label(parent, "", new Rect(x + 40f, y - 22f, w - 46f, 16f), Dim(),
+                                  FontMicro, FontStyles.Normal, TextAlignmentOptions.Left);
+                NameLabel.enableWordWrapping = false;
+                NameLabel.overflowMode = TextOverflowModes.Ellipsis;
+                StateLabel = Label(parent, "", new Rect(x + w - 66f, y - 3f, 62f, 18f), Dim(),
+                                   FontMicro, FontStyles.Bold, TextAlignmentOptions.Right);
 
                 Hit = HitButton(parent, rect, null);
                 Hide();
@@ -83,6 +126,7 @@ namespace WingCommand
             {
                 bool inSquadron = PersonnelFacade.Roster.ContainsCallsign(record.Callsign);
                 Fill.color = isSelected ? WingUi.CardFillSelected : WingUi.CardFill;
+                Rail.color = isSelected ? Green() : MemberFrameColor();
                 if (Outline != null)
                 {
                     Color border = isSelected ? Green() : FrameColor();
@@ -90,22 +134,45 @@ namespace WingCommand
                         if (Outline[i] != null) Outline[i].color = border;
                 }
 
-                CallLabel.text = record.Callsign;
+                CallLabel.text = AvTheme.Truncate(record.Callsign, 12);
                 CallLabel.color = isSelected ? Green() : Friendly();
+                NameLabel.text = AvTheme.Truncate(record.Name, 16);
 
-                NameLabel.text = AvTheme.Truncate(record.Name, 18);
+                StateLabel.text = inSquadron ? "IN SQUADRON" : "AVAILABLE";
+                StateLabel.color = inSquadron ? WingUi.RailEmerald : Dim();
 
-                WingRank rank = PersonnelFacade.Roster.RankFor(record.Xp);
-                RankLabel.text = PersonnelFacade.Roster.RankName(rank).ToUpperInvariant();
-                RankLabel.color = RankColor(rank);
-
-                StatusLabel.text = inSquadron ? "IN SQUADRON" : "READY";
-                StatusLabel.color = inSquadron ? WingUi.RailEmerald : WingUi.RailCyan;
+                UpdatePortraitAspectFill(Portrait, PersonnelFacade.Portraits.ForSelection(record.Selection),
+                                         28f, 36f);
 
                 Hit.SetAction(onClick);
-                Hit.SetRowHighlight(Fill, isSelected ? WingUi.CardFillSelected : WingUi.CardFill, WingUi.CardFillHover);
-                Hit.WithTooltip($"Select {record.Callsign} to inspect and edit");
+                Hit.SetRowHighlight(Fill, isSelected ? WingUi.CardFillSelected : WingUi.CardFill,
+                    isSelected ? WingUi.CardFillSelectedHover : WingUi.CardFillHover);
+                Hit.WithTooltip($"Select {record.Callsign} · {record.Name} to inspect and edit");
                 SetVisible(true);
+            }
+
+            /// <summary>Inert, named placeholder for a catalog row with no saved pilot behind it.</summary>
+            public void ShowVacant(int slot)
+            {
+                Fill.color = WingUi.CardFill;
+                Rail.color = WingUi.RailInert;
+                if (Outline != null)
+                {
+                    for (int i = 0; i < Outline.Length; i++)
+                        if (Outline[i] != null) Outline[i].color = FrameColor();
+                }
+
+                CallLabel.text = "EMPTY SLOT " + (slot + 1).ToString("00");
+                CallLabel.color = Dim();
+                NameLabel.text = "NEW OR IMPORT";
+                NameLabel.color = Dim();
+                StateLabel.text = "VACANT";
+                StateLabel.color = Dim();
+                if (Portrait != null) Portrait.enabled = false;
+
+                Hit.SetAction(null);
+                SetVisible(true);
+                if (Hit != null) Hit.gameObject.SetActive(false);
             }
 
             public void Hide() => SetVisible(false);
@@ -113,213 +180,323 @@ namespace WingCommand
             private void SetVisible(bool visible)
             {
                 if (Fill != null && Fill.gameObject.activeSelf != visible) Fill.gameObject.SetActive(visible);
+                if (Portrait != null && Portrait.gameObject.activeSelf != visible) Portrait.gameObject.SetActive(visible);
                 if (CallLabel != null && CallLabel.gameObject.activeSelf != visible) CallLabel.gameObject.SetActive(visible);
                 if (NameLabel != null && NameLabel.gameObject.activeSelf != visible) NameLabel.gameObject.SetActive(visible);
-                if (RankLabel != null && RankLabel.gameObject.activeSelf != visible) RankLabel.gameObject.SetActive(visible);
-                if (StatusLabel != null && StatusLabel.gameObject.activeSelf != visible) StatusLabel.gameObject.SetActive(visible);
+                if (StateLabel != null && StateLabel.gameObject.activeSelf != visible) StateLabel.gameObject.SetActive(visible);
+                if (Rail != null && Rail.gameObject.activeSelf != visible) Rail.gameObject.SetActive(visible);
                 if (Hit != null && Hit.gameObject.activeSelf != visible) Hit.gameObject.SetActive(visible);
                 if (Outline != null)
                 {
                     for (int i = 0; i < Outline.Length; i++)
-                        if (Outline[i] != null && Outline[i].gameObject.activeSelf != visible) Outline[i].gameObject.SetActive(visible);
+                        if (Outline[i] != null && Outline[i].gameObject.activeSelf != visible)
+                            Outline[i].gameObject.SetActive(visible);
                 }
             }
         }
 
         private static float BuildCustomPilotsStudio(RectTransform parent, float y)
         {
-            float w = PanelWidth - Pad * 2f;
+            _ = y;
+            studioCatalogPage = 0;
+            selectedCatalogIndex = -1;
+            studioDeleteConfirm.Clear();
+            studioDischargeConfirm.Clear();
+            studioTall = BodyHeight >= StudioTallBodyHeight;
 
-            // Header & Back Navigation
-            Heading(parent, y, "PILOT STUDIO");
-            WingUi.Button(parent, "< SQUADRON",
-                new Rect(PanelWidth - Pad - 96f, y - 2f, 96f, 20f), FontSmall, ShowSquadronView)
+            // The save footer stays visible; the columns share one viewport when the body is short.
+            const float footerBlock = RowHeight + Space2;
+            float bodyBottom = BodyBottom + footerBlock;
+            float bodyHeight = Mathf.Max(RowHeight, BodyTop - bodyBottom);
+
+            if (studioTall)
+            {
+                studioScroll = null;
+                studioBody = PageRoot(parent, "StudioColumns");
+                Place(studioBody, new Rect(0f, BodyTop, PageWidth, bodyHeight));
+            }
+            else
+            {
+                BuildViewport(parent, new Rect(0f, BodyTop, PageWidth, bodyHeight), "StudioViewport",
+                              out studioBody, out studioScroll);
+            }
+
+            float titleBottom = Heading(studioBody, -Space1, "PILOT STUDIO");
+            float columnsTop = titleBottom - Space1;
+            float rightX = Pad + StudioColumnWidth + Gap;
+            float rightWidth = ContentWidth - StudioColumnWidth - Gap;
+            float leftBottom = BuildStudioCatalog(studioBody, Pad, StudioColumnWidth, columnsTop);
+            float rightBottom = BuildStudioEditor(studioBody, rightX, rightWidth, columnsTop);
+
+            if (studioScroll != null) Reflow(studioScroll, Mathf.Min(leftBottom, rightBottom));
+
+            BuildStudioFooter(parent);
+            return BodyBottom;
+        }
+
+        private static float BuildStudioCatalog(RectTransform parent, float x, float w, float y)
+        {
+            WingUi.Button(parent, "< SQUADRON", new Rect(x, y, w, 28f), FontSmall, ShowSquadronView)
                 .WithTooltip("Return to squadron roster view");
-            y -= 26f;
+            y -= 28f + Space1;
 
-            // Batch Toolbar (4 buttons)
-            float btnW = (w - Gap * 3f) / 4f;
-            WingUi.Button(parent, "IMPORT ALL",
-                new Rect(Pad, y, btnW, RowHeight), FontSmall, OnStudioImportAll)
-                .WithTooltip("Reload custom pilots from folder");
-            WingUi.Button(parent, "EXPORT ALL",
-                new Rect(Pad + (btnW + Gap), y, btnW, RowHeight), FontSmall, OnStudioExportAll)
+            float half = (w - Gap) * 0.5f;
+            WingUi.Button(parent, "IMPORT FILES", new Rect(x, y, half, 28f), FontMicro, OnStudioImportAll)
+                .WithTooltip("Import pilots and chatter from the custom pilot files into the squadron");
+            WingUi.Button(parent, "EXPORT ALL", new Rect(x + half + Gap, y, half, 28f), FontMicro, OnStudioExportAll)
                 .WithTooltip("Export active squadron roster to exported_squadron.json");
-            WingUi.Button(parent, "OPEN FOLDER",
-                new Rect(Pad + (btnW + Gap) * 2f, y, btnW, RowHeight), FontSmall, PersonnelFacade.CustomPilots.OpenFolder)
+            y -= 28f + Space1;
+            WingUi.Button(parent, "OPEN FOLDER", new Rect(x, y, half, 28f), FontMicro,
+                PersonnelFacade.CustomPilots.OpenFolder)
                 .WithTooltip("Open Pilots folder in Windows Explorer");
-            WingUi.Button(parent, "RECRUIT ALL",
-                new Rect(Pad + (btnW + Gap) * 3f, y, btnW, RowHeight), FontSmall, OnStudioRecruitAll)
+            WingUi.Button(parent, "RECRUIT ALL", new Rect(x + half + Gap, y, half, 28f), FontMicro, OnStudioRecruitAll)
                 .WithTooltip("Recruit all unrecruited custom pilots into squadron");
-            y -= RowHeight + Gap;
+            y -= 28f + Space2;
 
-            // Column Headers & Header Pager
-            Label(parent, "CALL", new Rect(Pad + 6f, y, 76f, Space4), Dim(), FontMicro, FontStyles.Normal, TextAlignmentOptions.Left);
-            Label(parent, "NAME", new Rect(Pad + 86f, y, 114f, Space4), Dim(), FontMicro, FontStyles.Normal, TextAlignmentOptions.Left);
-            Label(parent, "RANK", new Rect(Pad + 204f, y, 76f, Space4), Dim(), FontMicro, FontStyles.Normal, TextAlignmentOptions.Left);
-            Label(parent, "STATUS", new Rect(Pad + 284f, y, 40f, Space4), Dim(), FontMicro, FontStyles.Normal, TextAlignmentOptions.Left);
+            float headerTop = y;
+            y = SectionHeader(parent, x, y, w, "SAVED PILOTS");
+            studioCatalogCountLabel = Label(parent, "", new Rect(x + 10f, headerTop - 1f, w - 10f, 14f),
+                                            Dim(), FontMicro, FontStyles.Normal, TextAlignmentOptions.Right);
+            y -= Space1;
 
-            studioHeaderPager = HeaderPager(parent, y,
-                () => TurnStudioCatalogPage(-1),
-                () => TurnStudioCatalogPage(1),
-                out studioPrevButton, out studioPageLabel, out studioNextButton);
-            y -= Space4 + 2f;
-
-            // Catalog Table Area
-            studioTableArea = new GameObject("StudioTableArea", typeof(RectTransform)).GetComponent<RectTransform>();
-            studioTableArea.SetParent(parent, worldPositionStays: false);
-            Place(studioTableArea, new Rect(Pad, y, w, 22f * StudioRowsPerPage));
-
-            studioTableEmptyLabel = EmptyNote(studioTableArea, "No custom pilots found in folder.");
+            float rowsTop = y;
             studioRows.Clear();
             for (int i = 0; i < StudioRowsPerPage; i++)
-            {
-                studioRows.Add(new StudioPilotRow(parent, y - 22f * i));
-            }
-            y -= 22f * StudioRowsPerPage + Gap;
+                studioRows.Add(new StudioPilotRow(parent, x, rowsTop - i * StudioRowPitch, w));
 
-            // List Action Row (4 buttons)
-            WingUi.Button(parent, "+ NEW", new Rect(Pad, y, btnW, 20f), FontSmall, OnStudioNewPilot)
+            studioTableEmptyLabel = Label(parent,
+                "NO SAVED PILOTS\nCreate one with NEW or import your pilot files.",
+                new Rect(x + 4f, rowsTop - 24f, w - 8f, 44f), Dim(), FontSmall, FontStyles.Normal,
+                TextAlignmentOptions.Center);
+            studioTableEmptyLabel.enableWordWrapping = true;
+            studioTableEmptyLabel.gameObject.SetActive(false);
+            y = rowsTop - StudioRowsPerPage * StudioRowPitch;
+
+            RectTransform pagerRoot = PageRoot(parent, "StudioPager");
+            Place(pagerRoot, new Rect(x, y, w, RowHeight));
+            (studioPagerPrev, studioPagerLabel, studioPagerNext) =
+                PagerRow(pagerRoot, 0f, w, () => TurnStudioCatalogPage(-1), () => TurnStudioCatalogPage(1),
+                         "Previous or next saved pilot page");
+            y -= RowHeight + Space1;
+
+            half = (w - Gap) * 0.5f;
+            WingUi.Button(parent, "NEW", new Rect(x, y, half, 28f), FontSmall, OnStudioNewPilot)
                 .WithTooltip("Create a new blank pilot record in the editor");
-            WingUi.Button(parent, "CLONE", new Rect(Pad + (btnW + Gap), y, btnW, 20f), FontSmall, OnStudioClonePilot)
+            WingUi.Button(parent, "CLONE", new Rect(x + half + Gap, y, half, 28f), FontSmall, OnStudioClonePilot)
                 .WithTooltip("Duplicate currently selected pilot with a new callsign");
-            WingUi.Button(parent, "DELETE", new Rect(Pad + (btnW + Gap) * 2f, y, btnW, 20f), FontSmall, OnStudioDeletePilot)
-                .WithTooltip("Delete currently selected custom pilot from file");
+            y -= 28f + Space1;
+            studioDeleteButton = WingUi.Button(parent, "DELETE", new Rect(x, y, half, 28f), FontSmall,
+                UiButtonStyle.Danger, OnStudioDeletePressed)
+                .WithTooltip("Delete the selected custom pilot file. Press twice to confirm.");
             studioRecruitSelectedButton = WingUi.Button(parent, "RECRUIT",
-                new Rect(Pad + (btnW + Gap) * 3f, y, btnW, 20f), FontSmall, OnStudioToggleRecruitSelected);
-            y -= 24f + Gap;
+                new Rect(x + half + Gap, y, half, 28f), FontSmall, OnStudioToggleRecruitSelected)
+                .WithTooltip("Recruit this pilot into the active squadron roster");
+            y -= 28f + Space2;
 
-            // Tactical Card: Portrait & Identity Studio
-            const float cardHeight = 150f;
-            WingUi.TacticalCard(parent, new Rect(Pad, y, w, cardHeight), WingUi.RailCyan);
+            // Selected preview card; the portrait and card grow with the body.
+            float previewHeight = StudioPreviewHeight;
+            float previewPortraitW = StudioPortraitWidth;
+            float previewPortraitH = StudioPreviewPortraitHeight;
+            var (_, rail) = WingUi.TacticalCard(parent, new Rect(x, y, w, previewHeight), WingUi.RailCyan);
+            studioPreviewRail = rail;
+            studioPreviewFrame = Panel(parent,
+                new Rect(x + 5f, y - 5f, previewPortraitW + 2f, previewPortraitH + 2f), FrameColor());
+            Panel(parent, new Rect(x + 6f, y - 6f, previewPortraitW, previewPortraitH), AvTheme.Surface);
 
-            // Left: Portrait (76 x 96) and Looks Reroll
-            float pX = Pad + 8f;
-            Panel(parent, new Rect(pX, y - 4f, 76f, 96f), AvTheme.Surface);
+            var previewMaskGo = new GameObject("StudioPreviewMask", typeof(RectTransform), typeof(RectMask2D));
+            RectTransform previewMask = previewMaskGo.GetComponent<RectTransform>();
+            previewMask.SetParent(parent, worldPositionStays: false);
+            Place(previewMask, new Rect(x + 6f, y - 6f, previewPortraitW, previewPortraitH));
+            studioPreviewPortrait = AddSprite(previewMask, "StudioPreviewPortrait", null,
+                                              new Rect(0f, 0f, previewPortraitW, previewPortraitH), Color.white);
+            UpdatePortraitAspectFill(studioPreviewPortrait, PersonnelFacade.Portraits.Sprite,
+                                     previewPortraitW, previewPortraitH);
 
+            float previewTextX = x + 6f + previewPortraitW + 6f;
+            float previewTextWidth = x + w - 6f - previewTextX;
+            studioPreviewName = Label(parent, "", new Rect(previewTextX, y - 8f, previewTextWidth, 16f),
+                                      Friendly(), FontSmall, FontStyles.Bold, TextAlignmentOptions.Left);
+            studioPreviewName.enableWordWrapping = false;
+            studioPreviewName.overflowMode = TextOverflowModes.Ellipsis;
+            studioPreviewDetail = Label(parent, "", new Rect(previewTextX, y - 26f, previewTextWidth, 14f),
+                                        Dim(), FontMicro, FontStyles.Normal, TextAlignmentOptions.Left);
+            studioPreviewDetail.enableWordWrapping = false;
+            studioPreviewDetail.overflowMode = TextOverflowModes.Ellipsis;
+            studioPreviewState = Label(parent, "", new Rect(previewTextX, y - 44f, previewTextWidth, 14f),
+                                       Dim(), FontMicro, FontStyles.Bold, TextAlignmentOptions.Left);
+
+            // Rank/XP strip sits on the card foot so a taller preview does not strand glass.
+            float previewBarY = y - previewHeight + 20f;
+            Rule(parent, new Rect(previewTextX, previewBarY, previewTextWidth, 6f), FrameColor());
+            studioPreviewXpBar = Rule(parent, new Rect(previewTextX, previewBarY, 0f, 6f), Green());
+            studioPreviewXpWidth = previewTextWidth;
+            for (int i = 1; i < 5; i++)
+                Rule(parent, new Rect(previewTextX + previewTextWidth * (i / 5f), previewBarY, 1f, 6f),
+                     WingUi.BorderSubtle);
+
+            y -= previewHeight + Gap;
+            return y;
+        }
+
+        private static float BuildStudioEditor(RectTransform parent, float x, float w, float y)
+        {
+            y = SectionHeader(parent, x, y, w, "IDENTITY");
+            y -= Space1;
+
+            const float labelWidth = 54f;
+            const float randomWidth = 54f;
+            const float fieldHeight = 30f;
+            float fieldWidth = w - labelWidth - Gap - randomWidth - Space1;
+
+            Label(parent, "CALLSIGN", new Rect(x, y, labelWidth, fieldHeight), Dim(), FontMicro,
+                  FontStyles.Normal, TextAlignmentOptions.Left);
+            studioCallsignField = WingUi.InputField(parent, new Rect(x + labelWidth, y, fieldWidth, fieldHeight), 14,
+                val => { draftPilot.Callsign = val.Trim().ToUpperInvariant(); RefreshDraftVisual(); },
+                tooltip: "Pilot callsign shown on the squadron roster",
+                placeholderText: "CALLSIGN");
+            WingUi.Button(parent, "RANDOM", new Rect(x + w - randomWidth, y, randomWidth, fieldHeight),
+                FontMicro, OnRandomizeCallsign).WithTooltip("Generate a random callsign");
+            y -= fieldHeight + Space1;
+
+            Label(parent, "NAME", new Rect(x, y, labelWidth, fieldHeight), Dim(), FontMicro,
+                  FontStyles.Normal, TextAlignmentOptions.Left);
+            studioNameField = WingUi.InputField(parent, new Rect(x + labelWidth, y, fieldWidth, fieldHeight), 24,
+                val => { draftPilot.Name = val.Trim(); RefreshDraftVisual(); },
+                tooltip: "Pilot name", placeholderText: "NAME");
+            WingUi.Button(parent, "RANDOM", new Rect(x + w - randomWidth, y, randomWidth, fieldHeight),
+                FontMicro, OnRandomizeName).WithTooltip("Generate a random name");
+            y -= fieldHeight + Space1;
+
+            CreateStudioStepper(parent, x, y, w, "RADIO", out personaValueLabel,
+                () => CyclePersona(-1), () => CyclePersona(1));
+            y -= RowHeight + Space1;
+            CreateStudioStepper(parent, x, y, w, "RANK", out rankValueLabel,
+                () => CycleRank(-1), () => CycleRank(1));
+            y -= RowHeight + Space1;
+
+            studioStatusLabel = Label(parent, "", new Rect(x, y, w, 16f), Dim(), FontMicro,
+                                      FontStyles.Normal, TextAlignmentOptions.Left);
+            y -= 16f + Space2;
+
+            y = SectionHeader(parent, x, y, w, "APPEARANCE");
+            y -= Space1;
+            float blockTop = y;
+
+            Panel(parent, new Rect(x + 2f, blockTop - 2f, StudioPortraitWidth, StudioPortraitHeight),
+                  AvTheme.Surface);
             var maskGo = new GameObject("StudioPortraitMask", typeof(RectTransform), typeof(RectMask2D));
-            var maskRt = maskGo.GetComponent<RectTransform>();
+            RectTransform maskRt = maskGo.GetComponent<RectTransform>();
             maskRt.SetParent(parent, worldPositionStays: false);
-            Place(maskRt, new Rect(pX, y - 4f, 76f, 96f));
+            Place(maskRt, new Rect(x + 2f, blockTop - 2f, StudioPortraitWidth, StudioPortraitHeight));
 
-            var pGo = new GameObject("StudioPortrait", typeof(RectTransform), typeof(Image));
-            var pRt = pGo.GetComponent<RectTransform>();
-            pRt.SetParent(maskRt, worldPositionStays: false);
-            studioPortraitImage = pGo.GetComponent<Image>();
+            var portraitGo = new GameObject("StudioPortrait", typeof(RectTransform), typeof(Image));
+            RectTransform portraitRt = portraitGo.GetComponent<RectTransform>();
+            portraitRt.SetParent(maskRt, worldPositionStays: false);
+            studioPortraitImage = portraitGo.GetComponent<Image>();
             studioPortraitImage.color = Color.white;
             studioPortraitImage.raycastTarget = false;
-            UpdatePortraitAspectFill(studioPortraitImage, PersonnelFacade.Portraits.Sprite, 76f, 96f);
+            UpdatePortraitAspectFill(studioPortraitImage, PersonnelFacade.Portraits.Sprite,
+                                     StudioPortraitWidth, StudioPortraitHeight);
+            studioPortraitFrame = Outline(parent,
+                new Rect(x + 2f, blockTop - 2f, StudioPortraitWidth, StudioPortraitHeight), FrameColor());
 
-            studioPortraitFrame = Outline(parent, new Rect(pX, y - 4f, 76f, 96f), RankColor(WingRank.Rookie));
-
-            WingUi.Button(parent, "REROLL LOOKS", new Rect(pX, y - 128f, 76f, 18f), FontMicro, OnRerollLooks)
+            WingUi.Button(parent, "REROLL", new Rect(x + 2f, blockTop - StudioPortraitHeight - 8f,
+                                                     StudioPortraitWidth, 26f), FontMicro, OnRerollLooks)
                 .WithTooltip("Randomize body, face, hair, faction uniform, and backdrop");
 
-            // Center: body-specific paper-doll steppers.
-            float stX = pX + 76f + 8f;
-            const float stW = 96f;
-            const float stPitch = 21f;
-
-            CreateStudioStepper(parent, stX, y - 4f, stW, "BODY", out bodyValueLabel,
+            float stepperX = x + StudioPortraitWidth + 6f;
+            float stepperW = w - StudioPortraitWidth - 6f;
+            float stepperPitch = BodyHeight >= StudioWideBodyHeight ? 38f : 34f;
+            float stepperY = blockTop;
+            CreateStudioStepper(parent, stepperX, stepperY, stepperW, "BODY", out bodyValueLabel,
                 () => CycleBody(-1), () => CycleBody(1));
-
-            CreateStudioStepper(parent, stX, y - 4f - stPitch, stW, "FACE", out faceValueLabel,
+            stepperY -= stepperPitch;
+            CreateStudioStepper(parent, stepperX, stepperY, stepperW, "FACE", out faceValueLabel,
                 () => CycleFace(-1), () => CycleFace(1));
-
-            CreateStudioStepper(parent, stX, y - 4f - stPitch * 2f, stW, "HAIR", out hairValueLabel,
+            stepperY -= stepperPitch;
+            CreateStudioStepper(parent, stepperX, stepperY, stepperW, "HAIR", out hairValueLabel,
                 () => CycleHair(-1), () => CycleHair(1));
-
-            CreateStudioStepper(parent, stX, y - 4f - stPitch * 3f, stW, "SUIT", out uniformValueLabel,
+            stepperY -= stepperPitch;
+            CreateStudioStepper(parent, stepperX, stepperY, stepperW, "SUIT", out uniformValueLabel,
                 () => CycleUniform(-1), () => CycleUniform(1));
-
-            CreateStudioStepper(parent, stX, y - 4f - stPitch * 4f, stW, "BACK", out backdropValueLabel,
+            stepperY -= stepperPitch;
+            CreateStudioStepper(parent, stepperX, stepperY, stepperW, "SCENE", out backdropValueLabel,
                 () => CycleBackdrop(-1), () => CycleBackdrop(1));
 
-            Label(parent, "APPEARANCE", new Rect(stX, y - 129f, stW, 18f), Dim(), FontMicro, FontStyles.Italic, TextAlignmentOptions.Center);
+            y = blockTop - 5f * stepperPitch - Space2;
 
-            // Right: Identity & Characteristics
-            float idX = stX + stW + 10f;
-            float idW = w - (idX - Pad) - 6f;
-
-            // Row 1: Callsign
-            Label(parent, "CALL", new Rect(idX, y - 4f, 36f, 20f), Dim(), FontMicro, FontStyles.Normal, TextAlignmentOptions.Left);
-            studioCallsignField = WingUi.InputField(parent, new Rect(idX + 38f, y - 4f, idW - 74f, 20f), 14,
-                val => { draftPilot.Callsign = val.Trim().ToUpperInvariant(); RefreshDraftVisual(); },
-                placeholderText: "CALLSIGN");
-            WingUi.Button(parent, "RND", new Rect(idX + idW - 32f, y - 4f, 32f, 20f), FontMicro, OnRandomizeCallsign)
-                .WithTooltip("Roll random callsign");
-
-            // Row 2: Name
-            Label(parent, "NAME", new Rect(idX, y - 4f - stPitch, 36f, 20f), Dim(), FontMicro, FontStyles.Normal, TextAlignmentOptions.Left);
-            studioNameField = WingUi.InputField(parent, new Rect(idX + 38f, y - 4f - stPitch, idW - 74f, 20f), 24,
-                val => { draftPilot.Name = val.Trim(); },
-                placeholderText: "NAME");
-            WingUi.Button(parent, "RND", new Rect(idX + idW - 32f, y - 4f - stPitch, 32f, 20f), FontMicro, OnRandomizeName)
-                .WithTooltip("Roll random name");
-
-            // Row 3: Persona / Radio Style
-            Label(parent, "STYLE", new Rect(idX, y - 4f - stPitch * 2f, 36f, 20f), Dim(), FontMicro, FontStyles.Normal, TextAlignmentOptions.Left);
-            CreateStudioStepper(parent, idX + 38f, y - 4f - stPitch * 2f, idW - 38f, null, out personaValueLabel,
-                () => CyclePersona(-1), () => CyclePersona(1));
-
-            // Row 4: Rank / XP
-            Label(parent, "RANK", new Rect(idX, y - 4f - stPitch * 3f, 36f, 20f), Dim(), FontMicro, FontStyles.Normal, TextAlignmentOptions.Left);
-            CreateStudioStepper(parent, idX + 38f, y - 4f - stPitch * 3f, idW - 38f, null, out rankValueLabel,
-                () => CycleRank(-1), () => CycleRank(1));
-
-            // Row 5: Status Tag
-            studioStatusLabel = Label(parent, "", new Rect(idX + 38f, y - 128f, idW - 38f, 18f),
-                Green(), FontMicro, FontStyles.Bold, TextAlignmentOptions.Left);
-
-            y -= cardHeight + Gap + 2f;
-
-            // Background & Lore Box
-            Label(parent, "BACKGROUND / LORE", new Rect(Pad, y, w, 14f), Dim(), FontMicro, FontStyles.Normal, TextAlignmentOptions.Left);
-            y -= 16f;
-
-            studioBioField = WingUi.InputField(parent, new Rect(Pad, y, w, 72f), 280,
+            y = SectionHeader(parent, x, y, w, "BACKGROUND");
+            y -= Space1;
+            float bioHeight = StudioBioHeight(y);
+            studioBioField = WingUi.InputField(parent, new Rect(x, y, w, bioHeight), 280,
                 val => { draftPilot.Background = val; },
+                tooltip: "Pilot background notes or military history",
                 placeholderText: "Enter pilot background notes or military history...",
                 lineType: TMP_InputField.LineType.MultiLineNewline);
-            y -= 76f;
+            y -= bioHeight + Space1;
 
-            float bioBtnW = (w - Gap) / 2f;
-            WingUi.Button(parent, "GENERATE BIO", new Rect(Pad, y, bioBtnW, 20f), FontSmall, OnGenerateBio)
+            float half = (w - Gap) * 0.5f;
+            WingUi.Button(parent, "GENERATE BIO", new Rect(x, y, half, 28f), FontSmall, OnGenerateBio)
                 .WithTooltip("Generate background text matching pilot persona and callsign");
-            WingUi.Button(parent, "RANDOMIZE ALL", new Rect(Pad + bioBtnW + Gap, y, bioBtnW, 20f), FontSmall, OnRandomizeAll)
+            WingUi.Button(parent, "RANDOMIZE ALL", new Rect(x + half + Gap, y, half, 28f), FontSmall, OnRandomizeAll)
                 .WithTooltip("Generate a completely fresh random pilot (identity, looks, and lore)");
-            y -= 24f + Gap;
+            y -= 28f + Gap;
+            return y;
+        }
 
-            // Footer Action Buttons
-            float footW = (w - Gap) / 2f;
-            WingUi.Button(parent, "SAVE PILOT", new Rect(Pad, y, footW, 24f), FontSmall, OnStudioSavePilot)
+        /// <summary>Bio field height: fixed on short bodies, stretched to the pinned footer on tall
+        /// ones so the editor fills its column instead of stranding glass above SAVE PILOT.</summary>
+        private static float StudioBioHeight(float bioTop)
+        {
+            if (!studioTall) return StudioBioHeightMin;
+            float footerTop = BodyBottom + RowHeight + Space2;
+            return Mathf.Clamp(bioTop - footerTop - (Space1 + 28f + Gap), StudioBioHeightMin, 320f);
+        }
+
+        private static void BuildStudioFooter(RectTransform parent)
+        {
+            float top = BodyBottom + Space2 + RowHeight;
+            float half = (ContentWidth - Gap) * 0.5f;
+            WingUi.Button(parent, "SAVE PILOT", new Rect(Pad, top, half, RowHeight), FontSmall,
+                UiButtonStyle.Primary, OnStudioSavePilot)
                 .WithTooltip("Save or update this custom pilot record in custom_pilots.json");
-            WingUi.Button(parent, "RECRUIT TO SQUADRON", new Rect(Pad + footW + Gap, y, footW, 24f), FontSmall, OnStudioRecruitToSquadron)
+            WingUi.Button(parent, "SAVE & RECRUIT", new Rect(Pad + half + Gap, top, half, RowHeight),
+                FontSmall, OnStudioRecruitToSquadron)
                 .WithTooltip("Recruit this pilot into active squadron roster");
-
-            return y - 28f;
         }
 
         private static void CreateStudioStepper(RectTransform parent, float x, float y, float w,
             string labelPrefix, out TMP_Text valueLabel, Action onPrev, Action onNext)
         {
-            Panel(parent, new Rect(x, y, w, 20f), RowColor());
-            Outline(parent, new Rect(x, y, w, 20f), FrameColor());
-            const float arrow = 18f;
+            if (!string.IsNullOrEmpty(labelPrefix))
+            {
+                const float labelWidth = 54f;
+                Label(parent, labelPrefix, new Rect(x, y, labelWidth, RowHeight), Dim(), FontMicro,
+                    FontStyles.Normal, TextAlignmentOptions.Left);
+                x += labelWidth;
+                w -= labelWidth;
+            }
+            Panel(parent, new Rect(x, y, w, RowHeight), RowColor());
+            Outline(parent, new Rect(x, y, w, RowHeight), FrameColor());
+            const float arrow = 28f;
 
-            WingUi.Button(parent, "<", new Rect(x + 1f, y - 1f, arrow, 18f),
-                FontSmall, UiButtonStyle.Quiet, onPrev);
-            valueLabel = Label(parent, "", new Rect(x + arrow, y, w - arrow * 2f, 20f),
+            WingUi.Button(parent, "<", new Rect(x, y, arrow, RowHeight),
+                FontSmall, UiButtonStyle.Quiet, onPrev).WithTooltip("Previous " + (labelPrefix ?? "value").ToLowerInvariant());
+            valueLabel = Label(parent, "", new Rect(x + arrow + 4f, y, w - arrow * 2f - 8f, RowHeight),
                 Friendly(), FontMicro, FontStyles.Bold, TextAlignmentOptions.Center);
-            WingUi.Button(parent, ">", new Rect(x + w - arrow - 1f, y - 1f, arrow, 18f),
-                FontSmall, UiButtonStyle.Quiet, onNext);
+            WingUi.Button(parent, ">", new Rect(x + w - arrow, y, arrow, RowHeight),
+                FontSmall, UiButtonStyle.Quiet, onNext).WithTooltip("Next " + (labelPrefix ?? "value").ToLowerInvariant());
         }
 
         public static void ShowPilotStudioView()
         {
             if (squadronViewRoot != null) squadronViewRoot.gameObject.SetActive(false);
             if (customStudioRoot != null) customStudioRoot.gameObject.SetActive(true);
+            if (studioScroll != null) pageScrolls[(int)Page.Wing] = studioScroll;
+            ResetPageScroll(Page.Wing);
 
+            studioDeleteConfirm.Clear();
+            studioDischargeConfirm.Clear();
             ReloadCustomPilotsList();
             if (studioPilotsList.Count > 0)
             {
@@ -336,7 +513,10 @@ namespace WingCommand
             ReleaseStudioInput();
             if (customStudioRoot != null) customStudioRoot.gameObject.SetActive(false);
             if (squadronViewRoot != null) squadronViewRoot.gameObject.SetActive(true);
+            if (wingScroll != null) pageScrolls[(int)Page.Wing] = wingScroll;
+            ResetPageScroll(Page.Wing);
 
+            PruneFocus(Wing());
             RefreshWingPage(WingCommandManager.Instance?.Wing);
         }
 
@@ -366,10 +546,16 @@ namespace WingCommand
         {
             int total = studioPilotsList.Count;
             int pageCount = Mathf.Max(1, Mathf.CeilToInt(total / (float)StudioRowsPerPage));
-            RefreshHeaderPager(studioHeaderPager, studioPrevButton, studioPageLabel, studioNextButton, studioCatalogPage, pageCount);
+            studioCatalogPage = Mathf.Clamp(studioCatalogPage, 0, pageCount - 1);
 
-            bool empty = total == 0;
-            if (studioTableEmptyLabel != null) studioTableEmptyLabel.gameObject.SetActive(empty);
+            if (studioPagerLabel != null)
+                studioPagerLabel.text = PageSummary(total, studioCatalogPage, pageCount, "PILOT", "PILOTS");
+            studioPagerPrev?.SetEnabled(studioCatalogPage > 0);
+            studioPagerNext?.SetEnabled(studioCatalogPage < pageCount - 1);
+
+            if (studioTableEmptyLabel != null) studioTableEmptyLabel.gameObject.SetActive(total == 0);
+            if (studioCatalogCountLabel != null)
+                studioCatalogCountLabel.text = total == 0 ? "NO FILES" : total + (total == 1 ? " FILE" : " FILES");
 
             int startIndex = studioCatalogPage * StudioRowsPerPage;
             for (int i = 0; i < studioRows.Count; i++)
@@ -377,10 +563,16 @@ namespace WingCommand
                 int itemIndex = startIndex + i;
                 if (itemIndex < total)
                 {
-                    CustomPilotRecord rec = studioPilotsList[itemIndex];
-                    bool isSelected = (itemIndex == selectedCatalogIndex);
+                    CustomPilotRecord record = studioPilotsList[itemIndex];
+                    bool isSelected = itemIndex == selectedCatalogIndex;
                     int captureIndex = itemIndex;
-                    studioRows[i].Bind(rec, isSelected, () => SelectStudioPilot(rec, captureIndex));
+                    studioRows[i].Bind(record, isSelected, () => SelectStudioPilot(record, captureIndex));
+                }
+                else if (total > 0)
+                {
+                    // Named inert rows keep the catalog looking intentional on tall bodies;
+                    // the empty-file card owns the area when nothing is saved yet.
+                    studioRows[i].ShowVacant(itemIndex);
                 }
                 else
                 {
@@ -388,23 +580,41 @@ namespace WingCommand
                 }
             }
 
-            // Update recruit/discharge selected button
-            if (studioRecruitSelectedButton != null)
-            {
-                bool inSquadron = !string.IsNullOrEmpty(draftPilot.Callsign) &&
-                    PersonnelFacade.Roster.ContainsCallsign(draftPilot.Callsign);
-                studioRecruitSelectedButton.SetText(inSquadron ? "DISCHARGE" : "RECRUIT");
-                studioRecruitSelectedButton.WithTooltip(inSquadron
-                    ? $"Remove {draftPilot.Callsign} from squadron"
-                    : $"Recruit {draftPilot.Callsign} into squadron");
-            }
+            RefreshStudioActions();
         }
 
-        private static void TurnStudioCatalogPage(int dir)
+        private static void TurnStudioCatalogPage(int direction)
         {
             int pageCount = Mathf.Max(1, Mathf.CeilToInt(studioPilotsList.Count / (float)StudioRowsPerPage));
-            studioCatalogPage = Mathf.Clamp(studioCatalogPage + dir, 0, pageCount - 1);
+            studioCatalogPage = Mathf.Clamp(studioCatalogPage + direction, 0, pageCount - 1);
             RefreshStudioCatalog();
+        }
+
+        private static void RefreshStudioActions()
+        {
+            bool hasCallsign = !string.IsNullOrWhiteSpace(draftPilot.Callsign);
+            bool inSquadron = hasCallsign && PersonnelFacade.Roster.ContainsCallsign(draftPilot.Callsign);
+
+            if (studioDeleteButton != null)
+            {
+                bool armed = hasCallsign && studioDeleteConfirm.IsArmedFor(draftPilot.Callsign);
+                studioDeleteButton.SetText(armed ? "DELETE?" : "DELETE");
+                studioDeleteButton.SetLatched(armed);
+                studioDeleteButton.SetEnabled(hasCallsign);
+            }
+
+            if (studioRecruitSelectedButton != null)
+            {
+                bool armed = inSquadron && studioDischargeConfirm.IsArmedFor(draftPilot.Callsign);
+                studioRecruitSelectedButton.SetText(inSquadron
+                    ? (armed ? "DISCHARGE?" : "DISCHARGE")
+                    : "RECRUIT");
+                studioRecruitSelectedButton.SetLatched(armed);
+                studioRecruitSelectedButton.SetEnabled(hasCallsign);
+                studioRecruitSelectedButton.WithTooltip(inSquadron
+                    ? "Remove " + draftPilot.Callsign + " from the squadron. Press twice to confirm."
+                    : "Recruit " + draftPilot.Callsign + " into the active squadron roster");
+            }
         }
 
         private static void SelectStudioPilot(CustomPilotRecord record, int index = -1)
@@ -412,6 +622,8 @@ namespace WingCommand
             selectedCatalogIndex = index;
             draftPilot = record.Clone();
             if (!draftPilot.HasCustomPortrait) draftPilot.ApplySelection(PilotPortraitGenerator.DefaultSelection);
+            studioDeleteConfirm.Clear();
+            studioDischargeConfirm.Clear();
 
             if (studioCallsignField != null) studioCallsignField.text = draftPilot.Callsign;
             if (studioNameField != null) studioNameField.text = draftPilot.Name;
@@ -426,36 +638,72 @@ namespace WingCommand
             PortraitSelection selection = draftPilot.Selection;
 
             if (bodyValueLabel != null) bodyValueLabel.text = PilotPortraitGenerator.BodyLabel(selection.Body);
-            if (faceValueLabel != null) faceValueLabel.text = $"FACE {selection.Face + 1}/{PilotPortraitGenerator.FacesPerBody}";
-            if (hairValueLabel != null) hairValueLabel.text = selection.Hair == 0 ? "BALD" : $"HAIR {selection.Hair}";
+            if (faceValueLabel != null) faceValueLabel.text = $"{selection.Face + 1} / {PilotPortraitGenerator.FacesPerBody}";
+            if (hairValueLabel != null) hairValueLabel.text = selection.Hair == 0 ? "BALD" : selection.Hair.ToString();
             if (uniformValueLabel != null) uniformValueLabel.text = PilotPortraitGenerator.UniformLabel(selection.Uniform);
-            if (backdropValueLabel != null) backdropValueLabel.text = $"BACK {selection.Backdrop + 1}/{PilotPortraitGenerator.BackdropCount}";
+            if (backdropValueLabel != null) backdropValueLabel.text = $"{selection.Backdrop + 1} / {PilotPortraitGenerator.BackdropCount}";
 
             if (personaValueLabel != null) personaValueLabel.text = draftPilot.Persona.ToString().ToUpperInvariant();
 
             WingRank rank = PersonnelFacade.Roster.RankFor(draftPilot.Xp);
-            if (rankValueLabel != null) rankValueLabel.text = $"{PersonnelFacade.Roster.RankName(rank).ToUpperInvariant()} ({draftPilot.Xp} XP)";
+            if (rankValueLabel != null)
+                rankValueLabel.text = PersonnelFacade.Roster.RankName(rank).ToUpperInvariant() + " (" + draftPilot.Xp + " XP)";
 
-            if (studioPortraitImage != null)
+            if (studioPreviewXpBar != null)
             {
-                Sprite portraitSprite = PersonnelFacade.Portraits.ForSelection(selection);
-                UpdatePortraitAspectFill(studioPortraitImage, portraitSprite, 76f, 96f);
+                float progress = 1f;
+                if (rank < PersonnelFacade.Roster.TopRank)
+                {
+                    int floor = PersonnelFacade.Roster.XpForRank(rank);
+                    int ceiling = PersonnelFacade.Roster.XpForRank(rank + 1);
+                    progress = ceiling > floor
+                        ? Mathf.Clamp01((draftPilot.Xp - floor) / (float)(ceiling - floor))
+                        : 0f;
+                }
+                studioPreviewXpBar.rectTransform.sizeDelta =
+                    new Vector2(Mathf.Max(0f, studioPreviewXpWidth * progress), 6f);
             }
+
+            Sprite portraitSprite = PersonnelFacade.Portraits.ForSelection(selection);
+            if (studioPortraitImage != null)
+                UpdatePortraitAspectFill(studioPortraitImage, portraitSprite,
+                                         StudioPortraitWidth, StudioPortraitHeight);
+            if (studioPreviewPortrait != null)
+                UpdatePortraitAspectFill(studioPreviewPortrait, portraitSprite,
+                                         StudioPortraitWidth, StudioPreviewPortraitHeight);
 
             if (studioPortraitFrame != null)
             {
-                Color border = RankColor(rank);
+                Color border = FrameColor();
                 for (int i = 0; i < studioPortraitFrame.Length; i++)
                     if (studioPortraitFrame[i] != null) studioPortraitFrame[i].color = border;
             }
 
+            bool inSquadron = !string.IsNullOrEmpty(draftPilot.Callsign) &&
+                PersonnelFacade.Roster.ContainsCallsign(draftPilot.Callsign);
             if (studioStatusLabel != null)
             {
-                bool inSquadron = !string.IsNullOrEmpty(draftPilot.Callsign) &&
-                    PersonnelFacade.Roster.ContainsCallsign(draftPilot.Callsign);
-                studioStatusLabel.text = inSquadron ? "STATUS: [IN SQUADRON]" : "STATUS: [READY TO RECRUIT]";
-                studioStatusLabel.color = inSquadron ? WingUi.RailEmerald : WingUi.RailCyan;
+                studioStatusLabel.text = inSquadron
+                    ? "IN SQUADRON · Saving updates this pilot"
+                    : "NOT IN SQUADRON · Save & Recruit adds this pilot";
+                studioStatusLabel.color = inSquadron ? WingUi.RailEmerald : Dim();
             }
+
+            if (studioPreviewName != null)
+                studioPreviewName.text = AvTheme.Truncate(draftPilot.Callsign + " · " + draftPilot.Name, 18);
+            if (studioPreviewDetail != null)
+                studioPreviewDetail.text = PersonnelFacade.Roster.RankName(rank) + " · " + draftPilot.Xp + " XP";
+            if (studioPreviewState != null)
+            {
+                studioPreviewState.text = inSquadron ? "IN SQUADRON" : "SAVED PILOT";
+                studioPreviewState.color = inSquadron ? WingUi.RailEmerald : Dim();
+            }
+            if (studioPreviewFrame != null)
+                studioPreviewFrame.color = inSquadron ? WingUi.RailEmerald : FrameColor();
+            if (studioPreviewRail != null)
+                studioPreviewRail.color = inSquadron ? WingUi.RailEmerald : WingUi.RailCyan;
+
+            RefreshStudioActions();
         }
 
         private static void CycleBody(int dir)
@@ -569,6 +817,8 @@ namespace WingCommand
             if (studioBioField != null) studioBioField.text = draftPilot.Background;
 
             selectedCatalogIndex = -1;
+            studioDeleteConfirm.Clear();
+            studioDischargeConfirm.Clear();
             RefreshDraftVisual();
             RefreshStudioCatalog();
         }
@@ -591,6 +841,8 @@ namespace WingCommand
             if (studioBioField != null) studioBioField.text = draftPilot.Background;
 
             selectedCatalogIndex = -1;
+            studioDeleteConfirm.Clear();
+            studioDischargeConfirm.Clear();
             RefreshDraftVisual();
             RefreshStudioCatalog();
         }
@@ -619,6 +871,21 @@ namespace WingCommand
             WingCommandManager.Instance?.Toast($"Cloned pilot as {newCall}");
         }
 
+        /// <summary>First press arms the three-second confirmation, second press deletes.</summary>
+        private static void OnStudioDeletePressed()
+        {
+            if (string.IsNullOrWhiteSpace(draftPilot.Callsign)) return;
+            if (!studioDeleteConfirm.IsArmedFor(draftPilot.Callsign))
+            {
+                studioDeleteConfirm.Arm(draftPilot.Callsign);
+                RefreshStudioActions();
+                return;
+            }
+
+            studioDeleteConfirm.Clear();
+            OnStudioDeletePilot();
+        }
+
         private static void OnStudioDeletePilot()
         {
             if (string.IsNullOrWhiteSpace(draftPilot.Callsign)) return;
@@ -636,10 +903,19 @@ namespace WingCommand
             WingCommandManager.Instance?.Toast(deleted ? $"Deleted pilot {call}" : $"Could not delete {call}");
         }
 
+        /// <summary>Discharge keeps the three-second two-press confirmation; recruit is immediate.</summary>
         private static void OnStudioToggleRecruitSelected()
         {
             if (string.IsNullOrWhiteSpace(draftPilot.Callsign)) return;
             bool inSquadron = PersonnelFacade.Roster.ContainsCallsign(draftPilot.Callsign);
+            if (inSquadron && !studioDischargeConfirm.IsArmedFor(draftPilot.Callsign))
+            {
+                studioDischargeConfirm.Arm(draftPilot.Callsign);
+                RefreshStudioActions();
+                return;
+            }
+
+            studioDischargeConfirm.Clear();
             if (inSquadron)
             {
                 var pilot = PersonnelFacade.Roster.FindByCallsign(draftPilot.Callsign);

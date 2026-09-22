@@ -182,7 +182,6 @@ namespace NOAvionics.Ui
         {
             Image bg = Panel(parent, area, AvTheme.Surface, AvSprites.Card);
             Outline(parent, area, AvTheme.Hairline);
-            CornerTicks(parent, area, AvTheme.Hairline);
 
             Image rail = null;
             if (hasRail)
@@ -197,10 +196,11 @@ namespace NOAvionics.Ui
             RectTransform parent, string text, Rect area, Color railColor, Color textColor,
             float fontSize = AvTokens.FontMicro)
         {
-            Image bg = Panel(parent, area, new Color(railColor.r * 0.15f, railColor.g * 0.15f, railColor.b * 0.15f, 0.85f), AvSprites.Control);
-            Outline(parent, area, new Color(railColor.r, railColor.g, railColor.b, 0.45f));
-
-            TMP_Text lbl = Label(parent, text, area, textColor, fontSize, FontStyles.Bold, TextAlignmentOptions.Center);
+            Image bg = Panel(parent, area, AvTheme.SurfaceInert);
+            Rule(parent, new Rect(area.x + 5f, area.y - area.height * 0.5f + 3f, 3f, 6f), railColor);
+            TMP_Text lbl = Label(parent, text,
+                new Rect(area.x + 12f, area.y, Mathf.Max(0f, area.width - 16f), area.height),
+                textColor, fontSize, FontStyles.Normal, TextAlignmentOptions.MidlineLeft);
             return (bg, lbl);
         }
 
@@ -238,15 +238,31 @@ namespace NOAvionics.Ui
             fill.sprite = AvSprites.Control;
             fill.type = Image.Type.Sliced;
             fill.raycastTarget = true;
-
-            Image[] frame = Outline(rt, new Rect(0f, 0f, area.width, area.height), AvTheme.Frame);
+            Image border = Panel(rt, new Rect(0f, 0f, area.width, area.height), AvTheme.Frame, AvSprites.ControlFrame);
+            border.raycastTarget = false;
+            Stretch(border.rectTransform);
+            Image[] frame = new[] { border };
 
             Image underline = style == AvButtonStyle.Tab
                 ? Rule(rt, new Rect(0f, -(area.height - 2f), area.width, 2f), Color.clear)
                 : null;
+            if (underline != null)
+            {
+                RectTransform underlineRect = underline.rectTransform;
+                underlineRect.anchorMin = new Vector2(0f, 0f);
+                underlineRect.anchorMax = new Vector2(1f, 0f);
+                underlineRect.pivot = new Vector2(0.5f, 0f);
+                underlineRect.anchoredPosition = Vector2.zero;
+                underlineRect.sizeDelta = new Vector2(0f, 2f);
+            }
 
             TMP_Text label = Label(rt, text, new Rect(0f, 0f, area.width, area.height),
                                    AvTheme.Accent, fontSize, FontStyles.Bold, TextAlignmentOptions.Center);
+            Stretch(label.rectTransform);
+            label.margin = new Vector4(6f, 0f, 6f, 0f);
+            label.enableAutoSizing = true;
+            label.fontSizeMax = fontSize;
+            label.fontSizeMin = Mathf.Min(fontSize, AvTokens.FontMicro);
 
             AvButton btn = go.AddComponent<AvButton>();
             btn.Initialise(style, fill, frame, underline, label, onClick);
@@ -355,6 +371,11 @@ namespace NOAvionics.Ui
             return y - AvTokens.Space4;
         }
 
+        /// <summary>
+        /// A track with a leading fill. Returns the <em>fill</em>: the track and its outline are
+        /// siblings placed from <paramref name="area"/>, so re-placing the returned image later
+        /// leaves the track behind. Lay the bar out where it belongs when it is built.
+        /// </summary>
         public static Image ProgressBar(RectTransform parent, Rect area, float percent, Color fillCol)
         {
             Panel(parent, area, AvTheme.SurfaceInert);
@@ -366,6 +387,7 @@ namespace NOAvionics.Ui
             Place(fillRect, new Rect(area.x + 1f, area.y - 1f, area.width - 2f, area.height - 2f));
             Image fill = fillObject.GetComponent<Image>();
             fill.color = fillCol;
+            fill.sprite = AvSprites.White;
             fill.type = Image.Type.Filled;
             fill.fillMethod = Image.FillMethod.Horizontal;
             fill.fillOrigin = 0;
@@ -398,14 +420,9 @@ namespace NOAvionics.Ui
 
         public static TMP_Text StatusStrip(RectTransform parent, Rect area, Color? railColor = null)
         {
-            Color rail = railColor ?? AvTheme.RailReady;
-            TacticalCard(parent, area, rail);
-
-            TMP_Text label = Label(parent, "> READY",
-                                   new Rect(area.x + AvTokens.Space3, area.y - 2f,
-                                            area.width - AvTokens.Space4 - AvTokens.Space2, area.height - 4f),
-                                   AvTheme.Dim, AvTokens.FontMicro, FontStyles.Normal,
-                                   TextAlignmentOptions.MidlineLeft, wrap: true);
+            TMP_Text label = AvStyled.StatusStrip(parent, area, out Image rail);
+            rail.color = railColor ?? AvTheme.RailInert;
+            label.text = "READY";
             return label;
         }
 
@@ -430,19 +447,23 @@ namespace NOAvionics.Ui
             viewport.SetParent(rt, worldPositionStays: false);
             Place(viewport, new Rect(AvTokens.Space2, 0f, area.width - AvTokens.Space2 * 2f, area.height));
 
-            bool multiline = lineType != TMP_InputField.LineType.SingleLine;
-            TextAlignmentOptions alignment = multiline
-                ? TextAlignmentOptions.TopLeft
-                : TextAlignmentOptions.Left;
             TMP_Text text = Label(viewport, "", new Rect(0f, 0f, area.width - AvTokens.Space2 * 2f, area.height),
-                                  AvTheme.Friendly, AvTokens.FontBody, FontStyles.Normal, alignment);
+                                  AvTheme.Friendly, AvTokens.FontBody, FontStyles.Normal, TextAlignmentOptions.Left);
             text.raycastTarget = false;
-            text.enableWordWrapping = multiline;
 
             TMP_Text placeholder = Label(viewport, placeholderText, new Rect(0f, 0f, area.width - AvTokens.Space2 * 2f, area.height),
-                                         AvTheme.Disabled, AvTokens.FontBody, FontStyles.Italic, alignment);
+                                         AvTheme.Disabled, AvTokens.FontBody, FontStyles.Italic, TextAlignmentOptions.Left);
             placeholder.raycastTarget = false;
-            placeholder.enableWordWrapping = multiline;
+
+            bool multiline = lineType != TMP_InputField.LineType.SingleLine;
+            text.enableWordWrapping = placeholder.enableWordWrapping = multiline;
+            if (multiline)
+            {
+                text.alignment = TextAlignmentOptions.TopLeft;
+                text.overflowMode = TextOverflowModes.Overflow;
+                placeholder.alignment = TextAlignmentOptions.TopLeft;
+                placeholder.overflowMode = TextOverflowModes.Overflow;
+            }
 
             var field = go.AddComponent<TMP_InputField>();
             field.textViewport = viewport;
@@ -471,23 +492,27 @@ namespace NOAvionics.Ui
         public class Popup
         {
             private readonly GameObject root;
+            private readonly RectTransform sourcePageRoot;
+            private readonly RectTransform scrim;
+            private readonly float panelWidth;
             private readonly RectTransform listRect;
             private readonly Image listGround;
             private readonly List<PopupRow> rows = new List<PopupRow>();
             private static Popup open;
 
             public const int MaxRows = 7;
-            private const int PagedRows = MaxRows - 1;
             private int page;
 
             public Popup(RectTransform pageRoot, float panelWidth)
             {
+                sourcePageRoot = pageRoot;
+                this.panelWidth = panelWidth;
                 root = new GameObject("AvPopup", typeof(RectTransform));
                 var rt = root.GetComponent<RectTransform>();
                 rt.SetParent(pageRoot, worldPositionStays: false);
                 Stretch(rt);
 
-                HitButton(rt, new Rect(0f, 0f, panelWidth, 4000f), Close);
+                scrim = (RectTransform)HitButton(rt, new Rect(0f, 0f, panelWidth, 4000f), Close).transform;
 
                 var listGo = new GameObject("PopupList", typeof(RectTransform), typeof(Image));
                 listRect = listGo.GetComponent<RectTransform>();
@@ -512,13 +537,18 @@ namespace NOAvionics.Ui
 
             private void Render(Rect area, IReadOnlyList<PopupEntry> entries, Action<int> onPick)
             {
-                if (root == null) return;
+                if (root == null || sourcePageRoot == null) return;
                 open?.Close();
                 open = this;
 
+                Rect placement = area;
+                bool bounded = PrepareOverlay(ref placement, out Rect bounds);
+                int capacity = bounded
+                    ? Mathf.Clamp(Mathf.FloorToInt((bounds.height - AvTokens.Space1 * 2f) / AvTokens.RowPitch), 2, MaxRows)
+                    : MaxRows;
                 int total = entries?.Count ?? 0;
-                bool paged = total > MaxRows;
-                int perPage = paged ? PagedRows : MaxRows;
+                bool paged = total > capacity;
+                int perPage = paged ? capacity - 1 : capacity;
                 int pages = paged ? Mathf.CeilToInt(total / (float)perPage) : 1;
 
                 page = pages > 0 ? ((page % pages) + pages) % pages : 0;
@@ -527,7 +557,13 @@ namespace NOAvionics.Ui
                 int used = shown + (paged ? 1 : 0);
 
                 float height = Mathf.Max(AvTokens.RowPitch, AvTokens.RowPitch * used) + AvTokens.Space1 * 2f;
-                Place(listRect, new Rect(area.x, area.y, area.width, height));
+                if (bounded)
+                {
+                    placement.width = Mathf.Min(placement.width, bounds.width);
+                    placement.x = Mathf.Clamp(placement.x, bounds.x, bounds.x + bounds.width - placement.width);
+                    placement.y = Mathf.Clamp(placement.y, bounds.y - bounds.height + height, bounds.y);
+                }
+                Place(listRect, new Rect(placement.x, placement.y, placement.width, height));
 
                 while (rows.Count < MaxRows) rows.Add(new PopupRow(listRect, rows.Count));
 
@@ -536,7 +572,7 @@ namespace NOAvionics.Ui
                     if (i < shown)
                     {
                         int index = first + i;
-                        rows[i].Bind(entries[index], area.width, () =>
+                        rows[i].Bind(entries[index], placement.width, () =>
                         {
                             Close();
                             onPick?.Invoke(index);
@@ -544,7 +580,7 @@ namespace NOAvionics.Ui
                     }
                     else if (paged && i == shown)
                     {
-                        rows[i].Bind(new PopupEntry("MORE...", "page " + (page + 1) + " of " + pages), area.width, () =>
+                        rows[i].Bind(new PopupEntry("MORE...", "page " + (page + 1) + " of " + pages), placement.width, () =>
                         {
                             page++;
                             Render(area, entries, onPick);
@@ -558,6 +594,43 @@ namespace NOAvionics.Ui
 
                 root.SetActive(true);
                 root.transform.SetAsLastSibling();
+            }
+
+            // Pages are wrapped in ScrollRect after their controls are built. Resolve the
+            // viewport when opened, then draw outside its mask without losing the trigger's
+            // original page coordinates. The overlay stays within the visible body.
+            private bool PrepareOverlay(ref Rect area, out Rect bounds)
+            {
+                var rt = (RectTransform)root.transform;
+                ScrollRect scroll = sourcePageRoot.GetComponentInParent<ScrollRect>();
+                RectTransform viewport = scroll != null
+                    ? (scroll.viewport != null ? scroll.viewport : (RectTransform)scroll.transform)
+                    : sourcePageRoot;
+                RectTransform overlayParent = scroll != null && viewport != null ? viewport.parent as RectTransform : null;
+                rt.SetParent(overlayParent != null ? overlayParent : sourcePageRoot, false);
+                Stretch(rt);
+                if (viewport == null)
+                {
+                    bounds = default;
+                    Place(scrim, new Rect(0f, 0f, panelWidth, 4000f));
+                    return false;
+                }
+
+                Vector2 trigger = PointIn(sourcePageRoot, rt, area.x, area.y);
+                Vector2 triggerRight = PointIn(sourcePageRoot, rt, area.x + area.width, area.y);
+                area = new Rect(trigger.x, trigger.y, Mathf.Abs(triggerRight.x - trigger.x), area.height);
+                Vector2 topLeft = PointIn(viewport, rt, 0f, 0f);
+                Vector2 bottomRight = PointIn(viewport, rt, viewport.rect.width, -viewport.rect.height);
+                bounds = new Rect(topLeft.x, topLeft.y, bottomRight.x - topLeft.x, topLeft.y - bottomRight.y);
+                Place(scrim, bounds);
+                return true;
+            }
+
+            private static Vector2 PointIn(RectTransform from, RectTransform to, float x, float y)
+            {
+                Vector3 world = from.TransformPoint(new Vector3(from.rect.xMin + x, from.rect.yMax + y, 0f));
+                Vector3 local = to.InverseTransformPoint(world);
+                return new Vector2(local.x - to.rect.xMin, local.y - to.rect.yMax);
             }
 
             public void Close()
@@ -622,11 +695,11 @@ namespace NOAvionics.Ui
                 Place((RectTransform)hit.transform, new Rect(0f, 0f, width, AvTokens.RowHeight));
 
                 label.text = entry.Text ?? "";
-                label.color = !entry.Enabled ? AvTheme.Disabled : entry.Selected ? AvTheme.Accent : AvTheme.Friendly;
+                label.color = !entry.Enabled ? AvTheme.Disabled : entry.Selected ? AvTheme.Accent : AvTheme.TextPrimary;
                 detail.text = entry.Detail ?? "";
 
-                Color rest = entry.Selected ? AvTheme.Unity(AvTokens.Wash(AvTheme.Accent.ToRgba(), AvTokens.SelectedScale, AvTokens.SelectedAlpha)) : AvTheme.Ground;
-                Color hover = AvTheme.Unity(AvTokens.Wash(AvTheme.Accent.ToRgba(), AvTokens.RowHoverScale, AvTokens.RowHoverAlpha));
+                Color rest = AvTheme.Unity(AvTokens.RowFill(AvTheme.Accent.ToRgba(), entry.Selected));
+                Color hover = AvTheme.Unity(AvTokens.RowFill(AvTheme.Accent.ToRgba(), entry.Selected, true));
                 hit.SetRowHighlight(fill, rest, hover);
                 hit.SetAction(entry.Enabled ? onPick : null);
                 hit.SetEnabled(entry.Enabled);

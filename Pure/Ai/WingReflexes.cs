@@ -60,6 +60,12 @@ namespace WingCommand
                 // Reject hard breaks below the landing/crash floor.
                 if (s.RadarAlt < WingTuning.PanicFloorAlt) return 0f;
 
+                bool climbout = RadarDefenceGeometry.IsClimbout(s.RadarAlt, s.Airspeed);
+                if (!incumbent && climbout &&
+                    !RadarDefenceGeometry.AllowEvadeCommit(
+                        true, s.NearMissile, s.MissileImpactSeconds, s.MissileDistance))
+                    return 0f;
+
                 if (s.MissileWarned) return 0.9f;
 
                 // Bridge brief warning gaps so reacquisition cannot release controls mid-break.

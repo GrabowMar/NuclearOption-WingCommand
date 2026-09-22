@@ -44,18 +44,18 @@ namespace WingCommand.PureTests
         [Fact]
         public void StatusFormattingProducesReadableAvionicsText()
         {
-            Assert.Equal("1 WINGMAN  •  ROE: TIGHT\nFORMATION: WEDGE",
-                RadialSelection.FormatSquadronSubtitle(1, "TIGHT", "WEDGE"));
-            Assert.Equal("3 WINGMEN  •  ROE: FREE\nFORMATION: COMBAT SPREAD",
-                RadialSelection.FormatSquadronSubtitle(3, "FREE", "COMBAT SPREAD"));
+            Assert.Equal("1 WINGMAN  •  ESCORT\nFORMATION: WEDGE",
+                RadialSelection.FormatSquadronSubtitle(1, "ESCORT", "WEDGE"));
+            Assert.Equal("3 WINGMEN  •  SWEEP\nFORMATION: COMBAT SPREAD",
+                RadialSelection.FormatSquadronSubtitle(3, "SWEEP", "COMBAT SPREAD"));
 
             Assert.Equal("TARGET: T-90M",
                 RadialSelection.FormatTargetSubtitle(true, "T-90M", "NO TARGET LOCKED"));
             Assert.Equal("NO TARGET LOCKED",
                 RadialSelection.FormatTargetSubtitle(false, null, "NO TARGET LOCKED"));
 
-            Assert.Equal("TIGHT  ▶  FREE",
-                RadialSelection.FormatRoeTransition("TIGHT", "FREE"));
+            Assert.Equal("ESCORT  ▶  SWEEP",
+                RadialSelection.FormatPatternTransition("ESCORT", "SWEEP"));
 
             Assert.Equal("MOVE TO SELECT  •  R-CLICK CANCEL",
                 RadialSelection.FormatHint(inDeadzone: true, isAvailable: true));

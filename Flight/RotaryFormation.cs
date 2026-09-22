@@ -138,7 +138,7 @@ namespace WingCommand
                 aircraft.GlobalPosition().y, aircraft.radarAlt, slotPos.y,
                 WingFidelity.TerrainClearance);
             float holdBlend = FormationCollision.HoldBlend(
-                CombatFacade.Roe.Current == WingRoe.Hold, flat, spacing);
+                WingDoctrineRules.StickyTrack(DoctrineLive.Current.Interval), flat, spacing);
             float effectiveClimb = leaderState.EffectiveClimb(leaderVel.y, holdBlend);
             desiredAgl += Mathf.Max(0f, effectiveClimb) * AltitudeLeadSeconds;
             if (avoiding && escape.y > 0.1f) desiredAgl += escape.y * 30f;

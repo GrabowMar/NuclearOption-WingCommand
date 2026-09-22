@@ -55,7 +55,7 @@ namespace WingCommand
 
             if (allow == Allow.MissilesOnly)
                 return InterceptMissiles(aircraft, pilot,
-                    RoeRules.MissileDefenceProtectee(aircraft) ?? aircraft);
+                    DoctrineLive.Protectee(aircraft) ?? aircraft);
 
             Unit target = ChooseTarget(aircraft, allow, maxRange,
                                        out WeaponStation station, out int capacity);

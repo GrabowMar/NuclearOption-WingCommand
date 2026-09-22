@@ -627,7 +627,6 @@ namespace WingCommand
                 taskQueue.Clear();
                 engageActivityAt = Time.timeSinceLevelLoad;
                 Complete(WingOrderRules.PointTaskCompletion(Order));
-                CombatFacade.Roe.EnsureFree(owner);
                 return;
             }
 
@@ -749,9 +748,9 @@ namespace WingCommand
             bool active =
                 (Order == WingOrder.Attack &&
                  CombatFacade.Weapons.CanStillEngage(Aircraft, AssignedTarget)) ||
-                CombatFacade.Weapons.NearestThreatTo(Aircraft, WingTuning.FreeEngageRange) != null ||
+                CombatFacade.Weapons.NearestThreatTo(Aircraft, WingTuning.ReachLongMetres) != null ||
                 (leader != null &&
-                 CombatFacade.Weapons.NearestThreatTo(leader, WingTuning.FreeEngageRange) != null);
+                 CombatFacade.Weapons.NearestThreatTo(leader, WingTuning.ReachLongMetres) != null);
 
             if (active)
             {

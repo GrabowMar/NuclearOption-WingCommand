@@ -433,7 +433,7 @@ namespace WingCommand
             statusTitle.text = "WING  /  " + wing.Count;
             statusTitle.color = AvTheme.Accent;
             statusSummary.text = FormationShapes.Pretty(WingFormation.Shape).ToUpperInvariant() +
-                                 "  ·  " + wing.Roe.ToString().ToUpperInvariant();
+                                 "  ·  " + wing.Doctrine.PatternName;
             statusSummary.color = WingUi.TextPrimary;
 
             while (statusRows.Count < wing.Count)

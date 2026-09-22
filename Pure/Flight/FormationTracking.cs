@@ -27,9 +27,12 @@ namespace WingCommand
             return Math.Max(0f, (float)Math.Sqrt(vx * vx + slotVy * slotVy + vz * vz) + speedLead);
         }
 
-        public static float QuietTurnRate(float rate, float deadband)
+        public static float QuietTurnRate(float rate, float deadband, float horizontalSpeed = 100f)
         {
             if (deadband <= 0f) return rate;
+            // Above the reference speed, reject the same lateral acceleration noise rather than
+            // suppressing deliberate shallow jet turns whose heading rate decreases with speed.
+            deadband *= Math.Min(1f, 100f / Math.Max(1f, horizontalSpeed));
             float blend = Math.Max(0f, Math.Min(1f, (Math.Abs(rate) - deadband) / deadband));
             return rate * blend * blend * (3f - 2f * blend);
         }
@@ -54,18 +57,6 @@ namespace WingCommand
             return ((float)(time * (vx * sinc + vz * cosc)),
                     (float)(time * vy),
                     (float)(time * (vz * sinc - vx * cosc)));
-        }
-
-        public static (float x, float y, float z) FutureSlotOffset(
-            float vx, float vy, float vz, float offsetX, float offsetY, float offsetZ,
-            float turnRate, float seconds)
-        {
-            var travel = Arc(vx, vy, vz, turnRate, seconds);
-            double angle = Sweep(turnRate, seconds);
-            double cos = Math.Cos(angle), sin = Math.Sin(angle);
-            return (travel.x + (float)(offsetX * cos + offsetZ * sin),
-                    travel.y + offsetY,
-                    travel.z + (float)(offsetZ * cos - offsetX * sin));
         }
 
         public static float WrapDegrees(float degrees)

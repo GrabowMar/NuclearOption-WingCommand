@@ -16,6 +16,7 @@ namespace WingCommand
     internal static partial class WmcScreen
     {
         private const float PanelWidth = AvTokens.PanelWidth;
+        private const float PageWidth = PanelWidth - 8f;
 
         private const float Pad = WingUi.Pad;
         private const float RowHeight = WingUi.RowHeight;
@@ -39,13 +40,17 @@ namespace WingCommand
         /// <summary>Single-line text-block height for hints, status, and readouts.</summary>
         private const float LineHeight = Space4;
 
-        private const float GutterWidth = 62f;
         private const float ArrowWidth = 34f;
         private const float HeaderPagerArrowWidth = Space6 + Space1;
         private const float HeaderPagerLabelWidth = 40f;
         private const float HeaderPagerWidth = HeaderPagerArrowWidth * 2f + HeaderPagerLabelWidth;
         private const float HeaderPagerHeight = Space5;
 
+        /// <summary>One height for order keys, supply actions, and loadout controls.</summary>
+        private const float KeyHeight = 28f;
+
+        /// <summary>Shared pinned-strip height. Kept at the token value: the offline layout check
+        /// reserves Pad + strip + Space2 (77) at the panel foot for every viewport.</summary>
         private const float StatusStripHeight = AvTokens.StatusStripHeight;
 
         /// <summary>Visible flight rows matching normal wing capacity; larger debug rosters
@@ -70,6 +75,7 @@ namespace WingCommand
         private static readonly RectTransform[] pageRoots = new RectTransform[PageCount];
         private static readonly WingButton[] pageTabs = new WingButton[PageCount];
         private static readonly float[] pageHeights = new float[PageCount];
+        private static readonly ScrollRect[] pageScrolls = new ScrollRect[PageCount];
 
         /// <summary>Per-page status and hover-help text.</summary>
         private static readonly TMP_Text[] statusLabels = new TMP_Text[PageCount];
@@ -88,10 +94,19 @@ namespace WingCommand
         private static AvStyled.DataBar dataBar;
         private static AvStyled.Metric fundsMetric;
         private static AvStyled.Metric fuelMetric;
+        private static AvStyled.Metric wingMetric;
         private static TMP_Text rosterPageLabel;
-        private static WingButton holdButton;
-        private static WingButton tightButton;
-        private static WingButton freeButton;
+        private static WingButton reserveButton;
+        private static WingButton escortButton;
+        private static WingButton sweepButton;
+        private static readonly WingButton[] guardButtons = new WingButton[4];
+        private static WingButton breakButton;
+        private static WingButton pressButton;
+        private static readonly WingButton[] intervalButtons = new WingButton[3];
+        private static WingButton spreadButton;
+        private static readonly WingButton[] targetButtons = new WingButton[5];
+        private static WingButton slotReachButton;
+        private static WingButton longReachButton;
         private static WingButton cargoButton;
         private static WingButton landButton;
         private static WingButton jamButton;
@@ -222,6 +237,7 @@ namespace WingCommand
             UpdateTacticalPause(shouldPause: false);
             ReleasePanelInput();
 
+            BezelRegistry.Release(BezelRegistry.Wmc);
             screen = null;
             page = Page.Tactical;
             panelRect = null;
@@ -246,12 +262,14 @@ namespace WingCommand
             dataBar = null;
             fundsMetric = null;
             fuelMetric = null;
+            wingMetric = null;
             formationButtons = null;
             rosterPageLabel = null;
             rosterRows.Clear();
             shopTiles.Clear();
             launchRows.Clear();
             liveryLabel = null;
+            pylonPagerRoot = null;
             supplyFundsLabel = null;
             supplySquadronLabel = null;
             supplyPilotPortrait = null;
@@ -292,9 +310,17 @@ namespace WingCommand
             shopPage = 0;
             rosterPage = 0;
             ResetTacticalNavigation();
-            holdButton = null;
-            tightButton = null;
-            freeButton = null;
+            reserveButton = null;
+            escortButton = null;
+            sweepButton = null;
+            for (int i = 0; i < guardButtons.Length; i++) guardButtons[i] = null;
+            breakButton = null;
+            pressButton = null;
+            for (int i = 0; i < intervalButtons.Length; i++) intervalButtons[i] = null;
+            spreadButton = null;
+            for (int i = 0; i < targetButtons.Length; i++) targetButtons[i] = null;
+            slotReachButton = null;
+            longReachButton = null;
             cargoButton = null;
             landButton = null;
             jamButton = null;
@@ -343,6 +369,7 @@ namespace WingCommand
             pilotRows.Clear();
             pilotRosterArea = null;
             pilotEmptyLabel = null;
+            pilotEmptyCard = null;
             pilotPager = null;
             pilotIdentityLabel = null;
             pilotRankLabel = null;
@@ -391,6 +418,7 @@ namespace WingCommand
                     ?? UnityEngine.Object.FindObjectOfType<VirtualMFD>();
                 if (mfd == null) return;
 
+                RetireStaleScreens();
                 if (!MfdBezel.TryClaim(preferLeft: true, mfd: mfd,
                     out List<Button> buttons, out List<MFDScreen> screens, out int slot, out bool left))
                 {
@@ -407,6 +435,7 @@ namespace WingCommand
                 // Bind fails only if another plugin took the slot in the same frame; retry next second.
                 if (!MfdBezel.Bind(mfd, buttons, screens, slot, left, screen))
                 {
+                    BezelRegistry.Release(BezelRegistry.Wmc);
                     screen = null;
                     return;
                 }
@@ -423,9 +452,23 @@ namespace WingCommand
             }
         }
 
+        /// <summary>A hot reload leaves the previous WMC object in the slot. Drop it so the new
+        /// layout can claim the same bezel.</summary>
+        private static void RetireStaleScreens()
+        {
+            MFDScreen[] found = UnityEngine.Object.FindObjectsOfType<MFDScreen>();
+            for (int i = 0; i < found.Length; i++)
+            {
+                if (found[i] != null && found[i].shortName == "WMC")
+                    UnityEngine.Object.Destroy(found[i].gameObject);
+            }
+            BezelRegistry.Release(BezelRegistry.Wmc);
+        }
+
         private static void Fail(string reason)
         {
             gaveUp = true;
+            BezelRegistry.Release(BezelRegistry.Wmc);
             screen = null;
             Plugin.Logger.LogWarning(
                 "Could not install the WMC MFD screen (" + reason +
@@ -455,17 +498,54 @@ namespace WingCommand
             RectTransform contentRt = content.GetComponent<RectTransform>();
             contentRt.SetParent(rt, worldPositionStays: false);
             Stretch(contentRt);
-            Image bg = content.GetComponent<Image>();
-            bg.sprite = WingUi.PanelSprite();
-            bg.type = Image.Type.Sliced;
-            bg.color = Color.white;
-            bg.raycastTarget = true;
+
+            // Measure the dock the template lives in, not this new root. A fresh
+            // RectTransform is ~100px, and clamping that up to the 596 floor is why
+            // WMC sat short while every Boscali screen used the 896 ceiling.
+            BuildContent(contentRt, MeasureDockHeight(templateRt));
+
+            panelRect = rt;
+            rt.sizeDelta = new Vector2(PanelWidth, panelHeight);
+
+            MFDScreen s = root.AddComponent<MFDScreen>();
+            s.shortName = "WMC";
+            s.displayPanel = content;
+            s.aircraftOnly = false;
+            s.label = FindLabel(bezelButton);
+            s.highlight = FindHighlight(bezelButton, template);
+
+            if (s.label == null)
+            {
+                UnityEngine.Object.Destroy(root);
+                Fail("could not find the bezel button label");
+                return null;
+            }
+
+            SetPage(Page.Tactical);
+
+            return s;
+        }
+
+        /// <summary>Populate the MFD content root with header, tabs, pages, and pinned status.</summary>
+        private static void BuildContent(RectTransform contentRt, float height = 0f)
+        {
+            Image bg = contentRt.GetComponent<Image>();
+            if (bg != null)
+            {
+                bg.sprite = WingUi.PanelSprite();
+                bg.type = Image.Type.Sliced;
+                bg.color = Color.white;
+                bg.raycastTarget = true;
+            }
 
             // The shared frame fades towards its foot; keep scenery out of the reading surface.
             Image backing = Rule(contentRt, new Rect(), AvTheme.Ground.WithAlpha(1f));
             Stretch(backing.rectTransform);
             backing.rectTransform.offsetMin = new Vector2(Space2, Space2);
             backing.rectTransform.offsetMax = new Vector2(-Space2, -Space2);
+
+            // Resolve the shared height before pages size themselves against BodyHeight.
+            panelHeight = height > 0f ? height : AvTokens.PanelHeightMax;
 
             float y = -Pad;
             y = AddTitle(contentRt, y);
@@ -491,19 +571,13 @@ namespace WingCommand
             float loadoutY = AddLoadoutPage(pageRoots[(int)Page.Loadout], y);
             float wingY = AddWingPage(pageRoots[(int)Page.Wing], y);
 
-            // Include pinned status-strip clearance in content height accounting.
+            // Content-height requests are diagnostics only; the shared height is the measured bay so
+            // switching tabs cannot move the bezel. Tabs that exceed the body scroll it.
             const float stripBlock = StatusStripHeight + Space2;
             pageHeights[(int)Page.Tactical] = Mathf.Abs(tacticalY) + stripBlock + Pad;
             pageHeights[(int)Page.Supply] = Mathf.Abs(supplyY) + stripBlock + Pad;
             pageHeights[(int)Page.Loadout] = Mathf.Abs(loadoutY) + stripBlock + Pad;
             pageHeights[(int)Page.Wing] = Mathf.Abs(wingY) + stripBlock + Pad;
-
-            // Use one fixed height for every tab, but honour the viewport ceiling. Tactical owns
-            // the only overflow and scrolls it; the fixed Supply/Loadout/Wing layouts fit below it.
-            panelHeight = AvTokens.PanelHeight;
-            for (int i = 0; i < PageCount; i++)
-                panelHeight = Mathf.Max(panelHeight, pageHeights[i]);
-            panelHeight = Mathf.Min(panelHeight, AvTokens.PanelHeightMax);
 
             FitTacticalViewport();
 
@@ -511,27 +585,22 @@ namespace WingCommand
             float stripY = -(panelHeight - Pad - StatusStripHeight);
             for (int i = 0; i < PageCount; i++)
                 PinStatusStrip(pageRoots[i], stripY, (Page)i);
+        }
 
-            panelRect = rt;
-            rt.sizeDelta = new Vector2(PanelWidth, panelHeight);
-
-            MFDScreen s = root.AddComponent<MFDScreen>();
-            s.shortName = "WMC";
-            s.displayPanel = content;
-            s.aircraftOnly = false;
-            s.label = FindLabel(bezelButton);
-            s.highlight = FindHighlight(bezelButton, template);
-
-            if (s.label == null)
+        /// <summary>Tallest laid-out ancestor of the template, capped at the shared Boscali ceiling.</summary>
+        private static float MeasureDockHeight(RectTransform template)
+        {
+            float best = 0f;
+            for (Transform cursor = template != null ? template.parent : null;
+                 cursor != null; cursor = cursor.parent)
             {
-                UnityEngine.Object.Destroy(root);
-                Fail("could not find the bezel button label");
-                return null;
+                var candidate = cursor as RectTransform;
+                if (candidate != null && candidate.rect.height > best)
+                    best = candidate.rect.height;
             }
-
-            SetPage(Page.Tactical);
-
-            return s;
+            // Fill the column up to the shared Boscali ceiling. A short dock stays at the 596 floor.
+            if (best < AvTokens.PanelHeight) return AvTokens.PanelHeightMax;
+            return Mathf.Clamp(best, AvTokens.PanelHeight, AvTokens.PanelHeightMax);
         }
 
         private static RectTransform PageRoot(RectTransform parent, string name)
@@ -543,32 +612,69 @@ namespace WingCommand
             return rt;
         }
 
-        /// <summary>Build the WMC identity/state bar and three chips above shared funds and fuel
-        /// metrics.</summary>
+        /// <summary>Key, tabular value, caption, and a 2px track inside a short metric cell.</summary>
+        private static AvStyled.Metric CompactMetric(RectTransform parent, Rect area, string key, string unit)
+        {
+            var metric = new AvStyled.Metric();
+            float x = area.x + 8f;
+            float w = Mathf.Max(0f, area.width - 16f);
+            Label(parent, key, new Rect(x, area.y - 1f, 52f, 14f),
+                  Dim(), FontMicro, FontStyles.Bold, TextAlignmentOptions.MidlineLeft);
+            metric.Unit = Label(parent, unit, new Rect(area.x + area.width - 36f, area.y - 1f, 28f, 14f),
+                                Dim(), FontMicro, FontStyles.Normal, TextAlignmentOptions.MidlineRight);
+            metric.Value = Label(parent, "—", new Rect(x + 54f, area.y - 1f, Mathf.Max(0f, w - 86f), 14f),
+                                 Friendly(), FontLead, FontStyles.Bold, TextAlignmentOptions.MidlineLeft);
+            metric.Value.enableAutoSizing = true;
+            metric.Value.fontSizeMin = FontMicro;
+            metric.Value.fontSizeMax = FontLead;
+            metric.Value.enableWordWrapping = false;
+            metric.Value.overflowMode = TextOverflowModes.Ellipsis;
+
+            metric.Caption = Label(parent, "", new Rect(x, area.y - 15f, w, 12f),
+                                   Dim(), FontMicro, FontStyles.Normal, TextAlignmentOptions.MidlineLeft);
+            metric.Caption.enableWordWrapping = false;
+            metric.Caption.overflowMode = TextOverflowModes.Ellipsis;
+
+            float trackY = area.y - area.height + 3f;
+            Image track = Panel(parent, new Rect(x, trackY, w, 2f), WingUi.BorderSubtle);
+            track.raycastTarget = false;
+            metric.Fill = Panel(parent, new Rect(x, trackY, 0f, 2f), Green());
+            metric.Fill.raycastTarget = false;
+            metric.TrackWidth = w;
+            metric.TrackHeight = 2f;
+            return metric;
+        }
+
+        /// <summary>Build the one-lane identity bar and the compact metric strip.</summary>
         private static float AddTitle(RectTransform parent, float y)
         {
-            float inner = PanelWidth - Pad * 2f;
+            float inner = ContentWidth;
 
-            var bar = new Rect(Pad, y, inner, AvTokens.TitleBarHeight + 2f);
-            dataBar = AvStyled.TopBar(parent, bar, "WMC", 3);
+            var bar = new Rect(Pad, y, inner, HeaderHeight);
+            dataBar = AvStyled.TopBar(parent, bar, "WMC", 4);
             y -= bar.height + Space2;
 
-            // Keep funds and minimum flight fuel visible above tabs on every page.
-            const float metricHeight = 64f;
-            var metrics = new Rect(Pad, y, inner, metricHeight);
+            var metrics = new Rect(Pad, y, inner, MetricsHeight);
             AvStyled.Box(parent, metrics, "metrics");
-            float half = inner * 0.5f;
-            fundsMetric = AvStyled.MetricCell(parent, new Rect(Pad, y, half, metricHeight), "SQUADRON FUNDS", "CR");
-            fuelMetric = AvStyled.MetricCell(parent, new Rect(Pad + half, y, half, metricHeight), "FLIGHT FUEL", "% MIN");
-            fundsMetric.Caption.color = fuelMetric.Caption.color = Dim();
-            Rule(parent, new Rect(Pad + half, y, 1f, metricHeight), WingUi.BorderSubtle);
 
-            return y - metricHeight - Space2;
+            const float heroWidth = 166f;
+            const float compactWidth = 96f;
+            float hero2X = Pad + heroWidth + Space1 + 1f + Space1;
+            float compactX = Pad + inner - compactWidth;
+
+            fundsMetric = CompactMetric(parent, new Rect(Pad, y, heroWidth, MetricsHeight), "FUNDS", "CR");
+            fuelMetric = CompactMetric(parent, new Rect(hero2X, y, heroWidth, MetricsHeight), "FUEL", "%");
+            wingMetric = CompactMetric(parent, new Rect(compactX, y, compactWidth, MetricsHeight), "WING", "");
+
+            Rule(parent, new Rect(hero2X - Space1 - 1f, y, 1f, MetricsHeight), WingUi.BorderSubtle);
+            Rule(parent, new Rect(compactX - Space1 - 1f, y, 1f, MetricsHeight), WingUi.BorderSubtle);
+
+            return y - MetricsHeight - Space2;
         }
 
         private static float AddTabs(RectTransform parent, float y)
         {
-            float w = (PanelWidth - Pad * 2f - Gap * (PageCount - 1)) / PageCount;
+            float w = (PageWidth - Pad * 2f - Gap * (PageCount - 1)) / PageCount;
 
             pageTabs[(int)Page.Tactical] = Tab(parent, "TACTICAL", Page.Tactical, Pad, y, w);
             pageTabs[(int)Page.Supply] = Tab(parent, "SUPPLY", Page.Supply, Pad + w + Gap, y, w);
@@ -577,8 +683,8 @@ namespace WingCommand
             pageTabs[(int)Page.Wing] = Tab(parent, "WING", Page.Wing, Pad + (w + Gap) * 3f, y, w);
 
             y -= WingUi.TabHeight;
-            Rule(parent, new Rect(Pad, y, PanelWidth - Pad * 2f, 1f), FrameColor());
-            return y - Space3;
+            Rule(parent, new Rect(Pad, y, PageWidth - Pad * 2f, 1f), FrameColor());
+            return y - Space2;
         }
 
         private static WingButton Tab(RectTransform parent, string text, Page target,
@@ -621,6 +727,13 @@ namespace WingCommand
             }
         }
 
+        private static void ResetPageScroll(Page targetPage)
+        {
+            ScrollRect scroll = pageScrolls[(int)targetPage];
+            if (scroll == null) return;
+            ScrollToTop(scroll);
+        }
+
         /// <summary>Draw a shared section heading with a tick on the panel spine.</summary>
         private static float Heading(RectTransform parent, float y, string text)
         {
@@ -636,33 +749,29 @@ namespace WingCommand
         private static WingButton[] Stepper(RectTransform parent, float x, float y, float w,
                                             out TMP_Text valueLabel,
                                             Action onPrev, Action onNext,
-                                            string tooltip = null)
+                                            string tooltip = null, float rowHeight = 0f)
         {
-            Panel(parent, new Rect(x, y, w, RowHeight), RowColor());
+            float h = rowHeight > 0f ? rowHeight : RowHeight;
+            Panel(parent, new Rect(x, y, w, h), RowColor());
 
             // Inset arrows to avoid doubled borders while preserving nearly full row-height targets.
-            const float arrow = Space6 + Space1;
+            float arrow = Mathf.Min(Space6 + Space1, h + 4f);
             WingButton prev = WingUi.Button(parent, "<",
-                                            new Rect(x + 1f, y - 1f, arrow, RowHeight - 2f),
+                                            new Rect(x + 1f, y - 1f, arrow, h - 2f),
                                             FontBody, UiButtonStyle.Quiet, onPrev);
             WingButton next = WingUi.Button(parent, ">",
                                             new Rect(x + w - arrow - 1f, y - 1f,
-                                                     arrow, RowHeight - 2f),
+                                                     arrow, h - 2f),
                                             FontBody, UiButtonStyle.Quiet, onNext);
 
             valueLabel = Label(parent, "",
-                               new Rect(x + Space6 + Space2, y, w - (Space6 + Space2) * 2f, RowHeight),
-                               Friendly(), FontBody, FontStyles.Normal, TextAlignmentOptions.Center);
+                               new Rect(x + arrow + 2f, y, w - (arrow + 2f) * 2f, h),
+                               Friendly(), FontSmall, FontStyles.Normal, TextAlignmentOptions.Center);
 
             prev.WithTooltip(tooltip);
             next.WithTooltip(tooltip);
             return new[] { prev, next };
         }
-
-        /// <summary>Dim engagement-row gutter label.</summary>
-        private static void Gutter(RectTransform parent, float y, string text) =>
-            Label(parent, text, new Rect(Pad, y, GutterWidth - Gap, RowHeight), Dim(), FontMicro,
-                  FontStyles.Normal, TextAlignmentOptions.Left);
 
         /// <summary>Shared column geometry for headers and cells.</summary>
         private struct Column
@@ -680,15 +789,6 @@ namespace WingCommand
                 RightAligned = rightAligned;
             }
         }
-
-        // Compact identity and directive state columns; stores and fuel telemetry
-        // are monitored in the Tactical Bento deck below.
-        private static readonly Column[] RosterColumns =
-        {
-            new Column("PLANE", 52f, 54f),
-            new Column("CALLSIGN", 110f, 80f),
-            new Column("STATE", 194f, 84f),
-        };
 
         /// <summary>Pilot-list header geometry.</summary>
         private static readonly Column[] PilotColumns =
@@ -799,74 +899,95 @@ namespace WingCommand
         {
             float w = PanelWidth - Pad * 2f;
 
-            TMP_Text label = AvStyled.StatusStrip(parent, new Rect(Pad, y, w, StatusStripHeight));
+            TMP_Text label = AvStyled.StatusStrip(parent, new Rect(Pad, y, w, StatusStripHeight),
+                                                  out Image rail);
 
             statusLabels[(int)page] = label;
+            statusRails[(int)page] = rail;
         }
 
-        /// <summary>Show current hover help or the page fallback in its status strip.</summary>
+        /// <summary>Show armed map orders and hover help in the pinned strip, otherwise the page
+        /// fallback. Kind drives the rail colour and prefix so state is never colour alone.</summary>
         private static void RefreshStatusStrip(Page page, string fallback)
         {
-            TMP_Text label = statusLabels[(int)page];
-            if (label == null) return;
+            WingCommandManager manager = WingCommandManager.Instance;
+            if (manager != null && manager.MapOrderArmed && manager.MapStatusIsNotice)
+            {
+                WriteStatus(page, StripKind.Map, manager.MapStatus);
+                return;
+            }
 
             string tooltip = WingButton.HoveredTooltip;
-            bool hovering = !string.IsNullOrEmpty(tooltip);
+            if (!string.IsNullOrEmpty(tooltip))
+            {
+                WriteStatus(page, StripKind.Help, tooltip);
+                return;
+            }
 
-            label.text = hovering ? "> " + tooltip : "> " + fallback;
-            label.color = hovering ? WingUi.TextPrimary : Dim();
+            WriteStatus(page, StripKind.Ambient, fallback);
         }
-
-        /// <summary>Full-area empty-list message toggled during refresh.</summary>
-        private static TMP_Text EmptyNote(RectTransform area, string text)
-        {
-            TMP_Text label = Label(area, text,
-                                   new Rect(Space4, 0f, area.rect.width - Space4 * 2f,
-                                            area.rect.height),
-                                   Dim(), FontSmall, FontStyles.Normal,
-                                   TextAlignmentOptions.Center);
-            label.enableWordWrapping = true;
-            label.gameObject.SetActive(false);
-            return label;
-        }
-
-        /// <summary>Secondary explanatory line beneath a section heading.</summary>
-        private static TMP_Text Hint(RectTransform parent, float y, string text) =>
-            Label(parent, text, new Rect(Pad, y, PanelWidth - Pad * 2f, LineHeight),
-                  Dim(), FontMicro, FontStyles.Normal, TextAlignmentOptions.Left);
 
         /// <summary>Refresh persistent top-bar state and metrics independently of the selected
         /// tab.</summary>
         private static void RefreshDataBar(WingRegistry wing)
         {
             int count = wing?.Count ?? 0;
+            int airborne = 0;
+            if (wing != null)
+            {
+                for (int i = 0; i < wing.Members.Count; i++)
+                {
+                    WingMember member = wing.Members[i];
+                    if (member != null && member.Alive && member.Aircraft != null) airborne++;
+                }
+            }
 
             if (dataBar != null)
             {
                 dataBar.State.text = count == 0
                     ? "NO WING"
-                    : "WING " + count + " / " + WingRegistry.WingLimitLabel;
+                    : "WING " + count + " / " + WingRegistry.WingLimitLabel +
+                      (airborne > 0 ? "  ·  " + airborne + " AIRBORNE" : "  ·  NO FLIGHT");
                 dataBar.State.color = count == 0 ? WingUi.Dim : WingUi.TextPrimary;
 
-                dataBar.SetChip(0, count == 0 ? "NO LINK" : "LINKED " + count, count > 0);
-                dataBar.SetChip(1, wing != null ? wing.Roe.ToString().ToUpperInvariant() : "ROE --",
-                                wing != null && wing.Roe != WingRoe.Hold);
-                dataBar.SetChip(2, EconomyFacade.Shop.Allocation > 0f ? "SUPPLY" : "NO FUNDS",
-                                EconomyFacade.Shop.Allocation > 0f);
+                dataBar.SetChip(0, count == 0 ? "NO WING" : "LINK " + count + "/" + WingRegistry.WingLimitLabel,
+                                count > 0 ? "live" : "inert");
+
+                WingDoctrine doctrine = wing != null ? wing.Doctrine : WingDoctrine.Reserve;
+                string pattern = doctrine.PatternName;
+                dataBar.SetChip(1, pattern,
+                                wing == null ? "inert" : pattern == "SWEEP" ? "warn" : pattern == "RESERVE" ? "info" : "live");
+
+                int held = EconomyFacade.SupplyReserve.Count;
+                int capacity = EconomyFacade.SupplyReserve.Capacity;
+                dataBar.SetChip(2,
+                    capacity <= 0 ? "RESERVE --" : held <= 0 ? "RESERVE EMPTY" : held >= capacity ? "RESERVE FULL" : "RESERVE " + held + "/" + capacity,
+                    capacity <= 0 ? "inert" : held <= 0 ? "inert" : held >= capacity ? "warn" : "live");
+
+                WingCommandManager manager = WingCommandManager.Instance;
+                bool armed = manager != null && manager.MapOrderArmed;
+                if (armed)
+                    dataBar.SetChip(3, "ARMED " + WingOrderCatalog.ShortLabel(manager.ArmedMapOrder), "warn");
+                else
+                    dataBar.SetChip(3, EconomyFacade.Shop.Allocation > 0f ? "SUPPLY FUNDED" : "NO FUNDS",
+                                    EconomyFacade.Shop.Allocation > 0f ? "live" : "warn");
             }
 
             if (fundsMetric != null)
             {
-                fundsMetric.Set(Grouped(EconomyFacade.Shop.Allocation),
-                                "HOLD " + EconomyFacade.SupplyReserve.Count + " / " + EconomyFacade.SupplyReserve.Capacity,
-                                1f, WingUi.RailCyan);
+                int capacity = EconomyFacade.SupplyReserve.Capacity;
+                int held = EconomyFacade.SupplyReserve.Count;
+                fundsMetric.Set(EconomyFacade.Shop.Allocation > 0f ? Grouped(EconomyFacade.Shop.Allocation) : "—",
+                                "HOLD " + held + " / " + capacity + "  ·  WING " + count + "/" + WingRegistry.WingLimitLabel,
+                                capacity > 0 ? held / (float)capacity : 0f,
+                                WingUi.RailCyan);
             }
 
             if (fuelMetric != null)
             {
                 // Report the lowest member fuel fraction, which determines the first bingo call.
                 float lowest = 1f;
-                bool any = false;
+                int tracked = 0;
                 if (wing != null)
                 {
                     for (int i = 0; i < wing.Members.Count; i++)
@@ -874,18 +995,28 @@ namespace WingCommand
                         WingMember member = wing.Members[i];
                         if (member == null || !member.Alive || member.Aircraft == null) continue;
                         float f = member.Fuel;
-                        if (!any || f < lowest) lowest = f;
-                        any = true;
+                        if (tracked == 0 || f < lowest) lowest = f;
+                        tracked++;
                     }
                 }
 
+                bool any = tracked > 0;
                 float bingoThreshold = Plugin.Settings != null ? Plugin.Settings.BingoFuel : WingTuning.BingoFuel;
                 bool bingo = any && lowest <= bingoThreshold;
                 fuelMetric.Set(
                     any ? Mathf.RoundToInt(lowest * 100f).ToString() : "--",
-                    any ? "BINGO AT " + Mathf.RoundToInt(bingoThreshold * 100f) + "%" : "NO FLIGHT",
+                    any ? "BINGO " + Mathf.RoundToInt(bingoThreshold * 100f) + "%  ·  " + tracked + " TRACKED" : "NO FLIGHT",
                     any ? lowest : 0f,
                     bingo ? WingUi.Alert : any ? WingUi.RailEmerald : WingUi.Disabled);
+            }
+
+            if (wingMetric != null)
+            {
+                int pending = EconomyFacade.ShopDelivery.PendingCount;
+                wingMetric.Set(count + " / " + WingRegistry.WingLimitLabel,
+                               pending > 0 ? pending + " INBOUND" : count == 0 ? "NO AIRCRAFT" : "READY",
+                               count / Mathf.Max(1f, WingFormation.MaxWingSize),
+                               count > 0 ? WingUi.RailEmerald : WingUi.Disabled);
             }
         }
 
@@ -902,23 +1033,24 @@ namespace WingCommand
             switch (page)
             {
                 case Page.Supply:
+                    // The page owns its final wording; a blocked dispatch must survive the fallback.
+                    RefreshStatusStrip(Page.Supply, "Choose a pilot, airframe and launch base, then requisition.");
                     RefreshSupplyPilot();
                     RefreshSupplyStatus();
                     RefreshShop();
                     RefreshLaunchFrom();
                     // Refresh reserve after catalogue changes can alter selected-airframe actions.
                     RefreshReserve();
-                    RefreshStatusStrip(Page.Supply, "Choose a pilot, airframe and launch base, then requisition.");
                     break;
 
                 case Page.Loadout:
-                    RefreshLoadoutPage();
                     RefreshStatusStrip(Page.Loadout, "Click a pylon to edit its stores. Select this fit on SUPPLY.");
+                    RefreshLoadoutPage();
                     break;
 
                 case Page.Wing:
-                    RefreshWingPage(wing);
                     RefreshStatusStrip(Page.Wing, "Select a pilot to inspect their record and assigned aircraft.");
+                    RefreshWingPage(wing);
                     break;
 
                 default:
@@ -1034,9 +1166,16 @@ namespace WingCommand
                 slot.color = kia ? Alert() : RankColor(pilot.Rank);
                 name.text = AvTheme.Truncate(pilot.Callsign, 12);
                 name.color = kia ? Alert() : selected ? Green() : Friendly();
-                detail.text = kia ? "KIA" : pilot.RecoveryStatus != PilotRecoveryStatus.None
-                    ? pilot.RecoveryStatus.ToString().ToUpperInvariant() : PersonnelFacade.Roster.RankName(pilot.Rank);
-                detail.color = kia ? Alert() : Dim();
+                detail.text = kia ? "KIA"
+                    : pilot.RecoveryStatus != PilotRecoveryStatus.None
+                        ? pilot.RecoveryStatus.ToString().ToUpperInvariant()
+                        : FlyingMember(Wing(), pilot) != null
+                            ? PersonnelFacade.Roster.RankName(pilot.Rank) + "  ·  ACTIVE"
+                            : PersonnelFacade.Roster.RankName(pilot.Rank) + "  ·  RESERVE";
+                detail.color = kia ? Alert()
+                    : pilot.RecoveryStatus != PilotRecoveryStatus.None ? Warning()
+                    : FlyingMember(Wing(), pilot) != null ? Green()
+                    : Dim();
 
                 kiaOverlay.gameObject.SetActive(kia);
             }

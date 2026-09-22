@@ -17,21 +17,22 @@ namespace WingCommand.PureTests
         }
 
         [Theory]
-        [InlineData(WingRoe.Hold, "SARH", true, 10f, false, 100f, true)]
-        [InlineData(WingRoe.Hold, "SARH", true, 10f, true, 5000f, false)]
-        [InlineData(WingRoe.Hold, "SARH", true, 10f, true, 5001f, true)]
-        [InlineData(WingRoe.Hold, "SARH", true, 10f, true, -1f, true)]
-        [InlineData(WingRoe.Hold, "SARH", true, 3f, false, 100f, false)]
-        [InlineData(WingRoe.Hold, "SARH", false, 10f, false, 100f, false)]
-        [InlineData(WingRoe.Hold, "IR", true, 10f, false, 100f, false)]
-        [InlineData(WingRoe.Hold, "ARH", true, 10f, false, 100f, false)]
-        [InlineData(WingRoe.Tight, "SARH", true, 10f, false, 100f, false)]
-        [InlineData(WingRoe.Free, "SARH", true, 10f, false, 100f, false)]
-        public void HoldPrefersSarhInterceptionUnlessCoveredOrUrgent(WingRoe roe, string seeker,
-            bool armed, float impact, bool cover, float distance, bool expected)
+        [InlineData(MissileResponse.Press, MissileGuard.Wing, "SARH", true, 10f, false, 100f, true)]
+        [InlineData(MissileResponse.Press, MissileGuard.Wing, "SARH", true, 10f, true, 5000f, false)]
+        [InlineData(MissileResponse.Press, MissileGuard.Wing, "SARH", true, 10f, true, 5001f, true)]
+        [InlineData(MissileResponse.Press, MissileGuard.Wing, "SARH", true, 10f, true, -1f, true)]
+        [InlineData(MissileResponse.Press, MissileGuard.Wing, "SARH", true, 3f, false, 100f, false)]
+        [InlineData(MissileResponse.Press, MissileGuard.Wing, "SARH", false, 10f, false, 100f, false)]
+        [InlineData(MissileResponse.Press, MissileGuard.Wing, "IR", true, 10f, false, 100f, false)]
+        [InlineData(MissileResponse.Press, MissileGuard.Wing, "ARH", true, 10f, false, 100f, false)]
+        [InlineData(MissileResponse.Break, MissileGuard.Wing, "SARH", true, 10f, false, 100f, false)]
+        [InlineData(MissileResponse.Press, MissileGuard.Off, "SARH", true, 10f, false, 100f, false)]
+        public void PressPrefersSarhInterceptionUnlessCoveredUrgentOrOff(MissileResponse response,
+            MissileGuard guard, string seeker, bool armed, float impact, bool cover, float distance,
+            bool expected)
         {
             Assert.Equal(expected, MissileDefencePolicy.PreferInterception(
-                roe, seeker, armed, impact, cover, distance, 5000f));
+                response, guard, seeker, armed, impact, cover, distance, 5000f));
         }
     }
 }

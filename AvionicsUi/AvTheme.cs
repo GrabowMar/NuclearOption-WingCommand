@@ -58,6 +58,9 @@ namespace NOAvionics.Ui
         public static Color TextPrimary => Unity(AvTokens.TextPrimary);
         public static Color Dim => Unity(AvTokens.TextDim);
         public static Color Disabled => Unity(AvTokens.TextMuted);
+        public static Color TextInk => Unity(AvTokens.TextInk);
+        public static Color SelectLabelText(Color fill) =>
+            (fill.r * 0.2126f + fill.g * 0.7152f + fill.b * 0.0722f) > 0.35f ? TextInk : Color.white;
         public static Color Frame => Unity(AvTokens.Frame);
         public static Color Hairline => Unity(AvTokens.Hairline);
         public static Color Surface => Unity(AvTokens.Surface);
@@ -65,9 +68,9 @@ namespace NOAvionics.Ui
         public static Color SurfaceInert => Unity(AvTokens.SurfaceInert);
         public static Color Ground => Unity(AvTokens.Ground);
 
-        public static Color RailReady => Unity(AvTokens.RailReady);
-        public static Color RailCaution => Unity(AvTokens.RailCaution);
-        public static Color RailDanger => Unity(AvTokens.RailDanger);
+        public static Color RailReady => Accent;
+        public static Color RailCaution => Warning;
+        public static Color RailDanger => Alert;
         public static Color RailInfo => Unity(AvTokens.RailInfo);
         public static Color RailInert => Unity(AvTokens.RailInert);
 

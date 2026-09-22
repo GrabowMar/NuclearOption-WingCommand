@@ -69,13 +69,28 @@ namespace NOAvionics.Ui
             return label;
         }
 
+        /// <summary>
+        /// Keep the horizontal alignment a caller asked for and only drop the vertical one,
+        /// so a one-line label sits on the middle of its box. Mapping the midline variants by
+        /// exclusion sent <c>MidlineRight</c> and <c>TopRight</c> to the left edge, which is
+        /// how a form number ended up printed over the title it was supposed to sit opposite.
+        /// </summary>
         private static TextAlignmentOptions Midline(TextAlignmentOptions a)
         {
             switch (a)
             {
-                case TextAlignmentOptions.Right: return TextAlignmentOptions.MidlineRight;
-                case TextAlignmentOptions.Center: return TextAlignmentOptions.Center;
-                default: return TextAlignmentOptions.MidlineLeft;
+                case TextAlignmentOptions.Right:
+                case TextAlignmentOptions.MidlineRight:
+                case TextAlignmentOptions.TopRight:
+                case TextAlignmentOptions.BottomRight:
+                    return TextAlignmentOptions.MidlineRight;
+                case TextAlignmentOptions.Center:
+                case TextAlignmentOptions.Midline:
+                case TextAlignmentOptions.Top:
+                case TextAlignmentOptions.Bottom:
+                    return TextAlignmentOptions.Center;
+                default:
+                    return TextAlignmentOptions.MidlineLeft;
             }
         }
 
@@ -161,7 +176,7 @@ namespace NOAvionics.Ui
                 y -= 14f + AvTokens.Space2;
             }
 
-            return new Rect(innerX, y, innerW, Mathf.Max(0f, area.Bottom() - y - padB));
+            return new Rect(innerX, y, innerW, Mathf.Max(0f, y - area.Bottom() - padB));
         }
 
         private static float Bottom(this Rect r) => r.y - r.height;
@@ -169,41 +184,64 @@ namespace NOAvionics.Ui
         // ------------------------------------------------------------------- data bar
 
         /// <summary>
-        /// The hard top strip: a filled id tag, the live state, and the status chips.
-        /// Replaces the centred title, subtitle and separate chip rail all three panels
-        /// used to carry, which cost roughly 24px of height for no information.
+        /// Screen identity and telemetry have separate lanes. Small overlay headers keep
+        /// the compact one-line form; full MFD screens give the title the complete top row.
         /// </summary>
         public static DataBar TopBar(
             RectTransform parent, Rect area, string id, int chipCount)
         {
             Box(parent, area, "databar");
 
-            AvStyle tag = AvStyleHost.Style("id-tag");
-            float tagWidth = 12f + id.Length * 11f + 12f;
-
-            AvKit.Panel(parent, new Rect(area.x, area.y, tagWidth, area.height),
-                        AvStyleHost.Resolve(tag.Background, AvTheme.Accent));
-            Label(parent, new Rect(area.x, area.y, tagWidth, area.height), id, "id-tag",
+            bool twoRows = area.height >= 48f;
+            float titleHeight = twoRows ? 26f : area.height;
+            float tagWidth = 20f + id.Length * 9f;
+            AvKit.Rule(parent, new Rect(area.x, area.y - 4f, 2f, titleHeight - 8f), AvTheme.Accent);
+            Label(parent, new Rect(area.x + 6f, area.y, tagWidth - 6f, titleHeight), id, "id-tag",
                   align: TextAlignmentOptions.Center);
 
-            var bar = new DataBar { Chips = new TMP_Text[chipCount], ChipBoxes = new Image[chipCount] };
+            var bar = new DataBar
+            {
+                Chips = new TMP_Text[chipCount],
+                ChipBoxes = new Image[chipCount],
+                ChipRails = new Image[chipCount],
+            };
 
-            const float chipWidth = 74f;
-            const float chipGap = 2f;
-            float chipsWidth = chipCount * chipWidth + Mathf.Max(0, chipCount - 1) * chipGap;
-            float chipsX = area.x + area.width - chipsWidth - 6f;
-
-            float stateX = area.x + tagWidth;
+            const float preferredChipWidth = 82f;
+            const float chipGap = AvTokens.Space1;
+            const float stateGap = 8f;
+            float gapsWidth = Mathf.Max(0, chipCount - 1) * chipGap;
+            float chipWidth = chipCount <= 0 ? 0f : twoRows
+                ? Mathf.Max(0f, (area.width - gapsWidth) / chipCount)
+                : Mathf.Min(preferredChipWidth, Mathf.Max(0f, (area.width - tagWidth - 140f - stateGap - gapsWidth) / chipCount));
+            float chipsWidth = chipCount * chipWidth + gapsWidth;
+            float chipsX = twoRows ? area.x : area.x + area.width - chipsWidth;
+            float stateX = area.x + tagWidth + stateGap;
+            float stateRight = twoRows || chipCount == 0 ? area.x + area.width : chipsX - stateGap;
             bar.State = Label(parent,
-                              new Rect(stateX, area.y, Mathf.Max(0f, chipsX - stateX - 8f), area.height),
+                              new Rect(stateX, area.y, Mathf.Max(0f, stateRight - stateX), titleHeight),
                               "", "databar-state");
+            bar.State.enableWordWrapping = false;
+            bar.State.enableAutoSizing = true;
+            bar.State.fontSizeMin = AvTokens.FontMicro;
+            bar.State.fontSizeMax = bar.State.fontSize;
+            bar.State.overflowMode = TextOverflowModes.Ellipsis;
 
             for (int i = 0; i < chipCount; i++)
             {
                 var chipRect = new Rect(chipsX + i * (chipWidth + chipGap),
-                                        area.y - (area.height - 16f) * 0.5f, chipWidth, 16f);
+                                        twoRows ? area.y - 32f : area.y - (area.height - 20f) * 0.5f,
+                                        chipWidth, 20f);
                 bar.ChipBoxes[i] = Box(parent, chipRect, "chip");
-                bar.Chips[i] = Label(parent, chipRect, "", "chip", align: TextAlignmentOptions.Center);
+                bar.ChipRails[i] = AvKit.Rule(parent,
+                    new Rect(chipRect.x + 6f, chipRect.y - 7f, 4f, 6f), AvTheme.RailInert);
+                bar.Chips[i] = Label(parent,
+                    new Rect(chipRect.x + 16f, chipRect.y, Mathf.Max(0f, chipWidth - 20f), chipRect.height),
+                    "", "chip", align: TextAlignmentOptions.Left);
+                bar.Chips[i].enableWordWrapping = false;
+                bar.Chips[i].enableAutoSizing = true;
+                bar.Chips[i].fontSizeMin = AvTokens.FontMicro;
+                bar.Chips[i].fontSizeMax = bar.Chips[i].fontSize;
+                bar.Chips[i].overflowMode = TextOverflowModes.Ellipsis;
             }
 
             return bar;
@@ -215,15 +253,33 @@ namespace NOAvionics.Ui
             public TMP_Text State;
             public TMP_Text[] Chips;
             public Image[] ChipBoxes;
+            public Image[] ChipRails;
 
             /// <summary>Set a chip's text and whether it reads as live.</summary>
             public void SetChip(int index, string text, bool live)
             {
+                SetChip(index, text, live ? "live" : null);
+            }
+
+            /// <summary>Set a chip's semantic state: live, warn, danger, info, or inert.</summary>
+            public void SetChip(int index, string text, string state)
+            {
                 if (index < 0 || index >= Chips.Length) return;
                 Chips[index].text = text;
 
-                AvStyle style = AvStyleHost.Style(live ? "chip live" : "chip");
+                string classes = string.IsNullOrEmpty(state) ? "chip" : "chip " + state;
+                AvStyle style = AvStyleHost.Style(classes);
                 Chips[index].color = AvStyleHost.Resolve(style.Color, AvTheme.Dim);
+                if (ChipBoxes[index] != null)
+                    ChipBoxes[index].color = AvStyleHost.Resolve(style.Background, AvTheme.SurfaceInert);
+                if (ChipRails[index] != null)
+                {
+                    ChipRails[index].color = state == "live" ? AvTheme.Accent
+                        : state == "warn" ? AvTheme.Warning
+                        : state == "danger" ? AvTheme.Alert
+                        : state == "info" ? AvTheme.RailInfo
+                        : AvTheme.RailInert;
+                }
             }
         }
 
@@ -239,29 +295,31 @@ namespace NOAvionics.Ui
         public static Metric MetricCell(RectTransform parent, Rect area, string key, string unit)
         {
             AvStyle style = AvStyleHost.Style("metric");
-            float padL = style.HasPad ? style.PadLeft : 14f;
-            float padT = style.HasPad ? style.PadTop : 9f;
-            float padR = style.HasPad ? style.PadRight : 14f;
+            float padL = style.HasPad ? style.PadLeft : 10f;
+            float padR = style.HasPad ? style.PadRight : 10f;
 
             float x = area.x + padL;
             float w = Mathf.Max(0f, area.width - padL - padR);
-            float y = area.y - padT;
+            float y = area.y - 2f;
 
             var metric = new Metric();
 
             Label(parent, new Rect(x, y, w, 11f), key, "metric-key");
-            y -= 12f;
-
-            metric.Value = Label(parent, new Rect(x, y, w * 0.72f, 26f), "—", "metric-value");
-            metric.Unit = Label(parent, new Rect(x, y, w, 26f), unit, "metric-unit",
+            metric.Unit = Label(parent, new Rect(x, y, w, 11f), unit, "metric-unit",
                                 align: TextAlignmentOptions.Right);
-            y -= 28f;
-
-            metric.Caption = Label(parent, new Rect(x, y, w, 11f), "", "metric-cap");
             y -= 12f;
+
+            metric.Value = Label(parent, new Rect(x, y, w, 18f), "—", "metric-value");
+            metric.Value.enableAutoSizing = true;
+            metric.Value.fontSizeMin = AvTokens.FontSmall;
+            metric.Value.fontSizeMax = metric.Value.fontSize;
+            y -= 17f;
+
+            metric.Caption = Label(parent, new Rect(x, y, w, 10f), "", "metric-cap");
+            y = area.y - area.height + 2f;
 
             AvStyle track = AvStyleHost.Style("metric-track");
-            float th = track.HasHeight ? track.Height : 3f;
+            float th = track.HasHeight ? track.Height : 2f;
             AvKit.Panel(parent, new Rect(x, y, w, th),
                         AvStyleHost.Resolve(track.Background, AvTheme.Unity(AvTokens.Hairline)));
             metric.Fill = AvKit.Panel(parent, new Rect(x, y, 0f, th), AvTheme.Accent);
@@ -298,12 +356,16 @@ namespace NOAvionics.Ui
         /// The bottom strip. Shows the hovered control's tooltip, else an armed picker's
         /// prompt, else idle copy — and it is where a disabled control says why.
         /// </summary>
-        public static TMP_Text StatusStrip(RectTransform parent, Rect area)
+        public static TMP_Text StatusStrip(RectTransform parent, Rect area) =>
+            StatusStrip(parent, area, out _);
+
+        public static TMP_Text StatusStrip(RectTransform parent, Rect area, out Image rail)
         {
             Box(parent, area, "status");
             AvStyle style = AvStyleHost.Style("status");
             float padL = style.HasPad ? style.PadLeft : 14f;
             float padT = style.HasPad ? style.PadTop : 9f;
+            rail = AvKit.Rule(parent, new Rect(area.x, area.y, 3f, area.height), AvTheme.RailInert);
 
             return Label(parent,
                          new Rect(area.x + padL, area.y - padT,
@@ -323,6 +385,12 @@ namespace NOAvionics.Ui
             float size = declared.HasFont ? declared.FontSize : AvTokens.FontMicro;
 
             AvButton button = AvKit.Button(parent, text, area, onClick, size, style);
+            TMP_Text label = button.GetComponentInChildren<TMP_Text>();
+            if (label != null)
+            {
+                if (declared.Tracking != 0f) label.characterSpacing = declared.Tracking;
+                if (declared.Bold) label.fontStyle = FontStyles.Bold;
+            }
             return button;
         }
     }

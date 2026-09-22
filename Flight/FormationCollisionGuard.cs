@@ -7,7 +7,7 @@ namespace WingCommand
     {
         public static bool TryAvoid(Aircraft self, Aircraft leader, IReadOnlyList<WingMember> members,
             float spacing, out Vector3 escape, out Aircraft threat, out float miss,
-            Aircraft currentThreat = null)
+            Aircraft currentThreat = null, bool ignoreLeader = false)
         {
             escape = Vector3.zero;
             threat = null;
@@ -18,6 +18,7 @@ namespace WingCommand
             for (int i = -1; i < count; i++)
             {
                 Aircraft other = i < 0 ? leader : members[i].Aircraft;
+                if (ignoreLeader && other == leader) continue;
                 if (other == null || other == self || other.disabled || other.rb == null) continue;
                 Vector3 relative = other.transform.position - self.transform.position;
                 Vector3 velocity = other.rb.velocity - self.rb.velocity;

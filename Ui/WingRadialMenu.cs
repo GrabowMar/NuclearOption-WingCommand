@@ -157,7 +157,7 @@ namespace WingCommand
 
             var secondary = new List<WingMenuAction>
             {
-                Icon(WingMenuAction.Create("Rules Of Engagement", _ => ShowRoeMenu()), "posture"),
+                Icon(WingMenuAction.Create("Doctrine", _ => ShowRoeMenu()), "posture"),
                 Icon(WingMenuAction.Create("Formation", _ => ShowFormationMenu()), "formation"),
                 Leaf(WingOrderCatalog.Label(WingOrder.OrbitHere), WingAction.OrbitHere, "orbit",
                      () => WingOrderCatalog.IsOfferable(WingOrder.OrbitHere)),
@@ -181,9 +181,9 @@ namespace WingCommand
 
             var roes = new List<WingMenuAction>
             {
-                Roe("Hold", WingRoe.Hold),
-                Roe("Tight", WingRoe.Tight),
-                Roe("Free", WingRoe.Free),
+                Pattern("Reserve", WingDoctrine.Reserve),
+                Pattern("Escort", WingDoctrine.Escort),
+                Pattern("Sweep", WingDoctrine.Sweep),
                 Back(ShowSecondaryMenu),
             };
 
@@ -278,15 +278,15 @@ namespace WingCommand
             return Icon(entry, "maneuver");
         }
 
-        /// <summary>Select a specific ROE directly.</summary>
-        private static WingMenuAction Roe(string label, WingRoe roe)
+        /// <summary>Select a doctrine pattern directly.</summary>
+        private static WingMenuAction Pattern(string label, WingDoctrine doctrine)
         {
             WingMenuAction entry = WingMenuAction.Create(label, _ =>
             {
                 if (Mgr != null)
                 {
-                    Mgr.Wing.Roe = roe;
-                    Mgr.Toast("ROE: " + CombatFacade.Roe.Label(roe));
+                    Mgr.Wing.Doctrine = doctrine;
+                    Mgr.Toast(doctrine.PatternName);
                     WingRadioAudio.Play(WingRadioAudio.Earcon.RoeCycle);
                 }
                 RestoreStockWheel();
@@ -340,10 +340,10 @@ namespace WingCommand
         {
             if (roeMenu != null && roeMenu.Length >= 3 && Mgr?.Wing != null)
             {
-                WingRoe current = Mgr.Wing.Roe;
-                roeMenu[0].DisplayName = current == WingRoe.Hold ? "▶ Hold (Active)" : "Hold";
-                roeMenu[1].DisplayName = current == WingRoe.Tight ? "▶ Tight (Active)" : "Tight";
-                roeMenu[2].DisplayName = current == WingRoe.Free ? "▶ Free (Active)" : "Free";
+                WingDoctrine current = Mgr.Wing.Doctrine;
+                roeMenu[0].DisplayName = current.Equals(WingDoctrine.Reserve) ? "▶ Reserve (Active)" : "Reserve";
+                roeMenu[1].DisplayName = current.Equals(WingDoctrine.Escort) ? "▶ Escort (Active)" : "Escort";
+                roeMenu[2].DisplayName = current.Equals(WingDoctrine.Sweep) ? "▶ Sweep (Active)" : "Sweep";
             }
             Swap(roeMenu, submenu: true);
         }

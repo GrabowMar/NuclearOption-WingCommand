@@ -95,6 +95,7 @@ namespace WingCommand
             {
                 typeof(AiCombatTweak),
                 typeof(AiSharpTurnPatch),
+                typeof(WingmanOverdrivePatch),
                 typeof(AiTargetDeconflictionPatch),
                 typeof(Interop.WingSquad.SurvivorSpawnPatch),
                 typeof(Interop.WingSquad.SurvivorStatePatch),
@@ -114,6 +115,7 @@ namespace WingCommand
                 typeof(WingRefitEjectPatch),
                 typeof(WingTakeoffQueuePatch),
                 typeof(HangarDeliveryCompletionPatch),
+                typeof(WingHangarSpawnGuard),
             };
             for (int i = 0; i < patchTypes.Length; i++)
                 harmony.PatchAll(patchTypes[i]);
@@ -136,7 +138,9 @@ namespace WingCommand
                 "Effective settings: " +
                 $"Mode={Settings.Mode.Value} [{WingFidelity.Summary()}] " +
                 $"Shape={WingFormation.Shape} " +
-                $"DefaultRoe={Settings.DefaultRoe.Value} " +
+                $"Doctrine={Settings.Doctrine.Value} " +
+                $"WingmanOverdrive={Settings.WingmanOverdrive.Value} " +
+                $"WingmanPursuitBoost={Settings.WingmanPursuitBoost.Value} " +
                 $"AutoReturnOnEmpty={Settings.AutoReturnOnEmpty.Value} " +
                 $"RtbReturnsToReserve={Settings.RtbReturnsToReserve.Value} " +
                 $"TakeoverOnDeath={Settings.TakeoverOnDeath.Value} " +
@@ -172,12 +176,14 @@ namespace WingCommand
                 "UnitMapIcon.UpdateIcon",
                 "HUDUnitMarker.UpdateColor",
                 "AIPilotCombatModes.EnterState",
+                "FlyByWire.Filter",
                 "CombatAI.ChooseHQTarget",
                 "GameManager.FinishGame",
                 // Both airfield patches depend on Pilot.SwitchState; losing them breaks apron pilot
                 // retention and runway cleanup.
                 "Pilot.SwitchState",
                 "Hangar.DoorSequenceCarrier",
+                "Hangar.TrySpawnAircraft",
             };
 
             foreach (string want in expected)

@@ -55,7 +55,7 @@ namespace WingCommand
             public WingFlightContribution Evaluate(in WingFlightSituation s)
             {
                 float experience = s.PilotSkill;
-                float hold = s.Situation.Roe == WingRoe.Hold ? 1f : 0f;
+                float hold = WingDoctrineRules.StickyTrack(s.Situation.Doctrine.Interval) ? 1f : 0f;
                 return new WingFlightContribution(1f,
                     captureGain: 0.97f + experience * 0.09f + hold * 0.03f,
                     spacingScale: 1.04f - experience * 0.04f,

@@ -446,6 +446,9 @@ tactical rules, hotkeys, and appearance can be configured.
 | AI | `AiSharpTurns` | `true` | Enable sharp, rapid combat manoeuvres (high-bank slice turns, corner-speed airbraking, coordinated rudder kicks, elevated pitch authority) for fixed-wing aircraft. |
 | AI | `AiTargetSpreading` | `true` | Enable AI target spreading on the next target selection; still disabled in Performance mode. |
 | AI | `AiMissileWarningRepair` | `true` | Repair warning subscriptions on the next combat entry. Disabling leaves existing subscriptions intact. |
+| AI | `ProtectHangarSpawns` | `true` | Hold any AI aircraft spawn off a hangar whose pad or roll-out is physically blocked by a parked aircraft, vehicle or wreck; the airbase tries its next hangar instead. Player spawns are never affected. Host or single-player only. |
+| AI | `WingmanOverdrive` | `true` | Raise the fly-by-wire G and angle-of-attack limits for AI wingmen under Wing Command control, so they can pull harder to hold formation and match player manoeuvres. Your own aircraft keeps stock limits. |
+| AI | `WingmanPursuitBoost` | `true` | Apply extra acceleration to AI wingmen chasing your aircraft from more than one slot spacing behind, outside the staggered rejoin hold, so they can close a blown slot even while you fly at maximum speed. A deliberate AI advantage that applies only while chasing a player-led formation at full throttle. |
 | Formation | `Shape` | `EchelonRight` | Initial formation at mission start |
 | Formation | `Spacing` | `120` | Lateral and longitudinal slot spacing in metres (`50`–`300`) |
 | Engagement | `DefaultRoe` | `Hold` | Initial ROE (`Hold`, `Tight`, `Free`) |
@@ -546,3 +549,10 @@ Version 0.9.2.6 adds `SpawnWingAt` for Boscali Summer's host-selected ingress.
 Boscali's Command control grid now owns territory selection and nearest-edge ranking;
 Wing Command validates placement bounds and runs native spawning. The old `SpawnWing`
 entry point remains compatible for other callers.
+
+The companion pilot API (additive, `WingSquad.ApiVersion` stays 1) lets Boscali Summer's
+SQD studio browse the portrait catalogue, render a portrait for an explicit appearance
+selection, and list, read, save, delete and recruit custom pilots through the same
+`PersonnelFacade` calls the in-game Pilot Studio uses. Records cross the boundary as flat
+`object[]` rows of BCL values, so no Wing Command type becomes public and an older
+companion build continues to work with every existing feature.

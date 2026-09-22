@@ -13,15 +13,10 @@ namespace WingCommand
         /// <summary>Lower surface-attack height for rotary aircraft.</summary>
         private const float RotaryAttackAltitude = 220f;
 
-        /// <summary>Whether a fixed-wing attacker has overflown the target and is extending away before
-        /// turning back in or rejoining.</summary>
-        private bool egress;
-
-        /// <summary>Timestamp until which egress flight geometry is maintained.</summary>
-        private float egressUntil;
-
         /// <summary>Timestamp of the last shot, used to enforce the shared firing interval.</summary>
         private float lastFiredTime;
+
+        private bool holdFire;
 
         public AttackRunState(WingMember member) : base(member)
         {
@@ -32,8 +27,7 @@ namespace WingCommand
         {
             BeginFlight(pilot);
             lastFiredTime = float.NegativeInfinity;
-            egress = false;
-            egressUntil = 0f;
+            holdFire = false;
 
             if (Plugin.Settings.VerboseLogging.Value)
             {
@@ -64,7 +58,7 @@ namespace WingCommand
             // Native turrets continue firing after target assignment. An interrupted or completed run
             // must release the designation before another behaviour owns the aircraft.
             CombatFacade.Weapons.ClearTurretTargets(aircraft);
-            egress = false;
+            holdFire = false;
             lastFiredTime = float.NegativeInfinity;
         }
 
@@ -111,34 +105,29 @@ namespace WingCommand
             }
 
             Vector3 toTarget = targetPos - aircraft.GlobalPosition();
-            float distanceSq = toTarget.sqrMagnitude;
-            float forwardDot = Vector3.Dot(aircraft.transform.forward, toTarget.normalized);
+            float distance = toTarget.magnitude;
+            Vector3 los = distance > 1f ? toTarget / distance : aircraft.transform.forward;
+            float forwardDot = Vector3.Dot(aircraft.transform.forward, los);
+            Vector3 fromTarget = -los;
+            float aspectDot = Vector3.Dot(target.transform.forward, fromTarget);
 
-            // Break-off / egress check: if we overflew the target (target is behind us) or passed inside
-            // close range with a high aspect angle, commit to an egress leg rather than stalling or pulling high-G inverted.
-            if (!egress)
-            {
-                if ((distanceSq < 800f * 800f && forwardDot < 0.2f) ||
-                    (forwardDot < -0.1f && distanceSq < 2500f * 2500f))
-                {
-                    egress = true;
-                    egressUntil = Time.timeSinceLevelLoad + 6f;
-                }
-            }
-            else
-            {
-                if (Time.timeSinceLevelLoad > egressUntil || distanceSq > 3500f * 3500f)
-                {
-                    egress = false;
-                }
-            }
+            AircraftParameters parms = aircraft.GetAircraftParameters();
+            float corner = parms != null ? parms.cornerSpeed : 150f;
+            float mySpeed = aircraft.rb != null ? aircraft.rb.velocity.magnitude : aircraft.speed;
+            float tgtSpeed = target.rb != null ? target.rb.velocity.magnitude : 0f;
+            bool leadPursuit = PersonnelFacade.Roster.HasPerk(aircraft, PilotPerk.LeadPursuit);
+            bool energyFighter = PersonnelFacade.Roster.HasPerk(aircraft, PilotPerk.EnergyFighter);
 
-            if (egress)
+            AttackRunAdvice advice = AttackRunGeometry.Evaluate(
+                distance, forwardDot, aspectDot, mySpeed, tgtSpeed, corner,
+                aircraft.radarAlt, surface, leadPursuit, energyFighter);
+            holdFire = advice.HoldFire;
+
+            if (advice.Shape == AttackRunShape.Overshoot)
             {
-                // Fly straight-ahead climbing egress along current forward vector with terrain following active
                 Vector3 fwd = aircraft.transform.forward;
                 GlobalPosition egressAim = aircraft.GlobalPosition() + (fwd + Vector3.up * 0.15f) * 4000f;
-                controlInputs.throttle = 1f;
+                controlInputs.throttle = advice.Throttle;
                 aircraft.autopilot.AutoAim(
                     destination: egressAim,
                     aimVelocity: true,
@@ -152,33 +141,37 @@ namespace WingCommand
                 return;
             }
 
-            controlInputs.throttle = 1f;
+            Vector3 right = Vector3.Cross(Vector3.up, los);
+            if (right.sqrMagnitude < 0.01f) right = aircraft.transform.right;
+            right.Normalize();
+            GlobalPosition dest = aim
+                + los * advice.Along
+                + right * advice.Right
+                + Vector3.up * advice.Up;
 
-            float holdAlt = surface ? altitude : targetPos.y;
-
-            // Follow terrain during approach so wingmen never clip terrain. Disable terrain following
-            // only when actively diving at a surface target within delivery range to avoid premature pullup.
-            bool divingAttack = surface && forwardDot > 0.85f && distanceSq < 2500f * 2500f;
-            bool followTerrain = !divingAttack;
+            controlInputs.throttle = advice.Throttle;
+            float holdAlt = surface ? altitude + advice.Up : targetPos.y + advice.Up;
+            Vector3 targetVel = target.rb != null ? target.rb.velocity : Vector3.zero;
+            if (leadPursuit) targetVel *= 1.25f;
 
             aircraft.autopilot.AutoAim(
-                destination: aim,
+                destination: dest,
                 aimVelocity: true,
                 ignoreCollisions: false,
                 runwayAlign: false,
-                effort: 2f,
+                effort: PilotPerks.DogfightEffort(leadPursuit),
                 bankAllowed: AutopilotMath.PursuitBank(),
-                followTerrain: followTerrain,
+                followTerrain: advice.FollowTerrain,
                 altitudeHold: AutopilotMath.CruiseHold(aircraft, holdAlt),
-                targetVelocity: target.rb != null ? target.rb.velocity : Vector3.zero);
+                targetVelocity: targetVel);
         }
 
         private void Shoot(Unit target)
         {
-            if (egress) return;
+            if (holdFire) return;
             if (Time.timeSinceLevelLoad - lastFiredTime < CombatFacade.Weapons.FireInterval(aircraft)) return;
             if (CombatFacade.Weapons.EngageSpecific(aircraft, pilot, target,
-                CombatFacade.Roe.ExplicitOrderRange())) lastFiredTime = Time.timeSinceLevelLoad;
+                CombatFacade.Doctrine.ExplicitOrderRange())) lastFiredTime = Time.timeSinceLevelLoad;
         }
     }
 }

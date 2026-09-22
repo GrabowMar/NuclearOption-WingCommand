@@ -7,60 +7,90 @@ namespace WingCommand
 {
     internal static partial class WmcScreen
     {
-        private const float FlightGroupsHeight = Space5 + (TacticalButtonHeight + Gap) * 2f;
+        private const float FlightGroupsHeight = 44f;
         private static RectTransform flightGroupsRoot, groupBar, groupEditor;
         private static readonly WingButton[] groupButtons = new WingButton[FlightGroups<WingMember>.Count];
         private static WingButton groupCreateButton, groupEditButton, groupDeleteButton, groupSaveButton;
         private static TMP_InputField groupNameField;
-        private static TMP_Text groupsHint;
         private static int editingGroup = -1;
+        private static int groupDeleteSlot = -1;
+        private static float groupDeleteUntil;
+
+        private static void ConfirmDeleteFlightGroup()
+        {
+            if (editingGroup < 0) return;
+            if (groupDeleteSlot != editingGroup || Time.unscaledTime > groupDeleteUntil)
+            {
+                groupDeleteSlot = editingGroup;
+                groupDeleteUntil = Time.unscaledTime + 3f;
+                groupDeleteButton?.SetText("DELETE?");
+                return;
+            }
+
+            WingCommandManager.Instance?.Selection.Groups.Clear(editingGroup);
+            editingGroup = -1;
+            groupDeleteSlot = -1;
+            groupDeleteButton?.SetText("DELETE");
+            nextRefresh = 0f;
+        }
 
         private static void BuildFlightGroups(RectTransform parent)
         {
             flightGroupsRoot = PageRoot(parent, "OptionalFlightGroups");
-            float y = Heading(flightGroupsRoot, 0f, "GROUPS - OPTIONAL / SELECTED AIRCRAFT");
             groupBar = PageRoot(flightGroupsRoot, "Groups");
             groupEditor = PageRoot(flightGroupsRoot, "GroupEditor");
-            groupCreateButton = TacticalButton(groupBar, "CREATE GROUP", Pad, y, TacticalCellWidth, CreateFlightGroup)
-                .WithTooltip("Create a named group from the selected aircraft. Groups are optional and last for this mission.");
+
+            const int slots = 3;
+            const float rowY = -7f;
+            const float recallW = 80f;
+            const float actionW = 60f;
             for (int i = 0; i < groupButtons.Length; i++)
             {
                 int index = i;
-                groupButtons[i] = TacticalButton(groupBar, "", TacticalColumn(i + 1), y, TacticalCellWidth, () => {
-                    editingGroup = index;
-                    WingCommandManager.Instance?.RecallFlightGroup(index);
-                    nextRefresh = 0f;
-                }, UiButtonStyle.Toggle)
+                groupButtons[i] = WingUi.Button(groupBar, "G" + (i + 1),
+                    new Rect(Pad + i * (recallW + TacticalGap), rowY, recallW, TacticalButtonHeight),
+                    FontMicro, UiButtonStyle.Toggle, () =>
+                    {
+                        editingGroup = index;
+                        WingCommandManager.Instance?.RecallFlightGroup(index);
+                        nextRefresh = 0f;
+                    })
                     .WithTooltip("Recall this group. With Flight expanded: Ctrl+1/2/3 recalls existing groups; Ctrl+Shift+1/2/3 replaces their selection.");
             }
-            float secondRow = y - TacticalButtonHeight - Gap;
-            groupEditButton = TacticalButton(groupBar, "EDIT GROUP", Pad, secondRow, TacticalCellWidth, EditFlightGroup)
-                .WithTooltip("Edit the last recalled group. SAVE updates its name and members to your current selection.");
-            groupDeleteButton = TacticalButton(groupBar, "DELETE GROUP", TacticalColumn(1), secondRow,
-                TacticalCellWidth, () => {
-                    if (editingGroup < 0) return;
-                    WingCommandManager.Instance?.Selection.Groups.Clear(editingGroup);
-                    editingGroup = -1;
-                    nextRefresh = 0f;
-                }).WithTooltip("Delete the saved group without releasing any aircraft.");
-            groupsHint = Label(groupBar, "Select aircraft, then CREATE GROUP.",
-                new Rect(Pad, secondRow, PanelWidth - Pad * 2f, LineHeight),
-                Dim(), FontSmall, FontStyles.Normal, TextAlignmentOptions.Left);
 
+            float actionsX = Pad + slots * (recallW + TacticalGap);
+            groupCreateButton = WingUi.Button(groupBar, "CREATE",
+                new Rect(actionsX, rowY, actionW, TacticalButtonHeight), FontMicro, UiButtonStyle.Default,
+                CreateFlightGroup)
+                .WithTooltip("Create a named group from the selected aircraft. Groups are optional and last for this mission.");
+            groupEditButton = WingUi.Button(groupBar, "EDIT",
+                new Rect(actionsX + actionW + TacticalGap, rowY, actionW, TacticalButtonHeight), FontMicro,
+                UiButtonStyle.Default, EditFlightGroup)
+                .WithTooltip("Edit the last recalled group. SAVE updates its name and members to your current selection.");
+            groupDeleteButton = WingUi.Button(groupBar, "DELETE",
+                new Rect(actionsX + (actionW + TacticalGap) * 2f, rowY, actionW, TacticalButtonHeight), FontMicro,
+                UiButtonStyle.Default, ConfirmDeleteFlightGroup)
+                .WithTooltip("Delete the saved group without releasing any aircraft. Press twice.");
+
+            float fieldW = recallW * 3f + TacticalGap * 2f;
             if (WingKeyboardGuard.Available)
                 groupNameField = WingUi.InputField(groupEditor,
-                    new Rect(Pad, y, TacticalCellWidth * 2f + Gap, TacticalButtonHeight),
+                    new Rect(Pad, rowY, fieldW, TacticalButtonHeight),
                     12, _ => nextRefresh = 0f, "Group name, up to 12 characters", "GROUP NAME");
-            groupSaveButton = TacticalButton(groupEditor, "SAVE", TacticalColumn(2), y, TacticalCellWidth, () => {
-                var manager = WingCommandManager.Instance;
-                if (manager == null || editingGroup < 0 || string.IsNullOrWhiteSpace(groupNameField?.text)) return;
-                manager.SaveFlightGroup(editingGroup, groupNameField.text);
-                CloseFlightGroupEditor();
-            });
-            TacticalButton(groupEditor, "BACK", TacticalColumn(3), y, TacticalCellWidth, CloseFlightGroupEditor);
-            Label(groupEditor, "SAVE uses the current command selection.",
-                new Rect(Pad, secondRow, PanelWidth - Pad * 2f, LineHeight),
-                Dim(), FontSmall, FontStyles.Normal, TextAlignmentOptions.Left);
+            groupSaveButton = WingUi.Button(groupEditor, "SAVE",
+                new Rect(actionsX, rowY, actionW, TacticalButtonHeight), FontMicro, UiButtonStyle.Primary, () =>
+                {
+                    var manager = WingCommandManager.Instance;
+                    if (manager == null || editingGroup < 0 || string.IsNullOrWhiteSpace(groupNameField?.text)) return;
+                    manager.SaveFlightGroup(editingGroup, groupNameField.text);
+                    CloseFlightGroupEditor();
+                })
+                .WithTooltip("Save the current command selection under this group name.");
+            WingUi.Button(groupEditor, "BACK",
+                new Rect(actionsX + actionW + TacticalGap, rowY, actionW, TacticalButtonHeight), FontMicro,
+                UiButtonStyle.Quiet, CloseFlightGroupEditor)
+                .WithTooltip("Close the group editor without saving.");
+
             groupEditor.gameObject.SetActive(false);
             flightGroupsRoot.gameObject.SetActive(false);
         }
@@ -115,9 +145,6 @@ namespace WingCommand
             bool editable = editingGroup >= 0 && selection.Groups.Exists(editingGroup);
             groupEditButton?.gameObject.SetActive(editable);
             groupDeleteButton?.gameObject.SetActive(editable);
-            groupsHint?.gameObject.SetActive(!editable);
-            if (groupsHint != null)
-                groupsHint.text = created == 0 ? "Select aircraft, then CREATE GROUP." : "Recall a group to edit or delete it.";
             groupCreateButton?.SetEnabled(created < groupButtons.Length && scope.Count > 0 && groupNameField != null);
             groupEditButton?.SetEnabled(groupNameField != null);
             groupSaveButton?.SetEnabled(scope.Count > 0 && !string.IsNullOrWhiteSpace(groupNameField?.text));
@@ -128,7 +155,6 @@ namespace WingCommand
             flightGroupsRoot = groupBar = groupEditor = null;
             groupCreateButton = groupEditButton = groupDeleteButton = groupSaveButton = null;
             groupNameField = null;
-            groupsHint = null;
             editingGroup = -1;
             Array.Clear(groupButtons, 0, groupButtons.Length);
         }

@@ -31,10 +31,9 @@ namespace WingCommand
             // Enforce the configured interval so repeated checks cannot empty the loadout immediately.
             bool mayFire = Time.timeSinceLevelLoad - lastFired >= WingWeapons.FireInterval(aircraft);
 
-            WingRoe roe = RoeRules.Current;
-            WingWeapons.Allow roeAllow = RoeRules.WeaponsFree(roe, aircraft);
-            StationFireMode mode = OrderRoePolicy.StationFire(authority, roe,
-                roeAllow == WingWeapons.Allow.MissilesOnly, WingFidelity.OpportunityFire);
+            WingDoctrine doctrine = DoctrineLive.Current;
+            StationFireMode mode = OrderRoePolicy.StationFire(authority, doctrine,
+                DoctrineLive.MissileShotAvailable(aircraft), WingFidelity.OpportunityFire);
             if (mode == StationFireMode.None)
             {
                 WingWeapons.ClearTurretTargets(aircraft);
@@ -44,8 +43,8 @@ namespace WingCommand
             bool orderOwnsWeapons = authority == OrderEngagementAuthority.ExplicitTarget ||
                                     authority == OrderEngagementAuthority.AutonomousCombat;
             float range = orderOwnsWeapons
-                ? RoeRules.ExplicitOrderRange()
-                : RoeRules.EngageRange(roe);
+                ? WingDoctrineRules.ExplicitOrderRange()
+                : WingDoctrineRules.EngageRange(doctrine.Reach);
 
             bool fired = false;
             bool coveringLeader = false;
@@ -75,7 +74,7 @@ namespace WingCommand
                             WingWeapons.ClearTurretTargets(aircraft);
                         break;
                     case StationFireMode.ProtectWing:
-                        Unit threat = RoeRules.PriorityTarget(roe, aircraft, leader, range);
+                        Unit threat = DoctrineLive.PriorityTarget(aircraft, leader, range);
                         if (threat != null)
                         {
                             fired = WingWeapons.EngageSpecific(aircraft, pilot, threat, range);
@@ -86,8 +85,10 @@ namespace WingCommand
                             WingWeapons.ClearTurretTargets(aircraft);
                         break;
                     case StationFireMode.Opportunity:
-                        fired = WingWeapons.Engage(aircraft, pilot,
-                            WingWeapons.Allow.AirAndGround, range);
+                        WingWeapons.Allow allow = authority == OrderEngagementAuthority.AutonomousCombat
+                            ? WingWeapons.Allow.AirAndGround
+                            : ToAllow(WingDoctrineRules.StandingAllow(doctrine.Targets));
+                        fired = WingWeapons.Engage(aircraft, pilot, allow, range);
                         if (!fired) WingWeapons.ClearTurretTargets(aircraft);
                         break;
                 }
@@ -98,6 +99,17 @@ namespace WingCommand
             lastFired = Time.timeSinceLevelLoad;
             if (coveringLeader) WingComms.Say(member, WingComms.Call.Covering);
             return true;
+        }
+
+        private static WingWeapons.Allow ToAllow(DoctrineAllow allow)
+        {
+            switch (allow)
+            {
+                case DoctrineAllow.AirOnly: return WingWeapons.Allow.AirOnly;
+                case DoctrineAllow.GroundOnly: return WingWeapons.Allow.GroundOnly;
+                case DoctrineAllow.AirAndGround: return WingWeapons.Allow.AirAndGround;
+                default: return WingWeapons.Allow.None;
+            }
         }
     }
 }

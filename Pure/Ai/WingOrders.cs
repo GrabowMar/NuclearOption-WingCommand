@@ -45,14 +45,6 @@ namespace WingCommand
         MaskTerrain,
     }
 
-    /// <summary>Public wing weapons policy included in reflex telemetry.</summary>
-    public enum WingRoe
-    {
-        Hold,
-        Tight,
-        Free,
-    }
-
     internal enum OrderEngagementAuthority
     {
         /// <summary>Use standing ROE for incidental target selection and fire.</summary>
@@ -146,10 +138,46 @@ namespace WingCommand
         Ignore,
     }
 
-    /// <summary>Left-click arms a WMC command; right-click applies it. Unarmed right-click defaults to
-    /// Move.</summary>
+    /// <summary>Left-click opens a short wing-order menu (or places an already-armed order).
+    /// Right-click is theater (Boscali), not wing.</summary>
     internal static class MapOrderPolicy
     {
+        public const int ContextOrderCap = 6;
+
+        /// <summary>Fill <paramref name="dest"/> with contextual wing orders for a map click. Returns count.</summary>
+        public static int CopyContextOrders(
+            MapPointerKind pointer, bool rotary, bool canCargo, bool canJam, WingOrder[] dest)
+        {
+            if (dest == null || dest.Length == 0) return 0;
+            int n = 0;
+            void Add(WingOrder order)
+            {
+                if (n >= dest.Length) return;
+                for (int i = 0; i < n; i++)
+                    if (dest[i] == order) return;
+                dest[n++] = order;
+            }
+
+            if (pointer == MapPointerKind.Enemy)
+            {
+                Add(WingOrder.Attack);
+                Add(WingOrder.FireForEffect);
+                if (canJam) Add(WingOrder.JamTarget);
+                Add(WingOrder.MoveToPoint);
+            }
+            else
+            {
+                Add(WingOrder.MoveToPoint);
+                Add(WingOrder.OrbitHere);
+                Add(WingOrder.SeekAndDestroy);
+                if (rotary) Add(WingOrder.LandHere);
+                if (canCargo) Add(WingOrder.DeliverCargo);
+            }
+
+            Add(WingOrder.ReturnToBase);
+            return n;
+        }
+
         /// <summary>Orders available to arm for the next map right-click.</summary>
         public static bool ArmsOnMap(WingOrder order) =>
             PlacesPoint(order) || PicksTarget(order);
@@ -245,18 +273,18 @@ namespace WingCommand
         public static string ArmPrompt(WingOrder order)
         {
             if (order == WingOrder.Attack)
-                return "ATTACK TARGET ARMED · RIGHT-CLICK A HOSTILE · SHIFT QUEUES";
+                return "ATTACK TARGET ARMED · LEFT-CLICK A HOSTILE · SHIFT QUEUES";
             if (order == WingOrder.FireForEffect)
-                return "SPLASH 'EM ARMED · RIGHT-CLICK A HOSTILE · SHIFT QUEUES";
+                return "SPLASH 'EM ARMED · LEFT-CLICK A HOSTILE · SHIFT QUEUES";
             if (order == WingOrder.DeliverCargo)
-                return "DELIVER CARGO ARMED · RIGHT-CLICK MAP · SHIFT QUEUES, OR PRESS AGAIN FOR THE STANDARD ROUTE";
+                return "DELIVER CARGO ARMED · LEFT-CLICK MAP · SHIFT QUEUES, OR PRESS AGAIN FOR THE STANDARD ROUTE";
             if (order == WingOrder.OrbitHere)
-                return "HOLD HERE ARMED · RIGHT-CLICK MAP · SHIFT QUEUES";
+                return "HOLD HERE ARMED · LEFT-CLICK MAP · SHIFT QUEUES";
             if (order == WingOrder.SeekAndDestroy)
-                return "SEEK & DESTROY ARMED · RIGHT-CLICK MAP · SHIFT QUEUES";
+                return "SEEK & DESTROY ARMED · LEFT-CLICK MAP · SHIFT QUEUES";
             if (order == WingOrder.LandHere)
-                return "LAND ARMED · RIGHT-CLICK MAP · SHIFT QUEUES";
-            return "ARMED · RIGHT-CLICK MAP · SHIFT QUEUES";
+                return "LAND ARMED · LEFT-CLICK MAP · SHIFT QUEUES";
+            return "ARMED · LEFT-CLICK MAP · SHIFT QUEUES";
         }
     }
 
@@ -267,9 +295,10 @@ namespace WingCommand
         /// payload without attack permission. Missile defence precedes optional opportunity
         /// scans.</summary>
         public static StationFireMode StationFire(OrderEngagementAuthority authority,
-            WingRoe roe, bool missileDefenceAvailable, bool opportunityFireEnabled)
+            WingDoctrine doctrine, bool missileShotAvailable, bool opportunityFireEnabled)
         {
-            if (missileDefenceAvailable) return StationFireMode.MissileDefence;
+            if (doctrine.Guard != MissileGuard.Off && missileShotAvailable)
+                return StationFireMode.MissileDefence;
             if (authority == OrderEngagementAuthority.ExplicitTarget)
                 return StationFireMode.DesignatedTarget;
             if (authority == OrderEngagementAuthority.AutonomousCombat)
@@ -277,9 +306,14 @@ namespace WingCommand
             if (authority != OrderEngagementAuthority.StandingRoe || !opportunityFireEnabled)
                 return StationFireMode.None;
 
-            if (roe == WingRoe.Tight) return StationFireMode.ProtectWing;
-            if (roe == WingRoe.Free) return StationFireMode.Opportunity;
-            return StationFireMode.None;
+            switch (doctrine.Targets)
+            {
+                case TargetPolicy.Cover: return StationFireMode.ProtectWing;
+                case TargetPolicy.Air:
+                case TargetPolicy.Ground:
+                case TargetPolicy.Both: return StationFireMode.Opportunity;
+                default: return StationFireMode.None;
+            }
         }
 
         public static OrderEngagementAuthority Authority(WingOrder order)

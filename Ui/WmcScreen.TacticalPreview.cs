@@ -2,6 +2,7 @@ using System.Collections.Generic;
 using TMPro;
 using UnityEngine;
 using UnityEngine.UI;
+using NOAvionics.Ui;
 
 namespace WingCommand
 {
@@ -14,29 +15,39 @@ namespace WingCommand
         private static readonly List<RectTransform> formationWingmenDots = new List<RectTransform>();
         private static readonly List<Image> formationVectorLines = new List<Image>();
 
-        // Keep formation and current behaviour visible above the geometry controls.
-        private static float AddTacticalPreview(RectTransform parent, float y)
-        {
-            float w = PanelWidth - Pad * 2f;
-            const float radarW = 184f;
-            const float boxH = 176f;
+        private const float PreviewMinHeight = 96f;
+        private const float PreviewRadarWidth = 168f;
+        private const float GeometryHead = 12f;
+        private const float GeometryRow = 26f;
 
-            // Formation preview.
-            WingUi.TacticalCard(parent, new Rect(Pad, y, radarW, boxH), WingUi.RailEmerald);
+        /// <summary>Gap after the plot, two heads, and two 2-row grids. The plot fills whatever is left.</summary>
+        private const float GeometryControlsHeight =
+            TacticalGap + GeometryHead + (GeometryRow * 2f + TacticalGap) + TacticalGap
+            + GeometryHead + (GeometryRow * 2f + TacticalGap) + 2f;
+
+        private static float TacticalPreviewHeight =>
+            Mathf.Max(PreviewMinHeight, tacticalDeckAvail - GeometryControlsHeight);
+
+        // Keep formation and current behaviour visible above the geometry controls.
+        private static float AddTacticalPreview(RectTransform parent, float y, float previewH)
+        {
+            float w = ContentWidth;
+            float docX = Pad + PreviewRadarWidth + TacticalGap;
+            float docW = w - PreviewRadarWidth - TacticalGap;
+
+            WingUi.TacticalCard(parent, new Rect(Pad, y, w, previewH), WingUi.RailEmerald);
 
             // Low-opacity preview crosshairs.
-            Color crosshairCol = new Color(WingUi.RailEmerald.r, WingUi.RailEmerald.g, WingUi.RailEmerald.b, 0.25f);
-            Rule(parent, new Rect(Pad + radarW * 0.5f, y - 6f, 1f, boxH - 28f), crosshairCol);
-            Rule(parent, new Rect(Pad + 6f, y - (boxH - 20f) * 0.5f, radarW - 12f, 1f), crosshairCol);
-
-            float radarCenterX = Pad + radarW * 0.5f;
-            formationRadarCenterY = y - 44f;
+            float radarCenterX = Pad + PreviewRadarWidth * 0.5f;
+            formationRadarCenterY = y - previewH * 0.5f - 4f;
+            Rule(parent, new Rect(radarCenterX, y - 6f, 1f, previewH - 28f), WingUi.BorderSubtle);
+            Rule(parent, new Rect(Pad + 6f, formationRadarCenterY, PreviewRadarWidth - 12f, 1f), WingUi.BorderSubtle);
 
             // Centred leader symbol.
             Label(parent, "^", new Rect(radarCenterX - 10f, formationRadarCenterY - 6f, 20f, 16f),
-                  Green(), FontSmall, FontStyles.Bold, TextAlignmentOptions.Center);
+                  WingUi.TextPrimary, FontSmall, FontStyles.Bold, TextAlignmentOptions.Center);
             Label(parent, "LDR", new Rect(radarCenterX - 15f, formationRadarCenterY + 10f, 30f, 10f),
-                  Green(), FontMicro, FontStyles.Bold, TextAlignmentOptions.Center);
+                  WingUi.TextPrimary, FontMicro, FontStyles.Bold, TextAlignmentOptions.Center);
 
             // Follower markers with slot connections matching maximum wing size.
             formationWingmenDots.Clear();
@@ -46,7 +57,7 @@ namespace WingCommand
             for (int i = 0; i < WingFormation.MaxWingSize; i++)
             {
                 var line = Rule(parent, new Rect(radarCenterX, formationRadarCenterY, 1f, 1f),
-                                new Color(WingUi.RailEmerald.r, WingUi.RailEmerald.g, WingUi.RailEmerald.b, 0.35f));
+                                WingUi.BorderSubtle);
                 formationVectorLines.Add(line);
 
                 var dotGo = new GameObject("WingmanDot_" + i, typeof(RectTransform));
@@ -58,44 +69,39 @@ namespace WingCommand
                 formationLiveDots.Add(Rule(parent, new Rect(radarCenterX, formationRadarCenterY, 4f, 4f), WingUi.RailCyan));
             }
 
-            Label(parent, "SLOTS 1–4 · [ ] SELECTED\nDOT: LIVE · EDGE: OFF SCALE",
-                new Rect(Pad + Space2, y - 140f, radarW - Space4, 30f), Dim(), FontMicro,
+            Label(parent, "SLOT: 1 / [1] SELECTED\nDOT: LIVE / EDGE: FAR",
+                new Rect(Pad + Space2, y - previewH + 30f, PreviewRadarWidth - Space4, 30f), Dim(), FontMicro,
                 FontStyles.Normal, TextAlignmentOptions.Center);
 
-            // Combat-doctrine readouts.
-            float docX = Pad + radarW + Gap;
-            float docW = w - radarW - Gap;
-
-            WingUi.TacticalCard(parent, new Rect(docX, y, docW, boxH), WingUi.RailCyan);
-
-            float lineY = y - 4f;
+            // Combat-doctrine readouts on an equal-pitch table so the card fills with height
+            // instead of leaving a hole under a fixed stack.
+            float tableTop = y - 4f;
+            float tableH = Mathf.Max(56f, previewH - 26f);
+            float tablePitch = tableH / 4f;
+            float tableTextH = Mathf.Clamp(tablePitch - 3f, 14f, 30f);
+            float tableOffset = (tablePitch - tableTextH) * 0.5f;
             doctrineTitleLabel = Label(parent, "",
-                new Rect(docX + Space2, lineY, docW - Space3, 16f),
-                Green(), FontSmall, FontStyles.Bold, TextAlignmentOptions.Left);
-            lineY -= 18f;
-
+                new Rect(docX + Space2, tableTop - tableOffset, docW - Space3, tableTextH),
+                WingUi.TextPrimary, FontSmall, FontStyles.Bold, TextAlignmentOptions.MidlineLeft);
             doctrineProfileLabel = Label(parent, "",
-                new Rect(docX + Space2, lineY, docW - Space3, 32f),
-                Friendly(), FontSmall, FontStyles.Normal, TextAlignmentOptions.Left);
-            lineY -= 36f;
-
+                new Rect(docX + Space2, tableTop - tablePitch - tableOffset, docW - Space3, tableTextH),
+                Friendly(), FontSmall, FontStyles.Normal, TextAlignmentOptions.MidlineLeft);
             doctrineRulesLabel = Label(parent, "",
-                new Rect(docX + Space2, lineY, docW - Space3, 32f),
-                Friendly(), FontSmall, FontStyles.Normal, TextAlignmentOptions.Left);
-            lineY -= 36f;
-
+                new Rect(docX + Space2, tableTop - tablePitch * 2f - tableOffset, docW - Space3, tableTextH),
+                Friendly(), FontSmall, FontStyles.Normal, TextAlignmentOptions.MidlineLeft);
             doctrineWeaponsLabel = Label(parent, "",
-                new Rect(docX + Space2, lineY, docW - Space3, LineHeight),
-                WingUi.TextPrimary, FontSmall, FontStyles.Normal, TextAlignmentOptions.Left);
+                new Rect(docX + Space2, tableTop - tablePitch * 3f - tableOffset, docW - Space3, tableTextH),
+                WingUi.TextPrimary, FontSmall, FontStyles.Normal, TextAlignmentOptions.MidlineLeft);
+            for (int i = 0; i < 3; i++)
+                Rule(parent, new Rect(docX + Space2, tableTop - (i + 1) * tablePitch + 1f, docW - Space3, 1f),
+                     WingUi.BorderSubtle);
 
             doctrineProfileLabel.enableWordWrapping = true;
             doctrineRulesLabel.enableWordWrapping = true;
-            doctrineWeaponsLabel.rectTransform.sizeDelta = new Vector2(docW - Space3, 36f);
             doctrineWeaponsLabel.enableWordWrapping = true;
-            formationSpacingLabel = Label(parent, "", new Rect(docX + Space2, y - 148f, docW - Space3, LineHeight),
+            formationSpacingLabel = Label(parent, "", new Rect(docX + Space2, y - previewH + 16f, docW - Space3, LineHeight),
                 Dim(), FontMicro, FontStyles.Normal, TextAlignmentOptions.Left);
-            return y - boxH - Space2;
-
+            return y - previewH - TacticalGap;
         }
 
         private static void RefreshTacticalPreview()
@@ -103,8 +109,7 @@ namespace WingCommand
             WingRegistry wing = Wing();
             FormationShape shape = WingFormation.Shape;
             WingWeaponPreference? shared = WingCommandManager.Instance?.ScopeWeaponPreference();
-            const float radarW = 184f;
-            float radarCenterX = Pad + radarW * 0.5f;
+            float radarCenterX = Pad + PreviewRadarWidth * 0.5f;
 
             var selected = WingCommandManager.Instance?.Commands.Scope(wholeWing: false);
             float scale = 24f;
@@ -172,14 +177,14 @@ namespace WingCommand
                     lineRt.anchoredPosition = new Vector2(radarCenterX, formationRadarCenterY);
                     lineRt.localRotation = Quaternion.Euler(0f, 0f, angle);
 
-                    line.color = inWing ? new Color(0.2f, 0.65f, 0.45f, 0.45f) : new Color(0.2f, 0.35f, 0.3f, 0.2f);
+                    line.color = inWing ? WingUi.RailEmerald.WithAlpha(0.35f) : WingUi.BorderSubtle;
                 }
             }
 
             if (formationSpacingLabel != null)
                 formationSpacingLabel.text = "BASE SPACING " + WingFormation.SlotSpacing.ToString("0") + " m · PLAN VIEW";
 
-            string roeName = wing != null ? CombatFacade.Roe.Label(wing.Roe) : "HOLD";
+            string roeName = wing != null ? wing.Doctrine.PatternName : "RESERVE";
             string shapeName = FormationShapes.Pretty(shape).ToUpperInvariant();
             string roleDesc = FormationShapes.Role(shape);
 

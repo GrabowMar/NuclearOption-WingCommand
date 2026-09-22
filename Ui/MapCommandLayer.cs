@@ -1,5 +1,6 @@
 using System.Collections.Generic;
 using HarmonyLib;
+using NOAvionics;
 using UnityEngine;
 using UnityEngine.EventSystems;
 using UnityEngine.UI;
@@ -49,8 +50,9 @@ namespace WingCommand
                 if (pendingRecruit.Count > 0 && Time.unscaledTime <= recruitConfirmationUntil)
                     return "CONFIRM ASSIGNMENT: " + pendingRecruit.Count + " AIRCRAFT · " +
                            Mathf.RoundToInt(pendingRecruitCost) + " FUNDS";
-                return "Right-click moves at " + FormatAltitude(moveAltitude) + " · " +
-                       FormatSpeed(moveSpeed) + ". H+/H- height, S+/S- speed. Shift queues.";
+                return "Left-click a point for wing orders · " +
+                       FormatAltitude(moveAltitude) + " · " + FormatSpeed(moveSpeed) +
+                       ". H+/H- height, S+/S- speed. Shift queues. Right-click is theater.";
             }
         }
 
@@ -72,9 +74,7 @@ namespace WingCommand
             DynamicMap map = SceneSingleton<DynamicMap>.i;
             if (map == null) return;
 
-            // Apply the armed order on right-click; otherwise issue Move.
             if (pointArmed) HandleArmedOrder(map);
-            else HandleWaypointInput(map);
         }
 
         public void ArmPointOrder(WingOrder order)
@@ -103,9 +103,16 @@ namespace WingCommand
                 Toast("Tactical map unavailable");
                 return;
             }
-            if (BoscaliLink.SupportGestureArmed)
+            if (BoscaliLink.SupportGestureArmed || MapPicker.IsOwner(MapPicker.Support))
             {
                 Toast("A Boscali support call-in is armed - cancel it first");
+                return;
+            }
+
+            string prompt = MapOrderPolicy.ArmPrompt(order);
+            if (!MapPicker.TryArm(MapPicker.WingPoint, MapPicker.GestureLeft, prompt))
+            {
+                Toast("The map is already armed");
                 return;
             }
 
@@ -115,8 +122,8 @@ namespace WingCommand
             gesture.Clear();
             Interop.WingMapMode.GestureArmed = true;
             Toast(MapOrderPolicy.PicksTarget(order)
-                ? WingOrderCatalog.Label(order) + " armed - right-click a hostile on the map"
-                : WingOrderCatalog.Label(order) + " armed - right-click a point on the map");
+                ? WingOrderCatalog.Label(order) + " armed - left-click a hostile on the map"
+                : WingOrderCatalog.Label(order) + " armed - left-click a point on the map");
         }
 
         public void CancelPointOrder(bool notify)
@@ -125,6 +132,7 @@ namespace WingCommand
             pointArmed = false;
             gesture.Clear();
             Interop.WingMapMode.GestureArmed = false;
+            MapPicker.Disarm(MapPicker.WingPoint);
             if (notify) Toast("Order cancelled");
         }
 
@@ -132,6 +140,7 @@ namespace WingCommand
         {
             gesture.Clear();
             Interop.WingMapMode.GestureArmed = false;
+            MapPicker.Disarm(MapPicker.WingPoint);
             pointArmed = false;
             moveAltitude = 0f;
             moveSpeed = 0f;
@@ -158,16 +167,15 @@ namespace WingCommand
                 return;
             }
 
-            // Ignore the arming frame and its immediate successor so a simultaneous right-click cannot
-            // place the order. Commit on release, and only when the pointer barely moved: a right-drag
-            // pans the map and must not also drop the order at where the drag began.
+            // Ignore the arming frame so the same click that armed cannot also place.
+            // Commit on left release; a left-drag pans the map and must not drop the order.
             if (Time.frameCount <= armedFrame + 1) return;
-            if (Input.GetMouseButtonDown(1))
+            if (Input.GetMouseButtonDown(0))
             {
                 gesture.NotePointerDown(Input.mousePosition.x, Input.mousePosition.y);
                 return;
             }
-            if (!Input.GetMouseButtonUp(1) ||
+            if (!Input.GetMouseButtonUp(0) ||
                 !gesture.ReleasedAsClick(Input.mousePosition.x, Input.mousePosition.y)) return;
             if (!TryGetMapPointer(map, out GlobalPosition point, out Unit target)) return;
 
@@ -191,31 +199,11 @@ namespace WingCommand
                     manager?.IssueTargetOrder(armedOrder, target, append: true);
                     break;
                 case MapClickIntent.NeedTarget:
-                    Toast("Right-click a hostile on the map");
+                    Toast("Left-click a hostile on the map");
                     break;
             }
         }
 
-        private void HandleWaypointInput(DynamicMap map)
-        {
-            if (pointArmed || !WmcScreen.TacticalCommandModeActive) return;
-            if (BoscaliLink.SupportGestureArmed) return;
-
-            if (Input.GetMouseButtonDown(1))
-            {
-                gesture.NotePointerDown(Input.mousePosition.x, Input.mousePosition.y);
-                return;
-            }
-            if (!Input.GetMouseButtonUp(1) ||
-                !gesture.ReleasedAsClick(Input.mousePosition.x, Input.mousePosition.y)) return;
-
-            WingCommandManager manager = WingCommandManager.Instance;
-            if (manager == null) return;
-            if (!TryGetMapPointer(map, out GlobalPosition point, out _)) return;
-
-            bool append = Input.GetKey(KeyCode.LeftShift) || Input.GetKey(KeyCode.RightShift);
-            manager.IssueMove(point, append);
-        }
 
         public void StepMoveHeight(int sign)
         {

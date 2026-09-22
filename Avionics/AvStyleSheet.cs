@@ -462,18 +462,19 @@ namespace NOAvionics
         private AvPaint ParsePaint(string[] parts, int from, int line)
         {
             string token = Resolve(parts[from]).Trim();
+            string[] expanded = token.Split(new[] { ' ', '\t' }, StringSplitOptions.RemoveEmptyEntries);
 
-            // A theme reference, optionally with an alpha in the next token.
-            AvColorRef kind = ThemeRef(token);
+            // A variable can carry a live theme reference plus alpha just like a literal.
+            AvColorRef kind = ThemeRef(expanded[0]);
             if (kind != AvColorRef.None && kind != AvColorRef.Fixed)
             {
                 float alpha = 1f;
-                if (parts.Length > from + 1 && TryAlpha(parts[from + 1], out float a)) alpha = a;
+                if (expanded.Length > 1 && TryAlpha(expanded[1], out float aliasAlpha)) alpha = aliasAlpha;
+                else if (parts.Length > from + 1 && TryAlpha(parts[from + 1], out float a)) alpha = a;
                 return new AvPaint(kind, alpha);
             }
 
             // Re-split, because a variable may itself expand to "#RRGGBB aa".
-            string[] expanded = token.Split(new[] { ' ', '\t' }, StringSplitOptions.RemoveEmptyEntries);
             string hex = expanded[0];
 
             if (!TryHex(hex, out Rgba rgb))

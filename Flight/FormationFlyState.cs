@@ -149,6 +149,15 @@ namespace WingCommand
         /// <summary>Heading-rate smoothing duration in seconds.</summary>
         private const float TurnRateSmoothing = 0.20f;
 
+        // A player leader is the exact motion the wing exists to mirror. Player stick input is
+        // smoother than scripted AI flight, so the follower can filter less of it without chasing
+        // noise; AI-led flights keep the quieter defaults.
+        private const float PlayerLeaderTrackSmoothing = 0.20f;
+        private const float PlayerLeaderTurnRateSmoothing = 0.12f;
+        private const float PlayerLeaderBankSmoothing = 0.25f;
+        private const float PlayerLeaderSpeedRateSmoothing = 0.18f;
+        private const float PlayerLeaderThrottleSmoothing = 0.10f;
+
         /// <summary>Heading-rate noise threshold in rad/s, below deliberate turns but above differentiated
         /// filter residue.</summary>
         private const float TurnRateDeadband = 0.006f;
@@ -174,6 +183,7 @@ namespace WingCommand
         /// sway.</summary>
         private LeaderState TrackLeader(Aircraft leader, float dt)
         {
+            bool playerLead = leader.Player != null;
             Vector3 leaderVel = leader.rb != null ? leader.rb.velocity : Vector3.zero;
             if (leader.rb != null)
             {
@@ -238,12 +248,13 @@ namespace WingCommand
             }
 
             float holdBlend = FormationCollision.HoldBlend(
-                CombatFacade.Roe.Current == WingRoe.Hold, member.SlotError, WingFormation.SlotSpacing);
+                WingDoctrineRules.StickyTrack(DoctrineLive.Current.Interval), member.SlotError, WingFormation.SlotSpacing);
             float intensity = FormationTracking.ManeuverIntensity(
                 leaderPitchRate, leaderRollRate, leaderTurnRate);
 
             float trackResponse = FormationTracking.ResponsiveTrackTime(
-                Vector3.Angle(smoothedLeaderDir, instant), LeaderTrackSmoothing, intensity, holdBlend);
+                Vector3.Angle(smoothedLeaderDir, instant),
+                playerLead ? PlayerLeaderTrackSmoothing : LeaderTrackSmoothing, intensity, holdBlend);
             smoothedLeaderDir = Vector3.Slerp(
                 smoothedLeaderDir, instant,
                 1f - Mathf.Exp(-dt / trackResponse)).normalized;
@@ -261,8 +272,8 @@ namespace WingCommand
             lastLeaderTrack = instant;
             flatLeaderTrack = flat;
 
-            leaderTurnRate = Mathf.Lerp(
-                leaderTurnRate, measured, 1f - Mathf.Exp(-dt / TurnRateSmoothing));
+            leaderTurnRate = Mathf.Lerp(leaderTurnRate, measured, 1f - Mathf.Exp(
+                -dt / (playerLead ? PlayerLeaderTurnRateSmoothing : TurnRateSmoothing)));
 
             // Differentiate the same leader speed used by throttle control, then smooth; consumers
             // clamp prediction after discontinuities.
@@ -272,10 +283,12 @@ namespace WingCommand
             leaderSpeedRate = Mathf.Lerp(
                 leaderSpeedRate,
                 Mathf.Clamp(rate, -WingTuning.MaxCredibleAccel, WingTuning.MaxCredibleAccel),
-                1f - Mathf.Exp(-dt / WingTuning.SpeedRateSmoothing));
+                1f - Mathf.Exp(-dt / (playerLead
+                    ? PlayerLeaderSpeedRateSmoothing : WingTuning.SpeedRateSmoothing)));
 
             float bankResponse = FormationTracking.ResponsiveBankTime(
-                observedBank - leaderBank, BankSmoothing, intensity, holdBlend);
+                observedBank - leaderBank,
+                playerLead ? PlayerLeaderBankSmoothing : BankSmoothing, intensity, holdBlend);
             leaderBank = FormationTracking.SmoothBank(
                 leaderBank, observedBank, bankResponse, dt);
             leaderBankRate = Mathf.Lerp(leaderBankRate, leaderRollRate, 1f - Mathf.Exp(-dt / bankResponse));
@@ -314,12 +327,15 @@ namespace WingCommand
 
             leaderThrottle = Mathf.Lerp(
                 leaderThrottle, lever,
-                1f - Mathf.Exp(-dt / WingTuning.LeaderThrottleSmoothing));
+                1f - Mathf.Exp(-dt / (leader.Player != null
+                    ? PlayerLeaderThrottleSmoothing : WingTuning.LeaderThrottleSmoothing)));
         }
 
         /// <summary>Filtered heading rate with the noise deadband removed.</summary>
         private float LeaderTurnRate =>
-            FormationTracking.QuietTurnRate(leaderTurnRate, TurnRateDeadband);
+            FormationTracking.QuietTurnRate(leaderTurnRate, TurnRateDeadband,
+                lastLeaderSpeed * Mathf.Sqrt(lastLeaderTrack.x * lastLeaderTrack.x +
+                    lastLeaderTrack.z * lastLeaderTrack.z));
 
         private static Vector3 Flatten(Vector3 direction)
         {
@@ -346,6 +362,11 @@ namespace WingCommand
             terrainFloorY = float.MinValue;
             nextTerrainProbe = 0f;
             geometryTick = 0;
+
+            // Reset keep-up history so a fresh assignment cannot inherit the previous encounter's
+            // separation or failure timing.
+            lastKeepUpDistance = float.MaxValue;
+            losingGroundSince = 0f;
 
             // Reset stale track, speed, and throttle filters on re-entry so old samples cannot become
             // false turn or acceleration spikes.
@@ -407,8 +428,10 @@ namespace WingCommand
             }
 
             // Recompute geometry at the fidelity stride, phased by slot. Keep previous commands between
-            // updates; manager-driven missile defence is not strided.
-            int stride = WingFidelity.GeometryStride;
+            // updates; manager-driven missile defence is not strided. A player-led formation always
+            // runs at full rate because held commands add control latency exactly where the wing must
+            // mirror the player.
+            int stride = leader.Player != null ? 1 : WingFidelity.GeometryStride;
             if (stride > 1 && (++geometryTick + member.Slot) % stride != 0)
                 return;
 
@@ -437,13 +460,14 @@ namespace WingCommand
             if (WingRegistry.IsRotary(aircraft))
                 spacing *= WingTuning.RotarySpacingScale;
 
-            // Use the larger of ROE spacing and reactive widening, never their product. Always evaluate
-            // threat spacing because it also updates the combat-spread warning latch.
-            float roeScale = CombatFacade.Roe.SpacingScale(CombatFacade.Roe.Current);
+            // Always evaluate threat spacing: it also updates the combat-spread warning latch.
+            // Spread multiplies only when the doctrine asks the formation to open.
+            WingDoctrine doctrine = DoctrineLive.Current;
             float threatScale = ThreatSpacingScale(leader, dt);
             if (PersonnelFacade.Roster.HasPerk(aircraft, PilotPerk.CombatSpread) && threatScale > 1.001f)
                 threatScale *= PilotPerks.CombatSpreadScale(true, true);
-            spacing *= threatScale > 1.001f ? Mathf.Max(roeScale, threatScale) : roeScale;
+            spacing *= WingDoctrineRules.AppliedSpacingScale(
+                doctrine.Interval, doctrine.SpreadWhenThreatened, threatScale);
             spacing *= FormationSolver.SharedFlightSpacing(member.Siblings, leader);
 
             EaseSlotLocal(shape, spacing, turnRate, dt);
@@ -530,7 +554,7 @@ namespace WingCommand
 
             // Move eligible asymmetric shapes to the outside of sustained turns. Smooth the crossing
             // and retain separation/path avoidance; symmetric shapes stay unchanged.
-            if (CombatFacade.Roe.Current != WingRoe.Hold && WingFidelity.SmartFormation && mirrorSign != 0 &&
+            if (WingDoctrineRules.EchelonSwap(DoctrineLive.Current.Interval) && WingFidelity.SmartFormation && mirrorSign != 0 &&
                 (shape == FormationShape.EchelonRight || shape == FormationShape.EchelonLeft) &&
                 (int)Mathf.Sign(desiredSlotLocal.x) == mirrorSign)
             {
@@ -576,7 +600,7 @@ namespace WingCommand
             else
             {
                 float holdBlend = FormationCollision.HoldBlend(
-                    CombatFacade.Roe.Current == WingRoe.Hold, member.SlotError, spacing);
+                    WingDoctrineRules.StickyTrack(DoctrineLive.Current.Interval), member.SlotError, spacing);
                 float slotResponse = FormationTracking.ResponsiveSlotTime(
                     FormationTracking.SlotResponseSeconds, holdBlend, leaderState.ManeuverIntensity);
 
@@ -629,7 +653,7 @@ namespace WingCommand
             // Use one bank for all slots; per-member scaling can make neighbouring targets intersect.
             Vector3 footprint = Vector3.zero;
             FormationSolver.IncludeBankFootprint(ref footprint, smoothedSlotLocal);
-            float fallbackSpacing = WingFormation.SlotSpacing * CombatFacade.Roe.SpacingScale(CombatFacade.Roe.Current) *
+            float fallbackSpacing = WingFormation.SlotSpacing * WingDoctrineRules.SpacingScale(DoctrineLive.Current.Interval) *
                 FormationSolver.SharedFlightSpacing(member.Siblings, leader);
             if (member.Siblings != null)
                 foreach (WingMember wingman in member.Siblings)

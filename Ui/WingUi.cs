@@ -61,11 +61,13 @@ namespace WingCommand
         public static Color PanelEdge => AvTheme.Unity(AvTokens.PanelEdge);
         public static Color PanelShadow => AvTheme.Unity(AvTokens.PanelShadow);
 
-        public static Color CardFill => new Color(0f, 0f, 0f, AvTokens.RowRestShade);
+        public static Color CardFill => AvTheme.Unity(AvTokens.RowFill(AvTheme.Accent.ToRgba(), false, false));
         public static Color CardFillHover =>
-            AvTheme.Unity(AvTokens.Wash(AvTheme.Accent.ToRgba(), AvTokens.RowHoverScale, AvTokens.RowHoverAlpha));
+            AvTheme.Unity(AvTokens.RowFill(AvTheme.Accent.ToRgba(), false, true));
         public static Color CardFillSelected =>
-            AvTheme.Unity(AvTokens.Wash(AvTheme.Accent.ToRgba(), AvTokens.RowSelectedScale, AvTokens.RowSelectedAlpha));
+            AvTheme.Unity(AvTokens.RowFill(AvTheme.Accent.ToRgba(), true, false));
+        public static Color CardFillSelectedHover =>
+            AvTheme.Unity(AvTokens.RowFill(AvTheme.Accent.ToRgba(), true, true));
 
         public static Color SurfaceCard => AvTheme.Surface;
         public static Color BorderSubtle => AvTheme.Hairline;
@@ -131,17 +133,30 @@ namespace WingCommand
             fill.type = Image.Type.Sliced;
             fill.raycastTarget = true;
 
-            Image[] frame = Outline(rt, new Rect(0f, 0f, rect.width, rect.height), FrameColor);
+            Image border = AvKit.Panel(rt, new Rect(0f, 0f, rect.width, rect.height), FrameColor, AvSprites.ControlFrame);
+            border.raycastTarget = false;
+            Stretch(border.rectTransform);
+            Image[] frame = { border };
             Image underline = style == AvButtonStyle.Tab
                 ? Rule(rt, new Rect(0f, -(rect.height - 2f), rect.width, 2f), Color.clear)
                 : null;
+            if (underline != null)
+            {
+                RectTransform underlineRect = underline.rectTransform;
+                underlineRect.anchorMin = Vector2.zero;
+                underlineRect.anchorMax = new Vector2(1f, 0f);
+                underlineRect.pivot = new Vector2(0.5f, 0f);
+                underlineRect.anchoredPosition = Vector2.zero;
+                underlineRect.sizeDelta = new Vector2(0f, 2f);
+            }
 
             TMP_Text label = Label(rt, text, new Rect(0f, 0f, rect.width, rect.height),
                                    Green, fontSize, FontStyles.Bold, TextAlignmentOptions.Center);
+            Stretch(label.rectTransform);
             label.enableAutoSizing = true;
             label.fontSizeMin = Mathf.Min(fontSize, Mathf.Max(FontMicro, fontSize - 2f));
             label.fontSizeMax = fontSize;
-            label.margin = new Vector4(Space1, 0f, Space1, 0f);
+            label.margin = new Vector4(6f, 0f, 6f, 0f);
 
             WingButton behaviour = go.AddComponent<WingButton>();
             behaviour.Initialise(style, fill, frame, underline, label, onClick);

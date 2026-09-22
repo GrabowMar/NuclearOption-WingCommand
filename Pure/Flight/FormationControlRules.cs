@@ -12,12 +12,13 @@ namespace WingCommand
             (slotClimb / Math.Max(1f, horizontalSpeed) + verticalCorrection / Math.Max(1f, lookAhead));
 
         // Native AutoAim scales bankAllowed by Clamp(radarAlt * 0.003f - 1f, 0.6f, 1.2f).
-        // Scale desiredDegrees by the inverse so native autopilot respects the intended angle without
-        // artificially suppressing high-altitude maneuvering.
+        // Its vertical multiplier also reaches 1.2 (the installed game's Clamp has reversed bounds).
+        // Cancel the largest multiplier so even terrain-modified aims cannot exceed our safety ceiling;
+        // preserve native bank reductions during descents. Callers use effort > 1.
         public static float BankInput(float desiredDegrees, float radarAltitude)
         {
             float altitudeFactor = Math.Max(0.6f, Math.Min(1.2f, radarAltitude * 0.003f - 1f));
-            return Math.Max(0f, desiredDegrees) / altitudeFactor;
+            return Math.Max(0f, desiredDegrees) / (altitudeFactor * 1.2f);
         }
 
         public static float HorizontalAngle(float vx, float vz, float ax, float az)
@@ -169,8 +170,9 @@ namespace WingCommand
             float requestedBankDeg, float levelBankDeg)
         {
             float pitchDeficit = currentPitchDeg - demandedPitchDeg;
-            // Only engage when actively climbing above the slot or severely nose-high relative to demand.
-            bool divergingClimb = verticalSpeed > 2f && verticalError < -5f;
+            // Absolute climb speed can be high during a correctly matched jet turn. An above-slot
+            // climb needs recovery only when its flight-path pitch also exceeds the commanded path.
+            bool divergingClimb = verticalSpeed > 2f && verticalError < -5f && pitchDeficit > 8f;
             bool severePitchHigh = currentPitchDeg > 10f && pitchDeficit > 8f;
 
             if (divergingClimb || severePitchHigh)
@@ -238,7 +240,10 @@ namespace WingCommand
             if (airspeed < minimumSpeed) return 1f;
 
             // Never cap throttle during normal rejoins, UNLESS climbing violently above the slot.
-            bool runawayZoomClimb = verticalSpeed > 15f && verticalError < -80f;
+            // Arresting a runaway zoom only works inside the arrival envelope, where the aim can
+            // point down; at distance the same cap just starves closure. 1500 m mirrors the
+            // arrival-brake floor in FormationClosure.Resolve.
+            bool runawayZoomClimb = distance <= 1500f && verticalSpeed > 15f && verticalError < -80f;
             if (!runawayZoomClimb && (gap > 80f || distance > 200f)) return rawThrottle;
 
             if (verticalSpeed > 2f && verticalError < -30f)
@@ -261,45 +266,6 @@ namespace WingCommand
             float leadSeconds = 0.15f + 0.05f * Math.Max(0f, Math.Min(1f, holdBlend));
             float lead = verticalAccel * leadSeconds * blend;
             return climbRate + Math.Max(-8f, Math.Min(8f, lead));
-        }
-
-        /// <summary>Compute target bank blending navigation turn demand with leader bank matching and roll rate lead.</summary>
-        public static float TargetBank(float turnBank, float leaderBank, float leaderRollRate,
-                                       float holdBlend, float outOfPosition, float bankAllowed,
-                                       float leadSeconds = 0.25f)
-        {
-            float anticipatedLeaderBank = leaderBank + leaderRollRate * (180f / (float)Math.PI) * leadSeconds;
-            float stationWeight = Math.Max(0f, Math.Min(1f, 1f - outOfPosition));
-            float matchWeight = stationWeight * (0.6f + 0.4f * Math.Max(0f, Math.Min(1f, holdBlend)));
-            float blended = turnBank * (1f - matchWeight) + anticipatedLeaderBank * matchWeight;
-            return Math.Max(-bankAllowed, Math.Min(bankAllowed, blended));
-        }
-
-        /// <summary>Calculate signed shortest bank error in degrees.</summary>
-        public static float BankError(float ownBank, float targetBank) =>
-            FormationTracking.WrapDegrees(targetBank - ownBank);
-
-        /// <summary>Calculate proportional-derivative roll demand for bank matching without raw stick passthrough.</summary>
-        public static float RollFeedforward(float bankErrorDeg, float leaderRollRateRad, float ownRollRateRad,
-                                            float holdBlend, float outOfPosition)
-        {
-            float p = Math.Max(-1f, Math.Min(1f, bankErrorDeg / 28f));
-            float rateDiff = leaderRollRateRad - ownRollRateRad;
-            float d = Math.Max(-0.6f, Math.Min(0.6f, rateDiff / 2.0f));
-            float demand = p * 0.75f + d * 0.25f;
-            float stationScale = Math.Max(0f, Math.Min(1f, (1f - outOfPosition) * (0.5f + 0.5f * holdBlend)));
-            return Math.Max(-1f, Math.Min(1f, demand * stationScale));
-        }
-
-        /// <summary>Calculate pitch demand assist for rapid pull-ups / push-overs without raw stick passthrough.</summary>
-        public static float PitchFeedforward(float pitchRateErrorRad, float verticalAccel,
-                                             float holdBlend, float outOfPosition)
-        {
-            float rateDemand = Math.Max(-0.8f, Math.Min(0.8f, pitchRateErrorRad / 1.2f));
-            float accelDemand = Math.Max(-0.4f, Math.Min(0.4f, verticalAccel / 25f));
-            float demand = rateDemand * 0.65f + accelDemand * 0.35f;
-            float scale = Math.Max(0f, Math.Min(1f, (1f - outOfPosition) * (0.4f + 0.6f * holdBlend)));
-            return Math.Max(-1f, Math.Min(1f, demand * scale));
         }
     }
 }

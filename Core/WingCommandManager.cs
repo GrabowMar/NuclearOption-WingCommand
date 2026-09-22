@@ -35,7 +35,9 @@ namespace WingCommand
             Instance = this;
             Commands = new WingDirectiveDispatcher(Wing, Selection);
             mapLayer = new MapCommandLayer(Wing);
-            Wing.Roe = Plugin.Settings.DefaultRoe.Value;
+            Wing.Doctrine = WingDoctrine.TryParse(Plugin.Settings.Doctrine.Value, out WingDoctrine doctrine)
+                ? doctrine
+                : WingDoctrine.Reserve;
             WingFormation.Shape = Plugin.Settings.FormationShape.Value;
             WingFormation.SlotSpacing = Plugin.Settings.FormationSpacing.Value;
         }
@@ -87,6 +89,8 @@ namespace WingCommand
                 resetForNonPlayableState = true;
                 return;
             }
+
+            WingFrameGate.NoteFrame(Time.unscaledDeltaTime);
 
             if (resetForNonPlayableState)
             {

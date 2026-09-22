@@ -67,50 +67,6 @@ namespace WingCommand.PureTests
         }
 
         [Fact]
-        public void TargetBankMatchesLeaderInHoldAndBlendsTurnNavigation()
-        {
-            float turnBank = 10f;
-            float leaderBank = 45f;
-            float leaderRollRate = 0.2f;
-
-            // Near slot in HOLD: matches leader bank + roll rate lead closely
-            float onStationHold = FormationControlRules.TargetBank(turnBank, leaderBank, leaderRollRate, 1f, 0f, 60f);
-            Assert.True(onStationHold > 40f);
-
-            // Far out: follows navigation turnBank
-            float farRejoin = FormationControlRules.TargetBank(turnBank, leaderBank, leaderRollRate, 1f, 1f, 60f);
-            Assert.Equal(turnBank, farRejoin);
-        }
-
-        [Fact]
-        public void RollFeedforwardCommandsAileronForBankMismatchAndDampsRate()
-        {
-            // 30 deg bank deficit with zero relative roll rate -> strong roll demand
-            float rollDemand = FormationControlRules.RollFeedforward(30f, 0f, 0f, 1f, 0f);
-            Assert.InRange(rollDemand, 0.7f, 1.0f);
-
-            // Leader rolling fast right -> positive feedforward even at zero error
-            float rateDemand = FormationControlRules.RollFeedforward(0f, 1.5f, 0f, 1f, 0f);
-            Assert.InRange(rateDemand, 0.1f, 0.3f);
-
-            // Far out of position -> fades to zero
-            float distant = FormationControlRules.RollFeedforward(30f, 1.5f, 0f, 1f, 1f);
-            Assert.Equal(0f, distant);
-        }
-
-        [Fact]
-        public void PitchFeedforwardProvidesImmediateElevatorAssist()
-        {
-            // Leader pulling pitch up faster than wingman with positive vertical accel
-            float pitchDemand = FormationControlRules.PitchFeedforward(0.4f, 20f, 1f, 0f);
-            Assert.InRange(pitchDemand, 0.3f, 0.8f);
-
-            // Far out -> fades to zero
-            float distant = FormationControlRules.PitchFeedforward(0.4f, 20f, 1f, 1f);
-            Assert.Equal(0f, distant);
-        }
-
-        [Fact]
         public void ClimbThrottleCapPreservesRejoinPowerWhenGapExceeds80M()
         {
             // On station (gap = 0, distance = 0): climbing above slot throttles back to let excess energy dissipate
@@ -127,6 +83,22 @@ namespace WingCommand.PureTests
             float beamRejoinThrottle = FormationControlRules.ClimbThrottleCap(
                 rawThrottle: 1.0f, verticalSpeed: 10f, verticalError: -100f, gap: -50f, distance: 2500f);
             Assert.Equal(1.0f, beamRejoinThrottle);
+        }
+
+        [Fact]
+        public void RunawayZoomClimbAtRangeKeepsFullThrottle()
+        {
+            float throttle = FormationControlRules.ClimbThrottleCap(
+                rawThrottle: 1.0f, verticalSpeed: 20f, verticalError: -500f, gap: 0f, distance: 5000f);
+            Assert.Equal(1.0f, throttle);
+        }
+
+        [Fact]
+        public void RunawayZoomClimbInsideArrivalEnvelopeCapsThrottle()
+        {
+            float throttle = FormationControlRules.ClimbThrottleCap(
+                rawThrottle: 1.0f, verticalSpeed: 20f, verticalError: -500f, gap: 0f, distance: 500f);
+            Assert.True(throttle <= 0.30f);
         }
     }
 }

@@ -24,8 +24,17 @@ namespace WingCommand
         public const float FormationRejoinCommandAngle = 55f;
         public const float FormationRejoinPitchUp = 25f;
         public const float FormationRejoinPitchDown = 22f;
-        public const float FormationStationPitchUp = 7f;
-        public const float FormationStationPitchDown = 6f;
+        // Station pitch clamps stay below the rejoin envelope but must not cap a normal climb or
+        // descent profile; the kinematic vertical corrector still bounds overshoot.
+        public const float FormationStationPitchUp = 12f;
+        public const float FormationStationPitchDown = 10f;
+
+        /// <summary>Air-speed margin over the minimum safe speed over which commanded climb
+        /// authority fades to level flight. A climb the engine cannot power bleeds the very speed
+        /// that holds the slot; the observed failure is a wingman mushing from a 1 km altitude
+        /// correction and departing at low altitude.</summary>
+        public const float ClimbEnergyMargin = 40f;
+
         public const float FormationBurstSeconds = 8f;
         public const float FormationBurstCooldown = 30f;
         public const float FormationBurstInterval = 0.2f;
@@ -33,12 +42,13 @@ namespace WingCommand
         /// <summary>Vertical stack unit in metres for wake separation.</summary>
         public const float SlotStack = 20f;
 
-        /// <summary>Maximum station-keeping heading correction, in degrees.</summary>
-        public const float CommandAngle = 40f;
+        /// <summary>Maximum station-keeping heading correction, in degrees. Large corrections clamp
+        /// well below this; the ceiling only matters while recovering a blown slot.</summary>
+        public const float CommandAngle = 50f;
 
         /// <summary>Settled bank limit with a level leader, in degrees; bounds lift loss and native
         /// elevator suppression. Leader turns may raise it through BankFollowScale.</summary>
-        public const float StationBank = 45f;
+        public const float StationBank = 55f;
 
         /// <summary>Level-leader rejoin bank limit beyond capture, in degrees; retains substantial
         /// vertical lift during pursuit.</summary>
@@ -81,11 +91,11 @@ namespace WingCommand
         /// <summary>Rejoin stagger duration per slot index, in seconds.</summary>
         public const float RejoinStagger = 0.3f;
 
-        /// <summary>ROE spacing scales: Hold tightens, Free widens, Tight stays at baseline. Combine with
-        /// reactive widening using maximum, not multiplication.</summary>
-        public const float RoeSpacingHold = 0.7f;
-        public const float RoeSpacingTight = 1f;
-        public const float RoeSpacingFree = 1.5f;
+        /// <summary>Doctrine interval scales. Close tightens, Open widens, Standard stays at baseline.
+        /// Combine with reactive widening using maximum, not multiplication, and only when spread is on.</summary>
+        public const float IntervalClose = 0.7f;
+        public const float IntervalStandard = 1f;
+        public const float IntervalOpen = 1.5f;
 
         // Rotary tuning for the distinct native autopilot and its rate-limited waypoint response.
 
@@ -148,10 +158,6 @@ namespace WingCommand
         /// trigger.</summary>
         public const float ChaffWindowSeconds = 12f;
 
-        /// <summary>Defensive bank limit below the formation inversion ceiling; bounds native roll noise
-        /// when beam direction aligns with velocity.</summary>
-        public const float DefensiveBankAllowed = 70f;
-
         /// <summary>Fraction of leash radius required for release after recall, providing wide
         /// hysteresis.</summary>
         public const float LeashReleaseFraction = 0.60f;
@@ -164,14 +170,41 @@ namespace WingCommand
         /// resume when activity returns.</summary>
         public const float EngageIdleSeconds = 8f;
 
-        /// <summary>Hold/Tight station-keeping weapons range in metres.</summary>
-        public const float HoldEngageRange = 6000f;
+        /// <summary>Slot-reach standing weapons range in metres. The aircraft does not manoeuvre to engage.</summary>
+        public const float ReachSlotMetres = 6000f;
 
-        /// <summary>Free-ROE weapons range in metres.</summary>
-        public const float FreeEngageRange = 12000f;
+        /// <summary>Long-reach standing weapons range, and the cap for explicit Attack and Splash, in metres.</summary>
+        public const float ReachLongMetres = 12000f;
 
         /// <summary>Maximum hunting distance from leader before recall, in metres.</summary>
         public const float LeashRadius = 5000f;
+
+        /// <summary>Deliberate AI advantage for wingmen under mod control: fly-by-wire positive G
+        /// limit, above the stock 9 G, so a follower can pull harder than the airframe's nominal
+        /// ceiling to hold formation and match player manoeuvres. Structural G damage still starts
+        /// well above this. Applied and restored per filter call by WingmanOverdrivePatch.</summary>
+        public const float WingmanGLimit = 14f;
+
+        /// <summary>Deliberate AI advantage for wingmen under mod control: slow-flight angle-of-attack
+        /// limiter in degrees, above the stock 25, reducing the stall-margin penalty during
+        /// aggressive slot corrections.</summary>
+        public const float WingmanAlphaLimiter = 35f;
+
+        /// <summary>Deliberate AI advantage for a wingman chasing a player-led formation: extra
+        /// acceleration applied along its own velocity while it is behind its slot and already at
+        /// full throttle, so it can close a blown slot instead of being capped at the leader's
+        /// speed. Applied per physics tick by FixedWingFormation.</summary>
+        public const float PursuitBoostAccel = 5f;
+
+        /// <summary>Deliberate AI advantage: pursuit-boost speed ceiling as a multiple of the
+        /// airframe's nominal max speed.</summary>
+        public const float PursuitBoostMaxScale = 1.30f;
+
+        /// <summary>Deliberate AI advantage: pursuit-boost speed ceiling is also capped this many
+        /// m/s above the predicted leader speed, so the boost cannot leave the wingman faster than
+        /// the leader by more than this margin (the arrival braking envelope still bounds the
+        /// approach).</summary>
+        public const float PursuitBoostLeadMargin = 30f;
 
         /// <summary>Retreat stand-off distance from the threat, in metres.</summary>
         public const float FallBackStandoff = 6000f;

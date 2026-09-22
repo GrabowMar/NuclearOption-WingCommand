@@ -65,7 +65,7 @@ namespace NOAvionics
     /// <summary>How a control is weighted against the others around it.</summary>
     public enum AvButtonStyle
     {
-        /// <summary>An ordinary action. Outlined in accent colour at rest.</summary>
+        /// <summary>An ordinary action. Neutral until pointed at or selected.</summary>
         Default,
 
         /// <summary>The primary action of a page. Carries a fill at rest.</summary>
@@ -109,27 +109,31 @@ namespace NOAvionics
     public static class AvTokens
     {
         // ------------------------------------------------------------------- surfaces
-        public static readonly Rgba Ground = new Rgba(0.010f, 0.018f, 0.014f, 0.975f);
-        public static readonly Rgba Surface = new Rgba(0.024f, 0.048f, 0.038f, 0.920f);
-        public static readonly Rgba SurfaceRaised = new Rgba(0.040f, 0.080f, 0.060f, 0.960f);
-        public static readonly Rgba SurfaceInert = new Rgba(0.016f, 0.032f, 0.026f, 0.700f);
-        public static readonly Rgba Hairline = new Rgba(0.180f, 0.650f, 0.420f, 0.300f);
-        public static readonly Rgba Frame = new Rgba(0.220f, 0.440f, 0.350f, 0.550f);
-        public static readonly Rgba PanelEdge = new Rgba(0.180f, 0.550f, 0.380f, 1f);
-        public static readonly Rgba PanelShadow = new Rgba(0.010f, 0.025f, 0.015f, 1f);
-        public static readonly Rgba HudPanel = new Rgba(0.025f, 0.040f, 0.032f, 0.850f);
+        // Neutral instrument surfaces. The game's theme supplies the operational colours.
+        public static readonly Rgba Ground = new Rgba(0.025f, 0.035f, 0.040f, 0.985f);
+        public static readonly Rgba Surface = new Rgba(0.047f, 0.066f, 0.075f, 0.980f);
+        public static readonly Rgba SurfaceRaised = new Rgba(0.075f, 0.100f, 0.110f, 0.980f);
+        public static readonly Rgba SurfaceInert = new Rgba(0.032f, 0.045f, 0.052f, 0.940f);
+        public static readonly Rgba Hairline = new Rgba(0.180f, 0.230f, 0.250f, 0.650f);
+        public static readonly Rgba Frame = new Rgba(0.280f, 0.360f, 0.390f, 0.850f);
+        public static readonly Rgba PanelEdge = new Rgba(0.300f, 0.390f, 0.420f, 0.900f);
+        public static readonly Rgba PanelShadow = new Rgba(0.005f, 0.008f, 0.014f, 1f);
+        public static readonly Rgba HudPanel = new Rgba(0.015f, 0.025f, 0.038f, 0.850f);
 
         // ----------------------------------------------------------------------- text
-        public static readonly Rgba TextPrimary = new Rgba(0.920f, 1.000f, 0.960f, 1f);
-        public static readonly Rgba TextDim = new Rgba(0.620f, 0.720f, 0.670f, 1f);
-        public static readonly Rgba TextMuted = new Rgba(0.340f, 0.440f, 0.400f, 0.750f);
+        public static readonly Rgba TextPrimary = new Rgba(0.920f, 0.950f, 0.960f, 1f);
+        public static readonly Rgba TextDim = new Rgba(0.680f, 0.750f, 0.780f, 1f);
+        // Secondary/disabled copy still has to be readable on a moving tactical map. Its
+        // quieter role comes from weight, framing and control state rather than low opacity.
+        public static readonly Rgba TextMuted = new Rgba(0.470f, 0.560f, 0.600f, 1f);
+        public static readonly Rgba TextInk = new Rgba(0.004f, 0.047f, 0.024f, 1f); // #010C06 optical dark ink for solid active button plates
 
         // ---------------------------------------------------------------- status rails
-        public static readonly Rgba RailReady = new Rgba(0.000f, 1.000f, 0.616f, 1f);
-        public static readonly Rgba RailCaution = new Rgba(0.961f, 0.620f, 0.043f, 1f);
-        public static readonly Rgba RailDanger = new Rgba(0.937f, 0.267f, 0.267f, 1f);
-        public static readonly Rgba RailInfo = new Rgba(0.000f, 0.898f, 1.000f, 1f);
-        public static readonly Rgba RailInert = new Rgba(0.150f, 0.300f, 0.240f, 0.500f);
+        public static readonly Rgba RailReady = new Rgba(0.420f, 0.830f, 0.620f, 1f);
+        public static readonly Rgba RailCaution = new Rgba(1.000f, 0.760f, 0.320f, 1f);
+        public static readonly Rgba RailDanger = new Rgba(1.000f, 0.380f, 0.400f, 1f);
+        public static readonly Rgba RailInfo = new Rgba(0.500f, 0.760f, 0.850f, 1f);
+        public static readonly Rgba RailInert = new Rgba(0.250f, 0.330f, 0.360f, 0.650f);
 
         // Aliases for compatibility
         public static Rgba PanelGround => Ground;
@@ -139,6 +143,9 @@ namespace NOAvionics
         public static Rgba Disabled => TextMuted;
         public static Rgba RailEmerald => RailReady;
         public static Rgba RailCyan => RailInfo;
+
+        /// <summary>Picks high-contrast label color (dark optical ink on bright plates, white on dark).</summary>
+        public static Rgba SelectLabelText(Rgba fill) => fill.RelativeLuminance > 0.35f ? TextInk : Rgba.White;
 
         // -------------------------------------------------------------------- spacing
         public const float Space1 = 4f;
@@ -177,14 +184,14 @@ namespace NOAvionics
         /// </summary>
         public const float PanelHeightMax = 896f;
         public const float TitleBarHeight = 28f;
+        /// <summary>Shared two-lane identity/chip header matching the Boscali instrument rhythm.</summary>
+        public const float ScreenHeaderHeight = 54f;
         public const float ChipRailHeight = 18f;
         public const float TabBarHeight = 30f;
         public const float StatusStripHeight = 56f;
 
         // --------------------------------------------------------------- button scales
         private const float RestShade = 0.30f;
-        private const float QuietRestShade = 0.22f;
-        private const float DangerRestShade = 0.26f;
         private const float RestFrameScale = 0.80f;
 
         public const float SelectedScale = 0.34f;
@@ -212,6 +219,15 @@ namespace NOAvionics
             accent.Scaled(scale).WithAlpha(alpha);
 
         /// <summary>
+        /// Large list/grid selections use a neutral lift with a hint of the theme accent.
+        /// Saturated fills belong to small controls, not entire pages of enabled layers.
+        /// </summary>
+        public static Rgba RowFill(Rgba accent, bool selected, bool hover = false) =>
+            (selected ? Rgba.Lerp(SurfaceRaised, Rgba.Lerp(TextDim, accent, 0.12f), hover ? 0.28f : 0.22f)
+             : hover ? Rgba.Lerp(SurfaceRaised, TextDim, 0.10f)
+             : SurfaceInert).WithAlpha(1f);
+
+        /// <summary>
         /// Resolves button colors from current state.
         /// Selection fills, hover only brightens.
         /// </summary>
@@ -223,7 +239,7 @@ namespace NOAvionics
             if (!enabled)
             {
                 paint.Fill = Rgba.Shade(0.18f);
-                paint.Frame = colors.Disabled;
+                paint.Frame = colors.Frame.WithAlpha(0.4f);
                 paint.Text = colors.Disabled;
                 return paint;
             }
@@ -251,7 +267,7 @@ namespace NOAvionics
                 case AvButtonStyle.Quiet:
                     paint.Fill = latched
                         ? Wash(accent, SubtleScale, SubtleAlpha)
-                        : Rgba.Shade(QuietRestShade);
+                        : new Rgba(0.020f, 0.035f, 0.050f, 0.70f);
                     paint.Frame = hover ? accent : colors.Frame;
                     paint.Text = hover ? accent : colors.Dim;
                     break;
@@ -259,7 +275,7 @@ namespace NOAvionics
                 case AvButtonStyle.Danger:
                     paint.Fill = latched ? Wash(accent, SelectedScale, SelectedAlpha)
                                : hover ? Wash(accent, DangerHoverScale, DangerHoverAlpha)
-                               : Rgba.Shade(DangerRestShade);
+                               : new Rgba(0.050f, 0.018f, 0.014f, 0.75f);
                     paint.Frame = latched || hover ? accent : colors.Frame;
                     paint.Text = latched ? Rgba.White : hover ? accent : colors.Dim;
                     break;
@@ -267,7 +283,7 @@ namespace NOAvionics
                 case AvButtonStyle.Tab:
                     paint.Fill = latched
                         ? Wash(accent, SubtleScale, SubtleAlpha)
-                        : Rgba.Shade(QuietRestShade);
+                        : new Rgba(0.024f, 0.040f, 0.060f, 0.70f);
                     paint.Frame = latched || hover ? accent : colors.Frame;
                     paint.Text = latched ? Rgba.White : hover ? accent : colors.Dim;
                     break;
@@ -275,17 +291,19 @@ namespace NOAvionics
                 case AvButtonStyle.Toggle:
                     paint.Fill = latched
                         ? Wash(accent, SelectedScale, SelectedAlpha)
-                        : Rgba.Shade(RestShade);
-                    paint.Frame = hover ? Rgba.White : (latched ? accent : accent.Scaled(RestFrameScale));
-                    paint.Text = hover || latched ? Rgba.White : accent;
+                        : hover ? Wash(accent, 0.16f, 0.60f)
+                        : new Rgba(0.028f, 0.048f, 0.070f, 0.80f);
+                    paint.Frame = hover ? Rgba.White : latched ? accent : colors.Frame;
+                    paint.Text = hover || latched ? Rgba.White : colors.Dim;
                     break;
 
                 default:
                     paint.Fill = latched
                         ? Wash(accent, SelectedScale, SelectedAlpha)
-                        : Rgba.Shade(RestShade);
-                    paint.Frame = hover ? Rgba.White : accent.Scaled(RestFrameScale);
-                    paint.Text = hover || latched ? Rgba.White : accent;
+                        : hover ? Wash(accent, 0.16f, 0.60f)
+                        : new Rgba(0.028f, 0.048f, 0.070f, 0.80f);
+                    paint.Frame = hover ? Rgba.White : latched ? accent : colors.Frame;
+                    paint.Text = hover || latched ? Rgba.White : TextPrimary;
                     break;
             }
 
