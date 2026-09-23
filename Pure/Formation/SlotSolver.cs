@@ -26,8 +26,9 @@ namespace WingCommand
     /// <summary>Places every slot of one wing each tick through <see cref="TurnFrame"/> and the definition's
     /// modifiers:
     /// <list type="bullet">
-    /// <item>TurnCompress scales a slot's lateral offset (critically damped, about 2 s) when its arc speed
-    /// V − ω·right would leave the member's speed range.</item>
+    /// <item>TurnCompress scales the whole shape's lateral offsets together (critically damped, about 2 s) by
+    /// the factor the most constrained slot needs, when its arc speed V − ω·right would leave the member's
+    /// speed range; the shape keeps its ratios.</item>
     /// <item>Crossover mirrors a wide slot after 60° of turn toward it. It takes 8 s, passing one spacing aft
     /// and one stack below; it re-arms when the turn reverses or after 20 s level.</item>
     /// <item>TerrainFlatten keeps slots above floor + clearance.</item>
@@ -42,7 +43,7 @@ namespace WingCommand
         public const float LevelTurnRate = 0.02f;
 
         private const int N = FormationCatalog.MaxSlots;
-        private readonly float[] compress = new float[N], compressRate = new float[N];
+        private float compress = 1f, compressRate;
         private readonly float[] frameBank = new float[N];
         private readonly bool[] framePrimed = new bool[N];
         private readonly float[] crossSign = new float[N], crossTime = new float[N];
@@ -53,7 +54,6 @@ namespace WingCommand
         {
             for (int i = 0; i < N; i++)
             {
-                compress[i] = 1f;
                 crossSign[i] = 1f;
                 crossTime[i] = -1f;
             }
@@ -65,12 +65,20 @@ namespace WingCommand
             spacing = def.ClampSpacing(spacing);
             count = Math.Min(count, N);
             TrackTurn(leader.TurnRate, dt);
+            // One compression factor for the whole shape (the smallest any slot needs), so the shape keeps its
+            // ratios: compressing only the outer slot would pull it onto its neighbours.
+            float k = 1f;
+            if ((def.Modifiers & FormationModifiers.TurnCompress) != 0)
+            {
+                float target = 1f;
+                for (int i = 0; i < count; i++)
+                    target = Math.Min(target, CompressTarget(SlotFor(def, i).Right * spacing * crossSign[i], leader, caps[i]));
+                k = EaseCompress(target, dt);
+            }
             for (int i = 0; i < count; i++)
             {
                 SlotDef slot = SlotFor(def, i);
                 float baseRight = slot.Right * spacing;
-                float k = (def.Modifiers & FormationModifiers.TurnCompress) != 0
-                    ? Compress(i, baseRight * crossSign[i], leader, caps[i], dt) : 1f;
                 float sign = Crossover(i, def, baseRight, dt, out float dip, out float extraAft, out bool crossing);
                 float right = baseRight * sign * k;
                 float w = TurnFrame.RollFollowWeight(TurnFrame.Reach(baseRight * k, slot.Aft * spacing,
@@ -118,27 +126,31 @@ namespace WingCommand
             return Scalar.Wrap180(frameBank[i] - previous) / dt;
         }
 
-        private float Compress(int i, float right, in LeaderEstimate leader, MemberCapability cap, float dt)
+        /// <summary>Compression one slot needs so its arc speed V − ω·right stays inside the member's range.</summary>
+        private static float CompressTarget(float right, in LeaderEstimate leader, MemberCapability cap)
         {
-            float target = 1f, lateral = Math.Abs(right), omega = leader.TurnRate;
-            if (Math.Abs(omega) > 1e-3f && lateral > 1f)
-            {
-                float speed = leader.Vel.Horizontal.Length;
-                float arc = speed - omega * right;
-                float allowed = lateral;
-                if (arc > cap.MaxSpeed - SpeedMargin)
-                    allowed = Math.Max(0f, cap.MaxSpeed - SpeedMargin - speed) / Math.Abs(omega);
-                else if (arc < cap.MinSpeed + SpeedMargin)
-                    allowed = Math.Max(0f, speed - cap.MinSpeed - SpeedMargin) / Math.Abs(omega);
-                target = Scalar.Clamp(allowed / lateral, FormationCatalog.CompressMin, 1f);
-            }
+            float lateral = Math.Abs(right), omega = leader.TurnRate;
+            if (Math.Abs(omega) <= 1e-3f || lateral <= 1f) return 1f;
+            float speed = leader.Vel.Horizontal.Length;
+            float arc = speed - omega * right;
+            float allowed = lateral;
+            if (arc > cap.MaxSpeed - SpeedMargin)
+                allowed = Math.Max(0f, cap.MaxSpeed - SpeedMargin - speed) / Math.Abs(omega);
+            else if (arc < cap.MinSpeed + SpeedMargin)
+                allowed = Math.Max(0f, speed - cap.MinSpeed - SpeedMargin) / Math.Abs(omega);
+            return Scalar.Clamp(allowed / lateral, FormationCatalog.CompressMin, 1f);
+        }
+
+        /// <summary>Critically damped approach of the shape's compression factor to its target (about 2 s).</summary>
+        private float EaseCompress(float target, float dt)
+        {
             if (dt > 0f)
             {
-                float accel = CompressOmega * CompressOmega * (target - compress[i]) - 2f * CompressOmega * compressRate[i];
-                compressRate[i] += accel * dt;
-                compress[i] = Scalar.Clamp(compress[i] + compressRate[i] * dt, FormationCatalog.CompressMin, 1f);
+                float accel = CompressOmega * CompressOmega * (target - compress) - 2f * CompressOmega * compressRate;
+                compressRate += accel * dt;
+                compress = Scalar.Clamp(compress + compressRate * dt, FormationCatalog.CompressMin, 1f);
             }
-            return compress[i];
+            return compress;
         }
 
         private void TrackTurn(float turnRate, float dt)

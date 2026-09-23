@@ -55,16 +55,30 @@ namespace WingCommand.PureTests
         }
 
         [Fact]
-        public void OutsideSlotCompressesOnlyWhenItsArcSpeedWouldExceedItsMaximum()
+        public void FormationCompressesOnlyWhenAnArcSpeedWouldExceedItsMaximum()
         {
             FormationDefinition def = Def(FormationModifiers.TurnCompress, new SlotDef(-1f, 0f, 0f), new SlotDef(1f, 0f, 0f));
             LeaderEstimate turning = Leader(240f, 0.1f);
             SlotTarget[] s = Run(new SlotSolver(), def, 350f, turning, 5f);
-            Assert.InRange(s[0].Lateral, -350f * FormationCatalog.CompressMin - 1f, -350f * FormationCatalog.CompressMin + 1f);   // needs 275 m/s, has 250
-            Assert.Equal(350f, s[1].Lateral, 2);                                    // inside: 205 m/s is fine
+            float compressed = 350f * FormationCatalog.CompressMin;   // the outside slot needs 275 m/s, has 250
+            Assert.InRange(s[0].Lateral, -compressed - 1f, -compressed + 1f);
+            Assert.InRange(s[1].Lateral, compressed - 1f, compressed + 1f);   // the whole shape scales together
             Assert.Equal(-350f, Run(new SlotSolver(), def, 350f, turning, 5f, Caps(max: 300f))[0].Lateral, 2);
             FormationDefinition plain = Def(FormationModifiers.None, new SlotDef(-1f, 0f, 0f));
             Assert.Equal(-350f, Run(new SlotSolver(), plain, 350f, turning, 5f)[0].Lateral, 2);
+        }
+
+        [Fact]
+        public void CompressionKeepsTheShapesRatios()
+        {
+            // Line abreast at 80 m, left turn: only #4 (160 m out) exceeds its speed, but compressing it alone would
+            // put it 24 m from #3. The whole shape scales, so #4 stays twice as far out as #3.
+            FormationDefinition def = Def(FormationModifiers.TurnCompress,
+                new SlotDef(-1f, 0f, 0f), new SlotDef(1f, 0f, 0f), new SlotDef(2f, 0f, 0f));
+            SlotTarget[] s = Run(new SlotSolver(), def, 80f, Leader(240f, -0.1f), 5f);
+            Assert.Equal(2f, s[2].Lateral / s[1].Lateral, 2);
+            Assert.Equal(-1f, s[0].Lateral / s[1].Lateral, 2);
+            Assert.True(s[2].Lateral - s[1].Lateral >= FormationCatalog.MinSeparation * 80f, $"{s[1].Lateral:0} / {s[2].Lateral:0}");
         }
 
         [Fact]
