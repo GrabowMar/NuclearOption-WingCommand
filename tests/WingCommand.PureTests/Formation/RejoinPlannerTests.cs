@@ -134,6 +134,40 @@ namespace WingCommand.PureTests
         }
 
         [Fact]
+        public void MemberOnADeepLaneUnderItsPreSlotClimbsToIt()
+        {
+            // In game (FS-20, Close finger four): #4 sat on its lane 102 m under the leader, directly below its
+            // pre-slot, for 90 s. The lane depth alone put it more than two spacings from the pre-slot, so the blend
+            // toward the pre-slot never started. The lane's own depth must not count as distance to the pre-slot.
+            const float close = 40f;
+            LeaderEstimate leader = Leader();
+            SlotTarget slot = Slot(leader, 80f, 80f);
+            var planner = new RejoinPlanner { LaneStepM = 34f };
+            Vec3 pre = slot.Ref.Pos - Vec3.Forward * close - Vec3.Up * RejoinPlanner.PreSlotLow;
+            var onLane = new Vec3(pre.X, leader.Pos.Y - 3f * 34f, pre.Z);
+            AircraftState s = TestStates.Flying(onLane, leader.Vel);
+            RejoinOutput o = default;
+            for (int i = 0; i < 20 * 60; i++) o = planner.Step(s, slot, leader, 3, close, 255f, true, Dt);
+            Assert.True(o.Sigma > 0.9f, $"sigma {o.Sigma:0.00}");
+            Assert.True(o.Ref.Pos.Y > onLane.Y + 50f, $"reference {o.Ref.Pos.Y - onLane.Y:0} m above the lane");
+        }
+
+        [Fact]
+        public void MemberClimbingFromItsLaneKeepsBlendingTowardThePreSlot()
+        {
+            // Half way up from the lane the blend must hold, or the reference would drop back to the lane (limit cycle).
+            const float close = 40f;
+            LeaderEstimate leader = Leader();
+            SlotTarget slot = Slot(leader, 80f, 80f);
+            var planner = new RejoinPlanner { LaneStepM = 34f };
+            Vec3 pre = slot.Ref.Pos - Vec3.Forward * close - Vec3.Up * RejoinPlanner.PreSlotLow;
+            var halfWay = new Vec3(pre.X, (pre.Y + leader.Pos.Y - 3f * 34f) / 2f, pre.Z);
+            RejoinOutput o = default;
+            for (int i = 0; i < 20 * 60; i++) o = planner.Step(TestStates.Flying(halfWay, leader.Vel), slot, leader, 3, close, 255f, true, Dt);
+            Assert.True(o.Sigma > 0.9f, $"sigma {o.Sigma:0.00}");
+        }
+
+        [Fact]
         public void EachSlotNumberRejoinsOnItsOwnLane()
         {
             LeaderEstimate leader = Leader();

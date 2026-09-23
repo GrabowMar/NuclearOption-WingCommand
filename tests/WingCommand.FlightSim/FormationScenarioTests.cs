@@ -37,6 +37,21 @@ namespace WingCommand.FlightSim
         }
 
         [Fact]
+        public void CloseFingerFourJoinsFromAnAirStart()
+        {
+            // The in-game air-start (2026-09-23 harness run): 2 km behind, 150 m low, one lateral step per slot, a
+            // straight leader at 200 m/s, Close spacing. #4's lane (3 × 34 m) was deeper than two spacings, and it
+            // never left the lane under its pre-slot.
+            var leader = new VirtualLeader(new Vec3(0f, 2500f, 2000f), 200f, 0f);
+            FormationDefinition shape = SimFormations.Get("finger-four-right");
+            var wing = new SimWing(leader, shape, FormationCatalog.Close,
+                new[] { new Vec3(-120f, 2350f, 0f), new Vec3(120f, 2350f, 0f), new Vec3(240f, 2350f, 0f) }, 200f, 0f);
+            float[] captured = RunUntilCaptured(wing, t => (0f, 200f), 150f, out float minSeparation);
+            for (int k = 0; k < 3; k++) Assert.True(captured[k] < 120f, $"member {k + 1} captured at {captured[k]:0} s");
+            Assert.True(minSeparation >= wing.SafeRadius, $"separation {minSeparation:0.0} m");
+        }
+
+        [Fact]
         public void OppositeHeadingJoinConvergesWithoutConflicts()
         {
             // J2: the wing starts 6 km ahead of the leader, flying toward it.

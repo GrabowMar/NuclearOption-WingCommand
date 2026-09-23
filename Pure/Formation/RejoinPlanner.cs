@@ -21,7 +21,8 @@ namespace WingCommand
     /// <item>The slot.</item>
     /// </list>
     /// σ blends them continuously. σ_pre = 1 − smoothstep(1, 2, d/spacing), falling at 0.7 s and rising at
-    /// 2.5 s. σ_slot follows it only once the stagger gate is clear, the member is already in its slot, or it
+    /// 2.5 s; d does not count height anywhere between the member's lane and the pre-slot (a deep lane at Close
+    /// spacing would otherwise keep a member under its pre-slot forever). σ_slot follows it only once the stagger gate is clear, the member is already in its slot, or it
     /// has waited 30 s.
     /// Falling behind is declared when there is no intercept, or one beyond 120 s, for 10 s. The member then
     /// pursues the slot itself (extended trail) until the intercept is under 60 s. It never gives up the
@@ -69,7 +70,7 @@ namespace WingCommand
             RefState rendezvous = behind ? target : Rendezvous(s, pre, leader, laneDepth, availableSpeed);
 
             float dSlot = (target.Pos - s.Pos).Length;
-            float d = Math.Min((pre.Pos - s.Pos).Length, dSlot);
+            float d = Math.Min(LaneAwareDistance(s.Pos, pre.Pos, leader.Pos.Y - laneDepth), dSlot);
             float rawPre = behind ? 0f : 1f - Scalar.SmoothStep(SigmaNear, SigmaFar, d / Math.Max(1f, spacing));
             bool inSlot = dSlot < InSlotFraction * spacing;
             if (staggerClear) waited = 0f;
@@ -124,6 +125,16 @@ namespace WingCommand
             float hold = Scalar.SmoothStep(LaneCapture, 2f * LaneCapture, Math.Abs(s.Pos.Y - cutoff.Pos.Y));
             pos += across * ((memberSide - refSide) * hold);
             return new RefState(pos, new Vec3(faded.Vel.X, leader.Vel.Y, faded.Vel.Z), new Vec3(faded.Acc.X, 0f, faded.Acc.Z));
+        }
+
+        /// <summary>Distance to the pre-slot without the height between the member's lane and the pre-slot: the lane's
+        /// depth is deliberate, and the climb from the lane up to the pre-slot must not undo the blend that starts it.</summary>
+        private static float LaneAwareDistance(Vec3 member, Vec3 pre, float laneY)
+        {
+            float low = Math.Min(laneY, pre.Y), high = Math.Max(laneY, pre.Y);
+            float outside = member.Y < low ? low - member.Y : member.Y > high ? member.Y - high : 0f;
+            float horizontal = (pre - member).Horizontal.Length;
+            return (float)Math.Sqrt(horizontal * horizontal + outside * outside);
         }
 
         private static float Filter(float current, float target, float dt)
