@@ -37,6 +37,7 @@ namespace WingCommand
         public ConfigEntry<bool> DevTools { get; }
         public ConfigEntry<bool> Overlay { get; }
         public ConfigEntry<KeyboardShortcut> KeyDumpTelemetry { get; }
+        public ConfigEntry<KeyboardShortcut> KeyStepTest { get; }
 
         public WingConfig(ConfigFile c)
         {
@@ -94,6 +95,10 @@ namespace WingCommand
             KeyDumpTelemetry = c.Bind("Debug", "DumpTelemetry", KeyboardShortcut.Empty, new ConfigDescription(
                 "With DevTools on, write the last 120 s of wing telemetry to v1/telemetry.", null,
                 new ConfigurationManagerAttributes { IsAdvanced = true, Order = 68 }));
+
+            KeyStepTest = c.Bind("Debug", "StepTest", KeyboardShortcut.Empty, new ConfigDescription(
+                "With DevTools on, fly wingman #2 through a 30 s open-loop step test (above 1500 m) and calibrate its airframe.",
+                null, new ConfigurationManagerAttributes { IsAdvanced = true, Order = 67 }));
 
             c.Bind("Debug", "ExportLogs", false, new ConfigDescription(
                 "Export the latest Wing Command log events from this session beside WingCommand.dll " +

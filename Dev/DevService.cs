@@ -34,6 +34,7 @@ namespace WingCommand
             if (s.Overlay.Value) DebugOverlay.Draw(wing);
             else DebugOverlay.Hide();
             if (s.KeyDumpTelemetry.Value.MainKey != KeyCode.None && s.KeyDumpTelemetry.Value.IsDown()) TelemetryRecorder.Dump("manual");
+            if (s.KeyStepTest.Value.MainKey != KeyCode.None && s.KeyStepTest.Value.IsDown()) StepTest.Start(wing);
             if (Time.unscaledTime >= nextBridge)
             {
                 nextBridge = Time.unscaledTime + 0.5f;

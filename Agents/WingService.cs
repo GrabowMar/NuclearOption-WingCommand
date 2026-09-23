@@ -124,6 +124,7 @@ namespace WingCommand
                     Release(m, "no fly-by-wire (too slow or on the ground)");
                     return;
                 }
+                if (StepTest.Fly(m, dt)) return;
                 ControlOutput o = m.Brain.Step(frame, m.Last, m.Profile, missionTime, dt, Events);
                 ControlWriter.Fly(m.Aircraft, o);
                 if (Plugin.Settings.DevTools.Value && frameIndex % 3 == 0) TelemetryRecorder.Sample(m, frame, missionTime);
