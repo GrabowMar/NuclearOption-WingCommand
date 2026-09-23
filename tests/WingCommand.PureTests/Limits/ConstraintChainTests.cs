@@ -85,6 +85,51 @@ namespace WingCommand.PureTests
             Assert.Equal(ConstraintId.None, report.BankBy);
         }
 
+        private static GuidanceCommand Climb(float speed, float vy, float floorY, float altitude, out BindingReport report)
+        {
+            var chain = new ConstraintChain();
+            report = new BindingReport();
+            var g = new GuidanceCommand { VelCmd = new Vec3(0f, vy, speed) };
+            chain.ApplyAccel(ref g, At(altitude, speed), Floor(floorY), Fighter, ref report);
+            return g;
+        }
+
+        [Fact]
+        public void SlowAircraftMayNotClimbAwayItsSpeed()
+        {
+            // In game slow CI-22s kept climbing at full throttle and sagged toward the stall. Between Vmin(1) = 66 and
+            // 1.5·Vmin(1) = 99 m/s the climb allowed grows as the square of the margin.
+            float vmin = Fighter.MinimumSpeed(1f);
+            float speed = vmin + 0.35f * 0.5f * vmin;
+            GuidanceCommand g = Climb(speed, 20f, float.NaN, 0f, out BindingReport report);
+            Assert.Equal(Fighter.ClimbRateMax * 0.35f * 0.35f, g.VelCmd.Y, 2);
+            Assert.True(g.Accel.Y < 0f);
+            Assert.Equal(ConstraintId.Envelope, report.SpeedBy);
+        }
+
+        [Fact]
+        public void BelowTheMinimumSpeedTheCommandIsADescent()
+        {
+            GuidanceCommand g = Climb(Fighter.MinimumSpeed(1f) - 5f, 10f, float.NaN, 0f, out _);
+            Assert.True(g.VelCmd.Y < 0f, $"vy {g.VelCmd.Y:0.0}");
+        }
+
+        [Fact]
+        public void FastAircraftClimbsAsCommanded()
+        {
+            GuidanceCommand g = Climb(1.5f * Fighter.MinimumSpeed(1f) + 1f, 20f, float.NaN, 0f, out BindingReport report);
+            Assert.Equal(20f, g.VelCmd.Y, 3);
+            Assert.Equal(ConstraintId.None, report.SpeedBy);
+        }
+
+        [Fact]
+        public void TerrainFloorWinsOverTheSpeedLimit()
+        {
+            GuidanceCommand g = Climb(Fighter.MinimumSpeed(1f) - 5f, 10f, 0f, 30f, out BindingReport report);
+            Assert.True(g.VelCmd.Y > 0f, $"vy {g.VelCmd.Y:0.0}");
+            Assert.Equal(ConstraintId.Terrain, report.VerticalBy);
+        }
+
         [Fact]
         public void UnknownFloorLeavesTheCommandAlone()
         {

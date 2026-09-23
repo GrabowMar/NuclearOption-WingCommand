@@ -3,7 +3,7 @@ using System;
 namespace WingCommand
 {
     /// <summary>One ordered chain applied to every command, recording what bound it.
-    /// <para>Acceleration stage: collision bias, then terrain floor.</para>
+    /// <para>Acceleration stage: collision bias, then speed priority (no climbing away a low speed), then terrain floor.</para>
     /// <para>Attitude stage: envelope (bank ceiling, lift- and structure-limited load factor, loaded
     /// minimum speed), then ground-collision avoidance, then authority slews that keep commands continuous.</para>
     /// Holds per-aircraft state (GCAS latch, last command), so there is one instance per aircraft.</summary>
@@ -12,6 +12,7 @@ namespace WingCommand
         public static float GcasTrigger = 1.5f, GcasRelease = 3f;
         public static float BankFloorDeg = 60f, BankRangeDeg = 25f;
         public static float NzSlew = 3f;
+        public static float SpeedProtectFactor = 1.5f, RecoverSinkGain = 1f, RecoverSinkMax = 10f;
 
         private bool gcas;
         private float lastBank, lastNz;
@@ -27,6 +28,18 @@ namespace WingCommand
                 c.Accel += ctx.CollisionBias;
                 r.CollisionActive = true;
             }
+
+            // Speed priority: a slow aircraft may not climb away its speed (at full throttle the climb would bleed
+            // it toward the stall). The terrain floor below still wins.
+            float maxVy = SpeedLimitedClimb(s, p);
+            if (c.VelCmd.Y > maxVy)
+            {
+                float cut = maxVy - c.VelCmd.Y;
+                c.VelCmd = new Vec3(c.VelCmd.X, maxVy, c.VelCmd.Z);
+                c.Accel += Vec3.Up * (cut / Math.Max(0.1f, p.TauVel));
+                r.SpeedBy = ConstraintId.Envelope;
+            }
+
             if (float.IsNaN(ctx.FloorY)) return;
             // Keep the commanded vertical speed above what the height margin allows: climb back when
             // below the floor + clearance, otherwise sink no faster than GCAS's own recovery model accepts
@@ -116,6 +129,22 @@ namespace WingCommand
             lastBank = a.BankDeg;
             lastNz = a.Nz;
             primed = true;
+        }
+
+        /// <summary>Largest vertical speed a slow aircraft may command: unlimited from
+        /// <see cref="SpeedProtectFactor"/>·Vmin(1) up, growing as the square of the margin between Vmin(1) and
+        /// there, and below Vmin(1) a descent of <see cref="RecoverSinkGain"/> m/s per m/s short (at most
+        /// <see cref="RecoverSinkMax"/>) to win the speed back.</summary>
+        public static float SpeedLimitedClimb(in AircraftState s, AirframeProfile p)
+        {
+            float vmin = p.MinimumSpeed(1f), high = SpeedProtectFactor * vmin;
+            if (s.Eas >= high) return float.PositiveInfinity;
+            if (s.Eas >= vmin)
+            {
+                float f = (s.Eas - vmin) / Math.Max(1f, high - vmin);
+                return p.ClimbRateMax * f * f;
+            }
+            return -Math.Min(RecoverSinkMax, RecoverSinkGain * (vmin - s.Eas));
         }
 
         /// <summary>Seed the authority stage from the aircraft's actual attitude (handover, spawn).</summary>
