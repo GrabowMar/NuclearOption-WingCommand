@@ -45,8 +45,9 @@ namespace WingCommand
         /// <summary>Formation cruise speed: what a member sustains (rotary 0.8·max, fixed-wing the reference airspeed).</summary>
         public float CruiseSpeed = 200f;
         /// <summary>Rotary: disc tilt limit (deg), collective that hovers, vertical acceleration limit (m/s²), and the
-        /// FBW rate authorities that seed the learners (deg/s, native maxAngularVel (1, 2, 2) rad/s).</summary>
-        public float MaxTiltDeg = 20f, HoverCollective = 0.5f, VerticalAccelMax = 3f;
+        /// FBW rate authorities that seed the learners (deg/s, native maxAngularVel (1, 2, 2) rad/s). 30° of tilt: drag
+        /// at 60 m/s already takes ~15°, and a 20° bank turn another 20°.</summary>
+        public float MaxTiltDeg = 30f, HoverCollective = 0.5f, VerticalAccelMax = 3f;
         public float PitchRateMaxDps = 57f, YawRateMaxDps = 115f;
         public static float RotaryClimbRateMax = 8f;
 #pragma warning disable CS0649 // set only from airframes JSON through ApplyOverrides (reflection)

@@ -42,6 +42,12 @@ namespace WingCommand.FlightSim
 
     internal static class SimProfiles
     {
+        /// <summary>Profile the engine derives for RotaryParams.Utility (a UH-90-like helicopter).</summary>
+        public static AirframeProfile Utility() => AirframeProfile.Derive(new ProfileInputs
+        {
+            UnitName = "sim-utility-helo", Class = AirframeClass.Rotary, MaxSpeed = 80f, GLimit = 3f, MaxRadius = 9f,
+        });
+
         /// <summary>Profile the pipeline would derive for PlantParams.GenericFighter.</summary>
         public static AirframeProfile GenericFighter()
         {

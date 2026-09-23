@@ -27,7 +27,7 @@ namespace WingCommand.PureTests
         {
             AirframeProfile p = Utility();
             Assert.Equal(64f, p.CruiseSpeed, 3);
-            Assert.Equal(20f, p.MaxTiltDeg);
+            Assert.Equal(30f, p.MaxTiltDeg);
             Assert.Equal(0.5f, p.HoverCollective);
             Assert.True(p.ClimbRateMax <= 10f, $"climb rate {p.ClimbRateMax}");
             Assert.False(p.HasAfterburner);
@@ -45,12 +45,13 @@ namespace WingCommand.PureTests
         [Fact]
         public void StopsAtAHoveringReferenceWithoutOvershootSpeed()
         {
-            // 20 m short of a hovering reference at 30 m/s: the stopping law allows √(2·0.6·g·tan20·20) ≈ 9.3 m/s,
-            // so the helo brakes at the tilt limit.
+            // 20 m short of a hovering reference at 30 m/s: the stopping law allows √(2·0.6·g·tan(MaxTilt)·20)
+            // (≈ 11.7 m/s at 30°), so the helo brakes at the tilt limit.
             AirframeProfile p = Utility();
             GuidanceCommand g = RotaryGuidance.Evaluate(At(new Vec3(0f, 300f, 20f), Vec3.Zero),
                 Helo(new Vec3(0f, 300f, 0f), new Vec3(0f, 0f, 30f)), p);
-            Assert.True(g.VelCmd.Z <= 9.4f && g.VelCmd.Z > 0f, $"closing command {g.VelCmd.Z}");
+            float allowed = (float)Math.Sqrt(2f * RotaryGuidance.BrakeFraction * TiltAccel(p) * 20f);
+            Assert.True(g.VelCmd.Z <= allowed + 0.01f && g.VelCmd.Z > 0f, $"closing command {g.VelCmd.Z} (allowed {allowed:0.0})");
             Assert.Equal(-TiltAccel(p), g.Accel.Z, 2);
         }
 

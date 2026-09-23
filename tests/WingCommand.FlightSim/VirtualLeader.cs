@@ -10,6 +10,10 @@ namespace WingCommand.FlightSim
         private const float RollRate = 90f;
         public const float SpeedRate = 8f, GammaRate = 5f;
         private float heading;
+        /// <summary>A helicopter leader: it may slow to a hover, and the wing reads its nose.</summary>
+        public bool CanHover;
+        /// <summary>Speed change rate, m/s² (a helicopter brakes far more gently than 8).</summary>
+        public float SpeedChangeRate = SpeedRate;
 
         public VirtualLeader(Vec3 position, float speed, float headingDeg)
         {
@@ -38,7 +42,7 @@ namespace WingCommand.FlightSim
         public void Step(float targetBankDeg, float dt, float targetSpeed, float targetGammaDeg)
         {
             BankDeg = ConstraintChain.SlewBank(BankDeg, targetBankDeg, RollRate * dt);
-            Speed = Slew.Step(Speed, targetSpeed, SpeedRate, dt);
+            Speed = Slew.Step(Speed, targetSpeed, SpeedChangeRate, dt);
             GammaDeg = Slew.Step(GammaDeg, targetGammaDeg, GammaRate, dt);
             float previous = TurnRate;
             TurnRate = Scalar.G * (float)Math.Tan(BankDeg * Scalar.Deg2Rad) / Math.Max(1f, HorizontalSpeed);
@@ -51,6 +55,7 @@ namespace WingCommand.FlightSim
         public LeaderSample Sample() => new LeaderSample
         {
             Pos = Position, Vel = Velocity, BankDeg = BankDeg, Present = true, Airborne = true, IsPlayer = true,
+            Fwd = Vec3.FromHeading(HeadingDeg), CanHover = CanHover,
         };
 
         /// <summary>Slot reference: <paramref name="right"/> m to the right, <paramref name="aft"/> m behind,
