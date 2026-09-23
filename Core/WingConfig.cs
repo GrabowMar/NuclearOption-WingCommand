@@ -35,6 +35,8 @@ namespace WingCommand
         public ConfigEntry<KeyboardShortcut> KeyApOff { get; }
         public ConfigEntry<bool> VerboseLogging { get; }
         public ConfigEntry<bool> DevTools { get; }
+        public ConfigEntry<bool> Overlay { get; }
+        public ConfigEntry<KeyboardShortcut> KeyDumpTelemetry { get; }
 
         public WingConfig(ConfigFile c)
         {
@@ -85,6 +87,13 @@ namespace WingCommand
             DevTools = c.Bind("Debug", "DevTools", false, new ConfigDescription(
                 "Enable developer tools: debug overlay, telemetry recorder, step tests and calibration.",
                 null, new ConfigurationManagerAttributes { IsAdvanced = true, Order = 70 }));
+
+            Overlay = c.Bind("Debug", "Overlay", true, new ConfigDescription(
+                "With DevTools on, draw each wingman's slot (green), tracked reference (yellow), velocity command (cyan) " +
+                "and collision bias (red).", null, new ConfigurationManagerAttributes { IsAdvanced = true, Order = 69 }));
+            KeyDumpTelemetry = c.Bind("Debug", "DumpTelemetry", KeyboardShortcut.Empty, new ConfigDescription(
+                "With DevTools on, write the last 120 s of wing telemetry to v1/telemetry.", null,
+                new ConfigurationManagerAttributes { IsAdvanced = true, Order = 68 }));
 
             c.Bind("Debug", "ExportLogs", false, new ConfigDescription(
                 "Export the latest Wing Command log events from this session beside WingCommand.dll " +

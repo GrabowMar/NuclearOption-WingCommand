@@ -21,6 +21,7 @@ namespace WingCommand
         public float Precision = 1f, Aggression = 0.5f, Clearance = 60f;
         public bool AfterburnerAllowed = true;
         public FlightIntent LastIntent;
+        public GuidanceCommand LastGuidance;
         public RejoinOutput LastRejoin;
         public ControlOutput LastOutput;
         private HoldOrbit orbit;
@@ -82,7 +83,7 @@ namespace WingCommand
                 Spacing = spacing,
                 TerrainClearance = Clearance,
             };
-            GuidanceCommand guidance = TrackingGuidance.Evaluate(LastIntent, s, p);
+            GuidanceCommand guidance = LastGuidance = TrackingGuidance.Evaluate(LastIntent, s, p);
             var ctx = new LimitContext
             {
                 FloorY = frame.FloorY, NearFloorY = frame.NearFloorY[Slot], HasNearFloor = frame.HasNearFloor[Slot],

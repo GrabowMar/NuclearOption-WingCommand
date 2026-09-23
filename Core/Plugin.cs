@@ -64,6 +64,8 @@ namespace WingCommand
             runtime.Register(new PlayerAutopilot());
             runtime.Register(new WingHotkeys());
             runtime.Register(new WingHudPanel());
+            runtime.Register(new DevService());
+            go.AddComponent<BridgeState>();
 
             Logger.LogInfo($"{PluginName} {PluginVersion}-{PluginPrerelease} loaded. " +
                 $"mvid={typeof(Plugin).Assembly.ManifestModule.ModuleVersionId}");

@@ -105,6 +105,14 @@ namespace WingCommand.PureTests
         }
 
         [Fact]
+        public void StepKeepsTheGuidanceCommandForTheOverlay()
+        {
+            var rig = new Rig();
+            rig.Step(memberPos: rig.LeaderPos + new Vec3(-80f, 0f, -600f));
+            Assert.NotEqual(Vec3.Zero, rig.Pilot.LastGuidance.VelCmd);
+        }
+
+        [Fact]
         public void FormUpLogsACommandedRejoin()
         {
             var pilot = new FormationPilot(1);
