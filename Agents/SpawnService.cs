@@ -212,7 +212,8 @@ namespace WingCommand
         public int LaunchFromField(Airbase airbase, AircraftDefinition definition, int n)
         {
             WingService wing = WingService.Instance;
-            Aircraft player = wing?.Player;
+            // The player calls; without a player aircraft (automation) the anchor stands in.
+            Aircraft player = wing?.Player != null ? wing.Player : wing?.Leader;
             if (wing?.Selection == null || airbase == null || definition == null || player == null)
             {
                 WingToast.Show("No field to launch from");

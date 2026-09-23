@@ -23,7 +23,33 @@ namespace WingCommand
             }
         }
 
-        public static void Call(int n) => SpawnService.Instance?.Call(n, CallAirframe());
+        /// <summary>Wingmen always launch from a field (the picked one, else the nearest friendly one).</summary>
+        public static void Call(int n)
+        {
+            if (!Ready(out WingService w) || SpawnService.Instance == null) return;
+            Aircraft caller = w.Player;
+            if (caller == null)
+            {
+                WingToast.Show("Not flying");
+                return;
+            }
+            Airbase field = w.FieldFor(caller);
+            if (field == null)
+            {
+                WingToast.Show("No friendly field to launch from");
+                return;
+            }
+            SpawnService.Instance.LaunchFromField(field, CallAirframe() ?? caller.definition, n);
+        }
+
+        public static void NextField()
+        {
+            if (!Ready(out WingService w) || w.Player == null) return;
+            Airbase field = w.NextField(w.Player);
+            WingToast.Show(field != null
+                ? $"Launch field: {field.name} ({(field.transform.position - w.Player.transform.position).magnitude / 1000f:0} km)"
+                : "No friendly field to launch from");
+        }
 
         public static void FormUp()
         {

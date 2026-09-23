@@ -42,6 +42,63 @@ namespace WingCommand
             return spawned > 0 ? Ok("spawned", spawned) : Fail("FormOn", "no wingmen spawned; see the log");
         }
 
+        /// <summary>Launches wingmen from a field (M3): <c>lead</c> (the anchor), <c>field</c> (an airbase name, or
+        /// <c>nearest</c> to the lead), <c>count</c>, and optionally <c>type</c>, <c>shape</c>, <c>spacing</c>.</summary>
+        public static Dictionary<string, object> Launch(Dictionary<string, object> args)
+        {
+            WingService wing = WingService.Instance;
+            if (wing?.Selection == null || SpawnService.Instance == null) return Fail("Launch", "the wing is not active (no mission, or no formations loaded)");
+            if (!(Arg(args, "leadUnit") is Aircraft lead) || lead.disabled) return Fail("Launch", "'lead' does not name a live aircraft");
+            AircraftDefinition type = lead.definition;
+            string typeName = Text(args, "type");
+            if (typeName != null && (type = FindType(typeName)) == null) return Fail("Launch", $"no aircraft type '{typeName}'");
+            int count = Number(args, "count", 2);
+            if (count < 1 || count > FormationCatalog.MaxSlots) return Fail("Launch", $"count must be 1 to {FormationCatalog.MaxSlots}");
+            string fieldName = Text(args, "field") ?? "nearest";
+            List<Airbase> fields = WingService.FriendlyFields(lead);
+            Airbase field = fieldName == "nearest" ? (fields.Count > 0 ? fields[0] : null)
+                : fields.Find(a => string.Equals(a.name, fieldName, StringComparison.OrdinalIgnoreCase));
+            if (field == null) return Fail("Launch", $"no friendly field '{fieldName}'; friendly: {string.Join(", ", fields.ConvertAll(a => a.name))}");
+            string shape = Text(args, "shape");
+            if (shape != null && FormationCatalog.Find(WingData.Formations, shape) == null) return Fail("Launch", $"no formation '{shape}'");
+            wing.SetAnchor(lead);
+            if (shape != null) wing.SetShape(shape);
+            string spacingName = Text(args, "spacing");
+            if (spacingName != null)
+            {
+                if (!TryPreset(spacingName, out SpacingPreset spacing)) return Fail("Launch", $"no spacing '{spacingName}'");
+                wing.SetSpacing(spacing);
+            }
+            int launched = SpawnService.Instance.LaunchFromField(field, type, count);
+            Plugin.Logger.LogInfo($"[Automation] Launch: {launched} × {type.unitName} from {field.name}");
+            return launched > 0 ? Ok("launched", launched) : Fail("Launch", "nothing launched; see the log");
+        }
+
+        /// <summary>Ground operations so far: members still on the ground and airborne, and the ground events
+        /// (relocations, reroutes, native ejections blocked).</summary>
+        public static Dictionary<string, object> Ground(Dictionary<string, object> args)
+        {
+            WingService wing = WingService.Instance;
+            if (wing == null) return Fail("Ground", "the wing is not active");
+            int grounded = 0, airborne = 0;
+            foreach (WingMember m in wing.Members)
+            {
+                if (m.OnGround) grounded++;
+                else airborne++;
+            }
+            var result = new Dictionary<string, object>
+            {
+                { "ok", true }, { "grounded", grounded }, { "airborne", airborne },
+                { "relocated", wing.Events.CountOf(WingEventKind.Relocated) },
+                { "rerouted", wing.Events.CountOf(WingEventKind.Rerouted) },
+                { "rolled", wing.Events.CountOf(WingEventKind.Rolling) },
+                { "ejections_blocked", EjectGuard.Blocked },
+            };
+            Plugin.Logger.LogInfo($"[Automation] Ground: {grounded} on the ground, {airborne} airborne, " +
+                                  $"{result["relocated"]} relocated, {result["rerouted"]} rerouted, {EjectGuard.Blocked} ejections blocked");
+            return result;
+        }
+
         /// <summary>The wing's members as <c>{"ids": {"w2": aircraft, ...}}</c> (wingman numbers, #2 up), plus how many
         /// air-starts are still waiting to join.</summary>
         public static Dictionary<string, object> Members(Dictionary<string, object> args)

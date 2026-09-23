@@ -6,7 +6,7 @@
     <RootNamespace>WingCommand</RootNamespace>
     <Version>1.0.0</Version>
     <!-- Milestone prerelease tag; keep in step with Plugin.PluginPrerelease. -->
-    <VersionPrerelease>alpha.4</VersionPrerelease>
+    <VersionPrerelease>alpha.5</VersionPrerelease>
     <InformationalVersion>$(Version)-$(VersionPrerelease)</InformationalVersion>
     <LangVersion>latest</LangVersion>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>

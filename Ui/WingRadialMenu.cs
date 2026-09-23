@@ -122,6 +122,7 @@ namespace WingCommand
                 Leaf("Call 1", () => WingCommands.Call(1), "selection"),
                 Leaf("Call 2", () => WingCommands.Call(2), "selection"),
                 Leaf("Call 3", () => WingCommands.Call(3), "selection"),
+                Leaf("Next Field", WingCommands.NextField, "airframe"),
                 Back(),
             };
             formationMenu = new[]

@@ -309,6 +309,45 @@ namespace WingCommand
             TrackLeader();
         }
 
+        /// <summary>The field the next call launches from (the player's pick; null: the nearest friendly one).</summary>
+        public Airbase LaunchField { get; private set; }
+
+        /// <summary>Friendly or unowned fields with a runway usable for takeoff, nearest to <paramref name="from"/> first.</summary>
+        public static List<Airbase> FriendlyFields(Aircraft from)
+        {
+            var fields = new List<Airbase>();
+            if (from == null) return fields;
+            foreach (Airbase a in UnityEngine.Object.FindObjectsOfType<Airbase>())
+            {
+                if (a == null || a.disabled || a.runways == null) continue;
+                if (a.CurrentHQ != null && a.CurrentHQ != from.NetworkHQ) continue;
+                bool takeoff = false;
+                foreach (Airbase.Runway r in a.runways)
+                    if (r != null && r.Takeoff) takeoff = true;
+                if (takeoff) fields.Add(a);
+            }
+            Vector3 at = from.transform.position;
+            fields.Sort((x, y) => (x.transform.position - at).sqrMagnitude.CompareTo((y.transform.position - at).sqrMagnitude));
+            return fields;
+        }
+
+        /// <summary>The picked field while it is still usable, else the nearest friendly field.</summary>
+        public Airbase FieldFor(Aircraft caller)
+        {
+            List<Airbase> fields = FriendlyFields(caller);
+            if (LaunchField != null && fields.Contains(LaunchField)) return LaunchField;
+            return fields.Count > 0 ? fields[0] : null;
+        }
+
+        /// <summary>Picks the next friendly field (nearest first, wrapping).</summary>
+        public Airbase NextField(Aircraft caller)
+        {
+            List<Airbase> fields = FriendlyFields(caller);
+            if (fields.Count == 0) return LaunchField = null;
+            int i = LaunchField != null ? fields.IndexOf(LaunchField) : -1;
+            return LaunchField = fields[(i + 1) % fields.Count];
+        }
+
         /// <summary>A ground anchor's collision radius is capped: a ship's bounding radius (well over 100 m) would push
         /// close-escort slots out of reach, and the terrain floor already keeps the wing off the surface.</summary>
         public static float GroundAnchorRadiusMax = 20f;
