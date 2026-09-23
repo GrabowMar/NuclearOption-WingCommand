@@ -43,6 +43,15 @@ namespace WingCommand.PureTests
         }
 
         [Fact]
+        public void RowRecordsTheMembersRoleAfterItsBehaviour()
+        {
+            var pilot = new FormationPilot(0, AirframeClass.Rotary);
+            TelemetryRow r = TelemetryRows.From(1f, 0, TestStates.Flying(Vec3.Zero, new Vec3(0f, 0f, 50f)), pilot, Vec3.Zero);
+            Assert.Equal((byte)pilot.Roles.Current, r.Role);
+            Assert.Contains(",behaviour,role,", TelemetryCsv.Header);
+        }
+
+        [Fact]
         public void CsvHasTheSharedHeaderAndInvariantNumbers()
         {
             CultureInfo previous = CultureInfo.CurrentCulture;

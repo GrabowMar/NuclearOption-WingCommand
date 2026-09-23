@@ -18,7 +18,7 @@ namespace WingCommand
         public const string PluginGuid = "com.marci.wingcommand";
         public const string PluginName = "Wing Command";
         public const string PluginVersion = "1.0.0";
-        public const string PluginPrerelease = "alpha.2";
+        public const string PluginPrerelease = "alpha.3";
 
         internal static Plugin Instance { get; private set; }
         internal static new ManualLogSource Logger { get; private set; }
