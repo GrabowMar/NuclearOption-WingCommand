@@ -33,8 +33,6 @@ namespace WingCommand.FlightSim
         public float CornerSpeed = 170f;
         /// <summary>FBW maxRollAngularVel (rad/s). The FBW commands half of it (native units quirk).</summary>
         public float MaxRollAngularVel = 6f;
-        /// <summary>FBW maxPitchAngularVel (rad/s): pure-rate pitch below corner q.</summary>
-        public float MaxPitchAngularVel = 1f;
         public float RollRateMaxDps => 0.5f * MaxRollAngularVel * 57.29578f;
         public float RollLagS = 0.18f;
         public float LoadLagS = 0.25f;
@@ -114,14 +112,14 @@ namespace WingCommand.FlightSim
             rollRate += (rollCmd - rollRate) * Math.Min(1f, dt / p.RollLagS);
             bank = WrapPi(bank + rollRate * dt);
 
-            // Pitch: g-command at speed, pure rate at low dynamic pressure; limited by structure and lift.
+            // Pitch: a g-command, scaled down below corner speed (flight assist on, as native AI states set
+            // it; the pure-rate law is only reached with assist off); limited by structure and lift.
             float liftLimit = qbar * p.WingAreaM2 * p.ClMax / (p.MassKg * G);
             float nMax = Math.Min(p.GLimit, liftLimit);
             float nMin = -Math.Min(p.NegativeGLimit, liftLimit);
             float stickPitch = Clamp(input.Pitch, -1f, 1f);
-            float gCommand = stickPitch * p.GLimit * G / Math.Max(Speed, 0.75f * p.CornerSpeed);
-            if (qRatio < 1f) gCommand *= Clamp(qRatio, 0.3f, 1f);
-            float pitchRate = qRatio > 1.2f ? gCommand : Lerp(stickPitch * p.MaxPitchAngularVel, gCommand, Clamp01(qRatio - 0.2f));
+            float pitchRate = stickPitch * p.GLimit * G / Math.Max(Speed, 0.75f * p.CornerSpeed);
+            if (qRatio < 1f) pitchRate *= Clamp(qRatio, 0.3f, 1f);
             float nCmd = Speed * pitchRate / G + (float)(Math.Cos(gamma) * Math.Cos(bank));
             nCmd = Clamp(nCmd, nMin, nMax);
             LoadFactor += (nCmd - LoadFactor) * Math.Min(1f, dt / p.LoadLagS);
@@ -172,7 +170,6 @@ namespace WingCommand.FlightSim
 
         private static float Clamp(float v, float lo, float hi) => v < lo ? lo : v > hi ? hi : v;
         private static float Lerp(float a, float b, float t) => a + (b - a) * t;
-        private static float Clamp01(float v) => Clamp(v, 0f, 1f);
 
         private static float WrapPi(float a)
         {

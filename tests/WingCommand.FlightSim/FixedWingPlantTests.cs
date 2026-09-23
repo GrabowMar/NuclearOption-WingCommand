@@ -63,6 +63,19 @@ namespace WingCommand.FlightSim
         }
 
         [Fact]
+        public void BelowCornerSpeedPitchStickIsAGCommandScaledByDynamicPressure()
+        {
+            // Flight assist on, as native AI states set it: rate = stick·gLimit·g / max(V, 0.75·Vc)·clamp(qR, 0.3, 1).
+            PlantParams p = PlantParams.GenericFighter;
+            var plant = LevelAt(120f, 0f);
+            for (int i = 0; i < 90; i++) plant.Step(new PlantInput(0.3f, 0f, 1f), 1f / 60f);
+            float qR = plant.Speed * plant.Speed * Isa.Density(plant.Position.Y) / (Isa.SeaLevelDensity * p.CornerSpeed * p.CornerSpeed);
+            float expected = 0.3f * p.GLimit * 9.81f / Math.Max(plant.Speed, 0.75f * p.CornerSpeed) * Math.Max(0.3f, Math.Min(1f, qR));
+            float actual = 9.81f * (plant.LoadFactor - (float)Math.Cos(plant.GammaDeg * Math.PI / 180.0)) / plant.Speed;
+            Assert.InRange(actual, 0.9f * expected, 1.1f * expected);
+        }
+
+        [Fact]
         public void BankWithoutBackPressureLosesHeight()
         {
             // Pitch stick commands pitch rate; holding zero pitch rate in a bank means n = cos(bank),

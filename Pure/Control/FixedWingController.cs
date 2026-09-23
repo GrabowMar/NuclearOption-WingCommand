@@ -137,12 +137,16 @@ namespace WingCommand
             return Scalar.Clamp(trim, ThrottleFloor, 1f);
         }
 
+        /// <summary>Stick for load factor <paramref name="nz"/> through the FBW g-command (flight assist on):
+        /// rate = stick·gLimit·g / max(V, 0.75·Vc), scaled by clamp(qR, 0.3, 1) below corner speed.</summary>
         private static float PitchFeedforward(float nz, in AircraftState s, AirframeProfile p)
         {
             float v = Math.Max(30f, s.Tas);
             float gamma = s.GammaDeg * Scalar.Deg2Rad, bank = s.BankDeg * Scalar.Deg2Rad;
             float gravity = (float)(Math.Cos(gamma) * Math.Cos(bank));
-            return (nz - gravity) * Math.Max(v, 0.75f * p.CornerSpeed) / (v * p.GLimit);
+            float qRatio = s.Qbar / (0.5f * Isa.SeaLevelDensity * Math.Max(1f, p.CornerSpeed * p.CornerSpeed));
+            float lowSpeedGain = Scalar.Clamp(qRatio, 0.3f, 1f);
+            return (nz - gravity) * Math.Max(v, 0.75f * p.CornerSpeed) / (v * p.GLimit * lowSpeedGain);
         }
     }
 }

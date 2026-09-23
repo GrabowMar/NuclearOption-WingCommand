@@ -1,3 +1,4 @@
+using System;
 using Xunit;
 
 namespace WingCommand.PureTests
@@ -31,6 +32,19 @@ namespace WingCommand.PureTests
             ControlOutput o = c.Step(Cmd(nz: 2f), Level(), Fighter, Dt);
             // ff = (2 − 1)·max(170, 127.5)/(170·9) = 0.111, plus a small proportional term.
             Assert.InRange(o.Pitch, 0.11f, 0.3f);
+        }
+
+        [Fact]
+        public void PitchFeedforwardUndoesTheFbwLowSpeedScaling()
+        {
+            // Below corner speed the FBW scales its g-command by clamp(qR, 0.3, 1), qR = EAS²/Vc², so the
+            // feedforward must ask for 1/qR more stick.
+            var c = new FixedWingController();
+            AircraftState s = Level(120f);
+            float qR = s.Qbar / (0.5f * Isa.SeaLevelDensity * Fighter.CornerSpeed * Fighter.CornerSpeed);
+            float ff = Math.Max(120f, 0.75f * Fighter.CornerSpeed) / (120f * Fighter.GLimit) / Math.Max(0.3f, qR);
+            ControlOutput o = c.Step(Cmd(nz: 2f), s, Fighter, Dt);
+            Assert.InRange(o.Pitch, ff, ff + 0.15f);
         }
 
         [Fact]
