@@ -5,7 +5,9 @@ namespace WingCommand
     /// <summary>Helicopter inner loops (spec M2 §4.3), 60 Hz, Pure signs.
     /// <list type="bullet">
     /// <item>Tilt: the horizontal acceleration in the heading frame gives the disc attitude (pitch = −atan(a_fwd/g),
-    /// roll = atan(a_right/g)) plus a slow trim on the acceleration error (drag, hover attitude), within MaxTilt.</item>
+    /// roll = atan(a_right/g)) plus a slow trim on the acceleration error (drag, hover attitude), within MaxTilt. After
+    /// a takeover (<see cref="Track"/>: a tiltwing converting to rotary flight) the target eases in from the attitude
+    /// taken over at <see cref="TiltSlewDps"/> until it has caught up.</item>
     /// <item>Attitude → rate → stick: a P loop to a rate command; the stick is that rate over the authority learned
     /// in flight per axis (<see cref="RateAuthority"/>), since the helo FBW is itself a rate loop.</item>
     /// <item>Yaw: heading error → yaw rate → pedal; no heading target holds the heading (zero rate).</item>
@@ -19,11 +21,12 @@ namespace WingCommand
     {
         public static float AttitudeGain = 2.5f, RateMaxDps = 60f, YawGain = 1.5f, YawRateMaxDps = 30f;
         public static float TrimTau = 3f, CollectiveKi = 0.05f, CollectiveSlew = 1f, TrimRange = 0.5f;
-        public static float AuxNeutral = 0.5f;
+        public static float AuxNeutral = 0.5f, TiltSlewDps = 30f;
 
         public readonly RateAuthority Pitch = new RateAuthority(), Roll = new RateAuthority(), Yaw = new RateAuthority();
         private float trimF, trimR, integrator = float.NaN, collective = float.NaN;
-        private float lastPitch, lastRoll, lastYaw;
+        private float lastPitch, lastRoll, lastYaw, pitchTarget, rollTarget;
+        private bool easingIn;
         private AirframeProfile seededFrom;
 
         public float PitchTargetDeg { get; private set; }
@@ -51,6 +54,16 @@ namespace WingCommand
             {
                 pitch *= p.MaxTiltDeg / tilt;
                 roll *= p.MaxTiltDeg / tilt;
+            }
+            if (easingIn)
+            {
+                float slew = TiltSlewDps * dt;
+                float dp = pitch - pitchTarget, dr = roll - rollTarget;
+                easingIn = Math.Abs(dp) > slew || Math.Abs(dr) > slew;
+                pitchTarget += Scalar.Clamp(dp, -slew, slew);
+                rollTarget += Scalar.Clamp(dr, -slew, slew);
+                pitch = pitchTarget;
+                roll = rollTarget;
             }
             PitchTargetDeg = pitch;
             RollTargetDeg = roll;
@@ -91,6 +104,9 @@ namespace WingCommand
             integrator = Scalar.Clamp(collective * Scalar.Clamp(s.Up.Y, 0.7f, 1f),
                 (1f - TrimRange) * p.HoverCollective, (1f + TrimRange) * p.HoverCollective);
             trimF = trimR = 0f;
+            pitchTarget = s.PitchDeg;
+            rollTarget = s.BankDeg;
+            easingIn = true;
             lastPitch = applied.Pitch;
             lastRoll = applied.Roll;
             lastYaw = applied.Yaw;

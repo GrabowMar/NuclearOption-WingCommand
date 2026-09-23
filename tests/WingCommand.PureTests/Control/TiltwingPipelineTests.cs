@@ -107,6 +107,29 @@ namespace WingCommand.PureTests
         }
 
         [Fact]
+        public void RotaryModeStaysBelowTheConversionForAReferenceInsideTheBand()
+        {
+            // Review M2b I4: with the reference at 58 m/s (inside 49.5-63) the rotary cap was 68 m/s, so the tiltwing
+            // ran into plane mode and out again on every S-turn.
+            AirframeProfile p = Tiltwing();
+            var t = new TiltwingPipeline();
+            Run(t, 30f, 1f, p);
+            GuidanceCommand g = t.Guide(Toward(new Vec3(0f, 500f, 500f), new Vec3(0f, 0f, 58f)), At(30f), p);
+            Assert.True(g.VelCmd.Horizontal.Length < p.ConversionHigh, $"{g.VelCmd.Horizontal.Length:0} m/s");
+        }
+
+        [Fact]
+        public void PlaneModeStaysAboveTheConversionForAReferenceInsideTheBand()
+        {
+            AirframeProfile p = Tiltwing();
+            var t = new TiltwingPipeline();
+            Run(t, 80f, 1f, p);
+            // Ahead of a reference at 52 m/s: the plane-mode speed loop would slow it below 49.5 m/s and convert it.
+            GuidanceCommand g = t.Guide(Toward(new Vec3(0f, 500f, -300f), new Vec3(0f, 0f, 52f)), At(60f), p);
+            Assert.True(g.VelCmd.Length >= TiltwingPipeline.PlaneFloorFactor * p.ConversionLow - 0.01f, $"{g.VelCmd.Length:0} m/s");
+        }
+
+        [Fact]
         public void TheIncomingPipelineTakesOverFromTheAppliedOutput()
         {
             // Plane mode slows through the band: the rotary pipeline's first collective continues from the throttle the

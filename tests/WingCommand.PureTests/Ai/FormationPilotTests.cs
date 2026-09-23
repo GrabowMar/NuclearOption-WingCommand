@@ -89,6 +89,32 @@ namespace WingCommand.PureTests
         }
 
         [Fact]
+        public void ATiltwingConversionIsLogged()
+        {
+            // Review M2b I8: every mode change is logged with a reason.
+            AirframeProfile tilt = AirframeProfile.Derive(new ProfileInputs
+            {
+                Class = AirframeClass.Tiltwing, PublishedStallKmh = 45f * 3.6f, MaxSpeed = 150f,
+            });
+            var rig = new Rig();
+            var pilot = new FormationPilot(0, AirframeClass.Tiltwing);
+            var events = new WingEventRing();
+            var members = new WingMemberInput[1];
+            Vec3 lead = new Vec3(0f, 2000f, 0f);
+            for (int i = 0; i < 6 * 60; i++)
+            {
+                float speed = i < 60 ? 80f : 30f;
+                lead += North * Dt;
+                AircraftState s = TestStates.Flying(lead + new Vec3(-80f, 0f, -80f), new Vec3(0f, 0f, speed));
+                members[0] = new WingMemberInput { State = s, Capability = new MemberCapability { MaxSpeed = 150f }, Radius = 7f };
+                WingFrame frame = rig.Wing.Update(new AnchorSample { Pos = lead, Vel = North, Present = true, Airborne = true },
+                    members, 1, float.NaN, 60f, 8f, Dt);
+                pilot.Step(frame, s, tilt, i * Dt, Dt, events);
+            }
+            Assert.Equal(1, events.CountOf(WingEventKind.Converted, 0));
+        }
+
+        [Fact]
         public void MemberInItsSlotIsCapturedAndThenTracksTheSlot()
         {
             var rig = new Rig();

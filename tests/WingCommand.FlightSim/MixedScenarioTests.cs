@@ -112,48 +112,77 @@ namespace WingCommand.FlightSim
             Assert.True(jetFar < HoldOrbit.RadiusFor(FormationPilot.OrbitSpeed(jetProfile)) + 1500f, $"jet up to {jetFar:0} m away");
         }
 
-        [Fact]
-        public void TiltwingConvertsOnceEachWayBehindALeaderThatSlowsAndSpeedsUp()
+        private static AirframeProfile TiltwingProfile(out PlantParams pp)
         {
-            // T1: a tiltwing rejoins from 3 km at 120 m/s; the leader slows to 20 m/s at 90 s and speeds back up to
-            // 120 m/s at 180 s. One conversion each way, no bank step over 10° in the command at a conversion, no sag
-            // after converting (a low hand-over trim once sank it 1360 m), back in its slot by the end (the turboprop
-            // accelerates slowly: it trails the leader's re-acceleration by ~800 m and closes afterwards).
-            PlantParams pp = PlantParams.CoinTurboprop;
+            pp = PlantParams.CoinTurboprop;
             float stall = (float)Math.Sqrt(pp.MassKg * Scalar.G / (0.5 * 1.225 * pp.WingAreaM2 * pp.ClMax));
-            AirframeProfile p = AirframeProfile.Derive(new ProfileInputs
+            return AirframeProfile.Derive(new ProfileInputs
             {
                 UnitName = "sim-tiltwing", Class = AirframeClass.Tiltwing, PublishedStallKmh = stall * 3.6f, MaxSpeed = 160f,
                 CornerSpeed = pp.CornerSpeed, PidReferenceAirspeed = 110f, GLimit = pp.GLimit, CruiseThrottle = 0.55f,
                 FbwMaxRollAngularVel = pp.MaxRollAngularVel, FbwGLimit = pp.GLimit, FbwCornerSpeed = pp.CornerSpeed, MaxRadius = 7f,
             });
+        }
+
+        [Fact]
+        public void TiltwingConvertsOnceEachWayBehindALeaderThatSlowsAndSpeedsUp()
+        {
+            // T1: a tiltwing rejoins from 3 km at 120 m/s; the leader slows to 20 m/s at 90 s and speeds back up to
+            // 120 m/s at 180 s. One conversion each way; on the first tick after each, the incoming pipeline's bank and
+            // tilt commands are within 10 deg of the attitude it took over (no bump); no sag after converting; back in
+            // its slot by the end (the turboprop accelerates slowly: it trails the re-acceleration and closes afterwards).
+            AirframeProfile p = TiltwingProfile(out PlantParams pp);
             var leader = new VirtualLeader(new Vec3(0f, 1500f, 3000f), 120f, 0f) { CanHover = true, SpeedChangeRate = 2f };
             var wing = new MixedSimWing(leader, SimFormations.Get("echelon-right"), FormationCatalog.Standard);
             var plant = new TiltwingPlant(pp, RotaryParams.Utility, p.ConversionLow, p.ConversionHigh,
                 new Vec3(80f, 1500f, 0f), new Vec3(0f, 0f, 120f), 0f);
             wing.Add(plant, p, 0.55f);
             var pipeline = (TiltwingPipeline)wing.Pilots[0].Pipeline;
-            TiltwingMode mode = TiltwingMode.Plane;
-            float lastBank = 0f, maxBankStep = 0f, maxSlotError = 0f, lowest = float.MaxValue;
+            int seen = 0;
+            float maxStep = 0f, maxSlotError = 0f, lowest = float.MaxValue;
             for (int i = 0; i < 400 * 60; i++)
             {
                 float t = i * Dt;
                 leader.Step(0f, Dt, t < 90f ? 120f : t < 180f ? 20f : 120f, 0f);
+                AircraftState before = plant.Read(Dt);
+                bool justConverted = pipeline.Conversions != seen;
+                seen = pipeline.Conversions;
                 wing.Step();
-                float bank = pipeline.LastAttitude.BankDeg;
-                if (pipeline.Mode != mode)
+                if (justConverted)
                 {
-                    maxBankStep = Math.Max(maxBankStep, Math.Abs(bank - lastBank));
-                    mode = pipeline.Mode;
+                    float bank = pipeline.Mode == TiltwingMode.Rotary ? pipeline.Rotary.Controller.RollTargetDeg : pipeline.Plane.LastAttitude.BankDeg;
+                    maxStep = Math.Max(maxStep, Math.Abs(bank - before.BankDeg));
+                    if (pipeline.Mode == TiltwingMode.Rotary)
+                        maxStep = Math.Max(maxStep, Math.Abs(pipeline.Rotary.Controller.PitchTargetDeg - before.PitchDeg));
                 }
-                lastBank = bank;
                 lowest = Math.Min(lowest, plant.Position.Y);
                 if (t > 380f) maxSlotError = Math.Max(maxSlotError, wing.SlotError(0));
             }
             Assert.Equal(2, pipeline.Conversions);
-            Assert.True(maxBankStep < 10f, $"bank command stepped {maxBankStep:0.0}° at a conversion");
+            Assert.True(maxStep < 10f, $"a command stepped {maxStep:0.0} deg from the attitude at a conversion");
             Assert.True(lowest > 1500f - 150f, $"sank to {lowest:0} m (leader at 1500 m)");
             Assert.True(maxSlotError < 2f * FormationCatalog.Standard, $"up to {maxSlotError:0} m from its slot at the end");
+        }
+
+        [Fact]
+        public void TiltwingBehindALeaderInsideItsConversionBandDoesNotChatter()
+        {
+            // Review M2b I4: a leader steady at 52 m/s (band 43-55) with S-turns converted the tiltwing 8 times in 300 s.
+            AirframeProfile p = TiltwingProfile(out PlantParams pp);
+            float mid = p.ConversionHigh - 2.7f;   // 52 m/s: near the top of the band, where the old caps chattered
+            var leader = new VirtualLeader(new Vec3(0f, 1500f, 0f), mid, 0f) { CanHover = true };
+            var wing = new MixedSimWing(leader, SimFormations.Get("echelon-right"), FormationCatalog.Standard);
+            var plant = new TiltwingPlant(pp, RotaryParams.Utility, p.ConversionLow, p.ConversionHigh,
+                new Vec3(80f, 1500f, -80f), new Vec3(0f, 0f, 40f), 0f);   // starts in rotary flight, below the band
+            wing.Add(plant, p, 0.55f);
+            var pipeline = (TiltwingPipeline)wing.Pilots[0].Pipeline;
+            for (int i = 0; i < 300 * 60; i++)
+            {
+                float t = i * Dt;
+                leader.Step((int)(t / 10f) % 2 == 0 ? 10f : -10f, Dt);
+                wing.Step();
+            }
+            Assert.True(pipeline.Conversions <= 1, $"{pipeline.Conversions} conversions in 300 s");
         }
 
         /// <summary>Horizontal distance from <paramref name="p"/> to the polyline <paramref name="route"/>.</summary>

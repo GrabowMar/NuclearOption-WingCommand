@@ -48,6 +48,18 @@ namespace WingCommand.PureTests
         }
 
         [Fact]
+        public void TiltTargetSlewsFromTheAttitudeTheControllerTookOver()
+        {
+            // Review M2b I5: after a tiltwing converted to rotary flight the pitch target stepped from 0 to the 30 deg
+            // tilt limit in one tick.
+            AirframeProfile p = Utility();
+            var c = new RotaryController();
+            c.Track(Hover(), new ControlOutput { Throttle = 0.5f }, p);
+            c.Step(new GuidanceCommand { Accel = new Vec3(0f, 0f, -20f) }, Hover(), p, Dt);
+            Assert.True(Math.Abs(c.PitchTargetDeg) <= RotaryController.TiltSlewDps * Dt + 1e-3f, $"pitch target {c.PitchTargetDeg:0.0}");
+        }
+
+        [Fact]
         public void TiltTargetStaysWithinTheTiltLimit()
         {
             AirframeProfile p = Utility();

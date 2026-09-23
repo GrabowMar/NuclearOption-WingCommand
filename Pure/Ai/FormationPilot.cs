@@ -27,6 +27,7 @@ namespace WingCommand
         public ControlOutput LastOutput;
         private HoldOrbit orbit;
         private bool gcasWas, emergencyWas;
+        private int conversions;
 
         public FormationPilot(int slot, AirframeClass cls)
         {
@@ -106,6 +107,11 @@ namespace WingCommand
             };
             LastOutput = Pipeline.Step(guidance, s, ctx, p, dt);
 
+            if (Pipeline is TiltwingPipeline tilt && tilt.Conversions != conversions)
+            {
+                conversions = tilt.Conversions;
+                Log(events, time, WingEventKind.Converted);
+            }
             bool gcas = Pipeline.GcasActive;
             if (gcas && !gcasWas) Log(events, time, WingEventKind.GcasActivated);
             gcasWas = gcas;
