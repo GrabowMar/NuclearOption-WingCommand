@@ -125,7 +125,7 @@ namespace WingCommand
                     return;
                 }
                 if (StepTest.Fly(m, dt)) return;
-                ControlOutput o = m.Brain.Step(frame, m.Last, m.Profile, missionTime, dt, Events);
+                ControlOutput o = StepTest.Adjust(m, m.Brain.Step(frame, m.Last, m.Profile, missionTime, dt, Events), dt);
                 ControlWriter.Fly(m.Aircraft, o);
                 if (Plugin.Settings.DevTools.Value && frameIndex % 3 == 0) TelemetryRecorder.Sample(m, frame, missionTime);
             }
@@ -238,6 +238,7 @@ namespace WingCommand
             {
                 WingMember m = Members[i];
                 if (!m.Released && m.Alive && ReferenceEquals(m.Pilot.currentState, m.State)) continue;
+                StepTest.Forget(m);
                 Members.RemoveAt(i);
                 changed = true;
                 Plugin.Logger.LogInfo($"[Wing] #{m.Number} left the wing");

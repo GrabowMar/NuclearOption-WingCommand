@@ -7,10 +7,11 @@ namespace WingCommand
 {
     /// <summary>Fits airframe profile numbers from one step test (60 Hz rows, time from the start of the test):
     /// <list type="bullet">
-    /// <item><c>RollRateMaxDps</c>: the peak roll rate during a roll step, divided by the stick fraction.</item>
-    /// <item><c>ThrustAccelMax</c>: the mean aerodynamic acceleration along the path at military power (16–20 s,
-    /// after spool-up).</item>
-    /// <item><c>AirbrakeDecel</c>: the mean deceleration at idle with the airbrake out (22–26 s).</item>
+    /// <item><c>RollRateMaxDps</c>: the peak roll rate during the open-loop roll pulses, divided by the stick
+    /// fraction (rows the brain flew are ignored).</item>
+    /// <item><c>ThrustAccelMax</c>: the mean aerodynamic acceleration along the path at military power, after
+    /// spool-up.</item>
+    /// <item><c>AirbrakeDecel</c>: the mean deceleration at idle with the airbrake out, after spool-down.</item>
     /// </list>
     /// Along-path acceleration adds g·sinγ back, so a climb does not read as drag. <see cref="Merge"/> writes the
     /// result into the calibrated airframe layer, keeping every other entry.</summary>
@@ -24,19 +25,19 @@ namespace WingCommand
             for (int i = 0; i < rows.Count; i++)
             {
                 TelemetryRow r = rows[i];
-                if (Math.Abs(r.Roll) > 0.1f && Math.Abs(r.RollRate) > rollPeak)
+                if (StepSequence.InRollPulse(r.Time) && Math.Abs(r.Roll) > 0.1f && Math.Abs(r.RollRate) > rollPeak)
                 {
                     rollPeak = Math.Abs(r.RollRate);
                     rollStick = Math.Abs(r.Roll);
                 }
                 float speed = r.Vel.Length;
                 float along = r.AccelAlong + (speed > 1f ? Scalar.G * r.Vel.Y / speed : 0f);
-                if (r.Time >= 16f && r.Time < 20f)
+                if (r.Time >= StepSequence.ThrustFrom + StepSequence.SpoolSeconds && r.Time < StepSequence.ThrustTo)
                 {
                     thrust += along;
                     thrustN++;
                 }
-                else if (r.Time >= 22f && r.Time < 26f)
+                else if (r.Time >= StepSequence.BrakeFrom + StepSequence.SpoolSeconds && r.Time < StepSequence.BrakeTo)
                 {
                     brake += along;
                     brakeN++;

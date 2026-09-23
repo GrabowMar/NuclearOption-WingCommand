@@ -8,15 +8,18 @@ namespace WingCommand.PureTests
         private static TelemetryRing Synthetic()
         {
             var ring = new TelemetryRing();
-            for (int i = 0; i < 30 * 60; i++)
+            for (int i = 0; i < (int)(StepSequence.Duration * 60f); i++)
             {
                 float t = i / 60f;
                 StepCommand c = StepSequence.At(t);
-                float along = t >= 14f && t < 20f ? 6f : t >= 20f && t < 26f ? -8f : 0f;
+                bool open = c.Phase == StepPhase.Open;
+                float along = t >= StepSequence.ThrustFrom && t < StepSequence.ThrustTo ? 6f
+                    : t >= StepSequence.BrakeFrom && t < StepSequence.BrakeTo ? -8f : 0f;
                 ring.Push(new TelemetryRow
                 {
-                    Time = t, Roll = c.Roll, Pitch = c.Pitch, Throttle = c.Throttle,
-                    RollRate = c.Roll * 300f,             // full stick = 300 deg/s
+                    // Between the pulses the brain rolls too, faster than the test's steps: it must not be fitted.
+                    Time = t, Roll = open ? c.Roll : 0.4f, Pitch = c.Pitch, Throttle = c.Throttle,
+                    RollRate = open ? c.Roll * 300f : 500f,   // open loop: full stick = 300 deg/s
                     AccelAlong = along, Vel = new Vec3(0f, 0f, 200f),
                 });
             }
@@ -37,7 +40,7 @@ namespace WingCommand.PureTests
         {
             // Climbing at 10 m/s on 200 m/s while the kinematic acceleration is zero: thrust = g·sinγ ≈ 0.49 m/s².
             var ring = new TelemetryRing();
-            for (int i = 16 * 60; i < 20 * 60; i++)
+            for (int i = (int)((StepSequence.ThrustTo - 4f) * 60f); i < (int)(StepSequence.ThrustTo * 60f); i++)
                 ring.Push(new TelemetryRow { Time = i / 60f, AccelAlong = 0f, Vel = new Vec3(0f, 10f, 199.75f) });
             Assert.Equal(Scalar.G * 10f / 200f, ProfileFit.Fit(ring)["ThrustAccelMax"], 2);
         }

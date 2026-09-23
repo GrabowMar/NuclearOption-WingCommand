@@ -97,7 +97,7 @@ namespace WingCommand
                 new ConfigurationManagerAttributes { IsAdvanced = true, Order = 68 }));
 
             KeyStepTest = c.Bind("Debug", "StepTest", KeyboardShortcut.Empty, new ConfigDescription(
-                "With DevTools on, fly wingman #2 through a 30 s open-loop step test (above 1500 m) and calibrate its airframe.",
+                "With DevTools on, fly wingman #2 through a 38 s step test (above 1500 m; it recovers between short stick pulses) and calibrate its airframe.",
                 null, new ConfigurationManagerAttributes { IsAdvanced = true, Order = 67 }));
 
             c.Bind("Debug", "ExportLogs", false, new ConfigDescription(
