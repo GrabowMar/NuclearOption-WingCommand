@@ -110,6 +110,24 @@ namespace WingCommand.PureTests
         }
 
         [Fact]
+        public void HeldMemberWhoseRoleIsTrailReturnsToTheTrailOnceTheLeaderFlies()
+        {
+            // Review C1: a trailing helicopter whose leader dropped out held overhead forever (HoldOverhead only left for
+            // Slot) and ended 16.6 km behind, chasing an orbit centre moving at 200 m/s.
+            var mind = new PilotMind();
+            MindInput trail = Nominal();
+            trail.Role = Role.Trail;
+            RunUntilTransition(mind, trail, 10f, out _);
+            MindInput lost = trail;
+            lost.LeaderLost = true;
+            mind.Tick(lost, Dt, out _, out _);
+            Assert.Equal(BehaviourId.HoldOverhead, mind.Current);
+            RunUntilTransition(mind, trail, 10f, out TransitionReason why);
+            Assert.Equal(BehaviourId.Trail, mind.Current);
+            Assert.Equal(TransitionReason.LeaderFast, why);
+        }
+
+        [Fact]
         public void ForceSwitchesAtOnceAndRestartsTheDwell()
         {
             var mind = new PilotMind();

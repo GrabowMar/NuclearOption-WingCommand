@@ -18,6 +18,7 @@ namespace WingCommand
     /// <item>Either → Trail: the role is Trail (the leader is too fast to hold a slot on).</item>
     /// <item>Any → HoldOverhead: the leader is lost (immediate).</item>
     /// <item>HoldOverhead or Trail → Rejoin: the leader flies and the role is Slot again.</item>
+    /// <item>HoldOverhead → Trail: the leader flies again and the role is still Trail.</item>
     /// </list>
     /// Persistence timers run every tick; decisions are taken every 0.2 s.</summary>
     internal sealed class PilotMind
@@ -50,7 +51,9 @@ namespace WingCommand
             switch (Current)
             {
                 case BehaviourId.HoldOverhead:
-                    return m.LeaderFlying && m.Role == Role.Slot && Switch(BehaviourId.Rejoin, TransitionReason.LeaderRecovered, out reason);
+                    if (!m.LeaderFlying) return false;
+                    if (m.Role == Role.Trail) return Switch(BehaviourId.Trail, TransitionReason.LeaderFast, out reason);
+                    return m.Role == Role.Slot && Switch(BehaviourId.Rejoin, TransitionReason.LeaderRecovered, out reason);
                 case BehaviourId.Trail:
                     if (!m.LeaderFlying) return Switch(BehaviourId.HoldOverhead, TransitionReason.LeaderNotFlying, out reason);
                     if (m.Role == Role.HighCover) return Switch(BehaviourId.HoldOverhead, TransitionReason.LeaderSlow, out reason);
