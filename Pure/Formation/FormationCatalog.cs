@@ -103,7 +103,7 @@ namespace WingCommand
         private static Vec3 Position(SlotDef slot, float spacing, float compression, float bank, Vec3 velocity)
         {
             float right = slot.Right * spacing * compression;
-            float w = TurnFrame.RollFollowWeight(right, slot.RollFollow);
+            float w = TurnFrame.RollFollowWeight(TurnFrame.Reach(right, slot.Aft * spacing, slot.Up * StackMetres), slot.RollFollow);
             return TurnFrame.Offset(velocity, Vec3.Forward, bank, right, slot.Aft * spacing, slot.Up * StackMetres, w);
         }
 

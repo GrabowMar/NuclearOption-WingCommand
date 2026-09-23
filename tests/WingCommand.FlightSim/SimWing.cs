@@ -57,7 +57,8 @@ namespace WingCommand.FlightSim
                 SlotDef slot = SlotSolver.SlotFor(definition, i);
                 float right = slot.Right * spacing;
                 starts[i] = leader.Position + TurnFrame.Offset(leader.Velocity, Vec3.Forward, 0f, right,
-                    slot.Aft * spacing, slot.Up * FormationCatalog.StackMetres, TurnFrame.RollFollowWeight(right, slot.RollFollow));
+                    slot.Aft * spacing, slot.Up * FormationCatalog.StackMetres,
+                    TurnFrame.RollFollowWeight(TurnFrame.Reach(right, slot.Aft * spacing, slot.Up * FormationCatalog.StackMetres), slot.RollFollow));
             }
             return new SimWing(leader, definition, spacing, starts, leader.Speed, leader.HeadingDeg);
         }

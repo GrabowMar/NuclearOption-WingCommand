@@ -26,23 +26,33 @@ namespace WingCommand.PureTests
         }
 
         [Fact]
-        public void RollFollowIsFullForCloseSlotsAndZeroForWideOnes()
+        public void RollFollowIsFullOnlyForFingertipSlotsAndZeroFromFortyFiveMetres()
         {
-            Assert.Equal(1f, TurnFrame.RollFollowWeight(40f, -1f));
-            Assert.Equal(0f, TurnFrame.RollFollowWeight(-200f, -1f));
-            Assert.Equal(0.5f, TurnFrame.RollFollowWeight(120f, -1f), 3);
+            Assert.Equal(1f, TurnFrame.RollFollowWeight(10f, -1f));
+            Assert.Equal(0f, TurnFrame.RollFollowWeight(-60f, -1f));
+            Assert.Equal(0.5f, TurnFrame.RollFollowWeight(30f, -1f), 3);
             Assert.Equal(0.3f, TurnFrame.RollFollowWeight(500f, 0.3f));
         }
 
         [Fact]
-        public void LevelSlotInAConstantTurnMatchesTheRigidFrame()
+        public void LateralSlotInAConstantTurnFliesItsConcentricArc()
         {
-            const float v = 200f, w = 0.1f, right = -150f, aft = 100f;
-            RefState r = TurnFrame.Evaluate(Turning(v, w, 0f), 0f, 0f, right, aft, 0f, 0f);
-            // t̂ = +z, ĉ = +x: vel = t̂(V − ω·right) − ĉ(ω·aft); acc = ĉ·ω(V − ω·right) + t̂·ω²·aft.
-            Assert.True((r.Pos - new Vec3(right, 2000f, -aft)).Length < 1e-3f);
-            Assert.True((r.Vel - new Vec3(-w * aft, 0f, v - w * right)).Length < 0.05f, $"vel {r.Vel}");
-            Assert.True((r.Acc - new Vec3(w * (v - w * right), 0f, w * w * aft)).Length < 0.05f, $"acc {r.Acc}");
+            const float v = 200f, w = 0.1f, right = -150f;
+            RefState r = TurnFrame.Evaluate(Turning(v, w, 0f), 0f, 0f, right, 0f, 0f, 0f);
+            // t̂ = +z, ĉ = +x: on radius R − right the arc speed is V − ω·right, the acceleration ω(V − ω·right) inward.
+            Assert.True((r.Pos - new Vec3(right, 2000f, 0f)).Length < 1e-3f);
+            Assert.True((r.Vel - new Vec3(0f, 0f, v - w * right)).Length < 0.05f, $"vel {r.Vel}");
+            Assert.True((r.Acc - new Vec3(w * (v - w * right), 0f, 0f)).Length < 0.05f, $"acc {r.Acc}");
+        }
+
+        [Fact]
+        public void TrailSlotRidesTheLeadersCircleNotItsTangent()
+        {
+            // 400 m in trail of a 2 km-radius turn: on the tangent it would sit 2040 m from the centre, on the
+            // leader's own path 2000 m. The centre is 2 km to the leader's right.
+            RefState r = TurnFrame.Evaluate(Turning(200f, 0.1f, 0f), 0f, 0f, 0f, 400f, 0f, 0f);
+            float fromCentre = (r.Pos - new Vec3(2000f, 2000f, 0f)).Length;
+            Assert.InRange(fromCentre, 1998f, 2002f);
         }
 
         [Fact]
@@ -61,14 +71,17 @@ namespace WingCommand.PureTests
         }
 
         [Fact]
-        public void RolledFrameFollowsTheFlightPathInAClimb()
+        public void AftSlotsFollowTheLeadersPathInAClimb()
         {
+            // 80 m behind a 30° climb is 40 m below the leader, whatever the frame: aft is along the path flown.
             var climbing = new LeaderEstimate
             {
                 Pos = new Vec3(0f, 2000f, 0f), Vel = new Vec3(0f, 100f, 173.205f), Track = Vec3.Forward, Flying = true,
             };
             Assert.Equal(1960f, TurnFrame.Evaluate(climbing, 0f, 0f, 0f, 80f, 0f, 1f).Pos.Y, 2);
-            Assert.Equal(2000f, TurnFrame.Evaluate(climbing, 0f, 0f, 0f, 80f, 0f, 0f).Pos.Y, 2);
+            Assert.Equal(1960f, TurnFrame.Evaluate(climbing, 0f, 0f, 0f, 80f, 0f, 0f).Pos.Y, 2);
+            // The lateral offset of a level-frame slot stays horizontal in the climb.
+            Assert.Equal(2000f, TurnFrame.Evaluate(climbing, 0f, 0f, 100f, 0f, 0f, 0f).Pos.Y, 2);
         }
 
         [Fact]

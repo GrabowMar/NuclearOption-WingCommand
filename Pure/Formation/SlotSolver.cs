@@ -73,7 +73,8 @@ namespace WingCommand
                     ? Compress(i, baseRight * crossSign[i], leader, caps[i], dt) : 1f;
                 float sign = Crossover(i, def, baseRight, dt, out float dip, out float extraAft, out bool crossing);
                 float right = baseRight * sign * k;
-                float w = TurnFrame.RollFollowWeight(baseRight * k, slot.RollFollow);
+                float w = TurnFrame.RollFollowWeight(TurnFrame.Reach(baseRight * k, slot.Aft * spacing,
+                    slot.Up * FormationCatalog.StackMetres), slot.RollFollow);
                 float bankRate = FrameBank(i, right, leader.BankDeg, dt);
                 RefState r = TurnFrame.Evaluate(leader, frameBank[i], bankRate, right,
                     (slot.Aft + extraAft) * spacing, slot.Up * FormationCatalog.StackMetres + dip, w);
@@ -166,7 +167,7 @@ namespace WingCommand
             crossing = false;
             if ((def.Modifiers & FormationModifiers.Crossover) == 0) return 1f;
             float right = baseRight * crossSign[i];
-            bool wide = TurnFrame.RollFollowWeight(right, -1f) < 0.5f;
+            bool wide = Math.Abs(right) >= TurnFrame.RollFollowFar;   // wide slots only: close ones roll with the leader
             if (crossTime[i] < 0f && wide && turnDir != 0 && Math.Sign(right) == turnDir && turnAccum > CrossoverTriggerDeg)
                 crossTime[i] = 0f;
             if (crossTime[i] < 0f) return crossSign[i];
