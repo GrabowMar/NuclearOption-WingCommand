@@ -14,8 +14,9 @@ namespace WingCommand
     /// <item>Runtime FixedTick tracks the leader, prunes lost members, compacts slots, and probes terrain at
     /// 5 Hz.</item>
     /// <item>Members that lose their fly-by-wire for 1 s, or fault three times in 10 s, go to native AI once.</item>
-    /// <item>The leader is the anchor aircraft while one is set and alive (automation now, escort in M2), else the
-    /// local player. A dead or despawned anchor falls back to the player.</item>
+    /// <item>The wing forms on its anchor while one is set and alive (an aircraft from automation, or any unit it
+    /// escorts), else on the local player. A lost anchor falls back to the player; a lost escortee also says so.</item>
+    /// <item>The shape use follows the anchor: rotary shapes behind a helicopter, escort shapes while escorting.</item>
     /// <item><see cref="Metrics"/> accumulates formation quality for the automated in-game scenarios.</item>
     /// </list></summary>
     internal sealed class WingService : IWingService
@@ -30,8 +31,15 @@ namespace WingCommand
         public WingEventRing Events { get; private set; } = new WingEventRing();
         public FormationSelection Selection { get; private set; }
         public FormationWing Wing { get; private set; }
-        public Aircraft Leader { get; private set; }
-        public Aircraft Anchor { get; private set; }
+        /// <summary>What the wing forms on: the anchor while one is set and alive, else the player's aircraft.</summary>
+        public Unit LeaderUnit { get; private set; }
+        /// <summary>The leader when it is an aircraft (null while escorting a vehicle or a ship).</summary>
+        public Aircraft Leader => LeaderUnit as Aircraft;
+        /// <summary>The local player's aircraft.</summary>
+        public Aircraft Player { get; private set; }
+        public Unit Anchor { get; private set; }
+        public bool Escorting { get; private set; }
+        public static string RotaryDefaultShape = "staggered-trail";
         public WingMetrics Metrics { get; } = new WingMetrics();
         public float MissionTime => missionTime;
         public double LastFrameAiMs { get; private set; }
@@ -42,6 +50,7 @@ namespace WingCommand
         private TerrainFloor floor = new TerrainFloor();
         private float frameTime = float.NaN, missionTime;
         private int probeTick, frameIndex, nextMemberId;
+        private AirframeClass leaderClass;
         private long eventsLogged, aiTicks;
 
         public WingService() => Instance = this;
@@ -53,8 +62,11 @@ namespace WingCommand
             Members.Clear();
             Events = new WingEventRing();
             floor = new TerrainFloor();
-            Leader = null;
+            LeaderUnit = null;
+            Player = null;
             Anchor = null;
+            Escorting = false;
+            leaderClass = AirframeClass.FixedWing;
             frameTime = float.NaN;
             missionTime = 0f;
             eventsLogged = 0;
@@ -77,8 +89,10 @@ namespace WingCommand
         public void Deactivate()
         {
             Members.Clear();
-            Leader = null;
+            LeaderUnit = null;
+            Player = null;
             Anchor = null;
+            Escorting = false;
             RosterChanged?.Invoke();
         }
 
@@ -203,9 +217,20 @@ namespace WingCommand
         public void SetAnchor(Aircraft a)
         {
             Anchor = a;
+            Escorting = false;
             Plugin.Logger.LogInfo(a != null
                 ? $"[Wing] forming on {a.definition.unitName} '{a.unitName}'"
                 : "[Wing] forming on the player");
+            TrackLeader();
+        }
+
+        /// <summary>Escorts <paramref name="u"/> (an aircraft, a vehicle or a ship) in the escort shapes; null ends the
+        /// escort and the wing forms on the player again in the shape it flew before.</summary>
+        public void SetEscort(Unit u)
+        {
+            Anchor = u;
+            Escorting = u != null;
+            Plugin.Logger.LogInfo(u != null ? $"[Wing] escorting {u.unitName}" : "[Wing] escort ended; forming on the player");
             TrackLeader();
         }
 
@@ -247,7 +272,7 @@ namespace WingCommand
             }
             AnchorSample leader = SampleAnchor(dt);
             SampleSeparation(leader, n);
-            Wing.Update(leader, inputs, n, floor.Value, Clearance, LeaderAlive ? Leader.maxRadius : 8f, dt);
+            Wing.Update(leader, inputs, n, floor.Value, Clearance, Alive(LeaderUnit) ? LeaderUnit.maxRadius : 8f, dt);
             return Wing.Frame;
         }
 
@@ -264,33 +289,80 @@ namespace WingCommand
             if (min < float.MaxValue) Metrics.Separation(min);
         }
 
-        private bool LeaderAlive => Flying(Leader);
-
         private static bool Flying(Aircraft a) =>
             a != null && !a.disabled && a.pilots != null && a.pilots.Length > 0 && !a.pilots[0].dead && !a.pilots[0].ejected;
 
-        /// <summary>Leader = the anchor while it flies, else the local player. A lost anchor is dropped once, with a log
-        /// line, so the wing re-forms on the player.</summary>
+        /// <summary>An aircraft that still flies, or any other unit that is not destroyed.</summary>
+        private static bool Alive(Unit u) => u is Aircraft a ? Flying(a) : u != null && !u.disabled;
+
+        /// <summary>Leader = the anchor while it lives, else the local player. A lost anchor is dropped once, with a log
+        /// line (and for an escortee a toast and a WingEvent), so the wing re-forms on the player. A new leader restarts
+        /// the estimate and sets the shape use for its class.</summary>
         private void TrackLeader()
         {
-            if ((object)Anchor != null && !Flying(Anchor))
+            Player = GameManager.GetLocalAircraft(out Aircraft local) ? local : null;
+            if ((object)Anchor != null && !Alive(Anchor))
             {
-                Plugin.Logger.LogInfo("[Wing] the anchor is gone; forming on the player");
+                Plugin.Logger.LogInfo(Escorting ? "[Wing] the escortee is gone; forming on the player" : "[Wing] the anchor is gone; forming on the player");
+                if (Escorting)
+                {
+                    WingToast.Show("Escort lost; forming on you");
+                    Events.Push(new WingEvent { Time = missionTime, Member = -1, Kind = WingEventKind.AnchorLost });
+                }
                 Anchor = null;
+                Escorting = false;
             }
-            Aircraft before = Leader;
-            Leader = Anchor != null ? Anchor : GameManager.GetLocalAircraft(out Aircraft local) ? local : null;
-            if (before != null && Leader != null && !ReferenceEquals(before, Leader)) Wing?.ResetLeader();
+            Unit before = LeaderUnit;
+            LeaderUnit = Anchor != null ? Anchor : Player;
+            if (!ReferenceEquals(before, LeaderUnit))
+            {
+                if (before != null && LeaderUnit != null) Wing?.ResetLeader();
+                leaderClass = LeaderUnit is Aircraft a ? ProfileReader.ClassOf(a) : AirframeClass.FixedWing;
+            }
+            UpdateUse();
+        }
+
+        /// <summary>Behind a helicopter the wing flies rotary shapes, escorting it flies escort shapes, otherwise jet
+        /// shapes; each use gets back the shape it last flew.</summary>
+        private void UpdateUse()
+        {
+            if (Selection == null) return;
+            FormationUse wanted = Escorting ? FormationUse.Escort
+                : leaderClass == AirframeClass.Rotary ? FormationUse.Rotary : FormationUse.Jet;
+            if (wanted == Selection.Use) return;
+            string fallback = wanted == FormationUse.Escort ? FormationSelection.EscortDefaultId(AnyRotaryMember())
+                : wanted == FormationUse.Rotary ? RotaryDefaultShape : Plugin.Settings.DefaultFormation.Value;
+            Selection.SetUse(wanted, fallback);
+            ApplySelection();
+        }
+
+        private bool AnyRotaryMember()
+        {
+            foreach (WingMember m in Members)
+                if (m.Profile.Class == AirframeClass.Rotary) return true;
+            return false;
         }
 
         private AnchorSample SampleAnchor(float dt)
         {
             bool player = Anchor == null;
-            if (!LeaderAlive) return new AnchorSample { Present = false, IsPlayer = player };
-            AircraftState s = leaderSensor.Read(Leader, dt);
+            Unit u = LeaderUnit;
+            if (!Alive(u)) return new AnchorSample { Present = false, IsPlayer = player };
+            if (u is Aircraft a)
+            {
+                AircraftState s = leaderSensor.Read(a, dt);
+                return new AnchorSample
+                {
+                    Pos = s.Pos, Vel = s.Vel, BankDeg = s.BankDeg, Present = true, Airborne = a.radarAlt > 1f, IsPlayer = player,
+                    Kind = player ? AnchorKind.Player : AnchorKind.Aircraft, CanHover = leaderClass != AirframeClass.FixedWing,
+                    Fwd = s.Fwd,
+                };
+            }
+            Rigidbody rb = u.rb;
             return new AnchorSample
             {
-                Pos = s.Pos, Vel = s.Vel, BankDeg = s.BankDeg, Present = true, Airborne = Leader.radarAlt > 1f, IsPlayer = player,
+                Pos = u.GlobalPosition().ToVec3(), Vel = rb != null ? rb.velocity.ToVec3() : Vec3.Zero, Present = true,
+                Kind = AnchorKind.Ground, Fwd = u.transform.forward.ToVec3(),
             };
         }
 
@@ -316,9 +388,9 @@ namespace WingCommand
         {
             bool any = false;
             float raw = 0f;
-            if (LeaderAlive)
+            if (Alive(LeaderUnit))
             {
-                AircraftState l = leaderSensor.Read(Leader, 0f);
+                AnchorSample l = SampleAnchor(0f);
                 raw = TerrainProbe.LookAhead(l.Pos, l.Vel);
                 any = true;
             }

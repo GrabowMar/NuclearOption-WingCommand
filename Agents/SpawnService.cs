@@ -74,7 +74,8 @@ namespace WingCommand
         public int Call(int n, AircraftDefinition definition)
         {
             WingService wing = WingService.Instance;
-            Aircraft leader = wing?.Leader;
+            // Around the aircraft the wing forms on, or the player while it escorts a vehicle or a ship.
+            Aircraft leader = wing?.Leader ?? wing?.Player;
             if (wing?.Selection == null || leader == null)
             {
                 WingToast.Show("Not flying");

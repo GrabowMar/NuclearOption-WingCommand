@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 
 namespace WingCommand
 {
@@ -61,6 +62,73 @@ namespace WingCommand
             }
             w.Dismiss();
             WingToast.Show("Wing dismissed");
+        }
+
+        /// <summary>Escort the player's selected friendly unit (aircraft, vehicle or ship), else the nearest friendly
+        /// aircraft ahead within 5 km (spec M2 §6).</summary>
+        public static void EscortTarget()
+        {
+            if (!Ready(out WingService w)) return;
+            Aircraft player = w.Player;
+            if (player == null)
+            {
+                WingToast.Show("Not flying");
+                return;
+            }
+            Unit target = SelectedFriendly(player) ?? NearestFriendlyAhead(player, w);
+            if (target == null)
+            {
+                WingToast.Show("No friendly to escort");
+                return;
+            }
+            w.SetEscort(target);
+            WingToast.Show("Escorting " + target.unitName);
+        }
+
+        public static void EscortMe()
+        {
+            if (!Ready(out WingService w)) return;
+            if (!w.Escorting)
+            {
+                WingToast.Show("Already on you");
+                return;
+            }
+            w.SetEscort(null);
+            WingToast.Show("Escorting you");
+        }
+
+        private static Unit SelectedFriendly(Aircraft player)
+        {
+            List<Unit> targets = player.weaponManager != null ? player.weaponManager.GetTargetList() : null;
+            if (targets == null) return null;
+            foreach (Unit u in targets)
+                if (u != null && !u.disabled && !ReferenceEquals(u, player) && u.NetworkHQ == player.NetworkHQ) return u;
+            return null;
+        }
+
+        private static readonly List<Aircraft> candidates = new List<Aircraft>();
+        private static Vec3[] candidatePositions = new Vec3[64];
+
+        private static Unit NearestFriendlyAhead(Aircraft player, WingService w)
+        {
+            candidates.Clear();
+            foreach (Aircraft a in UnitRegistry.allAircraft)
+            {
+                if (a == null || a.disabled || ReferenceEquals(a, player) || a.NetworkHQ != player.NetworkHQ || IsMember(w, a)) continue;
+                candidates.Add(a);
+            }
+            if (candidatePositions.Length < candidates.Count) candidatePositions = new Vec3[candidates.Count];
+            for (int i = 0; i < candidates.Count; i++) candidatePositions[i] = candidates[i].GlobalPosition().ToVec3();
+            int chosen = EscortPick.Nearest(player.GlobalPosition().ToVec3(), player.transform.forward.ToVec3(),
+                candidatePositions, candidates.Count);
+            return chosen >= 0 ? candidates[chosen] : null;
+        }
+
+        private static bool IsMember(WingService w, Aircraft a)
+        {
+            foreach (WingMember m in w.Members)
+                if (ReferenceEquals(m.Aircraft, a)) return true;
+            return false;
         }
 
         /// <summary>The configured airframe to call, or null for the player's own type.</summary>

@@ -117,6 +117,22 @@ namespace WingCommand
             return Ok("anchor", a.unitName);
         }
 
+        /// <summary>Escorts <c>id</c> (any scenario unit: aircraft, vehicle or ship) in the escort shapes; no id ends the
+        /// escort.</summary>
+        public static Dictionary<string, object> Escort(Dictionary<string, object> args)
+        {
+            WingService wing = WingService.Instance;
+            if (wing == null) return Fail("Escort", "the wing is not active");
+            if (Text(args, "id") == null)
+            {
+                wing.SetEscort(null);
+                return Ok("escort", "none");
+            }
+            if (!(Arg(args, "idUnit") is Unit u) || u.disabled) return Fail("Escort", "'id' does not name a live unit");
+            wing.SetEscort(u);
+            return Ok("escort", u.unitName);
+        }
+
         /// <summary>Hands every member to the game's AI and forms on the player again.</summary>
         public static Dictionary<string, object> Dismiss(Dictionary<string, object> args)
         {
