@@ -73,7 +73,7 @@ namespace WingCommand.FlightSim
     /// pitch stick commands pitch rate (converted to load factor), both through first-order lags and limited
     /// by the g limit and available lift. Coordinated flight (no sideslip); engine is a first-order lag with
     /// an afterburner step; the airbrake opens only at exactly zero throttle, as in the game.</summary>
-    internal sealed class FixedWingPlant
+    internal sealed class FixedWingPlant : ISimPlant
     {
         private const float G = 9.81f;
         private const float Deg = (float)(Math.PI / 180.0);
@@ -124,6 +124,10 @@ namespace WingCommand.FlightSim
             float drag = Drag(Isa.DynamicPressure(Position.Y, Speed), 1f, airbrake: false);
             return ThrottleFor(drag);
         }
+
+        public AircraftState Read(float dt) => SimSensor.Read(this, dt);
+
+        public void Step(in ControlOutput output, float dt) => Step(new PlantInput(output.Pitch, output.Roll, output.Throttle), dt);
 
         public void Step(in PlantInput input, float dt)
         {

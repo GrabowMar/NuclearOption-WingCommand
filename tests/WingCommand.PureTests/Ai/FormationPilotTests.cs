@@ -40,6 +40,16 @@ namespace WingCommand.PureTests
         }
 
         [Fact]
+        public void HoldOrbitFliesAtTheMembersCruiseNeverUnderItsSafeMinimum()
+        {
+            // A helicopter's reference airspeed can be a jet-like default (170 m/s); its hold orbit must use its cruise.
+            AirframeProfile helo = AirframeProfile.Derive(new ProfileInputs { Class = AirframeClass.Rotary, MaxSpeed = 80f });
+            Assert.Equal(0.75f * helo.CruiseSpeed, FormationPilot.OrbitSpeed(helo), 3);
+            var slowJet = new AirframeProfile { StallSpeed = 60f, CruiseSpeed = 100f };
+            Assert.Equal(1.5f * slowJet.MinimumSpeed(1f), FormationPilot.OrbitSpeed(slowJet), 3);
+        }
+
+        [Fact]
         public void MemberInItsSlotIsCapturedAndThenTracksTheSlot()
         {
             var rig = new Rig();

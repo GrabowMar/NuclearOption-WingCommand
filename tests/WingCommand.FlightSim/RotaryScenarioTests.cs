@@ -7,7 +7,7 @@ namespace WingCommand.FlightSim
 {
     public class RotaryScenarioTests
     {
-        private const float Dt = RotarySimWing.Dt;
+        private const float Dt = MixedSimWing.Dt;
 
         private static FormationDefinition StaggeredTrail() => SimFormations.Get("staggered-trail");
 
@@ -16,7 +16,7 @@ namespace WingCommand.FlightSim
         {
             // H1: helo leader at 60 m/s, ±20° S-turns every 10 s; three helos in a staggered trail at 80 m.
             var leader = new VirtualLeader(new Vec3(0f, 300f, 0f), 60f, 0f) { CanHover = true };
-            RotarySimWing wing = RotarySimWing.InSlots(leader, StaggeredTrail(), FormationCatalog.Standard, 3);
+            MixedSimWing wing = MixedSimWing.HelosInSlots(leader, StaggeredTrail(), FormationCatalog.Standard, 3);
             var along2 = new double[3];
             int samples = 0;
             float minSeparation = float.MaxValue;
@@ -44,7 +44,7 @@ namespace WingCommand.FlightSim
         {
             // H2: leader at 40 m/s decelerates at 2 m/s² to a hover and holds it.
             var leader = new VirtualLeader(new Vec3(0f, 300f, 0f), 40f, 0f) { CanHover = true, SpeedChangeRate = 2f };
-            RotarySimWing wing = RotarySimWing.InSlots(leader, StaggeredTrail(), FormationCatalog.Standard, 3);
+            MixedSimWing wing = MixedSimWing.HelosInSlots(leader, StaggeredTrail(), FormationCatalog.Standard, 3);
             var speeds = new List<float>[3];
             for (int k = 0; k < 3; k++) speeds[k] = new List<float>();
             for (int i = 0; i < 120 * 60; i++)
@@ -72,7 +72,7 @@ namespace WingCommand.FlightSim
         public void RotaryFourShipTickAllocatesNothing()
         {
             var leader = new VirtualLeader(new Vec3(0f, 300f, 0f), 60f, 0f) { CanHover = true };
-            RotarySimWing wing = RotarySimWing.InSlots(leader, StaggeredTrail(), FormationCatalog.Standard, 3);
+            MixedSimWing wing = MixedSimWing.HelosInSlots(leader, StaggeredTrail(), FormationCatalog.Standard, 3);
             void Tick(int i)
             {
                 leader.Step(i % 600 < 300 ? 20f : -20f, Dt);

@@ -22,7 +22,7 @@ namespace WingCommand.FlightSim
     /// target capped by gLimit·g/max(speed, 10), reached through a first-order lag); the collective lags; drag is
     /// quadratic. Euler angles are integrated from the body rates (fine at ≤ 30° of tilt). No ground effect, no
     /// vortex ring. Pure signs: pitch + nose up, roll + right, yaw + nose right.</summary>
-    internal sealed class RotaryPlant
+    internal sealed class RotaryPlant : ISimPlant
     {
         private const float Deg = (float)(Math.PI / 180.0);
         private readonly RotaryParams p;

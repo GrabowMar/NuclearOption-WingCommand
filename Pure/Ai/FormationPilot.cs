@@ -127,7 +127,8 @@ namespace WingCommand
         private Vec3 HoldCenter(in LeaderEstimate leader) =>
             new Vec3(leader.Pos.X, leader.Pos.Y + HoldOrbit.BaseHeight + HoldOrbit.SlotHeight * (Slot + 1), leader.Pos.Z);
 
-        private static float OrbitSpeed(AirframeProfile p) => Math.Max(1.5f * p.MinimumSpeed(1f), 0.75f * p.RefAirspeed);
+        /// <summary>Hold orbit speed: three quarters of cruise, never under 1.5 × the loaded minimum.</summary>
+        internal static float OrbitSpeed(AirframeProfile p) => Math.Max(1.5f * p.MinimumSpeed(1f), 0.75f * p.CruiseSpeed);
 
         private void Log(WingEventRing events, float time, WingEventKind kind) =>
             events?.Push(new WingEvent { Time = time, Member = Slot, Kind = kind });
