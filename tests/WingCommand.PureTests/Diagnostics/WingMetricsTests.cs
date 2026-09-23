@@ -70,10 +70,32 @@ namespace WingCommand.PureTests
             m.Reset(5f);
             MetricsSnapshot s = m.Snapshot(5f);
             Assert.Equal(0, s.Members);
-            Assert.Equal(0f, s.SlotRmsM);
+            Assert.Equal(-1f, s.SlotRmsM);          // never observed, not a perfect 0 (review I6)
+            Assert.Equal(-1f, s.SlotMaxM);
+            Assert.Equal(-1f, s.StationFraction);
             Assert.Equal(-1f, s.MeanCaptureSeconds);
             Assert.Equal(-1f, s.MinSeparationM);
             Assert.Equal(-1f, s.MinSpeedMps);
+        }
+
+        [Fact]
+        public void MembersAreKeptApartByIdNotBySlotWhenOneLeaves()
+        {
+            // A, B, C capture; A is lost and the engine renumbers B and C into slots 0 and 1. The window still counts three
+            // captured members and one that left (review I5).
+            var m = new WingMetrics();
+            m.Reset(0f);
+            m.Sample(10, 5f, true, 150f, 10f, 1f);
+            m.Sample(11, 5f, true, 150f, 15f, 1f);
+            m.Sample(12, 5f, true, 150f, 20f, 1f);
+            m.Left(10);
+            m.Sample(11, 5f, true, 150f, 25f, 1f);
+            m.Sample(12, 5f, true, 150f, 25f, 1f);
+            MetricsSnapshot s = m.Snapshot(30f);
+            Assert.Equal(3, s.Members);
+            Assert.Equal(3, s.CapturedMembers);
+            Assert.Equal(15f, s.MeanCaptureSeconds, 3);
+            Assert.Equal(1, s.Left);
         }
 
         [Fact]

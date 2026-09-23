@@ -23,6 +23,8 @@
     {"check": "result_below", "path": "join.mean_capture_s", "max": 180},
     {"check": "result_above", "path": "join.min_separation_m", "min": 20},
     {"check": "result_below", "path": "join.collision", "max": 0},
-    {"check": "result_below", "path": "join.gcas", "max": 0}
+    {"check": "result_below", "path": "join.gcas", "max": 0},
+    {"check": "result_above", "path": "join.members", "min": 3},
+    {"check": "result_below", "path": "join.left", "max": 0}
   ]
 }

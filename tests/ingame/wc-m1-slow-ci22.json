@@ -23,6 +23,8 @@
     {"check": "result_above", "path": "slow.min_speed_mps", "min": 45},
     {"check": "result_above", "path": "slow.min_separation_m", "min": 15},
     {"check": "result_below", "path": "slow.collision", "max": 0},
-    {"check": "result_below", "path": "slow.gcas", "max": 0}
+    {"check": "result_below", "path": "slow.gcas", "max": 0},
+    {"check": "result_above", "path": "slow.members", "min": 3},
+    {"check": "result_below", "path": "slow.left", "max": 0}
   ]
 }

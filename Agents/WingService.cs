@@ -41,7 +41,7 @@ namespace WingCommand
         private readonly AircraftSensor leaderSensor = new AircraftSensor();
         private TerrainFloor floor = new TerrainFloor();
         private float frameTime = float.NaN, missionTime;
-        private int probeTick, frameIndex;
+        private int probeTick, frameIndex, nextMemberId;
         private long eventsLogged, aiTicks;
 
         public WingService() => Instance = this;
@@ -110,7 +110,7 @@ namespace WingCommand
                 WingToast.Show("Only fixed-wing wingmen can fly formation in this build");
                 return false;
             }
-            var m = new WingMember(a, Members.Count, WingProfiles.For(a));
+            var m = new WingMember(a, Members.Count, WingProfiles.For(a)) { Id = nextMemberId++ };
             m.State = new WingFlightState(m);
             Members.Add(m);
             m.Pilot.SwitchState(m.State);
@@ -137,7 +137,7 @@ namespace WingCommand
                 ControlOutput o = StepTest.Adjust(m, m.Brain.Step(frame, m.Last, m.Profile, missionTime, dt, Events), dt);
                 ControlWriter.Fly(m.Aircraft, o);
                 int slot = m.Brain.Slot;
-                Metrics.Sample(slot, (frame.Slots[slot].Ref.Pos - m.Last.Pos).Length,
+                Metrics.Sample(m.Id, (frame.Slots[slot].Ref.Pos - m.Last.Pos).Length,
                     m.Brain.Mind.Current == BehaviourId.StationKeep, m.Last.Tas, missionTime, dt);
                 if (Plugin.Settings.DevTools.Value && frameIndex % 3 == 0) TelemetryRecorder.Sample(m, frame, missionTime);
             }
@@ -301,6 +301,7 @@ namespace WingCommand
                 WingMember m = Members[i];
                 if (!m.Released && m.Alive && ReferenceEquals(m.Pilot.currentState, m.State)) continue;
                 StepTest.Forget(m);
+                Metrics.Left(m.Id);
                 Members.RemoveAt(i);
                 changed = true;
                 Plugin.Logger.LogInfo($"[Wing] #{m.Number} left the wing");

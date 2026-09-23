@@ -11,6 +11,8 @@ namespace WingCommand
         public readonly AirframeProfile Profile;
         public readonly FaultGuard Faults = new FaultGuard();
         public WingFlightState State;
+        /// <summary>Stable for the member's life in the wing (slots renumber when a member ahead leaves).</summary>
+        public int Id;
         public AircraftState Last;
         public float NearFloorY = float.NaN;
         public float NoFbwSeconds;

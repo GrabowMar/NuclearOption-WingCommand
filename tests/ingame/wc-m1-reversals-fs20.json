@@ -26,6 +26,8 @@
     {"check": "result_below", "path": "reversals.slot_rms_m", "max": 22.5},
     {"check": "result_below", "path": "reversals.collision", "max": 0},
     {"check": "result_below", "path": "reversals.gcas", "max": 0},
-    {"check": "result_below", "path": "reversals.transitions_per_member_min", "max": 1.5}
+    {"check": "result_below", "path": "reversals.transitions_per_member_min", "max": 1.5},
+    {"check": "result_above", "path": "reversals.members", "min": 3},
+    {"check": "result_below", "path": "reversals.left", "max": 0}
   ]
 }
