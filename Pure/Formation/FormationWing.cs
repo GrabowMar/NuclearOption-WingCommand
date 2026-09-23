@@ -2,6 +2,8 @@ using System;
 
 namespace WingCommand
 {
+// Filled by the engine's wing service (M1c) and the FlightSim; the mod assembly only reads it until then.
+#pragma warning disable CS0649
     /// <summary>What one member contributes to the wing computation this tick.</summary>
     internal struct WingMemberInput
     {
@@ -9,6 +11,7 @@ namespace WingCommand
         public MemberCapability Capability;
         public float Radius;
     }
+#pragma warning restore CS0649
 
     /// <summary>Everything a member reads this tick, computed once per wing. Arrays are indexed by slot.</summary>
     internal sealed class WingFrame

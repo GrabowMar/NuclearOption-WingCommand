@@ -2,6 +2,8 @@ using System;
 
 namespace WingCommand
 {
+// Filled by the engine's leader sensor (M1c) and the FlightSim; the mod assembly only reads it until then.
+#pragma warning disable CS0649
     /// <summary>What the wing can observe about its leader this tick.</summary>
     internal struct LeaderSample
     {
@@ -13,6 +15,7 @@ namespace WingCommand
         /// <summary>A player leader gets the faster filters (0.12 s, 360°/s).</summary>
         public bool IsPlayer;
     }
+#pragma warning restore CS0649
 
     /// <summary>The wing's smoothed, one-tick-projected view of its leader, shared by every member.</summary>
     internal struct LeaderEstimate

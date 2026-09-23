@@ -14,11 +14,14 @@ namespace WingCommand
         public bool Crossing;
     }
 
+// Filled by the engine's wing service (M1c) and the FlightSim; the mod assembly only reads it until then.
+#pragma warning disable CS0649
     /// <summary>Speeds a member can fly now: its usable maximum and its loaded minimum.</summary>
     internal struct MemberCapability
     {
         public float MaxSpeed, MinSpeed;
     }
+#pragma warning restore CS0649
 
     /// <summary>Places every slot of one wing each tick through <see cref="TurnFrame"/> and the definition's
     /// modifiers:
