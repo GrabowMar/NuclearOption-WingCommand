@@ -30,6 +30,7 @@ namespace WingCommand
     internal static class FlightStack
     {
         // ponytail: tiltwings fly the fixed-wing pipeline until their own arrives in M2b.
-        public static IFlightPipeline NewPipeline(AirframeClass cls) => new FixedWingPipeline();
+        public static IFlightPipeline NewPipeline(AirframeClass cls) =>
+            cls == AirframeClass.Rotary ? new RotaryPipeline() : (IFlightPipeline)new FixedWingPipeline();
     }
 }

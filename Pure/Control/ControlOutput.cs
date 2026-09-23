@@ -8,6 +8,9 @@ namespace WingCommand
     internal struct ControlOutput
     {
         public float Pitch, Roll, Yaw, Throttle, Brake;
+        /// <summary>customAxis1: the compound helicopter's pusher (0.5 neutral); set by the rotary pipeline, written by
+        /// the engine writer from M2c.</summary>
+        public float Aux;
         /// <summary>Airbrake demanded; throttle is exactly 0 while set (the game opens brakes only there).</summary>
         public bool Airbrake;
     }
