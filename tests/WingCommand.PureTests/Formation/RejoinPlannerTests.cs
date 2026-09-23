@@ -42,6 +42,28 @@ namespace WingCommand.PureTests
         }
 
         [Fact]
+        public void MemberAheadOfItsPreSlotIsNotLedFurtherAhead()
+        {
+            // After a head-on pass the member ends up ahead of its slot: the slot must come to it, so the
+            // reference is the pre-slot itself, not a lead point that runs away with the member.
+            LeaderEstimate leader = Leader();
+            SlotTarget slot = Slot(leader);
+            Vec3 ahead = PreSlot(slot) + Vec3.Forward * 700f;
+            RejoinOutput o = new RejoinPlanner().Step(TestStates.Flying(ahead, leader.Vel), slot, leader, 1, Spacing, 255f, true, Dt);
+            Assert.True((o.Ref.Pos - PreSlot(slot)).Horizontal.Length < 50f, $"reference {o.Ref.Pos} vs pre-slot {PreSlot(slot)}");
+        }
+
+        [Fact]
+        public void MemberAheadOfItsPreSlotStillFliesItsLane()
+        {
+            LeaderEstimate leader = Leader();
+            SlotTarget slot = Slot(leader);
+            Vec3 ahead = PreSlot(slot) + Vec3.Forward * 700f;
+            RejoinOutput o = new RejoinPlanner().Step(TestStates.Flying(ahead, leader.Vel), slot, leader, 2, Spacing, 255f, true, Dt);
+            Assert.Equal(2000f - 2f * RejoinPlanner.LaneStep, o.Ref.Pos.Y, 2);
+        }
+
+        [Fact]
         public void EachSlotNumberRejoinsOnItsOwnLane()
         {
             LeaderEstimate leader = Leader();

@@ -91,9 +91,18 @@ namespace WingCommand
         {
             FormationIntercept.Plan plan = FormationIntercept.Solve(Flat(pre.Pos - s.Pos), Flat(leader.Vel),
                 Flat(pre.Pos - leader.Pos), Flat(pre.Vel), s.Speed, availableSpeed, leader.TurnRate);
-            return new RefState(
+            var cutoff = new RefState(
                 new Vec3(s.Pos.X + plan.Gap.X, leader.Pos.Y - LaneStep * lane, s.Pos.Z + plan.Gap.Y),
                 new Vec3(plan.ArrivalVelocity.X, 0f, plan.ArrivalVelocity.Y), Vec3.Zero);
+            // A lead point only helps a member that has to catch the pre-slot up. One abeam or ahead of it
+            // waits for it instead: fade the lead by how far the pre-slot is ahead (cosine, clipped at 0).
+            // The lane altitude stays either way: it is what keeps rejoins from different sides apart.
+            Vec3 gap = (pre.Pos - s.Pos).Horizontal;
+            float length = gap.Length;
+            float ahead = length > 1f ? Scalar.Clamp01(Vec3.Dot(gap, leader.Track) / length) : 1f;
+            RefState faded = Blend(pre, cutoff, ahead);
+            return new RefState(new Vec3(faded.Pos.X, cutoff.Pos.Y, faded.Pos.Z),
+                new Vec3(faded.Vel.X, leader.Vel.Y, faded.Vel.Z), new Vec3(faded.Acc.X, 0f, faded.Acc.Z));
         }
 
         private static float Filter(float current, float target, float dt)

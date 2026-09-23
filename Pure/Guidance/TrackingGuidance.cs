@@ -7,8 +7,8 @@ namespace WingCommand
     /// a linear PD with the reference acceleration as feedforward. The along-track closure also respects a
     /// stopping-distance law, so arrival does not overshoot. The acceleration is clamped to what the
     /// airframe can do: normal part to (Nz_max − 1)·g, tangential part to thrust and drag. A velocity
-    /// command more than 90° off the current track is steered 90° to its side, so the demand becomes a
-    /// maximum turn plus braking rather than braking alone.</summary>
+    /// command more than 90° off the current track becomes a maximum turn that holds the commanded speed,
+    /// in the intent's turn sense or else toward the side the command lies on.</summary>
     internal static class TrackingGuidance
     {
         public const float CatchUpMargin = 5f;
@@ -67,9 +67,16 @@ namespace WingCommand
             if (heading.SqrLength > 1f && Vec3.Dot(velCmd.Horizontal, heading) < 0f)
             {
                 Vec3 aside = Vec3.Cross(Vec3.Up, heading).Normalized;
-                float lean = Vec3.Dot(velCmd, aside);
-                if (Math.Abs(lean) < 1f) lean = Vec3.Dot(e, aside);
-                steer = aside * ((lean < 0f ? -1f : 1f) * velCmd.Horizontal.Length) + Vec3.Up * velCmd.Y;
+                float lean = intent.TurnSense;
+                if (lean == 0f)
+                {
+                    lean = Vec3.Dot(velCmd, aside);
+                    if (Math.Abs(lean) < 1f) lean = Vec3.Dot(e, aside);
+                }
+                // Along the current track at the commanded speed plus as much again to the chosen side: a maximum
+                // turn that holds speed, instead of a sideways vector whose projection says "brake to zero".
+                float speedCmd = velCmd.Horizontal.Length;
+                steer = (heading.Normalized + aside * (lean < 0f ? -1f : 1f)) * speedCmd + Vec3.Up * velCmd.Y;
             }
             Vec3 accel = ClampAccel(r.Acc + (steer - s.Vel) / Math.Max(0.1f, p.TauVel), s, p,
                 intent.Limits.AirbrakeAllowed);

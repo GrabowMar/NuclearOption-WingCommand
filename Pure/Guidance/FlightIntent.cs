@@ -43,6 +43,9 @@ namespace WingCommand
         /// <summary>Formation spacing in metres for the near-reference overtake cap; 0 disables it.</summary>
         public float Spacing;
         public float TerrainClearance;
+        /// <summary>Rotation sense for a turn-around (the command lies more than 90° off the track): +1 right,
+        /// −1 left, 0 = toward the side the command lies on. The behaviour latches it for the whole turn.</summary>
+        public float TurnSense;
     }
 
     /// <summary>Guidance output: commanded kinematic acceleration and velocity (world).</summary>
