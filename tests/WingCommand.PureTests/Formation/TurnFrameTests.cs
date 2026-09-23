@@ -34,6 +34,25 @@ namespace WingCommand.PureTests
         }
 
         [Fact]
+        public void AftSlotOfAHoveringLeaderStaysAftOfItsNose()
+        {
+            // The path delay covers the aft distance only as fast as the leader moves; a hovering leader's aft slots
+            // collapsed onto its lateral line (two helos in one spot in the FlightSim H2 stop).
+            var hover = new LeaderEstimate { Pos = new Vec3(0f, 300f, 0f), Track = Vec3.Forward, Flying = true };
+            RefState r = TurnFrame.Evaluate(hover, 0f, 0f, 40f, 80f, 0f, 0f);
+            Assert.True((r.Pos - new Vec3(40f, 300f, -80f)).Length < 1e-3f, $"slot at {r.Pos}");
+        }
+
+        [Fact]
+        public void AftSlotMovesContinuouslyThroughThePathSpeedFloor()
+        {
+            RefState fast = TurnFrame.Evaluate(Turning(TurnFrame.PathSpeedFloor + 0.01f, 0f, 0f), 0f, 0f, 0f, 80f, 0f, 0f);
+            RefState slow = TurnFrame.Evaluate(Turning(TurnFrame.PathSpeedFloor - 0.01f, 0f, 0f), 0f, 0f, 0f, 80f, 0f, 0f);
+            Assert.True((fast.Pos - slow.Pos).Length < 0.1f, $"jump {(fast.Pos - slow.Pos).Length:0.00} m");
+            Assert.Equal(-80f, slow.Pos.Z, 1);
+        }
+
+        [Fact]
         public void RollFollowIsFullOnlyForFingertipSlotsAndZeroFromFortyFiveMetres()
         {
             Assert.Equal(1f, TurnFrame.RollFollowWeight(10f, -1f));

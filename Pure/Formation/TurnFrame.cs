@@ -22,6 +22,18 @@ namespace WingCommand
     {
         public static float RollFollowNear = 15f, RollFollowFar = 45f;
         public static float DiffStep = 0.1f;
+        /// <summary>Aft slots hang off the leader's past path, at most aft / PathSpeedFloor seconds back.</summary>
+        public static float PathSpeedFloor = 50f;
+
+        /// <summary>How far back along the leader's path an aft offset looks, in seconds, and the part of the aft
+        /// distance the path does not cover (<paramref name="rigidAft"/>): below <see cref="PathSpeedFloor"/> the rest
+        /// is a fixed offset behind the leader's track, so a slowing or hovering leader keeps its aft slots aft.</summary>
+        public static float PathDelay(float aft, float speed, out float rigidAft)
+        {
+            float delay = aft / Math.Max(PathSpeedFloor, speed);
+            rigidAft = Math.Max(0f, aft - speed * delay);
+            return delay;
+        }
 
         /// <summary>Roll-follow weight for a slot <paramref name="distanceM"/> from the leader (3-D offset length);
         /// an override ≥ 0 from the shape's data wins.</summary>
@@ -57,17 +69,23 @@ namespace WingCommand
             return (r * cb - u * sb) * right - f * aft + (u * cb + r * sb) * up;
         }
 
-        /// <summary>Slot reference now: offset (right, up) from where the leader was aft/V ago on its current turn,
-        /// with velocity and acceleration from central differences over that point's constant-turn prediction
-        /// and the frame bank's constant-rate prediction.</summary>
+        /// <summary>Slot reference now: offset (right, up) from where the leader was aft/V ago on its current turn
+        /// (the part of <paramref name="aft"/> a slow leader's path does not cover, plus <paramref name="rigidAft"/>,
+        /// behind its track), with velocity and acceleration from central differences over that point's constant-turn
+        /// prediction and the frame bank's constant-rate prediction.</summary>
         public static RefState Evaluate(in LeaderEstimate leader, float frameBankDeg, float frameBankRateDps,
-            float right, float aft, float up, float w)
+            float right, float aft, float up, float w, float rigidAft = 0f)
         {
-            LeaderEstimate at = aft != 0f ? Delayed(leader, aft / Math.Max(50f, leader.Vel.Length)) : leader;
+            LeaderEstimate at = leader;
+            if (aft != 0f)
+            {
+                at = Delayed(leader, PathDelay(aft, leader.Vel.Length, out float uncovered));
+                rigidAft += uncovered;
+            }
             float h = DiffStep;
-            Vec3 back = Relative(at, -h, frameBankDeg, frameBankRateDps, right, up, w);
-            Vec3 now = Relative(at, 0f, frameBankDeg, frameBankRateDps, right, up, w);
-            Vec3 ahead = Relative(at, h, frameBankDeg, frameBankRateDps, right, up, w);
+            Vec3 back = Relative(at, -h, frameBankDeg, frameBankRateDps, right, rigidAft, up, w);
+            Vec3 now = Relative(at, 0f, frameBankDeg, frameBankRateDps, right, rigidAft, up, w);
+            Vec3 ahead = Relative(at, h, frameBankDeg, frameBankRateDps, right, rigidAft, up, w);
             return new RefState(at.Pos + now, (ahead - back) / (2f * h), (ahead - now * 2f + back) / (h * h));
         }
 
@@ -113,10 +131,10 @@ namespace WingCommand
         }
 
         private static Vec3 Relative(in LeaderEstimate leader, float tau, float bank, float bankRate,
-            float right, float up, float w)
+            float right, float aft, float up, float w)
         {
             Vec3 travel = leader.Vel * tau + leader.Acc * (0.5f * tau * tau);
-            return travel + Offset(PredictVelocity(leader, tau), leader.Track, bank + bankRate * tau, right, 0f, up, w);
+            return travel + Offset(PredictVelocity(leader, tau), leader.Track, bank + bankRate * tau, right, aft, up, w);
         }
     }
 }

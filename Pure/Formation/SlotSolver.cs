@@ -85,11 +85,11 @@ namespace WingCommand
                 // turn carried back, so wingmen bank with the leader now; far behind (from 1.5 s) it is where the
                 // leader really was (history), so trail slots follow its actual path through reversals.
                 float aftM = (slot.Aft + extraAft) * spacing, upM = slot.Up * FormationCatalog.StackMetres + dip;
-                float delay = aftM / Math.Max(50f, leader.Vel.Length);
+                float delay = TurnFrame.PathDelay(aftM, leader.Vel.Length, out float rigidAft);
                 LeaderEstimate at = TurnFrame.Delayed(leader, delay);
                 if (history != null && delay > HistoryBlendStart)
                     at = LeaderHistory.Blend(at, history.At(delay), Scalar.SmoothStep(HistoryBlendStart, HistoryBlendFull, delay));
-                RefState r = TurnFrame.Evaluate(at, frameBank[i], bankRate, right, 0f, upM, w);
+                RefState r = TurnFrame.Evaluate(at, frameBank[i], bankRate, right, 0f, upM, w, rigidAft);
                 if ((def.Modifiers & FormationModifiers.TerrainFlatten) != 0 && !float.IsNaN(floorY))
                     r = Flatten(r, floorY + clearance);
                 output[i] = new SlotTarget
