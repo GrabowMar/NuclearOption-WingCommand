@@ -60,5 +60,27 @@ namespace WingCommand.FlightSim
                 CruiseThrottle = 0.45f,
             };
         }
+
+        /// <summary>Profile the engine derives for PlantParams.CoinTurboprop, through the production
+        /// <see cref="AirframeProfile.Derive"/> (published stall, FBW corner, g and roll fields).</summary>
+        public static AirframeProfile CoinTurboprop()
+        {
+            PlantParams pp = PlantParams.CoinTurboprop;
+            float stall = (float)System.Math.Sqrt(pp.MassKg * Scalar.G / (0.5 * 1.225 * pp.WingAreaM2 * pp.ClMax));
+            return AirframeProfile.Derive(new ProfileInputs
+            {
+                UnitName = "sim-turboprop",
+                PublishedStallKmh = stall * 3.6f,
+                MaxSpeed = 160f,
+                CornerSpeed = pp.CornerSpeed,
+                PidReferenceAirspeed = 110f,
+                GLimit = pp.GLimit,
+                CruiseThrottle = 0.55f,
+                FbwMaxRollAngularVel = pp.MaxRollAngularVel,
+                FbwGLimit = pp.GLimit,
+                FbwCornerSpeed = pp.CornerSpeed,
+                MaxRadius = 6f,
+            });
+        }
     }
 }
