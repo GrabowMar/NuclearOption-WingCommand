@@ -23,7 +23,34 @@ namespace WingCommand.PureTests
             var errors = new List<string>();
             List<FormationDefinition> all = BuiltIns(errors);
             Assert.Empty(errors);
-            Assert.Equal(15, all.Count);
+            Assert.Equal(22, all.Count);
+        }
+
+        [Fact]
+        public void BuiltInsCoverTheRotaryAndEscortSets()
+        {
+            List<FormationDefinition> all = BuiltIns(new List<string>());
+            foreach (string id in new[] { "staggered-trail", "echelon-staggered", "heavy-stream" })
+                Assert.Equal("rotary", FormationCatalog.Find(all, id)?.Family);
+            foreach (string id in new[] { "high-cover", "low-cover", "sweep-ahead", "close-escort" })
+                Assert.Equal("escort", FormationCatalog.Find(all, id)?.Family);
+        }
+
+        [Fact]
+        public void ShapesSayWhichWingsTheySuitByFamilyUnlessTheDataSays()
+        {
+            List<FormationDefinition> all = BuiltIns(new List<string>());
+            Assert.Equal(FormationUse.Jet | FormationUse.Rotary, FormationCatalog.Find(all, "echelon-right").Use);
+            Assert.Equal(FormationUse.Jet, FormationCatalog.Find(all, "combat-spread").Use);
+            Assert.Equal(FormationUse.Rotary, FormationCatalog.Find(all, "staggered-trail").Use);
+            Assert.Equal(FormationUse.Escort, FormationCatalog.Find(all, "high-cover").Use);
+            var errors = new List<string>();
+            List<FormationDefinition> custom = FormationCatalog.Parse(@"{ ""formations"": [ { ""id"": ""x"", ""family"": ""classic"",
+                ""for"": [""rotary"", ""escort""], ""slots"": [ { ""right"": 1, ""aft"": 1 } ] } ] }", errors);
+            Assert.Empty(errors);
+            Assert.Equal(FormationUse.Rotary | FormationUse.Escort, custom[0].Use);
+            FormationCatalog.Parse(@"{ ""formations"": [ { ""id"": ""y"", ""for"": [""boats""], ""slots"": [ { ""right"": 1, ""aft"": 1 } ] } ] }", errors);
+            Assert.Contains(errors, e => e.Contains("boats"));
         }
 
         [Fact]

@@ -159,8 +159,43 @@ namespace WingCommand
                             return false;
                     }
             if (!ReadElements(e, d, out reason)) return false;
+            if (!ReadUse(e, d, out reason)) return false;
             def = d;
             return true;
+        }
+
+        /// <summary>The shape's <c>"for"</c> list (jet, rotary, escort), or its family's default.</summary>
+        private static bool ReadUse(Dictionary<string, object> e, FormationDefinition d, out string reason)
+        {
+            reason = null;
+            if (!MiniJson.TryGetList(e, "for", out List<object> uses))
+            {
+                d.Use = DefaultUse(d.Family);
+                return true;
+            }
+            d.Use = FormationUse.None;
+            foreach (object u in uses)
+                switch (u as string)
+                {
+                    case "jet": d.Use |= FormationUse.Jet; break;
+                    case "rotary": d.Use |= FormationUse.Rotary; break;
+                    case "escort": d.Use |= FormationUse.Escort; break;
+                    default:
+                        reason = $"unknown \"for\" value {u} (jet, rotary, escort)";
+                        return false;
+                }
+            return true;
+        }
+
+        private static FormationUse DefaultUse(string family)
+        {
+            switch (family)
+            {
+                case "classic": return FormationUse.Jet | FormationUse.Rotary;
+                case "rotary": return FormationUse.Rotary;
+                case "escort": return FormationUse.Escort;
+                default: return FormationUse.Jet;
+            }
         }
 
         private static bool ReadElements(Dictionary<string, object> e, FormationDefinition d, out string reason)

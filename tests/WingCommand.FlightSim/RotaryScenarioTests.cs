@@ -9,18 +9,7 @@ namespace WingCommand.FlightSim
     {
         private const float Dt = RotarySimWing.Dt;
 
-        /// <summary>Staggered trail (spec M2 §5.2's rotary default), test-local until the rotary family ships in M2b.</summary>
-        private static FormationDefinition StaggeredTrail()
-        {
-            const string json = @"{ ""formations"": [ { ""id"": ""staggered-trail"", ""family"": ""rotary"", ""name"": ""Staggered Trail"",
-                ""spacing"": { ""min"": 40, ""max"": 160, ""default"": 80 }, ""modifiers"": [],
-                ""slots"": [ { ""right"": 0.5, ""aft"": 1, ""up"": 0 }, { ""right"": -0.5, ""aft"": 2, ""up"": 0 }, { ""right"": 0.5, ""aft"": 3, ""up"": 0 } ],
-                ""elements"": [[0, 1], [2, 3]] } ] }";
-            var errors = new List<string>();
-            List<FormationDefinition> all = FormationCatalog.Parse(json, errors);
-            Assert.Empty(errors);
-            return all[0];
-        }
+        private static FormationDefinition StaggeredTrail() => SimFormations.Get("staggered-trail");
 
         [Fact]
         public void HeloTrailHoldsItsSlotsThroughSTurns()

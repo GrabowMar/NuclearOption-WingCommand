@@ -50,6 +50,28 @@ namespace WingCommand.PureTests
         }
 
         [Fact]
+        public void CyclingStaysWithinTheShapesThatSuitTheWing()
+        {
+            var sel = new FormationSelection(Catalog(), "finger-four-right");
+            sel.SetUse(FormationUse.Rotary, "staggered-trail");
+            Assert.Equal("finger-four-right", sel.Current.Id);   // classic suits a helicopter wing too
+            Assert.Equal("staggered-trail", sel.NextFamily().Id);
+            Assert.Equal("echelon-staggered", sel.NextShape().Id);
+            Assert.Equal("echelon-right", sel.NextFamily().Id);
+        }
+
+        [Fact]
+        public void ChangingTheUseSwitchesToAShapeThatSuitsIt()
+        {
+            var sel = new FormationSelection(Catalog(), "finger-four-right");
+            sel.SetUse(FormationUse.Escort, "high-cover");
+            Assert.Equal("high-cover", sel.Current.Id);
+            Assert.Equal("low-cover", sel.NextShape().Id);
+            sel.SetUse(FormationUse.Jet, "finger-four-right");
+            Assert.Equal("finger-four-right", sel.Current.Id);
+        }
+
+        [Fact]
         public void SpacingPresetIsClampedToTheShape()
         {
             var sel = new FormationSelection(Catalog(), "finger-four-right") { Spacing = SpacingPreset.Spread };
