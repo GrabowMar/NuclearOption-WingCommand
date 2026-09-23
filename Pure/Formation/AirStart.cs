@@ -16,6 +16,15 @@ namespace WingCommand
             return h.SqrLength > 1f ? h.Normalized : Vec3.Forward;
         }
 
+        /// <summary>Unit direction to point a spawn along: the leader's full flight path (climb or dive included),
+        /// so the air-start begins at the leader's angle of attack, not a large negative one.</summary>
+        public static Vec3 Direction(Vec3 leaderVel) => leaderVel.SqrLength > 1f ? leaderVel.Normalized : Heading(leaderVel);
+
+        /// <summary>Spawn point of wing slot <paramref name="slot"/> of <paramref name="def"/>. The slot number is
+        /// the lateral step, so slots called one at a time never share a point.</summary>
+        public static Vec3 ForSlot(FormationDefinition def, int slot, Vec3 leaderPos, Vec3 leaderVel, float groundY) =>
+            Position(leaderPos, leaderVel, SlotSolver.SlotFor(def, slot).Right, slot, groundY);
+
         public static Vec3 Position(Vec3 leaderPos, Vec3 leaderVel, float slotRight, int index, float groundY)
         {
             Vec3 fwd = Heading(leaderVel);

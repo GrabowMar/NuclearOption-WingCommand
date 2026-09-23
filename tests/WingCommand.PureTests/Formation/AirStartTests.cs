@@ -30,6 +30,35 @@ namespace WingCommand.PureTests
             Assert.Equal(2900f + AirStart.TerrainClearanceM, AirStart.Position(Leader, North, 0f, 0, 2900f).Y, 1);
 
         [Fact]
+        public void EverySlotOfEveryShapeGetsItsOwnSpawnPoint()
+        {
+            // Successive calls spawn later slots: each slot must land clear of every earlier one, even when they
+            // share a side.
+            var errors = new System.Collections.Generic.List<string>();
+            var all = FormationCatalog.Parse(System.IO.File.ReadAllText(
+                System.IO.Path.Combine(System.AppContext.BaseDirectory, "formations.json")), errors);
+            foreach (FormationDefinition def in all)
+            {
+                var points = new Vec3[FormationCatalog.MaxSlots];
+                for (int slot = 0; slot < points.Length; slot++)
+                {
+                    points[slot] = AirStart.ForSlot(def, slot, Leader, North, 0f);
+                    for (int earlier = 0; earlier < slot; earlier++)
+                        Assert.True((points[slot] - points[earlier]).Length >= AirStart.LateralStepM - 0.01f,
+                            $"{def.Id}: slots {earlier} and {slot} spawn {(points[slot] - points[earlier]).Length:0} m apart");
+                }
+            }
+        }
+
+        [Fact]
+        public void SpawnFacesTheLeadersFlightPath()
+        {
+            Vec3 climbing = new Vec3(0f, 52f, 193f);
+            Assert.True((AirStart.Direction(climbing) - climbing.Normalized).Length < 1e-5f);
+            Assert.Equal(Vec3.Forward, AirStart.Direction(Vec3.Zero));
+        }
+
+        [Fact]
         public void HeadingFollowsTheLeaderOrNorthWhenHovering()
         {
             Assert.Equal(new Vec3(1f, 0f, 0f), AirStart.Heading(new Vec3(150f, 20f, 0f)));

@@ -29,7 +29,9 @@ namespace WingCommand
     /// <see cref="RecaptureSeconds"/> after release, the axis re-captures its current value; ALT also waits
     /// for |vs| &lt; 2 m/s.</item>
     /// <item>Moving the throttle more than <see cref="ThrottleDisengage"/> drops SPD alone.</item>
-    /// <item>G-LOC, gear down below 20 m AGL, or speed under 1.1 × loaded minimum drop every mode.</item>
+    /// <item>G-LOC, gear down below 20 m AGL, or equivalent airspeed under 1.1 × loaded minimum drop every
+    /// mode.</item>
+    /// <item>Any mode change asks the caller to seed the pipeline from the applied inputs on the next step.</item>
     /// </list></summary>
     internal sealed class AutopilotSession
     {
@@ -40,6 +42,7 @@ namespace WingCommand
         public bool LateralOverride { get; private set; }
         public bool VerticalOverride { get; private set; }
         private float lateralQuiet, verticalQuiet, throttleRef;
+        private bool reseed;
 
         public bool Engaged => Spec.Lateral != LateralHold.None || Spec.Vertical != VerticalHold.None || Spec.Speed;
 
@@ -48,6 +51,7 @@ namespace WingCommand
             Spec.Lateral = mode;
             Spec.HeadingDeg = s.TrackDeg;
             LateralOverride = false;
+            reseed = true;
         }
 
         public void SetVertical(VerticalHold mode, in AircraftState s)
@@ -56,6 +60,7 @@ namespace WingCommand
             Spec.AltitudeM = s.Pos.Y;
             Spec.VerticalSpeedMps = s.Vel.Y;
             VerticalOverride = false;
+            reseed = true;
         }
 
         public void SetSpeed(bool on, in AircraftState s, float playerThrottle)
@@ -63,6 +68,7 @@ namespace WingCommand
             Spec.Speed = on;
             Spec.SpeedMps = s.Tas;
             throttleRef = playerThrottle;
+            reseed = true;
         }
 
         public void Off()
@@ -79,7 +85,7 @@ namespace WingCommand
 
             ApDisengage safety = pilot.Gloc ? ApDisengage.Gloc
                 : pilot.GearDown && s.RadarAlt < GearLowAgl ? ApDisengage.GearLow
-                : s.Tas < SlowFactor * loadedMinimum ? ApDisengage.Slow
+                : s.Eas < SlowFactor * loadedMinimum ? ApDisengage.Slow
                 : ApDisengage.None;
             if (safety != ApDisengage.None)
             {
@@ -87,6 +93,10 @@ namespace WingCommand
                 t.Disengaged = safety;
                 return t;
             }
+
+            // A mode change hands an axis from the pilot (or an idle loop) to the autopilot: seed first.
+            t.Recaptured = reseed;
+            reseed = false;
 
             if (Spec.Speed && Math.Abs(pilot.Throttle - throttleRef) > ThrottleDisengage)
             {

@@ -22,6 +22,8 @@ namespace WingCommand
 
         private readonly List<Aircraft> pending = new List<Aircraft>();
         private readonly HashSet<Aircraft> settling = new HashSet<Aircraft>();
+        private readonly Dictionary<Aircraft, float> pendingSince = new Dictionary<Aircraft, float>();
+        public static float AdoptTimeoutSeconds = 10f;
 
         public SpawnService() => Instance = this;
 
@@ -41,13 +43,25 @@ namespace WingCommand
                 if (a == null || a.disabled)
                 {
                     pending.RemoveAt(i);
+                    pendingSince.Remove(a);
                     continue;
                 }
                 Pilot p = a.pilots != null && a.pilots.Length > 0 ? a.pilots[0] : null;
-                if (p == null || p.currentState == null) continue;   // the game has not initialised it yet
+                if (p == null || p.currentState == null)
+                {
+                    // The game has not initialised it yet; give up (it keeps whatever the game does) after a timeout.
+                    if (pendingSince.TryGetValue(a, out float since) && Time.time - since > AdoptTimeoutSeconds)
+                    {
+                        Plugin.Logger.LogWarning($"[Spawn] {a.definition.unitName} never initialised its AI; not adopted");
+                        pending.RemoveAt(i);
+                        pendingSince.Remove(a);
+                    }
+                    continue;
+                }
                 if (settling.Add(a)) continue;                       // wait one more physics tick
                 settling.Remove(a);
                 pending.RemoveAt(i);
+                pendingSince.Remove(a);
                 if (WingService.Instance == null || !WingService.Instance.Adopt(a))
                     Plugin.Logger.LogWarning($"[Spawn] {a.definition.unitName} could not join the wing and keeps the game's AI");
             }
@@ -76,9 +90,12 @@ namespace WingCommand
             }
             definition = definition ?? leader.definition;
             GameObject prefab = definition != null ? definition.unitPrefab : null;
-            if (prefab == null || definition.aircraftParameters == null || definition.aircraftParameters.takeoffDistance <= 0f)
+            Aircraft template = prefab != null ? prefab.GetComponent<Aircraft>() : null;
+            if (template == null || template.pilots == null || template.pilots.Length == 0 || template.pilots[0] == null ||
+                template.pilots[0].pilotType != Pilot.PilotType.Plane)
             {
-                WingToast.Show("That airframe cannot fly formation in this build");
+                // Helicopters, tiltwings and VTOLs join in M2; a VTOL would never even get an AI state to adopt.
+                WingToast.Show("Only fixed-wing airframes can fly formation in this build");
                 return 0;
             }
             Spawner spawner = NetworkSceneSingleton<Spawner>.i;
@@ -97,14 +114,14 @@ namespace WingCommand
 
             Vec3 lp = leader.GlobalPosition().ToVec3();
             Vec3 lv = leader.CockpitRB().velocity.ToVec3();
-            Quaternion rotation = Quaternion.LookRotation(AirStart.Heading(lv).ToUnity());
+            Quaternion rotation = Quaternion.LookRotation(AirStart.Direction(lv).ToUnity());
             LiveryKey livery = definition == leader.definition ? leader.NetworkLiveryKey : default;
             int spawned = 0;
             for (int k = 0; k < n; k++)
             {
-                SlotDef slot = SlotSolver.SlotFor(wing.Selection.Current, wing.Members.Count + pending.Count);
-                float ground = TerrainProbe.GroundY(AirStart.Position(lp, lv, slot.Right, k, 0f));
-                Vec3 pos = AirStart.Position(lp, lv, slot.Right, k, ground);
+                int slot = wing.Members.Count + pending.Count;
+                float ground = TerrainProbe.GroundY(AirStart.ForSlot(wing.Selection.Current, slot, lp, lv, 0f));
+                Vec3 pos = AirStart.ForSlot(wing.Selection.Current, slot, lp, lv, ground);
                 try
                 {
                     Aircraft a = spawner.SpawnAircraft(null, prefab, null, 1f, livery, pos.ToGlobal(), rotation, lv.ToUnity(),
@@ -112,6 +129,7 @@ namespace WingCommand
                         leader.skill, leader.bravery);
                     if (a == null) break;
                     pending.Add(a);
+                    pendingSince[a] = Time.time;
                     spawned++;
                 }
                 catch (Exception e)
@@ -128,6 +146,7 @@ namespace WingCommand
         {
             pending.Clear();
             settling.Clear();
+            pendingSince.Clear();
         }
     }
 }

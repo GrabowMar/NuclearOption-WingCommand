@@ -137,6 +137,32 @@ namespace WingCommand.PureTests
         }
 
         [Fact]
+        public void AddingAModeWhileEngagedAsksForAReseed()
+        {
+            // Unwritten axes keep stepping against a plane the pilot flies; the axis a new mode takes over must be
+            // seeded from the applied inputs first, or it starts from a wound-up loop.
+            var ap = new AutopilotSession();
+            ap.SetLateral(LateralHold.Heading, At());
+            ap.Step(At(), Hands(), LoadedMinimum, Dt);
+            Assert.False(ap.Step(At(), Hands(), LoadedMinimum, Dt).Recaptured);
+            ap.SetVertical(VerticalHold.Altitude, At());
+            Assert.True(ap.Step(At(), Hands(), LoadedMinimum, Dt).Recaptured);
+            Assert.False(ap.Step(At(), Hands(), LoadedMinimum, Dt).Recaptured);
+            ap.SetSpeed(true, At(), 0.6f);
+            Assert.True(ap.Step(At(), Hands(), LoadedMinimum, Dt).Recaptured);
+        }
+
+        [Fact]
+        public void TooSlowIsJudgedOnEquivalentAirspeedAtAltitude()
+        {
+            // 100 m/s true at 8 km is about 65 m/s equivalent: below 1.1 × the 70 m/s loaded minimum.
+            var ap = new AutopilotSession();
+            AircraftState s = At(altitude: 8000f, speed: 100f);
+            ap.SetLateral(LateralHold.Level, s);
+            Assert.Equal(ApDisengage.Slow, ap.Step(s, Hands(), LoadedMinimum, Dt).Disengaged);
+        }
+
+        [Fact]
         public void GearDownHighUpDoesNotDisengage()
         {
             var ap = new AutopilotSession();

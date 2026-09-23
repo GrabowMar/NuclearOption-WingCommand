@@ -180,7 +180,7 @@ namespace WingCommand
                 playerThrottle = a.GetInputs().throttle;
                 haveState = true;
             }
-            if (!Session.Engaged) pipeline.Track(last, lastApplied, profile);
+            // The session asks for a reseed on every mode change; the next postfix seeds from the applied inputs.
             return true;
         }
 
