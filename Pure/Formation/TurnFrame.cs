@@ -34,11 +34,12 @@ namespace WingCommand
         public static float Reach(float right, float aft, float up) => (float)Math.Sqrt(right * right + aft * aft + up * up);
 
         /// <summary>World offset of a slot from a leader flying along <paramref name="velocity"/>.
-        /// <paramref name="track"/> is used when the velocity is (near) vertical.</summary>
+        /// <paramref name="track"/> is used when the horizontal velocity is below the track-hold speed (vertical
+        /// flight, a hover).</summary>
         public static Vec3 Offset(Vec3 velocity, Vec3 track, float bankDeg, float right, float aft, float up, float w)
         {
             Vec3 t = velocity.Horizontal;
-            t = t.SqrLength > 1f ? t.Normalized : track;
+            t = t.Length > LeaderEstimator.TrackHoldSpeed ? t.Normalized : track;
             Vec3 c = Vec3.Cross(Vec3.Up, t);
             if (w <= 0f) return c * right - t * aft + Vec3.Up * up;
 
@@ -78,7 +79,7 @@ namespace WingCommand
             LeaderEstimate d = leader;
             Vec3 horizontal = leader.Vel.Horizontal;
             float speed = horizontal.Length;
-            if (speed < 1f)
+            if (speed <= LeaderEstimator.TrackHoldSpeed)
             {
                 d.Pos = leader.Pos - leader.Vel * seconds;
                 return d;

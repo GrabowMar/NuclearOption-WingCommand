@@ -99,6 +99,28 @@ namespace WingCommand.PureTests
         }
 
         [Fact]
+        public void HoveringLeaderKeepsItsFacingAsTheTrack()
+        {
+            // A hovering helicopter drifting sideways at 3 m/s: the wing's frame follows its nose, not the drift.
+            var estimator = new LeaderEstimator();
+            LeaderSample hover = Straight();
+            hover.Vel = new Vec3(3f, 0f, 0f);
+            hover.Fwd = Vec3.Forward;
+            hover.CanHover = true;
+            LeaderEstimate e = estimator.Update(hover, Dt);
+            Assert.True((e.Track - Vec3.Forward).Length < 1e-4f, $"track {e.Track}");
+        }
+
+        [Fact]
+        public void HoverCapableLeaderFliesAtAnySpeed()
+        {
+            LeaderSample hover = Straight(0f);
+            hover.CanHover = true;
+            Assert.True(new LeaderEstimator().Update(hover, Dt).Flying);
+            Assert.False(new LeaderEstimator().Update(Straight(0f), Dt).Flying);
+        }
+
+        [Fact]
         public void TrackKeepsItsLastValidHeadingInVerticalFlight()
         {
             var estimator = new LeaderEstimator();

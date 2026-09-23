@@ -26,6 +26,14 @@ namespace WingCommand.PureTests
         }
 
         [Fact]
+        public void SlotsOfASlowLeaderFollowItsTrackNotItsDrift()
+        {
+            // Drifting east at 3 m/s while facing north: "right" is east, not south.
+            Vec3 offset = TurnFrame.Offset(new Vec3(3f, 0f, 0f), Vec3.Forward, 0f, 40f, 0f, 0f, 0f);
+            Assert.True((offset - new Vec3(40f, 0f, 0f)).Length < 1e-3f, $"offset {offset}");
+        }
+
+        [Fact]
         public void RollFollowIsFullOnlyForFingertipSlotsAndZeroFromFortyFiveMetres()
         {
             Assert.Equal(1f, TurnFrame.RollFollowWeight(10f, -1f));

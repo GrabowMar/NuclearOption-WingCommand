@@ -14,6 +14,11 @@ namespace WingCommand
         public bool Airborne;
         /// <summary>A player leader gets the faster filters (0.12 s, 360°/s).</summary>
         public bool IsPlayer;
+        /// <summary>The leader's nose (unit, world; zero = unknown): the wing's frame below
+        /// <see cref="LeaderEstimator.TrackHoldSpeed"/>, where the velocity no longer says which way it faces.</summary>
+        public Vec3 Fwd;
+        /// <summary>A helicopter leader flies at any speed, hovering included.</summary>
+        public bool CanHover;
     }
 #pragma warning restore CS0649
 
@@ -40,6 +45,8 @@ namespace WingCommand
     {
         public static float AccelTau = 0.25f, PlayerAccelTau = 0.12f, JerkLimit = 40f;
         public static float BankRateLimit = 180f, PlayerBankRateLimit = 360f, MinFlyingSpeed = 25f;
+        /// <summary>Below this horizontal speed the track is the leader's nose, not its (drifting) velocity.</summary>
+        public static float TrackHoldSpeed = 5f;
 
         private Vec3 lastVel, filtered, acc, track = Vec3.Forward;
         private float bank, turnRate;
@@ -81,8 +88,10 @@ namespace WingCommand
                 Estimate.TurnAccel = (turnRate - previousRate) / dt;
             }
             lastVel = s.Vel;
-            Vec3 horizontal = s.Vel.Horizontal;
-            if (horizontal.SqrLength > 1f) track = horizontal.Normalized;
+            Vec3 horizontal = s.Vel.Horizontal, nose = s.Fwd.Horizontal;
+            if (horizontal.Length > TrackHoldSpeed) track = horizontal.Normalized;
+            else if (nose.SqrLength > 0.25f) track = nose.Normalized;
+            else if (horizontal.SqrLength > 1f) track = horizontal.Normalized;
 
             float d = Math.Max(0f, dt + latency);
             Estimate.Pos = s.Pos + s.Vel * d + acc * (0.5f * d * d);
@@ -91,7 +100,7 @@ namespace WingCommand
             Estimate.Track = track;
             Estimate.BankDeg = bank;
             Estimate.TurnRate = turnRate;
-            Estimate.Flying = s.Airborne && s.Vel.Length >= MinFlyingSpeed;
+            Estimate.Flying = s.Airborne && (s.CanHover || s.Vel.Length >= MinFlyingSpeed);
             return Estimate;
         }
 
