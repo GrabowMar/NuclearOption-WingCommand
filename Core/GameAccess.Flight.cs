@@ -1,4 +1,5 @@
 using System;
+using System.Reflection;
 using HarmonyLib;
 using UnityEngine;
 
@@ -14,11 +15,16 @@ namespace WingCommand
         private static AccessTools.FieldRef<Aircraft, Vector3> windRef;
         private static AccessTools.FieldRef<PilotBaseState, Pilot> statePilotRef;
         private static AccessTools.FieldRef<PilotPlayerState, float> pilotStrengthRef;
+        // Private nested types (HeloControlsFilter.HeloFlyByWire, Autopilot.HoverController): plain FieldInfo, read once
+        // per aircraft when its profile is derived.
+        private static FieldInfo heloFbwField, heloMaxAngularVelField, heloGLimitField, hoverControllerField, hoverThrottleField;
 
         public static bool FlyByWireAvailable { get; private set; }
         public static bool FbwGateAvailable { get; private set; }
         public static bool WindAvailable { get; private set; }
         public static bool PilotStateAvailable { get; private set; }
+        public static bool HeloFlyByWireAvailable { get; private set; }
+        public static bool HoverThrottleAvailable { get; private set; }
 
         public static void InitialiseFlight()
         {
@@ -54,6 +60,27 @@ namespace WingCommand
             }
             try
             {
+                heloFbwField = Required(typeof(HeloControlsFilter), "heloFlyByWire");
+                heloMaxAngularVelField = Required(heloFbwField.FieldType, "maxAngularVel");
+                heloGLimitField = Required(heloFbwField.FieldType, "gLimit");
+                HeloFlyByWireAvailable = true;
+            }
+            catch (Exception e)
+            {
+                Plugin.Logger.LogWarning("Helicopter fly-by-wire unreadable (" + e.Message + "); rotary profiles use defaults.");
+            }
+            try
+            {
+                hoverControllerField = Required(typeof(Autopilot), "hoverController");
+                hoverThrottleField = Required(hoverControllerField.FieldType, "hoverThrottle");
+                HoverThrottleAvailable = true;
+            }
+            catch (Exception e)
+            {
+                Plugin.Logger.LogWarning("Hover throttle unreadable (" + e.Message + "); rotary hover trim starts at 0.5.");
+            }
+            try
+            {
                 statePilotRef = Field<PilotBaseState, Pilot>("pilot");
                 pilotStrengthRef = Field<PilotPlayerState, float>("pilotStrength");
                 PilotStateAvailable = true;
@@ -65,6 +92,33 @@ namespace WingCommand
         }
 
         public static Vector3 WindOf(Aircraft a) => WindAvailable ? windRef(a) : Vector3.zero;
+
+        /// <summary>A helicopter's fly-by-wire rate limits (rad/s: x pitch, y yaw, z roll) and its g limit.</summary>
+        public static bool TryReadHeloFlyByWire(Aircraft a, out Vector3 maxAngularVel, out float gLimit)
+        {
+            maxAngularVel = Vector3.zero;
+            gLimit = 0f;
+            if (!HeloFlyByWireAvailable || !(a.GetControlsFilter() is HeloControlsFilter filter)) return false;
+            object fbw = heloFbwField.GetValue(filter);
+            if (fbw == null) return false;
+            maxAngularVel = (Vector3)heloMaxAngularVelField.GetValue(fbw);
+            gLimit = (float)heloGLimitField.GetValue(fbw);
+            return true;
+        }
+
+        /// <summary>The collective the aircraft's own autopilot hovers at (0.5 when unknown or implausible).</summary>
+        public static bool TryReadHoverThrottle(Aircraft a, out float hoverThrottle)
+        {
+            hoverThrottle = 0f;
+            Autopilot autopilot = HoverThrottleAvailable ? a.autopilot : null;
+            object controller = autopilot != null ? hoverControllerField.GetValue(autopilot) : null;
+            if (controller == null) return false;
+            hoverThrottle = (float)hoverThrottleField.GetValue(controller);
+            return hoverThrottle > 0.05f && hoverThrottle < 0.95f;
+        }
+
+        private static FieldInfo Required(Type type, string name) =>
+            AccessTools.Field(type, name) ?? throw new MissingFieldException(type.Name, name);
 
         public static bool TryReadFlyByWire(Aircraft a, out float maxRollAngularVel, out float gLimit, out float cornerSpeed)
         {
