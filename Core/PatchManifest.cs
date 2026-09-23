@@ -13,12 +13,22 @@ namespace WingCommand
     {
         internal static readonly Type[] PatchTypes =
         {
+            typeof(WingMenuActionPatches),
+            typeof(WingRadialMenuPatches),
+            typeof(WingRadialMenuPatches.AwakePatch),
             typeof(PlayerAutopilotPatches),
         };
 
         /// <summary>"DeclaringType.Method" names that must be patched after <see cref="Apply"/>.</summary>
         internal static readonly string[] Expected =
         {
+            "RadialMenuAction.AllowedOnAircraft",
+            "RadialMenuAction.TriggerAction",
+            "RadialMenuAction.Flash",
+            "RadialMenuMain.SetupMain",
+            "RadialMenuMain.OpenMenu",
+            "RadialMenuMain.OnDestroy",
+            "SceneSingleton`1.Awake",
             "PilotPlayerState.PlayerAxisControls",
             "PilotPlayerState.PlayerThrottleAxis1Controls",
         };

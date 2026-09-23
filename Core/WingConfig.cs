@@ -19,6 +19,17 @@ namespace WingCommand
         public ConfigEntry<SpacingPreset> DefaultSpacing { get; }
         public ConfigEntry<int> MaxWingmen { get; }
         public ConfigEntry<string> CallAirframe { get; }
+        public ConfigEntry<KeyboardShortcut> KeyCallWingman { get; }
+        public ConfigEntry<KeyboardShortcut> KeyFormUp { get; }
+        public ConfigEntry<KeyboardShortcut> KeyNextShape { get; }
+        public ConfigEntry<KeyboardShortcut> KeyNextSpacing { get; }
+        public ConfigEntry<KeyboardShortcut> KeyDismiss { get; }
+        public ConfigEntry<KeyboardShortcut> KeyApLevel { get; }
+        public ConfigEntry<KeyboardShortcut> KeyApHeading { get; }
+        public ConfigEntry<KeyboardShortcut> KeyApAltitude { get; }
+        public ConfigEntry<KeyboardShortcut> KeyApVerticalSpeed { get; }
+        public ConfigEntry<KeyboardShortcut> KeyApSpeed { get; }
+        public ConfigEntry<KeyboardShortcut> KeyApOff { get; }
         public ConfigEntry<bool> VerboseLogging { get; }
         public ConfigEntry<bool> DevTools { get; }
 
@@ -47,6 +58,18 @@ namespace WingCommand
                 "Airframe to call, by unit name (for example FS-20). Empty calls your own type. Fixed-wing only in this build.",
                 null, new ConfigurationManagerAttributes { Order = 87 }));
 
+            KeyCallWingman = Key(c, "CallWingman", "Call one wingman (Wing/CallAirframe, or your type).", 50);
+            KeyFormUp = Key(c, "FormUp", "Every wingman rejoins now.", 49);
+            KeyNextShape = Key(c, "NextShape", "Next formation shape in the family.", 48);
+            KeyNextSpacing = Key(c, "NextSpacing", "Next spacing preset (Close, Standard, Open, Spread).", 47);
+            KeyDismiss = Key(c, "Dismiss", "Release every wingman to the game's AI.", 46);
+            KeyApLevel = Key(c, "AutopilotLevel", "Autopilot: wings level.", 45);
+            KeyApHeading = Key(c, "AutopilotHeading", "Autopilot: hold the current heading.", 44);
+            KeyApAltitude = Key(c, "AutopilotAltitude", "Autopilot: hold the current altitude.", 43);
+            KeyApVerticalSpeed = Key(c, "AutopilotVerticalSpeed", "Autopilot: hold the current vertical speed.", 42);
+            KeyApSpeed = Key(c, "AutopilotSpeed", "Autopilot: toggle speed hold at the current speed.", 41);
+            KeyApOff = Key(c, "AutopilotOff", "Autopilot: all holds off.", 40);
+
             DevTools = c.Bind("Debug", "DevTools", false, new ConfigDescription(
                 "Enable developer tools: debug overlay, telemetry recorder, step tests and calibration.",
                 null, new ConfigurationManagerAttributes { IsAdvanced = true, Order = 70 }));
@@ -68,6 +91,10 @@ namespace WingCommand
 
             Directory.CreateDirectory(DataRoot);
         }
+
+        private static ConfigEntry<KeyboardShortcut> Key(ConfigFile c, string name, string what, int order) =>
+            c.Bind("Keys", name, KeyboardShortcut.Empty, new ConfigDescription(what + " Unbound by default.", null,
+                new ConfigurationManagerAttributes { Order = order }));
 
         /// <summary>Move a pre-1.0 settings file aside once, then reload the now-empty file so orphaned
         /// 0.9 keys and values cannot leak into 1.0.</summary>

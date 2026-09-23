@@ -52,7 +52,6 @@
   <!-- Files not yet ported to the 1.0 architecture. Each names the milestone that restores it.
        Release builds of a non-prerelease version must have an empty quarantine. -->
   <ItemGroup Label="Quarantine">
-    <Quarantine Include="Ui\WingMenuAction.cs" Milestone="M1" />
     <Quarantine Include="Economy\WingLoadoutBook.cs" Milestone="M3" />
     <Quarantine Include="Combat\CombatFacade.cs" Milestone="M5" />
     <Quarantine Include="Combat\SplashSalvo.cs" Milestone="M5" />
@@ -100,12 +99,11 @@
     <Quarantine Include="Ui\MapCommandLayer.cs" Milestone="M4" />
     <Quarantine Include="Ui\TacticalMapOverlay.cs" Milestone="M4" />
     <Quarantine Include="Ui\WingDebugActions.cs" Milestone="M7" />
-    <Quarantine Include="Ui\WingHud.cs" Milestone="M1" />
-    <Quarantine Include="Ui\WingHudTint.cs" Milestone="M1" />
+    <Quarantine Include="Ui\WingHud.cs" Milestone="M7" />
+    <Quarantine Include="Ui\WingHudTint.cs" Milestone="M7" />
     <Quarantine Include="Ui\WingMapTint.cs" Milestone="M4" />
     <Quarantine Include="Ui\WingMarkers.cs" Milestone="M4" />
-    <Quarantine Include="Ui\WingRadialMenu.cs" Milestone="M1" />
-    <Quarantine Include="Ui\WingRadialOverlay.cs" Milestone="M1" />
+    <Quarantine Include="Ui\WingRadialOverlay.cs" Milestone="M7" />
     <Quarantine Include="Ui\WmcScreen.Groups.cs" Milestone="M4" />
     <Quarantine Include="Ui\WmcScreen.RouteNodes.cs" Milestone="M4" />
     <Quarantine Include="Ui\WmcScreen.Tactical.cs" Milestone="M4" />

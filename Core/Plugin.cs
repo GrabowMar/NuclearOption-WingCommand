@@ -62,6 +62,7 @@ namespace WingCommand
             runtime.Register(new WingService());
             runtime.Register(new SpawnService());
             runtime.Register(new PlayerAutopilot());
+            runtime.Register(new WingHotkeys());
 
             Logger.LogInfo($"{PluginName} {PluginVersion}-{PluginPrerelease} loaded. " +
                 $"mvid={typeof(Plugin).Assembly.ManifestModule.ModuleVersionId}");
