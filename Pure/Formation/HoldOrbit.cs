@@ -7,7 +7,7 @@ namespace WingCommand
     /// join is a smooth turn. Holds sit 500 m above the leader plus 100 m per slot number.</summary>
     internal struct HoldOrbit
     {
-        public const float BankDeg = 30f, LeadDeg = 30f, BaseHeight = 500f, SlotHeight = 100f;
+        public static float BankDeg = 30f, LeadDeg = 30f, BaseHeight = 500f, SlotHeight = 100f;
 
         public Vec3 Center;
         public float Radius, Speed;

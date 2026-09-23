@@ -38,8 +38,8 @@ namespace WingCommand
     /// control latency.</summary>
     internal sealed class LeaderEstimator
     {
-        public const float AccelTau = 0.25f, PlayerAccelTau = 0.12f, JerkLimit = 40f;
-        public const float BankRateLimit = 180f, PlayerBankRateLimit = 360f, MinFlyingSpeed = 25f;
+        public static float AccelTau = 0.25f, PlayerAccelTau = 0.12f, JerkLimit = 40f;
+        public static float BankRateLimit = 180f, PlayerBankRateLimit = 360f, MinFlyingSpeed = 25f;
 
         private Vec3 lastVel, filtered, acc, track = Vec3.Forward;
         private float bank, turnRate;

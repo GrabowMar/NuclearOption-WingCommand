@@ -9,9 +9,9 @@ namespace WingCommand
     /// Holds per-aircraft state (GCAS latch, last command), so there is one instance per aircraft.</summary>
     internal sealed class ConstraintChain
     {
-        public const float GcasTrigger = 1.5f, GcasRelease = 3f;
-        public const float BankFloorDeg = 60f, BankRangeDeg = 25f;
-        public const float NzSlew = 3f;
+        public static float GcasTrigger = 1.5f, GcasRelease = 3f;
+        public static float BankFloorDeg = 60f, BankRangeDeg = 25f;
+        public static float NzSlew = 3f;
 
         private bool gcas;
         private float lastBank, lastNz;

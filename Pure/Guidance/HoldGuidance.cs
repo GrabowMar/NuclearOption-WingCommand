@@ -26,10 +26,10 @@ namespace WingCommand
     /// </summary>
     internal static class HoldGuidance
     {
-        public const float HeadingGain = 0.5f;
-        public const float AltitudeGain = 0.2f;
-        public const float CaptureG = 0.3f;
-        public const float VerticalTau = 2f, SpeedTau = 5f;
+        public static float HeadingGain = 0.5f;
+        public static float AltitudeGain = 0.2f;
+        public static float CaptureG = 0.3f;
+        public static float VerticalTau = 2f, SpeedTau = 5f;
 
         public static GuidanceCommand Evaluate(in HoldSpec h, in AircraftState s, AirframeProfile p)
         {

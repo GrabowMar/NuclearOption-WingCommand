@@ -20,8 +20,8 @@ namespace WingCommand
     /// leader-relative, so position, velocity and acceleration stay consistent and precise at map scale.</summary>
     internal static class TurnFrame
     {
-        public const float RollFollowNear = 15f, RollFollowFar = 45f;
-        public const float DiffStep = 0.1f;
+        public static float RollFollowNear = 15f, RollFollowFar = 45f;
+        public static float DiffStep = 0.1f;
 
         /// <summary>Roll-follow weight for a slot <paramref name="distanceM"/> from the leader (3-D offset length);
         /// an override ≥ 0 from the shape's data wins.</summary>
@@ -63,7 +63,7 @@ namespace WingCommand
             float right, float aft, float up, float w)
         {
             LeaderEstimate at = aft != 0f ? Delayed(leader, aft / Math.Max(50f, leader.Vel.Length)) : leader;
-            const float h = DiffStep;
+            float h = DiffStep;
             Vec3 back = Relative(at, -h, frameBankDeg, frameBankRateDps, right, up, w);
             Vec3 now = Relative(at, 0f, frameBankDeg, frameBankRateDps, right, up, w);
             Vec3 ahead = Relative(at, h, frameBankDeg, frameBankRateDps, right, up, w);

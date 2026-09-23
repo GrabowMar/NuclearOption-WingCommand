@@ -17,10 +17,10 @@ namespace WingCommand
     /// owner flies.</summary>
     internal sealed class FixedWingController
     {
-        public const float RollStickSlew = 4f, PitchStickSlew = 3f, ThrottleSlew = 1f;
-        public const float AirbrakeEngageError = -3f, AirbrakeReleaseError = -1.5f, AirbrakeEngageSeconds = 0.5f;
-        public const float AirbrakeMinOnSeconds = 1f;
-        public const float ThrottleFloor = 0.01f, DryThrottleMax = 0.89f;
+        public static float RollStickSlew = 4f, PitchStickSlew = 3f, ThrottleSlew = 1f;
+        public static float AirbrakeEngageError = -3f, AirbrakeReleaseError = -1.5f, AirbrakeEngageSeconds = 0.5f;
+        public static float AirbrakeMinOnSeconds = 1f;
+        public static float ThrottleFloor = 0.01f, DryThrottleMax = 0.89f;
 
         private readonly Pidf roll = new Pidf { MaxRate = RollStickSlew };
         private readonly Pidf pitch = new Pidf { MaxRate = PitchStickSlew };

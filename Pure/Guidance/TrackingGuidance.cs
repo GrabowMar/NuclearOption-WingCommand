@@ -11,12 +11,12 @@ namespace WingCommand
     /// commanded speed (blended in from ~45°, continuous through 90° and beyond).</summary>
     internal static class TrackingGuidance
     {
-        public const float CatchUpMargin = 5f;
-        public const float CatchUpCap = 80f;
-        public const float NearOvertakeCap = 25f;
-        public const float NearSpacings = 3f;
-        public const float CrossTrackMaxDeg = 45f;
-        public const float TurnBlendStartDeg = 20f, TurnBlendFullDeg = 60f;
+        public static float CatchUpMargin = 5f;
+        public static float CatchUpCap = 80f;
+        public static float NearOvertakeCap = 25f;
+        public static float NearSpacings = 3f;
+        public static float CrossTrackMaxDeg = 45f;
+        public static float TurnBlendStartDeg = 20f, TurnBlendFullDeg = 60f;
 
         public static GuidanceCommand Evaluate(in FlightIntent intent, in AircraftState s, AirframeProfile p)
         {

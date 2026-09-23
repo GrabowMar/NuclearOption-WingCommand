@@ -27,11 +27,11 @@ namespace WingCommand
     /// rejoin.</summary>
     internal sealed class RejoinPlanner
     {
-        public const float LaneStep = 30f, LaneClearance = 5f, LaneCapture = 10f, PreSlotLow = 20f;
-        public const float SigmaNear = 1f, SigmaFar = 2f, SigmaTauDown = 0.7f, SigmaTauUp = 2.5f;
-        public const float InSlotFraction = 0.3f, AdvancedSigma = 0.95f, StaggerDeadlockSeconds = 30f;
-        public const float BehindEnterSeconds = 120f, BehindExitSeconds = 60f, BehindPersistSeconds = 10f;
-        public const float InterceptHorizon = 1000f;
+        public static float LaneStep = 30f, LaneClearance = 5f, LaneCapture = 10f, PreSlotLow = 20f;
+        public static float SigmaNear = 1f, SigmaFar = 2f, SigmaTauDown = 0.7f, SigmaTauUp = 2.5f;
+        public static float InSlotFraction = 0.3f, AdvancedSigma = 0.95f, StaggerDeadlockSeconds = 30f;
+        public static float BehindEnterSeconds = 120f, BehindExitSeconds = 60f, BehindPersistSeconds = 10f;
+        public static float InterceptHorizon = 1000f;
 
         private float sigmaPre, sigmaSlot, waited;
         private bool primed, behind;

@@ -10,7 +10,7 @@ namespace WingCommand
     internal static class AccelMapping
     {
         /// <summary>Below this lift (in g) bank direction is meaningless; the previous bank is held.</summary>
-        public const float MinLiftForBank = 0.2f;
+        public static float MinLiftForBank = 0.2f;
 
         public static AttitudeCommand Map(in GuidanceCommand cmd, Vec3 velocity, float previousBankDeg)
         {

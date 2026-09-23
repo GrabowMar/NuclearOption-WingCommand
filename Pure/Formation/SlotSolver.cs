@@ -39,10 +39,10 @@ namespace WingCommand
     /// Members beyond the definition's slots trail its last slot.</summary>
     internal sealed class SlotSolver
     {
-        public const float SpeedMargin = 5f, CompressOmega = 2.4f, RollSwingMax = 20f;
-        public const float CrossoverTriggerDeg = 60f, CrossoverSeconds = 8f, RearmLevelSeconds = 20f;
-        public const float LevelTurnRate = 0.02f;
-        public const float HistoryBlendStart = 0.5f, HistoryBlendFull = 1.5f;
+        public static float SpeedMargin = 5f, CompressOmega = 2.4f, RollSwingMax = 20f;
+        public static float CrossoverTriggerDeg = 60f, CrossoverSeconds = 8f, RearmLevelSeconds = 20f;
+        public static float LevelTurnRate = 0.02f;
+        public static float HistoryBlendStart = 0.5f, HistoryBlendFull = 1.5f;
 
         private const int N = FormationCatalog.MaxSlots;
         private float compress = 1f, compressRate;

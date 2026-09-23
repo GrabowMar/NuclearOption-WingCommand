@@ -43,7 +43,7 @@ namespace WingCommand
     /// Members read the resulting <see cref="WingFrame"/>, so their order does not matter.</summary>
     internal sealed class FormationWing
     {
-        public const float EstablishedFraction = 0.3f, EstablishedSeconds = 2f;
+        public static float EstablishedFraction = 0.3f, EstablishedSeconds = 2f;
         private const int N = FormationCatalog.MaxSlots;
 
         public readonly LeaderEstimator Estimator = new LeaderEstimator();

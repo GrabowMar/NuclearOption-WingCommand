@@ -23,8 +23,8 @@ namespace WingCommand
     /// at most 28 for eight aircraft.</summary>
     internal sealed class CollisionBias
     {
-        public const float Horizon = 8f, EmergencyHorizon = 2f, BiasG = 0.5f, EmergencyG = 2f, FilterTau = 0.4f;
-        public const float Margin = 15f, SafeMargin = 10f, SpacingFraction = 0.35f;
+        public static float Horizon = 8f, EmergencyHorizon = 2f, BiasG = 0.5f, EmergencyG = 2f, FilterTau = 0.4f;
+        public static float Margin = 15f, SafeMargin = 10f, SpacingFraction = 0.35f;
 
         private readonly Vec3[] raw;
         public readonly Vec3[] Bias;

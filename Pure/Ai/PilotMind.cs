@@ -20,10 +20,10 @@ namespace WingCommand
     /// Persistence timers run every tick; decisions are taken every 0.2 s.</summary>
     internal sealed class PilotMind
     {
-        public const float DecisionPeriod = 0.2f, MinDwell = 2f;
-        public const float CaptureSigma = 0.99f, CaptureSeconds = 3f;
-        public const float LostSlotSpacings = 2.5f, LostSlotSeconds = 2f;
-        public const float SlowMargin = 15f, FastMargin = 30f, LeaderSpeedSeconds = 3f;
+        public static float DecisionPeriod = 0.2f, MinDwell = 2f;
+        public static float CaptureSigma = 0.99f, CaptureSeconds = 3f;
+        public static float LostSlotSpacings = 2.5f, LostSlotSeconds = 2f;
+        public static float SlowMargin = 15f, FastMargin = 30f, LeaderSpeedSeconds = 3f;
 
         private Persistence captured, lostSlot, slow, fast;
         private float sinceDecision;
