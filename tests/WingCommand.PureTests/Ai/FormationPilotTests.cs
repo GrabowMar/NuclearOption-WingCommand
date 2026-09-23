@@ -80,7 +80,7 @@ namespace WingCommand.PureTests
             var rig = new Rig();
             for (int i = 0; i < 3; i++)
                 rig.Step(memberPos: rig.LeaderPos + new Vec3(-80f, -1850f, -80f), memberVel: new Vec3(0f, -60f, 190f), floorY: 0f);
-            Assert.True(rig.Pilot.Pipeline.Constraints.GcasActive);
+            Assert.True(rig.Pilot.Pipeline.GcasActive);
             Assert.Equal(1, rig.Events.CountOf(WingEventKind.GcasActivated, 0));
         }
 

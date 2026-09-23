@@ -4,17 +4,23 @@ namespace WingCommand
     /// attitude-stage constraints → inner loops. Guidance is computed by the caller (tracking or hold).
     /// The engine and the FlightSim run this same class. One instance per aircraft for its lifetime.
     /// <para>It keeps its own copy of the airframe profile whose roll rate is the authority learned in flight
-    /// (<see cref="RollAuthority"/>), so the controller, the authority slew and GCAS all use what the aircraft
+    /// (<see cref="RateAuthority"/>), so the controller, the authority slew and GCAS all use what the aircraft
     /// actually does.</para></summary>
-    internal sealed class FixedWingPipeline
+    internal sealed class FixedWingPipeline : IFlightPipeline
     {
         public readonly FixedWingController Controller = new FixedWingController();
         public readonly ConstraintChain Constraints = new ConstraintChain();
-        public readonly RollAuthority Roll = new RollAuthority();
-        public BindingReport Report;
-        public AttitudeCommand LastAttitude;
+        public readonly RateAuthority Roll = new RateAuthority();
+        private BindingReport report;
         private float lastBankCmd, lastRollStick;
         private AirframeProfile source, effective;
+
+        public BindingReport Report => report;
+        public AttitudeCommand LastAttitude { get; private set; }
+        public bool GcasActive => Constraints.GcasActive;
+
+        public GuidanceCommand Guide(in FlightIntent intent, in AircraftState s, AirframeProfile p) =>
+            TrackingGuidance.Evaluate(intent, s, p);
 
         public ControlOutput Step(in GuidanceCommand guidance, in AircraftState s, in LimitContext ctx,
             AirframeProfile p, float dt)
@@ -23,11 +29,11 @@ namespace WingCommand
             Roll.Update(lastRollStick, s.P, dt);
             e.RollRateMaxDps = Roll.RateDps;
 
-            Report = default;
+            report = default;
             GuidanceCommand g = guidance;
-            Constraints.ApplyAccel(ref g, s, ctx, e, ref Report);
+            Constraints.ApplyAccel(ref g, s, ctx, e, ref report);
             AttitudeCommand a = AccelMapping.Map(g, s.Vel, lastBankCmd);
-            Constraints.ApplyAttitude(ref a, s, ctx, e, dt, ref Report);
+            Constraints.ApplyAttitude(ref a, s, ctx, e, dt, ref report);
             lastBankCmd = a.BankDeg;
             LastAttitude = a;
             ControlOutput o = Controller.Step(a, s, e, dt);

@@ -30,7 +30,7 @@ namespace WingCommand
         public float StallSpeed = 55f, CornerSpeed = 170f, MaxSpeed = 300f, MilSpeed = 255f, RefAirspeed = 200f;
         public float CruiseThrottle = 0.6f;
         public float GLimit = 9f, NegativeGLimit = 3f;
-        /// <summary>Seed for the in-flight roll authority (<see cref="RollAuthority"/>) and its upper bound: the FBW
+        /// <summary>Seed for the in-flight roll authority (<see cref="RateAuthority"/>) and its upper bound: the FBW
         /// commands 0.5·maxRollAngularVel, capped at <see cref="RollSeedCapDps"/>. Each pipeline replaces it with
         /// the learned full-stick roll rate.</summary>
         public float RollRateMaxDps = 120f;
@@ -46,9 +46,11 @@ namespace WingCommand
         public bool ForceAutoAimFallback;
 #pragma warning restore CS0649
 
-        /// <summary>Loaded minimum speed: 1 g stall speed scaled by √n with a 20% margin.</summary>
-        public float MinimumSpeed(float loadFactor) =>
-            StallSpeed * 1.2f * (float)Math.Sqrt(Math.Max(1f, loadFactor));
+        /// <summary>Loaded minimum speed: 1 g stall speed scaled by √n with a 20% margin. A helicopter has none, so
+        /// the loaded-minimum logic (leader slow, speed floors) never fires for it.</summary>
+        public float MinimumSpeed(float loadFactor) => Class == AirframeClass.Rotary
+            ? 0f
+            : StallSpeed * 1.2f * (float)Math.Sqrt(Math.Max(1f, loadFactor));
 
         /// <summary>Load factor the wing can generate at this airspeed (n = 1 at StallSpeed).</summary>
         public float LiftLimitedG(float airspeed)

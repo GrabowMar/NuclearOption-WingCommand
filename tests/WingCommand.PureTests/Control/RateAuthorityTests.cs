@@ -2,12 +2,12 @@ using Xunit;
 
 namespace WingCommand.PureTests
 {
-    public class RollAuthorityTests
+    public class RateAuthorityTests
     {
         private const float Dt = 1f / 60f;
 
         /// <summary>Fly <paramref name="seconds"/> of a plant whose roll rate follows G·stick through a 0.2 s lag.</summary>
-        private static float Fly(RollAuthority r, float trueDps, float stick, float seconds, float rate = 0f)
+        private static float Fly(RateAuthority r, float trueDps, float stick, float seconds, float rate = 0f)
         {
             for (float t = 0f; t < seconds; t += Dt)
             {
@@ -20,7 +20,7 @@ namespace WingCommand.PureTests
         [Fact]
         public void LearnsTheRateAFullStickGivesFromSteadyRolling()
         {
-            var r = new RollAuthority();
+            var r = new RateAuthority();
             r.Reset(286f);
             Fly(r, 95f, 0.5f, 15f);
             Assert.InRange(r.RateDps, 90f, 100f);
@@ -29,7 +29,7 @@ namespace WingCommand.PureTests
         [Fact]
         public void LearnsWhileTheStickKeepsMoving()
         {
-            var r = new RollAuthority();
+            var r = new RateAuthority();
             r.Reset(286f);
             float rate = 0f;
             for (int k = 0; k < 20; k++) rate = Fly(r, 95f, k % 2 == 0 ? 0.6f : -0.6f, 1.5f, rate);
@@ -39,7 +39,7 @@ namespace WingCommand.PureTests
         [Fact]
         public void IgnoresTicksWithTheStickNearCentre()
         {
-            var r = new RollAuthority();
+            var r = new RateAuthority();
             r.Reset(100f);
             for (int i = 0; i < 600; i++) r.Update(0.05f, 30f, Dt);
             Assert.Equal(100f, r.RateDps);
@@ -48,7 +48,7 @@ namespace WingCommand.PureTests
         [Fact]
         public void IgnoresRatesAgainstTheStick()
         {
-            var r = new RollAuthority();
+            var r = new RateAuthority();
             r.Reset(100f);
             for (int i = 0; i < 600; i++) r.Update(0.5f, -20f, Dt);
             Assert.Equal(100f, r.RateDps);
@@ -57,14 +57,14 @@ namespace WingCommand.PureTests
         [Fact]
         public void StaysBetweenTheFloorAndAMultipleOfTheSeed()
         {
-            var high = new RollAuthority();
+            var high = new RateAuthority();
             high.Reset(100f);
             for (int i = 0; i < 3000; i++) high.Update(1f, 1000f, Dt);
-            var low = new RollAuthority();
+            var low = new RateAuthority();
             low.Reset(100f);
             for (int i = 0; i < 3000; i++) low.Update(1f, 1f, Dt);
-            Assert.Equal(RollAuthority.CeilingFactor * 100f, high.RateDps, 3);
-            Assert.Equal(RollAuthority.FloorDps, low.RateDps, 3);
+            Assert.Equal(RateAuthority.CeilingFactor * 100f, high.RateDps, 3);
+            Assert.Equal(RateAuthority.FloorDps, low.RateDps, 3);
         }
 
         [Fact]
@@ -89,7 +89,7 @@ namespace WingCommand.PureTests
         [Fact]
         public void ResetSeedsTheEstimate()
         {
-            var r = new RollAuthority();
+            var r = new RateAuthority();
             r.Reset(120f);
             Fly(r, 60f, 1f, 10f);
             r.Reset(150f);

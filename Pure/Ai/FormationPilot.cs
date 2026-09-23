@@ -13,7 +13,7 @@ namespace WingCommand
     /// and nothing resets on a behaviour change.</summary>
     internal sealed class FormationPilot
     {
-        public readonly FixedWingPipeline Pipeline = new FixedWingPipeline();
+        public readonly IFlightPipeline Pipeline;
         public readonly RejoinPlanner Rejoin = new RejoinPlanner();
         public readonly PilotMind Mind = new PilotMind();
         /// <summary>Slot index; the engine reassigns it when a member ahead of it is lost.</summary>
@@ -27,7 +27,11 @@ namespace WingCommand
         private HoldOrbit orbit;
         private bool gcasWas, emergencyWas;
 
-        public FormationPilot(int slot) => Slot = slot;
+        public FormationPilot(int slot, AirframeClass cls = AirframeClass.FixedWing)
+        {
+            Slot = slot;
+            Pipeline = FlightStack.NewPipeline(cls);
+        }
 
         /// <summary>Seed every loop from the aircraft (spawn, handover from native flight).</summary>
         public void Track(in AircraftState s, in ControlOutput applied, AirframeProfile p) => Pipeline.Track(s, applied, p);
@@ -83,7 +87,7 @@ namespace WingCommand
                 Spacing = spacing,
                 TerrainClearance = Clearance,
             };
-            GuidanceCommand guidance = LastGuidance = TrackingGuidance.Evaluate(LastIntent, s, p);
+            GuidanceCommand guidance = LastGuidance = Pipeline.Guide(LastIntent, s, p);
             var ctx = new LimitContext
             {
                 FloorY = frame.FloorY, NearFloorY = frame.NearFloorY[Slot], HasNearFloor = frame.HasNearFloor[Slot],
@@ -91,7 +95,7 @@ namespace WingCommand
             };
             LastOutput = Pipeline.Step(guidance, s, ctx, p, dt);
 
-            bool gcas = Pipeline.Constraints.GcasActive;
+            bool gcas = Pipeline.GcasActive;
             if (gcas && !gcasWas) Log(events, time, WingEventKind.GcasActivated);
             gcasWas = gcas;
             bool emergency = frame.Emergency[Slot];
