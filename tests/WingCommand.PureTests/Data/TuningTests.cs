@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Reflection;
 using Xunit;
 
@@ -66,6 +67,27 @@ namespace WingCommand.PureTests
                 foreach (FieldInfo f in t.GetFields(BindingFlags.Public | BindingFlags.Static))
                     Assert.False(f.IsLiteral && f.FieldType == typeof(float), $"{t.Name}.{f.Name} is const; make it static");
         }
+
+        [Fact]
+        public void EveryTypeWithStaticParametersIsRegisteredForTuning()
+        {
+            // A new controller whose gains are public statics but not in Tuning.Types cannot be tuned from data.
+            var unregistered = new List<string>();
+            foreach (Type t in typeof(Tuning).Assembly.GetTypes())
+            {
+                if (t.Namespace != "WingCommand" || Array.IndexOf(Tuning.Types, t) >= 0 || Array.IndexOf(NotAiParameters, t.Name) >= 0) continue;
+                foreach (FieldInfo f in t.GetFields(BindingFlags.Public | BindingFlags.Static))
+                    if (!f.IsInitOnly && !f.IsLiteral && (f.FieldType == typeof(float) || f.FieldType == typeof(int) || f.FieldType == typeof(bool)))
+                    {
+                        unregistered.Add(t.Name);
+                        break;
+                    }
+            }
+            Assert.True(unregistered.Count == 0, "not in Tuning.Types: " + string.Join(", ", unregistered));
+        }
+
+        /// <summary>Types whose public statics are not flight-AI parameters (kept systems with their own settings).</summary>
+        private static readonly string[] NotAiParameters = { };
 
         [Fact]
         public void ProductionExportRoundTrips() => Assert.Empty(Tuning.Apply(Tuning.Export(Tuning.Types), Tuning.Types));
