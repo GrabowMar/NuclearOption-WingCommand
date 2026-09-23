@@ -59,7 +59,9 @@ namespace WingCommand
             var go = new GameObject("WingCommandRuntime") { hideFlags = HideFlags.HideAndDontSave };
             DontDestroyOnLoad(go);
             WingRuntime runtime = go.AddComponent<WingRuntime>();
-            runtime.Register(new WingService());
+            var wing = new WingService();
+            wing.RosterChanged += () => Interop.WingMembership.Publish(wing.Members);
+            runtime.Register(wing);
             runtime.Register(new SpawnService());
             runtime.Register(new PlayerAutopilot());
             runtime.Register(new WingHotkeys());

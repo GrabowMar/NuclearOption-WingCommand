@@ -67,7 +67,7 @@
     <Quarantine Include="Economy\WingAirfield.cs" Milestone="M3" />
     <Quarantine Include="Economy\WingLaunchFields.cs" Milestone="M3" />
     <Quarantine Include="Economy\WingLoadoutTemplates.cs" Milestone="M3" />
-    <Quarantine Include="Interop\WingSquad.cs" Milestone="M1" />
+    <Quarantine Include="Interop\WingSquad.cs" Milestone="M3" />
     <Quarantine Include="Personnel\WingCustomPilots.cs" Milestone="M3" />
     <Quarantine Include="Personnel\WingKillCredit.cs" Milestone="M3" />
     <Quarantine Include="Personnel\WingPilotLoss.cs" Milestone="M3" />
@@ -87,7 +87,6 @@
     <Quarantine Include="Combat\SlotEngagement.cs" Milestone="M5" />
     <Quarantine Include="Comms\WingComms.cs" Milestone="M4" />
     <Quarantine Include="Core\WingCommandSelection.cs" Milestone="M4" />
-    <Quarantine Include="Interop\WingInterop.cs" Milestone="M1" />
     <Quarantine Include="Personnel\PersonnelFacade.cs" Milestone="M3" />
     <Quarantine Include="Personnel\WingDeparture.cs" Milestone="M3" />
     <Quarantine Include="Personnel\WingDepartureChatter.cs" Milestone="M3" />

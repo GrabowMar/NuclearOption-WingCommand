@@ -1,4 +1,6 @@
 using System;
+using System.Collections.Generic;
+using NOAvionics;
 
 namespace WingCommand.Interop
 {
@@ -12,8 +14,8 @@ namespace WingCommand.Interop
     }
 
     /// <summary>The recruited wing's live roster, keyed by
-    /// <c>Aircraft.persistentID.GetHashCode()</c>. Backed by the in-process wing — see
-    /// <see cref="Publish"/>. Boscali Summer reads this so its theater doctrine and sortie
+    /// <c>Aircraft.persistentID.GetHashCode()</c>. Backed by the in-process wing (WingService
+    /// calls <see cref="Publish"/> on every roster change). Boscali Summer reads this so its theater doctrine and sortie
     /// tally leave the player's wingmen alone.</summary>
     public static class WingMembership
     {
@@ -32,22 +34,26 @@ namespace WingCommand.Interop
             return false;
         }
 
-        /// <summary>Refresh the published roster from the live wing. Called each frame by
-        /// <see cref="WingCommandManager"/>. Reuses the buffer and only grows it.</summary>
-        internal static void Publish(WingRegistry wing)
+        /// <summary>Refresh the published roster from the live wing on every roster change. Also publishes it on
+        /// the cross-mod PresenceBoard (<c>NO.Wing.ids.v1</c>, <c>NO.Wing.guid.v1</c>) for plugins without a
+        /// reflection link.</summary>
+        internal static void Publish(List<WingMember> members)
         {
-            int n = wing?.Count ?? 0;
-            if (n == 0) { count = 0; return; }
+            int n = members?.Count ?? 0;
             if (ids.Length < n) ids = new int[n];
             for (int i = 0; i < n; i++)
             {
-                Aircraft aircraft = wing.Members[i]?.Aircraft;
+                Aircraft aircraft = members[i].Aircraft;
                 ids[i] = aircraft == null ? 0 : aircraft.persistentID.GetHashCode();
             }
             count = n;
+            var snapshot = new int[n];
+            Array.Copy(ids, snapshot, n);
+            PresenceBoard.SetString(PresenceBoard.WingGuid, WingPresence.Guid);
+            PresenceBoard.SetInts(PresenceBoard.WingMemberIds, snapshot);
         }
 
-        internal static void Clear() => count = 0;
+        internal static void Clear() => Publish(null);
     }
 
     /// <summary>Wing Command's tactical-map mode. A companion plugin defers its own armed map
