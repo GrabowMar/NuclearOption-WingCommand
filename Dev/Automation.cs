@@ -67,8 +67,9 @@ namespace WingCommand
             return Ok("time", wing.MissionTime);
         }
 
-        /// <summary>Formation quality since the last <see cref="ResetMetrics"/>. <c>-1</c> marks a value never observed
-        /// (no member captured, no pair, no sample).</summary>
+        /// <summary>Formation quality since the last <see cref="ResetMetrics"/>. A value never observed (no member
+        /// captured, no pair, no sample) is NaN, which the harness writes as null, so a check on it fails as missing
+        /// instead of passing on a sentinel.</summary>
         public static Dictionary<string, object> Metrics(Dictionary<string, object> args)
         {
             WingService wing = WingService.Instance;
@@ -81,12 +82,12 @@ namespace WingCommand
                 { "window_s", s.WindowSeconds },
                 { "members", s.Members },
                 { "captured", s.CapturedMembers },
-                { "mean_capture_s", s.MeanCaptureSeconds },
+                { "mean_capture_s", Observed(s.MeanCaptureSeconds) },
                 { "slot_rms_m", s.SlotRmsM },
                 { "slot_max_m", s.SlotMaxM },
                 { "station_fraction", s.StationFraction },
-                { "min_separation_m", s.MinSeparationM },
-                { "min_speed_mps", s.MinSpeedMps },
+                { "min_separation_m", Observed(s.MinSeparationM) },
+                { "min_speed_mps", Observed(s.MinSpeedMps) },
                 { "gcas", s.Gcas },
                 { "collision", s.Collision },
                 { "falling_behind", s.FallingBehind },
@@ -126,6 +127,8 @@ namespace WingCommand
             Plugin.Logger.LogInfo($"[Automation] dismissed {n} wingmen");
             return Ok("released", n);
         }
+
+        private static float Observed(float value) => value < 0f ? float.NaN : value;
 
         private static AircraftDefinition FindType(string name)
         {

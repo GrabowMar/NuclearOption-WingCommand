@@ -1,0 +1,31 @@
+{
+  "name": "wc-m1-reversals-fs20",
+  "mods": ["wingcommand"],
+  "timeout_s": 420,
+  "ops": [
+    {"op": "spawn", "id": "lead", "type": "FS-20 Vortex", "at": {"map": [0, 0]}, "altitude": 2500, "speed": 200, "heading": 0},
+    {"op": "fly", "id": "lead", "program": [{"level": 150}, {"reversals": {"bank": 60, "period": 8, "count": 8}}, {"level": 30}]},
+    {"op": "wait", "seconds": 2},
+    {"op": "call", "method": "WingCommand.Automation.FormOn", "store": "form",
+     "args": {"lead": "lead", "count": 3, "shape": "finger-four-right", "spacing": "Close"}},
+    {"op": "wait", "seconds": 3},
+    {"op": "call", "method": "WingCommand.Automation.Members"},
+    {"op": "record", "ids": ["*"], "hz": 5},
+    {"op": "wait", "seconds": 150},
+    {"op": "call", "method": "WingCommand.Automation.Metrics", "store": "join"},
+    {"op": "call", "method": "WingCommand.Automation.ResetMetrics"},
+    {"op": "mark", "text": "reversals"},
+    {"op": "wait", "seconds": 64},
+    {"op": "call", "method": "WingCommand.Automation.Metrics", "store": "reversals"},
+    {"op": "end"}
+  ],
+  "checks": [
+    {"check": "status_ok"},
+    {"check": "alive", "ids": ["*"]},
+    {"check": "result_above", "path": "join.captured", "min": 3},
+    {"check": "result_below", "path": "reversals.slot_rms_m", "max": 22.5},
+    {"check": "result_below", "path": "reversals.collision", "max": 0},
+    {"check": "result_below", "path": "reversals.gcas", "max": 0},
+    {"check": "result_below", "path": "reversals.transitions_per_member_min", "max": 1.5}
+  ]
+}

@@ -1,0 +1,28 @@
+{
+  "name": "wc-m1-slow-ci22",
+  "mods": ["wingcommand"],
+  "timeout_s": 420,
+  "ops": [
+    {"op": "spawn", "id": "lead", "type": "CI-22 Cricket", "at": {"map": [0, 0]}, "altitude": 1500, "speed": 80, "heading": 0},
+    {"op": "fly", "id": "lead", "program": [{"level": 5}, {"orbit": {"bank": 15, "seconds": 400}}]},
+    {"op": "wait", "seconds": 2},
+    {"op": "call", "method": "WingCommand.Automation.FormOn", "store": "form",
+     "args": {"lead": "lead", "count": 3, "shape": "finger-four-right", "spacing": "Standard"}},
+    {"op": "wait", "seconds": 3},
+    {"op": "call", "method": "WingCommand.Automation.Members"},
+    {"op": "record", "ids": ["*"], "hz": 5},
+    {"op": "wait", "seconds": 220},
+    {"op": "call", "method": "WingCommand.Automation.Metrics", "store": "slow"},
+    {"op": "end"}
+  ],
+  "checks": [
+    {"check": "status_ok"},
+    {"check": "alive", "ids": ["*"]},
+    {"check": "result_above", "path": "form.spawned", "min": 3},
+    {"check": "result_above", "path": "slow.captured", "min": 3},
+    {"check": "result_above", "path": "slow.min_speed_mps", "min": 45},
+    {"check": "result_above", "path": "slow.min_separation_m", "min": 15},
+    {"check": "result_below", "path": "slow.collision", "max": 0},
+    {"check": "result_below", "path": "slow.gcas", "max": 0}
+  ]
+}

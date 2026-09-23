@@ -1,0 +1,28 @@
+{
+  "name": "wc-m1-join-fs20",
+  "mods": ["wingcommand"],
+  "timeout_s": 420,
+  "ops": [
+    {"op": "spawn", "id": "lead", "type": "FS-20 Vortex", "at": {"map": [0, 0]}, "altitude": 2500, "speed": 200, "heading": 0},
+    {"op": "fly", "id": "lead", "program": [{"level": 5}, {"orbit": {"bank": 30, "seconds": 400}}]},
+    {"op": "wait", "seconds": 2},
+    {"op": "call", "method": "WingCommand.Automation.FormOn", "store": "form",
+     "args": {"lead": "lead", "count": 3, "shape": "finger-four-right", "spacing": "Standard"}},
+    {"op": "wait", "seconds": 3},
+    {"op": "call", "method": "WingCommand.Automation.Members"},
+    {"op": "record", "ids": ["*"], "hz": 5},
+    {"op": "wait", "seconds": 200},
+    {"op": "call", "method": "WingCommand.Automation.Metrics", "store": "join"},
+    {"op": "end"}
+  ],
+  "checks": [
+    {"check": "status_ok"},
+    {"check": "alive", "ids": ["*"]},
+    {"check": "result_above", "path": "form.spawned", "min": 3},
+    {"check": "result_above", "path": "join.captured", "min": 3},
+    {"check": "result_below", "path": "join.mean_capture_s", "max": 180},
+    {"check": "result_above", "path": "join.min_separation_m", "min": 20},
+    {"check": "result_below", "path": "join.collision", "max": 0},
+    {"check": "result_below", "path": "join.gcas", "max": 0}
+  ]
+}
