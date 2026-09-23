@@ -16,6 +16,7 @@ namespace WingCommand
             {
                 case BehaviourId.StationKeep: return "SLOT";
                 case BehaviourId.HoldOverhead: return "HOLD";
+                case BehaviourId.Trail: return "TRAIL";
                 default: return "JOIN";
             }
         }

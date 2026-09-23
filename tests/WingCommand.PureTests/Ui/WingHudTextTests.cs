@@ -9,6 +9,7 @@ namespace WingCommand.PureTests
         [InlineData((int)BehaviourId.Rejoin, false, "JOIN")]
         [InlineData((int)BehaviourId.StationKeep, false, "SLOT")]
         [InlineData((int)BehaviourId.HoldOverhead, false, "HOLD")]
+        [InlineData((int)BehaviourId.Trail, false, "TRAIL")]
         [InlineData((int)BehaviourId.Rejoin, true, "BEHIND")]
         public void PhaseCodes(int behaviour, bool behind, string expected) =>
             Assert.Equal(expected, WingHudText.Phase((BehaviourId)behaviour, behind));

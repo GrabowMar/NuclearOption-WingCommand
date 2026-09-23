@@ -16,6 +16,7 @@ namespace WingCommand
         public readonly IFlightPipeline Pipeline;
         public readonly RejoinPlanner Rejoin = new RejoinPlanner();
         public readonly PilotMind Mind = new PilotMind();
+        public readonly RolePolicy Roles = new RolePolicy();
         /// <summary>Slot index; the engine reassigns it when a member ahead of it is lost.</summary>
         public int Slot;
         public float Precision = 1f, Aggression = 0.5f, Clearance = 60f;
@@ -48,13 +49,18 @@ namespace WingCommand
             if (LastRejoin.FallingBehindStarted) Log(events, time, WingEventKind.FallingBehind);
             if (LastRejoin.FallingBehindCleared) Log(events, time, WingEventKind.FallingBehindCleared);
 
+            Roles.Tick(new RoleInput
+            {
+                AnchorSpeed = leader.Speed,
+                MinSpeed = p.MinimumSpeed(1f),
+                TopSpeed = p.Class == AirframeClass.Rotary ? p.CruiseSpeed : usable,
+            }, dt, out _);
             var mind = new MindInput
             {
                 Sigma = LastRejoin.Sigma,
                 SlotError = (slot.Ref.Pos - s.Pos).Length,
                 Spacing = frame.Spacing,
-                LeaderSpeed = leader.Speed,
-                LoadedMinimum = p.MinimumSpeed(1f),
+                Role = Roles.Current,
                 LeaderFlying = leader.Flying,
                 LeaderLost = frame.LeaderLost,
             };
@@ -70,7 +76,8 @@ namespace WingCommand
 
             RefState reference = LastRejoin.Ref;
             float spacing = frame.Spacing;
-            if (Mind.Current == BehaviourId.StationKeep) reference = slot.Ref;
+            // ponytail: Trail pursues the slot until the trail element (ElementPlan) gives it its own reference.
+            if (Mind.Current == BehaviourId.StationKeep || Mind.Current == BehaviourId.Trail) reference = slot.Ref;
             else if (Mind.Current == BehaviourId.HoldOverhead)
             {
                 bool anchored = !frame.LeaderLost && leader.Flying;

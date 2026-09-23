@@ -9,7 +9,7 @@ namespace WingCommand.PureTests
 
         private static MindInput Nominal(float sigma = 0f, float error = 500f) => new MindInput
         {
-            Sigma = sigma, SlotError = error, Spacing = 80f, LeaderSpeed = 200f, LoadedMinimum = 72f, LeaderFlying = true,
+            Sigma = sigma, SlotError = error, Spacing = 80f, Role = Role.Slot, LeaderFlying = true,
         };
 
         private static float RunUntilTransition(PilotMind mind, MindInput m, float maxSeconds, out TransitionReason reason)
@@ -69,44 +69,42 @@ namespace WingCommand.PureTests
         }
 
         [Fact]
-        public void SlowLeaderSendsTheMemberToHoldAndAFastOneBringsItBack()
+        public void HighCoverRoleSendsTheMemberToHoldAndTheSlotRoleBringsItBack()
         {
             var mind = new PilotMind();
-            MindInput slow = Nominal();
-            slow.LeaderSpeed = 80f;    // below 1.15 x loaded minimum 72
-            Assert.InRange(RunUntilTransition(mind, slow, 10f, out TransitionReason why), 3f, 3.25f);
+            MindInput cover = Nominal();
+            cover.Role = Role.HighCover;
+            Assert.InRange(RunUntilTransition(mind, cover, 10f, out TransitionReason why), PilotMind.MinDwell, PilotMind.MinDwell + 0.25f);
+            Assert.Equal(BehaviourId.HoldOverhead, mind.Current);
             Assert.Equal(TransitionReason.LeaderSlow, why);
-            MindInput fast = Nominal();
-            fast.LeaderSpeed = 110f;   // above 1.3 x 72
-            Assert.InRange(RunUntilTransition(mind, fast, 10f, out why), 3f, 3.25f);
+            Assert.InRange(RunUntilTransition(mind, Nominal(), 10f, out why), PilotMind.MinDwell, PilotMind.MinDwell + 0.25f);
             Assert.Equal(BehaviourId.Rejoin, mind.Current);
             Assert.Equal(TransitionReason.LeaderRecovered, why);
         }
 
         [Fact]
-        public void SlowAirframeFollowsAFlyableSlowLeader()
+        public void TrailRoleSendsTheMemberToTrailAndTheSlotRoleBringsItToRejoin()
         {
-            // In game a CI-22 wing (loaded minimum 46.9 m/s) held overhead 70–85% of the time behind a CI-22 leader
-            // climbing at ~60 m/s: an absolute +15 m/s margin is a third of a slow airframe's minimum speed.
             var mind = new PilotMind();
-            MindInput slowType = Nominal();
-            slowType.LoadedMinimum = 46.9f;
-            slowType.LeaderSpeed = 58f;
-            RunUntilTransition(mind, slowType, 10f, out _);
+            MindInput trail = Nominal();
+            trail.Role = Role.Trail;
+            RunUntilTransition(mind, trail, 10f, out TransitionReason why);
+            Assert.Equal(BehaviourId.Trail, mind.Current);
+            Assert.Equal(TransitionReason.LeaderFast, why);
+            RunUntilTransition(mind, Nominal(), 10f, out why);
             Assert.Equal(BehaviourId.Rejoin, mind.Current);
+            Assert.Equal(TransitionReason.LeaderRecovered, why);
         }
 
         [Fact]
-        public void SlowAirframeLeaderBackAtCruiseRecallsTheHold()
+        public void HeldMemberRejoinsAHelicopterLeaderThatIsFlyingAgainAtAnySpeed()
         {
+            // A rotary member's role stays Slot behind a hover; once the leader flies again it rejoins.
             var mind = new PilotMind();
-            MindInput held = Nominal();
-            held.LoadedMinimum = 46.9f;
-            held.LeaderSpeed = 45f;
-            RunUntilTransition(mind, held, 10f, out _);
-            Assert.Equal(BehaviourId.HoldOverhead, mind.Current);
-            held.LeaderSpeed = 66f;
-            RunUntilTransition(mind, held, 10f, out TransitionReason why);
+            MindInput lost = Nominal();
+            lost.LeaderLost = true;
+            mind.Tick(lost, Dt, out _, out _);
+            RunUntilTransition(mind, Nominal(), 10f, out TransitionReason why);
             Assert.Equal(BehaviourId.Rejoin, mind.Current);
             Assert.Equal(TransitionReason.LeaderRecovered, why);
         }
