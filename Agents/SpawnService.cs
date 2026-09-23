@@ -26,6 +26,24 @@ namespace WingCommand
         private readonly HashSet<Aircraft> settling = new HashSet<Aircraft>();
         private readonly Dictionary<Aircraft, float> pendingSince = new Dictionary<Aircraft, float>();
         public static float AdoptTimeoutSeconds = 10f, FallbackRotaryCruise = 60f;
+        /// <summary>A carrier hangar spawns after its door sequence; give up waiting after this.</summary>
+        public static float HangarSpawnTimeoutSeconds = 30f, ServicePointSpread = 25f;
+
+        /// <summary>A field launch in flight: the hangar it was asked of (null for a service-point spawn), the aircraft
+        /// once it exists, and where its ground pilot starts.</summary>
+        private sealed class GroundLaunch
+        {
+            public Hangar Hangar;
+            public GameObject Before;
+            public Aircraft Aircraft;
+            public FieldTraffic Traffic;
+            public Pose Spawn;
+            public int HangarIndex = -1;
+            public float Since;
+            public bool Settling;
+        }
+
+        private readonly List<GroundLaunch> groundPending = new List<GroundLaunch>();
 
         public SpawnService() => Instance = this;
 
@@ -39,6 +57,7 @@ namespace WingCommand
 
         public void FixedTick(float dt)
         {
+            StepGroundLaunches();
             for (int i = pending.Count - 1; i >= 0; i--)
             {
                 Aircraft a = pending[i];
@@ -187,9 +206,161 @@ namespace WingCommand
             }).MinimumSpeed(1f);
         }
 
+        /// <summary>Launch up to <paramref name="n"/> wingmen of <paramref name="definition"/> from <paramref name="airbase"/>
+        /// (spec M3 §3): each through a free hangar that can spawn the type, as the game does (doors, supply), or, on a
+        /// field without one, at its service points. They start on the ground and taxi out. Returns how many.</summary>
+        public int LaunchFromField(Airbase airbase, AircraftDefinition definition, int n)
+        {
+            WingService wing = WingService.Instance;
+            Aircraft player = wing?.Player;
+            if (wing?.Selection == null || airbase == null || definition == null || player == null)
+            {
+                WingToast.Show("No field to launch from");
+                return 0;
+            }
+            if (!player.IsServer)
+            {
+                WingToast.Show("Only the host can call wingmen");
+                return 0;
+            }
+            FactionHQ hq = airbase.CurrentHQ != null ? airbase.CurrentHQ : player.NetworkHQ;
+            if (airbase.CurrentHQ != null && airbase.CurrentHQ != player.NetworkHQ)
+            {
+                WingToast.Show(airbase.name + " is not a friendly field");
+                return 0;
+            }
+            GameObject prefab = definition.unitPrefab;
+            Aircraft template = prefab != null ? prefab.GetComponent<Aircraft>() : null;
+            if (template == null || template.pilots == null || template.pilots.Length == 0 || template.pilots[0] == null ||
+                template.pilots[0].pilotType == Pilot.PilotType.VTOL)
+            {
+                WingToast.Show("VTOL aircraft cannot fly formation");
+                return 0;
+            }
+            FieldTraffic traffic = FieldRegistry.For(airbase);
+            if (traffic == null)
+            {
+                WingToast.Show(airbase.name + " has no runway to take off from");
+                return 0;
+            }
+            n = Math.Min(n, WingService.MaxMembers - wing.Members.Count - pending.Count - groundPending.Count);
+            if (n <= 0)
+            {
+                WingToast.Show("Wing is full");
+                return 0;
+            }
+            var used = new HashSet<Hangar>();
+            int launched = 0;
+            for (int k = 0; k < n; k++)
+            {
+                try
+                {
+                    GroundLaunch launch = FromHangar(airbase, definition, traffic, used) ?? FromServicePoint(definition, traffic, hq, player, k);
+                    if (launch == null) break;
+                    launch.Since = Time.time;
+                    groundPending.Add(launch);
+                    launched++;
+                }
+                catch (Exception e)
+                {
+                    Plugin.Logger.LogError("[Spawn] field launch failed: " + e);
+                    break;
+                }
+            }
+            WingToast.Show(launched > 0
+                ? launched + " × " + definition.unitName + " launching from " + airbase.name
+                : airbase.name + " could not launch " + definition.unitName);
+            return launched;
+        }
+
+        private static GroundLaunch FromHangar(Airbase airbase, AircraftDefinition definition, FieldTraffic traffic, HashSet<Hangar> used)
+        {
+            if (airbase.hangars == null || !GameAccess.HangarSpawnAvailable) return null;
+            for (int i = 0; i < airbase.hangars.Count; i++)
+            {
+                Hangar h = airbase.hangars[i];
+                if (h == null || used.Contains(h) || h.Disabled || !h.Available || !h.CanSpawnAircraft(definition)) continue;
+                GameObject before = GameAccess.GetHangarSpawnedObject(h);
+                if (!h.TrySpawnAircraft(null, definition, default, null, 1f).Allowed) continue;
+                used.Add(h);
+                Transform t = h.GetSpawnTransform();
+                return new GroundLaunch
+                {
+                    Hangar = h, Before = before, Traffic = traffic, HangarIndex = i,
+                    Spawn = new Pose(t.GlobalPosition().ToVec3(), t.forward.ToVec3()),
+                };
+            }
+            return null;
+        }
+
+        /// <summary>A field without a usable hangar: the aircraft appears at a service point (several side by side), at rest.</summary>
+        private static GroundLaunch FromServicePoint(AircraftDefinition definition, FieldTraffic traffic, FactionHQ hq, Aircraft player, int k)
+        {
+            Pose[] points = traffic.Field.ServicePoints;
+            if (points.Length == 0) return null;
+            Pose at = points[k % points.Length];
+            Vec3 fwd = at.Fwd.Horizontal.SqrLength > 1e-4f ? at.Fwd.Horizontal.Normalized : Vec3.Forward;
+            Vec3 side = Vec3.Cross(Vec3.Up, fwd);
+            Vec3 pos = at.Pos + side * (ServicePointSpread * (k / points.Length)) + Vec3.Up * definition.spawnOffset.y;
+            Quaternion rotation = Quaternion.LookRotation(fwd.ToUnity()) * Quaternion.Euler(definition.restRotation);
+            Aircraft a = NetworkSceneSingleton<Spawner>.i.SpawnAircraft(null, definition.unitPrefab, null, 1f, default, pos.ToGlobal(),
+                rotation, Vector3.zero, null, hq, "WingCommand_" + Guid.NewGuid().ToString("N").Substring(0, 8),
+                player.skill, player.bravery);
+            return a == null ? null : new GroundLaunch { Aircraft = a, Traffic = traffic, Spawn = new Pose(pos, fwd) };
+        }
+
+        /// <summary>Hangar spawns appear in the hangar's private spawnedObject (at once, or after a carrier's doors); every
+        /// launch is adopted one physics tick after the game initialised its AI, before native taxi can act.</summary>
+        private void StepGroundLaunches()
+        {
+            for (int i = groundPending.Count - 1; i >= 0; i--)
+            {
+                GroundLaunch g = groundPending[i];
+                if (g.Aircraft == null)
+                {
+                    GameObject spawned = g.Hangar != null ? GameAccess.GetHangarSpawnedObject(g.Hangar) : null;
+                    if (spawned != null && !ReferenceEquals(spawned, g.Before)) g.Aircraft = spawned.GetComponent<Aircraft>();
+                    if (g.Aircraft == null)
+                    {
+                        if (Time.time - g.Since > HangarSpawnTimeoutSeconds)
+                        {
+                            Plugin.Logger.LogWarning("[Spawn] a hangar never produced its aircraft; launch dropped");
+                            groundPending.RemoveAt(i);
+                        }
+                        continue;
+                    }
+                    g.Since = Time.time;
+                }
+                if (g.Aircraft == null || g.Aircraft.disabled)
+                {
+                    groundPending.RemoveAt(i);
+                    continue;
+                }
+                Pilot p = g.Aircraft.pilots != null && g.Aircraft.pilots.Length > 0 ? g.Aircraft.pilots[0] : null;
+                if (p == null || p.currentState == null)
+                {
+                    if (Time.time - g.Since > AdoptTimeoutSeconds)
+                    {
+                        Plugin.Logger.LogWarning("[Spawn] " + g.Aircraft.definition.unitName + " never initialised its AI; not adopted");
+                        groundPending.RemoveAt(i);
+                    }
+                    continue;
+                }
+                if (!g.Settling)
+                {
+                    g.Settling = true;
+                    continue;
+                }
+                groundPending.RemoveAt(i);
+                if (WingService.Instance == null || !WingService.Instance.AdoptGround(g.Aircraft, g.Traffic, g.Spawn, g.HangarIndex))
+                    Plugin.Logger.LogWarning("[Spawn] " + g.Aircraft.definition.unitName + " could not join the wing and keeps the game's AI");
+            }
+        }
+
         private void Clear()
         {
             pending.Clear();
+            groundPending.Clear();
             settling.Clear();
             pendingSince.Clear();
         }

@@ -51,6 +51,13 @@ namespace WingCommand
                 n.HeloGLimit = heloG;
             }
             if (GameAccess.TryReadHoverThrottle(a, out float hover)) n.HoverCollective = hover;
+            if (GameAccess.TryReadLandingGear(a, out float steerLock, out float steerRate, out float wheelbase))
+            {
+                n.SteerLockDeg = steerLock;
+                n.SteerRateDps = steerRate;
+                n.WheelbaseM = wheelbase;
+            }
+            if (def != null) n.SpanM = def.width;
             return n;
         }
     }

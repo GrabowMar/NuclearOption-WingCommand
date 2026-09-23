@@ -22,7 +22,8 @@ namespace WingCommand
             aircraft = pilot.aircraft;
             controlInputs = aircraft.GetInputs();
             aircraft.SetFlightAssist(true);
-            if (aircraft.gearState != LandingGear.GearState.LockedRetracted) aircraft.SetGear(false);
+            // On the ground (a field launch) the gear stays down until the climb-out.
+            if (!member.OnGround && aircraft.gearState != LandingGear.GearState.LockedRetracted) aircraft.SetGear(false);
             switch (member.Profile.Class)
             {
                 case AirframeClass.Rotary:

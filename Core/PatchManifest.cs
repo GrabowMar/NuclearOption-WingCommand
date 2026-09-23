@@ -17,6 +17,8 @@ namespace WingCommand
             typeof(WingRadialMenuPatches),
             typeof(WingRadialMenuPatches.AwakePatch),
             typeof(PlayerAutopilotPatches),
+            typeof(RunwayLockPatch),
+            typeof(EjectGuard),
         };
 
         /// <summary>"DeclaringType.Method" names that must be patched after <see cref="Apply"/>.</summary>
@@ -31,6 +33,8 @@ namespace WingCommand
             "SceneSingleton`1.Awake",
             "PilotPlayerState.PlayerAxisControls",
             "PilotPlayerState.PlayerThrottleAxis1Controls",
+            "Runway.IsAvailableForTakeoff",
+            "Aircraft.StartEjectionSequence",
         };
 
         internal static void Apply(Harmony harmony, ManualLogSource log)

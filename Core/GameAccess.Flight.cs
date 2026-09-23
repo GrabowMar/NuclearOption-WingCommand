@@ -81,6 +81,18 @@ namespace WingCommand
             }
             try
             {
+                gearSteeringField = Required(typeof(LandingGear), "steering", typeof(bool));
+                gearBrakedField = Required(typeof(LandingGear), "braked", typeof(bool));
+                gearLockField = Required(typeof(LandingGear), "steeringLock", typeof(float));
+                gearRateField = Required(typeof(LandingGear), "steeringSpeed", typeof(float));
+                LandingGearAvailable = true;
+            }
+            catch (Exception e)
+            {
+                Plugin.Logger.LogWarning("Landing gear unreadable (" + e.Message + "); ground steering uses defaults.");
+            }
+            try
+            {
                 statePilotRef = Field<PilotBaseState, Pilot>("pilot");
                 pilotStrengthRef = Field<PilotPlayerState, float>("pilotStrength");
                 PilotStateAvailable = true;
@@ -92,6 +104,35 @@ namespace WingCommand
         }
 
         public static Vector3 WindOf(Aircraft a) => WindAvailable ? windRef(a) : Vector3.zero;
+
+        private static FieldInfo gearSteeringField, gearBrakedField, gearLockField, gearRateField;
+        public static bool LandingGearAvailable { get; private set; }
+
+        /// <summary>The steering leg's lock (degrees, signed) and slew rate, and the wheelbase: the distance along the
+        /// aircraft's nose axis from the steering leg to the mean of the braked legs (native §D9).</summary>
+        public static bool TryReadLandingGear(Aircraft a, out float lockDeg, out float rateDps, out float wheelbase)
+        {
+            lockDeg = rateDps = wheelbase = 0f;
+            if (!LandingGearAvailable) return false;
+            LandingGear steer = null;
+            float brakedZ = 0f;
+            int braked = 0;
+            foreach (LandingGear g in a.GetComponentsInChildren<LandingGear>(true))
+            {
+                float z = a.transform.InverseTransformPoint(g.transform.position).z;
+                if (steer == null && (bool)gearSteeringField.GetValue(g)) steer = g;
+                if ((bool)gearBrakedField.GetValue(g))
+                {
+                    brakedZ += z;
+                    braked++;
+                }
+            }
+            if (steer == null) return false;
+            lockDeg = (float)gearLockField.GetValue(steer);
+            rateDps = (float)gearRateField.GetValue(steer);
+            if (braked > 0) wheelbase = Math.Abs(a.transform.InverseTransformPoint(steer.transform.position).z - brakedZ / braked);
+            return true;
+        }
 
         /// <summary>A helicopter's fly-by-wire rate limits (rad/s: x pitch, y yaw, z roll) and its g limit.</summary>
         public static bool TryReadHeloFlyByWire(Aircraft a, out Vector3 maxAngularVel, out float gLimit)

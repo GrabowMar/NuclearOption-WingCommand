@@ -60,6 +60,7 @@ namespace WingCommand
         public void Activate()
         {
             Members.Clear();
+            FieldRegistry.Clear();
             Events = new WingEventRing();
             floor = new TerrainFloor();
             LeaderUnit = null;
@@ -89,6 +90,7 @@ namespace WingCommand
         public void Deactivate()
         {
             Members.Clear();
+            FieldRegistry.Clear();
             LeaderUnit = null;
             Player = null;
             Anchor = null;
@@ -133,6 +135,9 @@ namespace WingCommand
             return true;
         }
 
+        /// <summary>Gear comes up this high on the climb-out.</summary>
+        public static float GearUpHeight = 20f;
+
         public void StepMember(WingMember m)
         {
             if (Wing == null || m.Released) return;
@@ -141,6 +146,11 @@ namespace WingCommand
             try
             {
                 WingFrame frame = FrameFor(Time.fixedTime, dt);
+                if (m.OnGround)
+                {
+                    StepGround(m, dt);
+                    return;
+                }
                 m.NoFbwSeconds = m.Last.FbwActive ? 0f : m.NoFbwSeconds + dt;
                 if (m.NoFbwSeconds >= NoFbwReleaseSeconds)
                 {
@@ -157,6 +167,19 @@ namespace WingCommand
             }
             catch (Exception e)
             {
+                if (m.OnGround)
+                {
+                    // Native taxi ejects stuck pilots: a faulting member on the ground holds its brakes instead.
+                    ControlWriter.Fly(m.Aircraft, new ControlOutput { Brake = 1f }, m.Profile.Class);
+                    if (!m.Faults.Record(missionTime))
+                    {
+                        Plugin.LogVerbose($"[Wing] #{m.Number} ground step failed: {e.Message}");
+                        return;
+                    }
+                    Plugin.Logger.LogError($"[Wing] #{m.Number} failed three times in 10 s on the ground; releasing it: {e}");
+                    Release(m, null);
+                    return;
+                }
                 if (m.Faults.Record(missionTime))
                 {
                     Plugin.Logger.LogError($"[Wing] #{m.Number} failed three times in 10 s; handing it to the game's AI: {e}");
@@ -170,12 +193,56 @@ namespace WingCommand
             }
         }
 
+        /// <summary>A launched member on the ground: its ground pilot flies it (taxi, lineup, roll, climb-out), a pending
+        /// relocation moves it, the gear comes up on the climb-out, and when it is done the formation brain takes over
+        /// bumplessly and rejoins.</summary>
+        private void StepGround(WingMember m, float dt)
+        {
+            m.NoFbwSeconds = 0f;
+            ControlOutput o = m.Ground.Step(m.Last, m.Profile, m.Brain.Pipeline, missionTime, dt, Events, m.Brain.Slot);
+            ControlWriter.Fly(m.Aircraft, o, m.Profile.Class);
+            if (m.Ground.TakeRelocation(out Pose to)) SafeRelocate.Move(m.Aircraft, to);
+            bool climbing = m.Ground.Phase == GroundPhase.ClimbOut || m.Ground.Done;
+            if (climbing && m.Last.RadarAlt > GearUpHeight && m.Aircraft.gearState != LandingGear.GearState.LockedRetracted)
+                m.Aircraft.SetGear(false);
+            if (!m.Ground.Done) return;
+            m.Brain.Track(m.Last, o, m.Profile);
+            m.Brain.FormUp(missionTime, Events);
+            Plugin.Logger.LogInfo($"[Wing] #{m.Number} airborne from the field; rejoining");
+        }
+
+        /// <summary>Adopt an aircraft launched on a field: it starts on the ground under a <see cref="GroundPilot"/>.</summary>
+        public bool AdoptGround(Aircraft a, FieldTraffic field, Pose spawn, int hangarIndex)
+        {
+            if (!Adopt(a)) return false;
+            WingMember m = Members[Members.Count - 1];
+            m.Ground = new GroundPilot(m.Id, field, m.Profile.Class, spawn, hangarIndex);
+            if (m.Profile.Class == AirframeClass.FixedWing)
+            {
+                field.Departures.Expect(m.Id);
+                int abreast = LineupPlanner.Abreast(field.Runway.Width, m.Profile.SpanM);
+                field.Departures.Abreast = field.Departures.Rows == 0 ? abreast : Math.Min(field.Departures.Abreast, abreast);
+            }
+            else m.Ground.RoofOverhead = Physics.Raycast(a.transform.position + Vector3.up * 3f, Vector3.up, 30f);
+            Events.Push(new WingEvent { Time = missionTime, Member = m.Brain.Slot, Kind = WingEventKind.GroundSpawned });
+            return true;
+        }
+
+        /// <summary>A member still under ground supervision whose aircraft is intact is never ejected by native checks.</summary>
+        public bool ProtectsFromEjection(Aircraft a)
+        {
+            foreach (WingMember m in Members)
+                if (ReferenceEquals(m.Aircraft, a)) return m.OnGround && !a.disabled && !m.Released;
+            return false;
+        }
+
         /// <summary>Hand the member to native AI (its combat state exists: air-starts went through
         /// SetStartingAiState). It leaves the wing at the next prune.</summary>
         public void Release(WingMember m, string why)
         {
             if (m.Released) return;
             m.Released = true;
+            m.Ground?.Leave();
             if (why != null) Plugin.Logger.LogInfo($"[Wing] #{m.Number} released to the game's AI: {why}");
             Pilot p = m.Pilot;
             PilotBaseState combat = p != null ? NativeCombatState(p) : null;
@@ -276,6 +343,7 @@ namespace WingCommand
             if (time == frameTime) return Wing.Frame;
             frameTime = time;
             frameIndex++;
+            FieldRegistry.Step(dt, this);
             int n = Members.Count;
             for (int i = 0; i < n; i++)
             {
@@ -295,6 +363,7 @@ namespace WingCommand
                     HasNearFloor = !float.IsNaN(m.NearFloorY),
                     Role = m.Brain.Roles.Current,
                     Id = m.Id,
+                    Grounded = m.OnGround,
                 };
             }
             AnchorSample leader = SampleAnchor(dt);
@@ -402,6 +471,7 @@ namespace WingCommand
                 WingMember m = Members[i];
                 if (!m.Released && m.Alive && ReferenceEquals(m.Pilot.currentState, m.State)) continue;
                 StepTest.Forget(m);
+                m.Ground?.Leave();
                 Metrics.Left(m.Id);
                 Members.RemoveAt(i);
                 changed = true;

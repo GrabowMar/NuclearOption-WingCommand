@@ -1,0 +1,22 @@
+using System.Collections.Generic;
+using HarmonyLib;
+
+namespace WingCommand
+{
+    /// <summary>The native taxi, takeoff and landing states eject pilots of aircraft they think are stuck or tilted
+    /// (native §B). A wing aircraft under ground supervision is never ejected that way: the ejection is skipped while
+    /// it is intact and its ground pilot is not done (logged once per aircraft).</summary>
+    [HarmonyPatch(typeof(Aircraft), nameof(Aircraft.StartEjectionSequence))]
+    internal static class EjectGuard
+    {
+        private static readonly HashSet<Aircraft> logged = new HashSet<Aircraft>();
+
+        private static bool Prefix(Aircraft __instance)
+        {
+            if (WingService.Instance == null || !WingService.Instance.ProtectsFromEjection(__instance)) return true;
+            if (logged.Add(__instance))
+                Plugin.Logger.LogWarning($"[Ground] blocked a native ejection of {__instance.definition.unitName} under ground supervision");
+            return false;
+        }
+    }
+}

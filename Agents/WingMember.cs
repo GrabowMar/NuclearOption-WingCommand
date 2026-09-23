@@ -11,6 +11,9 @@ namespace WingCommand
         public readonly AirframeProfile Profile;
         public readonly FaultGuard Faults = new FaultGuard();
         public WingFlightState State;
+        /// <summary>Set while the member is on the ground after a field launch (taxi, lineup, roll, climb-out); the
+        /// formation brain takes over when it is done.</summary>
+        public GroundPilot Ground;
         /// <summary>Stable for the member's life in the wing (slots renumber when a member ahead leaves).</summary>
         public int Id;
         public AircraftState Last;
@@ -27,6 +30,8 @@ namespace WingCommand
         }
 
         public int Number => Brain.Slot + 2;
+
+        public bool OnGround => Ground != null && !Ground.Done;
 
         public bool Alive => Aircraft != null && !Aircraft.disabled && Pilot != null && !Pilot.dead && !Pilot.ejected;
     }
