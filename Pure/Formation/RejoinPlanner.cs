@@ -15,7 +15,8 @@ namespace WingCommand
     /// <summary>Procedural rejoin for one member. References, in order:
     /// <list type="number">
     /// <item>A cutoff rendezvous with the pre-slot, predicted around the leader's turn, on the member's own
-    /// lane (one lane step below the leader per slot number, so rejoin paths cannot cross).</item>
+    /// lane (one lane step per slot number below the leader, or above it for a member coming from above, so
+    /// rejoin paths cannot cross and nobody descends through the leader's altitude).</item>
     /// <item>The pre-slot: 1 spacing aft, 20 m low.</item>
     /// <item>The slot.</item>
     /// </list>
@@ -34,7 +35,7 @@ namespace WingCommand
         public static float InterceptHorizon = 1000f;
 
         private float sigmaPre, sigmaSlot, waited;
-        private bool primed, behind;
+        private bool primed, behind, above;
         private Persistence behindTimer;
 
         /// <summary>Vertical distance between rejoin lanes. The pilot keeps it clear of the collision-bias radius
@@ -59,7 +60,13 @@ namespace WingCommand
                 behindTimer = default;
             }
 
-            RefState rendezvous = behind ? target : Rendezvous(s, pre, leader, LaneStepM * lane, availableSpeed);
+            // Lanes stack on the side the member comes from, so a member leaving the hold overhead never descends
+            // through the leader's altitude on its way in. Latched: above once a lane step over the leader, below
+            // again only a lane step under it.
+            if (!above && s.Pos.Y > leader.Pos.Y + LaneStepM) above = true;
+            else if (above && s.Pos.Y < leader.Pos.Y - LaneStepM) above = false;
+            float laneDepth = (above ? -1f : 1f) * LaneStepM * lane;
+            RefState rendezvous = behind ? target : Rendezvous(s, pre, leader, laneDepth, availableSpeed);
 
             float dSlot = (target.Pos - s.Pos).Length;
             float d = Math.Min((pre.Pos - s.Pos).Length, dSlot);

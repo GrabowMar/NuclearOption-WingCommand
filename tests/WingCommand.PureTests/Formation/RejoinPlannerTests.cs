@@ -43,6 +43,34 @@ namespace WingCommand.PureTests
         }
 
         [Fact]
+        public void MemberAboveTheLeaderRejoinsOnALaneAboveIt()
+        {
+            // Leaving the hold overhead, a lane below the leader would make the member descend through the leader's
+            // altitude on its way in (16.7 m from the leader in the hold-exit scenario). Lanes stack on the side the
+            // member comes from.
+            LeaderEstimate leader = Leader();
+            SlotTarget slot = Slot(leader);
+            AircraftState s = TestStates.Flying(new Vec3(-80f, 2600f, -5000f), leader.Vel);
+            RejoinOutput o = new RejoinPlanner().Step(s, slot, leader, 2, Spacing, 255f, true, Dt);
+            Assert.Equal(2000f + 2f * RejoinPlanner.LaneStep, o.Ref.Pos.Y, 2);
+        }
+
+        [Fact]
+        public void LaneSideStaysAboveUntilTheMemberIsWellBelowTheLeader()
+        {
+            LeaderEstimate leader = Leader();
+            SlotTarget slot = Slot(leader);
+            var planner = new RejoinPlanner();
+            RejoinOutput Step(float y) =>
+                planner.Step(TestStates.Flying(new Vec3(-80f, y, -5000f), leader.Vel), slot, leader, 2, Spacing, 255f, true, Dt);
+
+            Step(2600f);
+            Assert.Equal(2000f + 2f * RejoinPlanner.LaneStep, Step(2010f).Ref.Pos.Y, 2);
+            Assert.Equal(2000f + 2f * RejoinPlanner.LaneStep, Step(1980f).Ref.Pos.Y, 2);
+            Assert.Equal(2000f - 2f * RejoinPlanner.LaneStep, Step(1960f).Ref.Pos.Y, 2);
+        }
+
+        [Fact]
         public void MemberAheadOfItsPreSlotIsNotLedFurtherAhead()
         {
             // After a head-on pass the member ends up ahead of its slot: the slot must come to it, so the
