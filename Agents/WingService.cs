@@ -14,6 +14,9 @@ namespace WingCommand
     /// <item>Runtime FixedTick tracks the leader, prunes lost members, compacts slots, and probes terrain at
     /// 5 Hz.</item>
     /// <item>Members that lose their fly-by-wire for 1 s, or fault three times in 10 s, go to native AI once.</item>
+    /// <item>The leader is the anchor aircraft while one is set and alive (automation now, escort in M2), else the
+    /// local player. A dead or despawned anchor falls back to the player.</item>
+    /// <item><see cref="Metrics"/> accumulates formation quality for the automated in-game scenarios.</item>
     /// </list></summary>
     internal sealed class WingService : IWingService
     {
@@ -28,6 +31,9 @@ namespace WingCommand
         public FormationSelection Selection { get; private set; }
         public FormationWing Wing { get; private set; }
         public Aircraft Leader { get; private set; }
+        public Aircraft Anchor { get; private set; }
+        public WingMetrics Metrics { get; } = new WingMetrics();
+        public float MissionTime => missionTime;
         public double LastFrameAiMs { get; private set; }
         public event Action RosterChanged;
 
@@ -48,9 +54,11 @@ namespace WingCommand
             Events = new WingEventRing();
             floor = new TerrainFloor();
             Leader = null;
+            Anchor = null;
             frameTime = float.NaN;
             missionTime = 0f;
             eventsLogged = 0;
+            Metrics.Reset(0f);
             if (WingData.Formations.Count == 0)
             {
                 Plugin.Logger.LogError("[Wing] no valid formations loaded; the wing is disabled this mission");
@@ -70,6 +78,7 @@ namespace WingCommand
         {
             Members.Clear();
             Leader = null;
+            Anchor = null;
             RosterChanged?.Invoke();
         }
 
@@ -83,7 +92,7 @@ namespace WingCommand
         public void FixedTick(float dt)
         {
             missionTime += dt;
-            Leader = GameManager.GetLocalAircraft(out Aircraft local) ? local : null;
+            TrackLeader();
             Prune();
             if (++probeTick >= ProbeTicks)
             {
@@ -127,6 +136,9 @@ namespace WingCommand
                 if (StepTest.Fly(m, dt)) return;
                 ControlOutput o = StepTest.Adjust(m, m.Brain.Step(frame, m.Last, m.Profile, missionTime, dt, Events), dt);
                 ControlWriter.Fly(m.Aircraft, o);
+                int slot = m.Brain.Slot;
+                Metrics.Sample(slot, (frame.Slots[slot].Ref.Pos - m.Last.Pos).Length,
+                    m.Brain.Mind.Current == BehaviourId.StationKeep, m.Last.Tas, missionTime, dt);
                 if (Plugin.Settings.DevTools.Value && frameIndex % 3 == 0) TelemetryRecorder.Sample(m, frame, missionTime);
             }
             catch (Exception e)
@@ -179,6 +191,24 @@ namespace WingCommand
             ApplySelection();
         }
 
+        /// <summary>Picks a shape by id; an unknown id changes nothing and returns false.</summary>
+        public bool SetShape(string id)
+        {
+            if (Selection == null || !Selection.Select(id)) return false;
+            ApplySelection();
+            return true;
+        }
+
+        /// <summary>Forms the wing on <paramref name="a"/> instead of the player; null forms on the player again.</summary>
+        public void SetAnchor(Aircraft a)
+        {
+            Anchor = a;
+            Plugin.Logger.LogInfo(a != null
+                ? $"[Wing] forming on {a.definition.unitName} '{a.unitName}'"
+                : "[Wing] forming on the player");
+            TrackLeader();
+        }
+
         public void Dismiss()
         {
             for (int i = 0; i < Members.Count; i++) Release(Members[i], "dismissed");
@@ -213,21 +243,50 @@ namespace WingCommand
                     HasNearFloor = !float.IsNaN(m.NearFloorY),
                 };
             }
-            Wing.Update(LeaderSample(dt), inputs, n, floor.Value, Clearance, LeaderAlive ? Leader.maxRadius : 8f, dt);
+            LeaderSample leader = LeaderSample(dt);
+            SampleSeparation(leader, n);
+            Wing.Update(leader, inputs, n, floor.Value, Clearance, LeaderAlive ? Leader.maxRadius : 8f, dt);
             return Wing.Frame;
         }
 
-        private bool LeaderAlive =>
-            Leader != null && !Leader.disabled && Leader.pilots != null && Leader.pilots.Length > 0 &&
-            !Leader.pilots[0].dead && !Leader.pilots[0].ejected;
+        /// <summary>The closest pair this tick, the leader included, for <see cref="Metrics"/>.</summary>
+        private void SampleSeparation(LeaderSample leader, int n)
+        {
+            float min = float.MaxValue;
+            for (int i = 0; i < n; i++)
+            {
+                Vec3 p = inputs[i].State.Pos;
+                if (leader.Present) min = Math.Min(min, (leader.Pos - p).Length);
+                for (int j = i + 1; j < n; j++) min = Math.Min(min, (inputs[j].State.Pos - p).Length);
+            }
+            if (min < float.MaxValue) Metrics.Separation(min);
+        }
+
+        private bool LeaderAlive => Flying(Leader);
+
+        private static bool Flying(Aircraft a) =>
+            a != null && !a.disabled && a.pilots != null && a.pilots.Length > 0 && !a.pilots[0].dead && !a.pilots[0].ejected;
+
+        /// <summary>Leader = the anchor while it flies, else the local player. A lost anchor is dropped once, with a log
+        /// line, so the wing re-forms on the player.</summary>
+        private void TrackLeader()
+        {
+            if ((object)Anchor != null && !Flying(Anchor))
+            {
+                Plugin.Logger.LogInfo("[Wing] the anchor is gone; forming on the player");
+                Anchor = null;
+            }
+            Leader = Anchor != null ? Anchor : GameManager.GetLocalAircraft(out Aircraft local) ? local : null;
+        }
 
         private LeaderSample LeaderSample(float dt)
         {
-            if (!LeaderAlive) return new LeaderSample { Present = false, IsPlayer = true };
+            bool player = Anchor == null;
+            if (!LeaderAlive) return new LeaderSample { Present = false, IsPlayer = player };
             AircraftState s = leaderSensor.Read(Leader, dt);
             return new LeaderSample
             {
-                Pos = s.Pos, Vel = s.Vel, BankDeg = s.BankDeg, Present = true, Airborne = Leader.radarAlt > 1f, IsPlayer = true,
+                Pos = s.Pos, Vel = s.Vel, BankDeg = s.BankDeg, Present = true, Airborne = Leader.radarAlt > 1f, IsPlayer = player,
             };
         }
 
@@ -275,6 +334,7 @@ namespace WingCommand
             for (int i = Events.Count - (int)fresh; i < Events.Count; i++)
             {
                 WingEvent e = Events[i];
+                Metrics.Event(e.Kind);
                 Plugin.Logger.LogInfo(string.Format(CultureInfo.InvariantCulture, "[Wing] t={0:0.0} #{1} {2} {3}->{4} ({5})",
                     e.Time, e.Member + 2, e.Kind, e.From, e.To, e.Reason));
                 if (e.Kind == WingEventKind.FallingBehind) WingToast.Show($"#{e.Member + 2} falling behind");
