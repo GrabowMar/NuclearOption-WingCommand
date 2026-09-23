@@ -189,5 +189,99 @@ namespace WingCommand.FlightSim
             for (int k = 0; k < 3; k++)
                 Assert.True(wing.SlotError(k) < FormationCatalog.Standard, $"member {k + 1} ended {wing.SlotError(k):0} m off");
         }
+
+        private static int HoldEntries(WingEventRing events, int member)
+        {
+            int n = 0;
+            for (int i = 0; i < events.Count; i++)
+            {
+                WingEvent e = events[i];
+                if (e.Member == member && e.Kind == WingEventKind.BehaviourChanged && e.To == BehaviourId.HoldOverhead) n++;
+            }
+            return n;
+        }
+
+        [Fact]
+        public void LeaderDashCausesOneFallingBehindPerMemberThenARejoin()
+        {
+            // A1: the leader dashes at 300 m/s for a minute; wingmen may not use afterburner (255 m/s usable).
+            var leader = new VirtualLeader(new Vec3(0f, 3000f, 0f), 200f, 0f);
+            SimWing wing = SimWing.InSlots(leader, SimFormations.Get("finger-four-right"), FormationCatalog.Standard, 3);
+            foreach (FormationPilot pilot in wing.Pilots) pilot.AfterburnerAllowed = false;
+            for (int i = 0; i < 300 * 60; i++)
+            {
+                float t = i * Dt;
+                leader.Step(0f, Dt, t > 5f && t < 65f ? 300f : 200f, 0f);
+                wing.Step();
+            }
+            for (int k = 0; k < 3; k++)
+            {
+                Assert.Equal(1, wing.Events.CountOf(WingEventKind.FallingBehind, k));
+                Assert.Equal(1, wing.Events.CountOf(WingEventKind.FallingBehindCleared, k));
+                Assert.Equal(0, HoldEntries(wing.Events, k));
+                Assert.Equal(BehaviourId.StationKeep, wing.Pilots[k].Mind.Current);
+            }
+        }
+
+        [Fact]
+        public void LowLevelValleyWithTurnsKeepsClearanceAndAtMostOneGcasPerMember()
+        {
+            // L1: the leader flies 100 m above rolling terrain with ±30° turns every 15 s; clearance 60 m.
+            Func<float, float, float> terrain = (x, z) => 200f + 100f * (float)Math.Sin(z / 2000f) * (float)Math.Cos(x / 3000f);
+            var leader = new VirtualLeader(new Vec3(0f, terrain(0f, 0f) + 100f, 0f), 180f, 0f);
+            SimWing wing = SimWing.InSlots(leader, SimFormations.Get("finger-four-right"), FormationCatalog.Standard, 3);
+            wing.Terrain = terrain;
+            float minClearance = float.MaxValue;
+            for (int i = 0; i < 120 * 60; i++)
+            {
+                float t = i * Dt;
+                Vec3 ahead = leader.Position + leader.Velocity * 3f;
+                float target = Math.Max(terrain(leader.Position.X, leader.Position.Z), terrain(ahead.X, ahead.Z)) + 100f;
+                float gamma = Scalar.Clamp((float)Math.Atan2(target - leader.Position.Y, 3f * leader.Speed) * Scalar.Rad2Deg, -10f, 10f);
+                leader.Step((int)(t / 15f) % 2 == 0 ? 30f : -30f, Dt, 180f, gamma);
+                wing.Step();
+                for (int k = 0; k < 3; k++) minClearance = Math.Min(minClearance, wing.ClearanceOf(k));
+            }
+            Assert.True(minClearance > 0f, $"minimum clearance {minClearance:0} m");
+            for (int k = 0; k < 3; k++)
+            {
+                int events = wing.Events.CountOf(WingEventKind.GcasActivated, k);
+                Assert.True(events <= 1, $"member {k + 1}: {events} GCAS events");
+            }
+        }
+
+        [Fact]
+        public void CrossingRejoinsKeepSeparationWithABriefBias()
+        {
+            // C1: #2 (left slot) starts on the right and #3 (right slot) on the left, so their rejoins cross.
+            var leader = new VirtualLeader(new Vec3(0f, 2000f, 3000f), 200f, 0f);
+            var wing = new SimWing(leader, SimFormations.Get("finger-four-right"), FormationCatalog.Standard,
+                new[] { new Vec3(300f, 1850f, 0f), new Vec3(-300f, 1850f, 0f), new Vec3(600f, 1850f, -300f) }, 180f, 0f);
+            var biasTime = new float[3];
+            var lastError = new[] { float.MaxValue, float.MaxValue, float.MaxValue };
+            var captured = new bool[3];
+            float minSeparation = float.MaxValue;
+            for (int i = 0; i < 180 * 60; i++)
+            {
+                leader.Step(0f, Dt);
+                wing.Step();
+                minSeparation = Math.Min(minSeparation, wing.MinSeparation());
+                for (int k = 0; k < 3; k++)
+                {
+                    if (wing.Wing.Frame.Bias[k].Length > 0.05f * Scalar.G) biasTime[k] += Dt;
+                    if (wing.Pilots[k].Mind.Current == BehaviourId.StationKeep) captured[k] = true;
+                    if (i % (5 * 60) != 0 || captured[k]) continue;
+                    float error = wing.SlotError(k);
+                    Assert.True(error <= lastError[k] * 1.05f + 5f, $"member {k + 1}: slot error grew to {error:0} m at {wing.Time:0} s");
+                    lastError[k] = error;
+                }
+            }
+            Assert.True(minSeparation >= wing.SafeRadius, $"separation {minSeparation:0.0} m");
+            for (int k = 0; k < 3; k++)
+            {
+                Assert.True(biasTime[k] < 5f, $"member {k + 1}: bias active {biasTime[k]:0.0} s");
+                Assert.True(captured[k], $"member {k + 1} never captured");
+            }
+        }
     }
 }
