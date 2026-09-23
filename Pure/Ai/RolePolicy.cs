@@ -7,7 +7,8 @@ namespace WingCommand
     internal enum RoleReason : byte { None, AnchorSlow, AnchorFast, AnchorRecovered }
 
     /// <summary>The member's speed envelope against the anchor's speed. MinSpeed is the loaded minimum (0 for a
-    /// helicopter); TopSpeed is what it can sustain in formation (a jet's usable maximum, a helicopter's cruise).</summary>
+    /// helicopter); TopSpeed is what it can sustain in formation (a helicopter's cruise; 0 = never trails, as for a
+    /// jet, which flies cutoff and calls "falling behind" instead).</summary>
     internal struct RoleInput
     {
         public float AnchorSpeed, MinSpeed, TopSpeed;

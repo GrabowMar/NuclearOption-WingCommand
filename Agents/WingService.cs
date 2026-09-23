@@ -241,6 +241,7 @@ namespace WingCommand
                     Radius = m.Profile.MaxRadius,
                     NearFloorY = m.NearFloorY,
                     HasNearFloor = !float.IsNaN(m.NearFloorY),
+                    Role = m.Brain.Roles.Current,
                 };
             }
             LeaderSample leader = LeaderSample(dt);

@@ -40,6 +40,68 @@ namespace WingCommand.PureTests
             return frame;
         }
 
+        /// <summary>A leader flying north at <paramref name="speed"/> from the origin for <paramref name="seconds"/>, then
+        /// holding position; two helicopters trailing from where it started. Returns the wing.</summary>
+        private static FormationWing TrailRun(float speed, float seconds, float holdSeconds, WingMemberInput[] members,
+            Func<int, float, Role> role = null)
+        {
+            var wing = new FormationWing(FingerFour(), 80f);
+            Vec3 pos = new Vec3(0f, 2000f, 0f);
+            int ticks = (int)Math.Round((seconds + holdSeconds) / Dt);
+            for (int i = 0; i < ticks; i++)
+            {
+                float t = i * Dt;
+                float v = t < seconds ? speed : 0f;
+                pos += new Vec3(0f, 0f, v * Dt);
+                for (int k = 0; k < members.Length; k++) members[k].Role = role?.Invoke(k, t) ?? Role.Trail;
+                wing.Update(new LeaderSample { Pos = pos, Vel = new Vec3(0f, 0f, v), Present = true, Airborne = true },
+                    members, members.Length, float.NaN, 60f, 8f, Dt);
+            }
+            return wing;
+        }
+
+        private static WingMemberInput[] Helos(int n)
+        {
+            WingMemberInput[] m = Members(new Vec3[n]);
+            for (int i = 0; i < n; i++)
+            {
+                m[i].State = TestStates.Flying(new Vec3(0f, 1850f, -100f * i), new Vec3(0f, 0f, 60f));
+                m[i].Capability = new MemberCapability { MaxSpeed = 60f, MinSpeed = 0f };
+            }
+            return m;
+        }
+
+        [Fact]
+        public void TrailingMembersFlyTheAnchorsRouteOneSpacingApartBelowIt()
+        {
+            FormationWing wing = TrailRun(200f, 20f, 0f, Helos(2));
+            RefState lead = wing.Frame.TrailRef[0], next = wing.Frame.TrailRef[1];
+            Assert.InRange(lead.Pos.Z, 1150f, 1250f);                            // 20 s at 60 m/s along the route
+            Assert.Equal(80f, lead.Pos.Z - next.Pos.Z, 0);                         // one spacing behind on the route
+            Assert.Equal(2000f - FormationWing.TrailBelow, lead.Pos.Y, 1);
+            Assert.Equal(60f, lead.Vel.Z, 1);
+            Assert.True(Math.Abs(lead.Pos.X) > 1f && Math.Sign(lead.Pos.X) != Math.Sign(next.Pos.X), "staggered");
+        }
+
+        [Fact]
+        public void TrailStopsShortOfAnAnchorThatStopped()
+        {
+            FormationWing wing = TrailRun(200f, 5f, 60f, Helos(1));   // the anchor stops 1000 m north
+            Assert.Equal(1000f - FormationWing.TrailGapSpacings * 80f, wing.Frame.TrailRef[0].Pos.Z, 0);
+            Assert.Equal(0f, wing.Frame.TrailRef[0].Vel.Length, 2);
+        }
+
+        [Fact]
+        public void TheNextMemberTakesTheLeadWithoutAJump()
+        {
+            // #1 leaves the trail at 20 s; #2's reference must keep moving smoothly, not leap one spacing forward.
+            WingMemberInput[] helos = Helos(2);
+            FormationWing before = TrailRun(200f, 20f, 0f, Helos(2));
+            FormationWing after = TrailRun(200f, 20f + Dt, 0f, helos, (k, t) => k == 0 && t >= 20f ? Role.Slot : Role.Trail);
+            float step = after.Frame.TrailRef[1].Pos.Z - before.Frame.TrailRef[1].Pos.Z;
+            Assert.InRange(step, 0f, 60f * Dt + 0.01f);
+        }
+
         [Fact]
         public void WideAftSlotHangsOffTheLeadersRealPastPath()
         {

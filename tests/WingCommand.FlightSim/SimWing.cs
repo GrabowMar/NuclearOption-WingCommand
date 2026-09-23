@@ -82,6 +82,7 @@ namespace WingCommand.FlightSim
                     Radius = Profile.MaxRadius,
                     NearFloorY = Terrain == null ? 0f : NearFloor(Plants[i].Position, Plants[i].Velocity),
                     HasNearFloor = Terrain != null,
+                    Role = Pilots[i].Roles.Current,
                 };
             }
             WingFrame frame = Wing.Update(Leader.Sample(), inputs, Plants.Length, floor, Clearance, Profile.MaxRadius, Dt);

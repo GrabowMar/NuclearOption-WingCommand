@@ -53,7 +53,8 @@ namespace WingCommand
             {
                 AnchorSpeed = leader.Speed,
                 MinSpeed = p.MinimumSpeed(1f),
-                TopSpeed = p.Class == AirframeClass.Rotary ? p.CruiseSpeed : usable,
+                // Only helicopters trail; a jet that cannot keep up flies cutoff and calls "falling behind" (A1).
+                TopSpeed = p.Class == AirframeClass.Rotary ? p.CruiseSpeed : 0f,
             }, dt, out _);
             var mind = new MindInput
             {
@@ -76,8 +77,8 @@ namespace WingCommand
 
             RefState reference = LastRejoin.Ref;
             float spacing = frame.Spacing;
-            // ponytail: Trail pursues the slot until the trail element (ElementPlan) gives it its own reference.
-            if (Mind.Current == BehaviourId.StationKeep || Mind.Current == BehaviourId.Trail) reference = slot.Ref;
+            if (Mind.Current == BehaviourId.StationKeep) reference = slot.Ref;
+            else if (Mind.Current == BehaviourId.Trail) reference = frame.TrailRef[Slot];
             else if (Mind.Current == BehaviourId.HoldOverhead)
             {
                 bool anchored = !frame.LeaderLost && leader.Flying;

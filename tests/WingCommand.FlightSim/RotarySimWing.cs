@@ -65,6 +65,7 @@ namespace WingCommand.FlightSim
                     State = states[i],
                     Capability = new MemberCapability { MaxSpeed = Profile.CruiseSpeed, MinSpeed = Profile.MinimumSpeed(1f) },
                     Radius = Profile.MaxRadius,
+                    Role = Pilots[i].Roles.Current,
                 };
             }
             WingFrame frame = Wing.Update(Leader.Sample(), inputs, Plants.Length, float.NaN, 60f, Profile.MaxRadius, Dt);
