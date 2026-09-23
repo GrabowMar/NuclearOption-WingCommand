@@ -28,13 +28,14 @@ namespace WingCommand
     }
 
     /// <summary>One field's departures (spec M3 §3.4–3.5). Expected members gather at the hold-short; the group lines
-    /// up together once all have arrived (or <see cref="GatherTimeout"/> after the first), taking the runway lock (never
-    /// while a native landing is pending); rows of <see cref="Abreast"/> roll in queue order, each
+    /// up once all have arrived (or <see cref="GatherTimeout"/> after the first), taking the runway lock (never while a
+    /// native landing is pending), one member at a time in queue order as the previous clears the threshold; rows of
+    /// <see cref="Abreast"/> roll in queue order, each
     /// <see cref="RowInterval"/> after the previous; the lock is released when the last member is airborne. A member
     /// removed on the ground (lost, released) never blocks its row.</summary>
     internal sealed class DepartureSequencer
     {
-        public static float RowInterval = 10f, GatherTimeout = 90f;
+        public static float RowInterval = 10f, GatherTimeout = 90f, ClearHeight = 75f;
 
         public int Abreast = 1;
         public bool NativeLandingPending;
@@ -43,6 +44,7 @@ namespace WingCommand
         private readonly List<int> expected = new List<int>();
         private readonly List<int> queue = new List<int>();
         private readonly HashSet<int> linedUp = new HashSet<int>(), airborne = new HashSet<int>(), removed = new HashSet<int>();
+        private readonly HashSet<int> cleared = new HashSet<int>();
         private readonly Dictionary<int, float> rowRolledAt = new Dictionary<int, float>();
         private float firstArrival = float.NaN;
 
@@ -63,16 +65,24 @@ namespace WingCommand
 
         public bool MayLineUp(int owner, float time)
         {
-            if (!queue.Contains(owner)) return false;
-            if (RunwayLocked) return true;
-            if (NativeLandingPending) return false;
-            bool gathered = true;
-            foreach (int o in expected)
-                if (!removed.Contains(o) && !queue.Contains(o)) gathered = false;
-            if (!gathered && time - firstArrival < GatherTimeout) return false;
-            RunwayLocked = true;
+            int index = queue.IndexOf(owner);
+            if (index < 0) return false;
+            if (!RunwayLocked)
+            {
+                if (NativeLandingPending) return false;
+                bool gathered = true;
+                foreach (int o in expected)
+                    if (!removed.Contains(o) && !queue.Contains(o)) gathered = false;
+                if (!gathered && time - firstArrival < GatherTimeout) return false;
+                RunwayLocked = true;
+            }
+            for (int j = 0; j < index; j++)
+                if (!cleared.Contains(queue[j]) && !removed.Contains(queue[j])) return false;
             return true;
         }
+
+        /// <summary>The member is well past the threshold on its way to its slot: the next may line up.</summary>
+        public void ClearedThreshold(int owner) => cleared.Add(owner);
 
         public void SlotOf(int owner, out int row, out int column)
         {
@@ -116,6 +126,7 @@ namespace WingCommand
             queue.Clear();
             expected.Clear();
             linedUp.Clear();
+            cleared.Clear();
             airborne.Clear();
             removed.Clear();
             rowRolledAt.Clear();

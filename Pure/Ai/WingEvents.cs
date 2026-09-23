@@ -2,7 +2,12 @@ namespace WingCommand
 {
     internal enum BehaviourId : byte { Rejoin, StationKeep, HoldOverhead, Trail }
 
-    internal enum WingEventKind : byte { BehaviourChanged, FallingBehind, FallingBehindCleared, GcasActivated, CollisionEmergency, AnchorLost, Converted }
+    internal enum WingEventKind : byte
+    {
+        BehaviourChanged, FallingBehind, FallingBehindCleared, GcasActivated, CollisionEmergency, AnchorLost, Converted,
+        // Ground operations (M3).
+        GroundSpawned, Taxiing, HoldingShort, LiningUp, Rolling, Airborne, Rerouted, Relocated,
+    }
 
     internal enum TransitionReason : byte { None, Captured, LostSlot, LeaderSlow, LeaderNotFlying, LeaderLost, LeaderRecovered, Commanded, LeaderFast }
 

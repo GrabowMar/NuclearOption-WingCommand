@@ -18,6 +18,9 @@ namespace WingCommand
         /// <summary>Stable for the member's life in the wing (slots renumber when a member ahead leaves); trail state is
         /// kept by it.</summary>
         public int Id;
+        /// <summary>Still on the ground (taxiing, lining up, rolling): never holds the stagger gate behind it and is not
+        /// part of the collision check.</summary>
+        public bool Grounded;
     }
 #pragma warning restore CS0649
 
@@ -130,7 +133,7 @@ namespace WingCommand
                 Frame.Established[i] = established[i].Update(error < EstablishedFraction * Frame.Spacing, EstablishedSeconds, dt);
             }
             for (int i = 0; i < count; i++)
-                Frame.StaggerClear[i] = i == 0 || Frame.Established[i - 1] || members[i - 1].Role != Role.Slot ||
+                Frame.StaggerClear[i] = i == 0 || Frame.Established[i - 1] || members[i - 1].Role != Role.Slot || members[i - 1].Grounded ||
                                         Side(Frame.Slots[i].Lateral) != Side(Frame.Slots[i - 1].Lateral);
 
             bodies[0] = new CollisionBody
@@ -144,6 +147,7 @@ namespace WingCommand
                 bodies[i + 1] = new CollisionBody
                 {
                     Pos = members[i].State.Pos, Vel = members[i].State.Vel, Radius = members[i].Radius, Rank = i + 1,
+                    Ignored = members[i].Grounded,
                 };
             Collision.Update(bodies, count + 1, Frame.Spacing, dt);
             for (int i = 0; i < count; i++)

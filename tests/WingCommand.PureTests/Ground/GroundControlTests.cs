@@ -73,6 +73,17 @@ namespace WingCommand.PureTests
         }
 
         [Fact]
+        public void APathThatStartsBehindTheNoseTurnsAroundSlowly()
+        {
+            // A reroute that doubles back: pure pursuit alone sees no lateral offset and would drive straight on.
+            Vec3[] path = { Vec3.Zero, new Vec3(0f, 0f, -200f) };
+            int progress = 0;
+            GroundCommand c = GroundGuidance.Pursue(path, ref progress, OnGround(Vec3.Zero, Vec3.Forward, 8f), 500f);
+            Assert.True(Math.Abs(c.Curvature) >= 1f / GroundGuidance.MinTurnRadius - 1e-4f, $"curvature {c.Curvature}");
+            Assert.True(c.Speed <= (float)Math.Sqrt(GroundGuidance.TurnAccel * GroundGuidance.MinTurnRadius) + 1e-3f, $"speed {c.Speed}");
+        }
+
+        [Fact]
         public void TheProgressAlongThePathNeverGoesBack()
         {
             Vec3[] path = { Vec3.Zero, new Vec3(0f, 0f, 50f), new Vec3(0f, 0f, 100f) };

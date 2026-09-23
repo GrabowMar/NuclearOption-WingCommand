@@ -9,6 +9,8 @@ namespace WingCommand
         public float Radius;
         /// <summary>0 = the leader; a higher rank yields to a lower one.</summary>
         public int Rank;
+        /// <summary>Not part of the check this tick (a member still on the ground).</summary>
+        public bool Ignored;
     }
 
     /// <summary>Wing-scope collision avoidance as a bias, never a mode.
@@ -52,6 +54,7 @@ namespace WingCommand
             for (int a = 0; a < count; a++)
                 for (int b = a + 1; b < count; b++)
                 {
+                    if (bodies[a].Ignored || bodies[b].Ignored) continue;
                     int yielder = bodies[b].Rank >= bodies[a].Rank ? b : a, other = yielder == b ? a : b;
                     Vec3 p = bodies[yielder].Pos - bodies[other].Pos, v = bodies[yielder].Vel - bodies[other].Vel;
                     float vv = v.SqrLength;

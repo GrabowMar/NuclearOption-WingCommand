@@ -190,6 +190,21 @@ namespace WingCommand.PureTests
         }
 
         [Fact]
+        public void AGroundedMemberNeverHoldsTheStaggerGateAndIsOutOfTheCollisionCheck()
+        {
+            WingMemberInput[] members = Members(Far, Far);
+            members[0].Grounded = true;
+            Assert.True(Run(new FormationWing(FingerFour(), 80f), Leader(), members, 1f).StaggerClear[1]);
+            // Two members on top of each other (one still on the runway below the other): no bias between them.
+            var at = new Vec3(5000f, 2000f, 5000f);
+            WingMemberInput[] stacked = Members(at, at);
+            stacked[0].Grounded = true;
+            WingFrame frame = Run(new FormationWing(FingerFour(), 80f), Leader(), stacked, 0.5f);
+            Assert.Equal(0f, frame.Bias[1].Length, 3);
+            Assert.False(frame.Emergency[1]);
+        }
+
+        [Fact]
         public void AMemberBehindOneThatTrailsOrHoldsIsNotHeldByTheStaggerGate()
         {
             // Review M2b I6: a jet behind a trailing helicopter waited out the 30 s stagger deadlock.

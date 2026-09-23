@@ -55,6 +55,20 @@ namespace WingCommand.PureTests
         }
 
         [Fact]
+        public void MembersLineUpOneByOneAsThePreviousClearsTheThreshold()
+        {
+            DepartureSequencer d = FourShip();
+            for (int o = 1; o <= 4; o++) d.Enqueue(o, 0f);
+            Assert.True(d.MayLineUp(1, 1f));
+            Assert.False(d.MayLineUp(2, 1f));
+            d.ClearedThreshold(1);
+            Assert.True(d.MayLineUp(2, 2f));
+            d.Remove(3);
+            d.ClearedThreshold(2);
+            Assert.True(d.MayLineUp(4, 3f), "a removed member never holds up the next");
+        }
+
+        [Fact]
         public void AGroupThatNeverGathersLinesUpAfterTheTimeout()
         {
             DepartureSequencer d = FourShip();

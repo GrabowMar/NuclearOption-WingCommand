@@ -13,7 +13,8 @@ namespace WingCommand
     /// <list type="bullet">
     /// <item>Progress: the path segment the aircraft is on; it only moves forward.</item>
     /// <item>Curvature to the point one lookahead (max(<see cref="Lookahead"/>, 1.5 s of travel)) along the path:
-    /// κ = 2·y/d², y the point's offset to the right of the nose, d its distance.</item>
+    /// κ = 2·y/d², y the point's offset to the right of the nose, d its distance. A point behind the nose (a route that
+    /// doubles back) turns the aircraft around at the tightest radius, <see cref="MinTurnRadius"/>, at walking pace.</item>
     /// <item>Speed: <see cref="TaxiSpeed"/>, cut for the curvature (√(TurnAccel/κ)), for each corner ahead within braking
     /// distance (a corner turning θ is flown at √(TurnAccel·lookahead/θ), reached by braking at
     /// <see cref="BrakeDecel"/>), and for the stop point (√(2·BrakeDecel·d)). Under a metre from the stop point it
@@ -22,6 +23,7 @@ namespace WingCommand
     internal static class GroundGuidance
     {
         public static float Lookahead = 12f, LookaheadTime = 1.5f, TaxiSpeed = 12f, TurnAccel = 1.5f, BrakeDecel = 1.5f, StopRadius = 1f;
+        public static float MinTurnRadius = 15f;
 
         public static GroundCommand Pursue(Vec3[] path, ref int progress, in AircraftState s, float stopDistance)
         {
@@ -40,7 +42,10 @@ namespace WingCommand
             Vec3 target = Walk(path, progress, a + (b - a) * t, lookahead, out _);
             Vec3 toTarget = target - pos;
             float d2 = Math.Max(toTarget.SqrLength, 1e-2f);
-            float curvature = 2f * Vec3.Dot(toTarget, right) / d2;
+            float lateral = Vec3.Dot(toTarget, right);
+            float curvature = 2f * lateral / d2;
+            if (Vec3.Dot(toTarget, fwd) < 0f)
+                curvature = (lateral < 0f ? -1f : 1f) * Math.Max(Math.Abs(curvature), 1f / MinTurnRadius);
 
             float limit = Math.Min(TaxiSpeed, (float)Math.Sqrt(2f * BrakeDecel * stopDistance));
             if (Math.Abs(curvature) > 1e-4f) limit = Math.Min(limit, (float)Math.Sqrt(TurnAccel / Math.Abs(curvature)));
