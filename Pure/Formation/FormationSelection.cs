@@ -33,6 +33,15 @@ namespace WingCommand
             }
         }
 
+        /// <summary>Picks a shape by id; an unknown id leaves the current shape and returns false.</summary>
+        public bool Select(string id)
+        {
+            FormationDefinition d = FormationCatalog.Find(all, id);
+            if (d == null) return false;
+            Current = d;
+            return true;
+        }
+
         public FormationDefinition NextShape() => Step(sameFamily: true);
 
         public FormationDefinition NextFamily() => Step(sameFamily: false);

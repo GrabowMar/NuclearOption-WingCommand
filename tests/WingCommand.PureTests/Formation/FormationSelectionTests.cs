@@ -24,6 +24,16 @@ namespace WingCommand.PureTests
         }
 
         [Fact]
+        public void SelectPicksAShapeByIdAndKeepsTheCurrentOneForAnUnknownId()
+        {
+            var sel = new FormationSelection(Catalog(), "finger-four-right");
+            Assert.True(sel.Select("trail"));
+            Assert.Equal("trail", sel.Current.Id);
+            Assert.False(sel.Select("no-such-shape"));
+            Assert.Equal("trail", sel.Current.Id);
+        }
+
+        [Fact]
         public void NextShapeCyclesWithinTheFamily()
         {
             var sel = new FormationSelection(Catalog(), "ladder");
