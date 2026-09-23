@@ -41,6 +41,37 @@ namespace WingCommand.PureTests
         }
 
         [Fact]
+        public void WideAftSlotHangsOffTheLeadersRealPastPath()
+        {
+            // A slot 700 m in trail (3.5 s at 200 m/s). The leader turns right for 10 s, then reverses left: 2 s
+            // into the reversal the slot must sit where the leader really was 3.5 s ago (still in the right
+            // turn), not on the new turn's arc extrapolated backwards.
+            var def = new FormationDefinition
+            {
+                Id = "trail", Slots = new[] { new SlotDef(0f, 2f, 0f) }, Element = new[] { 0 },
+                SpacingMin = 160f, SpacingDefault = 350f, SpacingMax = 600f,
+            };
+            var wing = new FormationWing(def, 350f);
+            WingMemberInput[] members = Members(Far);
+            var path = new Vec3[12 * 60 + 1];
+            Vec3 pos = new Vec3(0f, 2000f, 0f);
+            float heading = 0f;
+            for (int i = 0; i <= 12 * 60; i++)
+            {
+                float rate = i < 10 * 60 ? 0.1f : -0.1f;
+                heading += rate * Dt;
+                Vec3 vel = Vec3.FromHeading(heading * Scalar.Rad2Deg, 200f);
+                pos += vel * Dt;
+                path[i] = pos;
+                wing.Update(new LeaderSample { Pos = pos, Vel = vel, Present = true, Airborne = true }, members, 1,
+                    float.NaN, 60f, 8f, Dt);
+            }
+            Vec3 past = path[12 * 60 - (int)(3.5f * 60)];
+            float off = (wing.Frame.Slots[0].Ref.Pos - past).Length;
+            Assert.True(off < 10f, $"slot {off:0} m off the leader's real path");
+        }
+
+        [Fact]
         public void EstablishedNeedsTwoSecondsInsideThirtyPercentOfSpacing()
         {
             var wing = new FormationWing(FingerFour(), 80f);

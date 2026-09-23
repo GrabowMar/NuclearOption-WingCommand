@@ -43,6 +43,7 @@ namespace WingCommand
 
         public readonly LeaderEstimator Estimator = new LeaderEstimator();
         public readonly SlotSolver Solver = new SlotSolver();
+        public readonly LeaderHistory History = new LeaderHistory();
         public readonly CollisionBias Collision = new CollisionBias(N + 1);
         public readonly WingFrame Frame = new WingFrame();
         private readonly Persistence[] established = new Persistence[N];
@@ -62,12 +63,13 @@ namespace WingCommand
         {
             count = Math.Min(count, N);
             Frame.Leader = Estimator.Update(leader, dt);
+            History.Push(Frame.Leader, dt);
             Frame.LeaderLost = !leader.Present;
             Frame.Count = count;
             Frame.FloorY = floorY;
             Frame.Clearance = clearance;
             for (int i = 0; i < count; i++) caps[i] = members[i].Capability;
-            Solver.Solve(Frame.Definition, Frame.Spacing, Frame.Leader, caps, count, floorY, clearance, dt, Frame.Slots);
+            Solver.Solve(Frame.Definition, Frame.Spacing, Frame.Leader, caps, count, floorY, clearance, dt, Frame.Slots, History);
 
             for (int i = 0; i < count; i++)
             {

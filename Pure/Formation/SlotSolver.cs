@@ -42,6 +42,7 @@ namespace WingCommand
         public const float SpeedMargin = 5f, CompressOmega = 2.4f, RollSwingMax = 20f;
         public const float CrossoverTriggerDeg = 60f, CrossoverSeconds = 8f, RearmLevelSeconds = 20f;
         public const float LevelTurnRate = 0.02f;
+        public const float HistoryBlendStart = 0.5f, HistoryBlendFull = 1.5f;
 
         private const int N = FormationCatalog.MaxSlots;
         private float compress = 1f, compressRate;
@@ -52,7 +53,7 @@ namespace WingCommand
         private int turnDir;
 
         public void Solve(FormationDefinition def, float spacing, in LeaderEstimate leader, MemberCapability[] caps,
-            int count, float floorY, float clearance, float dt, SlotTarget[] output)
+            int count, float floorY, float clearance, float dt, SlotTarget[] output, LeaderHistory history = null)
         {
             spacing = def.ClampSpacing(spacing);
             count = Math.Min(count, N);
@@ -80,8 +81,15 @@ namespace WingCommand
                 float w = TurnFrame.RollFollowWeight(TurnFrame.Reach(baseRight * k, slot.Aft * spacing,
                     slot.Up * FormationCatalog.StackMetres), slot.RollFollow);
                 float bankRate = FrameBank(i, right, leader.BankDeg, dt);
-                RefState r = TurnFrame.Evaluate(leader, frameBank[i], bankRate, right,
-                    (slot.Aft + extraAft) * spacing, slot.Up * FormationCatalog.StackMetres + dip, w);
+                // Aft slots hang off the leader as it was aft/V ago. Close behind (up to 0.5 s) that is its current
+                // turn carried back, so wingmen bank with the leader now; far behind (from 1.5 s) it is where the
+                // leader really was (history), so trail slots follow its actual path through reversals.
+                float aftM = (slot.Aft + extraAft) * spacing, upM = slot.Up * FormationCatalog.StackMetres + dip;
+                float delay = aftM / Math.Max(50f, leader.Vel.Length);
+                LeaderEstimate at = TurnFrame.Delayed(leader, delay);
+                if (history != null && delay > HistoryBlendStart)
+                    at = LeaderHistory.Blend(at, history.At(delay), Scalar.SmoothStep(HistoryBlendStart, HistoryBlendFull, delay));
+                RefState r = TurnFrame.Evaluate(at, frameBank[i], bankRate, right, 0f, upM, w);
                 if ((def.Modifiers & FormationModifiers.TerrainFlatten) != 0 && !float.IsNaN(floorY))
                     r = Flatten(r, floorY + clearance);
                 output[i] = new SlotTarget
