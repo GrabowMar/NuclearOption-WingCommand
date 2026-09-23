@@ -26,6 +26,24 @@ namespace WingCommand.PureTests
         }
 
         [Fact]
+        public void SlowLeaderIsMatchedAtASafeAirStartSpeedAlongItsPath()
+        {
+            // In game CI-22s were air-started at the leader's ~50 m/s climb speed, just above the stall.
+            var climbing = new Vec3(0f, 5f, 50f);
+            Vec3 v = AirStart.Velocity(climbing, 46.9f);
+            Assert.Equal(AirStart.MinSpeedFactor * 46.9f, v.Length, 2);
+            Assert.Equal(0f, (v.Normalized - climbing.Normalized).Length, 3);
+        }
+
+        [Fact]
+        public void FastLeaderVelocityIsKept() =>
+            Assert.Equal(North, AirStart.Velocity(North, 46.9f));
+
+        [Fact]
+        public void StationaryLeaderStartsForwardAtTheFloor() =>
+            Assert.Equal(Vec3.Forward * (AirStart.MinSpeedFactor * 60f), AirStart.Velocity(Vec3.Zero, 60f));
+
+        [Fact]
         public void RaisedThreeHundredMetresAboveTheTerrain() =>
             Assert.Equal(2900f + AirStart.TerrainClearanceM, AirStart.Position(Leader, North, 0f, 0, 2900f).Y, 1);
 

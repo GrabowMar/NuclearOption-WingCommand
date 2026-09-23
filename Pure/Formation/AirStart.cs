@@ -4,11 +4,21 @@ namespace WingCommand
 {
     /// <summary>Where an air-started wingman appears (spec §8): 2 km behind and 150 m below the leader, spread
     /// toward its slot's side (trail slots go right), each later member one step further out. Raised to at least
-    /// 300 m above the terrain under the spawn point. It flies the leader's heading at the leader's velocity.</summary>
+    /// 300 m above the terrain under the spawn point. It flies the leader's flight path at the leader's velocity,
+    /// but never slower than <see cref="MinSpeedFactor"/> × its own loaded minimum speed.</summary>
     internal static class AirStart
     {
         public static float BehindM = 2000f, BelowM = 150f, LateralM = 200f, LateralStepM = 150f;
-        public static float TerrainClearanceM = 300f;
+        public static float TerrainClearanceM = 300f, MinSpeedFactor = 1.5f;
+
+        /// <summary>Spawn velocity: the leader's, raised along its flight path to at least
+        /// <see cref="MinSpeedFactor"/>·<paramref name="loadedMinimum"/> (a leader climbing slowly would otherwise
+        /// start the wingman just above its stall).</summary>
+        public static Vec3 Velocity(Vec3 leaderVel, float loadedMinimum)
+        {
+            float floor = MinSpeedFactor * loadedMinimum;
+            return leaderVel.Length >= floor ? leaderVel : Direction(leaderVel) * floor;
+        }
 
         public static Vec3 Heading(Vec3 leaderVel)
         {

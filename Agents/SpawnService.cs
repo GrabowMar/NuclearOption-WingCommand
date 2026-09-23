@@ -7,7 +7,7 @@ namespace WingCommand
     /// <summary>Air-starts wingmen (spec §8), host only.
     /// <list type="bullet">
     /// <item>Placement: 2 km behind and 150 m below the leader, spread toward each slot's side, at least
-    /// 300 m above the terrain, flying at the leader's velocity.</item>
+    /// 300 m above the terrain, flying the leader's velocity but never slower than 1.5x its own loaded minimum.</item>
     /// <item>The game initialises each spawn with its own AI. One physics tick after that AI state is entered,
     /// the aircraft is adopted by the wing.</item>
     /// </list></summary>
@@ -114,7 +114,8 @@ namespace WingCommand
 
             Vec3 lp = leader.GlobalPosition().ToVec3();
             Vec3 lv = leader.CockpitRB().velocity.ToVec3();
-            Quaternion rotation = Quaternion.LookRotation(AirStart.Direction(lv).ToUnity());
+            Vec3 v0 = AirStart.Velocity(lv, LoadedMinimum(definition, template));
+            Quaternion rotation = Quaternion.LookRotation(AirStart.Direction(v0).ToUnity());
             LiveryKey livery = definition == leader.definition ? leader.NetworkLiveryKey : default;
             int spawned = 0;
             for (int k = 0; k < n; k++)
@@ -124,7 +125,7 @@ namespace WingCommand
                 Vec3 pos = AirStart.ForSlot(wing.Selection.Current, slot, lp, lv, ground);
                 try
                 {
-                    Aircraft a = spawner.SpawnAircraft(null, prefab, null, 1f, livery, pos.ToGlobal(), rotation, lv.ToUnity(),
+                    Aircraft a = spawner.SpawnAircraft(null, prefab, null, 1f, livery, pos.ToGlobal(), rotation, v0.ToUnity(),
                         null, leader.NetworkHQ, "WingCommand_" + Guid.NewGuid().ToString("N").Substring(0, 8),
                         leader.skill, leader.bravery);
                     if (a == null) break;
@@ -140,6 +141,20 @@ namespace WingCommand
             }
             WingToast.Show(spawned > 0 ? $"{spawned} × {definition.unitName} inbound" : "Air-start failed; see the log");
             return spawned;
+        }
+
+        /// <summary>Loaded minimum speed of the called type, from its published stall speed (or its landing and
+        /// takeoff speeds) through the same derivation as the profile. Reads the prefab only, so the profile cache
+        /// is never filled from a prefab.</summary>
+        private static float LoadedMinimum(AircraftDefinition definition, Aircraft template)
+        {
+            AircraftParameters ap = template.GetAircraftParameters();
+            return AirframeProfile.Derive(new ProfileInputs
+            {
+                PublishedStallKmh = definition.aircraftInfo != null ? definition.aircraftInfo.stallSpeed : 0f,
+                LandingSpeed = ap != null ? ap.landingSpeed : 0f,
+                TakeoffSpeed = ap != null ? ap.takeoffSpeed : 0f,
+            }).MinimumSpeed(1f);
         }
 
         private void Clear()
