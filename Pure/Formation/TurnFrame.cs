@@ -25,13 +25,14 @@ namespace WingCommand
         /// <summary>Aft slots hang off the leader's past path, at most aft / PathSpeedFloor seconds back.</summary>
         public static float PathSpeedFloor = 50f;
 
-        /// <summary>How far back along the leader's path an aft offset looks, in seconds, and the part of the aft
-        /// distance the path does not cover (<paramref name="rigidAft"/>): below <see cref="PathSpeedFloor"/> the rest
-        /// is a fixed offset behind the leader's track, so a slowing or hovering leader keeps its aft slots aft.</summary>
+        /// <summary>How far back along the leader's path an aft offset looks, in seconds (negative: ahead, extrapolated),
+        /// and the part of the aft distance the path does not cover (<paramref name="rigidAft"/>): below
+        /// <see cref="PathSpeedFloor"/> the rest is a fixed offset along the leader's track, so a slowing or hovering
+        /// leader keeps its aft slots aft and its sweep-ahead slots ahead.</summary>
         public static float PathDelay(float aft, float speed, out float rigidAft)
         {
             float delay = aft / Math.Max(PathSpeedFloor, speed);
-            rigidAft = speed >= PathSpeedFloor ? 0f : Math.Max(0f, aft - speed * delay);
+            rigidAft = speed >= PathSpeedFloor ? 0f : aft * (1f - speed / PathSpeedFloor);
             return delay;
         }
 
@@ -115,7 +116,10 @@ namespace WingCommand
             float speed = horizontal.Length;
             if (speed < LeaderEstimator.TrackBlendSpeed)
             {
-                d.Pos = leader.Pos - leader.Vel * seconds;
+                // Straight-line history (or extrapolation) with the same acceleration terms as the arc below, so the
+                // two agree at the blend speed.
+                d.Pos = leader.Pos - leader.Vel * seconds + leader.Acc * (0.5f * seconds * seconds);
+                d.Vel = leader.Vel - leader.Acc * seconds;
                 return d;
             }
             Vec3 t = horizontal / speed, c = Vec3.Cross(Vec3.Up, t);

@@ -76,6 +76,33 @@ namespace WingCommand.PureTests
             Assert.True((offset - new Vec3(10f, 0f, -20f)).Length < 0.1f, $"offset {offset}");
         }
 
+        private static LeaderEstimate Moving(float speed, float along) => new LeaderEstimate
+        {
+            Pos = new Vec3(0f, 300f, 0f), Vel = new Vec3(0f, 0f, speed), Acc = new Vec3(0f, 0f, along), Track = Vec3.Forward,
+            Flying = true,
+        };
+
+        [Fact]
+        public void SweepAheadSlotOfAStoppedAnchorStaysAhead()
+        {
+            // Review M2b I1: negative aft (sweep ahead) collapsed onto a stopped escortee.
+            RefState r = TurnFrame.Evaluate(Moving(0f, 0f), 0f, 0f, 0f, -900f, 0f, 0f);
+            Assert.True((r.Pos - new Vec3(0f, 300f, 900f)).Length < 0.5f, $"slot at {r.Pos}");
+        }
+
+        [Fact]
+        public void SlotsOfAnAcceleratingSlowAnchorMoveWithItAndDoNotJumpAtTheTrackBlendSpeed()
+        {
+            foreach (float aft in new[] { -900f, 80f })
+            {
+                RefState below = TurnFrame.Evaluate(Moving(LeaderEstimator.TrackBlendSpeed - 0.01f, 1f), 0f, 0f, 0f, aft, 0f, 0f);
+                RefState above = TurnFrame.Evaluate(Moving(LeaderEstimator.TrackBlendSpeed + 0.01f, 1f), 0f, 0f, 0f, aft, 0f, 0f);
+                Assert.True((below.Pos - above.Pos).Length < 1f, $"aft {aft}: jump {(below.Pos - above.Pos).Length:0} m");
+                RefState slow = TurnFrame.Evaluate(Moving(10f, 1f), 0f, 0f, 0f, aft, 0f, 0f);
+                Assert.Equal(10f, slow.Vel.Z, 1);
+            }
+        }
+
         [Fact]
         public void RollFollowIsFullOnlyForFingertipSlotsAndZeroFromFortyFiveMetres()
         {
