@@ -58,14 +58,36 @@ namespace WingCommand.PureTests
         }
 
         [Fact]
-        public void CollectiveDoesNotWindUpWhenSaturated()
+        public void CollectiveDeliversTheCommandedVerticalAcceleration()
+        {
+            // Model-based: hover collective × (g + a_y)/g; with thrust-to-weight 1/hover that is exactly a_y.
+            AirframeProfile p = Utility();
+            ControlOutput o = Run(new RotaryController(), new GuidanceCommand { Accel = new Vec3(0f, 2f, 0f) }, Hover(), p, 2f);
+            Assert.Equal(p.HoverCollective * (Scalar.G + 2f) / Scalar.G, o.Throttle, 2);
+        }
+
+        [Fact]
+        public void TrimDoesNotWindUpWhileTheClimbIsAtItsAccelerationLimit()
         {
             AirframeProfile p = Utility();
             var c = new RotaryController();
-            ControlOutput up = Run(c, new GuidanceCommand { VelCmd = new Vec3(0f, 50f, 0f) }, Hover(), p, 20f);
-            Assert.Equal(1f, up.Throttle, 3);
+            var climb = new GuidanceCommand { VelCmd = new Vec3(0f, 50f, 0f), Accel = new Vec3(0f, p.VerticalAccelMax, 0f) };
+            ControlOutput up = Run(c, climb, Hover(), p, 20f);
+            Assert.Equal(p.HoverCollective * (Scalar.G + p.VerticalAccelMax) / Scalar.G, up.Throttle, 2);
             ControlOutput back = Run(c, default, Hover(), p, 1f);
-            Assert.True(back.Throttle < 0.6f, $"collective {back.Throttle:0.00} a second after the climb command ended");
+            Assert.True(back.Throttle < 0.55f, $"collective {back.Throttle:0.00} a second after the climb command ended");
+        }
+
+        [Fact]
+        public void AVerticalCollisionBiasMovesTheCollective()
+        {
+            // Two helicopters stacked vertically: the bias is almost purely vertical and must act.
+            AirframeProfile p = Utility();
+            var pipeline = new RotaryPipeline();
+            var ctx = new LimitContext { FloorY = float.NaN, Clearance = 60f, CollisionBias = new Vec3(0f, 5f, 0f) };
+            ControlOutput o = default;
+            for (int i = 0; i < 60; i++) o = pipeline.Step(default, Hover(), ctx, p, Dt);
+            Assert.True(o.Throttle > p.HoverCollective + 0.1f, $"collective {o.Throttle:0.00}");
         }
 
         [Fact]
