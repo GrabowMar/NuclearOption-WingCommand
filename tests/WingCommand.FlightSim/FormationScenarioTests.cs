@@ -347,5 +347,19 @@ namespace WingCommand.FlightSim
             for (int k = 0; k < 3; k++) Assert.False(float.IsNaN(captured[k]), $"member {k + 1} never captured after the hold");
             Assert.True(minSeparation >= wing.SafeRadius, $"separation {minSeparation:0.0} m");
         }
+
+        [Fact]
+        public void AbeamJoinConvergesOnLanesWithoutConflicts()
+        {
+            // Members start 2 km abeam on the right at the leader's altitude, stacked outward: #2 sits inboard of
+            // #3 and #4, so their paths to the finger four cross laterally and must do so on separate lanes.
+            var leader = new VirtualLeader(new Vec3(0f, 2000f, 0f), 200f, 0f);
+            var wing = new SimWing(leader, SimFormations.Get("finger-four-right"), FormationCatalog.Standard,
+                new[] { new Vec3(2000f, 2000f, 0f), new Vec3(2200f, 2000f, 0f), new Vec3(2400f, 2000f, 0f) }, 200f, 0f);
+            float[] captured = RunUntilCaptured(wing, t => (0f, 200f), 200f, out float minSeparation);
+            for (int k = 0; k < 3; k++) Assert.False(float.IsNaN(captured[k]), $"member {k + 1} never captured");
+            Assert.True(minSeparation >= wing.SafeRadius, $"separation {minSeparation:0.0} m");
+            for (int k = 0; k < 3; k++) Assert.Equal(0, wing.Events.CountOf(WingEventKind.CollisionEmergency, k));
+        }
     }
 }

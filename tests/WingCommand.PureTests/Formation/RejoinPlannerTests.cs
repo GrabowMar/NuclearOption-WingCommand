@@ -34,7 +34,8 @@ namespace WingCommand.PureTests
         {
             LeaderEstimate leader = Leader(200f, 0.05f);
             SlotTarget slot = Slot(leader);
-            AircraftState s = TestStates.Flying(new Vec3(-80f, 1900f, -5000f), new Vec3(0f, 0f, 230f));
+            // On its lane already, so the lanes-first hold does not suppress the cutoff.
+            AircraftState s = TestStates.Flying(new Vec3(-80f, 2000f - 2f * RejoinPlanner.LaneStep, -5000f), new Vec3(0f, 0f, 230f));
             RejoinOutput o = new RejoinPlanner().Step(s, slot, leader, 2, Spacing, 255f, true, Dt);
             Assert.Equal(2000f - 2f * RejoinPlanner.LaneStep, o.Ref.Pos.Y, 2);
             Assert.True(o.Ref.Pos.X > PreSlot(slot).X + 100f, $"rendezvous {o.Ref.Pos} vs pre-slot {PreSlot(slot)}");
@@ -89,6 +90,19 @@ namespace WingCommand.PureTests
             RejoinOutput onLane = new RejoinPlanner().Step(TestStates.Flying(new Vec3(400f, laneY, -3000f), leader.Vel),
                 slot, leader, 1, Spacing, 255f, true, Dt);
             Assert.True(onLane.Ref.Pos.X < 0f, $"held its side at {onLane.Ref.Pos.X:0} m although on its lane");
+        }
+
+        [Fact]
+        public void EveryMemberHoldsItsLateralUntilItIsOnItsLane()
+        {
+            // Same side as its slot but 2 km out and 150 m below its lane: sweeping sideways now would cut through
+            // the other members' lanes at their altitude, so it holds its lateral until it is on its lane.
+            LeaderEstimate leader = Leader();
+            SlotTarget slot = Slot(leader);
+            float laneY = 2000f - RejoinPlanner.LaneStep;
+            RejoinOutput low = new RejoinPlanner().Step(TestStates.Flying(new Vec3(-2000f, laneY - 150f, -3000f), leader.Vel),
+                slot, leader, 1, Spacing, 255f, true, Dt);
+            Assert.True(low.Ref.Pos.X < -1900f, $"moved in to {low.Ref.Pos.X:0} m while 150 m below its lane");
         }
 
         [Fact]

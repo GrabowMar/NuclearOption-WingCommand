@@ -111,14 +111,11 @@ namespace WingCommand
             Vec3 pos = pre.Pos + across * Vec3.Dot(faded.Pos - pre.Pos, across);
             pos = new Vec3(pos.X, cutoff.Pos.Y, pos.Z);
 
-            // Lanes first: a member on the far side of the leader's track from its slot keeps to its own side
-            // until it is on its lane, so the crossing happens with lane separation (blended over 10-20 m).
+            // Lanes first: every member keeps its own lateral position until it is on its lane, so any crossing
+            // of another member's path happens with lane separation (blended over 10-20 m of lane error).
             float memberSide = Vec3.Dot(s.Pos - leader.Pos, across), refSide = Vec3.Dot(pos - leader.Pos, across);
-            if (memberSide * Vec3.Dot(pre.Pos - leader.Pos, across) < 0f)
-            {
-                float hold = Scalar.SmoothStep(LaneCapture, 2f * LaneCapture, Math.Abs(s.Pos.Y - cutoff.Pos.Y));
-                pos += across * ((memberSide - refSide) * hold);
-            }
+            float hold = Scalar.SmoothStep(LaneCapture, 2f * LaneCapture, Math.Abs(s.Pos.Y - cutoff.Pos.Y));
+            pos += across * ((memberSide - refSide) * hold);
             return new RefState(pos, new Vec3(faded.Vel.X, leader.Vel.Y, faded.Vel.Z), new Vec3(faded.Acc.X, 0f, faded.Acc.Z));
         }
 
