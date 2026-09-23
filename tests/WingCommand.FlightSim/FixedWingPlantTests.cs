@@ -137,6 +137,44 @@ namespace WingCommand.FlightSim
                 $"fast {fast.RollRateDps:0} vs slow {slow.RollRateDps:0} deg/s");
         }
 
+        private static float SteadyRollRate(PlantParams p, float speed, float stick)
+        {
+            var plant = new FixedWingPlant(p, new Vec3(0f, 1000f, 0f), speed, 0f);
+            for (int i = 0; i < 90; i++) plant.Step(new PlantInput(0f, stick, 1f), 1f / 60f);
+            return plant.RollRateDps;
+        }
+
+        [Fact]
+        public void TurbopropFullStickRollsAboutNinetyFiveDegreesPerSecondAtCruise()
+        {
+            // In-game S2 steps (CI-22, 100–120 m/s): full stick peaks at 78–95°/s within 0.5 s, far below the
+            // 286°/s that 0.5·maxRollAngularVel would suggest (weak FBW roll loop, aero-limited surfaces).
+            Assert.InRange(SteadyRollRate(PlantParams.CoinTurboprop, 110f, 1f), 85f, 105f);
+        }
+
+        [Fact]
+        public void TurbopropRollAuthorityFallsWithSpeed()
+        {
+            // In-game hold rows (CI-22, 55–62 m/s): full stick gave 40–60°/s.
+            Assert.InRange(SteadyRollRate(PlantParams.CoinTurboprop, 55f, 1f), 45f, 65f);
+        }
+
+        [Fact]
+        public void TurbopropQuarterStickRollsAboutAQuarterAsFast()
+        {
+            float full = SteadyRollRate(PlantParams.CoinTurboprop, 110f, 1f);
+            float quarter = SteadyRollRate(PlantParams.CoinTurboprop, 110f, 0.25f);
+            Assert.InRange(quarter / full, 0.2f, 0.3f);
+        }
+
+        [Fact]
+        public void TurbopropStallsNearThirtyNineMetresPerSecond()
+        {
+            PlantParams p = PlantParams.CoinTurboprop;
+            float stall = (float)Math.Sqrt(p.MassKg * 9.81 / (0.5 * 1.225 * p.WingAreaM2 * p.ClMax));
+            Assert.InRange(stall, 37f, 41f);
+        }
+
         [Fact]
         public void SensorReportsLevelFlightAsOneGWingsLevel()
         {

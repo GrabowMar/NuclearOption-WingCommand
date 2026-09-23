@@ -34,11 +34,39 @@ namespace WingCommand.FlightSim
         /// <summary>FBW maxRollAngularVel (rad/s). The FBW commands half of it (native units quirk).</summary>
         public float MaxRollAngularVel = 6f;
         public float RollRateMaxDps => 0.5f * MaxRollAngularVel * 57.29578f;
-        public float RollLagS = 0.18f;
+        /// <summary>FBW rollTightness: surface per rad/s of roll-rate error in the rate loop.</summary>
+        public float RollTightness = 1f;
+        /// <summary>Steady roll rate (rad/s) a full surface gives at <see cref="RollAuthoritySpeed"/>; it scales
+        /// with airspeed (fixed-deflection roll rate ∝ V).</summary>
+        public float RollAuthorityRadS = 4f;
+        public float RollAuthoritySpeed = 200f;
+        public float RollLagS = 0.2f;
         public float LoadLagS = 0.25f;
         public float EngineLagS = 1.6f;
 
         public static PlantParams GenericFighter => new PlantParams();
+
+        /// <summary>A CI-22-like turboprop fitted to the in-game S2 steps: stall ≈ 39 m/s, corner 110 m/s, 6 g,
+        /// no afterburner, low excess thrust, and a weak FBW roll loop (maxRollAngularVel 10, rollTightness 0.2)
+        /// on aero-limited ailerons: ≈ 95°/s at 110 m/s, ≈ 57°/s at 55 m/s.</summary>
+        public static PlantParams CoinTurboprop => new PlantParams
+        {
+            MassKg = 5000f,
+            WingAreaM2 = 25f,
+            Cd0 = 0.025f,
+            InducedK = 0.07f,
+            ClMax = 2.1f,
+            DryThrustN = 10000f,
+            AfterburnerThrustN = 10000f,
+            AfterburnerThrottle = 1f,
+            GLimit = 6f,
+            CornerSpeed = 110f,
+            MaxRollAngularVel = 10f,
+            RollTightness = 0.2f,
+            RollAuthorityRadS = 2.5f,
+            RollAuthoritySpeed = 110f,
+            EngineLagS = 1f,
+        };
     }
 
     /// <summary>Point-mass fixed-wing model with a rate-command fly-by-wire: roll stick commands roll rate,
@@ -103,13 +131,14 @@ namespace WingCommand.FlightSim
             float qRatio = Isa.Density(Position.Y) * Speed * Speed / (Isa.SeaLevelDensity * p.CornerSpeed * p.CornerSpeed);
             float remap = 1f / Math.Max(qRatio, 1f);
 
-            // Roll: at or below corner speed a rate loop on 0.5·maxRollAngularVel; above it the FBW blends
-            // toward direct stick, whose surface authority grows with dynamic pressure.
+            // Roll, as FlyByWire.Filter: the surface is a P rate loop, rollTightness·(0.5·maxRollAngularVel·stick
+            // − ω), blended toward direct stick above corner speed, clamped to ±1. The ailerons then drive the
+            // roll rate toward a steady value proportional to deflection and airspeed, through a lag.
             float stickRoll = Clamp(input.Roll, -1f, 1f);
-            float rateLoop = stickRoll * 0.5f * p.MaxRollAngularVel;
-            float direct = rateLoop * qRatio;
-            float rollCmd = Lerp(direct, rateLoop, remap);
-            rollRate += (rollCmd - rollRate) * Math.Min(1f, dt / p.RollLagS);
+            float target = stickRoll * 0.5f * p.MaxRollAngularVel;
+            float surface = Clamp(Lerp(stickRoll, p.RollTightness * (target - rollRate), remap), -1f, 1f);
+            float authority = p.RollAuthorityRadS * Clamp(Speed / Math.Max(1f, p.RollAuthoritySpeed), 0.1f, 3f);
+            rollRate += (authority * surface - rollRate) * Math.Min(1f, dt / p.RollLagS);
             bank = WrapPi(bank + rollRate * dt);
 
             // Pitch: a g-command, scaled down below corner speed (flight assist on, as native AI states set
