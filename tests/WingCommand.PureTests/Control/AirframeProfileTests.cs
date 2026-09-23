@@ -5,6 +5,17 @@ namespace WingCommand.PureTests
 {
     public class AirframeProfileTests
     {
+        [Theory]
+        [InlineData(10f, 120f)]
+        [InlineData(3f, 85.944f)]
+        public void DeriveSeedsRollAuthorityAtTheSmallerOfTheFbwCommandAndTheCap(float maxRollAngularVel, float expected)
+        {
+            // The FBW commands 0.5·maxRollAngularVel, but its weak rate loop on aero-limited ailerons rolls far
+            // slower in game (CI-22: 286 commanded, ≈ 95°/s real); the controller learns the rest in flight.
+            AirframeProfile p = AirframeProfile.Derive(new ProfileInputs { FbwMaxRollAngularVel = maxRollAngularVel });
+            Assert.Equal(expected, p.RollRateMaxDps, 2);
+        }
+
         [Fact]
         public void DeriveMapsNativeNumbersAndAppliesTheFbwRollQuirk()
         {
@@ -22,7 +33,7 @@ namespace WingCommand.PureTests
             Assert.Equal(289f, p.MilSpeed, 3);
             Assert.Equal(220f, p.RefAirspeed);
             Assert.Equal(9f, p.GLimit);
-            Assert.Equal(171.887f, p.RollRateMaxDps, 2);
+            Assert.Equal(AirframeProfile.RollSeedCapDps, p.RollRateMaxDps, 2);
             Assert.Equal(0.55f, p.CruiseThrottle);
             Assert.Equal(9f, p.MaxRadius);
         }

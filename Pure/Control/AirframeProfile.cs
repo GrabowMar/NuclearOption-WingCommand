@@ -30,8 +30,11 @@ namespace WingCommand
         public float StallSpeed = 55f, CornerSpeed = 170f, MaxSpeed = 300f, MilSpeed = 255f, RefAirspeed = 200f;
         public float CruiseThrottle = 0.6f;
         public float GLimit = 9f, NegativeGLimit = 3f;
-        /// <summary>Effective full-stick roll rate: the FBW commands 0.5·maxRollAngularVel.</summary>
-        public float RollRateMaxDps = 171.887f;
+        /// <summary>Seed for the in-flight roll authority (<see cref="RollAuthority"/>) and its upper bound: the FBW
+        /// commands 0.5·maxRollAngularVel, capped at <see cref="RollSeedCapDps"/>. Each pipeline replaces it with
+        /// the learned full-stick roll rate.</summary>
+        public float RollRateMaxDps = 120f;
+        public static float RollSeedCapDps = 120f;
         public float ClimbRateMax = 80f;
         public float BrakeDecel = 4f, AirbrakeDecel = 7f, ThrustAccelMax = 8f;
         public bool HasAfterburner = true;
@@ -79,7 +82,8 @@ namespace WingCommand
             float g = n.GLimit > 0f ? n.GLimit : p.GLimit;
             if (n.FbwGLimit > 0f) g = Math.Min(g, n.FbwGLimit);
             p.GLimit = g;
-            if (n.FbwMaxRollAngularVel > 0f) p.RollRateMaxDps = 0.5f * n.FbwMaxRollAngularVel * Scalar.Rad2Deg;
+            if (n.FbwMaxRollAngularVel > 0f)
+                p.RollRateMaxDps = Math.Min(RollSeedCapDps, 0.5f * n.FbwMaxRollAngularVel * Scalar.Rad2Deg);
             if (n.MaxRadius > 0f) p.MaxRadius = n.MaxRadius;
             return p;
         }
