@@ -3,7 +3,7 @@ using System;
 namespace WingCommand
 {
     /// <summary>One ordered chain applied to every command, recording what bound it.
-    /// <para>Acceleration stage: collision bias, then speed priority (no climbing away a low speed), then terrain floor.</para>
+    /// <para>Acceleration stage: speed priority (no climbing away a low speed), then collision bias, then terrain floor.</para>
     /// <para>Attitude stage: envelope (bank ceiling, lift- and structure-limited load factor, loaded
     /// minimum speed), then ground-collision avoidance, then authority slews that keep commands continuous.</para>
     /// Holds per-aircraft state (GCAS latch, last command), so there is one instance per aircraft.</summary>
@@ -23,21 +23,23 @@ namespace WingCommand
         public void ApplyAccel(ref GuidanceCommand c, in AircraftState s, in LimitContext ctx, AirframeProfile p,
             ref BindingReport r)
         {
+            // Speed priority: a slow aircraft may not climb away its speed (at full throttle the climb would bleed
+            // it toward the stall). It clamps the guidance's own vertical acceleration to what the allowed climb
+            // needs (never an unbounded cut: the guidance may already have limited it to the lift available), before
+            // the collision bias and the terrain floor, which both still win.
+            float maxVy = SpeedLimitedClimb(s, p);
+            if (c.VelCmd.Y > maxVy)
+            {
+                c.VelCmd = new Vec3(c.VelCmd.X, maxVy, c.VelCmd.Z);
+                float ay = (maxVy - s.Vel.Y) / Math.Max(0.1f, p.TauVel);
+                if (c.Accel.Y > ay) c.Accel = new Vec3(c.Accel.X, ay, c.Accel.Z);
+                r.SpeedBy = ConstraintId.Envelope;
+            }
+
             if (ctx.CollisionBias.SqrLength > 1e-4f)
             {
                 c.Accel += ctx.CollisionBias;
                 r.CollisionActive = true;
-            }
-
-            // Speed priority: a slow aircraft may not climb away its speed (at full throttle the climb would bleed
-            // it toward the stall). The terrain floor below still wins.
-            float maxVy = SpeedLimitedClimb(s, p);
-            if (c.VelCmd.Y > maxVy)
-            {
-                float cut = maxVy - c.VelCmd.Y;
-                c.VelCmd = new Vec3(c.VelCmd.X, maxVy, c.VelCmd.Z);
-                c.Accel += Vec3.Up * (cut / Math.Max(0.1f, p.TauVel));
-                r.SpeedBy = ConstraintId.Envelope;
             }
 
             if (float.IsNaN(ctx.FloorY)) return;

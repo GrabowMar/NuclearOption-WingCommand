@@ -89,7 +89,8 @@ namespace WingCommand.PureTests
         {
             var chain = new ConstraintChain();
             report = new BindingReport();
-            var g = new GuidanceCommand { VelCmd = new Vec3(0f, vy, speed) };
+            // As the guidance builds it: the vertical acceleration closes the vertical-speed error over TauVel.
+            var g = new GuidanceCommand { VelCmd = new Vec3(0f, vy, speed), Accel = new Vec3(0f, vy / Fighter.TauVel, 0f) };
             chain.ApplyAccel(ref g, At(altitude, speed), Floor(floorY), Fighter, ref report);
             return g;
         }
@@ -98,13 +99,30 @@ namespace WingCommand.PureTests
         public void SlowAircraftMayNotClimbAwayItsSpeed()
         {
             // In game slow CI-22s kept climbing at full throttle and sagged toward the stall. Between Vmin(1) = 66 and
-            // 1.5·Vmin(1) = 99 m/s the climb allowed grows as the square of the margin.
+            // 1.5·Vmin(1) = 99 m/s the climb allowed grows as the square of the margin. The guidance's own vertical
+            // acceleration is clamped to what that climb needs, not reduced by an unbounded amount.
             float vmin = Fighter.MinimumSpeed(1f);
             float speed = vmin + 0.35f * 0.5f * vmin;
             GuidanceCommand g = Climb(speed, 20f, float.NaN, 0f, out BindingReport report);
-            Assert.Equal(Fighter.ClimbRateMax * 0.35f * 0.35f, g.VelCmd.Y, 2);
-            Assert.True(g.Accel.Y < 0f);
+            float limit = Fighter.ClimbRateMax * 0.35f * 0.35f;
+            Assert.Equal(limit, g.VelCmd.Y, 2);
+            Assert.Equal(limit / Fighter.TauVel, g.Accel.Y, 2);
             Assert.Equal(ConstraintId.Envelope, report.SpeedBy);
+        }
+
+        [Fact]
+        public void TerrainFloorWinsEvenWhenTheGuidanceAlreadyLimitedItsClimb()
+        {
+            // The guidance clamps its acceleration to the lift available (small when slow): 3.8 m/s² up for a 22 m/s
+            // climb command. Subtracting the whole speed cut from that pushed a slow member near the ground to zero g
+            // (review, M1d); the net command must still climb away from the floor.
+            var chain = new ConstraintChain();
+            var report = new BindingReport();
+            float speed = Fighter.MinimumSpeed(1f) - 2f;
+            var g = new GuidanceCommand { VelCmd = new Vec3(0f, 22f, speed), Accel = new Vec3(0f, 3.8f, 0f) };
+            chain.ApplyAccel(ref g, At(30f, speed), Floor(0f), Fighter, ref report);
+            Assert.True(g.Accel.Y > 0f, $"accel {g.Accel.Y:0.0} m/s² near the floor");
+            Assert.Equal(ConstraintId.Terrain, report.VerticalBy);
         }
 
         [Fact]
