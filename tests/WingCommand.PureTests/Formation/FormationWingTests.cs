@@ -28,6 +28,7 @@ namespace WingCommand.PureTests
                     State = TestStates.Flying(positions[i], new Vec3(0f, 0f, 200f)),
                     Capability = new MemberCapability { MaxSpeed = 255f, MinSpeed = 80f },
                     Radius = 8f,
+                    Id = i,
                 };
             return members;
         }
@@ -157,6 +158,46 @@ namespace WingCommand.PureTests
             }
             Assert.True(maxAcc < 1f, $"phantom acceleration up to {maxAcc:0.0} m/s²");
             Assert.True((frame.Slots[0].Ref.Pos - b).Length < 500f, $"slot {(frame.Slots[0].Ref.Pos - b).Length:0} m from the new leader");
+        }
+
+        [Fact]
+        public void ATrailMemberKeepsItsRouteWhenTheLeadDiesAndSlotsRenumber()
+        {
+            // Review M2b I2: the route place and stagger side were kept per slot; after the lead died the survivor moved
+            // to slot 0 and its reference jumped 114 m (a spacing forward plus the other side).
+            WingMemberInput[] two = Helos(2);
+            two[0].Id = 10;
+            two[1].Id = 11;
+            FormationWing wing = TrailRun(200f, 20f, 0f, two);
+            RefState before = wing.Frame.TrailRef[1];
+            WingMemberInput[] survivor = { two[1] };
+            survivor[0].Role = Role.Trail;
+            Vec3 leader = new Vec3(0f, 2000f, 200f * 20f);
+            wing.Update(new AnchorSample { Pos = leader, Vel = new Vec3(0f, 0f, 200f), Present = true, Airborne = true },
+                survivor, 1, float.NaN, 60f, 8f, Dt);
+            RefState after = wing.Frame.TrailRef[0];
+            Assert.True((after.Pos - before.Pos).Length < 60f * Dt + 1f, $"reference jumped {(after.Pos - before.Pos).Length:0} m");
+        }
+
+        [Fact]
+        public void TrailReferencesAreValidOnlyForMembersTheWingSawTrailing()
+        {
+            WingMemberInput[] one = Helos(1);
+            FormationWing wing = TrailRun(200f, 1f, 0f, one, (k, t) => Role.Slot);
+            Assert.False(wing.Frame.TrailValid[0]);
+            wing = TrailRun(200f, 1f, 0f, one);
+            Assert.True(wing.Frame.TrailValid[0]);
+        }
+
+        [Fact]
+        public void AMemberBehindOneThatTrailsOrHoldsIsNotHeldByTheStaggerGate()
+        {
+            // Review M2b I6: a jet behind a trailing helicopter waited out the 30 s stagger deadlock.
+            var wing = new FormationWing(FingerFour(), 80f);
+            WingMemberInput[] members = Members(Far, Far, Far);   // slots 2 and 3 of the finger four are both on the right
+            members[1].Role = Role.Trail;
+            WingFrame frame = Run(wing, Leader(), members, 1f);
+            Assert.True(frame.StaggerClear[2]);
         }
 
         [Fact]

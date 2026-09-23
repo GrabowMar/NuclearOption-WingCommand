@@ -77,6 +77,7 @@ namespace WingCommand.FlightSim
                     },
                     Radius = p.MaxRadius,
                     Role = Pilots[i].Roles.Current,
+                    Id = i,
                 };
             }
             WingFrame frame = Wing.Update(Leader.Sample(), inputs, n, FloorY, Clearance, 9f, Dt);

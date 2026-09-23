@@ -78,7 +78,8 @@ namespace WingCommand
             RefState reference = LastRejoin.Ref;
             float spacing = frame.Spacing;
             if (Mind.Current == BehaviourId.StationKeep) reference = slot.Ref;
-            else if (Mind.Current == BehaviourId.Trail) reference = frame.TrailRef[Slot];
+            // The frame computes trail references from last tick's roles: the tick the mind enters Trail it may have none.
+            else if (Mind.Current == BehaviourId.Trail) reference = frame.TrailValid[Slot] ? frame.TrailRef[Slot] : LastRejoin.Ref;
             else if (Mind.Current == BehaviourId.HoldOverhead)
             {
                 bool anchored = !frame.LeaderLost && leader.Flying;

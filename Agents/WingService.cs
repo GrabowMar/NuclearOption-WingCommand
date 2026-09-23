@@ -268,6 +268,7 @@ namespace WingCommand
                     NearFloorY = m.NearFloorY,
                     HasNearFloor = !float.IsNaN(m.NearFloorY),
                     Role = m.Brain.Roles.Current,
+                    Id = m.Id,
                 };
             }
             AnchorSample leader = SampleAnchor(dt);
@@ -316,7 +317,8 @@ namespace WingCommand
             LeaderUnit = Anchor != null ? Anchor : Player;
             if (!ReferenceEquals(before, LeaderUnit))
             {
-                if (before != null && LeaderUnit != null) Wing?.ResetLeader();
+                // (object) casts: a destroyed anchor is Unity-null but still a different leader to reset from.
+                if ((object)before != null && (object)LeaderUnit != null) Wing?.ResetLeader();
                 leaderClass = LeaderUnit is Aircraft a ? ProfileReader.ClassOf(a) : AirframeClass.FixedWing;
             }
             UpdateUse();

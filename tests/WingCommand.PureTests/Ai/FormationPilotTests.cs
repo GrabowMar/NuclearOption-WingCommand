@@ -1,3 +1,4 @@
+using System;
 using Xunit;
 
 namespace WingCommand.PureTests
@@ -56,6 +57,35 @@ namespace WingCommand.PureTests
             rig.Step();
             Assert.True(rig.Pilot.LastIntent.HasHeading);
             Assert.Equal(0f, rig.Pilot.LastIntent.HeadingDeg, 1);   // the leader flies north
+        }
+
+        [Fact]
+        public void TrailWithoutAFrameReferenceFallsBackToTheRejoinReference()
+        {
+            // Review M2b I3: the tick the mind entered Trail it flew the frame's stale trail reference (default: the
+            // map origin), because the frame computes trail references from the role of the previous tick.
+            AirframeProfile helo = AirframeProfile.Derive(new ProfileInputs { Class = AirframeClass.Rotary, MaxSpeed = 80f });
+            var wing = new FormationWing(new FormationDefinition
+            {
+                Id = "one", Slots = new[] { new SlotDef(-1f, 1f, 0f) }, Element = new[] { 0 },
+                SpacingMin = 40f, SpacingDefault = 80f, SpacingMax = 160f,
+            }, 80f);
+            var pilot = new FormationPilot(0, AirframeClass.Rotary);
+            var members = new WingMemberInput[1];
+            Vec3 lead = new Vec3(0f, 2000f, 0f);
+            float nearestToOrigin = float.MaxValue;
+            for (int i = 0; i < 8 * 60; i++)
+            {
+                lead += North * Dt;
+                AircraftState s = TestStates.Flying(lead + new Vec3(0f, -150f, -3000f), new Vec3(0f, 0f, 60f));
+                members[0] = new WingMemberInput { State = s, Capability = new MemberCapability { MaxSpeed = 64f }, Radius = 9f };
+                WingFrame frame = wing.Update(new AnchorSample { Pos = lead, Vel = North, Present = true, Airborne = true },
+                    members, 1, float.NaN, 60f, 8f, Dt);
+                pilot.Step(frame, s, helo, i * Dt, Dt, null);
+                if (pilot.Mind.Current == BehaviourId.Trail) nearestToOrigin = Math.Min(nearestToOrigin, pilot.LastIntent.Ref.Pos.Length);
+            }
+            Assert.Equal(BehaviourId.Trail, pilot.Mind.Current);
+            Assert.True(nearestToOrigin > 1000f, $"reference {nearestToOrigin:0} m from the map origin");
         }
 
         [Fact]

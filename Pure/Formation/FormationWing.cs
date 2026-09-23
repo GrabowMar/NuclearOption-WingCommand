@@ -15,6 +15,9 @@ namespace WingCommand
         public bool HasNearFloor;
         /// <summary>The member's role as of its last step (the wing computes trail references for Trail members).</summary>
         public Role Role;
+        /// <summary>Stable for the member's life in the wing (slots renumber when a member ahead leaves); trail state is
+        /// kept by it.</summary>
+        public int Id;
     }
 #pragma warning restore CS0649
 
@@ -33,21 +36,24 @@ namespace WingCommand
         public readonly bool[] StaggerClear = new bool[FormationCatalog.MaxSlots];
         public readonly float[] NearFloorY = new float[FormationCatalog.MaxSlots];
         public readonly bool[] HasNearFloor = new bool[FormationCatalog.MaxSlots];
-        /// <summary>For Trail members: their point on the anchor's route (see <see cref="FormationWing"/>).</summary>
+        /// <summary>For Trail members: their point on the anchor's route (see <see cref="FormationWing"/>), valid when
+        /// <see cref="TrailValid"/> (the wing saw the member trailing this tick).</summary>
         public readonly RefState[] TrailRef = new RefState[FormationCatalog.MaxSlots];
+        public readonly bool[] TrailValid = new bool[FormationCatalog.MaxSlots];
     }
 
     /// <summary>The once-per-wing half of the formation layer:
     /// <list type="number">
     /// <item>the leader estimate and the slots;</item>
     /// <item>which members are established (inside 0.3 spacing for 2 s);</item>
-    /// <item>the stagger gate: a slot opens when the previous slot is established or sits on the other side;</item>
+    /// <item>the stagger gate: a slot opens when the previous slot is established, sits on the other side, or is not
+    /// flying its slot (trail, high cover);</item>
     /// <item>the pairwise collision bias, with the leader as rank 0;</item>
     /// <item>the trail element: each Trail member advances along the anchor's route (<see cref="AnchorTrail"/>) at its
     /// own speed, at least one spacing behind the Trail member ahead of it (by slot) and
-    /// <see cref="TrailGapSpacings"/> behind the anchor, staggered left/right by slot, <see cref="TrailBelow"/> m
-    /// under the anchor and above the floor. Each keeps its own place on the route, so nobody's reference jumps
-    /// when a member ahead leaves the trail.</item>
+    /// <see cref="TrailGapSpacings"/> behind the anchor, staggered left/right by member id, <see cref="TrailBelow"/> m
+    /// under the anchor and above the floor. Each keeps its own place on the route, keyed by its id, so nobody's
+    /// reference jumps when a member ahead leaves the trail or the wing.</item>
     /// </list>
     /// Members read the resulting <see cref="WingFrame"/>, so their order does not matter.</summary>
     internal sealed class FormationWing
@@ -61,6 +67,8 @@ namespace WingCommand
         public readonly LeaderHistory History = new LeaderHistory();
         public readonly AnchorTrail Route = new AnchorTrail();
         private readonly float[] routeS = new float[N];
+        private readonly int[] routeIds = new int[N];
+        private readonly bool[] routeSeen = new bool[N];
         public readonly CollisionBias Collision = new CollisionBias(N + 1);
         public readonly WingFrame Frame = new WingFrame();
         private readonly Persistence[] established = new Persistence[N];
@@ -71,7 +79,7 @@ namespace WingCommand
         public FormationWing(FormationDefinition definition, float spacing)
         {
             SetFormation(definition, spacing);
-            for (int i = 0; i < N; i++) routeS[i] = float.NaN;
+            ForgetRoutes();
         }
 
         /// <summary>The wing forms on another aircraft now (an anchor set, lost or replaced by the player). The leader stays
@@ -81,7 +89,7 @@ namespace WingCommand
             Estimator.Reset();
             History.Clear();
             Route.Clear();
-            for (int i = 0; i < N; i++) routeS[i] = float.NaN;
+            ForgetRoutes();
         }
 
         public void SetFormation(FormationDefinition definition, float spacing)
@@ -122,7 +130,7 @@ namespace WingCommand
                 Frame.Established[i] = established[i].Update(error < EstablishedFraction * Frame.Spacing, EstablishedSeconds, dt);
             }
             for (int i = 0; i < count; i++)
-                Frame.StaggerClear[i] = i == 0 || Frame.Established[i - 1] ||
+                Frame.StaggerClear[i] = i == 0 || Frame.Established[i - 1] || members[i - 1].Role != Role.Slot ||
                                         Side(Frame.Slots[i].Lateral) != Side(Frame.Slots[i - 1].Lateral);
 
             bodies[0] = new CollisionBody
@@ -148,26 +156,61 @@ namespace WingCommand
 
         private void UpdateTrail(WingMemberInput[] members, int count, float dt)
         {
-            int ahead = -1;
+            for (int k = 0; k < N; k++) routeSeen[k] = false;
+            bool haveAhead = false;
+            float aheadS = 0f;
             for (int i = 0; i < N; i++)
             {
-                if (i >= count || members[i].Role != Role.Trail)
-                {
-                    routeS[i] = float.NaN;
-                    continue;
-                }
-                if (float.IsNaN(routeS[i])) routeS[i] = Route.Nearest(members[i].State.Pos);
-                float cap = ahead >= 0 ? routeS[ahead] - Frame.Spacing : Route.Head - TrailGapSpacings * Frame.Spacing;
-                float previous = routeS[i];
-                routeS[i] = Math.Min(previous + members[i].Capability.MaxSpeed * dt, Math.Max(previous, cap));
-                float advance = dt > 0f ? (routeS[i] - previous) / dt : 0f;
+                Frame.TrailValid[i] = false;
+                if (i >= count || members[i].Role != Role.Trail) continue;
+                int k = RouteOf(members[i].Id);
+                if (k < 0) continue;
+                routeSeen[k] = true;
+                if (float.IsNaN(routeS[k])) routeS[k] = Route.Nearest(members[i].State.Pos);
+                float cap = haveAhead ? aheadS - Frame.Spacing : Route.Head - TrailGapSpacings * Frame.Spacing;
+                float previous = routeS[k];
+                routeS[k] = Math.Min(previous + members[i].Capability.MaxSpeed * dt, Math.Max(previous, cap));
+                float advance = dt > 0f ? (routeS[k] - previous) / dt : 0f;
 
-                Vec3 pos = Route.PointAt(routeS[i], out Vec3 along);
-                pos += Vec3.Cross(Vec3.Up, along) * ((i % 2 == 0 ? 1f : -1f) * TrailStagger * Frame.Spacing);
+                Vec3 pos = Route.PointAt(routeS[k], out Vec3 along);
+                float side = Math.Abs(members[i].Id) % 2 == 0 ? 1f : -1f;
+                pos += Vec3.Cross(Vec3.Up, along) * (side * TrailStagger * Frame.Spacing);
                 float y = Frame.Leader.Pos.Y - TrailBelow;
                 if (!float.IsNaN(Frame.FloorY)) y = Math.Max(y, Frame.FloorY + Frame.Clearance);
                 Frame.TrailRef[i] = new RefState(new Vec3(pos.X, y, pos.Z), along * advance, Vec3.Zero);
-                ahead = i;
+                Frame.TrailValid[i] = true;
+                aheadS = routeS[k];
+                haveAhead = true;
+            }
+            for (int k = 0; k < N; k++)
+                if (!routeSeen[k])
+                {
+                    routeIds[k] = -1;
+                    routeS[k] = float.NaN;
+                }
+        }
+
+        /// <summary>The route entry of member <paramref name="id"/>, taking a free one for a newcomer; −1 when full.</summary>
+        private int RouteOf(int id)
+        {
+            int free = -1;
+            for (int k = 0; k < N; k++)
+            {
+                if (routeIds[k] == id) return k;
+                if (free < 0 && routeIds[k] == -1) free = k;
+            }
+            if (free < 0) return -1;
+            routeIds[free] = id;
+            routeS[free] = float.NaN;
+            return free;
+        }
+
+        private void ForgetRoutes()
+        {
+            for (int k = 0; k < N; k++)
+            {
+                routeIds[k] = -1;
+                routeS[k] = float.NaN;
             }
         }
 
