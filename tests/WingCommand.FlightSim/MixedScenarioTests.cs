@@ -112,6 +112,50 @@ namespace WingCommand.FlightSim
             Assert.True(jetFar < HoldOrbit.RadiusFor(FormationPilot.OrbitSpeed(jetProfile)) + 1500f, $"jet up to {jetFar:0} m away");
         }
 
+        [Fact]
+        public void TiltwingConvertsOnceEachWayBehindALeaderThatSlowsAndSpeedsUp()
+        {
+            // T1: a tiltwing rejoins from 3 km at 120 m/s; the leader slows to 20 m/s at 90 s and speeds back up to
+            // 120 m/s at 180 s. One conversion each way, no bank step over 10° in the command at a conversion, no sag
+            // after converting (a low hand-over trim once sank it 1360 m), back in its slot by the end (the turboprop
+            // accelerates slowly: it trails the leader's re-acceleration by ~800 m and closes afterwards).
+            PlantParams pp = PlantParams.CoinTurboprop;
+            float stall = (float)Math.Sqrt(pp.MassKg * Scalar.G / (0.5 * 1.225 * pp.WingAreaM2 * pp.ClMax));
+            AirframeProfile p = AirframeProfile.Derive(new ProfileInputs
+            {
+                UnitName = "sim-tiltwing", Class = AirframeClass.Tiltwing, PublishedStallKmh = stall * 3.6f, MaxSpeed = 160f,
+                CornerSpeed = pp.CornerSpeed, PidReferenceAirspeed = 110f, GLimit = pp.GLimit, CruiseThrottle = 0.55f,
+                FbwMaxRollAngularVel = pp.MaxRollAngularVel, FbwGLimit = pp.GLimit, FbwCornerSpeed = pp.CornerSpeed, MaxRadius = 7f,
+            });
+            var leader = new VirtualLeader(new Vec3(0f, 1500f, 3000f), 120f, 0f) { CanHover = true, SpeedChangeRate = 2f };
+            var wing = new MixedSimWing(leader, SimFormations.Get("echelon-right"), FormationCatalog.Standard);
+            var plant = new TiltwingPlant(pp, RotaryParams.Utility, p.ConversionLow, p.ConversionHigh,
+                new Vec3(80f, 1500f, 0f), new Vec3(0f, 0f, 120f), 0f);
+            wing.Add(plant, p, 0.55f);
+            var pipeline = (TiltwingPipeline)wing.Pilots[0].Pipeline;
+            TiltwingMode mode = TiltwingMode.Plane;
+            float lastBank = 0f, maxBankStep = 0f, maxSlotError = 0f, lowest = float.MaxValue;
+            for (int i = 0; i < 400 * 60; i++)
+            {
+                float t = i * Dt;
+                leader.Step(0f, Dt, t < 90f ? 120f : t < 180f ? 20f : 120f, 0f);
+                wing.Step();
+                float bank = pipeline.LastAttitude.BankDeg;
+                if (pipeline.Mode != mode)
+                {
+                    maxBankStep = Math.Max(maxBankStep, Math.Abs(bank - lastBank));
+                    mode = pipeline.Mode;
+                }
+                lastBank = bank;
+                lowest = Math.Min(lowest, plant.Position.Y);
+                if (t > 380f) maxSlotError = Math.Max(maxSlotError, wing.SlotError(0));
+            }
+            Assert.Equal(2, pipeline.Conversions);
+            Assert.True(maxBankStep < 10f, $"bank command stepped {maxBankStep:0.0}° at a conversion");
+            Assert.True(lowest > 1500f - 150f, $"sank to {lowest:0} m (leader at 1500 m)");
+            Assert.True(maxSlotError < 2f * FormationCatalog.Standard, $"up to {maxSlotError:0} m from its slot at the end");
+        }
+
         /// <summary>Horizontal distance from <paramref name="p"/> to the polyline <paramref name="route"/>.</summary>
         private static float CrossTrack(List<Vec3> route, Vec3 p)
         {

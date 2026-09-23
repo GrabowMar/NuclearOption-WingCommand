@@ -1,3 +1,5 @@
+using System;
+
 namespace WingCommand
 {
     internal enum TiltwingMode : byte { Plane, Rotary }
@@ -11,10 +13,13 @@ namespace WingCommand
     /// at once.</item>
     /// <item>On a conversion the incoming pipeline tracks the aircraft and the output just produced (bumpless); the
     /// outgoing one idles.</item>
+    /// <item>In rotary mode the speed is capped at max(<see cref="RotaryCapFactor"/> × ConversionHigh, the reference's
+    /// speed + <see cref="RotaryCatchUp"/>): chasing a slow reference never runs it into plane mode, while a fast
+    /// reference still carries it through the conversion.</item>
     /// </list></summary>
     internal sealed class TiltwingPipeline : IFlightPipeline
     {
-        public static float MinDwell = 3f;
+        public static float MinDwell = 3f, RotaryCapFactor = 0.9f, RotaryCatchUp = 10f;
 
         public readonly FixedWingPipeline Plane = new FixedWingPipeline();
         public readonly RotaryPipeline Rotary = new RotaryPipeline();
@@ -33,7 +38,12 @@ namespace WingCommand
         public GuidanceCommand Guide(in FlightIntent intent, in AircraftState s, AirframeProfile p)
         {
             Prime(s, p);
-            return Active.Guide(intent, s, p);
+            if (Mode == TiltwingMode.Plane) return Plane.Guide(intent, s, p);
+            float cap = Math.Max(RotaryCapFactor * p.ConversionHigh, intent.Ref.Vel.Horizontal.Length + RotaryCatchUp);
+            FlightIntent rotary = intent;
+            rotary.Limits = new SpeedLimits(intent.Limits.Min, intent.Limits.Max > 0f ? Math.Min(intent.Limits.Max, cap) : cap,
+                intent.Limits.AfterburnerAllowed, intent.Limits.AirbrakeAllowed);
+            return Rotary.Guide(rotary, s, p);
         }
 
         public ControlOutput Step(in GuidanceCommand guidance, in AircraftState s, in LimitContext ctx, AirframeProfile p, float dt)

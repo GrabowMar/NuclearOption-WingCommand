@@ -80,6 +80,32 @@ namespace WingCommand.PureTests
             Assert.Equal(expected.VelCmd, rotary.VelCmd);
         }
 
+        private static FlightIntent Toward(Vec3 refPos, Vec3 refVel) => new FlightIntent
+        {
+            Ref = new RefState(refPos, refVel, Vec3.Zero), Limits = new SpeedLimits(0f, 150f, false, true), Precision = 1f,
+        };
+
+        [Fact]
+        public void RotaryModeDoesNotOutrunTheConversionToChaseASlowReference()
+        {
+            // Overshot 3 km past a slow leader: flying back at plane cruise would convert it to plane mode and back (T1).
+            AirframeProfile p = Tiltwing();
+            var t = new TiltwingPipeline();
+            Run(t, 20f, 1f, p);
+            GuidanceCommand g = t.Guide(Toward(new Vec3(0f, 500f, -3000f), new Vec3(0f, 0f, 20f)), At(20f), p);
+            Assert.True(g.VelCmd.Horizontal.Length < p.ConversionHigh, $"{g.VelCmd.Horizontal.Length:0} m/s");
+        }
+
+        [Fact]
+        public void RotaryModeStillFollowsAFastReferenceIntoPlaneMode()
+        {
+            AirframeProfile p = Tiltwing();
+            var t = new TiltwingPipeline();
+            Run(t, 20f, 1f, p);
+            GuidanceCommand g = t.Guide(Toward(new Vec3(0f, 500f, 100f), new Vec3(0f, 0f, 120f)), At(20f), p);
+            Assert.True(g.VelCmd.Horizontal.Length >= 120f, $"{g.VelCmd.Horizontal.Length:0} m/s");
+        }
+
         [Fact]
         public void TheIncomingPipelineTakesOverFromTheAppliedOutput()
         {
