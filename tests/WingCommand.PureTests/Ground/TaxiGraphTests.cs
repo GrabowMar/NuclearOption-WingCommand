@@ -80,7 +80,7 @@ namespace WingCommand.PureTests
                 Near(g.NodePos(g.EdgeFrom(e)), new Vec3(0f, 0f, 0f)) && Near(g.NodePos(g.EdgeTo(e)), new Vec3(100f, 0f, 0f)));
             var nodes = new List<int>();
             var edges = new List<int>();
-            Assert.True(TaxiRouter.Route(g, a, c, e => e == ab ? 1000f : 0f, nodes, edges));
+            Assert.True(TaxiRouter.Route(g, a, c, (e, from) => e == ab ? 1000f : 0f, nodes, edges));
             Assert.DoesNotContain(ab, edges);
             Assert.Contains(nodes, n => Near(g.NodePos(n), new Vec3(0f, 0f, 100f)));
         }

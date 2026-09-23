@@ -35,9 +35,50 @@ namespace WingCommand.PureTests
 
         private static DepartureSequencer FourShip()
         {
-            var d = new DepartureSequencer { Abreast = 2 };
-            for (int o = 1; o <= 4; o++) d.Expect(o);
+            var d = new DepartureSequencer();
+            for (int o = 1; o <= 4; o++) d.Expect(o, 2);
             return d;
+        }
+
+        [Fact]
+        public void AMixedGroupLinesUpAsFewAbreastAsItsWidestTypeAllows()
+        {
+            // Review M3a #10: the type expected last set the count.
+            var d = new DepartureSequencer();
+            d.Expect(1, 4);
+            d.Expect(2, 2);
+            d.Expect(3, 4);
+            Assert.Equal(2, d.Abreast);
+        }
+
+        [Fact]
+        public void AMemberArrivingAfterTheLockWaitsForTheNextGroupAndLeavesTheSlotsAlone()
+        {
+            // Review M3a #10: a late narrow type shrank the rows (and a late arrival moved the slots) mid-lineup.
+            var d = new DepartureSequencer();
+            d.Expect(1, 2);
+            d.Expect(2, 2);
+            d.Enqueue(1, 0f);
+            d.Enqueue(2, 0f);
+            Assert.True(d.MayLineUp(1, 0f));
+            d.Expect(3, 1);
+            d.Enqueue(3, 1f);
+            Assert.Equal(2, d.Abreast);
+            Assert.Equal(1, d.Rows);
+            d.ClearedThreshold(1);
+            d.ClearedThreshold(2);
+            Assert.False(d.MayLineUp(3, 2f));
+            d.LinedUp(1);
+            d.LinedUp(2);
+            Assert.True(d.MayRoll(1, 3f));
+            d.Airborne(1);
+            d.Airborne(2);
+            Assert.False(d.RunwayLocked);
+            Assert.True(d.MayLineUp(3, 4f), "the late member is the next group");
+            Assert.Equal(1, d.Abreast);
+            d.SlotOf(3, out int row, out int column);
+            Assert.Equal(0, row);
+            Assert.Equal(0, column);
         }
 
         [Fact]

@@ -6,7 +6,7 @@ namespace WingCommand
     {
         BehaviourChanged, FallingBehind, FallingBehindCleared, GcasActivated, CollisionEmergency, AnchorLost, Converted,
         // Ground operations (M3).
-        GroundSpawned, Taxiing, HoldingShort, LiningUp, Rolling, Airborne, Rerouted, Relocated,
+        GroundSpawned, Taxiing, HoldingShort, LiningUp, Rolling, Airborne, Rerouted, Relocated, DepartureAborted,
     }
 
     internal enum TransitionReason : byte { None, Captured, LostSlot, LeaderSlow, LeaderNotFlying, LeaderLost, LeaderRecovered, Commanded, LeaderFast }

@@ -250,11 +250,11 @@ namespace WingCommand
         }
     }
 
-    /// <summary>Shortest routes over a <see cref="TaxiGraph"/> (A* on edge length plus an optional extra cost per edge:
-    /// reserved against the travel direction, blocked, or a watchdog's stuck edge).</summary>
+    /// <summary>Shortest routes over a <see cref="TaxiGraph"/> (A* on edge length plus an optional extra cost per edge and
+    /// the node it is entered from: in use against the travel direction, blocked, or an edge to avoid).</summary>
     internal static class TaxiRouter
     {
-        public static bool Route(TaxiGraph g, int start, int goal, Func<int, float> extraCost, List<int> nodes, List<int> edges)
+        public static bool Route(TaxiGraph g, int start, int goal, Func<int, int, float> extraCost, List<int> nodes, List<int> edges)
         {
             nodes.Clear();
             edges.Clear();
@@ -291,7 +291,7 @@ namespace WingCommand
                 {
                     int next = g.OtherEnd(e, current);
                     if (closed[next]) continue;
-                    float c = cost[current] + g.EdgeLength(e) + (extraCost != null ? extraCost(e) : 0f);
+                    float c = cost[current] + g.EdgeLength(e) + (extraCost != null ? extraCost(e, current) : 0f);
                     if (c < cost[next])
                     {
                         cost[next] = c;

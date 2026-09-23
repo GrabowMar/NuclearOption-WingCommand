@@ -5,6 +5,19 @@ namespace WingCommand.PureTests
     /// at both ends (x = −40); two hangars at x = −300 facing +X, joined to the taxiway by apron roads.</summary>
     internal static class TestFields
     {
+        /// <summary><see cref="Simple"/> with a second way between the apron junction at z = 500 and the south end of the
+        /// taxiway: a bypass through (−220, 250).</summary>
+        public static AirbaseSample WithBypass()
+        {
+            AirbaseSample field = Simple();
+            var roads = new System.Collections.Generic.List<Vec3[]>(field.Roads)
+            {
+                new[] { new Vec3(-150f, 0f, 500f), new Vec3(-220f, 0f, 250f), new Vec3(-150f, 0f, 0f) },
+            };
+            field.Roads = roads.ToArray();
+            return field;
+        }
+
         public static AirbaseSample Simple(float runwayWidth = 60f, bool roads = true) => new AirbaseSample
         {
             Name = "test_field",

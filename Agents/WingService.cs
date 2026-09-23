@@ -118,21 +118,26 @@ namespace WingCommand
         }
 
         /// <summary>Take over an initialised aircraft as the next member (host only; fixed-wing only in M1).</summary>
-        public bool Adopt(Aircraft a)
+        public bool Adopt(Aircraft a) => AdoptMember(a, null) != null;
+
+        /// <summary>The new member, its ground pilot (if any) attached before its state is entered: entering reads
+        /// <see cref="WingMember.OnGround"/> to keep the gear down.</summary>
+        private WingMember AdoptMember(Aircraft a, Func<WingMember, GroundPilot> ground)
         {
-            if (Wing == null || a == null || a.pilots == null || a.pilots.Length == 0 || Members.Count >= MaxMembers) return false;
+            if (Wing == null || a == null || a.pilots == null || a.pilots.Length == 0 || Members.Count >= MaxMembers) return null;
             if (ProfileReader.IsVtol(a))
             {
                 WingToast.Show("VTOL aircraft cannot fly formation (the game gives them no AI to take over)");
-                return false;
+                return null;
             }
             var m = new WingMember(a, Members.Count, WingProfiles.For(a)) { Id = nextMemberId++ };
             m.State = new WingFlightState(m);
+            if (ground != null) m.Ground = ground(m);
             Members.Add(m);
             m.Pilot.SwitchState(m.State);
             Plugin.Logger.LogInfo($"[Wing] #{m.Number} {a.definition.unitName} joined");
             RosterChanged?.Invoke();
-            return true;
+            return m;
         }
 
         /// <summary>Gear comes up this high on the climb-out.</summary>
@@ -202,6 +207,11 @@ namespace WingCommand
             ControlOutput o = m.Ground.Step(m.Last, m.Profile, m.Brain.Pipeline, missionTime, dt, Events, m.Brain.Slot);
             ControlWriter.Fly(m.Aircraft, o, m.Profile.Class);
             if (m.Ground.TakeRelocation(out Pose to)) SafeRelocate.Move(m.Aircraft, to);
+            if (m.Ground.Phase == GroundPhase.Aborted)
+            {
+                Release(m, "could not take off");
+                return;
+            }
             bool climbing = m.Ground.Phase == GroundPhase.ClimbOut || m.Ground.Done;
             if (climbing && m.Last.RadarAlt > GearUpHeight && m.Aircraft.gearState != LandingGear.GearState.LockedRetracted)
                 m.Aircraft.SetGear(false);
@@ -214,14 +224,11 @@ namespace WingCommand
         /// <summary>Adopt an aircraft launched on a field: it starts on the ground under a <see cref="GroundPilot"/>.</summary>
         public bool AdoptGround(Aircraft a, FieldTraffic field, Pose spawn, int hangarIndex)
         {
-            if (!Adopt(a)) return false;
-            WingMember m = Members[Members.Count - 1];
-            m.Ground = new GroundPilot(m.Id, field, m.Profile.Class, spawn, hangarIndex);
+            WingMember m = AdoptMember(a, n => new GroundPilot(n.Id, field, n.Profile.Class, spawn, hangarIndex));
+            if (m == null) return false;
             if (m.Profile.Class == AirframeClass.FixedWing)
             {
-                field.Departures.Expect(m.Id);
-                int abreast = LineupPlanner.Abreast(field.Runway.Width, m.Profile.SpanM);
-                field.Departures.Abreast = field.Departures.Rows == 0 ? abreast : Math.Min(field.Departures.Abreast, abreast);
+                field.Departures.Expect(m.Id, LineupPlanner.Abreast(field.Runway.Width, m.Profile.SpanM));
             }
             else m.Ground.RoofOverhead = Physics.Raycast(a.transform.position + Vector3.up * 3f, Vector3.up, 30f);
             Events.Push(new WingEvent { Time = missionTime, Member = m.Brain.Slot, Kind = WingEventKind.GroundSpawned });
@@ -237,12 +244,21 @@ namespace WingCommand
         }
 
         /// <summary>Hand the member to native AI (its combat state exists: air-starts went through
-        /// SetStartingAiState). It leaves the wing at the next prune.</summary>
+        /// SetStartingAiState); a member still on the surface of a field goes back to the reserve instead, since the
+        /// native AI ejects a pilot sitting on the ground. It leaves the wing at the next prune.</summary>
         public void Release(WingMember m, string why)
         {
             if (m.Released) return;
             m.Released = true;
+            bool despawn = m.Ground != null && m.Ground.DespawnOnRelease(m.Last);
             m.Ground?.Leave();
+            if (despawn && m.Aircraft != null && !m.Aircraft.disabled)
+            {
+                ControlWriter.Fly(m.Aircraft, new ControlOutput { Brake = 1f }, m.Profile.Class);
+                m.Aircraft.ReturnToInventory();
+                Plugin.Logger.LogInfo($"[Wing] #{m.Number} returned to the reserve from the field{(why != null ? ": " + why : "")}");
+                return;
+            }
             if (why != null) Plugin.Logger.LogInfo($"[Wing] #{m.Number} released to the game's AI: {why}");
             Pilot p = m.Pilot;
             PilotBaseState combat = p != null ? NativeCombatState(p) : null;

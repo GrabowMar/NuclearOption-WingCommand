@@ -53,7 +53,7 @@ namespace WingCommand.PureTests
             Pose spawn = sample.Hangars[0].Spawn;
             var plant = new TestGroundPlant(spawn);
             var pilot = new GroundPilot(1, field, AirframeClass.FixedWing, spawn, 0);
-            field.Departures.Expect(1);
+            field.Departures.Expect(1, 1);
             AirframeProfile p = Jet();
             IFlightPipeline pipeline = FlightStack.NewPipeline(AirframeClass.FixedWing);
             var events = new WingEventRing();
@@ -77,6 +77,118 @@ namespace WingCommand.PureTests
             Assert.True((linedUpAt - slot).Horizontal.Length < 5f, $"lined up at {linedUpAt}, slot {slot}");
             Assert.True(plant.Speed >= p.TakeoffSpeed - 1f);
             Assert.Equal(1, events.CountOf(WingEventKind.Rolling));
+            Assert.False(pilot.DespawnOnRelease(plant.Read(Dt)), "a member climbing out goes to the game's AI when released");
+        }
+
+        [Fact]
+        public void AReleaseDespawnsAMemberOnlyWhileItIsStillOnTheSurface()
+        {
+            // Review M3a #2: a member dismissed on the ground went to the native combat AI, which ejects a stopped pilot.
+            var field = new FieldTraffic(TestFields.Simple(), 0, false);
+            Pose spawn = field.Field.Hangars[1].Spawn;
+            var pilot = new GroundPilot(3, field, AirframeClass.Rotary, spawn, 1);
+            AirframeProfile helo = AirframeProfile.Derive(new ProfileInputs { Class = AirframeClass.Rotary, MaxSpeed = 134f });
+            IFlightPipeline pipeline = FlightStack.NewPipeline(AirframeClass.Rotary);
+            var s = new AircraftState { Pos = spawn.Pos, Fwd = spawn.Fwd, Up = Vec3.Up, Right = Vec3.Cross(Vec3.Up, spawn.Fwd), RotorRpm = 1f };
+            Assert.True(pilot.DespawnOnRelease(s));
+            for (int i = 0; i < 5 * 30 && pilot.Phase == GroundPhase.Parked; i++) pilot.Step(s, helo, pipeline, i * Dt, Dt, null, 0);
+            Assert.Equal(GroundPhase.LiftOff, pilot.Phase);
+            s.RadarAlt = 2f;
+            Assert.True(pilot.DespawnOnRelease(s));
+            s.RadarAlt = 25f;
+            Assert.False(pilot.DespawnOnRelease(s));
+        }
+
+        /// <summary>One jet from its hangar until it reaches <paramref name="until"/>; the time reached.</summary>
+        private static float RunUntil(FieldTraffic field, GroundPilot pilot, TestGroundPlant plant, IFlightPipeline pipeline,
+            WingEventRing events, GroundPhase until)
+        {
+            float t = 0f;
+            for (int i = 0; i < 600 * 30 && pilot.Phase != until; i++, t += Dt)
+            {
+                field.Step(Dt);
+                plant.Step(pilot.Step(plant.Read(Dt), Jet(), pipeline, t, Dt, events, 0), Dt);
+            }
+            Assert.Equal(until, pilot.Phase);
+            return t;
+        }
+
+        /// <summary>The plant held still (stuck): the pilot steps on, the aircraft never moves.</summary>
+        private static float Hold(FieldTraffic field, GroundPilot pilot, TestGroundPlant plant, IFlightPipeline pipeline,
+            WingEventRing events, float t, float seconds)
+        {
+            plant.Speed = 0f;
+            for (int i = 0; i < seconds * 30; i++, t += Dt)
+            {
+                field.Step(Dt);
+                pilot.Step(plant.Read(Dt), Jet(), pipeline, t, Dt, events, 0);
+            }
+            return t;
+        }
+
+        private static (FieldTraffic, GroundPilot, TestGroundPlant, IFlightPipeline, WingEventRing) OneJet()
+        {
+            var field = new FieldTraffic(TestFields.Simple(), 0, false);
+            Pose spawn = field.Field.Hangars[0].Spawn;
+            field.Departures.Expect(1, 1);
+            return (field, new GroundPilot(1, field, AirframeClass.FixedWing, spawn, 0), new TestGroundPlant(spawn),
+                FlightStack.NewPipeline(AirframeClass.FixedWing), new WingEventRing());
+        }
+
+        [Fact]
+        public void AMemberStoppedAtItsSlotOffHeadingStillRollsOnceSettled()
+        {
+            // Review M3a #6: a member stopped on its slot more than 10 degrees off the runway heading waited forever.
+            var (field, pilot, plant, pipeline, events) = OneJet();
+            float t = RunUntil(field, pilot, plant, pipeline, events, GroundPhase.LineUp);
+            RunwaySample r = field.Runway;
+            plant.Pos = LineupPlanner.Slot(r, false, 0, 0, 1, 1);
+            plant.Fwd = new Vec3((float)Math.Sin(20f * Scalar.Deg2Rad), 0f, (float)Math.Cos(20f * Scalar.Deg2Rad));
+            Hold(field, pilot, plant, pipeline, events, t, GroundPilot.AlignSettleSeconds + 1f);
+            Assert.Equal(GroundPhase.Roll, pilot.Phase);
+        }
+
+        [Fact]
+        public void AMemberThatCannotLineUpGivesUpAndFreesTheRunway()
+        {
+            // Review M3a #6: a member stuck in the lineup held the runway lock forever.
+            var (field, pilot, plant, pipeline, events) = OneJet();
+            float t = RunUntil(field, pilot, plant, pipeline, events, GroundPhase.LineUp);
+            Assert.True(field.Departures.RunwayLocked);
+            Hold(field, pilot, plant, pipeline, events, t, GroundPilot.LineUpSeconds + 1f);
+            Assert.Equal(GroundPhase.Aborted, pilot.Phase);
+            Assert.False(field.Departures.RunwayLocked);
+            Assert.True(pilot.DespawnOnRelease(plant.Read(Dt)), "a member that gave up goes back to the reserve");
+            Assert.Equal(1, events.CountOf(WingEventKind.DepartureAborted));
+        }
+
+        [Fact]
+        public void AMemberThatNeverReachesTakeoffSpeedGivesUpAndFreesTheRunway()
+        {
+            var (field, pilot, plant, pipeline, events) = OneJet();
+            float t = RunUntil(field, pilot, plant, pipeline, events, GroundPhase.Roll);
+            t = Hold(field, pilot, plant, pipeline, events, t, GroundPilot.RollSeconds - 5f);
+            Assert.Equal(GroundPhase.Roll, pilot.Phase);
+            Hold(field, pilot, plant, pipeline, events, t, 6f);
+            Assert.Equal(GroundPhase.Aborted, pilot.Phase);
+            Assert.False(field.Departures.RunwayLocked);
+        }
+
+        [Fact]
+        public void AMemberAdoptedLateInAMissionStillWaitsParkedFirst()
+        {
+            // Review M3a #9: the parked timer started at 0, so at mission time 1000 s it left at once (hangar doors
+            // still opening).
+            var field = new FieldTraffic(TestFields.Simple(), 0, false);
+            Pose spawn = field.Field.Hangars[0].Spawn;
+            var pilot = new GroundPilot(1, field, AirframeClass.FixedWing, spawn, 0);
+            var s = new AircraftState { Pos = spawn.Pos, Fwd = spawn.Fwd, Up = Vec3.Up, Right = Vec3.Cross(Vec3.Up, spawn.Fwd) };
+            IFlightPipeline pipeline = FlightStack.NewPipeline(AirframeClass.FixedWing);
+            pilot.Step(s, Jet(), pipeline, 1000f, Dt, null, 0);
+            pilot.Step(s, Jet(), pipeline, 1000f + GroundPilot.ParkedSeconds - 0.5f, Dt, null, 0);
+            Assert.Equal(GroundPhase.Parked, pilot.Phase);
+            pilot.Step(s, Jet(), pipeline, 1000f + GroundPilot.ParkedSeconds + 0.1f, Dt, null, 0);
+            Assert.Equal(GroundPhase.TaxiOut, pilot.Phase);
         }
 
         [Fact]
@@ -155,6 +267,74 @@ namespace WingCommand.PureTests
             Assert.Equal(0, events.CountOf(WingEventKind.Relocated));
         }
 
+        /// <summary>The direct taxiway edge between the apron junction (z = 500) and the south end (z = 0).</summary>
+        private static int DirectEdge(TaxiGraph g, out int south, out int junction)
+        {
+            south = g.NearestNode(new Vec3(-150f, 0f, 0f));
+            junction = g.NearestNode(new Vec3(-150f, 0f, 500f));
+            foreach (int e in g.EdgesOf(junction))
+                if (g.OtherEnd(e, junction) == south && g.EdgePoints(e).Length == 2) return e;
+            throw new InvalidOperationException("no direct edge");
+        }
+
+        [Fact]
+        public void AHeadOnIsResolvedByTheMemberAtTheJunctionTakingAnotherWay()
+        {
+            // Review M3a #4: the victim released the node it stood on and rerouted around its own edge.
+            var field = new FieldTraffic(TestFields.WithBypass(), 0, false);
+            int direct = DirectEdge(field.Graph, out int south, out int junction);
+            Pose spawn = field.Field.Hangars[0].Spawn;
+            var plant = new TestGroundPlant(spawn);
+            var pilot = new GroundPilot(1, field, AirframeClass.FixedWing, spawn, 0);
+            field.Departures.Expect(1, 1);
+            IFlightPipeline pipeline = FlightStack.NewPipeline(AirframeClass.FixedWing);
+            var events = new WingEventRing();
+            float minX = 0f;
+            for (int i = 0; i < 200 * 30 && pilot.Phase < GroundPhase.HoldShort; i++)
+            {
+                if (i == 5 * 30)
+                {
+                    // A member coming north up the direct taxiway: it holds the edge and waits for the junction.
+                    field.Reservations.TryAdvance(2, TaxiPriority.Departing, new[] { south, junction }, new[] { direct }, 0, 1);
+                    field.Reservations.ReleaseNode(2, south);
+                    field.Report(2, field.Graph.NodePos(south) + new Vec3(0f, 0f, 250f));
+                }
+                AircraftState s = plant.Read(Dt);
+                field.Step(Dt);
+                plant.Step(pilot.Step(s, Jet(), pipeline, i * Dt, Dt, events, 0), Dt);
+                minX = Math.Min(minX, plant.Pos.X);
+            }
+            Assert.True(pilot.Phase >= GroundPhase.HoldShort, $"phase {pilot.Phase}");
+            Assert.True(minX < -190f, $"took the direct taxiway (x {minX:0})");
+            Assert.Equal(0, events.CountOf(WingEventKind.Relocated));
+        }
+
+        [Fact]
+        public void ARouteAvoidsATaxiwayInUseTheOtherWay()
+        {
+            var field = new FieldTraffic(TestFields.WithBypass(), 0, false);
+            int direct = DirectEdge(field.Graph, out int south, out int junction);
+            field.Reservations.TryAdvance(2, TaxiPriority.Departing, new[] { south, junction }, new[] { direct }, 0, 1);
+            field.Reservations.ReleaseNode(2, south);
+            field.Reservations.ReleaseNode(2, junction);
+            Pose spawn = field.Field.Hangars[0].Spawn;
+            var plant = new TestGroundPlant(spawn);
+            var pilot = new GroundPilot(1, field, AirframeClass.FixedWing, spawn, 0);
+            IFlightPipeline pipeline = FlightStack.NewPipeline(AirframeClass.FixedWing);
+            var events = new WingEventRing();
+            float minX = 0f;
+            for (int i = 0; i < 200 * 30 && pilot.Phase < GroundPhase.HoldShort; i++)
+            {
+                AircraftState s = plant.Read(Dt);
+                field.Step(Dt);
+                plant.Step(pilot.Step(s, Jet(), pipeline, i * Dt, Dt, events, 0), Dt);
+                minX = Math.Min(minX, plant.Pos.X);
+            }
+            Assert.True(pilot.Phase >= GroundPhase.HoldShort, $"phase {pilot.Phase}");
+            Assert.True(minX < -190f, $"took the direct taxiway (x {minX:0})");
+            Assert.Equal(0, events.CountOf(WingEventKind.Rerouted));
+        }
+
         [Fact]
         public void ARelocationPutsTheMemberAtTheHoldShortOnce()
         {
@@ -177,6 +357,39 @@ namespace WingCommand.PureTests
             }
             Assert.Equal(1, relocations);
             Assert.True((to.Pos - field.Graph.NodePos(field.Graph.HoldShort(0, false))).Length < 1f);
+        }
+
+        [Fact]
+        public void ARelocationWaitsForAFreeHoldShortAndClaimsIt()
+        {
+            // Review M3a #3: the relocation teleported onto the hold-short whoever stood there.
+            var field = new FieldTraffic(TestFields.Simple(), 0, false);
+            int hold = field.Graph.HoldShort(0, false);
+            field.Reservations.TryAdvance(2, TaxiPriority.Departing, new[] { hold }, new int[0], 0, 0);
+            field.Report(2, field.Graph.NodePos(hold));
+            Pose spawn = field.Field.Hangars[0].Spawn;
+            var pilot = new GroundPilot(1, field, AirframeClass.FixedWing, spawn, 0);
+            var s = new AircraftState { Pos = spawn.Pos, Fwd = spawn.Fwd, Up = Vec3.Up, Right = Vec3.Cross(Vec3.Up, spawn.Fwd) };
+            IFlightPipeline pipeline = FlightStack.NewPipeline(AirframeClass.FixedWing);
+            int relocations = 0;
+            int i = 0;
+            for (; i < 150 * 30; i++)
+            {
+                field.Step(Dt);
+                if (pilot.Step(s, Jet(), pipeline, i * Dt, Dt, null, 0).Brake < 1f && i > 70 * 30)
+                    Assert.Fail("a member waiting to be relocated keeps its brakes on");
+                if (pilot.TakeRelocation(out _)) relocations++;
+            }
+            Assert.Equal(0, relocations);
+            field.Leave(2);
+            for (int j = 0; j < 5 * 30; j++, i++)
+            {
+                field.Step(Dt);
+                pilot.Step(s, Jet(), pipeline, i * Dt, Dt, null, 0);
+                if (pilot.TakeRelocation(out _)) relocations++;
+            }
+            Assert.Equal(1, relocations);
+            Assert.Equal(1, field.Reservations.OwnerOfNode(hold));
         }
 
         [Fact]

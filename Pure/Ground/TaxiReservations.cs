@@ -11,8 +11,11 @@ namespace WingCommand
     /// convoy; each keeps its distance to <see cref="Ahead"/>), and nobody enters against that direction.</item>
     /// <item>An owner claims along its route item by item (edge, far node, next edge, ...) and stops at the first item
     /// it cannot have; what stopped it is remembered for <see cref="FindDeadlock"/>. It releases each node and edge
-    /// once past it.</item>
+    /// once past it. The sole owner of an edge may turn back on it (its direction flips); a convoy may not.</item>
     /// <item>A blocked edge (a wreck, native traffic) is never granted.</item>
+    /// <item>A deadlock's victim is an owner waiting to enter an edge (it stands at a node it holds and can take another
+    /// way there) before one waiting for a node (it would have to turn back), then the lowest priority, then the highest
+    /// id; an owner that found no other way (<see cref="NoDetour"/>) is passed over until it next advances.</item>
     /// </list></summary>
     internal sealed class TaxiReservations
     {
@@ -23,6 +26,7 @@ namespace WingCommand
         private readonly bool[] blocked;
         private readonly Dictionary<int, int> waitingFor = new Dictionary<int, int>();
         private readonly Dictionary<int, TaxiPriority> priorities = new Dictionary<int, TaxiPriority>();
+        private readonly HashSet<int> waitingOnEdge = new HashSet<int>(), noDetour = new HashSet<int>();
         private readonly List<int> seen = new List<int>();
 
         public TaxiReservations(TaxiGraph g)
@@ -52,6 +56,21 @@ namespace WingCommand
 
         public void Block(int edge, bool isBlocked) => blocked[edge] = isBlocked;
 
+        /// <summary>Someone is on <paramref name="edge"/> travelling towards <paramref name="fromNode"/>.</summary>
+        public bool Against(int edge, int fromNode) =>
+            edgeUsers[edge].Count > 0 && edgeDirection[edge] != (graph.EdgeFrom(edge) == fromNode ? 1 : -1);
+
+        /// <summary>Nobody but <paramref name="owner"/> is on the edge.</summary>
+        public bool SoleUser(int owner, int edge) =>
+            edgeUsers[edge].Count == 0 || (edgeUsers[edge].Count == 1 && edgeUsers[edge][0] == owner);
+
+        /// <summary>Claims one edge for travel from <paramref name="fromNode"/> (a turn back on it).</summary>
+        public bool TryClaimEdge(int owner, int edge, int fromNode) =>
+            ClaimEdge(owner, edge, graph.EdgeFrom(edge) == fromNode ? 1 : -1);
+
+        /// <summary>The owner, a deadlock's victim, found no other way: pick another until it next advances.</summary>
+        public void NoDetour(int owner) => noDetour.Add(owner);
+
         /// <summary>Claims along the route from step <paramref name="from"/> for up to <paramref name="steps"/> steps (a
         /// step is edge k then node k+1; the route's first node is claimed too when <paramref name="from"/> is 0).
         /// Returns how many items it holds from there (0..2·steps); stops at the first item it cannot have.</summary>
@@ -59,6 +78,7 @@ namespace WingCommand
         {
             priorities[owner] = priority;
             waitingFor.Remove(owner);
+            waitingOnEdge.Remove(owner);
             if (from == 0 && nodes.Count > 0 && !ClaimNode(owner, nodes[0])) return 0;
             int granted = 0;
             for (int k = from; k < from + steps && k < edges.Count; k++)
@@ -70,6 +90,7 @@ namespace WingCommand
                 if (!ClaimNode(owner, nodes[k + 1])) return granted;
                 granted++;
             }
+            noDetour.Remove(owner);
             return granted;
         }
 
@@ -89,6 +110,8 @@ namespace WingCommand
                 if (nodeOwner[n] == owner) nodeOwner[n] = -1;
             for (int e = 0; e < edgeUsers.Length; e++) ReleaseEdge(owner, e);
             waitingFor.Remove(owner);
+            waitingOnEdge.Remove(owner);
+            noDetour.Remove(owner);
             priorities.Remove(owner);
         }
 
@@ -118,13 +141,25 @@ namespace WingCommand
 
         private int Victim(List<int> cycle)
         {
-            int victim = cycle[0];
+            bool anyDetour = false;
+            foreach (int o in cycle)
+                if (!noDetour.Contains(o)) anyDetour = true;
+            int victim = -1;
             foreach (int o in cycle)
             {
-                TaxiPriority p = Priority(o), v = Priority(victim);
-                if (p < v || (p == v && o > victim)) victim = o;
+                if (anyDetour && noDetour.Contains(o)) continue;
+                if (victim < 0 || Before(o, victim)) victim = o;
             }
             return victim;
+        }
+
+        /// <summary><paramref name="a"/> backs off before <paramref name="b"/>.</summary>
+        private bool Before(int a, int b)
+        {
+            bool edgeA = waitingOnEdge.Contains(a), edgeB = waitingOnEdge.Contains(b);
+            if (edgeA != edgeB) return edgeA;
+            TaxiPriority pa = Priority(a), pb = Priority(b);
+            return pa != pb ? pa < pb : a > b;
         }
 
         private TaxiPriority Priority(int owner) => priorities.TryGetValue(owner, out TaxiPriority p) ? p : TaxiPriority.TaxiIn;
@@ -146,16 +181,27 @@ namespace WingCommand
                 return true;
             }
             waitingFor[owner] = nodeOwner[node];
+            waitingOnEdge.Remove(owner);
             return false;
         }
 
         private bool ClaimEdge(int owner, int edge, int direction)
         {
-            if (edgeUsers[edge].Contains(owner)) return true;
-            if (blocked[edge]) return false;
+            if (edgeUsers[edge].Contains(owner))
+            {
+                if (edgeDirection[edge] == direction) return true;
+                if (edgeUsers[edge].Count == 1)
+                {
+                    edgeDirection[edge] = direction;
+                    return true;
+                }
+            }
+            else if (blocked[edge]) return false;
             if (edgeUsers[edge].Count > 0 && edgeDirection[edge] != direction)
             {
-                waitingFor[owner] = edgeUsers[edge][edgeUsers[edge].Count - 1];
+                int other = edgeUsers[edge][edgeUsers[edge].Count - 1];
+                waitingFor[owner] = other != owner ? other : edgeUsers[edge][0];
+                waitingOnEdge.Add(owner);
                 return false;
             }
             edgeUsers[edge].Add(owner);

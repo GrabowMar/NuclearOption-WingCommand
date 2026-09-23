@@ -92,6 +92,7 @@ namespace WingCommand
                 { "relocated", wing.Events.CountOf(WingEventKind.Relocated) },
                 { "rerouted", wing.Events.CountOf(WingEventKind.Rerouted) },
                 { "rolled", wing.Events.CountOf(WingEventKind.Rolling) },
+                { "aborted", wing.Events.CountOf(WingEventKind.DepartureAborted) },
                 { "ejections_blocked", EjectGuard.Blocked },
             };
             Plugin.Logger.LogInfo($"[Automation] Ground: {grounded} on the ground, {airborne} airborne, " +

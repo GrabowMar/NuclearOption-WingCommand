@@ -55,6 +55,16 @@ namespace WingCommand
 
         public bool TryGetPosition(int owner, out Vec3 pos) => positions.TryGetValue(owner, out pos);
 
+        /// <summary>Another member or a foreign aircraft stands within <paramref name="radius"/> of <paramref name="at"/>.</summary>
+        public bool Occupied(Vec3 at, float radius, int except)
+        {
+            foreach (KeyValuePair<int, Vec3> p in positions)
+                if (p.Key != except && (p.Value - at).Horizontal.Length < radius) return true;
+            foreach (Vec3 o in Obstacles)
+                if ((o - at).Horizontal.Length < radius) return true;
+            return false;
+        }
+
         public void Step(float dt)
         {
             sinceCheck += dt;
@@ -67,6 +77,9 @@ namespace WingCommand
         {
             if (Victim == owner) Victim = -1;
         }
+
+        /// <summary>The victim found no other way: the next deadlock check picks another member.</summary>
+        public void NoDetour(int owner) => Reservations.NoDetour(owner);
 
         /// <summary>A member done with the field (airborne, dead, released): its claims and its place go.</summary>
         public void Leave(int owner)

@@ -83,7 +83,7 @@ namespace WingCommand.FlightSim
             for (int i = 0; i < count; i++)
             {
                 Pose spawn = field.Field.Hangars[i].Spawn;
-                field.Departures.Expect(i);
+                field.Departures.Expect(i, LineupPlanner.Abreast(field.Runway.Width, p.SpanM));
                 members.Add(new Member
                 {
                     Pilot = new GroundPilot(i, field, AirframeClass.FixedWing, spawn, i),
@@ -91,7 +91,6 @@ namespace WingCommand.FlightSim
                     Pipeline = FlightStack.NewPipeline(AirframeClass.FixedWing),
                 });
             }
-            field.Departures.Abreast = LineupPlanner.Abreast(field.Runway.Width, p.SpanM);
             return members;
         }
 

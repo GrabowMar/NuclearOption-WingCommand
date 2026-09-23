@@ -29,30 +29,45 @@ namespace WingCommand
 
     /// <summary>One field's departures (spec M3 §3.4–3.5). Expected members gather at the hold-short; the group lines
     /// up once all have arrived (or <see cref="GatherTimeout"/> after the first), taking the runway lock (never while a
-    /// native landing is pending), one member at a time in queue order as the previous clears the threshold; rows of
-    /// <see cref="Abreast"/> roll in queue order, each
-    /// <see cref="RowInterval"/> after the previous; the lock is released when the last member is airborne. A member
-    /// removed on the ground (lost, released) never blocks its row.</summary>
+    /// native landing is pending). The group is the queue at that moment, its <see cref="Abreast"/> the fewest any of its
+    /// types allows; both stay fixed until the lock is released, and a member arriving later waits for the next group.
+    /// Members line up one at a time in queue order as the previous clears the threshold; rows roll in queue order, each
+    /// <see cref="RowInterval"/> after the previous; the lock is released when the last member of the group is airborne.
+    /// A member removed on the ground (lost, released) never blocks its row.</summary>
     internal sealed class DepartureSequencer
     {
         public static float RowInterval = 10f, GatherTimeout = 90f, ClearHeight = 75f;
 
-        public int Abreast = 1;
         public bool NativeLandingPending;
         public bool RunwayLocked { get; private set; }
 
         private readonly List<int> expected = new List<int>();
         private readonly List<int> queue = new List<int>();
+        private readonly List<int> group = new List<int>();
+        private readonly Dictionary<int, int> abreastOf = new Dictionary<int, int>();
         private readonly HashSet<int> linedUp = new HashSet<int>(), airborne = new HashSet<int>(), removed = new HashSet<int>();
         private readonly HashSet<int> cleared = new HashSet<int>();
         private readonly Dictionary<int, float> rowRolledAt = new Dictionary<int, float>();
         private float firstArrival = float.NaN;
+        private int lockedAbreast = 1;
 
-        public int Rows => queue.Count == 0 ? 0 : (queue.Count - 1) / Math.Max(1, Abreast) + 1;
+        /// <summary>Aircraft per row: fixed for the locked group, else the fewest any expected member's type allows.</summary>
+        public int Abreast => RunwayLocked ? lockedAbreast : Fewest(expected, queue);
 
-        public void Expect(int owner)
+        public int Rows
+        {
+            get
+            {
+                List<int> members = RunwayLocked ? group : queue;
+                return members.Count == 0 ? 0 : (members.Count - 1) / Abreast + 1;
+            }
+        }
+
+        /// <summary>A member will depart; <paramref name="abreast"/> is how many of its type fit the runway side by side.</summary>
+        public void Expect(int owner, int abreast)
         {
             if (!expected.Contains(owner)) expected.Add(owner);
+            abreastOf[owner] = Math.Max(1, abreast);
         }
 
         /// <summary>The member holds short; returns its place in the queue.</summary>
@@ -65,19 +80,24 @@ namespace WingCommand
 
         public bool MayLineUp(int owner, float time)
         {
-            int index = queue.IndexOf(owner);
-            if (index < 0) return false;
+            if (!queue.Contains(owner)) return false;
             if (!RunwayLocked)
             {
                 if (NativeLandingPending) return false;
+                if (float.IsNaN(firstArrival)) firstArrival = time;
                 bool gathered = true;
                 foreach (int o in expected)
                     if (!removed.Contains(o) && !queue.Contains(o)) gathered = false;
                 if (!gathered && time - firstArrival < GatherTimeout) return false;
+                group.Clear();
+                group.AddRange(queue);
+                lockedAbreast = Fewest(group, group);
                 RunwayLocked = true;
             }
+            int index = group.IndexOf(owner);
+            if (index < 0) return false;
             for (int j = 0; j < index; j++)
-                if (!cleared.Contains(queue[j]) && !removed.Contains(queue[j])) return false;
+                if (!cleared.Contains(group[j]) && !removed.Contains(group[j])) return false;
             return true;
         }
 
@@ -86,9 +106,9 @@ namespace WingCommand
 
         public void SlotOf(int owner, out int row, out int column)
         {
-            int i = Math.Max(0, queue.IndexOf(owner));
-            row = i / Math.Max(1, Abreast);
-            column = i % Math.Max(1, Abreast);
+            int i = Math.Max(0, (RunwayLocked ? group : queue).IndexOf(owner));
+            row = i / Abreast;
+            column = i % Abreast;
         }
 
         public void LinedUp(int owner) => linedUp.Add(owner);
@@ -98,8 +118,9 @@ namespace WingCommand
         {
             SlotOf(owner, out int row, out _);
             if (rowRolledAt.ContainsKey(row)) return true;
-            for (int i = row * Abreast; i < Math.Min(queue.Count, (row + 1) * Abreast); i++)
-                if (!linedUp.Contains(queue[i]) && !removed.Contains(queue[i])) return false;
+            int abreast = Abreast;
+            for (int i = row * abreast; i < Math.Min(group.Count, (row + 1) * abreast); i++)
+                if (!linedUp.Contains(group[i]) && !removed.Contains(group[i])) return false;
             if (row > 0 && (!rowRolledAt.TryGetValue(row - 1, out float previous) || time - previous < RowInterval)) return false;
             rowRolledAt[row] = time;
             return true;
@@ -117,20 +138,38 @@ namespace WingCommand
             ReleaseWhenDone();
         }
 
+        private int Fewest(List<int> a, List<int> b)
+        {
+            int fewest = LineupPlanner.MaxAbreast;
+            foreach (int o in a)
+                if (!removed.Contains(o) && abreastOf.TryGetValue(o, out int n)) fewest = Math.Min(fewest, n);
+            foreach (int o in b)
+                if (!removed.Contains(o) && abreastOf.TryGetValue(o, out int n)) fewest = Math.Min(fewest, n);
+            return Math.Max(1, fewest);
+        }
+
         private void ReleaseWhenDone()
         {
-            if (queue.Count == 0) return;
-            foreach (int o in queue)
+            if (!RunwayLocked) return;
+            foreach (int o in group)
                 if (!airborne.Contains(o) && !removed.Contains(o)) return;
             RunwayLocked = false;
-            queue.Clear();
-            expected.Clear();
+            foreach (int o in group) Forget(o);
+            foreach (int o in removed) Forget(o);
+            group.Clear();
             linedUp.Clear();
             cleared.Clear();
             airborne.Clear();
             removed.Clear();
             rowRolledAt.Clear();
             firstArrival = float.NaN;
+        }
+
+        private void Forget(int owner)
+        {
+            queue.Remove(owner);
+            expected.Remove(owner);
+            abreastOf.Remove(owner);
         }
     }
 }

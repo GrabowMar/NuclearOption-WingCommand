@@ -120,5 +120,57 @@ namespace WingCommand.PureTests
             r.ReleaseAll(2);
             Assert.False(r.FindDeadlock(out _));
         }
+
+        /// <summary>Head-on on B-C: 2 (eastbound, on A-B) waits for node C; 1 (westbound, on D-C) holds C and waits to
+        /// enter C-B.</summary>
+        private static TaxiReservations HeadOn(TaxiGraph g)
+        {
+            var r = new TaxiReservations(g);
+            var east = Path(g, 0f, 0f, 300f, 0f);
+            var west = Path(g, 300f, 0f, 0f, 0f);
+            r.TryAdvance(2, TaxiPriority.Departing, east.nodes, east.edges, 0, 1);
+            r.TryAdvance(1, TaxiPriority.Departing, west.nodes, west.edges, 0, 1);
+            r.TryAdvance(2, TaxiPriority.Departing, east.nodes, east.edges, 1, 1);
+            r.TryAdvance(1, TaxiPriority.Departing, west.nodes, west.edges, 1, 1);
+            return r;
+        }
+
+        [Fact]
+        public void AMemberWaitingToEnterAnEdgeIsTheVictimBeforeOneWaitingForANode()
+        {
+            // Review M3a #4: the victim was picked by id alone, so the member facing a held node had to turn around
+            // while the one at the junction could have taken another way.
+            var r = HeadOn(Line());
+            Assert.True(r.FindDeadlock(out int victim));
+            Assert.Equal(1, victim);
+        }
+
+        [Fact]
+        public void AVictimWithNoOtherWayIsPassedOver()
+        {
+            var r = HeadOn(Line());
+            r.NoDetour(1);
+            Assert.True(r.FindDeadlock(out int victim));
+            Assert.Equal(2, victim);
+        }
+
+        [Fact]
+        public void ASoleUserMayTurnBackOnItsEdgeButAConvoyMayNot()
+        {
+            TaxiGraph g = Line();
+            var r = new TaxiReservations(g);
+            var east = Path(g, 0f, 0f, 100f, 0f);   // A, A-B, B
+            var back = Path(g, 100f, 0f, 0f, 0f);   // B, B-A, A
+            r.TryAdvance(1, TaxiPriority.Departing, east.nodes, east.edges, 0, 1);
+            Assert.Equal(2, r.TryAdvance(1, TaxiPriority.Departing, back.nodes, back.edges, 0, 1));
+            Assert.True(r.Against(east.edges[0], east.nodes[0]), "A-B is now westbound");
+            r.ReleaseAll(1);
+            r.ReleaseAll(2);
+            r.TryAdvance(1, TaxiPriority.Departing, east.nodes, east.edges, 0, 1);
+            r.ReleaseNode(1, east.nodes[0]);
+            r.TryAdvance(2, TaxiPriority.Departing, east.nodes, east.edges, 0, 1);   // A, then A-B behind 1
+            r.ReleaseNode(1, east.nodes[1]);
+            Assert.True(r.TryAdvance(1, TaxiPriority.Departing, back.nodes, back.edges, 0, 1) < 2, "1 has a follower on A-B");
+        }
     }
 }
