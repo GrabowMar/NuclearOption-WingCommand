@@ -18,6 +18,8 @@ namespace WingCommand
         public float PublishedStallKmh, CruiseThrottle, MaxRadius;
         /// <summary>FBW fields: rad/s, g, m/s.</summary>
         public float FbwMaxRollAngularVel, FbwGLimit, FbwCornerSpeed;
+        /// <summary>Helicopter FBW rate limits (rad/s) and g limit, and the collective its own autopilot hovers at.</summary>
+        public float HeloPitchRate, HeloYawRate, HeloRollRate, HeloGLimit, HoverCollective;
     }
 #pragma warning restore CS0649
 
@@ -100,7 +102,7 @@ namespace WingCommand
                 p.RollRateMaxDps = Math.Min(RollSeedCapDps, 0.5f * n.FbwMaxRollAngularVel * Scalar.Rad2Deg);
             if (n.MaxRadius > 0f) p.MaxRadius = n.MaxRadius;
             p.CruiseSpeed = p.RefAirspeed;
-            if (p.Class == AirframeClass.Rotary) DeriveRotary(p);
+            if (p.Class == AirframeClass.Rotary) DeriveRotary(p, n);
             if (p.Class == AirframeClass.Tiltwing)
             {
                 p.ConversionLow = ConversionLowFactor * p.StallSpeed;
@@ -111,7 +113,7 @@ namespace WingCommand
 
         /// <summary>Helicopter numbers: cruise at 0.8·max, no afterburner, a gentle climb rate, quicker position
         /// loops than a jet (it can stop), and the helo FBW's default rate authorities.</summary>
-        private static void DeriveRotary(AirframeProfile p)
+        private static void DeriveRotary(AirframeProfile p, in ProfileInputs n)
         {
             p.CruiseSpeed = 0.8f * p.MaxSpeed;
             p.MilSpeed = p.MaxSpeed;
@@ -122,6 +124,11 @@ namespace WingCommand
             p.TauVert = 3f;
             p.TauVel = 1.5f;
             p.RollRateMaxDps = 115f;
+            if (n.HeloPitchRate > 0f) p.PitchRateMaxDps = n.HeloPitchRate * Scalar.Rad2Deg;
+            if (n.HeloYawRate > 0f) p.YawRateMaxDps = n.HeloYawRate * Scalar.Rad2Deg;
+            if (n.HeloRollRate > 0f) p.RollRateMaxDps = n.HeloRollRate * Scalar.Rad2Deg;
+            if (n.HeloGLimit > 0f) p.GLimit = n.HeloGLimit;
+            if (n.HoverCollective > 0f) p.HoverCollective = n.HoverCollective;
         }
 
         /// <summary>Overwrite public fields named by the keys (case-insensitive). Returns the keys that

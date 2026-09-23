@@ -112,6 +112,17 @@ namespace WingCommand.PureTests
         }
 
         [Fact]
+        public void AHelicoptersFlyByWireHasNoSpeedGate()
+        {
+            // The helo filter filters at any speed (native C4); its base-class gate fields must not release a hover.
+            RawAircraftSample hover = Level(new Vec3(0f, 0f, 0f));
+            hover.HasFbwGate = true;
+            hover.FbwGateMinSpeed = 25f;
+            hover.FbwAlwaysOn = true;
+            Assert.True(new AircraftSensorCore().Read(hover, Dt).FbwActive);
+        }
+
+        [Fact]
         public void FlyByWireIsInactiveWhenSlowOrOnTheGround()
         {
             Assert.False(new AircraftSensorCore().Read(Level(new Vec3(0f, 0f, 20f)), Dt).FbwActive);

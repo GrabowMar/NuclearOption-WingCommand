@@ -22,7 +22,7 @@ namespace WingCommand
         {
             Aircraft = aircraft;
             Pilot = aircraft.pilots[0];
-            Brain = new FormationPilot(slot);
+            Brain = new FormationPilot(slot, profile.Class);
             Profile = profile;
         }
 

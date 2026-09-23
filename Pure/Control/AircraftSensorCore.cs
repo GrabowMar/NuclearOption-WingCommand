@@ -15,6 +15,8 @@ namespace WingCommand
         public float AirDensity, RadarAlt, GroundSpeed, Throttle;
         public bool HasFbwGate;
         public float FbwGateMinSpeed, FbwGateMinRadarAlt;
+        /// <summary>A helicopter's fly-by-wire filters at any speed and height.</summary>
+        public bool FbwAlwaysOn;
     }
 #pragma warning restore CS0649
 
@@ -66,9 +68,9 @@ namespace WingCommand
                 Nz = Vec3.Dot(acc, r.Up) / Scalar.G + r.Up.Y,
                 RadarAlt = r.RadarAlt,
                 Throttle = r.Throttle,
-                FbwActive = r.HasFbwGate
+                FbwActive = r.FbwAlwaysOn || (r.HasFbwGate
                     ? r.GroundSpeed >= r.FbwGateMinSpeed && r.RadarAlt >= r.FbwGateMinRadarAlt
-                    : r.GroundSpeed >= FbwMinSpeed && r.RadarAlt >= FbwMinRadarAlt,
+                    : r.GroundSpeed >= FbwMinSpeed && r.RadarAlt >= FbwMinRadarAlt),
                 AirbrakeOpen = r.Throttle <= 0f && r.RadarAlt > 1f,
                 Dt = dt,
             };

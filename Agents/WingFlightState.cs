@@ -3,8 +3,9 @@ using UnityEngine;
 namespace WingCommand
 {
     /// <summary>The single pilot state that hosts a wingman's flight stack (spec §2.1). Entering binds the
-    /// controls, turns flight assist on, raises the gear and seeds every loop from the aircraft. Each physics
-    /// tick hands the member to <see cref="WingService.StepMember"/>. It never enters native taxi or takeoff.</summary>
+    /// controls, turns flight assist on, raises the gear and seeds every loop from the aircraft; a helicopter also gets
+    /// auto-hover off and a neutral pusher, a tiltwing keeps customAxis1 for the game's auto-tilt. Each physics tick
+    /// hands the member to <see cref="WingService.StepMember"/>. It never enters native taxi or takeoff.</summary>
     internal sealed class WingFlightState : PilotBaseState
     {
         private readonly WingMember member;
@@ -22,7 +23,16 @@ namespace WingCommand
             controlInputs = aircraft.GetInputs();
             aircraft.SetFlightAssist(true);
             if (aircraft.gearState != LandingGear.GearState.LockedRetracted) aircraft.SetGear(false);
-            controlInputs.customAxis1 = 1f;
+            switch (member.Profile.Class)
+            {
+                case AirframeClass.Rotary:
+                    aircraft.GetControlsFilter()?.SetAutoHover(false);
+                    controlInputs.customAxis1 = RotaryController.AuxNeutral;
+                    break;
+                case AirframeClass.FixedWing:
+                    controlInputs.customAxis1 = 1f;
+                    break;
+            }
             member.Last = member.Sensor.Read(aircraft, Time.fixedDeltaTime);
             member.Brain.Track(member.Last, EngineSticks.ToPure(ControlWriter.Read(controlInputs)), member.Profile);
         }

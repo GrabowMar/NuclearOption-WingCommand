@@ -105,9 +105,9 @@ namespace WingCommand
         public bool Adopt(Aircraft a)
         {
             if (Wing == null || a == null || a.pilots == null || a.pilots.Length == 0 || Members.Count >= MaxMembers) return false;
-            if (a.pilots[0].pilotType != Pilot.PilotType.Plane)
+            if (ProfileReader.IsVtol(a))
             {
-                WingToast.Show("Only fixed-wing wingmen can fly formation in this build");
+                WingToast.Show("VTOL aircraft cannot fly formation (the game gives them no AI to take over)");
                 return false;
             }
             var m = new WingMember(a, Members.Count, WingProfiles.For(a)) { Id = nextMemberId++ };
@@ -135,7 +135,7 @@ namespace WingCommand
                 }
                 if (StepTest.Fly(m, dt)) return;
                 ControlOutput o = StepTest.Adjust(m, m.Brain.Step(frame, m.Last, m.Profile, missionTime, dt, Events), dt);
-                ControlWriter.Fly(m.Aircraft, o);
+                ControlWriter.Fly(m.Aircraft, o, m.Profile.Class);
                 int slot = m.Brain.Slot;
                 Metrics.Sample(m.Id, (frame.Slots[slot].Ref.Pos - m.Last.Pos).Length,
                     m.Brain.Mind.Current == BehaviourId.StationKeep, m.Last.Tas, missionTime, dt);
@@ -235,7 +235,8 @@ namespace WingCommand
                     State = m.Last,
                     Capability = new MemberCapability
                     {
-                        MaxSpeed = m.Brain.AfterburnerAllowed && m.Profile.HasAfterburner ? m.Profile.MaxSpeed : m.Profile.MilSpeed,
+                        MaxSpeed = m.Profile.Class == AirframeClass.Rotary ? m.Profile.CruiseSpeed
+                            : m.Brain.AfterburnerAllowed && m.Profile.HasAfterburner ? m.Profile.MaxSpeed : m.Profile.MilSpeed,
                         MinSpeed = m.Profile.MinimumSpeed(1f),
                     },
                     Radius = m.Profile.MaxRadius,

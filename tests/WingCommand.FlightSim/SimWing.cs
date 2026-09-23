@@ -38,7 +38,7 @@ namespace WingCommand.FlightSim
             for (int i = 0; i < n; i++)
             {
                 Plants[i] = new FixedWingPlant(PlantParams.GenericFighter, starts[i], startSpeed, startHeadingDeg);
-                Pilots[i] = new FormationPilot(i);
+                Pilots[i] = new FormationPilot(i, AirframeClass.FixedWing);
                 Pilots[i].Track(SimSensor.Read(Plants[i], Dt), new ControlOutput { Throttle = Plants[i].ThrottleActual }, Profile);
             }
         }

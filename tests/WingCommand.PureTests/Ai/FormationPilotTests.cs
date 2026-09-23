@@ -16,7 +16,7 @@ namespace WingCommand.PureTests
                 Id = "one", Slots = new[] { new SlotDef(-1f, 1f, 0f) }, Element = new[] { 0 },
                 SpacingMin = 40f, SpacingDefault = 80f, SpacingMax = 160f,
             }, 80f);
-            public readonly FormationPilot Pilot = new FormationPilot(0);
+            public readonly FormationPilot Pilot = new FormationPilot(0, AirframeClass.FixedWing);
             public readonly WingEventRing Events = new WingEventRing();
             private readonly WingMemberInput[] members = new WingMemberInput[1];
             public Vec3 LeaderPos = new Vec3(0f, 2000f, 0f);
@@ -134,7 +134,7 @@ namespace WingCommand.PureTests
         [Fact]
         public void FormUpLogsACommandedRejoin()
         {
-            var pilot = new FormationPilot(1);
+            var pilot = new FormationPilot(1, AirframeClass.FixedWing);
             var events = new WingEventRing();
             pilot.FormUp(3f, events);
             Assert.Equal(0, events.Count);   // already rejoining

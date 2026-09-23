@@ -4,10 +4,12 @@ using UnityEngine;
 
 namespace WingCommand
 {
-    /// <summary>Air-starts wingmen (spec §8), host only.
+    /// <summary>Air-starts wingmen (spec §8, M2 §7), host only. Any class but VTOL (the game gives a VTOL no AI state).
     /// <list type="bullet">
-    /// <item>Placement: 2 km behind and 150 m below the leader, spread toward each slot's side, at least
-    /// 300 m above the terrain, flying the leader's velocity but never slower than 1.5x its own loaded minimum.</item>
+    /// <item>Jets and tiltwings: 2 km behind and 150 m below the leader, spread toward each slot's side, at least
+    /// 300 m above the terrain, flying the leader's velocity but never slower than 1.5x their own loaded minimum.</item>
+    /// <item>Helicopters: 1 km behind and 50 m above the leader (at least 150 m over the terrain), level, at the
+    /// leader's speed up to their cruise.</item>
     /// <item>The game initialises each spawn with its own AI. One physics tick after that AI state is entered,
     /// the aircraft is adopted by the wing.</item>
     /// </list></summary>
@@ -23,7 +25,7 @@ namespace WingCommand
         private readonly List<Aircraft> pending = new List<Aircraft>();
         private readonly HashSet<Aircraft> settling = new HashSet<Aircraft>();
         private readonly Dictionary<Aircraft, float> pendingSince = new Dictionary<Aircraft, float>();
-        public static float AdoptTimeoutSeconds = 10f;
+        public static float AdoptTimeoutSeconds = 10f, FallbackRotaryCruise = 60f;
 
         public SpawnService() => Instance = this;
 
@@ -92,12 +94,13 @@ namespace WingCommand
             GameObject prefab = definition != null ? definition.unitPrefab : null;
             Aircraft template = prefab != null ? prefab.GetComponent<Aircraft>() : null;
             if (template == null || template.pilots == null || template.pilots.Length == 0 || template.pilots[0] == null ||
-                template.pilots[0].pilotType != Pilot.PilotType.Plane)
+                template.pilots[0].pilotType == Pilot.PilotType.VTOL)
             {
-                // Helicopters, tiltwings and VTOLs join in M2; a VTOL would never even get an AI state to adopt.
-                WingToast.Show("Only fixed-wing airframes can fly formation in this build");
+                // A VTOL would never even get an AI state to adopt.
+                WingToast.Show("VTOL aircraft cannot fly formation");
                 return 0;
             }
+            bool rotary = template.pilots[0].pilotType == Pilot.PilotType.Helo;
             Spawner spawner = NetworkSceneSingleton<Spawner>.i;
             if (spawner == null)
             {
@@ -114,15 +117,17 @@ namespace WingCommand
 
             Vec3 lp = leader.GlobalPosition().ToVec3();
             Vec3 lv = leader.CockpitRB().velocity.ToVec3();
-            Vec3 v0 = AirStart.Velocity(lv, LoadedMinimum(definition, template));
-            Quaternion rotation = Quaternion.LookRotation(AirStart.Direction(v0).ToUnity());
+            Vec3 v0 = rotary ? AirStart.RotaryVelocity(lv, RotaryCruise(template)) : AirStart.Velocity(lv, LoadedMinimum(definition, template));
+            Quaternion rotation = Quaternion.LookRotation((rotary ? AirStart.Heading(lv) : AirStart.Direction(v0)).ToUnity());
             LiveryKey livery = definition == leader.definition ? leader.NetworkLiveryKey : default;
             int spawned = 0;
             for (int k = 0; k < n; k++)
             {
                 int slot = wing.Members.Count + pending.Count;
-                float ground = TerrainProbe.GroundY(AirStart.ForSlot(wing.Selection.Current, slot, lp, lv, 0f));
-                Vec3 pos = AirStart.ForSlot(wing.Selection.Current, slot, lp, lv, ground);
+                float right = SlotSolver.SlotFor(wing.Selection.Current, slot).Right;
+                Vec3 probe = rotary ? AirStart.RotaryPosition(lp, lv, right, slot, 0f) : AirStart.ForSlot(wing.Selection.Current, slot, lp, lv, 0f);
+                float ground = TerrainProbe.GroundY(probe);
+                Vec3 pos = rotary ? AirStart.RotaryPosition(lp, lv, right, slot, ground) : AirStart.ForSlot(wing.Selection.Current, slot, lp, lv, ground);
                 try
                 {
                     Aircraft a = spawner.SpawnAircraft(null, prefab, null, 1f, livery, pos.ToGlobal(), rotation, v0.ToUnity(),
@@ -141,6 +146,25 @@ namespace WingCommand
             }
             WingToast.Show(spawned > 0 ? $"{spawned} × {definition.unitName} inbound" : "Air-start failed; see the log");
             return spawned;
+        }
+
+        /// <summary>A helicopter's cruise speed from the prefab's parameters, through the same derivation as its profile.</summary>
+        private static float RotaryCruise(Aircraft template)
+        {
+            float maxSpeed = 0f;
+            try
+            {
+                AircraftParameters p = template.GetAircraftParameters();
+                if (p != null) maxSpeed = p.maxSpeed;
+            }
+            catch (Exception e)
+            {
+                Plugin.LogVerbose("[Spawn] helicopter parameters unreadable on the prefab: " + e.Message);
+            }
+            // Unknown: a utility helicopter's cruise, not the jet-shaped default a profile derives without a max speed.
+            return maxSpeed > 0f
+                ? AirframeProfile.Derive(new ProfileInputs { Class = AirframeClass.Rotary, MaxSpeed = maxSpeed }).CruiseSpeed
+                : FallbackRotaryCruise;
         }
 
         /// <summary>Loaded minimum speed of the called type, from its published stall speed (or its landing and

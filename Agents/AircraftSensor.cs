@@ -8,7 +8,7 @@ namespace WingCommand
     {
         private readonly AircraftSensorCore core = new AircraftSensorCore();
         private Aircraft gateOf;
-        private bool hasGate;
+        private bool hasGate, alwaysOn;
         private float gateSpeed, gateAlt;
 
         public AircraftState Read(Aircraft a, float dt)
@@ -19,7 +19,9 @@ namespace WingCommand
                 // The fly-by-wire gate is per airframe; the leader's sensor is reused when the player respawns.
                 gateOf = a;
                 hasGate = GameAccess.TryReadFbwGate(a, out gateSpeed, out gateAlt);
+                alwaysOn = a.GetControlsFilter() is HeloControlsFilter;   // no speed or height gate (native C4)
             }
+            r.FbwAlwaysOn = alwaysOn;
             r.HasFbwGate = hasGate;
             r.FbwGateMinSpeed = gateSpeed;
             r.FbwGateMinRadarAlt = gateAlt;

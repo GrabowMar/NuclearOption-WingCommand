@@ -28,7 +28,7 @@ namespace WingCommand
         private HoldOrbit orbit;
         private bool gcasWas, emergencyWas;
 
-        public FormationPilot(int slot, AirframeClass cls = AirframeClass.FixedWing)
+        public FormationPilot(int slot, AirframeClass cls)
         {
             Slot = slot;
             Pipeline = FlightStack.NewPipeline(cls);

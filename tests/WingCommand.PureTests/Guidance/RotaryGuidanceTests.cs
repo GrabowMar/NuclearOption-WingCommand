@@ -34,6 +34,21 @@ namespace WingCommand.PureTests
         }
 
         [Fact]
+        public void RotaryDeriveSeedsTheRateAuthoritiesAndHoverTrimFromTheGame()
+        {
+            AirframeProfile p = AirframeProfile.Derive(new ProfileInputs
+            {
+                UnitName = "helo", Class = AirframeClass.Rotary, MaxSpeed = 80f,
+                HeloPitchRate = 0.8f, HeloYawRate = 1.5f, HeloRollRate = 1.8f, HeloGLimit = 2.5f, HoverCollective = 0.42f,
+            });
+            Assert.Equal(0.8f * Scalar.Rad2Deg, p.PitchRateMaxDps, 2);
+            Assert.Equal(1.5f * Scalar.Rad2Deg, p.YawRateMaxDps, 2);
+            Assert.Equal(1.8f * Scalar.Rad2Deg, p.RollRateMaxDps, 2);
+            Assert.Equal(2.5f, p.GLimit, 3);
+            Assert.Equal(0.42f, p.HoverCollective, 3);
+        }
+
+        [Fact]
         public void NoMinimumSpeedForAReferenceAtRest()
         {
             var at = new Vec3(0f, 300f, 0f);
