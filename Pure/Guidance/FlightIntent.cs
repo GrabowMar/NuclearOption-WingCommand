@@ -45,11 +45,14 @@ namespace WingCommand
         public float TerrainClearance;
     }
 
-    /// <summary>Guidance output: commanded kinematic acceleration and velocity (world).</summary>
+    /// <summary>Guidance output: commanded kinematic acceleration and velocity (world). A rotary law also sets the
+    /// heading to face (<see cref="HasHeading"/>); without one the aircraft holds its heading.</summary>
     internal struct GuidanceCommand
     {
         public Vec3 Accel, VelCmd;
         public bool AfterburnerAllowed, AirbrakeAllowed;
+        public bool HasHeading;
+        public float HeadingDeg;
     }
 
     /// <summary>Attitude-level demand for the inner loops. EnergyRate is V·V̇/g + ḣ in m/s.</summary>

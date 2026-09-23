@@ -42,6 +42,13 @@ namespace WingCommand
         public float MaxRadius = 8f;
         public float TauAlong = 6f, TauCross = 4f, TauVert = 5f, TauVel = 1.5f;
         public float RollGain = 2.5f;
+        /// <summary>Formation cruise speed: what a member sustains (rotary 0.8·max, fixed-wing the reference airspeed).</summary>
+        public float CruiseSpeed = 200f;
+        /// <summary>Rotary: disc tilt limit (deg), collective that hovers, vertical acceleration limit (m/s²), and the
+        /// FBW rate authorities that seed the learners (deg/s, native maxAngularVel (1, 2, 2) rad/s).</summary>
+        public float MaxTiltDeg = 20f, HoverCollective = 0.5f, VerticalAccelMax = 3f;
+        public float PitchRateMaxDps = 57f, YawRateMaxDps = 115f;
+        public static float RotaryClimbRateMax = 8f;
 #pragma warning disable CS0649 // set only from airframes JSON through ApplyOverrides (reflection)
         public bool ForceAutoAimFallback;
 #pragma warning restore CS0649
@@ -87,7 +94,24 @@ namespace WingCommand
             if (n.FbwMaxRollAngularVel > 0f)
                 p.RollRateMaxDps = Math.Min(RollSeedCapDps, 0.5f * n.FbwMaxRollAngularVel * Scalar.Rad2Deg);
             if (n.MaxRadius > 0f) p.MaxRadius = n.MaxRadius;
+            p.CruiseSpeed = p.RefAirspeed;
+            if (p.Class == AirframeClass.Rotary) DeriveRotary(p);
             return p;
+        }
+
+        /// <summary>Helicopter numbers: cruise at 0.8·max, no afterburner, a gentle climb rate, quicker position
+        /// loops than a jet (it can stop), and the helo FBW's default rate authorities.</summary>
+        private static void DeriveRotary(AirframeProfile p)
+        {
+            p.CruiseSpeed = 0.8f * p.MaxSpeed;
+            p.MilSpeed = p.MaxSpeed;
+            p.HasAfterburner = false;
+            p.ClimbRateMax = RotaryClimbRateMax;
+            p.TauAlong = 4f;
+            p.TauCross = 3f;
+            p.TauVert = 3f;
+            p.TauVel = 1.5f;
+            p.RollRateMaxDps = 115f;
         }
 
         /// <summary>Overwrite public fields named by the keys (case-insensitive). Returns the keys that
