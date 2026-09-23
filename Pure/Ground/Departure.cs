@@ -1,0 +1,125 @@
+using System;
+using System.Collections.Generic;
+
+namespace WingCommand
+{
+    /// <summary>Where a departure group lines up (spec M3 §3.4): up to <see cref="MaxAbreast"/> aircraft per row, as many as
+    /// fit the runway width at span + <see cref="SideMargin"/> each (at least one); lanes centred on the centreline;
+    /// rows <see cref="RowGap"/> apart, the first row furthest down the runway and the last
+    /// <see cref="ThresholdMargin"/> past the threshold.</summary>
+    internal static class LineupPlanner
+    {
+        public static float SideMargin = 10f, RowGap = 30f, ThresholdMargin = 40f;
+        public static int MaxAbreast = 4;
+
+        public static int Abreast(float runwayWidth, float span) =>
+            Math.Max(1, Math.Min(MaxAbreast, (int)Math.Floor(runwayWidth / Math.Max(1f, span + SideMargin))));
+
+        public static Vec3 Slot(RunwaySample r, bool reverse, int row, int column, int abreast, int rows)
+        {
+            Vec3 threshold = reverse ? r.End : r.Start;
+            Vec3 dir = r.Direction(reverse);
+            Vec3 side = Vec3.Cross(Vec3.Up, dir);
+            float along = ThresholdMargin + (Math.Max(1, rows) - 1 - row) * RowGap;
+            float lane = r.Width / Math.Max(1, abreast);
+            float lateral = (column - 0.5f * (abreast - 1)) * lane;
+            return threshold + dir * along + side * lateral;
+        }
+    }
+
+    /// <summary>One field's departures (spec M3 §3.4–3.5). Expected members gather at the hold-short; the group lines
+    /// up together once all have arrived (or <see cref="GatherTimeout"/> after the first), taking the runway lock (never
+    /// while a native landing is pending); rows of <see cref="Abreast"/> roll in queue order, each
+    /// <see cref="RowInterval"/> after the previous; the lock is released when the last member is airborne. A member
+    /// removed on the ground (lost, released) never blocks its row.</summary>
+    internal sealed class DepartureSequencer
+    {
+        public static float RowInterval = 10f, GatherTimeout = 90f;
+
+        public int Abreast = 1;
+        public bool NativeLandingPending;
+        public bool RunwayLocked { get; private set; }
+
+        private readonly List<int> expected = new List<int>();
+        private readonly List<int> queue = new List<int>();
+        private readonly HashSet<int> linedUp = new HashSet<int>(), airborne = new HashSet<int>(), removed = new HashSet<int>();
+        private readonly Dictionary<int, float> rowRolledAt = new Dictionary<int, float>();
+        private float firstArrival = float.NaN;
+
+        public int Rows => queue.Count == 0 ? 0 : (queue.Count - 1) / Math.Max(1, Abreast) + 1;
+
+        public void Expect(int owner)
+        {
+            if (!expected.Contains(owner)) expected.Add(owner);
+        }
+
+        /// <summary>The member holds short; returns its place in the queue.</summary>
+        public int Enqueue(int owner, float time)
+        {
+            if (float.IsNaN(firstArrival)) firstArrival = time;
+            if (!queue.Contains(owner)) queue.Add(owner);
+            return queue.IndexOf(owner);
+        }
+
+        public bool MayLineUp(int owner, float time)
+        {
+            if (!queue.Contains(owner)) return false;
+            if (RunwayLocked) return true;
+            if (NativeLandingPending) return false;
+            bool gathered = true;
+            foreach (int o in expected)
+                if (!removed.Contains(o) && !queue.Contains(o)) gathered = false;
+            if (!gathered && time - firstArrival < GatherTimeout) return false;
+            RunwayLocked = true;
+            return true;
+        }
+
+        public void SlotOf(int owner, out int row, out int column)
+        {
+            int i = Math.Max(0, queue.IndexOf(owner));
+            row = i / Math.Max(1, Abreast);
+            column = i % Math.Max(1, Abreast);
+        }
+
+        public void LinedUp(int owner) => linedUp.Add(owner);
+
+        /// <summary>The member's row is complete on the runway and the previous row rolled at least an interval ago.</summary>
+        public bool MayRoll(int owner, float time)
+        {
+            SlotOf(owner, out int row, out _);
+            if (rowRolledAt.ContainsKey(row)) return true;
+            for (int i = row * Abreast; i < Math.Min(queue.Count, (row + 1) * Abreast); i++)
+                if (!linedUp.Contains(queue[i]) && !removed.Contains(queue[i])) return false;
+            if (row > 0 && (!rowRolledAt.TryGetValue(row - 1, out float previous) || time - previous < RowInterval)) return false;
+            rowRolledAt[row] = time;
+            return true;
+        }
+
+        public void Airborne(int owner)
+        {
+            airborne.Add(owner);
+            ReleaseWhenDone();
+        }
+
+        public void Remove(int owner)
+        {
+            removed.Add(owner);
+            ReleaseWhenDone();
+        }
+
+        private void ReleaseWhenDone()
+        {
+            if (queue.Count == 0) return;
+            foreach (int o in queue)
+                if (!airborne.Contains(o) && !removed.Contains(o)) return;
+            RunwayLocked = false;
+            queue.Clear();
+            expected.Clear();
+            linedUp.Clear();
+            airborne.Clear();
+            removed.Clear();
+            rowRolledAt.Clear();
+            firstArrival = float.NaN;
+        }
+    }
+}
