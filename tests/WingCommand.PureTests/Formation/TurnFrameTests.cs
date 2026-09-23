@@ -53,6 +53,14 @@ namespace WingCommand.PureTests
         }
 
         [Fact]
+        public void PartiallyRolledSlotKeepsItsDistanceFromTheLeader()
+        {
+            // Halfway between the level and the banked frame is a half roll, not a chord: the slot stays 104 m out.
+            RefState r = TurnFrame.Evaluate(Turning(200f, 0.1f, 85f), 85f, 0f, 104f, 0f, 0f, 0.5f);
+            Assert.Equal(104f, (r.Pos - new Vec3(0f, 2000f, 0f)).Length, 1);
+        }
+
+        [Fact]
         public void RolledFrameFollowsTheFlightPathInAClimb()
         {
             var climbing = new LeaderEstimate

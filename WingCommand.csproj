@@ -148,6 +148,7 @@
     <EmbeddedResource Include="Assets\Icons\*.png" LogicalName="WingCommand.Icons.%(Filename)%(Extension)" />
     <EmbeddedResource Include="Assets\Pilots\layers.png" LogicalName="WingCommand.PilotLayers.png" />
     <EmbeddedResource Include="Assets\maneuvers.json" LogicalName="WingCommand.maneuvers.json" />
+    <EmbeddedResource Include="Assets\Data\formations.json" LogicalName="WingCommand.formations.json" />
 
     <!-- Vendored engine-free avionics widget kit + design tokens (namespace NOAvionics / NOAvionics.Ui),
          picked up by the default compile glob from Avionics/ and AvionicsUi/. Boscali Summer carries its

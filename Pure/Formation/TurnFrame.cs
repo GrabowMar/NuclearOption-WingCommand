@@ -9,7 +9,9 @@ namespace WingCommand
     /// <item>The rolled frame carries it on the leader's flight-path axes rotated by the frame bank, so close
     /// slots stay on the wing line.</item>
     /// </list>
-    /// The blend weight w falls from 1 to 0 as the lateral offset grows from 60 to 180 m. Velocity and
+    /// The roll-follow weight w falls from 1 to 0 as the lateral offset grows from 60 to 180 m. In between,
+    /// the frame is partly pitched toward the flight path and rolled by w·bank (a rotation, so the slot
+    /// keeps its distance from the leader). Velocity and
     /// acceleration are central differences of the same prediction, taken leader-relative, so position,
     /// velocity and acceleration stay consistent and precise at map scale.</summary>
     internal static class TurnFrame
@@ -29,17 +31,20 @@ namespace WingCommand
             Vec3 t = velocity.Horizontal;
             t = t.SqrLength > 1f ? t.Normalized : track;
             Vec3 c = Vec3.Cross(Vec3.Up, t);
-            Vec3 level = c * right - t * aft + Vec3.Up * up;
-            if (w <= 0f) return level;
+            if (w <= 0f) return c * right - t * aft + Vec3.Up * up;
 
-            Vec3 f = velocity.SqrLength > 1f ? velocity.Normalized : t;
+            // A partial roll-follow is a partial rotation, not a chord: the forward axis tilts from the
+            // horizontal track toward the flight path and the frame rolls by w·bank, so the slot keeps its
+            // distance from the leader at every w.
+            Vec3 path = velocity.SqrLength > 1f ? velocity.Normalized : t;
+            Vec3 f = w >= 1f ? path : Vec3.Lerp(t, path, w).Normalized;
+            if (f.SqrLength < 0.5f) f = t;
             Vec3 r = Vec3.Cross(Vec3.Up, f);
             r = r.SqrLength > 1e-4f ? r.Normalized : c;
             Vec3 u = Vec3.Cross(f, r);
-            float phi = bankDeg * Scalar.Deg2Rad;
+            float phi = Scalar.Clamp01(w) * bankDeg * Scalar.Deg2Rad;
             float cb = (float)Math.Cos(phi), sb = (float)Math.Sin(phi);
-            Vec3 rolled = (r * cb - u * sb) * right - f * aft + (u * cb + r * sb) * up;
-            return Vec3.Lerp(level, rolled, w);
+            return (r * cb - u * sb) * right - f * aft + (u * cb + r * sb) * up;
         }
 
         /// <summary>Slot reference now, with velocity and acceleration from central differences over the
