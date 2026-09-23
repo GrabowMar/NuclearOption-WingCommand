@@ -17,6 +17,9 @@ namespace WingCommand
         public bool FbwActive, AirbrakeOpen;
 
         public float Speed => Vel.Length;
+
+        /// <summary>Equivalent airspeed √(2·q̄/ρ₀): what stall, lift-limited g and loaded minimum speed scale with.</summary>
+        public float Eas => (float)System.Math.Sqrt(2f * System.Math.Max(0f, Qbar) / Isa.SeaLevelDensity);
         public float TrackDeg => Vec3.HeadingDeg(Vel);
 
         /// <summary>Specific-energy rate V·V̇/g + ḣ in m/s, the quantity the throttle controls.</summary>

@@ -90,7 +90,7 @@ namespace WingCommand
             Vec3 v = s.Vel / speed;
             float along = Vec3.Dot(accel, v);
             Vec3 normal = accel - v * along;
-            float normalMax = Math.Max(0f, Math.Min(p.GLimit, p.LiftLimitedG(s.Tas)) - 1f) * Scalar.G;
+            float normalMax = Math.Max(0f, Math.Min(p.GLimit, p.LiftLimitedG(s.Eas)) - 1f) * Scalar.G;
             float magnitude = normal.Length;
             if (magnitude > normalMax) normal *= normalMax / magnitude;
             along = Scalar.Clamp(along, -(airbrake ? p.AirbrakeDecel : p.BrakeDecel), p.ThrustAccelMax);

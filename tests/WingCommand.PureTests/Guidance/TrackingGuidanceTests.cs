@@ -17,7 +17,10 @@ namespace WingCommand.PureTests
             };
 
         private static AircraftState At(Vec3 pos, Vec3 vel) =>
-            new AircraftState { Pos = pos, Vel = vel, Tas = vel.Length, Fwd = vel.Normalized };
+            new AircraftState
+            {
+                Pos = pos, Vel = vel, Tas = vel.Length, Qbar = Isa.DynamicPressure(pos.Y, vel.Length), Fwd = vel.Normalized,
+            };
 
         [Fact]
         public void FarBehindSaturatesAtCatchUpSpeedWithoutAfterburner()

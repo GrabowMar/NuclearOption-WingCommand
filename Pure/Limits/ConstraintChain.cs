@@ -60,17 +60,18 @@ namespace WingCommand
             }
 
             // Envelope: load factor within structure and available lift; protect the loaded minimum speed.
-            float nzMax = Math.Min(p.GLimit, p.LiftLimitedG(s.Tas));
+            // Both scale with equivalent airspeed, so the limits hold at altitude.
+            float nzMax = Math.Min(p.GLimit, p.LiftLimitedG(s.Eas));
             if (a.Nz > nzMax)
             {
                 r.BindNz(ConstraintId.Envelope, a.Nz, nzMax);
                 a.Nz = nzMax;
             }
-            if (s.Tas < p.MinimumSpeed(Math.Max(1f, a.Nz)))
+            if (s.Eas < p.MinimumSpeed(Math.Max(1f, a.Nz)))
             {
                 a.EnergyRate = Math.Max(a.EnergyRate, 10f);
                 r.SpeedBy = ConstraintId.Envelope;
-                float ratio = s.Tas / (1.2f * Math.Max(1f, p.StallSpeed));
+                float ratio = s.Eas / (1.2f * Math.Max(1f, p.StallSpeed));
                 float allowed = Math.Max(1f, ratio * ratio);
                 if (a.Nz > allowed)
                 {
@@ -130,7 +131,7 @@ namespace WingCommand
             }
             float height = s.Pos.Y - ctx.FloorY;
             float sink = Math.Max(0f, -s.Vel.Y);
-            float pullAccel = Math.Max(1f, (Math.Min(p.GLimit, p.LiftLimitedG(s.Tas)) - 1f) * Scalar.G);
+            float pullAccel = Math.Max(1f, (Math.Min(p.GLimit, p.LiftLimitedG(s.Eas)) - 1f) * Scalar.G);
             float rollTime = Math.Abs(s.BankDeg) / Math.Max(1f, p.RollRateMaxDps);
             float loss = sink * rollTime + sink * sink / (2f * pullAccel);
             float remaining = sink > 0.5f ? (height - loss - 0.5f * ctx.Clearance) / sink : float.PositiveInfinity;

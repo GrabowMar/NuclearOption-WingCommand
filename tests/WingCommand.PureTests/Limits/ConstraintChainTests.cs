@@ -10,6 +10,7 @@ namespace WingCommand.PureTests
         private static AircraftState At(float altitude, float speed = 200f, float vy = 0f, float bank = 0f) => new AircraftState
         {
             Pos = new Vec3(0f, altitude, 0f), Vel = new Vec3(0f, vy, speed), Tas = speed, BankDeg = bank, Nz = 1f,
+            Qbar = Isa.DynamicPressure(altitude, speed),
         };
 
         private static LimitContext Floor(float floorY, float clearance = 60f, float aggression = 0f) =>
@@ -73,6 +74,19 @@ namespace WingCommand.PureTests
             var a = new AttitudeCommand { Nz = 6f };
             chain.ApplyAttitude(ref a, At(3000f, speed: 80f), Floor(float.NaN), Fighter, Dt, ref report);
             Assert.True(a.Nz <= Fighter.LiftLimitedG(80f) + 1e-3f);
+            Assert.Equal(ConstraintId.Envelope, report.NzBy);
+        }
+
+        [Fact]
+        public void LoadFactorLimitUsesEquivalentAirspeedAtAltitude()
+        {
+            var chain = new ConstraintChain();
+            var report = new BindingReport();
+            // 150 m/s true at 9 km is about 93 m/s equivalent: lift allows (93/55)² ≈ 2.9 g, not the
+            // (150/55)² ≈ 7.4 g that true airspeed suggests.
+            var a = new AttitudeCommand { Nz = 6f };
+            chain.ApplyAttitude(ref a, At(9000f, speed: 150f), Floor(float.NaN), Fighter, Dt, ref report);
+            Assert.InRange(a.Nz, 1f, 3f);
             Assert.Equal(ConstraintId.Envelope, report.NzBy);
         }
 
