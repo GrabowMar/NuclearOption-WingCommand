@@ -50,8 +50,12 @@ namespace WingCommand
             }
             if (Math.Abs(a.BankDeg) > ceiling)
             {
+                // Keep the vertical lift and give up turn rate: holding the load factor at a shallower bank
+                // would turn the surplus into a climb.
                 float requested = a.BankDeg;
+                float vertical = Math.Max(0f, a.Nz * (float)Math.Cos(requested * Scalar.Deg2Rad));
                 a.BankDeg = Math.Sign(a.BankDeg) * ceiling;
+                a.Nz = vertical / (float)Math.Cos(ceiling * Scalar.Deg2Rad);
                 r.BindBank(ConstraintId.Envelope, requested, a.BankDeg);
             }
 

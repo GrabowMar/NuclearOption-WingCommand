@@ -53,6 +53,19 @@ namespace WingCommand.PureTests
         }
 
         [Fact]
+        public void BankCeilingKeepsTheVerticalLiftInsteadOfTheLoadFactor()
+        {
+            var chain = new ConstraintChain();
+            var report = new BindingReport();
+            // 80° at 4 g: vertical lift 4·cos 80° = 0.695 g. At the 60° ceiling the same vertical lift needs 1.39 g,
+            // not 4 g (which would be a 2 g vertical surplus: a zoom).
+            var a = new AttitudeCommand { BankDeg = 80f, Nz = 4f };
+            chain.ApplyAttitude(ref a, At(3000f, speed: 250f, bank: 60f), Floor(float.NaN, aggression: 0f), Fighter, Dt, ref report);
+            Assert.Equal(60f, a.BankDeg, 3);
+            Assert.Equal(4f * (float)System.Math.Cos(80.0 * System.Math.PI / 180.0) / 0.5f, a.Nz, 2);
+        }
+
+        [Fact]
         public void LoadFactorIsLimitedByLiftAtLowSpeed()
         {
             var chain = new ConstraintChain();

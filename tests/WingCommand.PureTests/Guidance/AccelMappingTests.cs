@@ -52,6 +52,22 @@ namespace WingCommand.PureTests
         }
 
         [Fact]
+        public void DescentBeyondOneGPushesUprightInsteadOfRollingInverted()
+        {
+            AttitudeCommand a = Map(new Vec3(0f, -1.5f * Scalar.G, 0f), North200, previousBank: 0f);
+            Assert.Equal(0f, a.BankDeg, 3);
+            Assert.Equal(0f, a.Nz, 3);
+        }
+
+        [Fact]
+        public void DescendingTurnKeepsTheLiftVectorAboveTheHorizon()
+        {
+            AttitudeCommand a = Map(new Vec3(2f * Scalar.G, -1.5f * Scalar.G, 0f), North200);
+            Assert.InRange(a.BankDeg, 0f, 90f);
+            Assert.True(a.Nz * Math.Cos(a.BankDeg * Scalar.Deg2Rad) >= -1e-3, $"bank {a.BankDeg:0.0} Nz {a.Nz:0.00}");
+        }
+
+        [Fact]
         public void VerticalVelocityHoldsPreviousBank()
         {
             AttitudeCommand a = Map(new Vec3(5f, 0f, 0f), new Vec3(0f, 150f, 0f), previousBank: -12f);

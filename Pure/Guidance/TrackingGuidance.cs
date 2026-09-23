@@ -5,7 +5,10 @@ namespace WingCommand
     /// <summary>Position → velocity → acceleration cascade toward a moving reference. One law at every
     /// distance: per-axis saturation turns a far error into pursuit at catch-up speed and a near error into
     /// a linear PD with the reference acceleration as feedforward. The along-track closure also respects a
-    /// stopping-distance law, so arrival does not overshoot.</summary>
+    /// stopping-distance law, so arrival does not overshoot. The acceleration is clamped to what the
+    /// airframe can do: normal part to (Nz_max − 1)·g, tangential part to thrust and drag. A velocity
+    /// command more than 90° off the current track is steered 90° to its side, so the demand becomes a
+    /// maximum turn plus braking rather than braking alone.</summary>
     internal static class TrackingGuidance
     {
         public const float CatchUpMargin = 5f;
@@ -59,13 +62,39 @@ namespace WingCommand
             else if (intent.Limits.Min > 0f && magnitude > 1f && magnitude < intent.Limits.Min)
                 velCmd *= intent.Limits.Min / magnitude;
 
+            Vec3 steer = velCmd;
+            Vec3 heading = s.Vel.Horizontal;
+            if (heading.SqrLength > 1f && Vec3.Dot(velCmd.Horizontal, heading) < 0f)
+            {
+                Vec3 aside = Vec3.Cross(Vec3.Up, heading).Normalized;
+                float lean = Vec3.Dot(velCmd, aside);
+                if (Math.Abs(lean) < 1f) lean = Vec3.Dot(e, aside);
+                steer = aside * ((lean < 0f ? -1f : 1f) * velCmd.Horizontal.Length) + Vec3.Up * velCmd.Y;
+            }
+            Vec3 accel = ClampAccel(r.Acc + (steer - s.Vel) / Math.Max(0.1f, p.TauVel), s, p,
+                intent.Limits.AirbrakeAllowed);
+
             return new GuidanceCommand
             {
-                Accel = r.Acc + (velCmd - s.Vel) / Math.Max(0.1f, p.TauVel),
+                Accel = accel,
                 VelCmd = velCmd,
                 AfterburnerAllowed = intent.Limits.AfterburnerAllowed,
                 AirbrakeAllowed = intent.Limits.AirbrakeAllowed,
             };
+        }
+
+        private static Vec3 ClampAccel(Vec3 accel, in AircraftState s, AirframeProfile p, bool airbrake)
+        {
+            float speed = s.Vel.Length;
+            if (speed < 1f) return accel;
+            Vec3 v = s.Vel / speed;
+            float along = Vec3.Dot(accel, v);
+            Vec3 normal = accel - v * along;
+            float normalMax = Math.Max(0f, Math.Min(p.GLimit, p.LiftLimitedG(s.Tas)) - 1f) * Scalar.G;
+            float magnitude = normal.Length;
+            if (magnitude > normalMax) normal *= normalMax / magnitude;
+            along = Scalar.Clamp(along, -(airbrake ? p.AirbrakeDecel : p.BrakeDecel), p.ThrustAccelMax);
+            return v * along + normal;
         }
     }
 }

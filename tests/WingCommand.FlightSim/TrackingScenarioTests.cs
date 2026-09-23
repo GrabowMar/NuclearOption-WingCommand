@@ -7,13 +7,14 @@ namespace WingCommand.FlightSim
     {
         private const float Dt = 1f / 60f;
 
-        private static FlightIntent SlotIntent(RefState slot, AirframeProfile p, bool afterburner, float spacing) =>
+        private static FlightIntent SlotIntent(RefState slot, AirframeProfile p, bool afterburner, float spacing,
+            float aggression = 1f) =>
             new FlightIntent
             {
                 Ref = slot,
                 Limits = new SpeedLimits(p.MinimumSpeed(1f), p.MaxSpeed, afterburner, true),
                 Precision = 1f,
-                Aggression = 1f,
+                Aggression = aggression,
                 Spacing = spacing,
                 TerrainClearance = 60f,
             };
@@ -85,6 +86,69 @@ namespace WingCommand.FlightSim
             Assert.False(float.IsNaN(captureTime), "never captured");
             Assert.True(captureTime < 120f, $"captured at {captureTime:0} s");
             Assert.True(maxAhead < spacing, $"passed {maxAhead:0} m ahead of the slot");
+        }
+
+        [Theory]
+        [InlineData(150f)]
+        [InlineData(3000f)]
+        public void SlotFarBelowIsReachedWingsLevelWithoutStalling(float below)
+        {
+            AirframeProfile profile = SimProfiles.GenericFighter();
+            var leader = new VirtualLeader(new Vec3(0f, 4000f, 0f), 200f, 0f);
+            var plant = new FixedWingPlant(PlantParams.GenericFighter, leader.Slot(60f, 20f, 0f).Pos, 200f, 0f);
+            var pilot = new SimPilot(plant, profile);
+            float maxBank = 0f, minSpeed = float.MaxValue, maxSpeed = 0f;
+            RefState slot = default;
+            for (int i = 0; i < 120 * 60; i++)
+            {
+                leader.Step(0f, Dt);
+                slot = leader.Slot(60f, 20f, -below);
+                pilot.StepTracking(SlotIntent(slot, profile, false, 80f), Dt);
+                maxBank = Math.Max(maxBank, Math.Abs(plant.BankDeg));
+                minSpeed = Math.Min(minSpeed, plant.Speed);
+                maxSpeed = Math.Max(maxSpeed, plant.Speed);
+            }
+            Assert.True(maxBank < 10f, $"max |bank| {maxBank:0.0}");
+            Assert.True(minSpeed > 1.1f * profile.MinimumSpeed(1f), $"min speed {minSpeed:0}");
+            Assert.True(maxSpeed < profile.MaxSpeed, $"max speed {maxSpeed:0}");
+            Assert.True((slot.Pos - plant.Position).Length < 20f, $"final error {(slot.Pos - plant.Position).Length:0} m");
+        }
+
+        [Fact]
+        public void WideSideOffsetAtLowAggressionTurnsWithoutClimbing()
+        {
+            AirframeProfile profile = SimProfiles.GenericFighter();
+            var leader = new VirtualLeader(new Vec3(0f, 2000f, 0f), 200f, 0f);
+            var plant = new FixedWingPlant(PlantParams.GenericFighter, new Vec3(0f, 2000f, -20f), 200f, 0f);
+            var pilot = new SimPilot(plant, profile);
+            float maxDy = 0f;
+            for (int i = 0; i < 60 * 60; i++)
+            {
+                leader.Step(0f, Dt);
+                pilot.StepTracking(SlotIntent(leader.Slot(1500f, 20f, 0f), profile, false, 80f, aggression: 0f), Dt);
+                maxDy = Math.Max(maxDy, Math.Abs(plant.Position.Y - 2000f));
+            }
+            Assert.True(maxDy < 50f, $"max height excursion {maxDy:0} m");
+        }
+
+        [Fact]
+        public void HeadOnLeaderIsRejoinedByTurningAroundAboveMinimumSpeed()
+        {
+            AirframeProfile profile = SimProfiles.GenericFighter();
+            var leader = new VirtualLeader(new Vec3(0f, 2000f, 3000f), 200f, 180f);
+            var plant = new FixedWingPlant(PlantParams.GenericFighter, new Vec3(0f, 2000f, 0f), 200f, 0f);
+            var pilot = new SimPilot(plant, profile);
+            float minSpeed = float.MaxValue;
+            RefState slot = default;
+            for (int i = 0; i < 240 * 60; i++)
+            {
+                leader.Step(0f, Dt);
+                slot = leader.Slot(60f, 20f, 0f);
+                pilot.StepTracking(SlotIntent(slot, profile, true, 80f, aggression: 0.5f), Dt);
+                minSpeed = Math.Min(minSpeed, plant.Speed);
+            }
+            Assert.True(minSpeed > 1.1f * profile.MinimumSpeed(1f), $"min speed {minSpeed:0}");
+            Assert.True((slot.Pos - plant.Position).Length < 50f, $"final error {(slot.Pos - plant.Position).Length:0} m");
         }
 
         [Fact]

@@ -57,11 +57,35 @@ namespace WingCommand.PureTests
             var c = new FixedWingController();
             ControlOutput o = default;
             // −120 m/s of excess energy drives the energy PI to its floor at once; the latch needs 0.5 s more.
-            for (int i = 0; i < 90; i++) o = c.Step(Cmd(energy: -120f), Level(300f), Fighter, Dt);
+            for (int i = 0; i < 45; i++) o = c.Step(Cmd(energy: -120f), Level(300f), Fighter, Dt);
             Assert.True(o.Airbrake);
             Assert.Equal(0f, o.Throttle);
-            for (int i = 0; i < 5; i++) o = c.Step(Cmd(energy: 0f), Level(300f), Fighter, Dt);
+            // The brake stays open for its minimum on-time, then releases once idle alone meets the command.
+            for (int i = 0; i < 30; i++) o = c.Step(Cmd(energy: 0f), Level(300f), Fighter, Dt);
+            Assert.True(o.Airbrake);
+            for (int i = 0; i < 40; i++) o = c.Step(Cmd(energy: 0f), Level(300f), Fighter, Dt);
             Assert.False(o.Airbrake);
+        }
+
+        [Fact]
+        public void AirbrakeStaysLatchedWhileTheCommandNeedsMoreThanIdleDrag()
+        {
+            // Idle gives −60 m/s of energy rate and the open brake another −100. A −120 command needs the brake
+            // throughout, even though the braked measurement (−160) overshoots the command.
+            var c = new FixedWingController();
+            bool open = false, engaged = false;
+            int releases = 0;
+            for (int i = 0; i < 300; i++)
+            {
+                AircraftState s = Level(200f);
+                s.Acc = Vec3.Forward * ((open ? -160f : -60f) * Scalar.G / 200f);
+                ControlOutput o = c.Step(Cmd(energy: -120f), s, Fighter, Dt);
+                if (engaged && !o.Airbrake) releases++;
+                engaged |= o.Airbrake;
+                open = o.Airbrake;
+            }
+            Assert.True(engaged);
+            Assert.Equal(0, releases);
         }
 
         [Fact]

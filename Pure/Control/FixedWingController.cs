@@ -9,7 +9,9 @@ namespace WingCommand
     /// <item>load factor → pitch stick, with a feedforward that inverts the FBW g-command
     /// <c>q = stick·gLimit·g / max(V, 0.75·Vc)</c>;</item>
     /// <item>sideslip → yaw;</item>
-    /// <item>energy rate → throttle, with a hysteretic airbrake at exactly zero throttle.</item>
+    /// <item>energy rate → throttle, with a hysteretic airbrake at exactly zero throttle. While the brake is
+    /// open the measurement includes its drag, so the energy loop and the release test use the energy rate
+    /// captured at idle just before it opened.</item>
     /// </list>
     /// One instance per aircraft for its lifetime. <see cref="Track"/> keeps it bumpless while another
     /// owner flies.</summary>
@@ -17,6 +19,7 @@ namespace WingCommand
     {
         public const float RollStickSlew = 4f, PitchStickSlew = 3f, ThrottleSlew = 1f;
         public const float AirbrakeEngageError = -3f, AirbrakeReleaseError = -1.5f, AirbrakeEngageSeconds = 0.5f;
+        public const float AirbrakeMinOnSeconds = 1f;
         public const float ThrottleFloor = 0.01f, DryThrottleMax = 0.89f;
 
         private readonly Pidf roll = new Pidf { MaxRate = RollStickSlew };
@@ -28,6 +31,7 @@ namespace WingCommand
         private bool bankPrimed;
         private Persistence airbrakeTimer;
         private bool airbrake;
+        private float idleEnergy, airbrakeOn;
 
         public bool AirbrakeLatched => airbrake;
 
@@ -62,16 +66,26 @@ namespace WingCommand
             energy.OutMin = ThrottleFloor - trim;
             energy.OutMax = ceiling - trim;
             float energyError = cmd.EnergyRate - s.EnergyRate;
-            float throttle = Scalar.Clamp(trim + energy.Update(cmd.EnergyRate, s.EnergyRate, dt), ThrottleFloor, ceiling);
+            float measured = airbrake ? idleEnergy : s.EnergyRate;
+            float throttle = Scalar.Clamp(trim + energy.Update(cmd.EnergyRate, measured, dt), ThrottleFloor, ceiling);
 
             bool atFloor = throttle <= ThrottleFloor + 1e-4f;
             if (!airbrake)
+            {
                 airbrake = cmd.AirbrakeAllowed && !cmd.Gcas &&
                            airbrakeTimer.Update(atFloor && energyError < AirbrakeEngageError, AirbrakeEngageSeconds, dt);
-            else if (!cmd.AirbrakeAllowed || cmd.Gcas || energyError > AirbrakeReleaseError)
+                idleEnergy = s.EnergyRate;
+                airbrakeOn = 0f;
+            }
+            else
             {
-                airbrake = false;
-                airbrakeTimer = default;
+                airbrakeOn += dt;
+                bool idleSuffices = airbrakeOn >= AirbrakeMinOnSeconds && cmd.EnergyRate - idleEnergy > AirbrakeReleaseError;
+                if (!cmd.AirbrakeAllowed || cmd.Gcas || idleSuffices)
+                {
+                    airbrake = false;
+                    airbrakeTimer = default;
+                }
             }
 
             return new ControlOutput
@@ -102,6 +116,8 @@ namespace WingCommand
             bankRate.Reset(0f);
             airbrake = applied.Airbrake;
             airbrakeTimer = default;
+            idleEnergy = s.EnergyRate;
+            airbrakeOn = AirbrakeMinOnSeconds;
         }
 
         /// <summary>Gain scale (RefQ/q)^0.3, clamped to [0.3, 3].</summary>
