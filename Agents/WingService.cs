@@ -277,7 +277,9 @@ namespace WingCommand
                 Plugin.Logger.LogInfo("[Wing] the anchor is gone; forming on the player");
                 Anchor = null;
             }
+            Aircraft before = Leader;
             Leader = Anchor != null ? Anchor : GameManager.GetLocalAircraft(out Aircraft local) ? local : null;
+            if (before != null && Leader != null && !ReferenceEquals(before, Leader)) Wing?.ResetLeader();
         }
 
         private AnchorSample SampleAnchor(float dt)

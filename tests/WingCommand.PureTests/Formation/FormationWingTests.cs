@@ -126,6 +126,40 @@ namespace WingCommand.PureTests
         }
 
         [Fact]
+        public void ANewLeaderStartsWithoutAPhantomAccelerationOrTheOldLeadersPath()
+        {
+            // The escorted aircraft dies 3 km away and the wing falls back to the player, who flies another way: the
+            // leader stays "present" throughout, so the change itself must restart the estimate and the path.
+            var def = new FormationDefinition
+            {
+                Id = "t", Slots = new[] { new SlotDef(0f, 5f, 0f) }, Element = new[] { 0 },
+                SpacingMin = 40f, SpacingDefault = 80f, SpacingMax = 160f,
+            };
+            var wing = new FormationWing(def, 80f);
+            WingMemberInput[] members = Members(new Vec3(0f, 2000f, -400f));
+            Vec3 a = new Vec3(0f, 2000f, 0f);
+            for (int i = 0; i < 5 * 60; i++)
+            {
+                a += new Vec3(0f, 0f, 200f * Dt);
+                wing.Update(new AnchorSample { Pos = a, Vel = new Vec3(0f, 0f, 200f), Present = true, Airborne = true },
+                    members, 1, float.NaN, 60f, 8f, Dt);
+            }
+            wing.ResetLeader();
+            var b = new Vec3(3000f, 2000f, 0f);
+            WingFrame frame = null;
+            float maxAcc = 0f;
+            for (int i = 0; i < 60; i++)   // one second on the new leader, flying straight east
+            {
+                b += new Vec3(150f * Dt, 0f, 0f);
+                frame = wing.Update(new AnchorSample { Pos = b, Vel = new Vec3(150f, 0f, 0f), Present = true, Airborne = true },
+                    members, 1, float.NaN, 60f, 8f, Dt);
+                maxAcc = Math.Max(maxAcc, frame.Leader.Acc.Length);
+            }
+            Assert.True(maxAcc < 1f, $"phantom acceleration up to {maxAcc:0.0} m/s²");
+            Assert.True((frame.Slots[0].Ref.Pos - b).Length < 500f, $"slot {(frame.Slots[0].Ref.Pos - b).Length:0} m from the new leader");
+        }
+
+        [Fact]
         public void WideAftSlotHangsOffTheLeadersRealPastPath()
         {
             // A slot 700 m in trail (3.5 s at 200 m/s). The leader turns right for 10 s, then reverses left: 2 s

@@ -74,6 +74,16 @@ namespace WingCommand
             for (int i = 0; i < N; i++) routeS[i] = float.NaN;
         }
 
+        /// <summary>The wing forms on another aircraft now (an anchor set, lost or replaced by the player). The leader stays
+        /// present across the change, so the estimate, the path history and the route restart here.</summary>
+        public void ResetLeader()
+        {
+            Estimator.Reset();
+            History.Clear();
+            Route.Clear();
+            for (int i = 0; i < N; i++) routeS[i] = float.NaN;
+        }
+
         public void SetFormation(FormationDefinition definition, float spacing)
         {
             Frame.Definition = definition;

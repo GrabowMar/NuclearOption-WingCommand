@@ -58,6 +58,10 @@ namespace WingCommand
 
         public LeaderEstimate Estimate;
 
+        /// <summary>Forget the previous leader: the next sample starts a fresh estimate (no acceleration from the jump
+        /// between two aircraft).</summary>
+        public void Reset() => primed = false;
+
         public LeaderEstimate Update(in AnchorSample s, float dt, float latency = 0f)
         {
             if (!s.Present)
