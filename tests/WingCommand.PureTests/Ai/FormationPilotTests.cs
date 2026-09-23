@@ -71,6 +71,17 @@ namespace WingCommand.PureTests
         }
 
         [Fact]
+        public void RejoinLanesClearTheCollisionBiasRadius()
+        {
+            // Adjacent lanes closer than the bias radius would keep crossing rejoins inside it: lane 1 must sit at
+            // least R + 5 m below the leader (R = max(2·8 + 15, 0.35·80) = 31 m).
+            var rig = new Rig();
+            rig.Step(memberPos: rig.LeaderPos + new Vec3(-80f, 0f, -5000f));
+            float depth = rig.Wing.Frame.Leader.Pos.Y - rig.Pilot.LastIntent.Ref.Pos.Y;
+            Assert.True(depth >= CollisionBias.RadiusFor(8f, 80f) + 5f - 0.01f, $"lane 1 only {depth:0.0} m below the leader");
+        }
+
+        [Fact]
         public void LeaderLossSendsTheMemberToAHoldAboveTheLastEstimate()
         {
             var rig = new Rig();

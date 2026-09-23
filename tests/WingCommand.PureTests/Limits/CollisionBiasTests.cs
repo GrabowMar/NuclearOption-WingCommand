@@ -39,6 +39,16 @@ namespace WingCommand.PureTests
         }
 
         [Fact]
+        public void BiasReachesHalfAGAtTheSafeRadius()
+        {
+            // Two 8 m aircraft holding 26 m apart (the safe radius, 2·8 + 10): the bias must already be at full
+            // strength there, not at the 16% a ramp from the 31 m bias radius down to zero would give.
+            CollisionBias b = Run(2f, 80f, Body(1, new Vec3(0f, 2000f, 0f), North), Body(2, new Vec3(0f, 2026f, 0f), North));
+            Assert.InRange(b.Bias[1].Length, 0.45f * Scalar.G, CollisionBias.BiasG * Scalar.G + 1e-3f);
+            Assert.True(b.Bias[1].Y > 0f);
+        }
+
+        [Fact]
         public void BiasIsCappedAtHalfAGOutsideAnEmergency()
         {
             // Rank 3 converges on both others with closest approach in 5 s (not imminent): 0.45 g + 0.40 g upward.

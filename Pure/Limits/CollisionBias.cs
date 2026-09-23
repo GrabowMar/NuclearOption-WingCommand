@@ -14,7 +14,8 @@ namespace WingCommand
     /// <summary>Wing-scope collision avoidance as a bias, never a mode.
     /// <list type="bullet">
     /// <item>For each pair whose closest approach within 8 s falls inside R = max(2·r_max + 15, 0.35·spacing),
-    /// the higher-ranked aircraft gets up to 0.5 g away from the other, scaled by penetration.</item>
+    /// the higher-ranked aircraft gets up to 0.5 g away from the other, scaled by penetration: it ramps in from
+    /// R and is at full strength by the safe radius 2·r_max + 10 m.</item>
     /// <item>Inside 1.2·(r_a + r_b) within 2 s the bias may reach 2 g.</item>
     /// <item>A 0.4 s low-pass makes it fade deterministically.</item>
     /// </list>
@@ -23,7 +24,7 @@ namespace WingCommand
     internal sealed class CollisionBias
     {
         public const float Horizon = 8f, EmergencyHorizon = 2f, BiasG = 0.5f, EmergencyG = 2f, FilterTau = 0.4f;
-        public const float Margin = 15f, SpacingFraction = 0.35f;
+        public const float Margin = 15f, SafeMargin = 10f, SpacingFraction = 0.35f;
 
         private readonly Vec3[] raw;
         public readonly Vec3[] Bias;
@@ -35,6 +36,11 @@ namespace WingCommand
             Bias = new Vec3[capacity];
             Emergency = new bool[capacity];
         }
+
+        /// <summary>Bias radius R = max(2·r_max + 15, 0.35·spacing) for a pair whose larger radius is
+        /// <paramref name="largestRadius"/>.</summary>
+        public static float RadiusFor(float largestRadius, float spacing) =>
+            Math.Max(2f * largestRadius + Margin, SpacingFraction * spacing);
 
         public void Update(CollisionBody[] bodies, int count, float spacing, float dt)
         {
@@ -52,10 +58,13 @@ namespace WingCommand
                     float t = vv > 1e-3f ? Scalar.Clamp(-Vec3.Dot(p, v) / vv, 0f, Horizon) : 0f;
                     Vec3 miss = p + v * t;
                     float distance = miss.Length;
-                    float radius = Math.Max(2f * Math.Max(bodies[a].Radius, bodies[b].Radius) + Margin, SpacingFraction * spacing);
+                    float largest = Math.Max(bodies[a].Radius, bodies[b].Radius);
+                    float radius = RadiusFor(largest, spacing);
                     if (distance >= radius) continue;
                     Vec3 away = distance > 0.5f ? miss / distance : Sideways(bodies[yielder].Vel);
-                    float g = BiasG * (1f - distance / radius);
+                    // Full strength by the safe radius (bounding spheres + 10 m), ramping in from the bias radius.
+                    float safe = 2f * largest + SafeMargin;
+                    float g = BiasG * Scalar.Clamp01((radius - distance) / Math.Max(1f, radius - safe));
                     float hard = 1.2f * (bodies[a].Radius + bodies[b].Radius);
                     if (t < EmergencyHorizon && distance < hard)
                     {

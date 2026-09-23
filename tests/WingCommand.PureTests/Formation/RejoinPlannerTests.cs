@@ -64,6 +64,34 @@ namespace WingCommand.PureTests
         }
 
         [Fact]
+        public void LeadPointNeverHidesTheBrakingThePreSlotNeeds()
+        {
+            // 1 km behind the pre-slot and 80 m/s faster: the reference must sit at the pre-slot along the track,
+            // so the stopping-distance law brakes for it, not for a lead point far ahead of it.
+            LeaderEstimate leader = Leader();
+            SlotTarget slot = Slot(leader);
+            AircraftState s = TestStates.Flying(PreSlot(slot) - Vec3.Forward * 1000f, new Vec3(0f, 0f, 280f));
+            RejoinOutput o = new RejoinPlanner().Step(s, slot, leader, 1, Spacing, 300f, true, Dt);
+            Assert.InRange(o.Ref.Pos.Z - PreSlot(slot).Z, -5f, 5f);
+        }
+
+        [Fact]
+        public void WrongSideMemberHoldsItsSideUntilItIsOnItsLane()
+        {
+            // The slot is left of the leader's track (x = −80); the member is 400 m right of it. 150 m below its lane
+            // it must not cross yet; on its lane it may.
+            LeaderEstimate leader = Leader();
+            SlotTarget slot = Slot(leader);
+            float laneY = 2000f - RejoinPlanner.LaneStep;
+            RejoinOutput low = new RejoinPlanner().Step(TestStates.Flying(new Vec3(400f, laneY - 150f, -3000f), leader.Vel),
+                slot, leader, 1, Spacing, 255f, true, Dt);
+            Assert.True(low.Ref.Pos.X > 300f, $"crossed at {low.Ref.Pos.X:0} m while 150 m below its lane");
+            RejoinOutput onLane = new RejoinPlanner().Step(TestStates.Flying(new Vec3(400f, laneY, -3000f), leader.Vel),
+                slot, leader, 1, Spacing, 255f, true, Dt);
+            Assert.True(onLane.Ref.Pos.X < 0f, $"held its side at {onLane.Ref.Pos.X:0} m although on its lane");
+        }
+
+        [Fact]
         public void EachSlotNumberRejoinsOnItsOwnLane()
         {
             LeaderEstimate leader = Leader();

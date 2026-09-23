@@ -15,7 +15,7 @@ namespace WingCommand
     /// <summary>Procedural rejoin for one member. References, in order:
     /// <list type="number">
     /// <item>A cutoff rendezvous with the pre-slot, predicted around the leader's turn, on the member's own
-    /// lane (30 m below the leader per slot number, so rejoin paths cannot cross).</item>
+    /// lane (one lane step below the leader per slot number, so rejoin paths cannot cross).</item>
     /// <item>The pre-slot: 1 spacing aft, 20 m low.</item>
     /// <item>The slot.</item>
     /// </list>
@@ -27,7 +27,7 @@ namespace WingCommand
     /// rejoin.</summary>
     internal sealed class RejoinPlanner
     {
-        public const float LaneStep = 30f, PreSlotLow = 20f;
+        public const float LaneStep = 30f, LaneClearance = 5f, LaneCapture = 10f, PreSlotLow = 20f;
         public const float SigmaNear = 1f, SigmaFar = 2f, SigmaTauDown = 0.7f, SigmaTauUp = 2.5f;
         public const float InSlotFraction = 0.3f, AdvancedSigma = 0.95f, StaggerDeadlockSeconds = 30f;
         public const float BehindEnterSeconds = 120f, BehindExitSeconds = 60f, BehindPersistSeconds = 10f;
@@ -36,6 +36,10 @@ namespace WingCommand
         private float sigmaPre, sigmaSlot, waited;
         private bool primed, behind;
         private Persistence behindTimer;
+
+        /// <summary>Vertical distance between rejoin lanes. The pilot keeps it clear of the collision-bias radius
+        /// (at least <see cref="LaneStep"/>), so members on adjacent lanes cross without tripping the bias.</summary>
+        public float LaneStepM = LaneStep;
 
         public bool FallingBehind => behind;
 
@@ -55,7 +59,7 @@ namespace WingCommand
                 behindTimer = default;
             }
 
-            RefState rendezvous = behind ? target : Rendezvous(s, pre, leader, lane, availableSpeed);
+            RefState rendezvous = behind ? target : Rendezvous(s, pre, leader, LaneStepM * lane, availableSpeed);
 
             float dSlot = (target.Pos - s.Pos).Length;
             float d = Math.Min((pre.Pos - s.Pos).Length, dSlot);
@@ -86,23 +90,36 @@ namespace WingCommand
             };
         }
 
-        private static RefState Rendezvous(in AircraftState s, in RefState pre, in LeaderEstimate leader, int lane,
+        private static RefState Rendezvous(in AircraftState s, in RefState pre, in LeaderEstimate leader, float laneDepth,
             float availableSpeed)
         {
             FormationIntercept.Plan plan = FormationIntercept.Solve(Flat(pre.Pos - s.Pos), Flat(leader.Vel),
                 Flat(pre.Pos - leader.Pos), Flat(pre.Vel), s.Speed, availableSpeed, leader.TurnRate);
             var cutoff = new RefState(
-                new Vec3(s.Pos.X + plan.Gap.X, leader.Pos.Y - LaneStep * lane, s.Pos.Z + plan.Gap.Y),
+                new Vec3(s.Pos.X + plan.Gap.X, leader.Pos.Y - laneDepth, s.Pos.Z + plan.Gap.Y),
                 new Vec3(plan.ArrivalVelocity.X, 0f, plan.ArrivalVelocity.Y), Vec3.Zero);
-            // A lead point only helps a member that has to catch the pre-slot up. One abeam or ahead of it
-            // waits for it instead: fade the lead by how far the pre-slot is ahead (cosine, clipped at 0).
-            // The lane altitude stays either way: it is what keeps rejoins from different sides apart.
+            // The lead point is used only across the track (the cutoff inside a turn): along the track the
+            // reference stays at the pre-slot, so the stopping-distance law brakes for the real gap. It only
+            // helps a member that has to catch the pre-slot up; one abeam or ahead of it waits for it instead,
+            // so the lead fades by how far the pre-slot is ahead (cosine, clipped at 0). The lane altitude stays
+            // either way: it is what keeps rejoins from different sides apart.
+            Vec3 across = Vec3.Cross(Vec3.Up, leader.Track);
             Vec3 gap = (pre.Pos - s.Pos).Horizontal;
             float length = gap.Length;
             float ahead = length > 1f ? Scalar.Clamp01(Vec3.Dot(gap, leader.Track) / length) : 1f;
             RefState faded = Blend(pre, cutoff, ahead);
-            return new RefState(new Vec3(faded.Pos.X, cutoff.Pos.Y, faded.Pos.Z),
-                new Vec3(faded.Vel.X, leader.Vel.Y, faded.Vel.Z), new Vec3(faded.Acc.X, 0f, faded.Acc.Z));
+            Vec3 pos = pre.Pos + across * Vec3.Dot(faded.Pos - pre.Pos, across);
+            pos = new Vec3(pos.X, cutoff.Pos.Y, pos.Z);
+
+            // Lanes first: a member on the far side of the leader's track from its slot keeps to its own side
+            // until it is on its lane, so the crossing happens with lane separation (blended over 10-20 m).
+            float memberSide = Vec3.Dot(s.Pos - leader.Pos, across), refSide = Vec3.Dot(pos - leader.Pos, across);
+            if (memberSide * Vec3.Dot(pre.Pos - leader.Pos, across) < 0f)
+            {
+                float hold = Scalar.SmoothStep(LaneCapture, 2f * LaneCapture, Math.Abs(s.Pos.Y - cutoff.Pos.Y));
+                pos += across * ((memberSide - refSide) * hold);
+            }
+            return new RefState(pos, new Vec3(faded.Vel.X, leader.Vel.Y, faded.Vel.Z), new Vec3(faded.Acc.X, 0f, faded.Acc.Z));
         }
 
         private static float Filter(float current, float target, float dt)
