@@ -50,6 +50,15 @@ namespace WingCommand.PureTests
         }
 
         [Fact]
+        public void IntentCarriesTheLeadersHeadingForSlowMembersToFace()
+        {
+            var rig = new Rig();
+            rig.Step();
+            Assert.True(rig.Pilot.LastIntent.HasHeading);
+            Assert.Equal(0f, rig.Pilot.LastIntent.HeadingDeg, 1);   // the leader flies north
+        }
+
+        [Fact]
         public void MemberInItsSlotIsCapturedAndThenTracksTheSlot()
         {
             var rig = new Rig();

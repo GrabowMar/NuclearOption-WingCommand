@@ -94,6 +94,8 @@ namespace WingCommand
                 Aggression = Aggression,
                 Spacing = spacing,
                 TerrainClearance = Clearance,
+                HasHeading = Mind.Current != BehaviourId.HoldOverhead,
+                HeadingDeg = Vec3.HeadingDeg(leader.Track),
             };
             GuidanceCommand guidance = LastGuidance = Pipeline.Guide(LastIntent, s, p);
             var ctx = new LimitContext

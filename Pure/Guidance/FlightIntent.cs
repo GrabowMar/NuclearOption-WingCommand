@@ -43,6 +43,9 @@ namespace WingCommand
         /// <summary>Formation spacing in metres for the near-reference overtake cap; 0 disables it.</summary>
         public float Spacing;
         public float TerrainClearance;
+        /// <summary>The heading to face when slow (a helicopter holding a slot faces its leader's way).</summary>
+        public bool HasHeading;
+        public float HeadingDeg;
     }
 
     /// <summary>Guidance output: commanded kinematic acceleration and velocity (world). A rotary law also sets the

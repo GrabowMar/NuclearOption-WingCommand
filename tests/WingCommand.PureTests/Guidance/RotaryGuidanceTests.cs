@@ -89,6 +89,19 @@ namespace WingCommand.PureTests
         }
 
         [Fact]
+        public void SlowHelicopterFacesTheIntentsHeading()
+        {
+            // A hovering element faces its leader's way (spec M2 §4.2), even after sidestepping into its slot.
+            var at = new Vec3(0f, 300f, 0f);
+            FlightIntent intent = At(at, new Vec3(3f, 0f, 0f));
+            intent.HasHeading = true;
+            intent.HeadingDeg = 0f;
+            GuidanceCommand g = RotaryGuidance.Evaluate(intent, Helo(at, new Vec3(3f, 0f, 0f)), Utility());
+            Assert.True(g.HasHeading);
+            Assert.Equal(0f, g.HeadingDeg, 1);
+        }
+
+        [Fact]
         public void ClimbIsCappedByTheClimbRateAndTheVerticalAcceleration()
         {
             AirframeProfile p = Utility();

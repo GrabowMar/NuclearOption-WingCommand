@@ -11,7 +11,8 @@ namespace WingCommand
     /// <item>Vertical: the reference climb plus error / TauVert, within ±ClimbRateMax.</item>
     /// <item>Acceleration: reference acceleration + velocity error / TauVel; horizontal within g·tan(MaxTilt),
     /// vertical within ±VerticalAccelMax.</item>
-    /// <item>Heading: along the command above <see cref="YawAlignSpeed"/>, else along a moving reference, else held.</item>
+    /// <item>Heading: along the command above <see cref="YawAlignSpeed"/>; below it the intent's heading (the leader's
+    /// way), else along a moving reference, else held.</item>
     /// </list></summary>
     internal static class RotaryGuidance
     {
@@ -47,6 +48,11 @@ namespace WingCommand
             {
                 g.HasHeading = true;
                 g.HeadingDeg = Vec3.HeadingDeg(vh);
+            }
+            else if (intent.HasHeading)
+            {
+                g.HasHeading = true;
+                g.HeadingDeg = intent.HeadingDeg;
             }
             else if (r.Vel.Horizontal.Length > MovingReferenceSpeed)
             {
