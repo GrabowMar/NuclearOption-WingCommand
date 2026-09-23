@@ -19,6 +19,9 @@ namespace WingCommand
         public ConfigEntry<SpacingPreset> DefaultSpacing { get; }
         public ConfigEntry<int> MaxWingmen { get; }
         public ConfigEntry<string> CallAirframe { get; }
+        public ConfigEntry<bool> ShowHud { get; }
+        public ConfigEntry<float> HudX { get; }
+        public ConfigEntry<float> HudY { get; }
         public ConfigEntry<KeyboardShortcut> KeyCallWingman { get; }
         public ConfigEntry<KeyboardShortcut> KeyFormUp { get; }
         public ConfigEntry<KeyboardShortcut> KeyNextShape { get; }
@@ -57,6 +60,15 @@ namespace WingCommand
             CallAirframe = c.Bind("Wing", "CallAirframe", "", new ConfigDescription(
                 "Airframe to call, by unit name (for example FS-20). Empty calls your own type. Fixed-wing only in this build.",
                 null, new ConfigurationManagerAttributes { Order = 87 }));
+
+            ShowHud = c.Bind("Hud", "Show", true, new ConfigDescription(
+                "Show the wing strip and autopilot annunciator.", null, new ConfigurationManagerAttributes { Order = 80 }));
+            HudX = c.Bind("Hud", "OffsetX", 0f, new ConfigDescription(
+                "Move the wing strip right (+) or left (-), in HUD pixels.", new AcceptableValueRange<float>(-1500f, 1500f),
+                new ConfigurationManagerAttributes { Order = 79 }));
+            HudY = c.Bind("Hud", "OffsetY", 0f, new ConfigDescription(
+                "Move the wing strip up (+) or down (-), in HUD pixels.", new AcceptableValueRange<float>(-1000f, 1000f),
+                new ConfigurationManagerAttributes { Order = 78 }));
 
             KeyCallWingman = Key(c, "CallWingman", "Call one wingman (Wing/CallAirframe, or your type).", 50);
             KeyFormUp = Key(c, "FormUp", "Every wingman rejoins now.", 49);
