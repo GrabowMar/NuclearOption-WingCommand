@@ -10,7 +10,7 @@ namespace WingCommand
     {
         public ConstraintId BankBy, NzBy, SpeedBy, VerticalBy;
         public float BankRequested, BankAllowed, NzRequested, NzAllowed;
-        public bool GcasActive;
+        public bool GcasActive, CollisionActive;
 
         public void BindBank(ConstraintId by, float requested, float allowed)
         {
@@ -35,6 +35,7 @@ namespace WingCommand
             if (NzBy != ConstraintId.None) sb.Append($"NZ {NzBy} {NzAllowed:0.0}/{NzRequested:0.0} ");
             if (VerticalBy != ConstraintId.None) sb.Append($"VERT {VerticalBy} ");
             if (SpeedBy != ConstraintId.None) sb.Append($"SPD {SpeedBy} ");
+            if (CollisionActive) sb.Append("COLL ");
             if (GcasActive) sb.Append("GCAS");
             return sb.ToString().TrimEnd();
         }
@@ -49,6 +50,8 @@ namespace WingCommand
         public float FloorY;
         public float Clearance;
         public float Aggression;
+        /// <summary>Wing collision bias for this aircraft (m/s², world), added before any other constraint.</summary>
+        public Vec3 CollisionBias;
     }
 #pragma warning restore CS0649
 }

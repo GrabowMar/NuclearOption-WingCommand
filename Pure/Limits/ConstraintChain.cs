@@ -3,7 +3,7 @@ using System;
 namespace WingCommand
 {
     /// <summary>One ordered chain applied to every command, recording what bound it.
-    /// <para>Acceleration stage: terrain floor (collision bias joins in M1b).</para>
+    /// <para>Acceleration stage: collision bias, then terrain floor.</para>
     /// <para>Attitude stage: envelope (bank ceiling, lift- and structure-limited load factor, loaded
     /// minimum speed), then ground-collision avoidance, then authority slews that keep commands continuous.</para>
     /// Holds per-aircraft state (GCAS latch, last command), so there is one instance per aircraft.</summary>
@@ -22,6 +22,11 @@ namespace WingCommand
         public void ApplyAccel(ref GuidanceCommand c, in AircraftState s, in LimitContext ctx, AirframeProfile p,
             ref BindingReport r)
         {
+            if (ctx.CollisionBias.SqrLength > 1e-4f)
+            {
+                c.Accel += ctx.CollisionBias;
+                r.CollisionActive = true;
+            }
             if (float.IsNaN(ctx.FloorY)) return;
             // Keep the commanded vertical speed above what the height margin allows: climb back when
             // below the floor + clearance, otherwise sink no faster than GCAS's own recovery model accepts

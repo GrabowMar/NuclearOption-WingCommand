@@ -145,5 +145,19 @@ namespace WingCommand.PureTests
             Assert.Equal(179f, ConstraintChain.SlewBank(-179f, 170f, 2f), 3);
             Assert.Equal(12f, ConstraintChain.SlewBank(10f, 60f, 2f), 3);
         }
+
+        [Fact]
+        public void CollisionBiasIsAddedToTheCommandAndReported()
+        {
+            var chain = new ConstraintChain();
+            var report = new BindingReport();
+            var g = new GuidanceCommand { Accel = new Vec3(1f, 0f, 0f), VelCmd = new Vec3(0f, 0f, 200f) };
+            LimitContext ctx = Floor(float.NaN);
+            ctx.CollisionBias = new Vec3(0f, 3f, 0f);
+            chain.ApplyAccel(ref g, At(2000f), ctx, Fighter, ref report);
+            Assert.Equal(new Vec3(1f, 3f, 0f), g.Accel);
+            Assert.True(report.CollisionActive);
+            Assert.Contains("COLL", report.Describe());
+        }
     }
 }
