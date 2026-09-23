@@ -92,6 +92,11 @@ namespace WingCommand.FlightSim
             }
         }
 
+        public AircraftState State(int i) => states[i];
+
+        /// <summary>The telemetry row the in-game recorder would write for member <paramref name="i"/>.</summary>
+        public TelemetryRow Row(int i) => TelemetryRows.From(Time, i, states[i], Pilots[i], Wing.Frame.Slots[i].Ref.Pos);
+
         public float SlotError(int i) => (Wing.Frame.Slots[i].Ref.Pos - Plants[i].Position).Length;
 
         /// <summary>Smallest distance between any two aircraft, the leader included.</summary>
