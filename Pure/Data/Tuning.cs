@@ -17,7 +17,7 @@ namespace WingCommand
             typeof(TrackingGuidance), typeof(AccelMapping), typeof(HoldGuidance), typeof(AutopilotSession),
             typeof(FixedWingController), typeof(AircraftSensorCore), typeof(ConstraintChain), typeof(CollisionBias),
             typeof(TerrainFloor), typeof(LeaderEstimator), typeof(TurnFrame), typeof(SlotSolver),
-            typeof(RejoinPlanner), typeof(FormationWing), typeof(HoldOrbit), typeof(PilotMind),
+            typeof(RejoinPlanner), typeof(FormationWing), typeof(HoldOrbit), typeof(PilotMind), typeof(AirStart),
         };
 
         /// <summary>Returns the keys it could not apply, in input order.</summary>
