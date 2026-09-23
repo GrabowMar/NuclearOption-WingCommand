@@ -13,7 +13,7 @@ namespace WingCommand.FlightSim
             new FlightIntent
             {
                 Ref = slot,
-                Limits = new SpeedLimits(p.MinimumSpeed(1f), p.MaxSpeed, false, true),
+                Limits = new SpeedLimits(p.MinimumSpeed(1f), p.MaxSpeed, true, true), // as FormationPilot: full power allowed
                 Precision = 1f,
                 Aggression = 0.5f,
                 Spacing = spacing,
@@ -49,9 +49,14 @@ namespace WingCommand.FlightSim
                 }
                 AircraftState s = SimSensor.Read(plant, Dt);
                 Vec3 right = Vec3.Cross(Vec3.Up, s.Vel.Normalized).Normalized;
-                var g = new GuidanceCommand { Accel = right * (Scalar.G * (float)Math.Tan(target * Scalar.Deg2Rad)), VelCmd = s.Vel };
+                var g = new GuidanceCommand
+                {
+                    Accel = right * (Scalar.G * (float)Math.Tan(target * Scalar.Deg2Rad)) - Vec3.Up * (s.Vel.Y / profile.TauVel),
+                    VelCmd = s.Vel.Horizontal.Normalized * 60f,
+                    AfterburnerAllowed = true,
+                };
                 ControlOutput c = pipeline.Step(g, s, new LimitContext { FloorY = float.NaN, Aggression = 0.5f }, profile, Dt);
-                plant.Step(new PlantInput(c.Pitch, c.Roll, 0.6f), Dt);
+                plant.Step(new PlantInput(c.Pitch, c.Roll, c.Throttle), Dt);
                 if (t < 4f) continue;
                 float e = plant.BankDeg - target;
                 if (!settled && Math.Abs(e) < 3f)

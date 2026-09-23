@@ -67,22 +67,28 @@ namespace WingCommand
             // Envelope: load factor within structure and available lift; protect the loaded minimum speed.
             // Both scale with equivalent airspeed, so the limits hold at altitude.
             float nzMax = Math.Min(p.GLimit, p.LiftLimitedG(s.Eas));
-            if (a.Nz > nzMax)
-            {
-                r.BindNz(ConstraintId.Envelope, a.Nz, nzMax);
-                a.Nz = nzMax;
-            }
+            float nzCap = nzMax;
             if (s.Eas < p.MinimumSpeed(Math.Max(1f, a.Nz)))
             {
                 a.EnergyRate = Math.Max(a.EnergyRate, 10f);
                 r.SpeedBy = ConstraintId.Envelope;
                 float ratio = s.Eas / (1.2f * Math.Max(1f, p.StallSpeed));
-                float allowed = Math.Max(1f, ratio * ratio);
-                if (a.Nz > allowed)
+                nzCap = Math.Min(nzCap, Math.Max(1f, ratio * ratio));
+            }
+            if (a.Nz > nzCap)
+            {
+                // Vertical priority: keep the vertical lift the command asked for and give up bank (turn rate);
+                // holding the bank at the capped load factor would lose height (a descending spiral).
+                float requested = a.BankDeg;
+                float vertical = Math.Max(0f, a.Nz * (float)Math.Cos(requested * Scalar.Deg2Rad));
+                float bank = vertical >= nzCap ? 0f : (float)Math.Acos(vertical / nzCap) * Scalar.Rad2Deg;
+                if (bank < Math.Abs(requested))
                 {
-                    r.BindNz(ConstraintId.Envelope, a.Nz, allowed);
-                    a.Nz = allowed;
+                    a.BankDeg = Math.Sign(requested) * bank;
+                    r.BindBank(ConstraintId.Envelope, requested, a.BankDeg);
                 }
+                r.BindNz(ConstraintId.Envelope, a.Nz, nzCap);
+                a.Nz = nzCap;
             }
 
             // Ground-collision avoidance: roll level, pull at available g, full dry power.

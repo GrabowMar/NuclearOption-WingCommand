@@ -47,6 +47,44 @@ namespace WingCommand.PureTests
             Assert.True(sink > 0f);
         }
 
+        private static AttitudeCommand Envelope(float speed, float bank, float nz, out BindingReport report)
+        {
+            var chain = new ConstraintChain();
+            report = new BindingReport();
+            var a = new AttitudeCommand { BankDeg = bank, Nz = nz };
+            chain.ApplyAttitude(ref a, At(0f, speed), new LimitContext { FloorY = float.NaN, Aggression = 0.5f }, Fighter, Dt, ref report);
+            return a;
+        }
+
+        [Fact]
+        public void LoadFactorCapShallowsTheBankToKeepTheVerticalLift()
+        {
+            // In game a slow wingman kept 72° of bank after its load factor was capped to ~1.5 g and spiralled down.
+            // At 80 m/s the loaded-minimum cap is (80/66)² ≈ 1.47 g: a level 70° turn becomes a level 47° turn.
+            AttitudeCommand a = Envelope(80f, 70f, 1f / (float)System.Math.Cos(70f * Scalar.Deg2Rad), out BindingReport report);
+            float cap = (80f / 66f) * (80f / 66f);
+            Assert.Equal(cap, a.Nz, 3);
+            Assert.Equal((float)System.Math.Acos(1f / cap) * Scalar.Rad2Deg, a.BankDeg, 1);
+            Assert.Equal(ConstraintId.Envelope, report.BankBy);
+        }
+
+        [Fact]
+        public void LoadFactorCapBelowTheVerticalDemandLevelsTheWings()
+        {
+            AttitudeCommand a = Envelope(80f, -60f, 4f, out _);
+            Assert.Equal(0f, a.BankDeg, 3);
+            Assert.Equal((80f / 66f) * (80f / 66f), a.Nz, 3);
+        }
+
+        [Fact]
+        public void LoadFactorUnderTheCapKeepsTheBank()
+        {
+            AttitudeCommand a = Envelope(80f, 70f, 0.5f, out BindingReport report);
+            Assert.Equal(70f, a.BankDeg, 3);
+            Assert.Equal(0.5f, a.Nz, 3);
+            Assert.Equal(ConstraintId.None, report.BankBy);
+        }
+
         [Fact]
         public void UnknownFloorLeavesTheCommandAlone()
         {
