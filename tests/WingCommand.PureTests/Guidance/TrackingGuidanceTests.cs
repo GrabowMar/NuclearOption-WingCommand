@@ -111,19 +111,5 @@ namespace WingCommand.PureTests
             Assert.True(cmd.Accel.Z > -1f, $"brakes at {cmd.Accel.Z:0.0} m/s² while turning around");
             Assert.True(Math.Abs(cmd.Accel.X) > 20f, $"turns at only {cmd.Accel.X:0.0} m/s²");
         }
-
-        [Fact]
-        public void TurnAroundFollowsTheGivenTurnSense()
-        {
-            // Heading (almost) south with the reference behind and off to one side: the given sense decides,
-            // even when the command itself leans the other way. Right of south is west.
-            AircraftState southbound = At(new Vec3(0f, 2000f, 0f), new Vec3(1f, 0f, -200f));
-            FlightIntent intent = Intent(new Vec3(-300f, 2000f, 3000f), new Vec3(0f, 0f, 200f));
-            intent.TurnSense = -1f;
-            Assert.True(TrackingGuidance.Evaluate(intent, southbound, Fighter).Accel.X > 10f);
-            intent = Intent(new Vec3(300f, 2000f, 3000f), new Vec3(0f, 0f, 200f));
-            intent.TurnSense = 1f;
-            Assert.True(TrackingGuidance.Evaluate(intent, southbound, Fighter).Accel.X < -10f);
-        }
     }
 }

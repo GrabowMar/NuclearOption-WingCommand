@@ -24,8 +24,6 @@ namespace WingCommand
         public ControlOutput LastOutput;
         private HoldOrbit orbit;
         private bool gcasWas, emergencyWas;
-        private float turnSense;
-        private Vec3 lastVelCmd;
 
         public FormationPilot(int slot) => Slot = slot;
 
@@ -74,15 +72,6 @@ namespace WingCommand
                 spacing = 0f;
             }
 
-            // A turn-around sweeps through the slot's side of the leader, so members reverse outboard, away from
-            // each other, and arrive on their own side. The sense is chosen once and held until the command is
-            // no longer behind; re-choosing mid-turn would flip it as the heading passes that side.
-            Vec3 heading = s.Vel.Horizontal;
-            bool behind = heading.SqrLength > 1f && Vec3.Dot(lastVelCmd.Horizontal, heading) < 0f;
-            if (!behind || Mind.Current == BehaviourId.HoldOverhead) turnSense = 0f;
-            else if (turnSense == 0f)
-                turnSense = SweepSense(heading, lastVelCmd, Vec3.Cross(Vec3.Up, leader.Track) * Math.Sign(slot.Lateral));
-
             LastIntent = new FlightIntent
             {
                 Ref = reference,
@@ -91,10 +80,8 @@ namespace WingCommand
                 Aggression = Aggression,
                 Spacing = spacing,
                 TerrainClearance = Clearance,
-                TurnSense = turnSense,
             };
             GuidanceCommand guidance = TrackingGuidance.Evaluate(LastIntent, s, p);
-            lastVelCmd = guidance.VelCmd;
             var ctx = new LimitContext
             {
                 FloorY = frame.FloorY, Clearance = Clearance, Aggression = Aggression, CollisionBias = frame.Bias[Slot],
@@ -108,16 +95,6 @@ namespace WingCommand
             if (emergency && !emergencyWas) Log(events, time, WingEventKind.CollisionEmergency);
             emergencyWas = emergency;
             return LastOutput;
-        }
-
-        /// <summary>+1 (right) when turning clockwise from <paramref name="heading"/> to <paramref name="command"/>
-        /// passes through <paramref name="side"/> first, −1 when the anticlockwise way does, 0 without a side.</summary>
-        private static float SweepSense(Vec3 heading, Vec3 command, Vec3 side)
-        {
-            if (side.SqrLength < 0.5f || command.Horizontal.SqrLength < 1f) return 0f;
-            float h = Vec3.HeadingDeg(heading);
-            float toSide = (Vec3.HeadingDeg(side) - h + 360f) % 360f, toCommand = (Vec3.HeadingDeg(command) - h + 360f) % 360f;
-            return toSide < toCommand ? 1f : -1f;
         }
 
         private Vec3 HoldCenter(in LeaderEstimate leader) =>

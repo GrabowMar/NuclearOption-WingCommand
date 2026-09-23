@@ -52,25 +52,6 @@ namespace WingCommand.PureTests
         }
 
         [Fact]
-        public void TurnAroundSweepsThroughTheSlotSideAndHoldsItsSenseUntilDone()
-        {
-            // The slot is on the leader's left (west, leader northbound). The member is 4 km ahead and 1 km west
-            // of it, so the command points east-north-east (~70°). A southbound member turns right, through west,
-            // and keeps turning right past west (at 300° a fresh choice would say left) until the command is no
-            // longer behind it.
-            var rig = new Rig();
-            Vec3 ahead = new Vec3(-1080f, 0f, 4000f);
-            rig.Step(memberPos: rig.LeaderPos + ahead, memberVel: new Vec3(0f, 0f, -200f));
-            rig.Step(memberPos: rig.LeaderPos + ahead, memberVel: new Vec3(0f, 0f, -200f));
-            Assert.Equal(1f, rig.Pilot.LastIntent.TurnSense);
-            rig.Step(memberPos: rig.LeaderPos + ahead, memberVel: Vec3.FromHeading(300f, 200f));
-            Assert.Equal(1f, rig.Pilot.LastIntent.TurnSense);
-            rig.Step(memberPos: rig.LeaderPos + ahead, memberVel: Vec3.FromHeading(0f, 200f));
-            rig.Step(memberPos: rig.LeaderPos + ahead, memberVel: Vec3.FromHeading(0f, 200f));
-            Assert.Equal(0f, rig.Pilot.LastIntent.TurnSense);
-        }
-
-        [Fact]
         public void RejoinLanesClearTheCollisionBiasRadius()
         {
             // Adjacent lanes closer than the bias radius would keep crossing rejoins inside it: lane 1 must sit at

@@ -7,8 +7,8 @@ namespace WingCommand
     /// a linear PD with the reference acceleration as feedforward. The along-track closure also respects a
     /// stopping-distance law, so arrival does not overshoot. The acceleration is clamped to what the
     /// airframe can do: normal part to (Nz_max − 1)·g, tangential part to thrust and drag. A velocity
-    /// command more than 90° off the current track becomes a maximum turn that holds the commanded speed,
-    /// in the intent's turn sense or else toward the side the command lies on.</summary>
+    /// command more than 90° off the current track becomes a maximum turn toward the side the command lies on
+    /// that holds the commanded speed.</summary>
     internal static class TrackingGuidance
     {
         public const float CatchUpMargin = 5f;
@@ -67,12 +67,8 @@ namespace WingCommand
             if (heading.SqrLength > 1f && Vec3.Dot(velCmd.Horizontal, heading) < 0f)
             {
                 Vec3 aside = Vec3.Cross(Vec3.Up, heading).Normalized;
-                float lean = intent.TurnSense;
-                if (lean == 0f)
-                {
-                    lean = Vec3.Dot(velCmd, aside);
-                    if (Math.Abs(lean) < 1f) lean = Vec3.Dot(e, aside);
-                }
+                float lean = Vec3.Dot(velCmd, aside);
+                if (Math.Abs(lean) < 1f) lean = Vec3.Dot(e, aside);
                 // Along the current track at the commanded speed plus as much again to the chosen side: a maximum
                 // turn that holds speed, instead of a sideways vector whose projection says "brake to zero".
                 float speedCmd = velCmd.Horizontal.Length;

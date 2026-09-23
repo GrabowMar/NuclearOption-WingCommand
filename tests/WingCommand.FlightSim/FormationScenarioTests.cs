@@ -283,5 +283,69 @@ namespace WingCommand.FlightSim
                 Assert.True(captured[k], $"member {k + 1} never captured");
             }
         }
+
+        /// <summary>Runs the wing until every member has held its slot within 0.25 spacing for 5 s; returns the
+        /// capture times (NaN = never) and the smallest separation seen.</summary>
+        private static float[] RunUntilCaptured(SimWing wing, Func<float, (float bank, float speed)> schedule, float seconds,
+            out float minSeparation)
+        {
+            int n = wing.Plants.Length;
+            var captured = new float[n];
+            var inside = new float[n];
+            for (int k = 0; k < n; k++) captured[k] = float.NaN;
+            minSeparation = float.MaxValue;
+            float spacing = wing.Wing.Frame.Spacing;
+            for (int i = 0; i < (int)(seconds * 60); i++)
+            {
+                (float bank, float speed) = schedule(i * Dt);
+                wing.Leader.Step(bank, Dt, speed, 0f);
+                wing.Step();
+                minSeparation = Math.Min(minSeparation, wing.MinSeparation());
+                for (int k = 0; k < n; k++)
+                {
+                    inside[k] = wing.SlotError(k) < 0.25f * spacing ? inside[k] + Dt : 0f;
+                    if (float.IsNaN(captured[k]) && inside[k] >= 5f) captured[k] = wing.Time;
+                }
+            }
+            return captured;
+        }
+
+        [Fact]
+        public void FourShipJoinsBehindALeaderInASteadyTurn()
+        {
+            // J1 with the leader in a steady 60° turn: the rejoin must cut inside the turn, not chase it round.
+            var leader = new VirtualLeader(new Vec3(0f, 2000f, 4000f), 200f, 0f);
+            var wing = new SimWing(leader, SimFormations.Get("finger-four-right"), FormationCatalog.Standard,
+                new[] { new Vec3(-150f, 1850f, 0f), new Vec3(150f, 1850f, 0f), new Vec3(300f, 1850f, -150f) }, 140f, 0f);
+            float[] captured = RunUntilCaptured(wing, t => (60f, 200f), 200f, out float minSeparation);
+            for (int k = 0; k < 3; k++) Assert.True(captured[k] < 150f, $"member {k + 1} captured at {captured[k]:0} s");
+            Assert.True(minSeparation >= wing.SafeRadius, $"separation {minSeparation:0.0} m");
+        }
+
+        [Fact]
+        public void OppositeHeadingJoinBehindAnSTurningLeader()
+        {
+            // J2 with the leader weaving ±30° every 8 s.
+            var leader = new VirtualLeader(new Vec3(0f, 2000f, 0f), 200f, 0f);
+            var wing = new SimWing(leader, SimFormations.Get("finger-four-right"), FormationCatalog.Standard,
+                new[] { new Vec3(-200f, 2000f, 6000f), new Vec3(200f, 2000f, 6000f), new Vec3(400f, 2000f, 6200f) }, 200f, 180f);
+            float[] captured = RunUntilCaptured(wing, t => ((int)(t / 8f) % 2 == 0 ? 30f : -30f, 200f), 300f, out float minSeparation);
+            for (int k = 0; k < 3; k++) Assert.False(float.IsNaN(captured[k]), $"member {k + 1} never captured");
+            Assert.True(minSeparation >= wing.SafeRadius, $"separation {minSeparation:0.0} m");
+        }
+
+        [Fact]
+        public void HoldExitRejoinsBehindATurningLeader()
+        {
+            // The leader slows below the members' hold threshold (they hold overhead), then accelerates away in a
+            // 60° turn: the rejoin from the hold must converge.
+            var leader = new VirtualLeader(new Vec3(0f, 2000f, 0f), 200f, 0f);
+            SimWing wing = SimWing.InSlots(leader, SimFormations.Get("finger-four-right"), FormationCatalog.Standard, 3);
+            float[] captured = RunUntilCaptured(wing, t => t < 60f ? (0f, 80f) : (60f, 200f), 60f, out _);
+            for (int k = 0; k < 3; k++) Assert.Equal(BehaviourId.HoldOverhead, wing.Pilots[k].Mind.Current);
+            captured = RunUntilCaptured(wing, t => (60f, 200f), 200f, out float minSeparation);
+            for (int k = 0; k < 3; k++) Assert.False(float.IsNaN(captured[k]), $"member {k + 1} never captured after the hold");
+            Assert.True(minSeparation >= wing.SafeRadius, $"separation {minSeparation:0.0} m");
+        }
     }
 }
