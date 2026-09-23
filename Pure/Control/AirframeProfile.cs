@@ -49,14 +49,18 @@ namespace WingCommand
         /// at 60 m/s already takes ~15°, and a 20° bank turn another 20°.</summary>
         public float MaxTiltDeg = 30f, HoverCollective = 0.5f, VerticalAccelMax = 3f;
         public float PitchRateMaxDps = 57f, YawRateMaxDps = 115f;
+        /// <summary>Tiltwing: plane mode above ConversionHigh, rotary below ConversionLow (1.4 / 1.1 × the plane-mode stall).</summary>
+        public float ConversionLow = 50f, ConversionHigh = 65f;
+        public static float ConversionLowFactor = 1.1f, ConversionHighFactor = 1.4f;
         public static float RotaryClimbRateMax = 8f;
 #pragma warning disable CS0649 // set only from airframes JSON through ApplyOverrides (reflection)
         public bool ForceAutoAimFallback;
 #pragma warning restore CS0649
 
-        /// <summary>Loaded minimum speed: 1 g stall speed scaled by √n with a 20% margin. A helicopter has none, so
-        /// the loaded-minimum logic (leader slow, speed floors) never fires for it.</summary>
-        public float MinimumSpeed(float loadFactor) => Class == AirframeClass.Rotary
+        /// <summary>Loaded minimum speed: 1 g stall speed scaled by √n with a 20% margin. A helicopter or a tiltwing can
+        /// hover, so it has none and the loaded-minimum logic (leader slow, speed floors) never fires for it (a tiltwing
+        /// converts to rotary flight before its plane-mode stall).</summary>
+        public float MinimumSpeed(float loadFactor) => Class != AirframeClass.FixedWing
             ? 0f
             : StallSpeed * 1.2f * (float)Math.Sqrt(Math.Max(1f, loadFactor));
 
@@ -97,6 +101,11 @@ namespace WingCommand
             if (n.MaxRadius > 0f) p.MaxRadius = n.MaxRadius;
             p.CruiseSpeed = p.RefAirspeed;
             if (p.Class == AirframeClass.Rotary) DeriveRotary(p);
+            if (p.Class == AirframeClass.Tiltwing)
+            {
+                p.ConversionLow = ConversionLowFactor * p.StallSpeed;
+                p.ConversionHigh = ConversionHighFactor * p.StallSpeed;
+            }
             return p;
         }
 

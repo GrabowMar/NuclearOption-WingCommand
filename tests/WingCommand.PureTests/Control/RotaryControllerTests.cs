@@ -108,6 +108,7 @@ namespace WingCommand.PureTests
         public void FlightStackGivesRotaryAircraftTheRotaryPipeline()
         {
             Assert.IsType<RotaryPipeline>(FlightStack.NewPipeline(AirframeClass.Rotary));
+            Assert.IsType<TiltwingPipeline>(FlightStack.NewPipeline(AirframeClass.Tiltwing));
         }
     }
 }

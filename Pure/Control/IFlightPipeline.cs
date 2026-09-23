@@ -29,8 +29,14 @@ namespace WingCommand
     /// <summary>The only switch on <see cref="AirframeClass"/>: which pipeline an aircraft flies with.</summary>
     internal static class FlightStack
     {
-        // ponytail: tiltwings fly the fixed-wing pipeline until their own arrives in M2b.
-        public static IFlightPipeline NewPipeline(AirframeClass cls) =>
-            cls == AirframeClass.Rotary ? new RotaryPipeline() : (IFlightPipeline)new FixedWingPipeline();
+        public static IFlightPipeline NewPipeline(AirframeClass cls)
+        {
+            switch (cls)
+            {
+                case AirframeClass.Rotary: return new RotaryPipeline();
+                case AirframeClass.Tiltwing: return new TiltwingPipeline();
+                default: return new FixedWingPipeline();
+            }
+        }
     }
 }
