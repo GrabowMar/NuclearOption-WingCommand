@@ -135,6 +135,8 @@ namespace WingCommand
                 Throttle = throttleActive ? apThrottle : inputs.throttle,
                 Airbrake = throttleActive && o.Airbrake,
             };
+            // With the lateral axis the player's, the roll-authority learner must see the player's stick.
+            pipeline.NoteAppliedRoll(lastApplied.Roll);
         }
 
         /// <summary>Postfix of <c>PilotPlayerState.PlayerThrottleAxis1Controls</c>: the pilot's throttle is in

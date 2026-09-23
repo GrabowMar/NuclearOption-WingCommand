@@ -45,8 +45,12 @@ namespace WingCommand
             lastRollStick = applied.Roll;
         }
 
-        /// <summary>The pipeline's copy of <paramref name="p"/>; a new profile (another airframe, a calibration
-        /// reload) re-seeds the learned roll authority from it.</summary>
+        /// <summary>Tell the roll-authority learner which roll stick was really applied after this tick's Step, when
+        /// the caller overrode the pipeline's own output (the player steering under an ALT-only autopilot).</summary>
+        public void NoteAppliedRoll(float appliedRoll) => lastRollStick = appliedRoll;
+
+        /// <summary>The pipeline's copy of <paramref name="p"/>; a new profile (another airframe) re-seeds the learned
+        /// roll authority from it.</summary>
         private AirframeProfile Effective(AirframeProfile p)
         {
             if (ReferenceEquals(p, source)) return effective;

@@ -68,6 +68,25 @@ namespace WingCommand.PureTests
         }
 
         [Fact]
+        public void PipelineLearnsFromTheRollActuallyApplied()
+        {
+            // The player autopilot steps the pipeline while the player steers (ALT only, or a stick override); learning
+            // from the pipeline's own unapplied stick collapsed the estimate to the floor (review, M1d).
+            var profile = new AirframeProfile { RollRateMaxDps = 120f };
+            var pipeline = new FixedWingPipeline();
+            AircraftState s = TestStates.Flying(new Vec3(0f, 3000f, 0f), new Vec3(0f, 0f, 200f));
+            s.P = 50f;                                     // the player holds half stick: 50°/s
+            var g = new GuidanceCommand { VelCmd = s.Vel };
+            var ctx = new LimitContext { FloorY = float.NaN };
+            for (int i = 0; i < 900; i++)
+            {
+                pipeline.Step(g, s, ctx, profile, Dt);     // its own output rolls the other way; it is not applied
+                pipeline.NoteAppliedRoll(0.5f);
+            }
+            Assert.InRange(pipeline.Roll.RateDps, 95f, 105f);
+        }
+
+        [Fact]
         public void ResetSeedsTheEstimate()
         {
             var r = new RollAuthority();
