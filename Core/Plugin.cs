@@ -61,6 +61,7 @@ namespace WingCommand
             WingRuntime runtime = go.AddComponent<WingRuntime>();
             runtime.Register(new WingService());
             runtime.Register(new SpawnService());
+            runtime.Register(new PlayerAutopilot());
 
             Logger.LogInfo($"{PluginName} {PluginVersion}-{PluginPrerelease} loaded. " +
                 $"mvid={typeof(Plugin).Assembly.ManifestModule.ModuleVersionId}");

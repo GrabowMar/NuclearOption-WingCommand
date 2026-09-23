@@ -13,11 +13,14 @@ namespace WingCommand
     {
         internal static readonly Type[] PatchTypes =
         {
+            typeof(PlayerAutopilotPatches),
         };
 
         /// <summary>"DeclaringType.Method" names that must be patched after <see cref="Apply"/>.</summary>
         internal static readonly string[] Expected =
         {
+            "PilotPlayerState.PlayerAxisControls",
+            "PilotPlayerState.PlayerThrottleAxis1Controls",
         };
 
         internal static void Apply(Harmony harmony, ManualLogSource log)

@@ -2,9 +2,26 @@ using System;
 
 namespace WingCommand
 {
+    internal enum ApCommand : byte { Level, Heading, Altitude, VerticalSpeed, Speed, Off }
+
     /// <summary>Player commands shared by the radial and the hotkeys.</summary>
     internal static class WingCommands
     {
+        public static void Autopilot(ApCommand c)
+        {
+            PlayerAutopilot ap = PlayerAutopilot.Instance;
+            if (ap == null) return;
+            switch (c)
+            {
+                case ApCommand.Level: ap.SetLateral(LateralHold.Level); break;
+                case ApCommand.Heading: ap.SetLateral(LateralHold.Heading); break;
+                case ApCommand.Altitude: ap.SetVertical(VerticalHold.Altitude); break;
+                case ApCommand.VerticalSpeed: ap.SetVertical(VerticalHold.VerticalSpeed); break;
+                case ApCommand.Speed: ap.ToggleSpeed(); break;
+                default: ap.Off(); break;
+            }
+        }
+
         public static void Call(int n) => SpawnService.Instance?.Call(n, CallAirframe());
 
         public static void FormUp()
