@@ -53,10 +53,13 @@ namespace WingCommand
 
             harmony = new Harmony(PluginGuid);
             PatchManifest.Apply(harmony, Logger);
+            GameAccess.Initialise();
+            WingData.Load(Logger);
 
             var go = new GameObject("WingCommandRuntime") { hideFlags = HideFlags.HideAndDontSave };
             DontDestroyOnLoad(go);
-            go.AddComponent<WingRuntime>();
+            WingRuntime runtime = go.AddComponent<WingRuntime>();
+            runtime.Register(new WingService());
 
             Logger.LogInfo($"{PluginName} {PluginVersion}-{PluginPrerelease} loaded. " +
                 $"mvid={typeof(Plugin).Assembly.ManifestModule.ModuleVersionId}");

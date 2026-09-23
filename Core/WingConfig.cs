@@ -15,6 +15,10 @@ namespace WingCommand
         internal static string DataRoot => Path.Combine(Paths.ConfigPath, "WingCommand", "v1");
 
         public ConfigEntry<WingMode> Mode { get; }
+        public ConfigEntry<string> DefaultFormation { get; }
+        public ConfigEntry<SpacingPreset> DefaultSpacing { get; }
+        public ConfigEntry<int> MaxWingmen { get; }
+        public ConfigEntry<string> CallAirframe { get; }
         public ConfigEntry<bool> VerboseLogging { get; }
         public ConfigEntry<bool> DevTools { get; }
 
@@ -29,6 +33,19 @@ namespace WingCommand
                 "Smart runs the full AI. Performance halves guidance rate and decision cadence for AI-led " +
                 "wings (player-led formations always run at full rate). Applies at the next mission start.",
                 null, new ConfigurationManagerAttributes { Order = 100 }));
+
+            DefaultFormation = c.Bind("Wing", "DefaultFormation", "finger-four-right", new ConfigDescription(
+                "Formation a new wing flies: an id from formations.json (for example finger-four-right, combat-spread).",
+                null, new ConfigurationManagerAttributes { Order = 90 }));
+            DefaultSpacing = c.Bind("Wing", "DefaultSpacing", SpacingPreset.Standard, new ConfigDescription(
+                "Spacing a new wing flies: Close 40 m, Standard 80 m, Open 160 m, Spread 350 m (clamped to the shape).",
+                null, new ConfigurationManagerAttributes { Order = 89 }));
+            MaxWingmen = c.Bind("Wing", "MaxWingmen", 3, new ConfigDescription(
+                "Most wingmen you can call (host only).", new AcceptableValueRange<int>(1, 3),
+                new ConfigurationManagerAttributes { Order = 88 }));
+            CallAirframe = c.Bind("Wing", "CallAirframe", "", new ConfigDescription(
+                "Airframe to call, by unit name (for example FS-20). Empty calls your own type. Fixed-wing only in this build.",
+                null, new ConfigurationManagerAttributes { Order = 87 }));
 
             DevTools = c.Bind("Debug", "DevTools", false, new ConfigDescription(
                 "Enable developer tools: debug overlay, telemetry recorder, step tests and calibration.",
