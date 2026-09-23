@@ -48,6 +48,61 @@ namespace WingCommand.PureTests
         }
 
         [Fact]
+        public void CollectiveBacksOffWhenTheRotorDroops()
+        {
+            // In game the collective sat at 1 while the rotor drooped and the UH-90 sank; the native autopilot takes
+            // collective off below 97.5% rotor speed.
+            AirframeProfile p = Utility();
+            AircraftState s = Hover();
+            s.RotorRpm = 0.9f;
+            ControlOutput o = Run(new RotaryController(), new GuidanceCommand { VelCmd = new Vec3(0f, 5f, 0f) }, s, p, 2f);
+            Assert.True(o.Throttle < p.HoverCollective - 0.1f, $"collective {o.Throttle:0.00} with the rotor at 90%");
+        }
+
+        [Fact]
+        public void ForwardTiltYieldsWhenTheClimbCannotBeHeldAtTheCollectiveLimit()
+        {
+            // Vertical priority: sinking 5 m/s below the command with no collective left, the disc must come back
+            // toward level (speed gives way to height) instead of holding the 30 deg the speed error asks for.
+            AirframeProfile p = Utility();
+            AircraftState s = Hover(new Vec3(0f, -5f, 60f));
+            s.RotorRpm = 0.93f;
+            var c = new RotaryController();
+            Run(c, new GuidanceCommand { Accel = new Vec3(0f, 0f, 10f), VelCmd = new Vec3(0f, 0f, 80f) }, s, p, 5f);
+            Assert.True(Math.Abs(c.PitchTargetDeg) < 0.6f * p.MaxTiltDeg, $"pitch target {c.PitchTargetDeg:0.0} deg");
+        }
+
+        [Fact]
+        public void HeightTakesPriorityOverSpeedButNotOverTheTurn()
+        {
+            // In the sim a helicopter in an orbit lost its bank with its speed when the whole tilt yielded, and fell out
+            // of the slot. Only the nose-down (accelerating) pitch gives way.
+            AirframeProfile p = Utility();
+            AircraftState s = Hover(new Vec3(0f, -5f, 60f));
+            s.RotorRpm = 0.93f;
+            var c = new RotaryController();
+            Run(c, new GuidanceCommand { Accel = new Vec3(3f, 0f, 10f), VelCmd = new Vec3(0f, 0f, 80f) }, s, p, 5f);
+            float turnBank = (float)(Math.Atan(3.0 / Scalar.G) * 180.0 / Math.PI);
+            Assert.True(c.RollTargetDeg > 0.8f * turnBank, $"roll target {c.RollTargetDeg:0.0} deg for a {turnBank:0.0} deg turn");
+            Assert.True(-c.PitchTargetDeg < 0.6f * p.MaxTiltDeg, $"pitch target {c.PitchTargetDeg:0.0} deg");
+        }
+
+        [Fact]
+        public void ForwardTiltComesBackOnceTheRotorHasMarginAgain()
+        {
+            AirframeProfile p = Utility();
+            var c = new RotaryController();
+            var g = new GuidanceCommand { Accel = new Vec3(0f, 0f, 10f), VelCmd = new Vec3(0f, 0f, 80f) };
+            AircraftState sinking = Hover(new Vec3(0f, -5f, 60f));
+            sinking.RotorRpm = 0.93f;
+            Run(c, g, sinking, p, 5f);
+            AircraftState level = Hover(new Vec3(0f, 0f, 60f));
+            level.RotorRpm = 1f;
+            Run(c, g, level, p, 20f);
+            Assert.True(Math.Abs(c.PitchTargetDeg) > 0.9f * p.MaxTiltDeg, $"pitch target {c.PitchTargetDeg:0.0} deg");
+        }
+
+        [Fact]
         public void TiltTargetSlewsFromTheAttitudeTheControllerTookOver()
         {
             // Review M2b I5: after a tiltwing converted to rotary flight the pitch target stepped from 0 to the 30 deg

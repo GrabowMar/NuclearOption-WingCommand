@@ -13,6 +13,8 @@ namespace WingCommand
     {
         public Vec3 Pos, Vel, Fwd, Up, Right, AngularVelocity, Wind;
         public float AirDensity, RadarAlt, GroundSpeed, Throttle;
+        /// <summary>Main rotor speed over nominal; 0 without a rotor.</summary>
+        public float RotorRpm;
         public bool HasFbwGate;
         public float FbwGateMinSpeed, FbwGateMinRadarAlt;
         /// <summary>A helicopter's fly-by-wire filters at any speed and height.</summary>
@@ -68,6 +70,7 @@ namespace WingCommand
                 Nz = Vec3.Dot(acc, r.Up) / Scalar.G + r.Up.Y,
                 RadarAlt = r.RadarAlt,
                 Throttle = r.Throttle,
+                RotorRpm = r.RotorRpm,
                 FbwActive = r.FbwAlwaysOn || (r.HasFbwGate
                     ? r.GroundSpeed >= r.FbwGateMinSpeed && r.RadarAlt >= r.FbwGateMinRadarAlt
                     : r.GroundSpeed >= FbwMinSpeed && r.RadarAlt >= FbwMinRadarAlt),

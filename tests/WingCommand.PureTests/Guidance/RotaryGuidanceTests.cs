@@ -7,7 +7,7 @@ namespace WingCommand.PureTests
     {
         private static AirframeProfile Utility() => AirframeProfile.Derive(new ProfileInputs
         {
-            UnitName = "UH-90", Class = AirframeClass.Rotary, MaxSpeed = 80f, GLimit = 3f, MaxRadius = 9f,
+            UnitName = "UH-90", Class = AirframeClass.Rotary, MaxSpeed = 134f, GLimit = 3f, MaxRadius = 9f,
         });
 
         private static AircraftState Helo(Vec3 pos, Vec3 vel) => new AircraftState
@@ -25,8 +25,10 @@ namespace WingCommand.PureTests
         [Fact]
         public void RotaryDeriveSetsRotaryDefaults()
         {
+            // The native helicopter autopilot reaches its cruise collective at half the maximum speed; the UH-90's
+            // 0.8·134 = 107 m/s sank it in game.
             AirframeProfile p = Utility();
-            Assert.Equal(64f, p.CruiseSpeed, 3);
+            Assert.Equal(67f, p.CruiseSpeed, 3);
             Assert.Equal(30f, p.MaxTiltDeg);
             Assert.Equal(0.5f, p.HoverCollective);
             Assert.True(p.ClimbRateMax <= 10f, $"climb rate {p.ClimbRateMax}");

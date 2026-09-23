@@ -76,6 +76,57 @@ namespace WingCommand.FlightSim
         }
 
         [Fact]
+        public void HelicoptersBehindAFastJetKeepTheirHeightAndRotorSpeed()
+        {
+            // In game (wc-m2-helo-trail-fs20): two UH-90s behind an FS-20 at 160 m/s flew at their derived "cruise" of
+            // 107 m/s, 15-28 deg nose down with the collective pinned at 1, and sank 14 m/s into the ground. A helicopter
+            // chasing a leader it cannot catch must fly the speed its rotor can hold, at its height.
+            var leader = new VirtualLeader(new Vec3(0f, 1500f, 0f), 160f, 0f);
+            var wing = new MixedSimWing(leader, SimFormations.Get("staggered-trail"), FormationCatalog.Standard);
+            AirframeProfile helo = SimProfiles.Utility();
+            var a = new RotaryPlant(RotaryParams.Utility, new Vec3(40f, 1550f, -1000f), new Vec3(0f, 0f, 60f), 0f);
+            var b = new RotaryPlant(RotaryParams.Utility, new Vec3(-40f, 1550f, -1100f), new Vec3(0f, 0f, 60f), 0f);
+            wing.Add(a, helo, a.Collective);
+            wing.Add(b, helo, b.Collective);
+            float lowest = float.MaxValue, lowestRpm = float.MaxValue;
+            for (int i = 0; i < 300 * 60; i++)
+            {
+                float t = i * Dt;
+                leader.Step(t >= 60f && t < 70f ? 30f : 0f, Dt);
+                wing.Step();
+                lowest = Math.Min(lowest, Math.Min(a.Position.Y, b.Position.Y));
+                lowestRpm = Math.Min(lowestRpm, Math.Min(a.Rpm, b.Rpm));
+            }
+            Assert.True(lowest > 1500f - FormationWing.TrailBelow - 40f, $"sank to {lowest:0} m (trail height {1500f - FormationWing.TrailBelow:0} m)");
+            Assert.True(lowestRpm > 0.93f, $"rotor drooped to {lowestRpm:0.00} of nominal");
+        }
+
+        [Fact]
+        public void AHelicopterAirStartedBehindASlowOrbitingLeaderDoesNotDive()
+        {
+            // In game (wc-m2-mixed-ci22): a UH-90 air-started 1 km behind a CI-22 orbiting at 60 m/s tilted 28 deg nose
+            // down with full collective and lost 400 m, then hung 300-500 m low and never caught up.
+            var leader = new VirtualLeader(new Vec3(0f, 1200f, 0f), 60f, 0f);
+            var wing = new MixedSimWing(leader, SimFormations.Get("staggered-trail"), FormationCatalog.Standard);
+            AirframeProfile helo = SimProfiles.Utility();
+            var plant = new RotaryPlant(RotaryParams.Utility, new Vec3(0f, 1250f, -1000f), new Vec3(0f, 0f, 60f), 0f);
+            wing.Add(plant, helo, plant.Collective);
+            float lowest = float.MaxValue, lowestRpm = float.MaxValue, capturedAt = float.NaN;
+            for (int i = 0; i < 300 * 60; i++)
+            {
+                float t = i * Dt;
+                leader.Step(t > 5f ? 15f : 0f, Dt);
+                wing.Step();
+                lowest = Math.Min(lowest, plant.Position.Y);
+                lowestRpm = Math.Min(lowestRpm, plant.Rpm);
+                if (float.IsNaN(capturedAt) && wing.Pilots[0].Mind.Current == BehaviourId.StationKeep) capturedAt = t;
+            }
+            Assert.True(lowest > 1200f - 80f, $"dove to {lowest:0} m (leader at 1200 m)");
+            Assert.True(lowestRpm > 0.93f, $"rotor drooped to {lowestRpm:0.00} of nominal");
+            Assert.True(capturedAt < 150f, $"captured its slot at {capturedAt:0} s (NaN: never)");
+        }
+
+        [Fact]
         public void JetAndHelicopterEscortAGroundUnit()
         {
             // E1: a truck at 15 m/s on flat ground, weaving gently; a helicopter and a jet escort it in close escort.

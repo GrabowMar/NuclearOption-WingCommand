@@ -2,12 +2,20 @@ using System;
 
 namespace WingCommand.FlightSim
 {
-    /// <summary>Helicopter parameters: a UH-90-like set from the native defaults until in-game calibration.</summary>
+    /// <summary>Helicopter parameters: a UH-90-like set from the native defaults and the first in-game runs.</summary>
     internal sealed class RotaryParams
     {
         public float MassKg = 5000f;
-        /// <summary>Full-collective thrust in multiples of the weight (hover at 1/ThrustToWeight collective).</summary>
-        public float ThrustToWeight = 2f;
+        /// <summary>Full-collective thrust at rest in multiples of the weight (hover at 1/ThrustToWeight collective).</summary>
+        public float ThrustToWeight = 1.8f;
+        /// <summary>Speed (m/s) at which the thrust per unit of collective has halved: the game's blade-element rotor
+        /// needs more collective the faster it flies (the UH-90 cannot hold its height at 107 m/s with full
+        /// collective), which caps the level speed near 78 m/s here.</summary>
+        public float ThrustHalfSpeed = 120f;
+        /// <summary>Rotor speed: collective above <see cref="SustainCollective"/> asks more power than the engines give,
+        /// so the rotor droops at DroopRate per unit of excess per second; it recovers with RpmRecoverTau. Thrust
+        /// scales with rpm² (the game's RotorShaft: engine torque is power / ω, capped).</summary>
+        public float SustainCollective = 0.85f, DroopRate = 0.4f, RpmRecoverTau = 2f;
         /// <summary>Quadratic drag, 1/m: about 70 m/s at 20° of tilt.</summary>
         public float DragK = 7.3e-4f;
         /// <summary>Helo FBW maxAngularVel (x pitch, y yaw, z roll), rad/s, and its pitch-rate g limit.</summary>
@@ -20,8 +28,10 @@ namespace WingCommand.FlightSim
     /// <summary>Helicopter plant for the FlightSim (spec M2 §8.1): a point mass carried by rotor thrust along the disc
     /// normal. The disc attitude follows the helo fly-by-wire's rate command (target = stick·maxAngularVel, the pitch
     /// target capped by gLimit·g/max(speed, 10), reached through a first-order lag); the collective lags; drag is
-    /// quadratic. Euler angles are integrated from the body rates (fine at ≤ 30° of tilt). No ground effect, no
-    /// vortex ring. Pure signs: pitch + nose up, roll + right, yaw + nose right.</summary>
+    /// quadratic. Thrust = collective·ThrustToWeight·g·rpm² / (1 + (V/ThrustHalfSpeed)²), and the rotor droops under
+    /// a collective the engines cannot sustain (<see cref="RotaryParams"/>). Euler angles are integrated from the body
+    /// rates (fine at ≤ 30° of tilt). No ground effect, no vortex ring. Pure signs: pitch + nose up, roll + right,
+    /// yaw + nose right.</summary>
     internal sealed class RotaryPlant : ISimPlant
     {
         private const float Deg = (float)(Math.PI / 180.0);
@@ -41,6 +51,8 @@ namespace WingCommand.FlightSim
         public Vec3 Velocity { get; private set; }
         public Vec3 Acceleration { get; private set; }
         public float Collective { get; private set; }
+        /// <summary>Rotor speed over nominal.</summary>
+        public float Rpm { get; private set; } = 1f;
         public float HoverCollective => 1f / p.ThrustToWeight;
         public float PitchDeg => pitch / Deg;
         public float RollDeg => roll / Deg;
@@ -73,8 +85,12 @@ namespace WingCommand.FlightSim
             roll += rollRate * dt;
             heading += yawRate * dt;
             Collective += (Scalar.Clamp01(input.Throttle) - Collective) * (1f - (float)Math.Exp(-dt / p.CollectiveLagS));
+            float excess = Collective - p.SustainCollective;
+            Rpm = excess > 0f ? Math.Max(0.3f, Rpm - p.DroopRate * excess * dt)
+                : Rpm + (1f - Rpm) * (1f - (float)Math.Exp(-dt / p.RpmRecoverTau));
 
-            Vec3 thrust = Basis().up * (Collective * p.ThrustToWeight * Scalar.G);
+            float perCollective = p.ThrustToWeight * Scalar.G * Rpm * Rpm / (1f + speed * speed / (p.ThrustHalfSpeed * p.ThrustHalfSpeed));
+            Vec3 thrust = Basis().up * (Collective * perCollective);
             Vec3 drag = Velocity * (-p.DragK * speed);
             Acceleration = thrust + drag - Vec3.Up * Scalar.G;
             Velocity += Acceleration * dt;
@@ -93,7 +109,7 @@ namespace WingCommand.FlightSim
                 GammaDeg = speed > 1f ? (float)Math.Asin(Scalar.Clamp(Velocity.Y / speed, -1f, 1f)) / Deg : 0f,
                 P = rollRate / Deg, Q = pitchRate / Deg, R = yawRate / Deg,
                 Tas = speed, Qbar = Isa.DynamicPressure(Position.Y, speed), Nz = Collective * p.ThrustToWeight,
-                RadarAlt = Position.Y, Throttle = Collective, FbwActive = true, Dt = dt,
+                RadarAlt = Position.Y, Throttle = Collective, FbwActive = true, Dt = dt, RotorRpm = Rpm,
             };
         }
 

@@ -34,6 +34,14 @@ namespace WingCommand.PureTests
             Assert.Equal(bank, new AircraftSensorCore().Read(Level(new Vec3(0f, 0f, 200f), bank), Dt).BankDeg, 2);
 
         [Fact]
+        public void RotorSpeedPassesThrough()
+        {
+            RawAircraftSample r = Level(new Vec3(0f, 0f, 60f));
+            r.RotorRpm = 0.96f;
+            Assert.Equal(0.96f, new AircraftSensorCore().Read(r, 1f / 60f).RotorRpm);
+        }
+
+        [Fact]
         public void BankIsZeroWithTheNoseVertical()
         {
             RawAircraftSample r = Level(new Vec3(0f, 0f, 200f));

@@ -15,6 +15,9 @@ namespace WingCommand
         public float P, Q, R;
         public float Tas, Qbar, Nz, RadarAlt, Throttle, Dt;
         public bool FbwActive, AirbrakeOpen;
+        /// <summary>Main rotor speed over nominal (the mean over the rotor shafts); 0 when the aircraft has no rotor or
+        /// the sensor cannot read it.</summary>
+        public float RotorRpm;
 
         public float Speed => Vel.Length;
 

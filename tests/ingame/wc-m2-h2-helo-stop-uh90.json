@@ -1,0 +1,34 @@
+{
+  "name": "wc-m2-h2-helo-stop-uh90",
+  "mods": ["wingcommand"],
+  "timeout_s": 480,
+  "ops": [
+    {"op": "spawn", "id": "lead", "type": "UH-90 Ibis", "at": {"map": [0, 0]}, "altitude": 600, "speed": 40, "heading": 0},
+    {"op": "fly", "id": "lead", "program": [{"level": 150}, {"speed": {"to": 0}}, {"level": 90}]},
+    {"op": "wait", "seconds": 2},
+    {"op": "call", "method": "WingCommand.Automation.FormOn", "store": "form",
+     "args": {"lead": "lead", "count": 2, "type": "UH-90 Ibis", "shape": "staggered-trail", "spacing": "Standard"}},
+    {"op": "wait", "seconds": 3},
+    {"op": "call", "method": "WingCommand.Automation.Members"},
+    {"op": "record", "ids": ["*"], "hz": 5},
+    {"op": "wait", "seconds": 150},
+    {"op": "call", "method": "WingCommand.Automation.Metrics", "store": "join"},
+    {"op": "call", "method": "WingCommand.Automation.ResetMetrics"},
+    {"op": "mark", "text": "stop"},
+    {"op": "wait", "seconds": 100},
+    {"op": "call", "method": "WingCommand.Automation.Metrics", "store": "h2"},
+    {"op": "end"}
+  ],
+  "checks": [
+    {"check": "status_ok"},
+    {"check": "alive", "ids": ["*"]},
+    {"check": "result_above", "path": "join.captured", "min": 2},
+    {"check": "result_above", "path": "h2.members", "min": 2},
+    {"check": "result_below", "path": "h2.left", "max": 0},
+    {"check": "result_below", "path": "h2.slot_rms_m", "max": 22.5},
+    {"check": "result_below", "path": "h2.slot_max_m", "max": 45},
+    {"check": "result_below", "path": "h2.collision", "max": 0},
+    {"check": "result_below", "path": "h2.gcas", "max": 0},
+    {"check": "result_above", "path": "h2.min_separation_m", "min": 20}
+  ]
+}

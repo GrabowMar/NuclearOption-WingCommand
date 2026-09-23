@@ -10,6 +10,7 @@ namespace WingCommand
         private Aircraft gateOf;
         private bool hasGate, alwaysOn;
         private float gateSpeed, gateAlt;
+        private RotorShaft[] rotors;
 
         public AircraftState Read(Aircraft a, float dt)
         {
@@ -20,12 +21,29 @@ namespace WingCommand
                 gateOf = a;
                 hasGate = GameAccess.TryReadFbwGate(a, out gateSpeed, out gateAlt);
                 alwaysOn = a.GetControlsFilter() is HeloControlsFilter;   // no speed or height gate (native C4)
+                rotors = a.GetComponentsInChildren<RotorShaft>();
             }
+            r.RotorRpm = RotorRpm(rotors);
             r.FbwAlwaysOn = alwaysOn;
             r.HasFbwGate = hasGate;
             r.FbwGateMinSpeed = gateSpeed;
             r.FbwGateMinRadarAlt = gateAlt;
             return core.Read(r, dt);
+        }
+
+        /// <summary>The mean rotor speed over nominal of the aircraft's rotor shafts (0 without any).</summary>
+        private static float RotorRpm(RotorShaft[] shafts)
+        {
+            if (shafts == null || shafts.Length == 0) return 0f;
+            float sum = 0f;
+            int n = 0;
+            foreach (RotorShaft shaft in shafts)
+                if (shaft != null)
+                {
+                    sum += shaft.GetRPMRatio();
+                    n++;
+                }
+            return n > 0 ? sum / n : 0f;
         }
 
         public static RawAircraftSample Sample(Aircraft a)

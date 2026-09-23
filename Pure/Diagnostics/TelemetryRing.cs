@@ -14,6 +14,9 @@ namespace WingCommand
         public float Throttle, Pitch, Roll, Sigma, SlotError;
         public byte Behaviour, Role, BankBy, NzBy, VerticalBy;
         public bool Gcas, Collision, Airbrake;
+        /// <summary>Rotor speed over nominal (0 without a rotor) and the rotary nose-down tilt limit in use (1 when
+        /// speed has not given way to height, and for fixed wings).</summary>
+        public float RotorRpm, TiltScale;
     }
 
     /// <summary>Fixed ring of <see cref="Capacity"/> rows (120 s at 20 Hz), oldest first. Push never allocates.</summary>
@@ -43,9 +46,18 @@ namespace WingCommand
 
     internal static class TelemetryRows
     {
-        public static TelemetryRow From(float time, int member, in AircraftState s, FormationPilot pilot, Vec3 slotPos) =>
-            From(time, member, s, pilot.LastIntent, pilot.Pipeline.LastAttitude, pilot.LastOutput, pilot.Pipeline.Report,
-                pilot.LastRejoin.Sigma, pilot.Mind.Current, slotPos, pilot.Roles.Current);
+        public static TelemetryRow From(float time, int member, in AircraftState s, FormationPilot pilot, Vec3 slotPos)
+        {
+            TelemetryRow r = From(time, member, s, pilot.LastIntent, pilot.Pipeline.LastAttitude, pilot.LastOutput,
+                pilot.Pipeline.Report, pilot.LastRejoin.Sigma, pilot.Mind.Current, slotPos, pilot.Roles.Current);
+            r.TiltScale = TiltScaleOf(pilot.Pipeline);
+            return r;
+        }
+
+        private static float TiltScaleOf(IFlightPipeline pipeline) =>
+            pipeline is RotaryPipeline rotary ? rotary.Controller.TiltScale
+            : pipeline is TiltwingPipeline tilt && tilt.Mode == TiltwingMode.Rotary ? tilt.Rotary.Controller.TiltScale
+            : 1f;
 
         public static TelemetryRow From(float time, int member, in AircraftState s, in FlightIntent intent,
             in AttitudeCommand cmd, in ControlOutput output, in BindingReport report, float sigma, BehaviourId behaviour,
@@ -61,7 +73,7 @@ namespace WingCommand
                 Sigma = sigma, SlotError = (slotPos - s.Pos).Length,
                 Behaviour = (byte)behaviour, Role = (byte)role, BankBy = (byte)report.BankBy, NzBy = (byte)report.NzBy,
                 VerticalBy = (byte)report.VerticalBy, Gcas = report.GcasActive, Collision = report.CollisionActive,
-                Airbrake = output.Airbrake,
+                Airbrake = output.Airbrake, RotorRpm = s.RotorRpm, TiltScale = 1f,
             };
         }
     }
@@ -70,7 +82,8 @@ namespace WingCommand
     {
         public const string Header =
             "time,member,x,y,z,vx,vy,vz,ref_x,ref_y,ref_z,bank,bank_cmd,nz,nz_cmd,tas,roll_rate,accel_along," +
-            "throttle,pitch,roll,sigma,slot_error,behaviour,role,bank_by,nz_by,vertical_by,gcas,collision,airbrake";
+            "throttle,pitch,roll,sigma,slot_error,behaviour,role,bank_by,nz_by,vertical_by,gcas,collision,airbrake," +
+            "rotor_rpm,tilt_scale";
 
         public static string Write(TelemetryRing ring)
         {
@@ -107,6 +120,8 @@ namespace WingCommand
               .Append(',').Append(r.NzBy.ToString(c)).Append(',').Append(r.VerticalBy.ToString(c))
               .Append(',').Append(r.Gcas ? '1' : '0').Append(',').Append(r.Collision ? '1' : '0')
               .Append(',').Append(r.Airbrake ? '1' : '0');
+            Num(sb, r.RotorRpm, c);
+            Num(sb, r.TiltScale, c);
         }
 
         private static void Vec(StringBuilder sb, Vec3 v, CultureInfo c)

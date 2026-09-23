@@ -52,6 +52,19 @@ namespace WingCommand.PureTests
         }
 
         [Fact]
+        public void RowRecordsTheRotorSpeedAndTheTiltLimitLast()
+        {
+            // M2d: the in-game helicopter sank with its rotor drooping; the trace must show it.
+            var pilot = new FormationPilot(0, AirframeClass.Rotary);
+            AircraftState s = TestStates.Flying(Vec3.Zero, new Vec3(0f, 0f, 50f));
+            s.RotorRpm = 0.96f;
+            TelemetryRow r = TelemetryRows.From(1f, 0, s, pilot, Vec3.Zero);
+            Assert.Equal(0.96f, r.RotorRpm);
+            Assert.Equal(1f, r.TiltScale);
+            Assert.EndsWith(",airbrake,rotor_rpm,tilt_scale", TelemetryCsv.Header);
+        }
+
+        [Fact]
         public void CsvHasTheSharedHeaderAndInvariantNumbers()
         {
             CultureInfo previous = CultureInfo.CurrentCulture;
@@ -59,13 +72,13 @@ namespace WingCommand.PureTests
             {
                 CultureInfo.CurrentCulture = new CultureInfo("pl-PL");
                 var ring = new TelemetryRing();
-                ring.Push(new TelemetryRow { Time = 1.25f, Member = 1, Tas = 200.5f, Gcas = true });
+                ring.Push(new TelemetryRow { Time = 1.25f, Member = 1, Tas = 200.5f, Gcas = true, RotorRpm = 0.5f, TiltScale = 1f });
                 string csv = TelemetryCsv.Write(ring);
                 string[] lines = csv.Split('\n');
                 Assert.Equal(TelemetryCsv.Header, lines[0]);
                 Assert.StartsWith("1.25,1,", lines[1]);
                 Assert.Contains(",200.5,", lines[1]);
-                Assert.EndsWith(",1,0,0", lines[1]);
+                Assert.EndsWith(",1,0,0,0.5,1", lines[1]);
                 Assert.Equal(TelemetryCsv.Header.Split(',').Length, lines[1].Split(',').Length);
             }
             finally

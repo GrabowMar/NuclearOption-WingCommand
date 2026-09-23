@@ -111,11 +111,16 @@ namespace WingCommand
             return p;
         }
 
-        /// <summary>Helicopter numbers: cruise at 0.8·max, no afterburner, a gentle climb rate, quicker position
-        /// loops than a jet (it can stop), and the helo FBW's default rate authorities.</summary>
+        /// <summary>Fraction of the published maximum a helicopter cruises at: the native helicopter autopilot reaches its
+        /// cruise collective at half the maximum speed (its collective blends by smoothstep(speed / max) × 2), and the
+        /// UH-90 could not hold its height at 0.8·max in game.</summary>
+        public static float RotaryCruiseFraction = 0.5f;
+
+        /// <summary>Helicopter numbers: cruise at <see cref="RotaryCruiseFraction"/>·max, no afterburner, a gentle climb
+        /// rate, quicker position loops than a jet (it can stop), and the helo FBW's default rate authorities.</summary>
         private static void DeriveRotary(AirframeProfile p, in ProfileInputs n)
         {
-            p.CruiseSpeed = 0.8f * p.MaxSpeed;
+            p.CruiseSpeed = RotaryCruiseFraction * p.MaxSpeed;
             p.MilSpeed = p.MaxSpeed;
             p.HasAfterburner = false;
             p.ClimbRateMax = RotaryClimbRateMax;
