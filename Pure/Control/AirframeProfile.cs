@@ -20,6 +20,9 @@ namespace WingCommand
         public float FbwMaxRollAngularVel, FbwGLimit, FbwCornerSpeed;
         /// <summary>Helicopter FBW rate limits (rad/s) and g limit, and the collective its own autopilot hovers at.</summary>
         public float HeloPitchRate, HeloYawRate, HeloRollRate, HeloGLimit, HoverCollective;
+        /// <summary>Landing gear: the steering leg's lock (degrees, signed: its sign reverses the wheel) and slew rate,
+        /// the wheelbase (steering leg to braked legs), and the wingspan.</summary>
+        public float SteerLockDeg, SteerRateDps, WheelbaseM, SpanM;
     }
 #pragma warning restore CS0649
 
@@ -55,6 +58,10 @@ namespace WingCommand
         public float ConversionLow = 50f, ConversionHigh = 65f;
         public static float ConversionLowFactor = 1.1f, ConversionHighFactor = 1.4f;
         public static float RotaryClimbRateMax = 8f;
+        /// <summary>Ground: nose-wheel lock (deg, signed) and slew rate, wheelbase and span (m), and the speed the takeoff
+        /// roll rotates at (the published takeoff speed, else 1.2 × stall).</summary>
+        public float SteerLockDeg = 45f, SteerRateDps = 60f, WheelbaseM = 6f, SpanM = 12f, TakeoffSpeed = 66f;
+        public static float WheelbaseMin = 2f;
 #pragma warning disable CS0649 // set only from airframes JSON through ApplyOverrides (reflection)
         public bool ForceAutoAimFallback;
 #pragma warning restore CS0649
@@ -102,6 +109,11 @@ namespace WingCommand
                 p.RollRateMaxDps = Math.Min(RollSeedCapDps, 0.5f * n.FbwMaxRollAngularVel * Scalar.Rad2Deg);
             if (n.MaxRadius > 0f) p.MaxRadius = n.MaxRadius;
             p.CruiseSpeed = p.RefAirspeed;
+            p.TakeoffSpeed = n.TakeoffSpeed > 0f ? n.TakeoffSpeed : 1.2f * p.StallSpeed;
+            if (n.SteerLockDeg != 0f) p.SteerLockDeg = n.SteerLockDeg;
+            if (n.SteerRateDps > 0f) p.SteerRateDps = n.SteerRateDps;
+            if (n.WheelbaseM > 0f) p.WheelbaseM = Math.Max(WheelbaseMin, n.WheelbaseM);
+            if (n.SpanM > 0f) p.SpanM = n.SpanM;
             if (p.Class == AirframeClass.Rotary) DeriveRotary(p, n);
             if (p.Class == AirframeClass.Tiltwing)
             {

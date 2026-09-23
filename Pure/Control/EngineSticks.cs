@@ -26,7 +26,7 @@ namespace WingCommand
             Roll = Scalar.Clamp(RollSign * o.Roll, -1f, 1f),
             Yaw = Scalar.Clamp(YawSign * o.Yaw, -1f, 1f),
             Throttle = o.Airbrake ? 0f : Scalar.Clamp01(o.Throttle),
-            Brake = 0f,
+            Brake = Scalar.Clamp01(o.Brake),
         };
 
         public static ControlOutput ToPure(in StickInputs s) => new ControlOutput
