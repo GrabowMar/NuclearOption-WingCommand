@@ -178,9 +178,16 @@ namespace WingCommand
             m.Released = true;
             if (why != null) Plugin.Logger.LogInfo($"[Wing] #{m.Number} released to the game's AI: {why}");
             Pilot p = m.Pilot;
-            if (p != null && !p.dead && ReferenceEquals(p.currentState, m.State) && p.AICombatState != null)
-                p.SwitchState(p.AICombatState);
+            PilotBaseState combat = p != null ? NativeCombatState(p) : null;
+            if (combat != null && !p.dead && ReferenceEquals(p.currentState, m.State)) p.SwitchState(combat);
         }
+
+        /// <summary>The native state an airborne AI of this pilot type flies: planes get AICombatState, helicopters
+        /// and tiltwings AIHeloCombatState (the game creates only the one matching the type).</summary>
+        public static PilotBaseState NativeCombatState(Pilot p) =>
+            p.pilotType == Pilot.PilotType.Plane ? p.AICombatState
+            : p.pilotType == Pilot.PilotType.Helo || p.pilotType == Pilot.PilotType.Tiltwing ? p.AIHeloCombatState
+            : null;
 
         public void FormUp()
         {
@@ -228,10 +235,29 @@ namespace WingCommand
         /// escort and the wing forms on the player again in the shape it flew before.</summary>
         public void SetEscort(Unit u)
         {
+            if (u is Aircraft a && IsMember(a)) u = null;
             Anchor = u;
             Escorting = u != null;
             Plugin.Logger.LogInfo(u != null ? $"[Wing] escorting {u.unitName}" : "[Wing] escort ended; forming on the player");
             TrackLeader();
+        }
+
+        /// <summary>A ground anchor's collision radius is capped: a ship's bounding radius (well over 100 m) would push
+        /// close-escort slots out of reach, and the terrain floor already keeps the wing off the surface.</summary>
+        public static float GroundAnchorRadiusMax = 20f;
+
+        private float AnchorRadius(AnchorKind kind)
+        {
+            float r = Alive(LeaderUnit) ? LeaderUnit.maxRadius : 8f;
+            return kind == AnchorKind.Ground ? System.Math.Min(r, GroundAnchorRadiusMax) : r;
+        }
+
+        /// <summary>A wing member cannot be an anchor: it would chase a slot that moves with it.</summary>
+        public bool IsMember(Aircraft a)
+        {
+            for (int i = 0; i < Members.Count; i++)
+                if (ReferenceEquals(Members[i].Aircraft, a)) return true;
+            return false;
         }
 
         public void Dismiss()
@@ -273,7 +299,7 @@ namespace WingCommand
             }
             AnchorSample leader = SampleAnchor(dt);
             SampleSeparation(leader, n);
-            Wing.Update(leader, inputs, n, floor.Value, Clearance, Alive(LeaderUnit) ? LeaderUnit.maxRadius : 8f, dt);
+            Wing.Update(leader, inputs, n, floor.Value, Clearance, AnchorRadius(leader.Kind), dt);
             return Wing.Frame;
         }
 

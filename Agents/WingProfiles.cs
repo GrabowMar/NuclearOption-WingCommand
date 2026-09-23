@@ -17,9 +17,10 @@ namespace WingCommand
             }
             catch (System.Exception e)
             {
-                // Spec §8: a failed derivation flies the generic profile.
+                // Spec §8: a failed derivation flies the generic profile of the aircraft's class (a helicopter must
+                // never get the fixed-wing stack).
                 Plugin.Logger.LogWarning("[Profile] could not read the airframe's numbers, using the generic profile: " + e.Message);
-                return new AirframeProfile();
+                return AirframeProfile.Derive(new ProfileInputs { Class = SafeClassOf(a) });
             }
             string key = inputs.UnitName ?? "generic";
             if (cache.TryGetValue(key, out AirframeProfile p)) return p;
@@ -33,5 +34,17 @@ namespace WingCommand
         }
 
         public static void Clear() => cache.Clear();
+
+        private static AirframeClass SafeClassOf(Aircraft a)
+        {
+            try
+            {
+                return ProfileReader.ClassOf(a);
+            }
+            catch (System.Exception)
+            {
+                return AirframeClass.FixedWing;
+            }
+        }
     }
 }

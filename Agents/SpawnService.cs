@@ -69,13 +69,18 @@ namespace WingCommand
             }
         }
 
-        /// <summary>Air-start up to <paramref name="n"/> wingmen of <paramref name="definition"/> (null: the
-        /// leader's type). Returns how many were spawned.</summary>
+        /// <summary>Air-start up to <paramref name="n"/> wingmen of <paramref name="definition"/> (null: the player's
+        /// type, or the leader's when there is no player aircraft). Returns how many were spawned.</summary>
         public int Call(int n, AircraftDefinition definition)
         {
             WingService wing = WingService.Instance;
-            // Around the aircraft the wing forms on, or the player while it escorts a vehicle or a ship.
-            Aircraft leader = wing?.Leader ?? wing?.Player;
+            // Around the aircraft the wing forms on, or the player while it escorts a vehicle or a ship. Unity-null
+            // aware: a destroyed leader falls back to the player.
+            Aircraft player = wing?.Player;
+            Aircraft leader = wing?.Leader;
+            if (leader == null) leader = player;
+            // The player calls: their altitude gates the call and their type is the default.
+            Aircraft caller = player != null ? player : leader;
             if (wing?.Selection == null || leader == null)
             {
                 WingToast.Show("Not flying");
@@ -86,12 +91,12 @@ namespace WingCommand
                 WingToast.Show("Only the host can call wingmen");
                 return 0;
             }
-            if (leader.radarAlt < MinLeaderAgl)
+            if (caller.radarAlt < MinLeaderAgl)
             {
                 WingToast.Show($"Climb above {MinLeaderAgl:0} m first");
                 return 0;
             }
-            definition = definition ?? leader.definition;
+            definition = definition ?? caller.definition;
             GameObject prefab = definition != null ? definition.unitPrefab : null;
             Aircraft template = prefab != null ? prefab.GetComponent<Aircraft>() : null;
             if (template == null || template.pilots == null || template.pilots.Length == 0 || template.pilots[0] == null ||

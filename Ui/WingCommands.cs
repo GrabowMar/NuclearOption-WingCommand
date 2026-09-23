@@ -75,7 +75,7 @@ namespace WingCommand
                 WingToast.Show("Not flying");
                 return;
             }
-            Unit target = SelectedFriendly(player) ?? NearestFriendlyAhead(player, w);
+            Unit target = SelectedFriendly(player, w) ?? NearestFriendlyAhead(player, w);
             if (target == null)
             {
                 WingToast.Show("No friendly to escort");
@@ -97,12 +97,13 @@ namespace WingCommand
             WingToast.Show("Escorting you");
         }
 
-        private static Unit SelectedFriendly(Aircraft player)
+        private static Unit SelectedFriendly(Aircraft player, WingService w)
         {
             List<Unit> targets = player.weaponManager != null ? player.weaponManager.GetTargetList() : null;
             if (targets == null) return null;
             foreach (Unit u in targets)
-                if (u != null && !u.disabled && !ReferenceEquals(u, player) && u.NetworkHQ == player.NetworkHQ) return u;
+                if (u != null && !u.disabled && !ReferenceEquals(u, player) && u.NetworkHQ == player.NetworkHQ &&
+                    !(u is Aircraft a && w.IsMember(a))) return u;
             return null;
         }
 
@@ -114,7 +115,7 @@ namespace WingCommand
             candidates.Clear();
             foreach (Aircraft a in UnitRegistry.allAircraft)
             {
-                if (a == null || a.disabled || ReferenceEquals(a, player) || a.NetworkHQ != player.NetworkHQ || IsMember(w, a)) continue;
+                if (a == null || a.disabled || ReferenceEquals(a, player) || a.NetworkHQ != player.NetworkHQ || w.IsMember(a)) continue;
                 candidates.Add(a);
             }
             if (candidatePositions.Length < candidates.Count) candidatePositions = new Vec3[candidates.Count];
@@ -122,13 +123,6 @@ namespace WingCommand
             int chosen = EscortPick.Nearest(player.GlobalPosition().ToVec3(), player.transform.forward.ToVec3(),
                 candidatePositions, candidates.Count);
             return chosen >= 0 ? candidates[chosen] : null;
-        }
-
-        private static bool IsMember(WingService w, Aircraft a)
-        {
-            foreach (WingMember m in w.Members)
-                if (ReferenceEquals(m.Aircraft, a)) return true;
-            return false;
         }
 
         /// <summary>The configured airframe to call, or null for the player's own type.</summary>

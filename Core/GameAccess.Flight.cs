@@ -61,8 +61,8 @@ namespace WingCommand
             try
             {
                 heloFbwField = Required(typeof(HeloControlsFilter), "heloFlyByWire");
-                heloMaxAngularVelField = Required(heloFbwField.FieldType, "maxAngularVel");
-                heloGLimitField = Required(heloFbwField.FieldType, "gLimit");
+                heloMaxAngularVelField = Required(heloFbwField.FieldType, "maxAngularVel", typeof(Vector3));
+                heloGLimitField = Required(heloFbwField.FieldType, "gLimit", typeof(float));
                 HeloFlyByWireAvailable = true;
             }
             catch (Exception e)
@@ -72,7 +72,7 @@ namespace WingCommand
             try
             {
                 hoverControllerField = Required(typeof(Autopilot), "hoverController");
-                hoverThrottleField = Required(hoverControllerField.FieldType, "hoverThrottle");
+                hoverThrottleField = Required(hoverControllerField.FieldType, "hoverThrottle", typeof(float));
                 HoverThrottleAvailable = true;
             }
             catch (Exception e)
@@ -117,8 +117,15 @@ namespace WingCommand
             return hoverThrottle > 0.05f && hoverThrottle < 0.95f;
         }
 
-        private static FieldInfo Required(Type type, string name) =>
-            AccessTools.Field(type, name) ?? throw new MissingFieldException(type.Name, name);
+        /// <summary>A field that must exist (and, given <paramref name="fieldType"/>, have that type: the reads unbox it,
+        /// so a type change in a game update fails here once instead of throwing on every read).</summary>
+        private static FieldInfo Required(Type type, string name, Type fieldType = null)
+        {
+            FieldInfo f = AccessTools.Field(type, name) ?? throw new MissingFieldException(type.Name, name);
+            if (fieldType != null && f.FieldType != fieldType)
+                throw new MissingFieldException($"{type.Name}.{name} is {f.FieldType.Name}, expected {fieldType.Name}");
+            return f;
+        }
 
         public static bool TryReadFlyByWire(Aircraft a, out float maxRollAngularVel, out float gLimit, out float cornerSpeed)
         {
