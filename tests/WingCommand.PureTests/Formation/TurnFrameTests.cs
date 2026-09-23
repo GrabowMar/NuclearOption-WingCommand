@@ -53,6 +53,18 @@ namespace WingCommand.PureTests
         }
 
         [Fact]
+        public void AftSlotOfASlowDeceleratingLeaderMovesWithTheLeader()
+        {
+            // Slot = leader − track·aft whatever the split between path and rigid offset, so its velocity is the leader's.
+            var slowing = new LeaderEstimate
+            {
+                Pos = new Vec3(0f, 300f, 0f), Vel = new Vec3(0f, 0f, 20f), Acc = new Vec3(0f, 0f, -2f), Track = Vec3.Forward, Flying = true,
+            };
+            RefState r = TurnFrame.Evaluate(slowing, 0f, 0f, 0f, 80f, 0f, 0f);
+            Assert.Equal(20f, r.Vel.Z, 1);
+        }
+
+        [Fact]
         public void RollFollowIsFullOnlyForFingertipSlotsAndZeroFromFortyFiveMetres()
         {
             Assert.Equal(1f, TurnFrame.RollFollowWeight(10f, -1f));

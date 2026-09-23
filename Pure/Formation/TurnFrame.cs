@@ -31,8 +31,21 @@ namespace WingCommand
         public static float PathDelay(float aft, float speed, out float rigidAft)
         {
             float delay = aft / Math.Max(PathSpeedFloor, speed);
-            rigidAft = Math.Max(0f, aft - speed * delay);
+            rigidAft = speed >= PathSpeedFloor ? 0f : Math.Max(0f, aft - speed * delay);
             return delay;
+        }
+
+        /// <summary>How fast the rigid part changes for a leader changing speed at <paramref name="along"/> m/s²: below the
+        /// floor the path covers aft·V/floor, so the rigid part aft·(1 − V/floor) changes at −aft·along/floor. With it, an
+        /// aft slot of a slowing leader moves with the leader (slot = leader − track·aft).</summary>
+        public static float RigidAftRate(float aft, float speed, float along) =>
+            speed < PathSpeedFloor ? -aft * along / PathSpeedFloor : 0f;
+
+        /// <summary>The leader's acceleration along its velocity (along its track when nearly stopped).</summary>
+        public static float Along(in LeaderEstimate leader)
+        {
+            float speed = leader.Vel.Length;
+            return speed > 0.1f ? Vec3.Dot(leader.Acc, leader.Vel / speed) : Vec3.Dot(leader.Acc, leader.Track);
         }
 
         /// <summary>Roll-follow weight for a slot <paramref name="distanceM"/> from the leader (3-D offset length);
@@ -74,18 +87,20 @@ namespace WingCommand
         /// behind its track), with velocity and acceleration from central differences over that point's constant-turn
         /// prediction and the frame bank's constant-rate prediction.</summary>
         public static RefState Evaluate(in LeaderEstimate leader, float frameBankDeg, float frameBankRateDps,
-            float right, float aft, float up, float w, float rigidAft = 0f)
+            float right, float aft, float up, float w, float rigidAft = 0f, float rigidAftRate = 0f)
         {
             LeaderEstimate at = leader;
             if (aft != 0f)
             {
-                at = Delayed(leader, PathDelay(aft, leader.Vel.Length, out float uncovered));
+                float speed = leader.Vel.Length;
+                at = Delayed(leader, PathDelay(aft, speed, out float uncovered));
                 rigidAft += uncovered;
+                rigidAftRate += RigidAftRate(aft, speed, Along(leader));
             }
             float h = DiffStep;
-            Vec3 back = Relative(at, -h, frameBankDeg, frameBankRateDps, right, rigidAft, up, w);
+            Vec3 back = Relative(at, -h, frameBankDeg, frameBankRateDps, right, rigidAft - rigidAftRate * h, up, w);
             Vec3 now = Relative(at, 0f, frameBankDeg, frameBankRateDps, right, rigidAft, up, w);
-            Vec3 ahead = Relative(at, h, frameBankDeg, frameBankRateDps, right, rigidAft, up, w);
+            Vec3 ahead = Relative(at, h, frameBankDeg, frameBankRateDps, right, rigidAft + rigidAftRate * h, up, w);
             return new RefState(at.Pos + now, (ahead - back) / (2f * h), (ahead - now * 2f + back) / (h * h));
         }
 

@@ -103,6 +103,29 @@ namespace WingCommand.PureTests
         }
 
         [Fact]
+        public void TrailSlotOfASlowDeceleratingLeaderMovesWithIt()
+        {
+            // H2's deceleration: the slot's reference velocity must be the leader's, or members lag their slots.
+            var def = new FormationDefinition
+            {
+                Id = "t", Slots = new[] { new SlotDef(0f, 1f, 0f) }, Element = new[] { 0 },
+                SpacingMin = 40f, SpacingDefault = 80f, SpacingMax = 160f,
+            };
+            var wing = new FormationWing(def, 80f);
+            WingMemberInput[] members = Members(new Vec3(0f, 2000f, -80f));
+            Vec3 pos = new Vec3(0f, 2000f, 0f);
+            float v = 30f;
+            for (int i = 0; i < 5 * 60; i++)
+            {
+                v -= 2f * Dt;
+                pos += new Vec3(0f, 0f, v * Dt);
+                wing.Update(new AnchorSample { Pos = pos, Vel = new Vec3(0f, 0f, v), Present = true, Airborne = true, CanHover = true },
+                    members, 1, float.NaN, 60f, 8f, Dt);
+            }
+            Assert.Equal(v, wing.Frame.Slots[0].Ref.Vel.Z, 0);
+        }
+
+        [Fact]
         public void WideAftSlotHangsOffTheLeadersRealPastPath()
         {
             // A slot 700 m in trail (3.5 s at 200 m/s). The leader turns right for 10 s, then reverses left: 2 s

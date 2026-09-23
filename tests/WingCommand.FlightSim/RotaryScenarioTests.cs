@@ -47,14 +47,19 @@ namespace WingCommand.FlightSim
             MixedSimWing wing = MixedSimWing.HelosInSlots(leader, StaggeredTrail(), FormationCatalog.Standard, 3);
             var speeds = new List<float>[3];
             for (int k = 0; k < 3; k++) speeds[k] = new List<float>();
+            float alongWhileStopping = 0f;
             for (int i = 0; i < 120 * 60; i++)
             {
                 float t = i * Dt;
                 leader.Step(0f, Dt, t < 20f ? 40f : 0f, 0f);
                 wing.Step();
+                if (t >= 20f && t < 45f)
+                    for (int k = 0; k < 3; k++) alongWhileStopping = Math.Max(alongWhileStopping, Math.Abs(wing.AlongError(k)));
                 if (t >= 100f)
                     for (int k = 0; k < 3; k++) speeds[k].Add(wing.Plants[k].Velocity.Length);
             }
+            // The slots move with the slowing leader, so members stay on them through the stop (review I3: 40 m before).
+            Assert.True(alongWhileStopping < 15f, $"up to {alongWhileStopping:0} m along-track while stopping");
             for (int k = 0; k < 3; k++)
             {
                 Assert.True(wing.SlotError(k) < 30f, $"member {k + 1} ended {wing.SlotError(k):0} m from its slot");
