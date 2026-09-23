@@ -60,6 +60,7 @@ namespace WingCommand
             DontDestroyOnLoad(go);
             WingRuntime runtime = go.AddComponent<WingRuntime>();
             runtime.Register(new WingService());
+            runtime.Register(new SpawnService());
 
             Logger.LogInfo($"{PluginName} {PluginVersion}-{PluginPrerelease} loaded. " +
                 $"mvid={typeof(Plugin).Assembly.ManifestModule.ModuleVersionId}");
