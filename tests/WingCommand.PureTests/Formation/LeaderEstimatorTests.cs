@@ -110,5 +110,18 @@ namespace WingCommand.PureTests
             LeaderEstimate e = estimator.Update(up, Dt);
             Assert.True((e.Track - Vec3.Right).Length < 1e-4f);
         }
+
+        [Fact]
+        public void LeaderReappearingElsewhereStartsWithoutAPhantomAcceleration()
+        {
+            var est = new LeaderEstimator();
+            for (int i = 0; i < 60; i++)
+                est.Update(new LeaderSample { Pos = new Vec3(0f, 2000f, i * 200f * Dt), Vel = new Vec3(0f, 0f, 200f), Present = true, Airborne = true, IsPlayer = true }, Dt);
+            for (int i = 0; i < 60; i++) est.Update(new LeaderSample { Present = false }, Dt);
+            LeaderEstimate e = default;
+            for (int i = 0; i < 30; i++)
+                e = est.Update(new LeaderSample { Pos = new Vec3(20000f + i * 200f * Dt, 2000f, 0f), Vel = new Vec3(200f, 0f, 0f), Present = true, Airborne = true, IsPlayer = true }, Dt);
+            Assert.True(e.Acc.Length < 1f, $"phantom |a| = {e.Acc.Length:0.0}");
+        }
     }
 }

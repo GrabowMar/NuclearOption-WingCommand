@@ -16,7 +16,8 @@ namespace WingCommand
         public readonly FixedWingPipeline Pipeline = new FixedWingPipeline();
         public readonly RejoinPlanner Rejoin = new RejoinPlanner();
         public readonly PilotMind Mind = new PilotMind();
-        public readonly int Slot;
+        /// <summary>Slot index; the engine reassigns it when a member ahead of it is lost.</summary>
+        public int Slot;
         public float Precision = 1f, Aggression = 0.5f, Clearance = 60f;
         public bool AfterburnerAllowed = true;
         public FlightIntent LastIntent;
@@ -96,6 +97,18 @@ namespace WingCommand
             if (emergency && !emergencyWas) Log(events, time, WingEventKind.CollisionEmergency);
             emergencyWas = emergency;
             return LastOutput;
+        }
+
+        /// <summary>"Form up": every member rejoins now, logged as a commanded transition.</summary>
+        public void FormUp(float time, WingEventRing events)
+        {
+            BehaviourId from = Mind.Current;
+            if (!Mind.Force(BehaviourId.Rejoin)) return;
+            events?.Push(new WingEvent
+            {
+                Time = time, Member = Slot, Kind = WingEventKind.BehaviourChanged,
+                From = from, To = BehaviourId.Rejoin, Reason = TransitionReason.Commanded,
+            });
         }
 
         private Vec3 HoldCenter(in LeaderEstimate leader) =>

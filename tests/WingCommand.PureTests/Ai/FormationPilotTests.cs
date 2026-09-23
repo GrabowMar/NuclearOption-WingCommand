@@ -103,5 +103,23 @@ namespace WingCommand.PureTests
             Assert.Equal(1, rig.Events.CountOf(WingEventKind.FallingBehind, 0));
             Assert.True(rig.Pilot.LastRejoin.FallingBehind);
         }
+
+        [Fact]
+        public void FormUpLogsACommandedRejoin()
+        {
+            var pilot = new FormationPilot(1);
+            var events = new WingEventRing();
+            pilot.FormUp(3f, events);
+            Assert.Equal(0, events.Count);   // already rejoining
+            pilot.Mind.Force(BehaviourId.StationKeep);
+            pilot.FormUp(4f, events);
+            Assert.Equal(1, events.Count);
+            WingEvent e = events[0];
+            Assert.Equal(WingEventKind.BehaviourChanged, e.Kind);
+            Assert.Equal(BehaviourId.StationKeep, e.From);
+            Assert.Equal(BehaviourId.Rejoin, e.To);
+            Assert.Equal(TransitionReason.Commanded, e.Reason);
+            Assert.Equal(1, e.Member);
+        }
     }
 }

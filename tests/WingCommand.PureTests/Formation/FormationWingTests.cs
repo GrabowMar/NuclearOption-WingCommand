@@ -103,6 +103,27 @@ namespace WingCommand.PureTests
         }
 
         [Fact]
+        public void HistoryRestartsWhenTheLeaderReappears()
+        {
+            var def = new FormationDefinition
+            {
+                Id = "trail", Slots = new[] { new SlotDef(0f, 2f, 0f) }, Element = new[] { 0 },
+                SpacingMin = 160f, SpacingDefault = 350f, SpacingMax = 600f,
+            };
+            var wing = new FormationWing(def, 350f);
+            WingMemberInput[] members = Members(Far);
+            for (int i = 0; i < 600; i++)
+                wing.Update(new LeaderSample { Pos = new Vec3(0f, 2000f, i * 200f * Dt), Vel = new Vec3(0f, 0f, 200f), Present = true, Airborne = true },
+                    members, 1, float.NaN, 60f, 8f, Dt);
+            for (int i = 0; i < 60; i++) wing.Update(new LeaderSample { Present = false }, members, 1, float.NaN, 60f, 8f, Dt);
+            var back = new Vec3(20000f, 2000f, 0f);
+            wing.Update(new LeaderSample { Pos = back, Vel = new Vec3(0f, 0f, 200f), Present = true, Airborne = true },
+                members, 1, float.NaN, 60f, 8f, Dt);
+            float off = (wing.Frame.Slots[0].Ref.Pos - back).Length;
+            Assert.True(off < 1000f, $"slot {off:0} m from the reappeared leader");
+        }
+
+        [Fact]
         public void LostLeaderKeepsTheLastEstimateAndFlagsIt()
         {
             var wing = new FormationWing(FingerFour(), 80f);

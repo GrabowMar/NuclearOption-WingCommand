@@ -54,6 +54,7 @@ namespace WingCommand
         private readonly Persistence[] established = new Persistence[N];
         private readonly MemberCapability[] caps = new MemberCapability[N];
         private readonly CollisionBody[] bodies = new CollisionBody[N + 1];
+        private bool leaderWasPresent;
 
         public FormationWing(FormationDefinition definition, float spacing) => SetFormation(definition, spacing);
 
@@ -68,6 +69,8 @@ namespace WingCommand
         {
             count = Math.Min(count, N);
             Frame.Leader = Estimator.Update(leader, dt);
+            if (leader.Present && !leaderWasPresent) History.Clear();
+            leaderWasPresent = leader.Present;
             History.Push(Frame.Leader, dt);
             Frame.LeaderLost = !leader.Present;
             Frame.Count = count;

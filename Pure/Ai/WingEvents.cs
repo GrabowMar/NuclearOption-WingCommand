@@ -4,7 +4,7 @@ namespace WingCommand
 
     internal enum WingEventKind : byte { BehaviourChanged, FallingBehind, FallingBehindCleared, GcasActivated, CollisionEmergency }
 
-    internal enum TransitionReason : byte { None, Captured, LostSlot, LeaderSlow, LeaderNotFlying, LeaderLost, LeaderRecovered }
+    internal enum TransitionReason : byte { None, Captured, LostSlot, LeaderSlow, LeaderNotFlying, LeaderLost, LeaderRecovered, Commanded }
 
     /// <summary>One entry of the wing log: a behaviour transition with its reason, or a notable event.</summary>
     internal struct WingEvent

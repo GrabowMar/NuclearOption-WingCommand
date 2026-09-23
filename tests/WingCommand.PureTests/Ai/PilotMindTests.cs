@@ -82,5 +82,15 @@ namespace WingCommand.PureTests
             Assert.Equal(BehaviourId.Rejoin, mind.Current);
             Assert.Equal(TransitionReason.LeaderRecovered, why);
         }
+
+        [Fact]
+        public void ForceSwitchesAtOnceAndRestartsTheDwell()
+        {
+            var mind = new PilotMind();
+            Assert.False(mind.Force(BehaviourId.Rejoin));
+            Assert.True(mind.Force(BehaviourId.StationKeep));
+            Assert.Equal(BehaviourId.StationKeep, mind.Current);
+            Assert.Equal(0f, mind.Dwell);
+        }
     }
 }

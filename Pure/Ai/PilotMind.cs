@@ -63,6 +63,17 @@ namespace WingCommand
             }
         }
 
+        /// <summary>Switch now, ignoring dwell (a player command). Returns false when already there.</summary>
+        public bool Force(BehaviourId to)
+        {
+            if (Current == to) return false;
+            Current = to;
+            Dwell = 0f;
+            captured = default;
+            lostSlot = default;
+            return true;
+        }
+
         private bool Switch(BehaviourId to, TransitionReason why, out TransitionReason reason)
         {
             reason = why;

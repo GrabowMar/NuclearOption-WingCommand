@@ -51,6 +51,7 @@ namespace WingCommand
         {
             if (!s.Present)
             {
+                primed = false;
                 Estimate.Flying = false;
                 return Estimate;
             }
@@ -58,6 +59,9 @@ namespace WingCommand
             {
                 lastVel = s.Vel;
                 bank = s.BankDeg;
+                filtered = Vec3.Zero;
+                acc = Vec3.Zero;
+                turnRate = 0f;
                 primed = true;
             }
             if (dt > 0f)

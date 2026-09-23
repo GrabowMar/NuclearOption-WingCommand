@@ -28,6 +28,14 @@ namespace WingCommand
             if (count < Capacity) count++;
         }
 
+        /// <summary>Forget the past (the leader reappeared, possibly somewhere else).</summary>
+        public void Clear()
+        {
+            count = 0;
+            newest = -1;
+            clock = 0f;
+        }
+
         /// <summary>The leader <paramref name="seconds"/> ago.</summary>
         public LeaderEstimate At(float seconds)
         {
