@@ -35,6 +35,28 @@ namespace WingCommand
         public static Vec3 ForSlot(FormationDefinition def, int slot, Vec3 leaderPos, Vec3 leaderVel, float groundY) =>
             Position(leaderPos, leaderVel, SlotSolver.SlotFor(def, slot).Right, slot, groundY);
 
+        /// <summary>Helicopters (spec M2 §7): 1 km behind and 50 m above the leader (at least
+        /// <see cref="RotaryTerrainClearanceM"/> over the terrain), on the slot's side like a jet.</summary>
+        public static float RotaryBehindM = 1000f, RotaryAboveM = 50f, RotaryTerrainClearanceM = 150f;
+
+        public static Vec3 RotaryPosition(Vec3 leaderPos, Vec3 leaderVel, float slotRight, int index, float groundY)
+        {
+            Vec3 fwd = Heading(leaderVel);
+            Vec3 right = Vec3.Cross(Vec3.Up, fwd);
+            float side = slotRight < 0f ? -1f : 1f;
+            Vec3 p = leaderPos - fwd * RotaryBehindM + right * (side * (LateralM + LateralStepM * index));
+            float y = Math.Max(leaderPos.Y + RotaryAboveM, groundY + RotaryTerrainClearanceM);
+            return new Vec3(p.X, y, p.Z);
+        }
+
+        /// <summary>A helicopter starts level along the leader's track at the leader's speed, never above its cruise.</summary>
+        public static Vec3 RotaryVelocity(Vec3 leaderVel, float cruise)
+        {
+            Vec3 h = leaderVel.Horizontal;
+            float speed = h.Length;
+            return speed > 1e-3f ? h * (Math.Min(speed, cruise) / speed) : Vec3.Zero;
+        }
+
         public static Vec3 Position(Vec3 leaderPos, Vec3 leaderVel, float slotRight, int index, float groundY)
         {
             Vec3 fwd = Heading(leaderVel);

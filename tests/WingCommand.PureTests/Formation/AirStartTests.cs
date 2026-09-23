@@ -8,6 +8,31 @@ namespace WingCommand.PureTests
         private static readonly Vec3 North = new Vec3(0f, 0f, 200f);
 
         [Fact]
+        public void RotaryAirStartIsOneKilometreBehindAndFiftyMetresAboveOnTheSlotSide()
+        {
+            var leader = new Vec3(0f, 800f, 0f);
+            Vec3 p = AirStart.RotaryPosition(leader, new Vec3(0f, 0f, 60f), -1f, 0, 0f);
+            Assert.Equal(-1000f, p.Z, 1);
+            Assert.Equal(850f, p.Y, 1);
+            Assert.True(p.X < 0f, "left slot spawns left");
+        }
+
+        [Fact]
+        public void RotaryAirStartKeepsItsTerrainClearance()
+        {
+            Vec3 p = AirStart.RotaryPosition(new Vec3(0f, 120f, 0f), new Vec3(0f, 0f, 30f), 1f, 0, 100f);
+            Assert.Equal(100f + AirStart.RotaryTerrainClearanceM, p.Y, 1);
+        }
+
+        [Fact]
+        public void RotaryAirStartFliesLevelAtTheLeadersSpeedUpToItsCruise()
+        {
+            Assert.Equal(new Vec3(0f, 0f, 64f), AirStart.RotaryVelocity(new Vec3(0f, 20f, 200f), 64f));
+            Assert.Equal(new Vec3(30f, 0f, 0f), AirStart.RotaryVelocity(new Vec3(30f, -5f, 0f), 64f));
+            Assert.Equal(Vec3.Zero, AirStart.RotaryVelocity(Vec3.Zero, 64f));
+        }
+
+        [Fact]
         public void TwoKilometresBehindAndBelowOnTheSlotSide()
         {
             Vec3 p = AirStart.Position(Leader, North, 80f, 0, 0f);
