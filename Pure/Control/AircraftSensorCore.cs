@@ -7,11 +7,14 @@ namespace WingCommand
     /// <summary>One tick of raw engine readings in Wing Command's world frame: global position (floating-origin
     /// safe) and Unity axes. AngularVelocity is the cockpit rigidbody's rate in its own local axes (rad/s, Unity
     /// signs: +x pitches the nose down, +y yaws right, +z rolls left). GroundSpeed is the game's speed relative
-    /// to what is under the aircraft; it gates the fly-by-wire.</summary>
+    /// to what is under the aircraft; it gates the fly-by-wire, at the airframe's own minimums when known
+    /// (<see cref="HasFbwGate"/>: its ControlsFilter's minSpeed and minAlt).</summary>
     internal struct RawAircraftSample
     {
         public Vec3 Pos, Vel, Fwd, Up, Right, AngularVelocity, Wind;
         public float AirDensity, RadarAlt, GroundSpeed, Throttle;
+        public bool HasFbwGate;
+        public float FbwGateMinSpeed, FbwGateMinRadarAlt;
     }
 #pragma warning restore CS0649
 
@@ -63,7 +66,9 @@ namespace WingCommand
                 Nz = Vec3.Dot(acc, r.Up) / Scalar.G + r.Up.Y,
                 RadarAlt = r.RadarAlt,
                 Throttle = r.Throttle,
-                FbwActive = r.GroundSpeed >= FbwMinSpeed && r.RadarAlt >= FbwMinRadarAlt,
+                FbwActive = r.HasFbwGate
+                    ? r.GroundSpeed >= r.FbwGateMinSpeed && r.RadarAlt >= r.FbwGateMinRadarAlt
+                    : r.GroundSpeed >= FbwMinSpeed && r.RadarAlt >= FbwMinRadarAlt,
                 AirbrakeOpen = r.Throttle <= 0f && r.RadarAlt > 1f,
                 Dt = dt,
             };

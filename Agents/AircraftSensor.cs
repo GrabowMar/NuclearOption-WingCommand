@@ -7,8 +7,24 @@ namespace WingCommand
     internal sealed class AircraftSensor
     {
         private readonly AircraftSensorCore core = new AircraftSensorCore();
+        private Aircraft gateOf;
+        private bool hasGate;
+        private float gateSpeed, gateAlt;
 
-        public AircraftState Read(Aircraft a, float dt) => core.Read(Sample(a), dt);
+        public AircraftState Read(Aircraft a, float dt)
+        {
+            RawAircraftSample r = Sample(a);
+            if (!ReferenceEquals(a, gateOf))
+            {
+                // The fly-by-wire gate is per airframe; the leader's sensor is reused when the player respawns.
+                gateOf = a;
+                hasGate = GameAccess.TryReadFbwGate(a, out gateSpeed, out gateAlt);
+            }
+            r.HasFbwGate = hasGate;
+            r.FbwGateMinSpeed = gateSpeed;
+            r.FbwGateMinRadarAlt = gateAlt;
+            return core.Read(r, dt);
+        }
 
         public static RawAircraftSample Sample(Aircraft a)
         {

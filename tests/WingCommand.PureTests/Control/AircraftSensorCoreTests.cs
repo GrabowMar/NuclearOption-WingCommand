@@ -97,6 +97,21 @@ namespace WingCommand.PureTests
         }
 
         [Fact]
+        public void FlyByWireGateUsesTheAirframesOwnMinimums()
+        {
+            // The CI-22's ControlsFilter filters down to 10 m/s and 0 m AGL; a fixed 25 m/s gate released a wingman
+            // whose fly-by-wire was still working.
+            RawAircraftSample slow = Level(new Vec3(0f, 0f, 15f));
+            slow.HasFbwGate = true;
+            slow.FbwGateMinSpeed = 10f;
+            slow.FbwGateMinRadarAlt = 0f;
+            slow.RadarAlt = 0.5f;
+            Assert.True(new AircraftSensorCore().Read(slow, Dt).FbwActive);
+            slow.FbwGateMinSpeed = 20f;
+            Assert.False(new AircraftSensorCore().Read(slow, Dt).FbwActive);
+        }
+
+        [Fact]
         public void FlyByWireIsInactiveWhenSlowOrOnTheGround()
         {
             Assert.False(new AircraftSensorCore().Read(Level(new Vec3(0f, 0f, 20f)), Dt).FbwActive);

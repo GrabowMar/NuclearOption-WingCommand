@@ -10,11 +10,13 @@ namespace WingCommand
     internal static partial class GameAccess
     {
         private static AccessTools.FieldRef<ControlsFilter.FlyByWire, float> fbwMaxRollRef, fbwGLimitRef, fbwCornerRef;
+        private static AccessTools.FieldRef<ControlsFilter, float> filterMinSpeedRef, filterMinAltRef;
         private static AccessTools.FieldRef<Aircraft, Vector3> windRef;
         private static AccessTools.FieldRef<PilotBaseState, Pilot> statePilotRef;
         private static AccessTools.FieldRef<PilotPlayerState, float> pilotStrengthRef;
 
         public static bool FlyByWireAvailable { get; private set; }
+        public static bool FbwGateAvailable { get; private set; }
         public static bool WindAvailable { get; private set; }
         public static bool PilotStateAvailable { get; private set; }
 
@@ -30,6 +32,16 @@ namespace WingCommand
             catch (Exception e)
             {
                 Plugin.Logger.LogWarning("Fly-by-wire fields unreadable (" + e.Message + "); profiles use AircraftParameters only.");
+            }
+            try
+            {
+                filterMinSpeedRef = Field<ControlsFilter, float>("minSpeed");
+                filterMinAltRef = Field<ControlsFilter, float>("minAlt");
+                FbwGateAvailable = true;
+            }
+            catch (Exception e)
+            {
+                Plugin.Logger.LogWarning("Controls filter gate unreadable (" + e.Message + "); fly-by-wire assumed from 25 m/s and 1 m.");
             }
             try
             {
@@ -62,6 +74,17 @@ namespace WingCommand
             maxRollAngularVel = fbwMaxRollRef(fbw);
             gLimit = fbwGLimitRef(fbw);
             cornerSpeed = fbwCornerRef(fbw);
+            return true;
+        }
+
+        /// <summary>The speed and radar altitude below which the aircraft's ControlsFilter stops filtering.</summary>
+        public static bool TryReadFbwGate(Aircraft a, out float minSpeed, out float minAlt)
+        {
+            minSpeed = minAlt = 0f;
+            ControlsFilter filter = FbwGateAvailable ? a.GetControlsFilter() : null;
+            if (filter == null) return false;
+            minSpeed = filterMinSpeedRef(filter);
+            minAlt = filterMinAltRef(filter);
             return true;
         }
 
