@@ -114,6 +114,48 @@ namespace WingCommand.PureTests
         }
 
         [Fact]
+        public void ABlockedEdgeAheadIsReroutedAroundAtOnce()
+        {
+            // The simple field plus a longer second taxiway at x = −100 (a detour via z = 600) from the apron junction
+            // (z = 500) to the south connector: the outer taxiway is the first choice.
+            AirbaseSample sample = TestFields.Simple();
+            var roads = new List<Vec3[]>(sample.Roads)
+            {
+                new[] { new Vec3(-150f, 0f, 500f), new Vec3(-100f, 0f, 600f), new Vec3(-100f, 0f, 0f) },
+            };
+            // Split the south connector at x = −100 so both taxiways join it at a node.
+            roads.RemoveAll(r => r[0].Z == 0f && r[1].Z == 0f);
+            roads.Add(new[] { new Vec3(-150f, 0f, 0f), new Vec3(-100f, 0f, 0f) });
+            roads.Add(new[] { new Vec3(-100f, 0f, 0f), new Vec3(-40f, 0f, 0f) });
+            sample.Roads = roads.ToArray();
+            var field = new FieldTraffic(sample, 0, false);
+            Pose spawn = sample.Hangars[0].Spawn;
+            var plant = new TestGroundPlant(spawn);
+            var pilot = new GroundPilot(1, field, AirframeClass.FixedWing, spawn, 0);
+            var events = new WingEventRing();
+            int outer = -1;
+            for (int e = 0; e < field.Graph.EdgeCount; e++)
+            {
+                Vec3 a = field.Graph.NodePos(field.Graph.EdgeFrom(e)), c = field.Graph.NodePos(field.Graph.EdgeTo(e));
+                if (Math.Abs(a.X + 150f) < 1f && Math.Abs(c.X + 150f) < 1f && Math.Min(a.Z, c.Z) < 1f && Math.Max(a.Z, c.Z) > 499f) outer = e;
+            }
+            Assert.True(outer >= 0);
+            float minX = 0f;
+            for (int i = 0; i < 120 * 30; i++)
+            {
+                if (i == 12 * 30) field.Reservations.Block(outer, true);   // a wreck appears on the outer taxiway
+                AircraftState s = plant.Read(Dt);
+                field.Step(Dt);
+                plant.Step(pilot.Step(s, Jet(), FlightStack.NewPipeline(AirframeClass.FixedWing), i * Dt, Dt, events, 0), Dt);
+                if (plant.Pos.Z < 450f && plant.Pos.Z > 50f) minX = Math.Min(minX, plant.Pos.X);
+            }
+            Assert.True(events.CountOf(WingEventKind.Rerouted) == 1, $"rerouted {events.CountOf(WingEventKind.Rerouted)} times, relocated {events.CountOf(WingEventKind.Relocated)}, phase {pilot.Phase}, minX {minX:0}, at {plant.Pos}");
+            Assert.True(minX > -120f, $"went down the blocked taxiway (x {minX:0})");
+            Assert.True(pilot.Phase >= GroundPhase.HoldShort, $"phase {pilot.Phase}");
+            Assert.Equal(0, events.CountOf(WingEventKind.Relocated));
+        }
+
+        [Fact]
         public void ARelocationPutsTheMemberAtTheHoldShortOnce()
         {
             var field = new FieldTraffic(TestFields.Simple(), 0, false);

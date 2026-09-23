@@ -20,7 +20,8 @@ namespace WingCommand
     /// <see cref="ClimbOutAboveRunway"/>; done at <see cref="ClimbOutHeight"/> radar altitude or after
     /// <see cref="ClimbOutSeconds"/>.</item>
     /// <item>Helicopters and tiltwings lift off in place (LiftOff), hover-taxiing out first when a roof is overhead.</item>
-    /// <item>The watchdog reroutes a member that makes no progress, then relocates it once to the hold-short.</item>
+    /// <item>A blocked edge within its claims reroutes it at once (routes avoid blocked edges when they can); the
+    /// watchdog reroutes a member that makes no progress, then relocates it once to the hold-short.</item>
     /// </list></summary>
     internal sealed class GroundPilot
     {
@@ -85,7 +86,7 @@ namespace WingCommand
                         }
                         else
                         {
-                            RouteFrom(s.Pos, hangar >= 0 ? field.Graph.HangarExit(hangar) : field.Graph.NearestNode(s.Pos), null);
+                            RouteFrom(new[] { s.Pos }, hangar >= 0 ? field.Graph.HangarExit(hangar) : field.Graph.NearestNode(s.Pos), null);
                             Enter(GroundPhase.TaxiOut, time);
                             Log(events, time, slot, WingEventKind.Taxiing);
                         }
@@ -140,6 +141,13 @@ namespace WingCommand
             {
                 int steps = 1;
                 while (step + steps < edges.Count && NodeAt(step + steps) < along + ClaimAhead) steps++;
+                for (int k = step; k < step + steps && k < edges.Count; k++)
+                    if (field.Reservations.Blocked(edges[k]))
+                    {
+                        // A wreck or a stuck aircraft ahead: find another way now rather than wait for it.
+                        Reroute(s.Pos, k, along, events, time, slot);
+                        return new ControlOutput { Brake = 1f };
+                    }
                 int items = field.Reservations.TryAdvance(Owner, TaxiPriority.Departing, nodes, edges, step, steps);
                 bool toGoal = step + steps >= edges.Count && items >= 2 * steps;
                 if (!toGoal)
@@ -332,12 +340,24 @@ namespace WingCommand
             Enter(GroundPhase.Done, time);
         }
 
-        /// <summary>A new route from where the aircraft stands, the edge it is on (or waiting to enter) made expensive.</summary>
+        /// <summary>A new route avoiding route edge <paramref name="step"/>: when that edge is still ahead, the current path
+        /// is kept up to the node before it and the new route starts there; when the aircraft is on it (stuck), the new
+        /// route starts at the nearest node.</summary>
         private void Reroute(Vec3 pos, int step, float along, WingEventRing events, float time, int slot)
         {
             int avoid = edges.Count > 0 ? edges[Math.Min(edges.Count - 1, step)] : -1;
+            int current = StepAt(along);
+            var prefix = new List<Vec3> { pos };
+            int start;
+            if (step > current && step < nodes.Count)
+            {
+                for (int i = Math.Min(progress + 1, path.Length - 1); i <= nodePathIndex[step]; i++) prefix.Add(path[i]);
+                start = nodes[step];
+                prefix.RemoveAt(prefix.Count - 1);
+            }
+            else start = field.Graph.NearestNode(pos);
             field.Reservations.ReleaseAll(Owner);
-            RouteFrom(pos, field.Graph.NearestNode(pos), e => e == avoid ? RerouteCost : 0f);
+            RouteFrom(prefix.ToArray(), start, e => e == avoid ? RerouteCost : 0f);
             Log(events, time, slot, WingEventKind.Rerouted);
         }
 
@@ -350,29 +370,32 @@ namespace WingCommand
             relocation = new Pose(at, (threshold - at).Horizontal.Normalized);
             relocationPending = true;
             field.Reservations.ReleaseAll(Owner);
-            RouteFrom(at, hold, null);
+            RouteFrom(new[] { at }, hold, null);
             Watchdog.Restart(at);
             Log(events, time, slot, WingEventKind.Relocated);
         }
 
-        private void RouteFrom(Vec3 pos, int start, Func<int, float> extraCost)
+        /// <summary>The path is <paramref name="prefix"/> (from where the aircraft is) followed by the route from
+        /// <paramref name="start"/> to the departure hold-short; blocked edges cost <see cref="RerouteCost"/>.</summary>
+        private void RouteFrom(Vec3[] prefix, int start, Func<int, float> extraCost)
         {
             int goal = field.Graph.HoldShort(field.RunwayIndex, field.Reverse);
-            if (start < 0 || goal < 0 || !TaxiRouter.Route(field.Graph, start, goal, extraCost, nodes, edges))
+            Func<int, float> cost = e => (field.Reservations.Blocked(e) ? RerouteCost : 0f) + (extraCost != null ? extraCost(e) : 0f);
+            if (start < 0 || goal < 0 || !TaxiRouter.Route(field.Graph, start, goal, cost, nodes, edges))
             {
                 nodes.Clear();
                 edges.Clear();
-                SetPath(new[] { pos, goal >= 0 ? field.Graph.NodePos(goal) : pos + spawn.Fwd * 10f });
+                SetPath(new[] { prefix[0], goal >= 0 ? field.Graph.NodePos(goal) : prefix[0] + spawn.Fwd * 10f });
                 nodePathIndex.Clear();
                 return;
             }
             Vec3[] pts = field.Graph.PathPoints(nodes, edges);
-            var full = new Vec3[pts.Length + 1];
-            full[0] = pos;
-            Array.Copy(pts, 0, full, 1, pts.Length);
+            var full = new Vec3[prefix.Length + pts.Length];
+            Array.Copy(prefix, 0, full, 0, prefix.Length);
+            Array.Copy(pts, 0, full, prefix.Length, pts.Length);
             SetPath(full);
             nodePathIndex.Clear();
-            int index = 1;
+            int index = prefix.Length;
             nodePathIndex.Add(index);
             for (int k = 0; k < edges.Count; k++)
             {

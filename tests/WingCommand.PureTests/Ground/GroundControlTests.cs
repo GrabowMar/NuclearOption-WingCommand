@@ -84,6 +84,23 @@ namespace WingCommand.PureTests
         }
 
         [Fact]
+        public void AHairpinIsFollowedRatherThanOrbited()
+        {
+            // A 153° corner: past it, the aircraft's position still projects inside the first segment; progress must move on.
+            Vec3[] path = { Vec3.Zero, new Vec3(50f, 0f, 100f), new Vec3(50f, 0f, -100f) };
+            var plant = new TestGroundPlant(new Pose(Vec3.Zero, new Vec3(0.447f, 0f, 0.894f)));
+            var controller = new GroundController();
+            int progress = 0;
+            for (int i = 0; i < 90 * 30; i++)
+            {
+                AircraftState s = plant.Read(1f / 30f);
+                GroundCommand c = GroundGuidance.Pursue(path, ref progress, s, 1000f);
+                plant.Step(controller.Step(c, s, Jet(), 1f / 30f), 1f / 30f);
+            }
+            Assert.True(plant.Pos.Z < 0f && Math.Abs(plant.Pos.X - 50f) < 5f, $"at {plant.Pos}");
+        }
+
+        [Fact]
         public void TheProgressAlongThePathNeverGoesBack()
         {
             Vec3[] path = { Vec3.Zero, new Vec3(0f, 0f, 50f), new Vec3(0f, 0f, 100f) };

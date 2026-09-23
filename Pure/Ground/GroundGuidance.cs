@@ -11,7 +11,8 @@ namespace WingCommand
 
     /// <summary>Regulated pure pursuit along a taxi path (spec M3 §2.1).
     /// <list type="bullet">
-    /// <item>Progress: the path segment the aircraft is on; it only moves forward.</item>
+    /// <item>Progress: the path segment the aircraft is on — the nearest of the next <see cref="ProgressWindow"/>
+    /// segments (past a hairpin the aircraft still projects inside the segment it left); it only moves forward.</item>
     /// <item>Curvature to the point one lookahead (max(<see cref="Lookahead"/>, 1.5 s of travel)) along the path:
     /// κ = 2·y/d², y the point's offset to the right of the nose, d its distance. A point behind the nose (a route that
     /// doubles back) turns the aircraft around at the tightest radius, <see cref="MinTurnRadius"/>, at walking pace.</item>
@@ -24,6 +25,7 @@ namespace WingCommand
     {
         public static float Lookahead = 12f, LookaheadTime = 1.5f, TaxiSpeed = 12f, TurnAccel = 1.5f, BrakeDecel = 1.5f, StopRadius = 1f;
         public static float MinTurnRadius = 15f;
+        public static int ProgressWindow = 3;
 
         public static GroundCommand Pursue(Vec3[] path, ref int progress, in AircraftState s, float stopDistance)
         {
@@ -33,8 +35,18 @@ namespace WingCommand
             Vec3 right = Vec3.Cross(Vec3.Up, fwd);
             float speed = Math.Max(0f, Vec3.Dot(s.Vel, fwd));
 
-            // Advance past segments whose end the aircraft has reached.
+            // Advance past segments whose end the aircraft has reached, and to a later segment that is nearer.
             while (progress < path.Length - 2 && Along(path[progress].Horizontal, path[progress + 1].Horizontal, pos) >= 1f) progress++;
+            float nearest = SegmentDistance(path, progress, pos);
+            for (int k = progress + 1; k <= Math.Min(progress + ProgressWindow, path.Length - 2); k++)
+            {
+                float d = SegmentDistance(path, k, pos);
+                if (d < nearest)
+                {
+                    nearest = d;
+                    progress = k;
+                }
+            }
             Vec3 a = path[progress].Horizontal, b = path[progress + 1].Horizontal;
             float t = Scalar.Clamp(Along(a, b, pos), 0f, 1f);
 
@@ -73,6 +85,12 @@ namespace WingCommand
             float d = (path[segment + 1].Horizontal - at.Horizontal).Length;
             for (int k = segment + 1; k < path.Length - 1; k++) d += (path[k + 1] - path[k]).Horizontal.Length;
             return d;
+        }
+
+        private static float SegmentDistance(Vec3[] path, int k, Vec3 p)
+        {
+            Vec3 a = path[k].Horizontal, b = path[k + 1].Horizontal;
+            return (a + (b - a) * Scalar.Clamp(Along(a, b, p), 0f, 1f) - p).Length;
         }
 
         private static float Along(Vec3 a, Vec3 b, Vec3 p)
