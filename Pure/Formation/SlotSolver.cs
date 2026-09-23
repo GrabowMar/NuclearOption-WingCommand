@@ -29,8 +29,9 @@ namespace WingCommand
     /// <item>TurnCompress scales the whole shape's lateral offsets together (critically damped, about 2 s) by
     /// the factor the most constrained slot needs, when its arc speed V − ω·right would leave the member's
     /// speed range; the shape keeps its ratios.</item>
-    /// <item>Crossover mirrors a wide slot after 60° of turn toward it. It takes 8 s, passing one spacing aft
-    /// and one stack below; it re-arms when the turn reverses or after 20 s level.</item>
+    /// <item>Crossover mirrors the whole shape after 60° of turn toward the side its wide slots are weighted
+    /// to. It takes 8 s; mid-crossing slot i passes (1 + i) spacings further aft and one stack below, so
+    /// crossing slots stay a spacing apart. It re-arms when the turn reverses or after 20 s level.</item>
     /// <item>TerrainFlatten keeps slots above floor + clearance.</item>
     /// </list>
     /// Each slot's rolled frame uses its own bank, slewed so that rolling moves the slot at most 20 m/s. The
@@ -46,18 +47,9 @@ namespace WingCommand
         private float compress = 1f, compressRate;
         private readonly float[] frameBank = new float[N];
         private readonly bool[] framePrimed = new bool[N];
-        private readonly float[] crossSign = new float[N], crossTime = new float[N];
+        private float mirror = 1f, crossTime = -1f;
         private float turnAccum, levelTime;
         private int turnDir;
-
-        public SlotSolver()
-        {
-            for (int i = 0; i < N; i++)
-            {
-                crossSign[i] = 1f;
-                crossTime[i] = -1f;
-            }
-        }
 
         public void Solve(FormationDefinition def, float spacing, in LeaderEstimate leader, MemberCapability[] caps,
             int count, float floorY, float clearance, float dt, SlotTarget[] output)
@@ -65,6 +57,8 @@ namespace WingCommand
             spacing = def.ClampSpacing(spacing);
             count = Math.Min(count, N);
             TrackTurn(leader.TurnRate, dt);
+            float sign = Crossover(def, spacing, count, dt, out float bump);
+            bool crossing = crossTime >= 0f;
             // One compression factor for the whole shape (the smallest any slot needs), so the shape keeps its
             // ratios: compressing only the outer slot would pull it onto its neighbours.
             float k = 1f;
@@ -72,14 +66,16 @@ namespace WingCommand
             {
                 float target = 1f;
                 for (int i = 0; i < count; i++)
-                    target = Math.Min(target, CompressTarget(SlotFor(def, i).Right * spacing * crossSign[i], leader, caps[i]));
+                    target = Math.Min(target, CompressTarget(SlotFor(def, i).Right * spacing * mirror, leader, caps[i]));
                 k = EaseCompress(target, dt);
             }
             for (int i = 0; i < count; i++)
             {
                 SlotDef slot = SlotFor(def, i);
                 float baseRight = slot.Right * spacing;
-                float sign = Crossover(i, def, baseRight, dt, out float dip, out float extraAft, out bool crossing);
+                // Mid-crossing each slot passes behind at its own extra distance, so crossing slots stay a
+                // spacing apart; all dip one stack.
+                float extraAft = bump * (1 + i), dip = -FormationCatalog.StackMetres * bump;
                 float right = baseRight * sign * k;
                 float w = TurnFrame.RollFollowWeight(TurnFrame.Reach(baseRight * k, slot.Aft * spacing,
                     slot.Up * FormationCatalog.StackMetres), slot.RollFollow);
@@ -171,32 +167,40 @@ namespace WingCommand
             turnAccum += Math.Abs(turnRate) * dt * Scalar.Rad2Deg;
         }
 
-        private float Crossover(int i, FormationDefinition def, float baseRight, float dt,
-            out float dip, out float extraAft, out bool crossing)
+        /// <summary>The shape's lateral multiplier this tick: ±1 at rest, cos-shaped through a crossover. The whole
+        /// shape mirrors as one when the leader has turned 60° toward the side its wide slots are weighted to;
+        /// <paramref name="bump"/> (0..1..0) scales each slot's extra aft distance and dip mid-crossing.</summary>
+        private float Crossover(FormationDefinition def, float spacing, int count, float dt, out float bump)
         {
-            dip = 0f;
-            extraAft = 0f;
-            crossing = false;
-            if ((def.Modifiers & FormationModifiers.Crossover) == 0) return 1f;
-            float right = baseRight * crossSign[i];
-            bool wide = Math.Abs(right) >= TurnFrame.RollFollowFar;   // wide slots only: close ones roll with the leader
-            if (crossTime[i] < 0f && wide && turnDir != 0 && Math.Sign(right) == turnDir && turnAccum > CrossoverTriggerDeg)
-                crossTime[i] = 0f;
-            if (crossTime[i] < 0f) return crossSign[i];
+            bump = 0f;
+            if ((def.Modifiers & FormationModifiers.Crossover) == 0) return mirror;
+            if (crossTime < 0f && turnDir != 0 && turnAccum > CrossoverTriggerDeg && WideSide(def, spacing, count) == turnDir)
+                crossTime = 0f;
+            if (crossTime < 0f) return mirror;
 
-            crossTime[i] += dt;
-            float x = Math.Min(1f, crossTime[i] / CrossoverSeconds);
+            crossTime += dt;
+            float x = Math.Min(1f, crossTime / CrossoverSeconds);
             if (x >= 1f)
             {
-                crossSign[i] = -crossSign[i];
-                crossTime[i] = -1f;
-                return crossSign[i];
+                mirror = -mirror;
+                crossTime = -1f;
+                return mirror;
             }
-            float bump = (float)Math.Sin(Math.PI * x);
-            dip = -FormationCatalog.StackMetres * bump;
-            extraAft = bump;
-            crossing = true;
-            return crossSign[i] * (float)Math.Cos(Math.PI * x);
+            bump = (float)Math.Sin(Math.PI * x);
+            return mirror * (float)Math.Cos(Math.PI * x);
+        }
+
+        /// <summary>Side (±1, 0 if balanced) the shape's wide slots are weighted to, as currently mirrored. Close
+        /// slots do not count.</summary>
+        private int WideSide(FormationDefinition def, float spacing, int count)
+        {
+            float weight = 0f;
+            for (int i = 0; i < count; i++)
+            {
+                float right = SlotFor(def, i).Right * spacing * mirror;
+                if (Math.Abs(right) >= TurnFrame.RollFollowFar) weight += right;
+            }
+            return Math.Sign(weight);
         }
 
         private static RefState Flatten(in RefState r, float minY)

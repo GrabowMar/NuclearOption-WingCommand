@@ -361,5 +361,31 @@ namespace WingCommand.FlightSim
             Assert.True(minSeparation >= wing.SafeRadius, $"separation {minSeparation:0.0} m");
             for (int k = 0; k < 3; k++) Assert.Equal(0, wing.Events.CountOf(WingEventKind.CollisionEmergency, k));
         }
+
+        [Fact]
+        public void CombatSpreadCrossesOverCleanlyInASustainedTurn()
+        {
+            // 40 s of 45° bank turns the leader ~110° toward the spread's wide side: the shape mirrors once, then
+            // 40 s level. No two aircraft may meet, and no member may fight the collision bias for long.
+            var leader = new VirtualLeader(new Vec3(0f, 3000f, 0f), 200f, 0f);
+            SimWing wing = SimWing.InSlots(leader, SimFormations.Get("combat-spread"), FormationCatalog.Spread, 3);
+            var biasTime = new float[3];
+            float minSeparation = float.MaxValue;
+            for (int i = 0; i < 80 * 60; i++)
+            {
+                leader.Step(i * Dt < 40f ? 45f : 0f, Dt);
+                wing.Step();
+                minSeparation = Math.Min(minSeparation, wing.MinSeparation());
+                for (int k = 0; k < 3; k++)
+                    if (wing.Wing.Frame.Bias[k].Length > 0.05f * Scalar.G) biasTime[k] += Dt;
+            }
+            Assert.True(minSeparation >= wing.SafeRadius, $"separation {minSeparation:0.0} m");
+            for (int k = 0; k < 3; k++)
+            {
+                Assert.True(biasTime[k] < 5f, $"member {k + 1}: bias active {biasTime[k]:0.0} s");
+                Assert.True(wing.SlotError(k) < 0.5f * FormationCatalog.Spread, $"member {k + 1} ended {wing.SlotError(k):0} m off");
+            }
+            Assert.True(wing.Wing.Frame.Slots[0].Lateral < 0f, "the shape did not mirror");
+        }
     }
 }

@@ -141,6 +141,34 @@ namespace WingCommand.PureTests
         }
 
         [Fact]
+        public void CrossoverMirrorsTheWholeShapeWithoutMergingSlots()
+        {
+            // Combat spread at 350 m, leader turning right into it: the shape mirrors as one, slots stay apart
+            // throughout (they cross at different distances behind), and the result is the mirror image.
+            FormationDefinition def = Def(FormationModifiers.Crossover,
+                new SlotDef(1f, 0f, 0f), new SlotDef(-0.5f, 1.5f, -1f), new SlotDef(0.5f, 1.5f, -1f));
+            var solver = new SlotSolver();
+            var output = new SlotTarget[FormationCatalog.MaxSlots];
+            MemberCapability[] caps = Caps();
+            LeaderEstimate turning = Leader(200f, 0.1f);
+            float closest = float.MaxValue;
+            for (int i = 0; i < 40 * 60; i++)
+            {
+                solver.Solve(def, 350f, turning, caps, 3, float.NaN, 60f, Dt, output);
+                for (int a = -1; a < 3; a++)
+                    for (int b = a + 1; b < 3; b++)
+                    {
+                        Vec3 pa = a < 0 ? turning.Pos : output[a].Ref.Pos;
+                        closest = Math.Min(closest, (pa - output[b].Ref.Pos).Length);
+                    }
+            }
+            Assert.True(closest >= FormationCatalog.MinSeparation * 350f, $"slots came within {closest:0} m");
+            Assert.Equal(-350f, output[0].Lateral, 1);
+            Assert.Equal(175f, output[1].Lateral, 1);
+            Assert.Equal(-175f, output[2].Lateral, 1);
+        }
+
+        [Fact]
         public void TerrainFlattenKeepsSlotsAboveFloorPlusClearance()
         {
             FormationDefinition flat = Def(FormationModifiers.TerrainFlatten, new SlotDef(0f, 1f, -5f));
