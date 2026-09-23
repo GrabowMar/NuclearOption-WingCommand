@@ -64,14 +64,15 @@ namespace WingCommand
         public static Vec3 Offset(Vec3 velocity, Vec3 track, float bankDeg, float right, float aft, float up, float w)
         {
             Vec3 t = velocity.Horizontal;
-            t = t.Length > LeaderEstimator.TrackHoldSpeed ? t.Normalized : track;
+            t = t.Length >= LeaderEstimator.TrackBlendSpeed ? t.Normalized : track;
             Vec3 c = Vec3.Cross(Vec3.Up, t);
             if (w <= 0f) return c * right - t * aft + Vec3.Up * up;
 
             // A partial roll-follow is a partial rotation, not a chord: the forward axis tilts from the
             // horizontal track toward the flight path and the frame rolls by w·bank, so the slot keeps its
             // distance from the leader at every w.
-            Vec3 path = velocity.SqrLength > 1f ? velocity.Normalized : t;
+            // A slow leader's velocity (a hover climb, a sidestep) is no flight direction for the frame: keep it level.
+            Vec3 path = velocity.Length >= LeaderEstimator.TrackBlendSpeed ? velocity.Normalized : t;
             Vec3 f = w >= 1f ? path : Vec3.Lerp(t, path, w).Normalized;
             if (f.SqrLength < 0.5f) f = t;
             Vec3 r = Vec3.Cross(Vec3.Up, f);
@@ -112,7 +113,7 @@ namespace WingCommand
             LeaderEstimate d = leader;
             Vec3 horizontal = leader.Vel.Horizontal;
             float speed = horizontal.Length;
-            if (speed <= LeaderEstimator.TrackHoldSpeed)
+            if (speed < LeaderEstimator.TrackBlendSpeed)
             {
                 d.Pos = leader.Pos - leader.Vel * seconds;
                 return d;

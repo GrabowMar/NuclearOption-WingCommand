@@ -49,8 +49,9 @@ namespace WingCommand
     {
         public static float AccelTau = 0.25f, PlayerAccelTau = 0.12f, JerkLimit = 40f;
         public static float BankRateLimit = 180f, PlayerBankRateLimit = 360f, MinFlyingSpeed = 25f;
-        /// <summary>Below this horizontal speed the track is the leader's nose, not its (drifting) velocity.</summary>
-        public static float TrackHoldSpeed = 5f;
+        /// <summary>Below TrackHoldSpeed the track is the leader's nose, not its (drifting) velocity; up to
+        /// TrackBlendSpeed it blends toward the velocity, so the wing's frame never snaps.</summary>
+        public static float TrackHoldSpeed = 5f, TrackBlendSpeed = 15f;
 
         private Vec3 lastVel, filtered, acc, track = Vec3.Forward;
         private float bank, turnRate;
@@ -97,9 +98,15 @@ namespace WingCommand
             }
             lastVel = s.Vel;
             Vec3 horizontal = s.Vel.Horizontal, nose = s.Fwd.Horizontal;
-            if (horizontal.Length > TrackHoldSpeed) track = horizontal.Normalized;
-            else if (nose.SqrLength > 0.25f) track = nose.Normalized;
-            else if (horizontal.SqrLength > 1f) track = horizontal.Normalized;
+            float speed = horizontal.Length;
+            if (nose.SqrLength > 0.25f && speed < TrackBlendSpeed)
+            {
+                Vec3 n = nose.Normalized;
+                float w = speed > 1e-3f ? Scalar.SmoothStep(TrackHoldSpeed, TrackBlendSpeed, speed) : 0f;
+                Vec3 blended = w > 0f ? Vec3.Lerp(n, horizontal / speed, w) : n;
+                track = blended.SqrLength > 1e-4f ? blended.Normalized : n;
+            }
+            else if (speed > 1f) track = horizontal.Normalized;
 
             float d = Math.Max(0f, dt + latency);
             Estimate.Pos = s.Pos + s.Vel * d + acc * (0.5f * d * d);

@@ -122,6 +122,24 @@ namespace WingCommand.PureTests
         }
 
         [Fact]
+        public void TrackBlendsFromTheNoseToTheVelocityWithoutASnap()
+        {
+            // Facing north while sidestepping east: at 4.9 and 5.1 m/s the frame must be (nearly) the same (review I8).
+            Vec3 Track(float eastSpeed)
+            {
+                AnchorSample s = Straight();
+                s.Vel = new Vec3(eastSpeed, 0f, 0f);
+                s.Fwd = Vec3.Forward;
+                s.CanHover = true;
+                return new LeaderEstimator().Update(s, Dt).Track;
+            }
+            float jump = (float)Math.Acos(Scalar.Clamp(Vec3.Dot(Track(4.9f), Track(5.1f)), -1f, 1f)) * Scalar.Rad2Deg;
+            Assert.True(jump < 2f, $"frame turns {jump:0.0}° between 4.9 and 5.1 m/s");
+            Assert.True((Track(0f) - Vec3.Forward).Length < 1e-3f);
+            Assert.True((Track(20f) - Vec3.Right).Length < 1e-3f);
+        }
+
+        [Fact]
         public void HoverCapableLeaderFliesAtAnySpeed()
         {
             AnchorSample hover = Straight(0f);

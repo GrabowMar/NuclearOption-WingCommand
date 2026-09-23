@@ -65,6 +65,18 @@ namespace WingCommand.PureTests
         }
 
         [Fact]
+        public void SlowlyClimbingLeadersSlotsStayBehindItNotBelow()
+        {
+            // A helicopter climbing straight up at 3 m/s: its path is not a flight direction for the frame (review I8).
+            var climbing = new LeaderEstimate
+            {
+                Pos = new Vec3(0f, 300f, 0f), Vel = new Vec3(0f, 3f, 0f), Track = Vec3.Forward, Flying = true,
+            };
+            Vec3 offset = TurnFrame.Offset(climbing.Vel, climbing.Track, 0f, 10f, 20f, 0f, 1f);
+            Assert.True((offset - new Vec3(10f, 0f, -20f)).Length < 0.1f, $"offset {offset}");
+        }
+
+        [Fact]
         public void RollFollowIsFullOnlyForFingertipSlotsAndZeroFromFortyFiveMetres()
         {
             Assert.Equal(1f, TurnFrame.RollFollowWeight(10f, -1f));
