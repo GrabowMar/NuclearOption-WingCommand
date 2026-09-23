@@ -244,14 +244,14 @@ namespace WingCommand
                     Role = m.Brain.Roles.Current,
                 };
             }
-            LeaderSample leader = LeaderSample(dt);
+            AnchorSample leader = SampleAnchor(dt);
             SampleSeparation(leader, n);
             Wing.Update(leader, inputs, n, floor.Value, Clearance, LeaderAlive ? Leader.maxRadius : 8f, dt);
             return Wing.Frame;
         }
 
         /// <summary>The closest pair this tick, the leader included, for <see cref="Metrics"/>.</summary>
-        private void SampleSeparation(LeaderSample leader, int n)
+        private void SampleSeparation(AnchorSample leader, int n)
         {
             float min = float.MaxValue;
             for (int i = 0; i < n; i++)
@@ -280,12 +280,12 @@ namespace WingCommand
             Leader = Anchor != null ? Anchor : GameManager.GetLocalAircraft(out Aircraft local) ? local : null;
         }
 
-        private LeaderSample LeaderSample(float dt)
+        private AnchorSample SampleAnchor(float dt)
         {
             bool player = Anchor == null;
-            if (!LeaderAlive) return new LeaderSample { Present = false, IsPlayer = player };
+            if (!LeaderAlive) return new AnchorSample { Present = false, IsPlayer = player };
             AircraftState s = leaderSensor.Read(Leader, dt);
-            return new LeaderSample
+            return new AnchorSample
             {
                 Pos = s.Pos, Vel = s.Vel, BankDeg = s.BankDeg, Present = true, Airborne = Leader.radarAlt > 1f, IsPlayer = player,
             };

@@ -15,6 +15,8 @@ namespace WingCommand
         public FormationDefinition Current { get; private set; }
         public SpacingPreset Spacing = SpacingPreset.Standard;
         public FormationUse Use { get; private set; } = FormationUse.Jet;
+        /// <summary>The shape last flown under each use (index by bit: jet, rotary, escort), restored on return.</summary>
+        private readonly FormationDefinition[] lastByUse = new FormationDefinition[3];
 
         public FormationSelection(List<FormationDefinition> catalog, string defaultId)
         {
@@ -44,15 +46,30 @@ namespace WingCommand
             return true;
         }
 
-        /// <summary>The wing now flies behind another kind of anchor. A current shape that does not suit it gives way to
-        /// <paramref name="defaultId"/>, or to the first shape that suits it.</summary>
+        /// <summary>The escort shape for a wing escorting a unit: helicopters hold close-escort slots (jets among them
+        /// fly high cover by role); an all-jet wing flies high cover.</summary>
+        public static string EscortDefaultId(bool anyRotary) => anyRotary ? "close-escort" : "high-cover";
+
+        /// <summary>The wing now flies behind another kind of anchor. The shape last flown under that use comes back;
+        /// otherwise a current shape that does not suit it gives way to <paramref name="defaultId"/>, or to the first
+        /// shape that suits it.</summary>
         public void SetUse(FormationUse use, string defaultId)
         {
+            if (use == Use) return;
+            lastByUse[Slot(Use)] = Current;
             Use = use;
+            FormationDefinition remembered = lastByUse[Slot(use)];
+            if (remembered != null && Suits(remembered))
+            {
+                Current = remembered;
+                return;
+            }
             if (Suits(Current)) return;
             FormationDefinition d = FormationCatalog.Find(all, defaultId);
             Current = d != null && Suits(d) ? d : all.Find(Suits) ?? Current;
         }
+
+        private static int Slot(FormationUse use) => use == FormationUse.Rotary ? 1 : use == FormationUse.Escort ? 2 : 0;
 
         private bool Suits(FormationDefinition d) => (d.Use & Use) != 0;
 

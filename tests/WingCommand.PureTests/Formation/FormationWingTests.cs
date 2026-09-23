@@ -14,7 +14,7 @@ namespace WingCommand.PureTests
             Element = new[] { 0, 1, 1 }, SpacingMin = 40f, SpacingDefault = 80f, SpacingMax = 160f,
         };
 
-        private static LeaderSample Leader(bool present = true, float speed = 200f, bool airborne = true) => new LeaderSample
+        private static AnchorSample Leader(bool present = true, float speed = 200f, bool airborne = true) => new AnchorSample
         {
             Pos = new Vec3(0f, 2000f, 0f), Vel = new Vec3(0f, 0f, speed), Present = present, Airborne = airborne,
         };
@@ -32,7 +32,7 @@ namespace WingCommand.PureTests
             return members;
         }
 
-        private static WingFrame Run(FormationWing wing, LeaderSample leader, WingMemberInput[] members, float seconds)
+        private static WingFrame Run(FormationWing wing, AnchorSample leader, WingMemberInput[] members, float seconds)
         {
             WingFrame frame = null;
             for (int i = 0; i < Math.Max(1, (int)Math.Round(seconds / Dt)); i++)
@@ -54,7 +54,7 @@ namespace WingCommand.PureTests
                 float v = t < seconds ? speed : 0f;
                 pos += new Vec3(0f, 0f, v * Dt);
                 for (int k = 0; k < members.Length; k++) members[k].Role = role?.Invoke(k, t) ?? Role.Trail;
-                wing.Update(new LeaderSample { Pos = pos, Vel = new Vec3(0f, 0f, v), Present = true, Airborne = true },
+                wing.Update(new AnchorSample { Pos = pos, Vel = new Vec3(0f, 0f, v), Present = true, Airborne = true },
                     members, members.Length, float.NaN, 60f, 8f, Dt);
             }
             return wing;
@@ -125,7 +125,7 @@ namespace WingCommand.PureTests
                 Vec3 vel = Vec3.FromHeading(heading * Scalar.Rad2Deg, 200f);
                 pos += vel * Dt;
                 path[i] = pos;
-                wing.Update(new LeaderSample { Pos = pos, Vel = vel, Present = true, Airborne = true }, members, 1,
+                wing.Update(new AnchorSample { Pos = pos, Vel = vel, Present = true, Airborne = true }, members, 1,
                     float.NaN, 60f, 8f, Dt);
             }
             Vec3 past = path[12 * 60 - (int)(3.5f * 60)];
@@ -175,11 +175,11 @@ namespace WingCommand.PureTests
             var wing = new FormationWing(def, 350f);
             WingMemberInput[] members = Members(Far);
             for (int i = 0; i < 600; i++)
-                wing.Update(new LeaderSample { Pos = new Vec3(0f, 2000f, i * 200f * Dt), Vel = new Vec3(0f, 0f, 200f), Present = true, Airborne = true },
+                wing.Update(new AnchorSample { Pos = new Vec3(0f, 2000f, i * 200f * Dt), Vel = new Vec3(0f, 0f, 200f), Present = true, Airborne = true },
                     members, 1, float.NaN, 60f, 8f, Dt);
-            for (int i = 0; i < 60; i++) wing.Update(new LeaderSample { Present = false }, members, 1, float.NaN, 60f, 8f, Dt);
+            for (int i = 0; i < 60; i++) wing.Update(new AnchorSample { Present = false }, members, 1, float.NaN, 60f, 8f, Dt);
             var back = new Vec3(20000f, 2000f, 0f);
-            wing.Update(new LeaderSample { Pos = back, Vel = new Vec3(0f, 0f, 200f), Present = true, Airborne = true },
+            wing.Update(new AnchorSample { Pos = back, Vel = new Vec3(0f, 0f, 200f), Present = true, Airborne = true },
                 members, 1, float.NaN, 60f, 8f, Dt);
             float off = (wing.Frame.Slots[0].Ref.Pos - back).Length;
             Assert.True(off < 1000f, $"slot {off:0} m from the reappeared leader");

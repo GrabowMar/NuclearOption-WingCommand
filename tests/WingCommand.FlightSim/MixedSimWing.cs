@@ -5,7 +5,7 @@ namespace WingCommand.FlightSim
 {
     /// <summary>A virtual leader plus wingmen of any class, each on its own plant with its own profile, running the
     /// production formation stack each tick: one FormationWing update, then every FormationPilot (pipelines from
-    /// FlightStack), then the plants. Flat terrain, no floor. <see cref="SimWing"/> stays the jets-only harness of the
+    /// FlightStack), then the plants. Optional flat floor (<see cref="FloorY"/>). <see cref="SimWing"/> stays the jets-only harness of the
     /// M1 scenarios (its tests read fixed-wing plant internals).</summary>
     internal sealed class MixedSimWing
     {
@@ -17,6 +17,8 @@ namespace WingCommand.FlightSim
         public readonly List<ISimPlant> Plants = new List<ISimPlant>();
         public readonly List<FormationPilot> Pilots = new List<FormationPilot>();
         public readonly List<AirframeProfile> Profiles = new List<AirframeProfile>();
+        /// <summary>Flat terrain height, or NaN for none; members keep <see cref="Clearance"/> above it.</summary>
+        public float FloorY = float.NaN, Clearance = 60f;
         private readonly WingMemberInput[] inputs = new WingMemberInput[FormationCatalog.MaxSlots];
         private readonly AircraftState[] states = new AircraftState[FormationCatalog.MaxSlots];
 
@@ -77,7 +79,7 @@ namespace WingCommand.FlightSim
                     Role = Pilots[i].Roles.Current,
                 };
             }
-            WingFrame frame = Wing.Update(Leader.Sample(), inputs, n, float.NaN, 60f, 9f, Dt);
+            WingFrame frame = Wing.Update(Leader.Sample(), inputs, n, FloorY, Clearance, 9f, Dt);
             for (int i = 0; i < n; i++)
                 Plants[i].Step(Pilots[i].Step(frame, states[i], Profiles[i], Time, Dt, Events), Dt);
         }

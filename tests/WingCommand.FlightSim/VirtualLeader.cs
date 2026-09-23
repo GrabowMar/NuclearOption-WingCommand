@@ -4,7 +4,7 @@ namespace WingCommand.FlightSim
 {
     /// <summary>Kinematic leader: coordinated turns from a bank schedule (90°/s roll), speed changes at
     /// 8 m/s² and flight-path changes at 5°/s. Provides exact slot references in its level heading frame (M1a
-    /// scenarios) and a <see cref="LeaderSample"/> for the formation layer.</summary>
+    /// scenarios) and a <see cref="AnchorSample"/> for the formation layer.</summary>
     internal sealed class VirtualLeader
     {
         private const float RollRate = 90f;
@@ -12,6 +12,8 @@ namespace WingCommand.FlightSim
         private float heading;
         /// <summary>A helicopter leader: it may slow to a hover, and the wing reads its nose.</summary>
         public bool CanHover;
+        /// <summary>What the wing forms on; a Ground anchor (an escorted vehicle) is never airborne.</summary>
+        public AnchorKind Kind = AnchorKind.Player;
         /// <summary>Speed change rate, m/s² (a helicopter brakes far more gently than 8).</summary>
         public float SpeedChangeRate = SpeedRate;
 
@@ -52,10 +54,11 @@ namespace WingCommand.FlightSim
         }
 
         /// <summary>What the formation layer observes: a present, airborne player leader.</summary>
-        public LeaderSample Sample() => new LeaderSample
+        public AnchorSample Sample() => new AnchorSample
         {
-            Pos = Position, Vel = Velocity, BankDeg = BankDeg, Present = true, Airborne = true, IsPlayer = true,
-            Fwd = Vec3.FromHeading(HeadingDeg), CanHover = CanHover,
+            Pos = Position, Vel = Velocity, BankDeg = Kind == AnchorKind.Ground ? 0f : BankDeg, Present = true,
+            Airborne = Kind != AnchorKind.Ground, IsPlayer = Kind == AnchorKind.Player,
+            Fwd = Vec3.FromHeading(HeadingDeg), CanHover = CanHover, Kind = Kind,
         };
 
         /// <summary>Slot reference: <paramref name="right"/> m to the right, <paramref name="aft"/> m behind,

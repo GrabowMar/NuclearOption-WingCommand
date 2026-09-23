@@ -75,6 +75,43 @@ namespace WingCommand.FlightSim
                 $"captured {capturedAt - slowAt:0} s after the leader slowed ({gap:0} m behind; allowed {allowed:0} s)");
         }
 
+        [Fact]
+        public void JetAndHelicopterEscortAGroundUnit()
+        {
+            // E1: a truck at 15 m/s on flat ground, weaving gently; a helicopter and a jet escort it in close escort.
+            var truck = new VirtualLeader(new Vec3(0f, 0f, 0f), 15f, 0f) { Kind = AnchorKind.Ground };
+            var wing = new MixedSimWing(truck, SimFormations.Get("close-escort"), 60f) { FloorY = 0f };
+            var helo = new RotaryPlant(RotaryParams.Utility, new Vec3(-60f, 60f, -30f), new Vec3(0f, 0f, 15f), 0f);
+            wing.Add(helo, SimProfiles.Utility(), helo.Collective);
+            AirframeProfile jetProfile = SimProfiles.GenericFighter();
+            var jet = new FixedWingPlant(PlantParams.GenericFighter, new Vec3(500f, 1200f, -2000f), 150f, 0f);
+            wing.Add(jet, jetProfile, jet.ThrottleActual);
+            float heloMax = 0f, jetFar = 0f, minHeloHeight = float.MaxValue;
+            Vec3 offsetSum = Vec3.Zero;
+            int samples = 0;
+            bool jetHeld = true;
+            for (int i = 0; i < 400 * 60; i++)
+            {
+                float t = i * Dt;
+                truck.Step((int)(t / 30f) % 2 == 0 ? 3f : -3f, Dt);
+                wing.Step();
+                if (t < 230f) continue;                       // one full orbit (~166 s) measured at the end
+                heloMax = Math.Max(heloMax, wing.SlotError(0));
+                minHeloHeight = Math.Min(minHeloHeight, helo.Position.Y);
+                Vec3 offset = (jet.Position - truck.Position).Horizontal;
+                offsetSum += offset;
+                jetFar = Math.Max(jetFar, offset.Length);
+                samples++;
+                jetHeld &= wing.Pilots[1].Mind.Current == BehaviourId.HoldOverhead;
+            }
+            Assert.True(heloMax < 30f, $"helicopter up to {heloMax:0} m from its close-escort slot");
+            Assert.True(minHeloHeight >= 30f, $"helicopter down to {minHeloHeight:0} m over the ground");
+            Assert.True(jetHeld, "the jet left its high-cover orbit");
+            float mean = (offsetSum / samples).Length;
+            Assert.True(mean < 800f, $"jet orbit centre {mean:0} m off the truck");
+            Assert.True(jetFar < HoldOrbit.RadiusFor(FormationPilot.OrbitSpeed(jetProfile)) + 1500f, $"jet up to {jetFar:0} m away");
+        }
+
         /// <summary>Horizontal distance from <paramref name="p"/> to the polyline <paramref name="route"/>.</summary>
         private static float CrossTrack(List<Vec3> route, Vec3 p)
         {

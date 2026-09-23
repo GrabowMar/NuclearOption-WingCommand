@@ -80,7 +80,7 @@ namespace WingCommand
             Frame.Spacing = definition.ClampSpacing(spacing);
         }
 
-        public WingFrame Update(in LeaderSample leader, WingMemberInput[] members, int count, float floorY,
+        public WingFrame Update(in AnchorSample leader, WingMemberInput[] members, int count, float floorY,
             float clearance, float leaderRadius, float dt)
         {
             count = Math.Min(count, N);

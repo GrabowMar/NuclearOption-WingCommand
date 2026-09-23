@@ -72,6 +72,24 @@ namespace WingCommand.PureTests
         }
 
         [Fact]
+        public void LeavingEscortRestoresTheShapeFlownBefore()
+        {
+            var sel = new FormationSelection(Catalog(), "finger-four-right");
+            Assert.Equal("finger-four-left", sel.NextShape().Id);
+            sel.SetUse(FormationUse.Escort, "high-cover");
+            Assert.Equal("high-cover", sel.Current.Id);
+            sel.SetUse(FormationUse.Jet, "finger-four-right");
+            Assert.Equal("finger-four-left", sel.Current.Id);
+        }
+
+        [Fact]
+        public void EscortDefaultsToCloseEscortWhenHelicoptersFlyAndHighCoverOtherwise()
+        {
+            Assert.Equal("close-escort", FormationSelection.EscortDefaultId(anyRotary: true));
+            Assert.Equal("high-cover", FormationSelection.EscortDefaultId(anyRotary: false));
+        }
+
+        [Fact]
         public void SpacingPresetIsClampedToTheShape()
         {
             var sel = new FormationSelection(Catalog(), "finger-four-right") { Spacing = SpacingPreset.Spread };

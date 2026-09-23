@@ -27,7 +27,7 @@ namespace WingCommand.PureTests
             {
                 time += Dt;
                 LeaderPos += North * Dt;
-                var leader = new LeaderSample { Pos = LeaderPos, Vel = North, Present = leaderPresent, Airborne = true };
+                var leader = new AnchorSample { Pos = LeaderPos, Vel = North, Present = leaderPresent, Airborne = true };
                 AircraftState s = TestStates.Flying(memberPos ?? LeaderPos + new Vec3(-80f, 0f, -80f), memberVel ?? North);
                 members[0] = new WingMemberInput
                 {

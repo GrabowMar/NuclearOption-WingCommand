@@ -4,9 +4,13 @@ namespace WingCommand
 {
 // Filled by the engine's leader sensor (M1c) and the FlightSim; the mod assembly only reads it until then.
 #pragma warning disable CS0649
-    /// <summary>What the wing can observe about its leader this tick.</summary>
-    internal struct LeaderSample
+    /// <summary>What the wing forms on: the player, another aircraft, or a unit on the ground or at sea (escort).</summary>
+    internal enum AnchorKind : byte { Player, Aircraft, Ground }
+
+    /// <summary>What the wing can observe about its anchor (its leader) this tick.</summary>
+    internal struct AnchorSample
     {
+        public AnchorKind Kind;
         public Vec3 Pos, Vel;
         public float BankDeg;
         /// <summary>False when the leader is gone (dead, ejected, despawned); the last estimate is kept.</summary>
@@ -54,7 +58,7 @@ namespace WingCommand
 
         public LeaderEstimate Estimate;
 
-        public LeaderEstimate Update(in LeaderSample s, float dt, float latency = 0f)
+        public LeaderEstimate Update(in AnchorSample s, float dt, float latency = 0f)
         {
             if (!s.Present)
             {
@@ -100,7 +104,9 @@ namespace WingCommand
             Estimate.Track = track;
             Estimate.BankDeg = bank;
             Estimate.TurnRate = turnRate;
-            Estimate.Flying = s.Airborne && (s.CanHover || s.Vel.Length >= MinFlyingSpeed);
+            // "Flying" = the wing should form on it: an escorted ground unit always, an aircraft in the air at flying speed
+            // (a helicopter at any speed).
+            Estimate.Flying = s.Kind == AnchorKind.Ground || s.Airborne && (s.CanHover || s.Vel.Length >= MinFlyingSpeed);
             return Estimate;
         }
 

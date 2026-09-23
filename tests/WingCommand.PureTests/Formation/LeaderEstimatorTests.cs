@@ -8,10 +8,10 @@ namespace WingCommand.PureTests
         private const float Dt = 1f / 60f;
 
         /// <summary>Exact constant right turn from heading 0 around the centre (R, 2000, 0).</summary>
-        private static LeaderSample Turning(float t, float speed = 200f, float rate = 0.1f)
+        private static AnchorSample Turning(float t, float speed = 200f, float rate = 0.1f)
         {
             float r = speed / rate, psi = rate * t;
-            return new LeaderSample
+            return new AnchorSample
             {
                 Pos = new Vec3(r - r * (float)Math.Cos(psi), 2000f, r * (float)Math.Sin(psi)),
                 Vel = new Vec3((float)Math.Sin(psi), 0f, (float)Math.Cos(psi)) * speed,
@@ -21,7 +21,7 @@ namespace WingCommand.PureTests
             };
         }
 
-        private static LeaderSample Straight(float speed = 200f, float bank = 0f) => new LeaderSample
+        private static AnchorSample Straight(float speed = 200f, float bank = 0f) => new AnchorSample
         {
             Pos = new Vec3(0f, 2000f, 0f), Vel = new Vec3(0f, 0f, speed), BankDeg = bank, Present = true, Airborne = true,
         };
@@ -32,7 +32,7 @@ namespace WingCommand.PureTests
             var estimator = new LeaderEstimator();
             LeaderEstimate e = default;
             for (int i = 0; i <= 180; i++) e = estimator.Update(Turning(i * Dt), Dt);
-            LeaderSample next = Turning(181 * Dt);
+            AnchorSample next = Turning(181 * Dt);
             Assert.True((e.Pos - next.Pos).Length < 0.05f, $"projection off by {(e.Pos - next.Pos).Length:0.000} m");
             Assert.True((e.Vel - next.Vel).Length < 0.1f);
             Assert.Equal(0.1f, e.TurnRate, 2);
@@ -42,7 +42,7 @@ namespace WingCommand.PureTests
         public void AccelerationStepIsJerkLimited()
         {
             var estimator = new LeaderEstimator();
-            LeaderSample s = Straight();
+            AnchorSample s = Straight();
             s.IsPlayer = true;
             for (int i = 0; i < 60; i++) estimator.Update(s, Dt);
             s.Vel = new Vec3(0f, 0f, 200.5f);   // a sudden 30 m/s² along the track
@@ -55,8 +55,8 @@ namespace WingCommand.PureTests
         {
             var ai = new LeaderEstimator();
             var player = new LeaderEstimator();
-            LeaderSample s = Straight();
-            LeaderSample p = Straight();
+            AnchorSample s = Straight();
+            AnchorSample p = Straight();
             p.IsPlayer = true;
             ai.Update(s, Dt);
             player.Update(p, Dt);
@@ -72,7 +72,7 @@ namespace WingCommand.PureTests
             var estimator = new LeaderEstimator();
             Assert.True(estimator.Update(Straight(), Dt).Flying);
             Assert.False(estimator.Update(Straight(speed: 20f), Dt).Flying);
-            LeaderSample grounded = Straight();
+            AnchorSample grounded = Straight();
             grounded.Airborne = false;
             Assert.False(estimator.Update(grounded, Dt).Flying);
         }
@@ -83,7 +83,7 @@ namespace WingCommand.PureTests
             var estimator = new LeaderEstimator();
             LeaderEstimate before = default;
             for (int i = 0; i < 30; i++) before = estimator.Update(Turning(i * Dt), Dt);
-            LeaderEstimate after = estimator.Update(new LeaderSample { Present = false }, Dt);
+            LeaderEstimate after = estimator.Update(new AnchorSample { Present = false }, Dt);
             Assert.Equal(before.Pos, after.Pos);
             Assert.False(after.Flying);
         }
@@ -103,7 +103,7 @@ namespace WingCommand.PureTests
         {
             // A hovering helicopter drifting sideways at 3 m/s: the wing's frame follows its nose, not the drift.
             var estimator = new LeaderEstimator();
-            LeaderSample hover = Straight();
+            AnchorSample hover = Straight();
             hover.Vel = new Vec3(3f, 0f, 0f);
             hover.Fwd = Vec3.Forward;
             hover.CanHover = true;
@@ -112,9 +112,19 @@ namespace WingCommand.PureTests
         }
 
         [Fact]
+        public void GroundAnchorIsFollowedAtAnySpeedOnTheGround()
+        {
+            // An escorted truck or ship: never "airborne", yet the wing forms on it, stopped or moving.
+            AnchorSample truck = Straight(0f);
+            truck.Airborne = false;
+            truck.Kind = AnchorKind.Ground;
+            Assert.True(new LeaderEstimator().Update(truck, Dt).Flying);
+        }
+
+        [Fact]
         public void HoverCapableLeaderFliesAtAnySpeed()
         {
-            LeaderSample hover = Straight(0f);
+            AnchorSample hover = Straight(0f);
             hover.CanHover = true;
             Assert.True(new LeaderEstimator().Update(hover, Dt).Flying);
             Assert.False(new LeaderEstimator().Update(Straight(0f), Dt).Flying);
@@ -124,10 +134,10 @@ namespace WingCommand.PureTests
         public void TrackKeepsItsLastValidHeadingInVerticalFlight()
         {
             var estimator = new LeaderEstimator();
-            LeaderSample east = Straight();
+            AnchorSample east = Straight();
             east.Vel = new Vec3(200f, 0f, 0f);
             estimator.Update(east, Dt);
-            LeaderSample up = Straight();
+            AnchorSample up = Straight();
             up.Vel = new Vec3(0f, 200f, 0f);
             LeaderEstimate e = estimator.Update(up, Dt);
             Assert.True((e.Track - Vec3.Right).Length < 1e-4f);
@@ -138,11 +148,11 @@ namespace WingCommand.PureTests
         {
             var est = new LeaderEstimator();
             for (int i = 0; i < 60; i++)
-                est.Update(new LeaderSample { Pos = new Vec3(0f, 2000f, i * 200f * Dt), Vel = new Vec3(0f, 0f, 200f), Present = true, Airborne = true, IsPlayer = true }, Dt);
-            for (int i = 0; i < 60; i++) est.Update(new LeaderSample { Present = false }, Dt);
+                est.Update(new AnchorSample { Pos = new Vec3(0f, 2000f, i * 200f * Dt), Vel = new Vec3(0f, 0f, 200f), Present = true, Airborne = true, IsPlayer = true }, Dt);
+            for (int i = 0; i < 60; i++) est.Update(new AnchorSample { Present = false }, Dt);
             LeaderEstimate e = default;
             for (int i = 0; i < 30; i++)
-                e = est.Update(new LeaderSample { Pos = new Vec3(20000f + i * 200f * Dt, 2000f, 0f), Vel = new Vec3(200f, 0f, 0f), Present = true, Airborne = true, IsPlayer = true }, Dt);
+                e = est.Update(new AnchorSample { Pos = new Vec3(20000f + i * 200f * Dt, 2000f, 0f), Vel = new Vec3(200f, 0f, 0f), Present = true, Airborne = true, IsPlayer = true }, Dt);
             Assert.True(e.Acc.Length < 1f, $"phantom |a| = {e.Acc.Length:0.0}");
         }
     }
