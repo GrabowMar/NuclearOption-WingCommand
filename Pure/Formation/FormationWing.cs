@@ -10,6 +10,9 @@ namespace WingCommand
         public AircraftState State;
         public MemberCapability Capability;
         public float Radius;
+        /// <summary>Terrain under and 2 s ahead of this member, for its GCAS.</summary>
+        public float NearFloorY;
+        public bool HasNearFloor;
     }
 #pragma warning restore CS0649
 
@@ -26,6 +29,8 @@ namespace WingCommand
         public readonly bool[] Emergency = new bool[FormationCatalog.MaxSlots];
         public readonly bool[] Established = new bool[FormationCatalog.MaxSlots];
         public readonly bool[] StaggerClear = new bool[FormationCatalog.MaxSlots];
+        public readonly float[] NearFloorY = new float[FormationCatalog.MaxSlots];
+        public readonly bool[] HasNearFloor = new bool[FormationCatalog.MaxSlots];
     }
 
     /// <summary>The once-per-wing half of the formation layer:
@@ -68,7 +73,12 @@ namespace WingCommand
             Frame.Count = count;
             Frame.FloorY = floorY;
             Frame.Clearance = clearance;
-            for (int i = 0; i < count; i++) caps[i] = members[i].Capability;
+            for (int i = 0; i < count; i++)
+            {
+                caps[i] = members[i].Capability;
+                Frame.NearFloorY[i] = members[i].NearFloorY;
+                Frame.HasNearFloor[i] = members[i].HasNearFloor;
+            }
             Solver.Solve(Frame.Definition, Frame.Spacing, Frame.Leader, caps, count, floorY, clearance, dt, Frame.Slots, History);
 
             for (int i = 0; i < count; i++)

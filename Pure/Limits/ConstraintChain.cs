@@ -147,12 +147,13 @@ namespace WingCommand
 
         private void UpdateGcas(in AircraftState s, in LimitContext ctx, AirframeProfile p)
         {
-            if (float.IsNaN(ctx.FloorY))
+            float floor = ctx.HasNearFloor ? ctx.NearFloorY : ctx.FloorY;
+            if (float.IsNaN(floor))
             {
                 gcas = false;
                 return;
             }
-            float height = s.Pos.Y - ctx.FloorY;
+            float height = s.Pos.Y - floor;
             float sink = Math.Max(0f, -s.Vel.Y);
             float delay = RecoveryDelay(s, p, out float pull);
             float loss = sink * delay + sink * sink / (2f * pull);

@@ -126,6 +126,25 @@ namespace WingCommand.PureTests
         }
 
         [Fact]
+        public void GcasJudgesTheNearFloorNotTheLookAheadRidge()
+        {
+            // 80 m above a ridge in the look-ahead floor, sinking 40 m/s: under 1.5 s to that floor, so GCAS
+            // would fire against it. The terrain within 2 s is 530 m below: GCAS must stay off.
+            var ridgeAhead = new LimitContext { FloorY = 450f, NearFloorY = 0f, HasNearFloor = true, Clearance = 60f };
+            var chain = new ConstraintChain();
+            var report = new BindingReport();
+            var a = new AttitudeCommand { Nz = 1f };
+            chain.ApplyAttitude(ref a, At(530f, vy: -40f), ridgeAhead, Fighter, Dt, ref report);
+            Assert.False(chain.GcasActive);
+
+            var without = new ConstraintChain();
+            var b = new AttitudeCommand { Nz = 1f };
+            var r2 = new BindingReport();
+            without.ApplyAttitude(ref b, At(530f, vy: -40f), Floor(450f), Fighter, Dt, ref r2);
+            Assert.True(without.GcasActive);
+        }
+
+        [Fact]
         public void AuthoritySlewsAStepInBankCommand()
         {
             var chain = new ConstraintChain();

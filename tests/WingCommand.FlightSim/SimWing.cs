@@ -21,6 +21,7 @@ namespace WingCommand.FlightSim
         public readonly AirframeProfile Profile = SimProfiles.GenericFighter();
         public Func<float, float, float> Terrain;
         public float Clearance = 60f;
+        private readonly TerrainFloor floor = new TerrainFloor();
         private readonly WingMemberInput[] inputs;
         private readonly AircraftState[] states;
 
@@ -79,6 +80,8 @@ namespace WingCommand.FlightSim
                         MinSpeed = Profile.MinimumSpeed(1f),
                     },
                     Radius = Profile.MaxRadius,
+                    NearFloorY = Terrain == null ? 0f : NearFloor(Plants[i].Position, Plants[i].Velocity),
+                    HasNearFloor = Terrain != null,
                 };
             }
             WingFrame frame = Wing.Update(Leader.Sample(), inputs, Plants.Length, floor, Clearance, Profile.MaxRadius, Dt);
@@ -109,10 +112,13 @@ namespace WingCommand.FlightSim
         private float Floor()
         {
             if (Terrain == null) return float.NaN;
-            float floor = Probe(Leader.Position, Leader.Velocity);
-            for (int i = 0; i < Plants.Length; i++) floor = Math.Max(floor, Probe(Plants[i].Position, Plants[i].Velocity));
-            return floor;
+            float raw = Probe(Leader.Position, Leader.Velocity);
+            for (int i = 0; i < Plants.Length; i++) raw = Math.Max(raw, Probe(Plants[i].Position, Plants[i].Velocity));
+            return floor.Update(raw, Dt);
         }
+
+        private float NearFloor(Vec3 p, Vec3 v) =>
+            Math.Max(Terrain(p.X, p.Z), Terrain(p.X + v.X * 2f, p.Z + v.Z * 2f));
 
         private float Probe(Vec3 p, Vec3 v)
         {

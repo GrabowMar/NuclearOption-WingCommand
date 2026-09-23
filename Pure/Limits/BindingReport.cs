@@ -48,6 +48,11 @@ namespace WingCommand
     {
         /// <summary>Altitude of the smoothed terrain floor under and ahead of the aircraft; NaN = unknown.</summary>
         public float FloorY;
+        /// <summary>Terrain under and just ahead of this aircraft (0–2 s), for GCAS; used when
+        /// <see cref="HasNearFloor"/>. The look-ahead <see cref="FloorY"/> would trip GCAS on a ridge that is
+        /// still 10 s away.</summary>
+        public float NearFloorY;
+        public bool HasNearFloor;
         public float Clearance;
         public float Aggression;
         /// <summary>Wing collision bias for this aircraft (m/s², world), added before any other constraint.</summary>

@@ -84,7 +84,8 @@ namespace WingCommand
             GuidanceCommand guidance = TrackingGuidance.Evaluate(LastIntent, s, p);
             var ctx = new LimitContext
             {
-                FloorY = frame.FloorY, Clearance = Clearance, Aggression = Aggression, CollisionBias = frame.Bias[Slot],
+                FloorY = frame.FloorY, NearFloorY = frame.NearFloorY[Slot], HasNearFloor = frame.HasNearFloor[Slot],
+                Clearance = Clearance, Aggression = Aggression, CollisionBias = frame.Bias[Slot],
             };
             LastOutput = Pipeline.Step(guidance, s, ctx, p, dt);
 
