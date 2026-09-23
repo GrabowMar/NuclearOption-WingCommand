@@ -11,13 +11,14 @@ namespace WingCommand
     /// <item>Yaw: heading error → yaw rate → pedal; no heading target holds the heading (zero rate).</item>
     /// <item>Collective: the guidance's vertical acceleration through the hover model, trim × (g + a_y)/(g·cos tilt),
     /// so the collision bias, the floor and the reference's own acceleration all act. The trim (seeded from
-    /// HoverCollective, within ±50% of it) integrates the vertical-speed error slowly, but not while the guidance's
-    /// vertical acceleration sits at its limit or the collective is saturated. Slewed, clamped 0..1.</item>
+    /// HoverCollective, bounded to ±50% of it) integrates the vertical-speed error, except into a saturated collective;
+    /// it keeps integrating while the climb command sits at its limit, since an aircraft that does not respond to it
+    /// has a wrong trim (a tiltwing converting from plane mode hands over a low throttle). Slewed, clamped 0..1.</item>
     /// </list></summary>
     internal sealed class RotaryController
     {
         public static float AttitudeGain = 2.5f, RateMaxDps = 60f, YawGain = 1.5f, YawRateMaxDps = 30f;
-        public static float TrimTau = 3f, CollectiveKi = 0.02f, CollectiveSlew = 1f, TrimRange = 0.5f;
+        public static float TrimTau = 3f, CollectiveKi = 0.05f, CollectiveSlew = 1f, TrimRange = 0.5f;
         public static float AuxNeutral = 0.5f;
 
         public readonly RateAuthority Pitch = new RateAuthority(), Roll = new RateAuthority(), Yaw = new RateAuthority();
@@ -63,8 +64,7 @@ namespace WingCommand
             float error = g.VelCmd.Y - s.Vel.Y;
             float cos = Scalar.Clamp(s.Up.Y, 0.7f, 1f);
             float raw = integrator * (Scalar.G + g.Accel.Y) / (Scalar.G * cos);
-            bool atLimit = Math.Abs(g.Accel.Y) >= p.VerticalAccelMax - 1e-3f;
-            if (!atLimit && !(raw >= 1f && error > 0f) && !(raw <= 0f && error < 0f))
+            if (!(raw >= 1f && error > 0f) && !(raw <= 0f && error < 0f))
                 integrator = Scalar.Clamp(integrator + CollectiveKi * error * dt,
                     (1f - TrimRange) * p.HoverCollective, (1f + TrimRange) * p.HoverCollective);
             collective = Scalar.Clamp01(collective + Scalar.Clamp(raw - collective, -CollectiveSlew * dt, CollectiveSlew * dt));

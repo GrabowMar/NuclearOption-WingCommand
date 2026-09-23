@@ -67,15 +67,28 @@ namespace WingCommand.PureTests
         }
 
         [Fact]
-        public void TrimDoesNotWindUpWhileTheClimbIsAtItsAccelerationLimit()
+        public void TrimRecoversFromATooLowSeedWhileTheClimbCommandIsAtItsLimit()
+        {
+            // A tiltwing converting from plane mode hands over a low throttle: sinking at 10 m/s, the climb command sits
+            // at its limit, and the trim must still rise (freezing it there kept the aircraft sinking: 1475 m → 112 m, T1).
+            AirframeProfile p = Utility();
+            var c = new RotaryController();
+            c.Track(Hover(new Vec3(0f, -10f, 0f)), new ControlOutput { Throttle = 0.1f }, p);
+            var recover = new GuidanceCommand { VelCmd = Vec3.Zero, Accel = new Vec3(0f, p.VerticalAccelMax, 0f) };
+            ControlOutput o = Run(c, recover, Hover(new Vec3(0f, -10f, 0f)), p, 3f);
+            Assert.True(o.Throttle >= p.HoverCollective, $"collective {o.Throttle:0.00} after 3 s of sinking");
+        }
+
+        [Fact]
+        public void TrimStaysWithinItsRangeWhenTheAircraftDoesNotRespond()
         {
             AirframeProfile p = Utility();
             var c = new RotaryController();
             var climb = new GuidanceCommand { VelCmd = new Vec3(0f, 50f, 0f), Accel = new Vec3(0f, p.VerticalAccelMax, 0f) };
-            ControlOutput up = Run(c, climb, Hover(), p, 20f);
-            Assert.Equal(p.HoverCollective * (Scalar.G + p.VerticalAccelMax) / Scalar.G, up.Throttle, 2);
-            ControlOutput back = Run(c, default, Hover(), p, 1f);
-            Assert.True(back.Throttle < 0.55f, $"collective {back.Throttle:0.00} a second after the climb command ended");
+            Run(c, climb, Hover(), p, 60f);
+            ControlOutput back = Run(c, default, Hover(), p, 2f);
+            Assert.True(back.Throttle <= (1f + RotaryController.TrimRange) * p.HoverCollective + 1e-3f,
+                $"collective {back.Throttle:0.00} once the command ended");
         }
 
         [Fact]
