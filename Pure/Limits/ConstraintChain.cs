@@ -24,12 +24,12 @@ namespace WingCommand
         {
             if (float.IsNaN(ctx.FloorY)) return;
             // Keep the commanded vertical speed above what the height margin allows: climb back when
-            // below the floor + clearance, otherwise descend no faster than a half-g pull can arrest.
+            // below the floor + clearance, otherwise sink no faster than GCAS's own recovery model accepts
+            // with its release time to spare, so riding the floor never trips GCAS.
             float margin = s.Pos.Y - ctx.FloorY - ctx.Clearance;
-            float pullAccel = Math.Max(1f, 0.5f * (p.GLimit - 1f) * Scalar.G);
             float minVy = margin < 0f
                 ? Math.Min(p.ClimbRateMax, -margin / 3f)
-                : -(float)Math.Sqrt(2f * pullAccel * margin);
+                : -AllowedSink(margin, s, p);
             if (c.VelCmd.Y >= minVy) return;
             float dv = minVy - c.VelCmd.Y;
             c.VelCmd = new Vec3(c.VelCmd.X, minVy, c.VelCmd.Z);
@@ -122,6 +122,24 @@ namespace WingCommand
             return Scalar.Wrap180(current + step);
         }
 
+        /// <summary>Recovery model shared by the floor law and GCAS: roll wings level at the roll-rate limit,
+        /// ramp the load factor at <see cref="NzSlew"/> (half the ramp counts as dead time), then pull at the
+        /// available g. Returns the dead time; <paramref name="pull"/> is the vertical deceleration.</summary>
+        private static float RecoveryDelay(in AircraftState s, AirframeProfile p, out float pull)
+        {
+            float available = Math.Min(p.GLimit, p.LiftLimitedG(s.Eas));
+            pull = Math.Max(1f, (available - 1f) * Scalar.G);
+            return Math.Abs(s.BankDeg) / Math.Max(1f, p.RollRateMaxDps) + 0.5f * Math.Max(0f, available - 1f) / NzSlew;
+        }
+
+        /// <summary>Largest sink whose recovery loss plus <see cref="GcasRelease"/> seconds of sinking fits in
+        /// the margin: s²/(2·pull) + s·(delay + release) = margin.</summary>
+        private static float AllowedSink(float margin, in AircraftState s, AirframeProfile p)
+        {
+            float b = RecoveryDelay(s, p, out float pull) + GcasRelease;
+            return pull * ((float)Math.Sqrt(b * b + 2f * margin / pull) - b);
+        }
+
         private void UpdateGcas(in AircraftState s, in LimitContext ctx, AirframeProfile p)
         {
             if (float.IsNaN(ctx.FloorY))
@@ -131,9 +149,8 @@ namespace WingCommand
             }
             float height = s.Pos.Y - ctx.FloorY;
             float sink = Math.Max(0f, -s.Vel.Y);
-            float pullAccel = Math.Max(1f, (Math.Min(p.GLimit, p.LiftLimitedG(s.Eas)) - 1f) * Scalar.G);
-            float rollTime = Math.Abs(s.BankDeg) / Math.Max(1f, p.RollRateMaxDps);
-            float loss = sink * rollTime + sink * sink / (2f * pullAccel);
+            float delay = RecoveryDelay(s, p, out float pull);
+            float loss = sink * delay + sink * sink / (2f * pull);
             float remaining = sink > 0.5f ? (height - loss - 0.5f * ctx.Clearance) / sink : float.PositiveInfinity;
             if (!gcas && remaining < GcasTrigger) gcas = true;
             else if (gcas && (remaining > GcasRelease || s.Vel.Y > 5f)) gcas = false;

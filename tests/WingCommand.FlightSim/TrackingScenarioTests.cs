@@ -152,6 +152,38 @@ namespace WingCommand.FlightSim
         }
 
         [Fact]
+        public void RollingTerrainBindsTheFloorWithAtMostOneGcasEvent()
+        {
+            // Hills from 0 to 300 m under a leader at 200 m: the slot often lies inside the clearance, so the
+            // floor binds. The floor is the highest terrain 0, 2, 5 and 10 s ahead, as the engine probes see it.
+            AirframeProfile profile = SimProfiles.GenericFighter();
+            var leader = new VirtualLeader(new Vec3(0f, 200f, 0f), 220f, 0f);
+            var plant = new FixedWingPlant(PlantParams.GenericFighter, new Vec3(60f, 600f, -20f), 220f, 0f);
+            var pilot = new SimPilot(plant, profile);
+            int events = 0, bound = 0, ticks = 0;
+            bool previous = false;
+            float minClearance = float.PositiveInfinity;
+            for (int i = 0; i < 180 * 60; i++)
+            {
+                leader.Step(0f, Dt);
+                float z = plant.Position.Z, v = plant.Speed;
+                float floorY = Math.Max(Math.Max(Hill(z), Hill(z + 2f * v)), Math.Max(Hill(z + 5f * v), Hill(z + 10f * v)));
+                pilot.StepTracking(SlotIntent(leader.Slot(60f, 20f, 0f), profile, false, 80f), Dt, floorY);
+                bool gcas = pilot.Pipeline.Constraints.GcasActive;
+                if (gcas && !previous) events++;
+                previous = gcas;
+                if (pilot.Pipeline.Report.VerticalBy == ConstraintId.Terrain) bound++;
+                ticks++;
+                minClearance = Math.Min(minClearance, plant.Position.Y - Hill(z));
+            }
+            Assert.True(bound > 0.2f * ticks, $"floor bound {bound} of {ticks} ticks");
+            Assert.True(events <= 1, $"{events} GCAS events");
+            Assert.True(minClearance > 0f, $"minimum clearance {minClearance:0} m");
+        }
+
+        private static float Hill(float z) => 150f + 150f * (float)Math.Sin(z / 3000f);
+
+        [Fact]
         public void ValleyFlightNeverDescendsIntoTheFloor()
         {
             AirframeProfile profile = SimProfiles.GenericFighter();

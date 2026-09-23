@@ -29,6 +29,24 @@ namespace WingCommand.PureTests
             Assert.Equal(ConstraintId.Terrain, report.VerticalBy);
         }
 
+        [Theory]
+        [InlineData(10f)]
+        [InlineData(60f)]
+        [InlineData(200f)]
+        [InlineData(500f)]
+        public void TerrainFloorNeverAllowsASinkThatTriggersGcas(float margin)
+        {
+            var chain = new ConstraintChain();
+            var report = new BindingReport();
+            var g = new GuidanceCommand { VelCmd = new Vec3(0f, -300f, 250f) };
+            chain.ApplyAccel(ref g, At(60f + margin, speed: 250f), Floor(0f), Fighter, ref report);
+            float sink = -g.VelCmd.Y;
+            var a = new AttitudeCommand { Nz = 1f };
+            chain.ApplyAttitude(ref a, At(60f + margin, speed: 250f, vy: -sink), Floor(0f), Fighter, Dt, ref report);
+            Assert.False(chain.GcasActive, $"allowed sink {sink:0.0} m/s at margin {margin} m triggers GCAS");
+            Assert.True(sink > 0f);
+        }
+
         [Fact]
         public void UnknownFloorLeavesTheCommandAlone()
         {
