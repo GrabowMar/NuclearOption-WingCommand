@@ -111,5 +111,18 @@ namespace WingCommand.PureTests
             Assert.True(cmd.Accel.Z > -1f, $"brakes at {cmd.Accel.Z:0.0} m/s² while turning around");
             Assert.True(Math.Abs(cmd.Accel.X) > 20f, $"turns at only {cmd.Accel.X:0.0} m/s²");
         }
+
+        [Fact]
+        public void LargeTurnsGainSpeedWithoutAJumpAtNinetyDegrees()
+        {
+            // Northbound at 200 m/s with the command at 280 m/s, 60° to 120° off: turn and speed up (no airbrake),
+            // and nothing jumps as the angle passes 90°.
+            AircraftState northbound = At(new Vec3(0f, 2000f, 0f), new Vec3(0f, 0f, 200f));
+            float Along(float angleDeg) => TrackingGuidance.Evaluate(
+                Intent(new Vec3(0f, 2000f, 0f), Vec3.FromHeading(angleDeg, 280f), afterburner: true), northbound, Fighter).Accel.Z;
+            foreach (float angle in new[] { 60f, 75f, 85f, 89f, 91f, 95f, 120f })
+                Assert.True(Along(angle) > -0.5f, $"brakes at {Along(angle):0.0} m/s² with the command {angle}° off");
+            Assert.True(Math.Abs(Along(89f) - Along(91f)) < 1f, $"{Along(89f):0.0} vs {Along(91f):0.0} m/s²");
+        }
     }
 }

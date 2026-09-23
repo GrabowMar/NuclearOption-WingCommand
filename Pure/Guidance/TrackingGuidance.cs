@@ -7,8 +7,8 @@ namespace WingCommand
     /// a linear PD with the reference acceleration as feedforward. The along-track closure also respects a
     /// stopping-distance law, so arrival does not overshoot. The acceleration is clamped to what the
     /// airframe can do: normal part to (Nz_max − 1)·g, tangential part to thrust and drag. A velocity
-    /// command more than 90° off the current track becomes a maximum turn toward the side the command lies on
-    /// that holds the commanded speed.</summary>
+    /// command far off the current track becomes a maximum turn toward the side it lies on that holds the
+    /// commanded speed (blended in from ~45°, continuous through 90° and beyond).</summary>
     internal static class TrackingGuidance
     {
         public const float CatchUpMargin = 5f;
@@ -16,6 +16,7 @@ namespace WingCommand
         public const float NearOvertakeCap = 25f;
         public const float NearSpacings = 3f;
         public const float CrossTrackMaxDeg = 45f;
+        public const float TurnBlendStartDeg = 20f, TurnBlendFullDeg = 60f;
 
         public static GuidanceCommand Evaluate(in FlightIntent intent, in AircraftState s, AirframeProfile p)
         {
@@ -62,17 +63,28 @@ namespace WingCommand
             else if (intent.Limits.Min > 0f && magnitude > 1f && magnitude < intent.Limits.Min)
                 velCmd *= intent.Limits.Min / magnitude;
 
+            // Large heading changes: the plain vector difference would brake whenever the command's along-track
+            // part is below the current speed, i.e. throughout any big turn. Past ~45° the along-track target
+            // blends up to the full commanded speed (reached at 60°), and past 90° the sideways part stays at full
+            // strength toward the side the command lies on, so the demand is a maximum turn that holds speed,
+            // continuous in the angle. Small angles keep the plain law.
             Vec3 steer = velCmd;
-            Vec3 heading = s.Vel.Horizontal;
-            if (heading.SqrLength > 1f && Vec3.Dot(velCmd.Horizontal, heading) < 0f)
+            Vec3 heading = s.Vel.Horizontal, command = velCmd.Horizontal;
+            float speedCmd = command.Length;
+            if (heading.SqrLength > 1f && speedCmd > 1f)
             {
-                Vec3 aside = Vec3.Cross(Vec3.Up, heading).Normalized;
-                float lean = Vec3.Dot(velCmd, aside);
-                if (Math.Abs(lean) < 1f) lean = Vec3.Dot(e, aside);
-                // Along the current track at the commanded speed plus as much again to the chosen side: a maximum
-                // turn that holds speed, instead of a sideways vector whose projection says "brake to zero".
-                float speedCmd = velCmd.Horizontal.Length;
-                steer = (heading.Normalized + aside * (lean < 0f ? -1f : 1f)) * speedCmd + Vec3.Up * velCmd.Y;
+                Vec3 h = heading.Normalized;
+                float cos = Scalar.Clamp(Vec3.Dot(command, h) / speedCmd, -1f, 1f);
+                float angle = (float)Math.Acos(cos) * Scalar.Rad2Deg;
+                float alongFactor = Math.Max(cos, Scalar.SmoothStep(TurnBlendStartDeg, TurnBlendFullDeg, angle));
+                if (alongFactor > cos + 1e-4f)
+                {
+                    Vec3 aside = Vec3.Cross(Vec3.Up, h);
+                    float lean = Vec3.Dot(command, aside);
+                    if (Math.Abs(lean) < 1f) lean = Vec3.Dot(e, aside);
+                    float sideways = cos >= 0f ? (float)Math.Sqrt(1f - cos * cos) : 1f;
+                    steer = (h * alongFactor + aside * ((lean < 0f ? -1f : 1f) * sideways)) * speedCmd + Vec3.Up * velCmd.Y;
+                }
             }
             Vec3 accel = ClampAccel(r.Acc + (steer - s.Vel) / Math.Max(0.1f, p.TauVel), s, p,
                 intent.Limits.AirbrakeAllowed);
