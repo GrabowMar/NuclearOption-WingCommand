@@ -73,12 +73,40 @@ namespace WingCommand.PureTests
         {
             var mind = new PilotMind();
             MindInput slow = Nominal();
-            slow.LeaderSpeed = 80f;    // below loaded minimum 72 + 15
+            slow.LeaderSpeed = 80f;    // below 1.15 x loaded minimum 72
             Assert.InRange(RunUntilTransition(mind, slow, 10f, out TransitionReason why), 3f, 3.25f);
             Assert.Equal(TransitionReason.LeaderSlow, why);
             MindInput fast = Nominal();
-            fast.LeaderSpeed = 110f;   // above 72 + 30
+            fast.LeaderSpeed = 110f;   // above 1.3 x 72
             Assert.InRange(RunUntilTransition(mind, fast, 10f, out why), 3f, 3.25f);
+            Assert.Equal(BehaviourId.Rejoin, mind.Current);
+            Assert.Equal(TransitionReason.LeaderRecovered, why);
+        }
+
+        [Fact]
+        public void SlowAirframeFollowsAFlyableSlowLeader()
+        {
+            // In game a CI-22 wing (loaded minimum 46.9 m/s) held overhead 70–85% of the time behind a CI-22 leader
+            // climbing at ~60 m/s: an absolute +15 m/s margin is a third of a slow airframe's minimum speed.
+            var mind = new PilotMind();
+            MindInput slowType = Nominal();
+            slowType.LoadedMinimum = 46.9f;
+            slowType.LeaderSpeed = 58f;
+            RunUntilTransition(mind, slowType, 10f, out _);
+            Assert.Equal(BehaviourId.Rejoin, mind.Current);
+        }
+
+        [Fact]
+        public void SlowAirframeLeaderBackAtCruiseRecallsTheHold()
+        {
+            var mind = new PilotMind();
+            MindInput held = Nominal();
+            held.LoadedMinimum = 46.9f;
+            held.LeaderSpeed = 45f;
+            RunUntilTransition(mind, held, 10f, out _);
+            Assert.Equal(BehaviourId.HoldOverhead, mind.Current);
+            held.LeaderSpeed = 66f;
+            RunUntilTransition(mind, held, 10f, out TransitionReason why);
             Assert.Equal(BehaviourId.Rejoin, mind.Current);
             Assert.Equal(TransitionReason.LeaderRecovered, why);
         }

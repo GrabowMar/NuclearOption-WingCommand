@@ -12,10 +12,10 @@ namespace WingCommand
     /// <list type="bullet">
     /// <item>Rejoin → StationKeep: σ has been 1 for 3 s.</item>
     /// <item>StationKeep → Rejoin: slot error above 2.5 spacings for 2 s.</item>
-    /// <item>Either → HoldOverhead: the leader is not flying, or has been slower than the loaded minimum +
-    /// 15 m/s for 3 s.</item>
+    /// <item>Either → HoldOverhead: the leader is not flying, or has been slower than 1.15 × the member's loaded
+    /// minimum for 3 s (a ratio, so slow airframes follow a slow leader of their own type).</item>
     /// <item>Any → HoldOverhead: the leader is lost (immediate).</item>
-    /// <item>HoldOverhead → Rejoin: the leader has been faster than the loaded minimum + 30 m/s for 3 s.</item>
+    /// <item>HoldOverhead → Rejoin: the leader has been faster than 1.3 × the loaded minimum for 3 s.</item>
     /// </list>
     /// Persistence timers run every tick; decisions are taken every 0.2 s.</summary>
     internal sealed class PilotMind
@@ -23,7 +23,7 @@ namespace WingCommand
         public static float DecisionPeriod = 0.2f, MinDwell = 2f;
         public static float CaptureSigma = 0.99f, CaptureSeconds = 3f;
         public static float LostSlotSpacings = 2.5f, LostSlotSeconds = 2f;
-        public static float SlowMargin = 15f, FastMargin = 30f, LeaderSpeedSeconds = 3f;
+        public static float SlowFactor = 1.15f, FastFactor = 1.3f, LeaderSpeedSeconds = 3f;
 
         private Persistence captured, lostSlot, slow, fast;
         private float sinceDecision;
@@ -39,8 +39,8 @@ namespace WingCommand
             sinceDecision += dt;
             bool isCaptured = captured.Update(m.Sigma >= CaptureSigma, CaptureSeconds, dt);
             bool isLost = lostSlot.Update(m.SlotError > LostSlotSpacings * m.Spacing, LostSlotSeconds, dt);
-            bool isSlow = slow.Update(m.LeaderSpeed < m.LoadedMinimum + SlowMargin, LeaderSpeedSeconds, dt);
-            bool isFast = fast.Update(m.LeaderSpeed > m.LoadedMinimum + FastMargin, LeaderSpeedSeconds, dt);
+            bool isSlow = slow.Update(m.LeaderSpeed < m.LoadedMinimum * SlowFactor, LeaderSpeedSeconds, dt);
+            bool isFast = fast.Update(m.LeaderSpeed > m.LoadedMinimum * FastFactor, LeaderSpeedSeconds, dt);
 
             if (m.LeaderLost)
                 return Current != BehaviourId.HoldOverhead && Switch(BehaviourId.HoldOverhead, TransitionReason.LeaderLost, out reason);
