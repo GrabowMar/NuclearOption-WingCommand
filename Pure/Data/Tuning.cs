@@ -20,6 +20,7 @@ namespace WingCommand
             typeof(RejoinPlanner), typeof(FormationWing), typeof(HoldOrbit), typeof(PilotMind), typeof(RolePolicy), typeof(AirStart), typeof(RateAuthority), typeof(AirframeProfile),
             typeof(RotaryGuidance), typeof(RotaryController), typeof(RotaryPipeline), typeof(TiltwingPipeline), typeof(AnchorTrail),
             typeof(FaultGuard), typeof(StepSequence), typeof(EscortPick),
+            typeof(TaxiGraph),
         };
 
         /// <summary>Returns the keys it could not apply, in input order.</summary>

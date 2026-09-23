@@ -86,6 +86,25 @@ namespace WingCommand.PureTests
         }
 
         [Fact]
+        public void EveryRealFreeFlightFieldRoutesFromItsServicePointsToAHoldShort()
+        {
+            // The Free Flight dump (nomodkit, 2026-09-24): 8 unowned airbases with taxi roads, no hangars.
+            string json = System.IO.File.ReadAllText(System.IO.Path.Combine(AppContext.BaseDirectory, "Fixtures", "airbases", "free-flight.json"));
+            List<AirbaseSample> fields = AirbaseSample.FromDumpJson(json);
+            Assert.Equal(8, fields.Count);
+            foreach (AirbaseSample field in fields)
+            {
+                TaxiGraph g = TaxiGraph.Build(field);
+                int hold = g.HoldShort(0, false) >= 0 ? g.HoldShort(0, false) : g.HoldShort(0, true);
+                Assert.True(hold >= 0, $"{field.Name}: no hold-short");
+                int start = g.NearestNode(field.ServicePoints[0].Pos);
+                var nodes = new List<int>();
+                var edges = new List<int>();
+                Assert.True(TaxiRouter.Route(g, start, hold, null, nodes, edges), $"{field.Name}: no route from the service point");
+            }
+        }
+
+        [Fact]
         public void NoRouteWhenTheTargetIsUnreachable()
         {
             var split = new AirbaseSample
