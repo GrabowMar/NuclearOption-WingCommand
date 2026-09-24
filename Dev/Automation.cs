@@ -274,13 +274,15 @@ namespace WingCommand
             WingService wing = WingService.Instance;
             if (wing == null) return Fail("Task", "the wing is not active");
             // The wing's anchor (the harness spawns its lead without a player, review M4a I1), else the player.
-            Unit lead = Arg(args, "leadUnit") as Unit ?? wing.LeaderUnit ?? wing.Player;
-            if (lead == null) return Fail("Task", "no lead to place the points from");
             if (!Enum.TryParse(Text(args, "kind") ?? "", true, out TaskKind kind)) return Fail("Task", "unknown kind");
             var points = new List<Waypoint>();
-            Vec3 at = lead.GlobalPosition().ToVec3();
-            Vec3 f = lead.transform.forward.ToVec3().Horizontal.Normalized;
             if (args.TryGetValue("offsets", out object raw) && raw is List<object> list)
+            {
+                // Only points need a lead (a Form order has none; during a task the leader is the virtual anchor).
+                Unit lead = Arg(args, "leadUnit") as Unit ?? wing.LeaderUnit ?? wing.Player;
+                if (lead == null) return Fail("Task", "no lead to place the points from");
+                Vec3 at = lead.GlobalPosition().ToVec3();
+                Vec3 f = lead.transform.forward.ToVec3().Horizontal.Normalized;
                 foreach (object o in list)
                     if (o is List<object> pair && pair.Count == 2)
                     {
@@ -289,6 +291,7 @@ namespace WingCommand
                         Vec3 p = at + f * forward + new Vec3(f.Z, 0f, -f.X) * right;
                         points.Add(Waypoint.At(p.X, p.Z));
                     }
+            }
             var task = new WingTask { Kind = kind, Points = points.ToArray() };
             if (args.TryGetValue("alt", out object alt)) task.Altitude = Convert.ToSingle(alt, CultureInfo.InvariantCulture);
             if (args.TryGetValue("speed", out object speed)) task.Speed = Convert.ToSingle(speed, CultureInfo.InvariantCulture);

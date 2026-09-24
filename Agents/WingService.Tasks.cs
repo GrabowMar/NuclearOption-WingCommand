@@ -14,8 +14,9 @@ namespace WingCommand
         public OrderResult Order(WingTask task)
         {
             OrderResult r = Planner.Apply(task, Snapshot(), missionTime, Events);
-            // A task replaces an escort (review M4a I5): the wing forms on the task's lead, with the player's shapes.
-            if (r.Accepted && task != null && task.Kind != TaskKind.Form && (object)Anchor != null)
+            // A task replaces an escort (review M4a I5): the wing forms on the task's lead, with the player's shapes. A
+            // plain anchor (the harness's lead, standing in for the player) stays, so Form returns to it.
+            if (r.Accepted && task != null && task.Kind != TaskKind.Form && Escorting)
             {
                 Anchor = null;
                 Escorting = false;
