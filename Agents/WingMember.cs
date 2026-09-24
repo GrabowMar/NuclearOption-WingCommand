@@ -30,6 +30,9 @@ namespace WingCommand
         public bool EjectBlocked;
         /// <summary>A helicopter down on a pad keeps its place in the pad's landing queue.</summary>
         public bool PadHeld;
+        /// <summary>Fighting in the game's combat state, supervised (spec M5 §2), and the target it was told to attack.</summary>
+        public bool Engaged;
+        public Unit AssignedTarget;
         /// <summary>The ground pilot's last output (the ground trace).</summary>
         public ControlOutput GroundOutput;
         public bool StopLogged;

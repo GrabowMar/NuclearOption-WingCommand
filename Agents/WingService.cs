@@ -124,6 +124,7 @@ namespace WingCommand
             TrackLeader();
             StepPlanner(dt);
             SuperviseLandings();
+            SuperviseCombat(dt);
             Prune();
             if (Plugin.Settings.DevTools.Value && (traceClock += dt) >= GroundTraceSeconds)
             {
@@ -397,6 +398,7 @@ namespace WingCommand
         public void FormUp()
         {
             if (Planner.Active) Order(WingTask.Form());
+            Disengage();
             for (int i = 0; i < Members.Count; i++) Members[i].Brain.FormUp(missionTime, Events);
         }
 
@@ -661,6 +663,13 @@ namespace WingCommand
             return false;
         }
 
+        /// <summary>Where the anchor is now, without reading its sensor (that would disturb the estimate).</summary>
+        private AnchorSample AnchorNow()
+        {
+            Unit u = LeaderUnit;
+            return Alive(u) ? new AnchorSample { Pos = u.GlobalPosition().ToVec3(), Present = true } : default;
+        }
+
         private AnchorSample SampleAnchor(float dt)
         {
             if (Planner.Active) return Planner.Sample();
@@ -692,7 +701,8 @@ namespace WingCommand
             {
                 WingMember m = Members[i];
                 bool ours = ReferenceEquals(m.Pilot.currentState, m.State) ||
-                            (m.Recovery != null && m.Recovery.Phase == RecoveryPhase.Landing && NativeLandingBridge.Landing(m.Pilot));
+                            (m.Recovery != null && m.Recovery.Phase == RecoveryPhase.Landing && NativeLandingBridge.Landing(m.Pilot)) ||
+                            (m.Engaged && InNativeCombat(m));
                 if (!m.Released && m.Alive && ours) continue;
                 StepTest.Forget(m);
                 m.Ground?.Leave();
@@ -801,7 +811,7 @@ namespace WingCommand
             {
                 WingEvent e = Events[i];
                 Metrics.Event(e.Kind);
-                if (e.Kind >= WingEventKind.TaskStarted)
+                if (e.Kind >= WingEventKind.TaskStarted && e.Kind <= WingEventKind.WaypointReached)
                 {
                     Plugin.Logger.LogInfo(string.Format(CultureInfo.InvariantCulture, "[Wing] t={0:0.0} task {1} {2} ({3})",
                         e.Time, e.Task, e.Kind, e.Reason));

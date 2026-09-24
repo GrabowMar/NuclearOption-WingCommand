@@ -28,6 +28,7 @@ namespace WingCommand
         public bool Recover(WingMember m, RecoveryIntent intent)
         {
             if (m.Released || m.Recovery != null) return false;
+            if (m.Engaged) TakeBack(m, TransitionReason.Commanded);
             if (m.OnGround)
             {
                 if (m.Ground.TaxiIn(m.Last, missionTime, Events, m.Brain.Slot))
@@ -235,8 +236,16 @@ namespace WingCommand
 
         private void CheckBingo(WingMember m, float dt)
         {
+            if (!BingoNow(m, dt)) return;
+            WingToast.Show($"#{m.Number} bingo fuel; returning to base");
+            Recover(m, RecoveryIntent.Rtb);
+        }
+
+        /// <summary>Once a second: true (and a Bingo event) the tick the member reaches bingo fuel for its home field.</summary>
+        private bool BingoNow(WingMember m, float dt)
+        {
             m.BingoClock += dt;
-            if (m.BingoClock < BingoCheckSeconds) return;
+            if (m.BingoClock < BingoCheckSeconds) return false;
             float step = m.BingoClock;
             m.BingoClock = 0f;
             if (m.BingoField == null || missionTime - m.BingoFieldAt > BingoFieldSeconds)
@@ -244,12 +253,11 @@ namespace WingCommand
                 m.BingoField = RecoveryField(m, RecoveryIntent.Rtb);
                 m.BingoFieldAt = missionTime;
             }
-            if (m.BingoField == null) return;
+            if (m.BingoField == null) return false;
             float distance = (m.BingoField.transform.position - m.Aircraft.transform.position).magnitude;
-            if (!m.Bingo.Update(m.Aircraft.GetFuelLevel(), distance, m.Last.Tas, step)) return;
+            if (!m.Bingo.Update(m.Aircraft.GetFuelLevel(), distance, m.Last.Tas, step)) return false;
             Events.Push(new WingEvent { Time = missionTime, Member = m.Brain.Slot, Kind = WingEventKind.Bingo });
-            WingToast.Show($"#{m.Number} bingo fuel; returning to base");
-            Recover(m, RecoveryIntent.Rtb);
+            return true;
         }
 
         private void ReturnToReserve(WingMember m, string why)

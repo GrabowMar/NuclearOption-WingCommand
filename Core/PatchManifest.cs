@@ -30,6 +30,7 @@ namespace WingCommand
             typeof(WingSurvivorDeathPatch),
             typeof(WingSurvivorCapturePatch),
             typeof(WingTakeoverPatches),
+            typeof(WingTargetPatch),
             typeof(Interop.WingSquad.SurvivorSpawnPatch),
             typeof(Interop.WingSquad.SurvivorStatePatch),
             typeof(Interop.WingSquad.SurvivorDisabledPatch),
