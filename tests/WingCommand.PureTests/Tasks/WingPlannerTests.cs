@@ -75,6 +75,7 @@ namespace WingCommand.PureTests
             Assert.Equal(12000f, p.Current.Points[0].Z);
             Assert.Equal(1, events.CountOf(WingEventKind.TaskCompleted));
             Assert.Equal(2, events.CountOf(WingEventKind.TaskStarted));
+            Assert.Equal(0, events.CountOf(WingEventKind.TaskCancelled));
             WingEvent last = events[events.Count - 1];
             Assert.Equal(TaskKind.Orbit, last.Task);
             Assert.Equal(TransitionReason.FollowOn, last.Reason);

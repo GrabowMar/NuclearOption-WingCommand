@@ -172,6 +172,7 @@ namespace WingCommand
             Log(events, time, WingEventKind.TaskCompleted, TransitionReason.None, done.Kind);
             FollowOn then = done.Then != FollowOn.Default ? done.Then
                 : done.Kind == TaskKind.Move || done.Kind == TaskKind.Route ? FollowOn.Orbit : FollowOn.Form;
+            Current = null;
             if (then == FollowOn.Orbit)
             {
                 WingTask orbit = WingTask.Orbit(done.Points[done.Points.Length - 1]);

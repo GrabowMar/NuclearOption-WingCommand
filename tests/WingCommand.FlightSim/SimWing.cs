@@ -20,6 +20,8 @@ namespace WingCommand.FlightSim
         public readonly WingEventRing Events = new WingEventRing();
         public readonly AirframeProfile Profile = SimProfiles.GenericFighter();
         public Func<float, float, float> Terrain;
+        /// <summary>What the wing forms on instead of <see cref="Leader"/> (a task lead); null: the leader.</summary>
+        public Func<AnchorSample> Anchor;
         public float Clearance = 60f;
         private readonly TerrainFloor floor = new TerrainFloor();
         private readonly WingMemberInput[] inputs;
@@ -86,7 +88,7 @@ namespace WingCommand.FlightSim
                     Id = i,
                 };
             }
-            WingFrame frame = Wing.Update(Leader.Sample(), inputs, Plants.Length, floor, Clearance, Profile.MaxRadius, Dt);
+            WingFrame frame = Wing.Update(Anchor != null ? Anchor() : Leader.Sample(), inputs, Plants.Length, floor, Clearance, Profile.MaxRadius, Dt);
             for (int i = 0; i < Plants.Length; i++)
             {
                 ControlOutput o = Pilots[i].Step(frame, states[i], Profile, Time, Dt, Events);
@@ -101,13 +103,14 @@ namespace WingCommand.FlightSim
 
         public float SlotError(int i) => (Wing.Frame.Slots[i].Ref.Pos - Plants[i].Position).Length;
 
-        /// <summary>Smallest distance between any two aircraft, the leader included.</summary>
-        public float MinSeparation()
+        /// <summary>Smallest distance between any two aircraft, the leader included unless <paramref name="withLeader"/> is
+        /// false (the wing flies a task away from it).</summary>
+        public float MinSeparation(bool withLeader = true)
         {
             float min = float.MaxValue;
             for (int i = 0; i < Plants.Length; i++)
             {
-                min = Math.Min(min, (Plants[i].Position - Leader.Position).Length);
+                if (withLeader) min = Math.Min(min, (Plants[i].Position - Leader.Position).Length);
                 for (int j = i + 1; j < Plants.Length; j++) min = Math.Min(min, (Plants[i].Position - Plants[j].Position).Length);
             }
             return min;
