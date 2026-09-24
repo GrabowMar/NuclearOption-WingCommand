@@ -29,6 +29,7 @@ namespace WingCommand
             typeof(WingSurvivorReturnPatch),
             typeof(WingSurvivorDeathPatch),
             typeof(WingSurvivorCapturePatch),
+            typeof(WingTakeoverPatches),
         };
 
         /// <summary>"DeclaringType.Method" names that must be patched after <see cref="Apply"/>.</summary>
@@ -54,6 +55,8 @@ namespace WingCommand
             "PilotDismounted.UnitDisabled",
             "PilotDismounted.SetPilotState",
             "PilotDismounted.Capture",
+            "Aircraft.UserCode_RpcJettisonCanopy_1196305304",
+            "GameManager.FinishGame",
         };
 
         internal static void Apply(Harmony harmony, ManualLogSource log)

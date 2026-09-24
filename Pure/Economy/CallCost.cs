@@ -1,3 +1,4 @@
+using System;
 using System.Globalization;
 
 namespace WingCommand
@@ -23,6 +24,17 @@ namespace WingCommand
             if (allocation < price)
                 return new CallQuote { Reason = $"needs {Money(price)}, the allocation holds {Money(allocation)}" };
             return new CallQuote { Allowed = true, Charge = price, TakeStock = !viaHangar };
+        }
+
+        /// <summary>Taking command of a faction aircraft already flying costs <paramref name="rate"/> (0–1) of its list
+        /// value, once per aircraft (<paramref name="paid"/>: it was bought before); no stock changes hands. Too little
+        /// allocation refuses with the reason; the sandbox recruits for free.</summary>
+        public static CallQuote Recruit(float value, float rate, float allocation, bool sandbox, bool paid)
+        {
+            float price = sandbox || paid ? 0f : value * Math.Max(0f, Math.Min(1f, rate));
+            if (allocation < price)
+                return new CallQuote { Reason = $"needs {Money(price)}, the allocation holds {Money(allocation)}" };
+            return new CallQuote { Allowed = true, Charge = price };
         }
 
         public static string Money(float value) =>

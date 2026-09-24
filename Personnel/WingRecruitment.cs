@@ -1,64 +1,53 @@
 using System.Collections.Generic;
 using NuclearOption.Networking;
-using UnityEngine;
 
 namespace WingCommand
 {
-    /// <summary>Purchases command rights for active faction aircraft.</summary>
+    /// <summary>Takes command of a faction aircraft already flying (spec M3 §5): the wing adopts it, and the player pays
+    /// Squadron/RecruitmentCostRate of its value from the allocation once per aircraft (<see cref="CallCost.Recruit"/>;
+    /// free with Squadron/SandboxFreeCalls). Nothing is refunded when it goes home: the command was bought, not the
+    /// airframe.</summary>
     internal static class WingRecruitment
     {
         private static readonly HashSet<PersistentID> paidAircraft = new HashSet<PersistentID>();
 
-        /// <summary>One-time assignment price as a fixed fraction of airframe list value, independent of
-        /// wing size.</summary>
-        public static float PriceOf(Aircraft aircraft)
+        public static CallQuote Quote(Aircraft aircraft)
         {
-            if (aircraft == null || aircraft.definition == null) return 0f;
-            if (paidAircraft.Contains(aircraft.persistentID)) return 0f;
-
-            float rate = Plugin.Settings != null ? Plugin.Settings.RecruitmentCostRate : WingTuning.RecruitmentCostRate;
-            return aircraft.definition.value * Mathf.Clamp(rate, 0f, 1f);
+            GameManager.GetLocalPlayer(out Player player);
+            return CallCost.Recruit(aircraft != null && aircraft.definition != null ? aircraft.definition.value : 0f,
+                Plugin.Settings.RecruitmentCostRate.Value, player != null ? player.Allocation : 0f,
+                Plugin.Settings.SandboxFreeCalls.Value, aircraft != null && paidAircraft.Contains(aircraft.persistentID));
         }
 
-        public static bool TryRecruit(WingRegistry wing, Aircraft aircraft,
-                                      out WingMember member, out string reason)
+        public static bool TryRecruit(WingService wing, Aircraft aircraft, out WingMember member, out string reason)
         {
             member = null;
-            reason = null;
-
-            if (wing == null || !wing.CanRecruit(aircraft, out reason)) return false;
-            if (wing.Leader == null || !wing.Leader.IsServer)
+            if (wing == null)
+            {
+                reason = "Wing Command is not ready";
+                return false;
+            }
+            if (!wing.CanRecruit(aircraft, out reason)) return false;
+            if (!GameManager.GetLocalPlayer(out Player player) || player == null || !player.IsServer)
             {
                 reason = "Host or single-player only";
                 return false;
             }
-
-            if (!GameManager.GetLocalPlayer(out Player player) || player == null)
+            CallQuote quote = Quote(aircraft);
+            if (!quote.Allowed)
             {
-                reason = "No player allocation available";
+                reason = quote.Reason;
                 return false;
             }
-
-            float price = PriceOf(aircraft);
-            if (player.Allocation < price)
-            {
-                reason = "Assignment costs " + Mathf.RoundToInt(price) + ", have " +
-                         Mathf.RoundToInt(player.Allocation);
-                return false;
-            }
-
-            member = wing.Add(aircraft);
+            member = wing.Recruit(aircraft);
             if (member == null)
             {
-                reason = "Aircraft could not be assigned";
+                reason = "the wing could not take it over";
                 return false;
             }
-
-            if (price > 0f) player.AddAllocation(-price);
+            if (quote.Charge > 0f) player.AddAllocation(-quote.Charge);
             paidAircraft.Add(aircraft.persistentID);
-
-            Plugin.LogVerbose(
-                $"[Recruit] assigned {aircraft.unitName} for {price:F0} allocation");
+            Plugin.Logger.LogInfo($"[Recruit] {aircraft.unitName} joined the wing for {CallCost.Money(quote.Charge)}");
             return true;
         }
 

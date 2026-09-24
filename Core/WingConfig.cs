@@ -36,6 +36,8 @@ namespace WingCommand
         public ConfigEntry<bool> PilotProgression { get; }
         public ConfigEntry<float> RankEffect { get; }
         public ConfigEntry<bool> SandboxFreeCalls { get; }
+        public ConfigEntry<bool> TakeoverOnDeath { get; }
+        public ConfigEntry<float> RecruitmentCostRate { get; }
         public ConfigEntry<bool> VerboseLogging { get; }
         public ConfigEntry<bool> DevTools { get; }
         public ConfigEntry<bool> Overlay { get; }
@@ -75,6 +77,13 @@ namespace WingCommand
             SandboxFreeCalls = c.Bind("Squadron", "SandboxFreeCalls", false, new ConfigDescription(
                 "Calls cost nothing: no allocation is charged and no stock is checked (hangar spawns still draw the " +
                 "faction's own supply, as the game does).", null, new ConfigurationManagerAttributes { Order = 83 }));
+
+            TakeoverOnDeath = c.Bind("Squadron", "TakeoverOnDeath", true, new ConfigDescription(
+                "When you are shot down or eject, offer to fly on in one of your wingmen's aircraft (host or single player).",
+                null, new ConfigurationManagerAttributes { Order = 82 }));
+            RecruitmentCostRate = c.Bind("Squadron", "RecruitmentCostRate", 0.25f, new ConfigDescription(
+                "Taking command of a faction aircraft already flying costs this share of its value, once per aircraft.",
+                new AcceptableValueRange<float>(0f, 1f), new ConfigurationManagerAttributes { Order = 81 }));
 
             ShowHud = c.Bind("Hud", "Show", true, new ConfigDescription(
                 "Show the wing strip and autopilot annunciator.", null, new ConfigurationManagerAttributes { Order = 80 }));

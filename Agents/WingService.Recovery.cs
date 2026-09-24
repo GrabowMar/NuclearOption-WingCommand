@@ -264,7 +264,7 @@ namespace WingCommand
         }
 
         /// <summary>Munitions aboard as a fraction of a full load (cargo aside); 1 with no weapon stations.</summary>
-        private static float AmmoFraction(Aircraft a)
+        internal static float AmmoFraction(Aircraft a)
         {
             int total = 0, full = 0;
             if (a.weaponStations != null)

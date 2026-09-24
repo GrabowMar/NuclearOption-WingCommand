@@ -64,6 +64,9 @@ namespace WingCommand
             WingPilotRoster.Reset();
             WingKillCredit.Reset();
             WingLedger.Reset();
+            WingTakeover.Reset();
+            WingRecruitment.Reset();
+            flyingPlayer = null;
             Events = new WingEventRing();
             floor = new TerrainFloor();
             LeaderUnit = null;
@@ -92,6 +95,8 @@ namespace WingCommand
 
         public void Deactivate()
         {
+            WingTakeover.Reset();
+            flyingPlayer = null;
             Members.Clear();
             FieldRegistry.Clear();
             LeaderUnit = null;
@@ -106,6 +111,7 @@ namespace WingCommand
             LastFrameAiMs = aiTicks * 1000.0 / Stopwatch.Frequency;
             aiTicks = 0;
             LogEvents();
+            WingTakeover.Tick();
             WingSearchAndRescue.Tick();
             WingKillCredit.Tick();
         }
@@ -286,6 +292,46 @@ namespace WingCommand
             foreach (WingMember m in Members)
                 if (ReferenceEquals(m.Aircraft, a) && m.Recovery != null && m.Recovery.Phase == RecoveryPhase.Landing) m.EjectBlocked = true;
         }
+
+        /// <summary>The player took this member's seat (<see cref="WingTakeover"/>): it leaves the wing without a state
+        /// switch (the server destroys the AI aircraft next), its pilot goes back to the pool, and its call cost is spent.</summary>
+        public bool TakenOver(WingMember m)
+        {
+            if (m == null || m.Released || !Members.Contains(m)) return false;
+            m.Released = true;
+            m.Ground?.Leave();
+            m.Recovery?.Leave();
+            if (m.Aircraft != null)
+            {
+                WingPilotRoster.Retire(m.Aircraft.persistentID, true);
+                WingLedger.Forget(m.Aircraft);
+            }
+            Plugin.Logger.LogInfo($"[Wing] #{m.Number} taken over by the player");
+            return true;
+        }
+
+        /// <summary>Whether a faction aircraft already flying can join the wing (<see cref="WingRecruitment"/>), with the
+        /// reason when it cannot.</summary>
+        public bool CanRecruit(Aircraft a, out string reason)
+        {
+            reason = null;
+            if (Wing == null) reason = "Wing Command is not ready";
+            else if (!Flying(Player)) reason = "Not flying";
+            else if (Members.Count >= MaxMembers) reason = "the wing is full";
+            else if (a == null || a.disabled) reason = "it is no longer available";
+            else if (ReferenceEquals(a, Player) || a.Player != null) reason = "a player flies it";
+            else if (Player.NetworkHQ == null || a.NetworkHQ != Player.NetworkHQ) reason = "it is not in your faction";
+            else if (IsMember(a)) reason = "it is already in the wing";
+            else if (!Flying(a)) reason = "it has no pilot to fly it";
+            else if (a.radarAlt < RecruitMinHeight) reason = "it must be airborne";
+            else if (!a.LocalSim) reason = "this host does not fly it";
+            return reason == null;
+        }
+
+        public static float RecruitMinHeight = 10f;
+
+        /// <summary>A faction aircraft already flying joins the wing (checked by <see cref="CanRecruit"/>).</summary>
+        public WingMember Recruit(Aircraft a) => AdoptMember(a, null);
 
         public bool ProtectsFromEjection(Aircraft a)
         {
@@ -512,6 +558,7 @@ namespace WingCommand
         private void TrackLeader()
         {
             Player = GameManager.GetLocalAircraft(out Aircraft local) ? local : null;
+            WatchPlayerLoss();
             if ((object)Anchor != null && !Alive(Anchor))
             {
                 Plugin.Logger.LogInfo(Escorting ? "[Wing] the escortee is gone; forming on the player" : "[Wing] the anchor is gone; forming on the player");
@@ -532,6 +579,27 @@ namespace WingCommand
                 leaderClass = LeaderUnit is Aircraft a ? ProfileReader.ClassOf(a) : AirframeClass.FixedWing;
             }
             UpdateUse();
+        }
+
+        private Aircraft flyingPlayer;
+        private GlobalPosition flyingPlayerAt;
+
+        /// <summary>The player's aircraft is lost — the pilot dead or ejected, or the aircraft destroyed, but not home at a
+        /// field — so the wing's aircraft are offered to fly on in (<see cref="WingTakeover"/>).</summary>
+        private void WatchPlayerLoss()
+        {
+            if (Flying(Player))
+            {
+                flyingPlayer = Player;
+                flyingPlayerAt = Player.GlobalPosition();
+                return;
+            }
+            if ((object)flyingPlayer == null) return;
+            Aircraft lost = flyingPlayer;
+            flyingPlayer = null;
+            if (lost != null && lost.unitState == Unit.UnitState.Returned) return;
+            if (!WingTakeover.Active && WingTakeover.Begin(this, lost, flyingPlayerAt))
+                Plugin.Logger.LogInfo("[Wing] player aircraft lost; offering the wing's aircraft");
         }
 
         /// <summary>Behind a helicopter the wing flies rotary shapes, escorting it flies escort shapes, otherwise jet

@@ -124,6 +124,27 @@ namespace WingCommand
             WingToast.Show("Escorting " + target.unitName);
         }
 
+        /// <summary>Takes command of the selected friendly aircraft, else the nearest one ahead (spec M3 §5).</summary>
+        public static void Recruit()
+        {
+            if (!Ready(out WingService w)) return;
+            Aircraft player = w.Player;
+            if (player == null)
+            {
+                WingToast.Show("Not flying");
+                return;
+            }
+            Aircraft target = SelectedFriendly(player, w) as Aircraft ?? NearestFriendlyAhead(player, w) as Aircraft;
+            if (target == null)
+            {
+                WingToast.Show("No friendly aircraft to recruit");
+                return;
+            }
+            WingToast.Show(WingRecruitment.TryRecruit(w, target, out _, out string reason)
+                ? target.unitName + " joins the wing"
+                : "Cannot recruit " + target.unitName + ": " + reason);
+        }
+
         public static void EscortMe()
         {
             if (!Ready(out WingService w)) return;

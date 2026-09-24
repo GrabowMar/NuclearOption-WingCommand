@@ -85,8 +85,6 @@
     <Quarantine Include="Personnel\WingDeparture.cs" Milestone="M3" />
     <Quarantine Include="Personnel\WingDepartureChatter.cs" Milestone="M3" />
     <Quarantine Include="Personnel\WingRecovery.cs" Milestone="M3" />
-    <Quarantine Include="Personnel\WingRecruitment.cs" Milestone="M3" />
-    <Quarantine Include="Personnel\WingTakeover.cs" Milestone="M3" />
     <Quarantine Include="Ui\MapCommandLayer.cs" Milestone="M4" />
     <Quarantine Include="Ui\TacticalMapOverlay.cs" Milestone="M4" />
     <Quarantine Include="Ui\WingDebugActions.cs" Milestone="M7" />
