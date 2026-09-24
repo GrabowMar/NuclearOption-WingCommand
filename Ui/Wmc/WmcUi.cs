@@ -124,8 +124,17 @@ namespace WingCommand
             if (fill != null) fill.raycastTarget = false;
             rail = AvStyled.Rail(parent, new Rect(r.x, r.y, 3f, r.height), "info");
             AvButton hit = AvKit.HitButton(parent, r, click);
-            if (fill != null) hit.SetRowHighlight(fill, AvTheme.SurfaceInert, AvTheme.SurfaceRaised);
+            if (fill != null) hit.SetRowHighlight(fill, RowColor("rest"), RowColor("hover"));
             return hit;
+        }
+
+        /// <summary>The `.row` fill for a <see cref="WmcStyle"/> row key: rest, hover (`.row:hover`) or selected
+        /// (`.row:armed`).</summary>
+        public static Color RowColor(string key)
+        {
+            AvStyle style = key == "hover" ? AvStyleHost.Style("row", "hover")
+                : key == "selected" ? AvStyleHost.Style("row", "armed") : AvStyleHost.Style("row");
+            return AvStyleHost.Resolve(style.Background, AvTheme.SurfaceInert);
         }
 
         public static void SetRail(Image rail, string railClass)

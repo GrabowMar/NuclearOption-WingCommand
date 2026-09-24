@@ -18,6 +18,8 @@ namespace WingCommand
             public GameObject Root;
             public TMP_Text Name, Sub, State, Flags;
             public Image Fuel, Ammo, Select, Rail;
+            public AvButton Hit;
+            public bool Selected, Styled;
             public float BarWidth;
         }
 
@@ -39,15 +41,15 @@ namespace WingCommand
         public void Build(RectTransform page, Rect body)
         {
             body = WmcUi.Page(page, body, ContentHeight);
-            float y = body.y;
+            float half = (body.width - WmcUi.Gap) / 2f;
+            float by = body.y;
+            float y = body.y - WmcUi.Row - RowGap;
             for (int i = 0; i < rows.Length; i++)
             {
                 rows[i] = BuildRow(page, new Rect(body.x, y, body.width, RowHeight), i);
                 y -= RowHeight + RowGap;
             }
-            empty = AvStyled.Label(page, new Rect(body.x, body.y, body.width, 40f), "No wingmen yet.", "hint");
-            float half = (body.width - WmcUi.Gap) / 2f;
-            float by = y;
+            empty = AvStyled.Label(page, new Rect(body.x, body.y - WmcUi.Row - RowGap, body.width, 40f), "No wingmen yet.", "hint");
             center = AvStyled.Button(page, new Rect(body.x, by, half, WmcUi.Row), "CENTER", "btn", Center);
             center.WithTooltip("Centre the map on the selected wingman.");
             release = AvStyled.Button(page, new Rect(body.x + half + WmcUi.Gap, by, half, WmcUi.Row), "RELEASE", "btn", Release,
@@ -65,7 +67,8 @@ namespace WingCommand
             row.SetParent(page, false);
             AvKit.Stretch(row);
             var v = new RowView { Root = go };
-            ids["wing.row" + index] = WmcUi.Card(row, r, () => Pick(index), out v.Select, out v.Rail);
+            v.Hit = WmcUi.Card(row, r, () => Pick(index), out v.Select, out v.Rail);
+            ids["wing.row" + index] = v.Hit;
             float x = r.x + 12f, w = r.width - 22f;
             v.Name = AvStyled.Label(row, new Rect(x, r.y - 5f, w * 0.62f, 18f), "", "row-name");
             v.State = AvStyled.Label(row, new Rect(x + w * 0.62f, r.y - 5f, w * 0.38f, 18f), "", "row-value",
@@ -128,7 +131,16 @@ namespace WingCommand
                 SnapshotMember m = c.Rows[i];
                 Unit u = WmcContext.UnitOf(m.Id);
                 string callsign = u is Aircraft a && !c.Client ? WingPilotRoster.Of(a)?.Callsign : null;
-                v.Name.text = WingRows.Number(m.Slot) + "  " + (callsign ?? "");
+                bool selected = m.Id == c.SelectedId;
+                if (!v.Styled || v.Selected != selected)
+                {
+                    v.Styled = true;
+                    v.Selected = selected;
+                    if (v.Select != null)
+                        v.Hit.SetRowHighlight(v.Select, WmcUi.RowColor(WmcStyle.RowRest(selected)),
+                            WmcUi.RowColor(WmcStyle.RowHover(selected)));
+                }
+                v.Name.text = WmcStyle.SelectedMark(selected) + WingRows.Number(m.Slot) + "  " + (callsign ?? "");
                 v.Sub.text = u != null && u.definition != null ? u.definition.unitName : WmcText.Unknown;
                 string state = WingRows.State(m);
                 v.State.text = state;
@@ -141,7 +153,6 @@ namespace WingCommand
                                (flags.Length > 0 ? "   " + flags : "");
                 WmcUi.SetBar(v.Fuel, v.BarWidth, fuel, WmcUi.LevelColor(WmcStyle.Level(fuel)));
                 WmcUi.SetBar(v.Ammo, v.BarWidth, ammo, WmcUi.LevelColor(WmcStyle.Level(ammo)));
-                if (v.Select != null) v.Select.color = m.Id == c.SelectedId ? AvTheme.SurfaceRaised : AvTheme.SurfaceInert;
             }
             empty.gameObject.SetActive(c.Count == 0);
             empty.text = c.Client && c.Stale ? "Waiting for the host's wing." : "No wingmen yet.";

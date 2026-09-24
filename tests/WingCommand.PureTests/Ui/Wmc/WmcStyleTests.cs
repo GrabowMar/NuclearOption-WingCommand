@@ -29,5 +29,17 @@ namespace WingCommand.PureTests
             Assert.Equal(level, WmcStyle.Level(fraction));
             Assert.Equal(word, WmcStyle.LevelWord(fraction));
         }
+
+        [Fact]
+        public void HoverAndSelectionLookDifferentAndSelectionHasAMark()
+        {
+            // Review P1 I1: hover lifts an unselected row; a selected row keeps its own fill under the pointer and a mark.
+            Assert.Equal("rest", WmcStyle.RowRest(false));
+            Assert.Equal("hover", WmcStyle.RowHover(false));
+            Assert.Equal("selected", WmcStyle.RowRest(true));
+            Assert.Equal("selected", WmcStyle.RowHover(true));
+            Assert.Equal("", WmcStyle.SelectedMark(false));
+            Assert.NotEqual("", WmcStyle.SelectedMark(true));
+        }
     }
 }

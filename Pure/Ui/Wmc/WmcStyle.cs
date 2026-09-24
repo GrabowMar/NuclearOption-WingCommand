@@ -27,6 +27,14 @@ namespace WingCommand
         public static string Level(float fraction) =>
             float.IsNaN(fraction) ? "" : fraction < Critical ? "bad" : fraction < Low ? "warn" : "ok";
 
+        /// <summary>Row fill keys (review P1 I1): hover lifts an unselected row; a selected row keeps its own fill under the
+        /// pointer, and the selection also shows as a mark before the name, never by colour alone.</summary>
+        public static string RowRest(bool selected) => selected ? "selected" : "rest";
+
+        public static string RowHover(bool selected) => selected ? "selected" : "hover";
+
+        public static string SelectedMark(bool selected) => selected ? "› " : "";
+
         public static string LevelWord(float fraction) =>
             float.IsNaN(fraction) ? "" : fraction < Critical ? "CRIT" : fraction < Low ? "LOW" : "";
     }
