@@ -42,6 +42,7 @@ namespace WingCommand
         public ConfigEntry<WinchesterAction> AfterWinchester { get; }
         public ConfigEntry<BingoAction> AfterBingo { get; }
         public ConfigEntry<float> FallBackRatio { get; }
+        public ConfigEntry<string> Doctrine { get; }
         public ConfigEntry<bool> VerboseLogging { get; }
         public ConfigEntry<bool> DevTools { get; }
         public ConfigEntry<bool> Overlay { get; }
@@ -98,6 +99,10 @@ namespace WingCommand
                 "An engaged wing facing this many enemy aircraft per fighting wingman falls back into formation; Engage while " +
                 "outnumbered asks you to press it again. 0 turns it off.",
                 new AcceptableValueRange<float>(0f, 10f), new ConfigurationManagerAttributes { Order = 88 }));
+            Doctrine = c.Bind("Combat", "Doctrine", "Reserve", new ConfigDescription(
+                "What wingmen shoot at while holding formation: Reserve (hold fire), Escort (aircraft threatening you), Sweep " +
+                "(targets of opportunity, long range), or a custom line guard,response,interval,spread,targets,reach. Cycle it " +
+                "from the radial Combat page.", null, new ConfigurationManagerAttributes { Order = 87 }));
             LoadoutTemplates = c.Bind("Loadout", "SavedTemplates", "", new ConfigDescription(
                 "Saved per-pylon loadout templates (airframe|id|name|store keys; records separated by semicolons). " +
                 "Clear it to delete every template.", null, new ConfigurationManagerAttributes { IsAdvanced = true, Order = 60 }));

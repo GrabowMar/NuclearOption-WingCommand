@@ -135,6 +135,7 @@ namespace WingCommand
                 Leaf("Engage", WingCommands.Engage, "selection"),
                 Leaf("Attack Target", WingCommands.AttackTarget, "selection"),
                 Leaf("Disengage", WingCommands.Disengage, "rejoin"),
+                Leaf("Doctrine", WingCommands.NextDoctrine, "selection"),
                 Back(),
             };
             callMenu = new[]

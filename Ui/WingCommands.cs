@@ -210,6 +210,17 @@ namespace WingCommand
             WingToast.Show(n > 0 ? $"{n} attacking {targets.Count} target{plural}" : "Nobody can attack");
         }
 
+        /// <summary>Reserve → Escort → Sweep: what members shoot at while holding formation (spec M5 §8).</summary>
+        public static void NextDoctrine()
+        {
+            if (!Ready(out WingService w)) return;
+            WingDoctrine d = w.NextDoctrine();
+            string what = d.Targets == TargetPolicy.Hold ? "holding fire"
+                : d.Targets == TargetPolicy.Cover ? "covering you"
+                : "targets of opportunity";
+            WingToast.Show($"Doctrine {d.PatternName}: {what}");
+        }
+
         public static void Disengage()
         {
             if (!Ready(out WingService w)) return;

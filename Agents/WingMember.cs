@@ -39,6 +39,9 @@ namespace WingCommand
         public float TargetLost;
         /// <summary>The missile the defence last classified (spec M5 §7.1), and how.</summary>
         public Missile ThreatMissile;
+        /// <summary>Standing fire from the slot (spec M5 §8): the cadence and the last target.</summary>
+        public readonly FireCadence Cadence = new FireCadence();
+        public Unit StandingTarget;
         public MissileSeeker ThreatSeeker;
         /// <summary>The ground pilot's last output (the ground trace).</summary>
         public ControlOutput GroundOutput;

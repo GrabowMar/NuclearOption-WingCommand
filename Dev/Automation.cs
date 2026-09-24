@@ -362,6 +362,16 @@ namespace WingCommand
             };
         }
 
+        /// <summary>Sets the wing's doctrine by name (Reserve, Escort, Sweep or a custom line).</summary>
+        public static Dictionary<string, object> Doctrine(Dictionary<string, object> args)
+        {
+            WingService wing = WingService.Instance;
+            if (wing == null) return Fail("Doctrine", "the wing is not active");
+            if (!WingDoctrine.TryParse(Text(args, "name") ?? "", out WingDoctrine d)) return Fail("Doctrine", "unknown doctrine");
+            wing.SetDoctrine(d);
+            return Ok("doctrine", d.PatternName);
+        }
+
         public static Dictionary<string, object> Disengage(Dictionary<string, object> args)
         {
             WingService wing = WingService.Instance;
@@ -383,6 +393,7 @@ namespace WingCommand
                 { "hostiles", wing.LastHostiles }, { "fallbacks", wing.FallBacks },
                 { "jokers", wing.Events.CountOf(WingEventKind.Joker) },
                 { "defends", wing.Events.CountOf(TransitionReason.MissileInbound) },
+                { "standing_shots", wing.StandingShots },
             };
         }
 

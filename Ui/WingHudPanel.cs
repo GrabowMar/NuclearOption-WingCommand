@@ -86,7 +86,7 @@ namespace WingCommand
             int n = wing != null ? wing.Members.Count : 0;
             FormationSelection sel = wing?.Selection;
             title.text = n > 0 && sel != null
-                ? $"WING  {sel.Current.Name.ToUpperInvariant()}  {sel.Spacing.ToString().ToUpperInvariant()}"
+                ? $"WING  {sel.Current.Name.ToUpperInvariant()}  {sel.Spacing.ToString().ToUpperInvariant()}  {wing.Doctrine.PatternName}"
                 : "AUTOPILOT";
             autopilot.text = ap != null
                 ? WingHudText.Autopilot(ap.Session.Spec, ap.Session.LateralOverride, ap.Session.VerticalOverride)
