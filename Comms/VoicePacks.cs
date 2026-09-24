@@ -37,6 +37,12 @@ namespace WingCommand
 
         public static bool Playing => source != null && source.isPlaying;
 
+        /// <summary>Silence the pack voice (the TTS is about to speak).</summary>
+        public static void Stop()
+        {
+            if (source != null && source.isPlaying) source.Stop();
+        }
+
         private static IEnumerable<string> Roots()
         {
             yield return Path.Combine(WingConfig.DataRoot, "voicepacks");
@@ -48,36 +54,50 @@ namespace WingCommand
         {
             string setting = Plugin.Settings.VoicePacks.Value ?? "";
             if (setting == loadedSetting) return;
-            loadedSetting = setting;
             Clear();
             foreach (string raw in setting.Split(','))
             {
                 string name = raw.Trim();
                 if (name.Length == 0) continue;
-                string folder = Find(name);
-                if (folder == null)
+                // One bad pack never takes the radio down with it (review M7d I3).
+                try
                 {
-                    Plugin.Logger.LogWarning($"[Radio] voice pack \"{name}\" not found under {string.Join(" or ", Roots())}");
-                    continue;
+                    Load(name);
                 }
-                var pack = new Pack { Name = name };
-                foreach (string file in Directory.GetFiles(folder))
+                catch (Exception e)
                 {
-                    AudioType type = TypeOf(file);
-                    if (type == AudioType.UNKNOWN) continue;
-                    int index = pack.Files.Count;
-                    pack.Files.Add(file);
-                    int before = pack.Index.Count;
-                    pack.Index.Add(index, Path.GetFileNameWithoutExtension(file));
-                    if (pack.Index.Count == before) continue;
-                    UnityWebRequest req = UnityWebRequestMultimedia.GetAudioClip("file:///" + file.Replace('\\', '/'), type);
-                    req.SendWebRequest();
-                    loading.Add(new Loading { Pack = pack, File = index, Request = req });
+                    Plugin.Logger.LogWarning($"[Radio] voice pack \"{name}\" could not be read: {e.Message}");
                 }
-                pack.Clips = new AudioClip[pack.Files.Count];
-                packs.Add(pack);
-                Plugin.Logger.LogInfo($"[Radio] voice pack \"{name}\": {pack.Index.Count} clips for wingman calls");
             }
+            loadedSetting = setting;
+        }
+
+        private static void Load(string name)
+        {
+            string folder = Find(name);
+            if (folder == null)
+            {
+                Plugin.Logger.LogWarning($"[Radio] voice pack \"{name}\" not found under {string.Join(" or ", Roots())}");
+                return;
+            }
+            var pack = new Pack { Name = name };
+            foreach (string file in Directory.GetFiles(folder))
+            {
+                AudioType type = TypeOf(file);
+                if (type == AudioType.UNKNOWN) continue;
+                int index = pack.Files.Count;
+                pack.Files.Add(file);
+                int before = pack.Index.Count;
+                pack.Index.Add(index, Path.GetFileNameWithoutExtension(file));
+                if (pack.Index.Count == before) continue;
+                // The raw path, as Yappinator: Unity turns a Windows path into a file URI itself ('#' and '+' survive).
+                UnityWebRequest req = UnityWebRequestMultimedia.GetAudioClip(file, type);
+                req.SendWebRequest();
+                loading.Add(new Loading { Pack = pack, File = index, Request = req });
+            }
+            pack.Clips = new AudioClip[pack.Files.Count];
+            packs.Add(pack);
+            Plugin.Logger.LogInfo($"[Radio] voice pack \"{name}\": {pack.Index.Count} clips for wingman calls");
         }
 
         private static string Find(string name)
@@ -124,9 +144,18 @@ namespace WingCommand
                 loading.RemoveAt(i);
                 try
                 {
-                    if (l.Request.result == UnityWebRequest.Result.Success)
-                        l.Pack.Clips[l.File] = DownloadHandlerAudioClip.GetContent(l.Request);
-                    else Plugin.Logger.LogWarning($"[Radio] {l.Pack.Files[l.File]}: {l.Request.error}");
+                    AudioClip clip = l.Request.result == UnityWebRequest.Result.Success ? DownloadHandlerAudioClip.GetContent(l.Request) : null;
+                    // Only a decoded clip plays; anything else falls back to the TTS (review M7d I4).
+                    if (clip != null && clip.loadState == AudioDataLoadState.Loaded) l.Pack.Clips[l.File] = clip;
+                    else
+                    {
+                        if (clip != null) UnityEngine.Object.Destroy(clip);
+                        Plugin.Logger.LogWarning($"[Radio] {l.Pack.Files[l.File]}: {(l.Request.error ?? "could not be decoded")}");
+                    }
+                }
+                catch (Exception e)
+                {
+                    Plugin.Logger.LogWarning($"[Radio] {l.Pack.Files[l.File]}: {e.Message}");
                 }
                 finally
                 {

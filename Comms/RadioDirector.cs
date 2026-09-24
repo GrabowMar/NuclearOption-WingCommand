@@ -182,6 +182,7 @@ namespace WingCommand
             return Queue.Enqueue(new RadioLine
             {
                 Speaker = speaker.Brain.Slot, Class = cls, Key = key, WingWide = wingWide, Text = who + ": " + text, Answer = answer,
+                Voice = speaker.Voice,
             }, now);
         }
 
@@ -210,8 +211,14 @@ namespace WingCommand
                 ContactsCalled++;
                 pendingKey = null;
             }
-            // A voice pack clip for this call (spec M7 §5) instead of the TTS.
-            if (VoicePacks.TryPlay(line.Speaker + 2, CallOf(line.Key))) return;
+            // A voice pack clip for this call (spec M7 §5) instead of the TTS; either way the other voice stops (review
+            // M7d I2: an emergency cutting in must not talk over the line it cut).
+            if (VoicePacks.TryPlay(line.Voice + 2, CallOf(line.Key)))
+            {
+                SilenceTts();
+                return;
+            }
+            VoicePacks.Stop();
             if (!VoiceOn()) return;
             try
             {
@@ -226,6 +233,20 @@ namespace WingCommand
         }
 
         /// <summary>The voice is still speaking the last line (the queue waits for it, but an emergency cuts in).</summary>
+        private void SilenceTts()
+        {
+            if (voice == null || voiceBroken) return;
+            try
+            {
+                // The game's Speak purges what it was saying before the (empty) new line.
+                voice.Speak(PlayerSettings.chatTtsSpeed, PlayerSettings.chatTtsVolume, "", false);
+            }
+            catch (Exception e)
+            {
+                VoiceFailed(e);
+            }
+        }
+
         /// <summary>The call a line's key names ("SPLASH:1234" → "SPLASH").</summary>
         private static string CallOf(string key)
         {

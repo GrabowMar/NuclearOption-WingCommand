@@ -20,6 +20,8 @@ namespace WingCommand
         public float Blocked, Seen;
         /// <summary>The answer to a player's question: it never goes stale and goes first in its class (review M7a-2 I2).</summary>
         public bool Answer;
+        /// <summary>The speaker's voice (a voice pack is dealt by it; it stays with the member when slots renumber).</summary>
+        public int Voice;
     }
 
     /// <summary>Spec M7 §1.2: the wing's one radio channel.

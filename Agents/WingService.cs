@@ -173,6 +173,7 @@ namespace WingCommand
             m.State = new WingFlightState(m);
             if (ground != null) m.Ground = ground(m);
             m.Brain.AfterburnerAllowed = afterburner;
+            m.Voice = nextVoice++;
             Members.Add(m);
             m.Pilot.SwitchState(m.State);
             Plugin.Logger.LogInfo($"[Wing] #{m.Number} {a.definition.unitName} joined");
@@ -560,6 +561,7 @@ namespace WingCommand
         }
 
         private bool afterburner = true;
+        private int nextVoice;
 
         /// <summary>Spec M5 §10.4: Gate (afterburner allowed for catch-up and rejoin) or Buster (military power only, fuel
         /// kept), for every member and those who join later.</summary>

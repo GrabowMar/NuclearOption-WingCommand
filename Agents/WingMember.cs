@@ -45,6 +45,8 @@ namespace WingCommand
         public SettlePilot Settle;
         /// <summary>The seated pilot's combat perks as modifiers (spec M5 §11).</summary>
         public PerkEffects Perks = PerkEffects.None;
+        /// <summary>The member's radio voice, dealt once when it joins (review M7d I1: slots renumber, voices must not).</summary>
+        public int Voice;
         /// <summary>What the settle is for once down (spec M4 §7); null: hold until Take Off.</summary>
         public SettleJob Job;
         /// <summary>The downed pilot a rescue settle waits for.</summary>
