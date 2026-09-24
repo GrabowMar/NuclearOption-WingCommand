@@ -8,9 +8,11 @@ namespace WingCommand
         // Ground operations (M3).
         GroundSpawned, Taxiing, HoldingShort, LiningUp, Rolling, Airborne, Rerouted, Relocated, DepartureAborted, Parked, PulledAside,
         Landed, LandingFailed, Serviced, Reserved, Bingo,
+        // Tasks (M4).
+        TaskStarted, TaskCompleted, TaskCancelled, TaskFailed, WaypointReached,
     }
 
-    internal enum TransitionReason : byte { None, Captured, LostSlot, LeaderSlow, LeaderNotFlying, LeaderLost, LeaderRecovered, Commanded, LeaderFast }
+    internal enum TransitionReason : byte { None, Captured, LostSlot, LeaderSlow, LeaderNotFlying, LeaderLost, LeaderRecovered, Commanded, LeaderFast, FollowOn, NoWing }
 
     /// <summary>One entry of the wing log: a behaviour transition with its reason, or a notable event.</summary>
     internal struct WingEvent
@@ -20,6 +22,8 @@ namespace WingCommand
         public WingEventKind Kind;
         public BehaviourId From, To;
         public TransitionReason Reason;
+        /// <summary>The task an event of a task is about.</summary>
+        public TaskKind Task;
     }
 
     /// <summary>Fixed-capacity ring of wing events, oldest first. Push never allocates; when full the oldest
