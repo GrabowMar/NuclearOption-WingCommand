@@ -2,7 +2,7 @@
 # unloaded). Checks under quarantine/ target files quarantined in WingCommand.csproj and are not run;
 # move each back beside this script when its subject is restored:
 #   M1 WingSquadApi   M3 AirbaseDisplayName, DepartureDispatch   M4 AssignmentQuote, TacticalAircraftSafety
-#   M5 SaturationSalvo, WeaponTargetAltitude   M7 TacticalLayout
+#   M7 TacticalLayout
 $ErrorActionPreference = 'Stop'
 
 foreach ($project in Get-ChildItem "$PSScriptRoot/*/*.csproj") {
