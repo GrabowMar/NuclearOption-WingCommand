@@ -56,7 +56,7 @@ namespace WingCommand
             if (count < 1 || count > FormationCatalog.MaxSlots) return Fail("Launch", $"count must be 1 to {FormationCatalog.MaxSlots}");
             string fieldName = Text(args, "field") ?? "nearest";
             List<Airbase> fields = WingService.FriendlyFields(lead);
-            Airbase field = fieldName == "nearest" ? (fields.Count > 0 ? fields[0] : null)
+            Airbase field = fieldName == "nearest" ? wing.FieldFor(lead, type)
                 : fields.Find(a => string.Equals(a.name, fieldName, StringComparison.OrdinalIgnoreCase));
             if (field == null) return Fail("Launch", $"no friendly field '{fieldName}'; friendly: {string.Join(", ", fields.ConvertAll(a => a.name))}");
             string shape = Text(args, "shape");

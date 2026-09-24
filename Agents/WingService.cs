@@ -472,18 +472,28 @@ namespace WingCommand
             return fields;
         }
 
-        /// <summary>The picked field while it is still usable, else the nearest friendly field.</summary>
-        public Airbase FieldFor(Aircraft caller)
+        /// <summary>Fields <paramref name="type"/> can launch from: a jet not from a carrier (spike S6: assault carriers have
+        /// no taxi network and narrow deck runways; deck operations are M3d's), a helicopter from any.</summary>
+        private static List<Airbase> LaunchFields(Aircraft caller, AircraftDefinition type)
         {
             List<Airbase> fields = FriendlyFields(caller);
+            if (ProfileReader.ClassOf(type ?? caller.definition) == AirframeClass.FixedWing) fields.RemoveAll(b => b.AttachedAirbase);
+            return fields;
+        }
+
+        /// <summary>The picked field while it is still usable, else the nearest friendly field <paramref name="type"/> can
+        /// launch from.</summary>
+        public Airbase FieldFor(Aircraft caller, AircraftDefinition type = null)
+        {
+            List<Airbase> fields = LaunchFields(caller, type);
             if (LaunchField != null && fields.Contains(LaunchField)) return LaunchField;
             return fields.Count > 0 ? fields[0] : null;
         }
 
         /// <summary>Picks the next friendly field (nearest first, wrapping).</summary>
-        public Airbase NextField(Aircraft caller)
+        public Airbase NextField(Aircraft caller, AircraftDefinition type = null)
         {
-            List<Airbase> fields = FriendlyFields(caller);
+            List<Airbase> fields = LaunchFields(caller, type);
             if (fields.Count == 0) return LaunchField = null;
             int i = LaunchField != null ? fields.IndexOf(LaunchField) : -1;
             return LaunchField = fields[(i + 1) % fields.Count];

@@ -244,6 +244,12 @@ namespace WingCommand
                 WingToast.Show("VTOL aircraft cannot fly formation");
                 return 0;
             }
+            if (airbase.AttachedAirbase && ProfileReader.ClassOf(template) == AirframeClass.FixedWing)
+            {
+                // ponytail: jets on carrier decks are M3d (no deck taxi network yet; spike S6).
+                WingToast.Show(definition.unitName + " cannot launch from a carrier yet; pick a field (Next Field)");
+                return 0;
+            }
             FieldTraffic traffic = FieldRegistry.For(airbase);
             if (traffic == null)
             {

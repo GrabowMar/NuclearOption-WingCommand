@@ -33,19 +33,20 @@ namespace WingCommand
                 WingToast.Show("Not flying");
                 return;
             }
-            Airbase field = w.FieldFor(caller);
+            AircraftDefinition type = CallAirframe() ?? caller.definition;
+            Airbase field = w.FieldFor(caller, type);
             if (field == null)
             {
                 WingToast.Show("No friendly field to launch from");
                 return;
             }
-            SpawnService.Instance.LaunchFromField(field, CallAirframe() ?? caller.definition, n);
+            SpawnService.Instance.LaunchFromField(field, type, n);
         }
 
         public static void NextField()
         {
             if (!Ready(out WingService w) || w.Player == null) return;
-            Airbase field = w.NextField(w.Player);
+            Airbase field = w.NextField(w.Player, CallAirframe());
             WingToast.Show(field != null
                 ? $"Launch field: {field.name} ({(field.transform.position - w.Player.transform.position).magnitude / 1000f:0} km)"
                 : "No friendly field to launch from");

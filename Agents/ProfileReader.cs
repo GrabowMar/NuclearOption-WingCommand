@@ -16,6 +16,13 @@ namespace WingCommand
             }
         }
 
+        /// <summary>The class of a type, from its prefab (fixed-wing when unknown).</summary>
+        public static AirframeClass ClassOf(AircraftDefinition d)
+        {
+            Aircraft template = d != null && d.unitPrefab != null ? d.unitPrefab.GetComponent<Aircraft>() : null;
+            return template != null ? ClassOf(template) : AirframeClass.FixedWing;
+        }
+
         public static bool IsVtol(Aircraft a) =>
             a.pilots != null && a.pilots.Length > 0 && a.pilots[0] != null && a.pilots[0].pilotType == Pilot.PilotType.VTOL;
 
