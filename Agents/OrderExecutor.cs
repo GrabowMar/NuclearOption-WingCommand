@@ -205,7 +205,7 @@ namespace WingCommand
                 }
                 case OrderKind.Call: return Call(w, (int)o.Number);
                 case OrderKind.SetShape:
-                    return w.SetShape(o.Text) ? OrderResult.Acked("") : OrderResult.Refused("No such shape: " + o.Text);
+                    return w.SetShape(o.Text, ElementFor(w, o.Scope)) ? OrderResult.Acked("") : OrderResult.Refused("No such shape: " + o.Text);
                 case OrderKind.NextShape:
                     w.NextShape();
                     return OrderResult.Acked("");
@@ -224,12 +224,15 @@ namespace WingCommand
                 case OrderKind.SetDoctrine:
                 {
                     if (!WingDoctrine.TryParse(o.Text, out WingDoctrine d)) return OrderResult.Refused("Unknown doctrine: " + o.Text);
-                    w.SetDoctrine(d);
-                    return OrderResult.Acked("Doctrine " + d.PatternName);
+                    int e = ElementFor(w, o.Scope);
+                    w.SetDoctrine(d, e);
+                    return OrderResult.Acked((e > 0 ? w.Roster.Name(e) + ": doctrine " : "Doctrine ") + d.PatternName);
                 }
                 case OrderKind.NextDoctrine:
                 {
-                    WingDoctrine d = w.NextDoctrine();
+                    int e = ElementFor(w, o.Scope);
+                    WingDoctrine d = e > 0 ? w.DoctrineOf(e).NextPattern() : w.NextDoctrine();
+                    if (e > 0) w.SetDoctrine(d, e);
                     string what = d.Targets == TargetPolicy.Hold ? "holding fire"
                         : d.Targets == TargetPolicy.Cover ? "covering you"
                         : "targets of opportunity";

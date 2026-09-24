@@ -36,6 +36,21 @@ namespace WingCommand
             return Doctrine;
         }
 
+        /// <summary>Element <paramref name="element"/>'s own doctrine (A and below: the wing's).</summary>
+        public void SetDoctrine(WingDoctrine d, int element)
+        {
+            if (element <= 0)
+            {
+                SetDoctrine(d);
+                return;
+            }
+            Settings.SetDoctrine(element, d);
+            Plugin.Logger.LogInfo($"[Wing] element {ElementRoster.Letter(element)} doctrine {d.PatternName}");
+        }
+
+        /// <summary>The doctrine element <paramref name="e"/> flies (spec WMC program §4).</summary>
+        public WingDoctrine DoctrineOf(int e) => Settings.DoctrineOf(e, Doctrine);
+
         public void SetDoctrine(WingDoctrine d)
         {
             Doctrine = d;
@@ -52,12 +67,13 @@ namespace WingCommand
             if (!m.Cadence.Due(dt, m.Perks.IntervalScale)) return;
             m.StandingTarget = null;
             if (m.Engaged || m.Recovery != null || m.OnGround || m.Released || !HoldsFormation(m.Brain.Mind.Current)) return;
-            StandingMode mode = StandingFire.Decide(Doctrine.Targets, out DoctrineAllow allow);
+            WingDoctrine doctrine = DoctrineOf(ElementOf(m));
+            StandingMode mode = StandingFire.Decide(doctrine.Targets, out DoctrineAllow allow);
             if (mode == StandingMode.None) return;
             Aircraft a = m.Aircraft;
             FactionHQ hq = a != null ? a.NetworkHQ : null;
             if (hq == null || hq.trackingDatabase == null || a.weaponStations == null || a.weaponManager == null) return;
-            float range = WingDoctrineRules.EngageRange(Doctrine.Reach) * m.Perks.ReachScale;
+            float range = WingDoctrineRules.EngageRange(doctrine.Reach) * m.Perks.ReachScale;
             AnchorSample anchor = Planner.Active ? Planner.Sample() : AnchorNow();
             Vec3 cover = anchor.Present ? anchor.Pos : a.GlobalPosition().ToVec3();
             int others = 0;
@@ -116,7 +132,7 @@ namespace WingCommand
             if (attempted) m.Cadence.Fired();
             if (!launched) return;
             StandingShots++;
-            Plugin.Logger.LogInfo($"[Wing] #{m.Number} fox on {best.unitName} ({Doctrine.PatternName})");
+            Plugin.Logger.LogInfo($"[Wing] #{m.Number} fox on {best.unitName} ({DoctrineOf(ElementOf(m)).PatternName})");
             CallFox(m, bestStation, best);
         }
 

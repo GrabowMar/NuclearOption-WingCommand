@@ -57,6 +57,9 @@ namespace WingCommand
 
         /// <summary>Which element each member flies in (spec WMC program §3.3).</summary>
         public ElementRoster Roster { get; private set; } = new ElementRoster();
+
+        /// <summary>An element's own shape and doctrine (spec WMC program §4); A follows the wing.</summary>
+        public ElementSettings Settings { get; } = new ElementSettings();
         private readonly AircraftSensor leaderSensor = new AircraftSensor();
         private TerrainFloor floor = new TerrainFloor();
         private float frameTime = float.NaN, missionTime;
@@ -482,6 +485,26 @@ namespace WingCommand
             return true;
         }
 
+        /// <summary>Element <paramref name="element"/>'s own shape (A and below: the wing's); an unknown id changes nothing.</summary>
+        public bool SetShape(string id, int element)
+        {
+            if (element <= 0) return SetShape(id);
+            FormationDefinition def = FormationCatalog.Find(WingData.Formations, id);
+            if (def == null || Selection == null) return false;
+            Settings.SetShape(element, id);
+            WingOf(element)?.SetFormation(def, Selection.SpacingMetres);
+            WingToast.Show($"Element {Roster.Name(element)}: {def.Name}");
+            return true;
+        }
+
+        /// <summary>The shape element <paramref name="e"/> flies.</summary>
+        public FormationDefinition ShapeOf(int e)
+        {
+            if (Selection == null) return null;
+            return e > 0 ? FormationCatalog.Find(WingData.Formations, Settings.ShapeOf(e, Selection.Current.Id)) ?? Selection.Current
+                : Selection.Current;
+        }
+
         /// <summary>Forms the wing on <paramref name="a"/> instead of the player; null forms on the player again.</summary>
         public void SetAnchor(Aircraft a)
         {
@@ -621,7 +644,7 @@ namespace WingCommand
         private void ApplySelection()
         {
             Wing.SetFormation(Selection.Current, Selection.SpacingMetres);
-            for (int e = 1; e < ElementRoster.MaxElements; e++) wings[e]?.SetFormation(Selection.Current, Selection.SpacingMetres);
+            for (int e = 1; e < ElementRoster.MaxElements; e++) wings[e]?.SetFormation(ShapeOf(e), Selection.SpacingMetres);
             WingToast.Show($"Formation: {Selection.Current.Name} · {Selection.Spacing} ({Selection.SpacingMetres:0} m)");
         }
 
@@ -725,7 +748,7 @@ namespace WingCommand
             if (e == 0) return Wing;
             if (wings[e] == null && Selection != null)
             {
-                wings[e] = new FormationWing(Selection.Current, Selection.SpacingMetres);
+                wings[e] = new FormationWing(ShapeOf(e), Selection.SpacingMetres);
                 wings[e].Solver.StackOffset = Wing != null ? Wing.Solver.StackOffset : 0f;
             }
             return wings[e];
@@ -752,6 +775,8 @@ namespace WingCommand
             if (e <= 0) return;
             // Form through the planner so a running task is logged as cancelled (review P2 I7).
             PlannerOf(e).Apply(WingTask.Form(), Snapshot(e), missionTime, Events);
+            Settings.Forget(e);
+            wings[e]?.SetFormation(Selection.Current, Selection.SpacingMetres);
             Roster.Merge(e);
             AssignSlots();
             Plugin.Logger.LogInfo($"[Wing] element {ElementRoster.Letter(e)} rejoined A");
@@ -760,6 +785,7 @@ namespace WingCommand
         private void ResetElements()
         {
             Roster = new ElementRoster();
+            Settings.Clear();
             for (int e = 1; e < ElementRoster.MaxElements; e++)
             {
                 wings[e] = null;
