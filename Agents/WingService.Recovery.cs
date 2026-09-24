@@ -15,7 +15,8 @@ namespace WingCommand
     /// there, a refit member is refuelled and rearmed after its refit time and departs again, rejoining once
     /// airborne.</item>
     /// <item>Three failed landings, or a landing where no field can take it, return it to the reserve.</item>
-    /// <item>Carriers are not recovery fields until M3d; a member the game lands on one goes back to the reserve.</item>
+    /// <item>A carrier is a recovery field only for a helicopter going home; a member the game lands on a carrier goes
+    /// back to the reserve.</item>
     /// </list></summary>
     internal sealed partial class WingService
     {
@@ -38,7 +39,7 @@ namespace WingCommand
                 m.HasPendingRecovery = true;
                 return true;
             }
-            Airbase airbase = RecoveryField(m);
+            Airbase airbase = RecoveryField(m, intent);
             FieldTraffic field = airbase != null ? FieldRegistry.For(airbase) : null;
             if (field == null) return false;
             m.Recovery = new RecoveryPilot(m.Id, field, m.Profile.Class, intent, m.Brain.Slot);
@@ -54,12 +55,15 @@ namespace WingCommand
             return n;
         }
 
-        /// <summary>The picked launch field while it is friendly, else the friendly field nearest the member. Not a carrier
-        /// (review M3b I7: the field's graph is a snapshot that does not move with the deck).</summary>
-        private Airbase RecoveryField(WingMember m)
+        /// <summary>The picked launch field while it is friendly, else the friendly field nearest the member. A carrier only
+        /// for a helicopter going home (spike S6: it lands on a pad through the game's own landing, which follows the deck,
+        /// and goes back to the reserve there); never for a jet, nor for a refit (review M3b I7: the field's graph is a
+        /// snapshot that does not move with the deck).</summary>
+        private Airbase RecoveryField(WingMember m, RecoveryIntent intent)
         {
             List<Airbase> fields = FriendlyFields(m.Aircraft);
-            fields.RemoveAll(b => b.AttachedAirbase);   // ponytail: carriers recover with M3d's deck frame
+            bool deckOk = m.Profile.Class != AirframeClass.FixedWing && intent == RecoveryIntent.Rtb;
+            if (!deckOk) fields.RemoveAll(b => b.AttachedAirbase);   // ponytail: jets on decks need a deck frame (post-M3d)
             if (LaunchField != null && fields.Contains(LaunchField)) return LaunchField;
             return fields.Count > 0 ? fields[0] : null;
         }
@@ -237,7 +241,7 @@ namespace WingCommand
             m.BingoClock = 0f;
             if (m.BingoField == null || missionTime - m.BingoFieldAt > BingoFieldSeconds)
             {
-                m.BingoField = RecoveryField(m);
+                m.BingoField = RecoveryField(m, RecoveryIntent.Rtb);
                 m.BingoFieldAt = missionTime;
             }
             if (m.BingoField == null) return;
