@@ -28,6 +28,8 @@ namespace WingCommand
         public float ListedUntil;
         /// <summary>The eject guard blocked the game's landing state ejecting it: take it back.</summary>
         public bool EjectBlocked;
+        /// <summary>The ground pilot's last output (the ground trace).</summary>
+        public ControlOutput GroundOutput;
         public bool StopLogged;
         public Airbase BingoField;
         /// <summary>Stable for the member's life in the wing (slots renumber when a member ahead leaves).</summary>

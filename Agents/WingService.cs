@@ -252,6 +252,7 @@ namespace WingCommand
         {
             m.NoFbwSeconds = 0f;
             ControlOutput o = m.Ground.Step(m.Last, m.Profile, m.Brain.Pipeline, missionTime, dt, Events, m.Brain.Slot);
+            m.GroundOutput = o;
             ControlWriter.Fly(m.Aircraft, o, m.Profile.Class);
             LogLongStop(m);
             if (m.Ground.TakeRelocation(out Pose to)) SafeRelocate.Move(m.Aircraft, to);
@@ -724,7 +725,9 @@ namespace WingCommand
                 GroundPilot g = m.Ground;
                 Plugin.Logger.LogInfo($"[Ground] trace t={missionTime:0} #{m.Number} id {m.Id} {g.Phase} stop={g.Stop}" +
                                       $"{(g.StopWho >= 0 ? " (" + NumberOf(g.StopWho) + ")" : "")} at ({m.Last.Pos.X:0}, {m.Last.Pos.Z:0}) " +
-                                      $"v {m.Last.Speed:0.0}");
+                                      $"v {m.Last.Speed:0.0} alt {m.Last.RadarAlt:0.0} throttle {m.GroundOutput.Throttle:0.00} brake {m.GroundOutput.Brake:0.0}" +
+                                      (m.Profile.Class != AirframeClass.FixedWing
+                                          ? $" rpm {m.Last.RotorRpm:0.00} roof {g.RoofOverhead} exited {g.ExitedHangar}" : ""));
                 if (traced.Add(g.Field)) Plugin.Logger.LogInfo($"[Ground] trace {g.Field.Field.Name}: {g.Field.Describe()}");
             }
         }

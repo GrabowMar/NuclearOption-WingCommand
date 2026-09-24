@@ -118,6 +118,9 @@ namespace WingCommand
         /// <summary>The stand it taxis to or stands on (−1: none, or standing where it stopped).</summary>
         public int StandNode => standNode;
 
+        /// <summary>A helicopter launched under a roof has hovered out of the hangar door.</summary>
+        public bool ExitedHangar => exitedHangar;
+
         /// <summary>Arriving and still on a runway (it keeps the field's departure runway busy, review M3b I3).</summary>
         public bool ArrivingOnRunway => arriving && Phase == GroundPhase.TaxiIn && OnRunway(lastPose.Pos, 0f);
 
