@@ -43,6 +43,13 @@ namespace WingCommand
         public static float CrossoverTriggerDeg = 60f, CrossoverSeconds = 8f, RearmLevelSeconds = 20f;
         public static float LevelTurnRate = 0.02f;
         public static float HistoryBlendStart = 0.5f, HistoryBlendFull = 1.5f;
+        /// <summary>Spec M5 §10.1: how fast the whole shape climbs or descends to a new <see cref="StackOffset"/>.</summary>
+        public static float StackRate = 15f;
+
+        /// <summary>Go High / Go Low: metres every slot sits above (below) its place in the shape; eased at
+        /// <see cref="StackRate"/>, the terrain flattening still winning.</summary>
+        public float StackOffset;
+        public float StackNow { get; private set; }
 
         private const int N = FormationCatalog.MaxSlots;
         private float compress = 1f, compressRate;
@@ -56,6 +63,8 @@ namespace WingCommand
             int count, float floorY, float clearance, float dt, SlotTarget[] output, LeaderHistory history = null)
         {
             spacing = def.ClampSpacing(spacing);
+            float step = StackRate * dt;
+            StackNow += Scalar.Clamp(StackOffset - StackNow, -step, step);
             count = Math.Min(count, N);
             TrackTurn(leader.TurnRate, dt);
             float sign = Crossover(def, spacing, count, dt, out float bump);
@@ -84,7 +93,7 @@ namespace WingCommand
                 // Aft slots hang off the leader as it was aft/V ago. Close behind (up to 0.5 s) that is its current
                 // turn carried back, so wingmen bank with the leader now; far behind (from 1.5 s) it is where the
                 // leader really was (history), so trail slots follow its actual path through reversals.
-                float aftM = (slot.Aft + extraAft) * spacing, upM = slot.Up * FormationCatalog.StackMetres + dip;
+                float aftM = (slot.Aft + extraAft) * spacing, upM = slot.Up * FormationCatalog.StackMetres + dip + StackNow;
                 float delay = TurnFrame.PathDelay(aftM, leader.Vel.Length, out float rigidAft);
                 float rigidRate = TurnFrame.RigidAftRate(aftM, leader.Vel.Length, TurnFrame.Along(leader));
                 LeaderEstimate at = TurnFrame.Delayed(leader, delay);
