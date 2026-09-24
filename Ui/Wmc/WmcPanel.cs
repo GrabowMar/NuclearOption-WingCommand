@@ -21,6 +21,7 @@ namespace WingCommand
         private readonly Dictionary<string, AvButton> controls = new Dictionary<string, AvButton>();
         private readonly WmcContext context = new WmcContext();
         private readonly WmcScopeBar scopeBar = new WmcScopeBar();
+        private readonly WmcMapOverlay overlay = new WmcMapOverlay();
         private IWmcTab[] tabs;
         private MFDScreen screen;
         private Button bezelButton;
@@ -29,16 +30,30 @@ namespace WingCommand
         private float nextAttempt, nextRefresh;
         private bool gaveUp;
 
-        public WmcPanel() => Instance = this;
+        public WmcPanel()
+        {
+            Instance = this;
+            context.Map.Placed += overlay.Ping;
+        }
 
         public bool Visible => screen != null && screen.isActive && DynamicMap.mapMaximized;
         public int Page => shell != null ? shell.Page : -1;
         public IReadOnlyDictionary<string, AvButton> Controls => controls;
         public WmcContext Context => context;
+        public WmcMapOverlay Overlay => overlay;
 
-        public void Activate() => Reset();
+        public void Activate()
+        {
+            Reset();
+            DynamicMap.onMapChanged -= overlay.Dirty;
+            DynamicMap.onMapChanged += overlay.Dirty;
+        }
 
-        public void Deactivate() => Reset();
+        public void Deactivate()
+        {
+            DynamicMap.onMapChanged -= overlay.Dirty;
+            Reset();
+        }
 
         public void FixedTick(float dt)
         {
@@ -51,6 +66,7 @@ namespace WingCommand
             {
                 if (screen != null && screen.isActive) screen.CloseScreen(screen.transform.localPosition);
                 context.Map.Update(context, false);
+                overlay.Hide();
                 return;
             }
             if (screen == null)
@@ -63,6 +79,7 @@ namespace WingCommand
             MfdPresentation.Tick();
             // Every frame: the right button is followed per frame (spec WMC program §5).
             context.Map.Update(context, Visible);
+            overlay.Tick(context, Visible);
             if (!Visible || Time.unscaledTime < nextRefresh) return;
             nextRefresh = Time.unscaledTime + WingFidelity.Interval(0.2f);
             Refresh();
@@ -110,6 +127,7 @@ namespace WingCommand
             context.Selection.Clear();
             context.Map.Disarm();
             context.Draft.Clear();
+            overlay.Destroy();
             nextAttempt = nextRefresh = 0f;
             gaveUp = false;
         }
