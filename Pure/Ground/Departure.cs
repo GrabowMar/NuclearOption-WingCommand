@@ -148,8 +148,15 @@ namespace WingCommand
             ReleaseWhenDone();
         }
 
+        /// <summary>The member will not depart after all (lost, released, recalled): before the lock it is forgotten;
+        /// in a locked group it never blocks its row.</summary>
         public void Remove(int owner)
         {
+            if (!RunwayLocked || !group.Contains(owner))
+            {
+                Forget(owner);
+                return;
+            }
             removed.Add(owner);
             ReleaseWhenDone();
         }

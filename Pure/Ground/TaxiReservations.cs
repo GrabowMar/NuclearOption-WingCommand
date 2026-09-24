@@ -17,7 +17,9 @@ namespace WingCommand
     /// <item>A blocked edge (a wreck, native traffic) is never granted.</item>
     /// <item>A deadlock's victim is an owner waiting to enter an edge (it stands at a node it holds and can take another
     /// way there) before one waiting for a node (it would have to turn back), then the lowest priority, then the highest
-    /// id; an owner that found no other way (<see cref="NoDetour"/>) is passed over until it next advances.</item>
+    /// id; an owner that found no other way (<see cref="NoDetour"/>) is passed over until it next advances. An owner
+    /// stopped behind another's aircraft (<see cref="WaitForMember"/>) waits for it too: two stopped nose to nose are
+    /// a deadlock.</item>
     /// </list></summary>
     internal sealed class TaxiReservations
     {
@@ -27,6 +29,7 @@ namespace WingCommand
         private readonly int[] edgeDirection;   // +1 from→to, −1 to→from, 0 free
         private readonly bool[] blocked;
         private readonly Dictionary<int, int> waitingFor = new Dictionary<int, int>();
+        private readonly Dictionary<int, int> memberWaits = new Dictionary<int, int>();
         private readonly Dictionary<int, TaxiPriority> priorities = new Dictionary<int, TaxiPriority>();
         private readonly HashSet<int> waitingOnEdge = new HashSet<int>(), noDetour = new HashSet<int>();
         private readonly List<int> seen = new List<int>();
@@ -58,6 +61,17 @@ namespace WingCommand
 
         /// <summary>The owner <paramref name="owner"/> last found holding what it asked for (−1: none).</summary>
         public int WaitingFor(int owner) => waitingFor.TryGetValue(owner, out int holder) ? holder : -1;
+
+        /// <summary>Whom the owner waits for: a holder of what it asked for, else the aircraft it is stopped behind.</summary>
+        public int WaitingForAny(int owner) =>
+            waitingFor.TryGetValue(owner, out int holder) ? holder : memberWaits.TryGetValue(owner, out int other) ? other : -1;
+
+        /// <summary>The owner is stopped behind <paramref name="other"/>'s aircraft (−1: it is not).</summary>
+        public void WaitForMember(int owner, int other)
+        {
+            if (other < 0) memberWaits.Remove(owner);
+            else memberWaits[owner] = other;
+        }
 
         public void Block(int edge, bool isBlocked) => blocked[edge] = isBlocked;
 
@@ -125,6 +139,7 @@ namespace WingCommand
                 if (nodeOwner[n] == owner) nodeOwner[n] = -1;
             for (int e = 0; e < edgeUsers.Length; e++) ReleaseEdge(owner, e);
             waitingFor.Remove(owner);
+            memberWaits.Remove(owner);
             waitingOnEdge.Remove(owner);
             noDetour.Remove(owner);
             priorities.Remove(owner);
@@ -135,11 +150,14 @@ namespace WingCommand
         public bool FindDeadlock(out int victim)
         {
             victim = -1;
-            foreach (int start in waitingFor.Keys)
+            starts.Clear();
+            starts.AddRange(waitingFor.Keys);
+            starts.AddRange(memberWaits.Keys);
+            foreach (int start in starts)
             {
                 int at = start;
                 seen.Clear();
-                while (waitingFor.TryGetValue(at, out int next) && Holds(next))
+                while (Next(at, out int next))
                 {
                     seen.Add(at);
                     if (next == start)
@@ -176,6 +194,11 @@ namespace WingCommand
             TaxiPriority pa = Priority(a), pb = Priority(b);
             return pa != pb ? pa < pb : a > b;
         }
+
+        private readonly List<int> starts = new List<int>();
+
+        private bool Next(int owner, out int next) =>
+            (waitingFor.TryGetValue(owner, out next) && Holds(next)) || memberWaits.TryGetValue(owner, out next);
 
         private TaxiPriority Priority(int owner) => priorities.TryGetValue(owner, out TaxiPriority p) ? p : TaxiPriority.TaxiIn;
 

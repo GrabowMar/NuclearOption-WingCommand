@@ -26,6 +26,15 @@ namespace WingCommand.PureTests
             return field;
         }
 
+        /// <summary><see cref="WithServicePoint"/> with a runway exit on the centreline at z = 1000 (as the game marks
+        /// them), joined to the parallel taxiway.</summary>
+        public static AirbaseSample WithServicePointAndExit()
+        {
+            AirbaseSample field = WithServicePoint();
+            field.Runways[0].Exits = new[] { new Pose(new Vec3(0f, 0f, 1000f), new Vec3(0f, 0f, 1f)) };
+            return field;
+        }
+
         public static AirbaseSample Simple(float runwayWidth = 60f, bool roads = true) => new AirbaseSample
         {
             Name = "test_field",

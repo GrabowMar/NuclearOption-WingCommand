@@ -13,6 +13,7 @@ namespace WingCommand
     internal sealed class FieldTraffic
     {
         public static float DeadlockPeriod = 1f, RunwayMargin = 5f, BlockSeconds = 20f, BlockCorridor = 10f, StandingRadius = 3f;
+        public static float PassedRadius = 20f;
 
         public readonly AirbaseSample Field;
         public readonly TaxiGraph Graph;
@@ -23,6 +24,14 @@ namespace WingCommand
         public readonly List<Vec3> Obstacles = new List<Vec3>();
         private readonly Dictionary<int, Vec3> positions = new Dictionary<int, Vec3>();
         private readonly Dictionary<int, int> waitsFor = new Dictionary<int, int>();
+        private readonly Dictionary<int, int> stands = new Dictionary<int, int>();   // owner → stand node
+        private readonly Dictionary<int, Route> routes = new Dictionary<int, Route>();
+
+        private struct Route
+        {
+            public IReadOnlyList<int> Nodes, Edges;
+            public int Step;
+        }
         private List<Vec3> standing = new List<Vec3>(), nextStanding = new List<Vec3>();
         private List<float> standingFor = new List<float>(), nextStandingFor = new List<float>();
         private readonly bool[] blockedHere;
@@ -70,7 +79,47 @@ namespace WingCommand
         /// <summary>The member <paramref name="owner"/> is stopped for (−1: none), as it last reported.</summary>
         public int WaitsFor(int owner) => waitsFor.TryGetValue(owner, out int other) ? other : -1;
 
-        public void ReportWait(int owner, int other) => waitsFor[owner] = other;
+        public void ReportWait(int owner, int other)
+        {
+            waitsFor[owner] = other;
+            Reservations.WaitForMember(owner, other);
+        }
+
+        /// <summary>The stand node is nobody else's (chosen by an arriving member, even before it holds the node).</summary>
+        public bool StandFree(int node, int owner)
+        {
+            foreach (KeyValuePair<int, int> s in stands)
+                if (s.Value == node && s.Key != owner) return false;
+            return true;
+        }
+
+        public void TakeStand(int owner, int node) => stands[owner] = node;
+
+        /// <summary>The member's route (its own lists, read live) and the edge it is on.</summary>
+        public void ReportRoute(int owner, IReadOnlyList<int> nodes, IReadOnlyList<int> edges, int step) =>
+            routes[owner] = new Route { Nodes = nodes, Edges = edges, Step = step };
+
+        /// <summary>The member still has <paramref name="node"/> ahead, or is still within <see cref="PassedRadius"/> of
+        /// it.</summary>
+        public bool RouteAhead(int owner, int node)
+        {
+            if (!routes.TryGetValue(owner, out Route r)) return false;
+            if (positions.TryGetValue(owner, out Vec3 at) && (at - Graph.NodePos(node)).Horizontal.Length < PassedRadius) return true;
+            for (int i = Math.Max(0, r.Step + 1); i < r.Nodes.Count; i++)
+                if (r.Nodes[i] == node) return true;
+            return false;
+        }
+
+        /// <summary>The member's route ahead (from the edge it is on) uses <paramref name="edge"/>.</summary>
+        public bool RouteUses(int owner, int edge)
+        {
+            if (!routes.TryGetValue(owner, out Route r)) return false;
+            for (int i = Math.Max(0, r.Step); i < r.Edges.Count; i++)
+                if (r.Edges[i] == edge) return true;
+            return false;
+        }
+
+        public void LeaveStand(int owner) => stands.Remove(owner);
 
         /// <summary>Another member or a foreign aircraft stands within <paramref name="radius"/> of <paramref name="at"/>.</summary>
         public bool Occupied(Vec3 at, float radius, int except)
@@ -155,6 +204,8 @@ namespace WingCommand
             Departures.Remove(owner);
             positions.Remove(owner);
             waitsFor.Remove(owner);
+            stands.Remove(owner);
+            routes.Remove(owner);
             ConsumeVictim(owner);
         }
     }
