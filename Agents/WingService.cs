@@ -222,7 +222,7 @@ namespace WingCommand
             if ((object)m.Aircraft == null) return;
             bool home = m.Aircraft != null && m.Aircraft.unitState == Unit.UnitState.Returned;
             PilotFate fate = PilotFates.Of(home, m.Aircraft == null || m.Aircraft.disabled, m.Pilot == null,
-                m.Pilot != null && m.Pilot.dead, m.Pilot != null && m.Pilot.ejected);
+                m.Pilot != null && m.Pilot.dead, Ejected(m));
             if (home) WingPilotRoster.NoteSortie(m.Aircraft);
             if (home) WingLedger.Returned(m.Aircraft);
             else WingLedger.Forget(m.Aircraft);
@@ -345,8 +345,6 @@ namespace WingCommand
             return true;
         }
 
-        /// <summary>A member under ground supervision, or in the game's landing for us, whose aircraft is intact is never
-        /// ejected by native checks.</summary>
         /// <summary>The eject guard skipped an ejection of <paramref name="a"/>: a member in the game's landing is taken back
         /// at the next tick (review M3b I5: the game's helicopter landing with no field only ejects, every tick).</summary>
         public void EjectionBlocked(Aircraft a)
@@ -409,12 +407,40 @@ namespace WingCommand
             return AdoptMember(a, null);
         }
 
+        /// <summary>A member under ground supervision, or in the game's landing for us, whose aircraft is intact is never
+        /// ejected by native checks (<see cref="EjectRules.Guarded"/>: the EJ order refuses the same cases first).</summary>
         public bool ProtectsFromEjection(Aircraft a)
         {
             foreach (WingMember m in Members)
                 if (ReferenceEquals(m.Aircraft, a))
-                    return !a.disabled && !m.Released && (m.OnGround || (m.Recovery != null && m.Recovery.Phase == RecoveryPhase.Landing));
+                    return EjectRules.Guarded(a.disabled, m.Released, m.OnGround, Landing(m));
             return false;
+        }
+
+        private static bool Landing(WingMember m) => m.Recovery != null && m.Recovery.Phase == RecoveryPhase.Landing;
+
+        /// <summary>EJ (design wmc-rebuild/eject.md): the pilot leaves the aircraft for search and rescue to find. Null when
+        /// the ejection started; else why not.</summary>
+        public string Eject(WingMember m)
+        {
+            Aircraft a = m.Aircraft;
+            bool lost = a == null || a.disabled;
+            var f = new EjectFacts
+            {
+                Host = !lost && a.IsServer && a.LocalSim, Released = m.Released, PlayerFlown = !lost && a.Player != null, Lost = lost,
+                PilotDead = m.Pilot == null || m.Pilot.dead, Ejected = !lost && (a.HasEjected() || (m.Pilot != null && m.Pilot.ejected)),
+                Supervised = m.OnGround, Phase = m.Ground != null ? m.Ground.Phase : GroundPhase.Done, Landing = Landing(m),
+                SettledDown = m.Settle != null && m.Settle.Phase == SettlePhase.Down,
+                RadarAlt = lost ? 0f : a.radarAlt, Speed = m.Last.Speed,
+            };
+            string why = EjectRules.Refusal(f);
+            if (why != null) return why;
+            // 0.9's AbandonRefit: a refit asked for later is dropped (the recovery itself leaves in Prune).
+            m.HasPendingRecovery = false;
+            a.StartEjectionSequence();
+            if (!a.HasEjected()) return "the game refused";
+            Plugin.Logger.LogInfo($"[Wing] #{m.Number} ejecting by order");
+            return null;
         }
 
         /// <summary>Hand the member to native AI (its combat state exists: air-starts went through
@@ -969,9 +995,13 @@ namespace WingCommand
         {
             Aircraft a = m.Aircraft;
             bool home = a != null && a.unitState == Unit.UnitState.Returned;
-            return MemberLoss.Of(m.Released, home, a != null && a.disabled, m.Pilot != null && m.Pilot.dead,
-                m.Pilot != null && m.Pilot.ejected);
+            return MemberLoss.Of(m.Released, home, a != null && a.disabled, m.Pilot != null && m.Pilot.dead, Ejected(m));
         }
+
+        /// <summary>An ejection has started: the aircraft's flag is set at once, the pilot's only when the parachute spawns
+        /// (eject.md: read alone, an ordered ejection sent the pilot back to the pool instead of to search and rescue).</summary>
+        private static bool Ejected(WingMember m) =>
+            (m.Pilot != null && m.Pilot.ejected) || (m.Aircraft != null && m.Aircraft.HasEjected());
 
         /// <summary>Why a member left (diagnostics).</summary>
         private static string LeaveReason(WingMember m, bool ours)
@@ -981,7 +1011,7 @@ namespace WingCommand
             if (m.Aircraft.disabled) return $"aircraft disabled ({m.Aircraft.unitState})";
             if (m.Pilot == null) return "no pilot";
             if (m.Pilot.dead) return "pilot dead";
-            if (m.Pilot.ejected) return "pilot ejected";
+            if (Ejected(m)) return "pilot ejected";
             return ours ? "unknown" : $"pilot state now {(m.Pilot.currentState != null ? m.Pilot.currentState.GetType().Name : "none")}";
         }
 

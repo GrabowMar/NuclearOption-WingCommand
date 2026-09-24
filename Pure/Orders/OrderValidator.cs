@@ -44,6 +44,10 @@ namespace WingCommand
                     return !float.IsNaN(o.Number) && Math.Abs(o.Number) <= MaxStack ? null : "stack out of range";
                 case OrderKind.SetSpacing:
                     return o.Number >= 0f && o.Number <= 3f ? null : "no such spacing";
+                case OrderKind.Eject:
+                    if (o.Scope.Kind != ScopeKind.Members || o.Scope.Members.Length != 1) return "eject one wingman at a time";
+                    if (o.Source != OrderSource.Player) return "only you can order an ejection";
+                    return o.Flag ? null : "not confirmed";
                 default:
                     return null;
             }

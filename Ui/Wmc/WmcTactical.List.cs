@@ -25,7 +25,7 @@ namespace WingCommand
             public uint Id;
             public string IdText;
             public int Key = int.MinValue;
-            public bool Selected, Styled, RtbAsking;
+            public bool Selected, Styled, RtbAsking, EjAsking;
         }
 
         private sealed class HeaderView
@@ -42,6 +42,8 @@ namespace WingCommand
         private readonly FlightLine[] lines = new FlightLine[MaxLines];
         private readonly int[] order = new int[MaxRows];
         private readonly ConfirmGate rtbGate = new ConfirmGate();
+        // Its own gate (eject.md): RTB then EJ on one row must not confirm the ejection on the first EJ press.
+        private readonly ConfirmGate ejGate = new ConfirmGate();
         private GameObject pagerRoot, emptyRoot;
         private RectTransform pagerRect;
         private TMP_Text pagerLabel, emptyText;
@@ -115,9 +117,8 @@ namespace WingCommand
             v.Rdr = RowButton(rt, 297f, 44f, "RDR", null, id + ".rdr",
                 "Radar on/off for this aircraft. Arrives with the weapons & EMCON update.");
             v.Rdr.SetEnabled(false);
-            v.Ej = RowButton(rt, 344f, 32f, "EJ", null, id + ".ej",
-                "Eject this pilot (press twice). Arrives with the weapons & EMCON update.");
-            v.Ej.SetEnabled(false);
+            v.Ej = RowButton(rt, 344f, 32f, "EJ", () => AskEject(index), id + ".ej",
+                "Eject this pilot (press twice): the aircraft is lost, search and rescue picks the pilot up.");
             v.Inspect = RowButton(rt, 380f, width - 380f, "INSPECT ›", () => Inspect(index), id + ".inspect",
                 "Open this aircraft in the planning room: stores, damage, fuel and what its AI is doing.");
             v.Root.SetActive(false);
@@ -155,6 +156,21 @@ namespace WingCommand
                     return;
                 }
                 WingOrders.Run(WingOrder.Of(OrderKind.Rtb, WingScope.OfMembers(v.Id)));
+            });
+        }
+
+        private void AskEject(int index)
+        {
+            RowView v = rowViews[index];
+            if (last == null || v.Id == 0u) return;
+            WmcUi.Order(last, () =>
+            {
+                if (!ejGate.Press(v.IdText, Time.unscaledTime))
+                {
+                    WingToast.Show("Eject " + v.Callsign.text + "? The aircraft is lost. Press EJ? again");
+                    return;
+                }
+                WingOrders.Run(new WingOrder { Kind = OrderKind.Eject, Scope = WingScope.OfMembers(v.Id), Flag = true });
             });
         }
 
@@ -299,6 +315,13 @@ namespace WingCommand
                 v.Rtb.SetText(asking ? "RTB?" : "RTB");
             }
             v.Rtb.SetEnabled(c.CanOrder);
+            asking = ejGate.IsArmed(v.IdText, Time.unscaledTime);
+            if (asking != v.EjAsking)
+            {
+                v.EjAsking = asking;
+                v.Ej.SetText(asking ? "EJ?" : "EJ");
+            }
+            v.Ej.SetEnabled(c.CanOrder);
         }
     }
 }

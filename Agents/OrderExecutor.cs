@@ -120,6 +120,21 @@ namespace WingCommand
             switch (o.Kind)
             {
                 case OrderKind.Rtb: return Recover(w, RecoveryIntent.Rtb, "returning to base", who);
+                case OrderKind.Eject:
+                {
+                    WingMember m = null;
+                    foreach (WingMember x in w.Members)
+                        if (who(x))
+                        {
+                            m = x;
+                            break;
+                        }
+                    if (m == null) return OrderResult.Refused("Nobody to eject");
+                    string name = (object)m.Aircraft != null ? WingPilotRoster.Of(m.Aircraft)?.Callsign : null;
+                    if (string.IsNullOrEmpty(name)) name = "#" + m.Number;
+                    string why = w.Eject(m);
+                    return why == null ? OrderResult.Acked(name + " ejecting") : OrderResult.Refused($"Cannot eject {name}: {why}");
+                }
                 case OrderKind.Refit: return Recover(w, RecoveryIntent.Refit, "going to refit", who);
                 case OrderKind.Engage:
                 {

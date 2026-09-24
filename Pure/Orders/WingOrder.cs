@@ -7,6 +7,8 @@ namespace WingCommand
         FormUp, Task, Rtb, Refit, Engage, Attack, Splash, BreakOff, BogeyDope, ClearSix, LandHere, TakeOff, DeliverCargo,
         Rescue, EscortMe, EscortTarget, Release, Dismiss, Recruit, Call, SetShape, NextShape, NextFamily, SetSpacing, Stack,
         Afterburner, SetDoctrine, NextDoctrine, SkipLeg, RenameElement,
+        // WMC rebuild R3: one member, confirmed (Flag), ordered by the player.
+        Eject,
     }
 
     internal enum ScopeKind : byte { Wing, Element, Members }

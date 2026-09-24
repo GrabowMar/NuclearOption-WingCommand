@@ -35,6 +35,20 @@ namespace WingCommand.PureTests
         }
 
         [Fact]
+        public void AnEjectionIsOneConfirmedWingmanOrderedByYou()
+        {
+            Assert.Equal("eject one wingman at a time", OrderValidator.Check(new WingOrder { Kind = OrderKind.Eject, Flag = true }));
+            Assert.Equal("eject one wingman at a time", OrderValidator.Check(new WingOrder
+                { Kind = OrderKind.Eject, Flag = true, Scope = WingScope.OfElement(1) }));
+            Assert.Equal("eject one wingman at a time", OrderValidator.Check(new WingOrder
+                { Kind = OrderKind.Eject, Flag = true, Scope = WingScope.OfMembers(11, 12) }));
+            Assert.Equal("not confirmed", OrderValidator.Check(new WingOrder { Kind = OrderKind.Eject, Scope = WingScope.OfMembers(11) }));
+            Assert.Equal("only you can order an ejection", OrderValidator.Check(new WingOrder
+                { Kind = OrderKind.Eject, Flag = true, Scope = WingScope.OfMembers(11), Source = OrderSource.Rule }));
+            Assert.Null(OrderValidator.Check(new WingOrder { Kind = OrderKind.Eject, Flag = true, Scope = WingScope.OfMembers(11) }));
+        }
+
+        [Fact]
         public void AnAcceptedResultCarriesItsAck()
         {
             OrderResult r = OrderResult.Acked("2 attacking", 1);

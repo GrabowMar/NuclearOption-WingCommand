@@ -90,6 +90,7 @@ namespace WingCommand
 
         public bool OnGround => Ground != null && !Ground.Done;
 
-        public bool Alive => Aircraft != null && !Aircraft.disabled && Pilot != null && !Pilot.dead && !Pilot.ejected;
+        /// <summary>Flying for the wing: an ejection that has started (the aircraft's flag) ends it at once.</summary>
+        public bool Alive => Aircraft != null && !Aircraft.disabled && !Aircraft.HasEjected() && Pilot != null && !Pilot.dead && !Pilot.ejected;
     }
 }
