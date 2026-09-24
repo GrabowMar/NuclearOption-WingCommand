@@ -103,5 +103,22 @@ namespace WingCommand.PureTests
             Assert.Equal(WingEventRing.Capacity, n);                              // the overwritten ones are gone, the rest read once
             Assert.Equal(10, firstMember);
         }
+
+        [Fact]
+        public void AManeuverIsCalledWhenItStartsAndWhenItIsDone()
+        {
+            var start = new WingEvent { Kind = WingEventKind.BehaviourChanged, From = BehaviourId.StationKeep, To = BehaviourId.React, Reason = TransitionReason.Commanded };
+            Assert.True(RadioCalls.For(start, out RadioCall call));
+            Assert.Equal(("MANEUVERING", RadioClass.Tactical, true), (call.Name, call.Class, call.WingWide));
+            var done = new WingEvent { Kind = WingEventKind.BehaviourChanged, From = BehaviourId.React, To = BehaviourId.Rejoin, Reason = TransitionReason.ManeuverDone };
+            Assert.True(RadioCalls.For(done, out call));
+            Assert.Equal("MANEUVERDONE", call.Name);
+            // A missile ending it is the defence's call; a commanded end and a capture say nothing.
+            var missile = new WingEvent { Kind = WingEventKind.BehaviourChanged, From = BehaviourId.React, To = BehaviourId.Defend, Reason = TransitionReason.MissileInbound };
+            Assert.True(RadioCalls.For(missile, out call));
+            Assert.Equal("PANIC", call.Name);
+            Assert.False(RadioCalls.For(new WingEvent { Kind = WingEventKind.BehaviourChanged, From = BehaviourId.React, To = BehaviourId.Rejoin, Reason = TransitionReason.Commanded }, out _));
+            Assert.False(RadioCalls.For(new WingEvent { Kind = WingEventKind.BehaviourChanged, From = BehaviourId.Rejoin, To = BehaviourId.StationKeep, Reason = TransitionReason.Captured }, out _));
+        }
     }
 }

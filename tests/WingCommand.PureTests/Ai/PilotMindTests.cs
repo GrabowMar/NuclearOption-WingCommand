@@ -56,6 +56,19 @@ namespace WingCommand.PureTests
         }
 
         [Fact]
+        public void ReactIsLeftOnlyByForceEvenWhenTheLeaderIsLost()
+        {
+            // Spec WMC rebuild R3: a maneuver ends by itself (the brain) or by an order, never by the mind's own switches.
+            var mind = new PilotMind();
+            mind.Force(BehaviourId.React);
+            MindInput lost = Nominal(sigma: 1f, error: 0f);
+            lost.LeaderLost = true;
+            for (int i = 0; i < 10 * 60; i++) Assert.False(mind.Tick(lost, Dt, out _, out _));
+            Assert.Equal(BehaviourId.React, mind.Current);
+            Assert.True(mind.Force(BehaviourId.Rejoin));
+        }
+
+        [Fact]
         public void LeaderLossSwitchesToHoldImmediately()
         {
             var mind = new PilotMind();

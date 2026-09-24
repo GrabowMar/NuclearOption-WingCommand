@@ -12,13 +12,14 @@ namespace WingCommand
         public static string Phase(BehaviourId behaviour, bool fallingBehind)
         {
             // Evading a missile outranks falling behind (the rejoin planner keeps running under the defence).
-            if (fallingBehind && behaviour != BehaviourId.Defend) return "BEHIND";
+            if (fallingBehind && behaviour != BehaviourId.Defend && behaviour != BehaviourId.React) return "BEHIND";
             switch (behaviour)
             {
                 case BehaviourId.StationKeep: return "SLOT";
                 case BehaviourId.HoldOverhead: return "HOLD";
                 case BehaviourId.Trail: return "TRAIL";
                 case BehaviourId.Defend: return "DEFEND";
+                case BehaviourId.React: return "MNVR";
                 default: return "JOIN";
             }
         }

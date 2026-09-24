@@ -17,6 +17,10 @@ namespace WingCommand
             switch (e.Kind)
             {
                 case WingEventKind.BehaviourChanged:
+                    // A maneuver speaks when it starts (by order, later by a rule) and when it is flown out.
+                    if (e.To == BehaviourId.React) return Make(RadioClass.Tactical, "MANEUVERING", true, out call);
+                    if (e.From == BehaviourId.React && e.Reason == TransitionReason.ManeuverDone)
+                        return Make(RadioClass.Status, "MANEUVERDONE", false, out call);
                     switch (e.Reason)
                     {
                         // PANIC, not DEFENDING: some DEFENDING lines say "covering" or "all clear" (review M7a I1).

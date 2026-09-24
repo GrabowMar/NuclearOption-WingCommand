@@ -326,5 +326,112 @@ namespace WingCommand.PureTests
             rig.Step();
             Assert.True(rig.Pilot.LastOutput.Throttle < 0.2f, $"throttle jumped to {rig.Pilot.LastOutput.Throttle:0.00}");
         }
+
+        private static AircraftState Member(Rig rig) => TestStates.Flying(rig.LeaderPos + new Vec3(-80f, 0f, -80f), North);
+
+        private static string Break(Rig rig, ReactionKind kind = ReactionKind.BreakRight) =>
+            rig.Pilot.React(new ReactionOrder { Kind = kind }, Member(rig), 2000f, Fighter, 1f, rig.Events);
+
+        [Fact]
+        public void AReactionIsLoggedAndEndsIntoRejoinWithManeuverDone()
+        {
+            var rig = new Rig();
+            for (int i = 0; i < 60; i++) rig.Step();
+            Assert.Null(Break(rig));
+            Assert.Equal(BehaviourId.React, rig.Pilot.Mind.Current);
+            WingEvent start = rig.Events[rig.Events.Count - 1];
+            Assert.Equal((BehaviourId.React, TransitionReason.Commanded), (start.To, start.Reason));
+            rig.Step();
+            Assert.Equal(ReactionManeuver.Aggression, rig.Pilot.LastIntent.Aggression);
+            Assert.False(rig.Pilot.LastIntent.HasHeading);
+            for (int i = 0; i < (int)(ReactionManeuver.BreakSeconds * 60f) + 5; i++) rig.Step();
+            Assert.Equal(BehaviourId.Rejoin, rig.Pilot.Mind.Current);
+            Assert.False(rig.Pilot.Reaction.Active);
+            int done = 0;
+            for (int i = 0; i < rig.Events.Count; i++)
+                if (rig.Events[i].From == BehaviourId.React && rig.Events[i].Reason == TransitionReason.ManeuverDone) done++;
+            Assert.Equal(1, done);
+        }
+
+        [Fact]
+        public void AMissilePreemptsAReactionAtOnceAndIsNotResumed()
+        {
+            var rig = new Rig();
+            for (int i = 0; i < 60; i++) rig.Step();
+            Assert.Null(Break(rig, ReactionKind.PullUp));
+            rig.Pilot.Threat = Infrared(rig.LeaderPos);
+            for (int i = 0; i < 90; i++) rig.Step();
+            Assert.Equal(BehaviourId.Defend, rig.Pilot.Mind.Current);
+            Assert.False(rig.Pilot.Reaction.Active);
+            bool preempted = false;
+            for (int i = 0; i < rig.Events.Count; i++)
+                preempted |= rig.Events[i].From == BehaviourId.React && rig.Events[i].To == BehaviourId.Defend
+                             && rig.Events[i].Reason == TransitionReason.MissileInbound;
+            Assert.True(preempted);
+            rig.Pilot.Threat = default;
+            for (int i = 0; i < 30 * 60; i++)
+            {
+                rig.Step();
+                Assert.NotEqual(BehaviourId.React, rig.Pilot.Mind.Current);
+            }
+        }
+
+        [Fact]
+        public void FormUpEndsAReactionAsCommanded()
+        {
+            var rig = new Rig();
+            for (int i = 0; i < 60; i++) rig.Step();
+            Break(rig);
+            rig.Pilot.FormUp(2f, rig.Events);
+            Assert.Equal(BehaviourId.Rejoin, rig.Pilot.Mind.Current);
+            Assert.False(rig.Pilot.Reaction.Active);
+            WingEvent last = rig.Events[rig.Events.Count - 1];
+            Assert.Equal((BehaviourId.React, BehaviourId.Rejoin, TransitionReason.Commanded), (last.From, last.To, last.Reason));
+        }
+
+        [Fact]
+        public void EndDefenceAlsoEndsAReaction()
+        {
+            // Engage, release, recovery and settle all leave formation flight through EndDefence.
+            var rig = new Rig();
+            for (int i = 0; i < 60; i++) rig.Step();
+            Break(rig);
+            rig.Pilot.EndDefence(2f, rig.Events);
+            Assert.Equal(BehaviourId.Rejoin, rig.Pilot.Mind.Current);
+            Assert.False(rig.Pilot.Reaction.Active);
+            Assert.Equal(TransitionReason.Commanded, rig.Events[rig.Events.Count - 1].Reason);
+        }
+
+        [Fact]
+        public void AReactionIsRefusedWhileDefendingAndInsideItsDwell()
+        {
+            var rig = new Rig();
+            for (int i = 0; i < 60; i++) rig.Step();
+            Assert.Null(Break(rig));
+            Assert.Equal("still maneuvering", Break(rig, ReactionKind.BreakLeft));
+            for (int i = 0; i < (int)(ReactionManeuver.MinDwell * 60f) + 2; i++) rig.Step();
+            Assert.Null(Break(rig, ReactionKind.BreakLeft));
+            Assert.Equal(ReactionKind.BreakLeft, rig.Pilot.Reaction.Kind);
+            for (int i = 0; i < (int)(ReactionManeuver.MinDwell * 60f) + 2; i++) rig.Step();
+            Assert.Equal("too low (below 120 m)", rig.Pilot.React(new ReactionOrder { Kind = ReactionKind.Split }, Member(rig), 50f, Fighter, 9f, rig.Events));
+
+            var defending = new Rig();
+            for (int i = 0; i < 60; i++) defending.Step();
+            defending.Pilot.Threat = Infrared(defending.LeaderPos);
+            for (int i = 0; i < 90; i++) defending.Step();
+            Assert.Equal("defending", Break(defending));
+        }
+
+        [Fact]
+        public void AReactionStillFliesTheFrameCollisionBiasAndFloor()
+        {
+            var rig = new Rig();
+            for (int i = 0; i < 60; i++) rig.Step();
+            Assert.Null(Break(rig));
+            for (int i = 0; i < 30; i++) rig.Step(memberPos: rig.LeaderPos + new Vec3(5f, 0f, 0f), floorY: rig.LeaderPos.Y + 200f);
+            Assert.Equal(BehaviourId.React, rig.Pilot.Mind.Current);
+            Assert.True(rig.Pilot.Pipeline.Report.CollisionActive);
+            Assert.Equal(ConstraintId.Terrain, rig.Pilot.Pipeline.Report.VerticalBy);
+        }
     }
 }

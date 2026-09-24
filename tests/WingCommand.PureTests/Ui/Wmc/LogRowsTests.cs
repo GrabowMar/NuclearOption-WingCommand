@@ -141,5 +141,14 @@ namespace WingCommand.PureTests
             // The element filter finds the member by aircraft too: the seat-0 Bingo at 8 s was id 1, not in B.
             Assert.Equal(3, LogRows.Fill(events, radio, into, LogRows.MaxRows, new LogFilter { Element = 1, Rows = rows, Count = 1 }));
         }
+
+        [Fact]
+        public void AManeuverAndItsEndAreLoggedOtherBehaviourChangesAreNot()
+        {
+            Assert.Equal("maneuver", LogRows.Describe(new WingEvent { Kind = WingEventKind.BehaviourChanged, From = BehaviourId.StationKeep, To = BehaviourId.React }));
+            Assert.Equal("maneuver done", LogRows.Describe(new WingEvent
+                { Kind = WingEventKind.BehaviourChanged, From = BehaviourId.React, To = BehaviourId.Rejoin, Reason = TransitionReason.ManeuverDone }));
+            Assert.Null(LogRows.Describe(new WingEvent { Kind = WingEventKind.BehaviourChanged, From = BehaviourId.Rejoin, To = BehaviourId.StationKeep }));
+        }
     }
 }

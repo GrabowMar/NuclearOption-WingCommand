@@ -18,6 +18,8 @@ namespace WingCommand
         public readonly PilotMind Mind = new PilotMind();
         public readonly RolePolicy Roles = new RolePolicy();
         public readonly MissileDefence Defence = new MissileDefence();
+        /// <summary>An ordered reaction maneuver (spec WMC rebuild R3): flown like Defend, through this member's pipeline.</summary>
+        public readonly ReactionManeuver Reaction = new ReactionManeuver();
         /// <summary>The nearest missile guiding on this member, set by the caller before each <see cref="Step"/> (spec M5
         /// §7.1); default: none.</summary>
         public MissileThreat Threat;
@@ -76,12 +78,30 @@ namespace WingCommand
                 BehaviourId was = Mind.Current;
                 BehaviourId to = LastDefence.Active ? BehaviourId.Defend : BehaviourId.Rejoin;
                 if (LastDefence.Active) beforeDefend = was;
+                // A missile pre-empts a maneuver for good: it is never resumed (its end is this logged transition).
+                if (was == BehaviourId.React) Reaction.End();
                 Mind.Force(to);
                 events?.Push(new WingEvent
                 {
                     Time = time, Member = Seat, Kind = WingEventKind.BehaviourChanged, From = was, To = to,
                     Reason = LastDefence.Active ? TransitionReason.MissileInbound : TransitionReason.MissileClear,
                 });
+            }
+
+            RefState reaction = default;
+            if (Mind.Current == BehaviourId.React)
+            {
+                reaction = Reaction.Step(s, LastRejoin.Ref, dt, out bool done);
+                if (done)
+                {
+                    Reaction.End();
+                    Mind.Force(BehaviourId.Rejoin);
+                    events?.Push(new WingEvent
+                    {
+                        Time = time, Member = Seat, Kind = WingEventKind.BehaviourChanged,
+                        From = BehaviourId.React, To = BehaviourId.Rejoin, Reason = TransitionReason.ManeuverDone,
+                    });
+                }
             }
 
             Roles.Tick(new RoleInput
@@ -122,8 +142,10 @@ namespace WingCommand
                 spacing = 0f;
             }
             else if (Mind.Current == BehaviourId.Defend) reference = LastDefence.Ref;
-            // Evading at full effort, as the game's evasion does (aimEffort 1).
-            float aggression = Mind.Current == BehaviourId.Defend ? MissileDefence.DefendAggression : Aggression;
+            else if (Mind.Current == BehaviourId.React) reference = reaction;
+            // Evading at full effort, as the game's evasion does (aimEffort 1); a maneuver too.
+            float aggression = Mind.Current == BehaviourId.Defend ? MissileDefence.DefendAggression
+                : Mind.Current == BehaviourId.React ? ReactionManeuver.Aggression : Aggression;
             // The throttle override is a fixed wing's (a helicopter's throttle is its collective: review M5c C1); idle only
             // when safe. The tick it stops, the loops pick up from the throttle it held (review M5c I4).
             bool fixedWing = Pipeline is FixedWingPipeline || (Pipeline is TiltwingPipeline tw && tw.Mode == TiltwingMode.Plane);
@@ -141,7 +163,7 @@ namespace WingCommand
                 Aggression = aggression,
                 Spacing = spacing,
                 TerrainClearance = Clearance,
-                HasHeading = Mind.Current != BehaviourId.HoldOverhead && Mind.Current != BehaviourId.Defend,
+                HasHeading = Mind.Current != BehaviourId.HoldOverhead && Mind.Current != BehaviourId.Defend && Mind.Current != BehaviourId.React,
                 HeadingDeg = Vec3.HeadingDeg(leader.Track),
             };
             GuidanceCommand guidance = LastGuidance = Pipeline.Guide(LastIntent, s, p);
@@ -188,29 +210,53 @@ namespace WingCommand
             return LastOutput = Pipeline.Step(guidance, s, ctx, p, dt);
         }
 
-        /// <summary>The member leaves formation flight (recovery, combat, release) mid-defence: the defence is forgotten and
-        /// the mind rejoins, logged (review M5c I3); the next flight picks up from the held throttle.</summary>
+        /// <summary>The member leaves formation flight (recovery, combat, release, settle) mid-defence or mid-maneuver: both
+        /// are forgotten and the mind rejoins, logged (review M5c I3); the next flight picks up from the held throttle.</summary>
         public void EndDefence(float time, WingEventRing events)
         {
             Defence.End();
             Threat = default;
             if (overrideWas) trackPending = true;
             overrideWas = false;
-            if (Mind.Current != BehaviourId.Defend) return;
+            Reaction.End();
+            BehaviourId from = Mind.Current;
+            if (from != BehaviourId.Defend && from != BehaviourId.React) return;
             Mind.Force(BehaviourId.Rejoin);
             events?.Push(new WingEvent
             {
                 Time = time, Member = Seat, Kind = WingEventKind.BehaviourChanged,
-                From = BehaviourId.Defend, To = BehaviourId.Rejoin, Reason = TransitionReason.Commanded,
+                From = from, To = BehaviourId.Rejoin, Reason = TransitionReason.Commanded,
             });
         }
 
-        /// <summary>"Form up": every member rejoins now, logged as a commanded transition.</summary>
+        /// <summary>A reaction maneuver ordered for this member (spec WMC rebuild R3): null when it begins, else why not
+        /// (defending, still inside the last one's dwell, or its gate). A new one replaces the last after
+        /// <see cref="ReactionManeuver.MinDwell"/>.</summary>
+        public string React(in ReactionOrder o, in AircraftState s, float agl, AirframeProfile p, float time, WingEventRing events)
+        {
+            BehaviourId from = Mind.Current;
+            if (from == BehaviourId.Defend) return "defending";
+            if (from == BehaviourId.React && Reaction.Elapsed < ReactionManeuver.MinDwell) return "still maneuvering";
+            string why = ReactionManeuver.Refusal(o.Kind, s, agl, p, o.HasThreat);
+            if (why != null) return why;
+            Reaction.Begin(o, s, LastRejoin.Ref);
+            Mind.Force(BehaviourId.React);
+            events?.Push(new WingEvent
+            {
+                Time = time, Member = Seat, Kind = WingEventKind.BehaviourChanged,
+                From = from, To = BehaviourId.React, Reason = TransitionReason.Commanded,
+            });
+            return null;
+        }
+
+        /// <summary>"Form up": every member rejoins now, logged as a commanded transition (a maneuver ends).</summary>
         public void FormUp(float time, WingEventRing events)
         {
             BehaviourId from = Mind.Current;
             // A member defending against a missile finishes first (spec M5 §7.2).
-            if (from == BehaviourId.Defend || !Mind.Force(BehaviourId.Rejoin)) return;
+            if (from == BehaviourId.Defend) return;
+            Reaction.End();
+            if (!Mind.Force(BehaviourId.Rejoin)) return;
             events?.Push(new WingEvent
             {
                 Time = time, Member = Seat, Kind = WingEventKind.BehaviourChanged,

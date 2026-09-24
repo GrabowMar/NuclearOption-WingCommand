@@ -83,7 +83,8 @@ namespace WingCommand
                 if (speaker == null) continue;
                 string detail = call.Name == "JOKER" ? Math.Max(1, (int)Math.Ceiling(speaker.Bingo.SecondsToBingo / 60f)).ToString()
                     // A loss is told by a surviving member about the seat that was lost.
-                    : call.Name == "AIRFRAMELOST" || call.Name == "EJECTED" ? WingRows.Number(e.Member) : null;
+                    : call.Name == "AIRFRAMELOST" || call.Name == "EJECTED" ? WingRows.Number(e.Member)
+                    : call.Name == "MANEUVERING" ? ReactionManeuver.Label(speaker.Brain.Reaction.Kind) : null;
                 string name = call.Name == "WINCHESTER" ? RadioCalls.WinchesterLine(Plugin.Settings.AfterWinchester.Value) : call.Name;
                 Say(speaker, call.Class, name, detail, call.WingWide, now);
             }

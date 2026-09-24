@@ -12,6 +12,7 @@ namespace WingCommand.PureTests
         [InlineData((int)BehaviourId.Trail, false, "TRAIL")]
         [InlineData((int)BehaviourId.Rejoin, true, "BEHIND")]
         [InlineData((int)BehaviourId.Defend, true, "DEFEND")]   // review M5c minor: evading outranks falling behind
+        [InlineData((int)BehaviourId.React, true, "MNVR")]   // a maneuver outranks falling behind too
         public void PhaseCodes(int behaviour, bool behind, string expected) =>
             Assert.Equal(expected, WingHudText.Phase((BehaviourId)behaviour, behind));
 

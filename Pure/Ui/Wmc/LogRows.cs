@@ -55,6 +55,9 @@ namespace WingCommand
             switch (e.Kind)
             {
                 case WingEventKind.BehaviourChanged:
+                    // Only a maneuver's start and end: the rest is the flight's own churn.
+                    if (e.To == BehaviourId.React) return "maneuver";
+                    return e.Reason == TransitionReason.ManeuverDone ? "maneuver done" : null;
                 case WingEventKind.FallingBehindCleared:
                 case WingEventKind.Converted:
                     return null;

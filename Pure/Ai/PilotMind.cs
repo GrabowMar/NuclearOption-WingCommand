@@ -43,7 +43,8 @@ namespace WingCommand
             bool isCaptured = captured.Update(m.Sigma >= CaptureSigma, CaptureSeconds, dt);
             bool isLost = lostSlot.Update(m.SlotError > LostSlotSpacings * m.Spacing, LostSlotSeconds, dt);
 
-            if (Current == BehaviourId.Defend) return false;
+            // Defend and a reaction maneuver are the brain's own: entered and left only by Force.
+            if (Current == BehaviourId.Defend || Current == BehaviourId.React) return false;
             if (m.LeaderLost)
                 return Current != BehaviourId.HoldOverhead && Switch(BehaviourId.HoldOverhead, TransitionReason.LeaderLost, out reason);
             if (sinceDecision < DecisionPeriod - 1e-6f) return false;
