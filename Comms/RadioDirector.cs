@@ -33,6 +33,7 @@ namespace WingCommand
         public void Activate()
         {
             Queue = new RadioQueue();
+            WingRadioAudio.Reset();
             Contacts.Clear();
             ContactsCalled = 0;
             ring = WingService.Instance?.Events;
@@ -159,6 +160,8 @@ namespace WingCommand
 
         private void Transmit(in RadioLine line)
         {
+            // Spec M5 §9.3: the game's radio static on every line, a threat warble on an emergency.
+            WingRadioAudio.Play(line.Class == RadioClass.Emergency ? WingRadioAudio.Earcon.ThreatAlarm : WingRadioAudio.Earcon.Transmission);
             WingToast.Show(line.Text);
             if (!VoiceOn()) return;
             try

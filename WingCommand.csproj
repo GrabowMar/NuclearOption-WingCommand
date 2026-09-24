@@ -63,7 +63,6 @@
     <Quarantine Include="Combat\TacticalCoordinator.cs" Milestone="M5" />
     <Quarantine Include="Combat\WingWeapons.cs" Milestone="M5" />
     <Quarantine Include="Comms\WingChatterHud.cs" Milestone="M4" />
-    <Quarantine Include="Comms\WingRadioAudio.cs" Milestone="M4" />
     <Quarantine Include="Ui\CombatHUDHitAudioPatch.cs" Milestone="M7" />
     <Quarantine Include="Ui\WingMarkerBadge.cs" Milestone="M4" />
     <Quarantine Include="Ui\WmcScreen.CustomPilots.cs" Milestone="M7" />

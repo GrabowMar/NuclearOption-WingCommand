@@ -244,6 +244,7 @@ namespace WingCommand
                 return;
             }
             int fired = w.Splash(targets[0], out int capable);
+            if (fired > 0) WingRadioAudio.Play(WingRadioAudio.Earcon.Splash);
             WingToast.Show(fired > 0 ? $"Splash: {fired} firing on {targets[0].unitName}"
                 : capable > 0 ? "Splash: launchers not ready" : "Splash: nobody in range");
         }
