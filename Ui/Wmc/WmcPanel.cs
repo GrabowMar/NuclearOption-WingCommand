@@ -20,6 +20,7 @@ namespace WingCommand
 
         private readonly Dictionary<string, AvButton> controls = new Dictionary<string, AvButton>();
         private readonly WmcContext context = new WmcContext();
+        private readonly WmcScopeBar scopeBar = new WmcScopeBar();
         private IWmcTab[] tabs;
         private MFDScreen screen;
         private Button bezelButton;
@@ -103,7 +104,7 @@ namespace WingCommand
             shell = null;
             tabs = null;
             controls.Clear();
-            context.SelectedId = 0u;
+            context.Selection.Clear();
             nextAttempt = nextRefresh = 0f;
             gaveUp = false;
         }
@@ -204,11 +205,16 @@ namespace WingCommand
                 new WmcWingTab(controls), new WmcOrdersTab(controls), new WmcFormTab(controls),
                 new WmcDoctrineTab(controls), new WmcApTab(controls), new WmcLogTab(controls),
             };
+            // The scope bar sits above every page (spec WMC program §4); pages lay out below it.
+            Rect body = shell.Body;
+            scopeBar.Build(shell.Content, new Rect(body.x, body.y, body.width, WmcScopeBar.Height), controls);
+            float drop = WmcScopeBar.Height + AvTokens.Space2;
+            var pageBody = new Rect(body.x, body.y - drop, body.width, body.height - drop);
             for (int i = 0; i < tabs.Length; i++)
             {
                 var page = (RectTransform)shell.CreatePage(i, "Wmc" + TabLabels[i]).transform;
                 // Review focus 2: a page taller than the body scrolls instead of painting over the status strip.
-                RectTransform parent = AvScreen.Scroll(page, shell.Body, tabs[i].ContentHeight, out Rect area);
+                RectTransform parent = AvScreen.Scroll(page, pageBody, tabs[i].ContentHeight, out Rect area);
                 tabs[i].Build(parent, area);
             }
 
@@ -248,13 +254,18 @@ namespace WingCommand
             {
                 context.Count = wing != null ? wing.FillSnapshot(context.Rows) : 0;
                 context.Stale = false;
-                return;
             }
-            WingMirror mirror = WingNet.Mirror;
-            context.Stale = mirror == null || mirror.Stale(Time.unscaledTime);
-            context.Count = 0;
-            if (mirror == null) return;
-            for (int i = 0; i < mirror.Count && i < context.Rows.Length; i++) context.Rows[context.Count++] = mirror[i];
+            else
+            {
+                WingMirror mirror = WingNet.Mirror;
+                context.Stale = mirror == null || mirror.Stale(Time.unscaledTime);
+                context.Count = 0;
+                if (mirror != null)
+                    for (int i = 0; i < mirror.Count && i < context.Rows.Length; i++) context.Rows[context.Count++] = mirror[i];
+            }
+            // Review focus 1: a selected aircraft that left drops out; the scope follows the selection.
+            context.Selection.Prune(context.Rows, context.Count);
+            context.Scope = context.Selection.Scope(context.Rows, context.Count);
         }
 
         private void Refresh()
@@ -276,6 +287,7 @@ namespace WingCommand
             shell.DataBar?.SetChip(1, "AP", ap != null && ap.Session.Engaged);
             shell.DataBar?.SetChip(2, "MAP", DynamicMap.mapMaximized);
 
+            scopeBar.Refresh(context);
             int page = shell.Page;
             if (page >= 0 && page < tabs.Length) tabs[page].Refresh(context);
 

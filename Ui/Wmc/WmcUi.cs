@@ -17,8 +17,10 @@ namespace WingCommand
         public int Count;
         public bool Client, Stale;
         public float MissionTime;
-        /// <summary>The selected aircraft's persistent id on the WING tab, 0 for none (slots renumber; review M7b-1 I2).</summary>
-        public uint SelectedId;
+        /// <summary>Who the next order goes to (spec WMC program §4): the selection by aircraft id, and the scope it makes this
+        /// refresh.</summary>
+        public readonly WmcSelection Selection = new WmcSelection();
+        public WingScope Scope;
 
         /// <summary>Orders run on the host (client orders are M6c-2).</summary>
         public bool CanOrder => !Client && Wing != null && Wing.Selection != null;
