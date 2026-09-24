@@ -514,7 +514,6 @@ namespace WingCommand
                 { "hostiles", wing.LastHostiles }, { "fallbacks", wing.FallBacks },
                 { "jokers", wing.Events.CountOf(WingEventKind.Joker) },
                 { "defends", wing.Events.CountOf(TransitionReason.MissileInbound) },
-                { "alert_repairs", MissileAlertRepair.Repairs },
                 { "standing_shots", wing.StandingShots },
             };
         }

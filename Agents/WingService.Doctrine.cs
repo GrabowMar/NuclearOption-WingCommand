@@ -129,23 +129,35 @@ namespace WingCommand
             {
                 if (m.Released || !m.Alive || m.Engaged || m.OnGround || m.Recovery != null || m.Settle != null) continue;
                 Aircraft a = m.Aircraft;
-                if (a.weaponStations == null || a.weaponManager == null) continue;
-                Vector3 to = target.GlobalPosition() - a.GlobalPosition();
+                FactionHQ hq = a.NetworkHQ;
+                if (a.weaponStations == null || a.weaponManager == null || hq == null || hq.trackingDatabase == null) continue;
+                // As standing fire and the game's own release gate (review M5e I2): a track accurate to 100 m, measured from
+                // the tracked position, and a weapon the game rates as able to hurt this target.
+                if (!hq.trackingDatabase.TryGetValue(target.persistentID, out TrackingInfo t) || t == null ||
+                    !hq.IsTargetPositionAccurate(target, FireAccuracyMetres)) continue;
+                Vector3 to = t.GetPosition() - a.GlobalPosition();
                 float distance = to.magnitude, off = Vector3.Angle(a.transform.forward, to);
+                bool inEnvelope = false;
                 foreach (WeaponStation w in a.weaponStations)
                 {
                     if (!Usable(a, w) || !w.WeaponInfo.missile || w.WeaponInfo.gun || w.WeaponInfo.bomb) continue;
                     TargetRequirements req = w.WeaponInfo.targetRequirements;
                     if (!StandingFire.InEnvelope(distance, req.minRange, req.maxRange, target.radarAlt, req.minAltitude, req.maxAltitude, off, req.minAlignment, a.speed, req.minOwnerSpeed)) continue;
+                    if (CombatAI.AnalyzeTarget(w, a, t, 0f, distance, 1f).opportunity <= 0f) continue;
                     if (!w.WeaponInfo.overHorizon && !target.LineOfSight(a.transform.position - Vector3.up * a.definition.spawnOffset.y, 1000f)) continue;
-                    capable++;
-                    if (FireAt(m, w, target, out _))
+                    inEnvelope = true;
+                    bool launched = FireAt(m, w, target, out bool attempted);
+                    // A shot (or one the ammo count has not shown yet) restarts standing fire's interval; a station not
+                    // ready lets the next one try.
+                    if (attempted) m.Cadence.Fired();
+                    if (launched)
                     {
                         fired++;
                         Plugin.Logger.LogInfo($"[Wing] #{m.Number} splash on {target.unitName}");
                     }
-                    break;
+                    if (attempted) break;
                 }
+                if (inEnvelope) capable++;
             }
             SplashShots += fired;
             return fired;
