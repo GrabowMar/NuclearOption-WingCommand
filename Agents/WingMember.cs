@@ -74,6 +74,8 @@ namespace WingCommand
         public readonly DamageWatch Damage = new DamageWatch();
         /// <summary>Out of weapons in formation, called once (a field: updated in place).</summary>
         public WinchesterLatch Winchester;
+        /// <summary>The RADAR doctrine's last toggle (a field: updated in place).</summary>
+        public RadarGate RadarGate;
 
         public WingMember(Aircraft aircraft, int slot, AirframeProfile profile)
         {

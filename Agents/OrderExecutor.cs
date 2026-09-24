@@ -307,10 +307,17 @@ namespace WingCommand
         {
             if (axis == DoctrineAxis.Weapons)
             {
-                bool gun = false, missile = false;
+                // Review Focus R3a 5: an aircraft without the weapon would get an empty station list and fly home "out of
+                // ammo", so the order is refused naming it.
+                string cannot = null;
                 foreach (WingMember m in w.Members)
-                    if (!m.Released && m.Alive && (who == null || who(m))) Carries(m.Aircraft, ref gun, ref missile);
-                string cannot = WeaponsFilter.Refusal((WeaponsPolicy)v, gun, missile);
+                {
+                    if (m.Released || !m.Alive || (who != null && !who(m))) continue;
+                    bool gun = false, missile = false;
+                    Carries(m.Aircraft, ref gun, ref missile);
+                    string why = WeaponsFilter.Refusal((WeaponsPolicy)v, gun, missile);
+                    if (why != null) cannot = (cannot == null ? "" : cannot + ", ") + "#" + m.Number + " " + why;
+                }
                 if (cannot != null) return OrderResult.Refused("Wing cannot: " + cannot);
             }
             string level;
@@ -329,6 +336,8 @@ namespace WingCommand
                 w.SetAxis(e, axis, v);
                 level = e < 0 ? "Wing" : w.Roster.Name(e);
             }
+            // The game's AI keeps its current attack until its next choice: engaged members choose again now.
+            if (axis == DoctrineAxis.Weapons || axis == DoctrineAxis.Radar) w.Rechoose(who);
             string ack = $"{level}: {AxisWord(axis)} {ValueWord(axis, v)}";
             foreach (WingMember m in w.Members)
             {

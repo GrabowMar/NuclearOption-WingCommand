@@ -748,7 +748,36 @@ namespace WingCommand
                 { "jokers", wing.Events.CountOf(WingEventKind.Joker) },
                 { "defends", wing.Events.CountOf(TransitionReason.MissileInbound) },
                 { "standing_shots", wing.StandingShots },
+                { "radars_on", wing.RadarsOn },
             };
+        }
+
+        /// <summary>Dev only (spec WMC rebuild R3 alerts): member <c>member</c> (its #n) has its parts' hit points set to
+        /// <c>hp</c> (0-100), or with <c>kill</c> its aircraft is disabled, as a shoot-down would.</summary>
+        public static Dictionary<string, object> Damage(Dictionary<string, object> args)
+        {
+            WingService wing = WingService.Instance;
+            if (wing == null) return Fail("Damage", "the wing is not active");
+            int number = (int)Number(args, "member", 2);
+            WingMember m = null;
+            foreach (WingMember x in wing.Members)
+                if (x.Number == number) m = x;
+            if (m == null || m.Aircraft == null) return Fail("Damage", "no such member");
+            if (Arg(args, "kill") is bool kill && kill)
+            {
+                m.Aircraft.DisableUnit();
+                return Ok("killed", number);
+            }
+            float hp = Number(args, "hp", 40);
+            int parts = 0;
+            if (m.Aircraft.partLookup != null)
+                foreach (UnitPart p in m.Aircraft.partLookup)
+                    if (p != null)
+                    {
+                        p.hitPoints = hp;
+                        parts++;
+                    }
+            return Ok("parts", parts);
         }
 
         /// <summary>What calls have cost this mission: charged, refunded, and the player's allocation now; the squadron's

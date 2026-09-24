@@ -357,6 +357,7 @@ namespace WingCommand
             foreach (WingMember m in Members)
                 if (ReferenceEquals(m.Aircraft, a)) self = m;
             if (self == null || !self.Engaged || self.AssignedTarget != null || a.NetworkHQ == null || a.NetworkHQ.trackingDatabase == null) return;
+            WingDoctrine doctrine = DoctrineFor(self);
             int others = 0;
             foreach (WingMember m in Members)
             {
@@ -374,6 +375,7 @@ namespace WingCommand
                 TrackingInfo tracking = pair.Value;
                 if (tracking == null || !tracking.TryGetUnit(out Unit u) || u == null || u.disabled || u.NetworkHQ == null || u.NetworkHQ == a.NetworkHQ) continue;
                 if (!a.NetworkHQ.IsTargetPositionAccurate(u, TargetAccuracyMetres)) continue;
+                if (!WeaponsFilter.AllowsTarget(doctrine.Weapons, IsAir(u))) continue;
                 float range = FastMath.Distance(tracking.GetPosition(), at);
                 int committed = 0;
                 for (int i = 0; i < others; i++)
@@ -382,7 +384,7 @@ namespace WingCommand
                 for (int s = 0; s < stations.Count; s++)
                 {
                     WeaponStation w = stations[s];
-                    if (!Usable(a, w)) continue;
+                    if (!UsableBy(self, doctrine, w)) continue;
                     OpportunityThreat ot = CombatAI.AnalyzeTarget(w, a, tracking, 0f, range, 100f);
                     if (ot.opportunity <= 0f) continue;
                     int capacity = u is Missile ? 1 : System.Math.Max(1, System.Math.Min(4, (int)System.Math.Ceiling(w.WeaponInfo.CalcAttacksNeeded(u))));
@@ -528,7 +530,7 @@ namespace WingCommand
                 for (int t = 0; t < attackCount; t++)
                 {
                     int cell = i * attackCount + t;
-                    canAttack[cell] = targetAlive[t] && CanAttack(m.Aircraft, attackTargets[t]);
+                    canAttack[cell] = targetAlive[t] && CanAttack(m, attackTargets[t]);
                     targetDistance[cell] = targetAlive[t] ? (attackTargets[t].GlobalPosition().ToVec3() - at).Length : float.MaxValue;
                     if (ReferenceEquals(m.AssignedTarget, attackTargets[t])) currentTarget[i] = t;
                 }
@@ -559,7 +561,7 @@ namespace WingCommand
             });
         }
 
-        private static void Assign(WingMember m, Unit target)
+        internal static void Assign(WingMember m, Unit target)
         {
             if (ReferenceEquals(m.AssignedTarget, target)) return;
             Plugin.Logger.LogInfo($"[Wing] #{m.Number} target {(target != null ? target.unitName : "own choice")}");
@@ -569,13 +571,17 @@ namespace WingCommand
 
         /// <summary>The member's faction tracks <paramref name="t"/> and one of its loaded non-cargo stations can attack it,
         /// by the game's own analysis.</summary>
-        private static bool CanAttack(Aircraft a, Unit t)
+        private bool CanAttack(WingMember m, Unit t)
         {
+            Aircraft a = m.Aircraft;
             // The game only chooses a target whose position is accurate (review M5a I4).
             TrackingInfo tracking = a.NetworkHQ != null ? a.NetworkHQ.GetTrackingData(t.persistentID) : null;
             if (tracking == null || a.weaponStations == null || !a.NetworkHQ.IsTargetPositionAccurate(t, TargetAccuracyMetres)) return false;
+            // Spec WMC rebuild R3: only what the member's WEAPONS allow (NO A-G: never a ground target).
+            WingDoctrine d = DoctrineFor(m);
+            if (!WeaponsFilter.AllowsTarget(d.Weapons, IsAir(t))) return false;
             foreach (WeaponStation w in a.weaponStations)
-                if (Usable(a, w) && CombatAI.AnalyzeTarget(w, a, tracking, 0f, -1f, 100f).opportunity > 0f) return true;
+                if (UsableBy(m, d, w) && CombatAI.AnalyzeTarget(w, a, tracking, 0f, -1f, 100f).opportunity > 0f) return true;
             return false;
         }
 

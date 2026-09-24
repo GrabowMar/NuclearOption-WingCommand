@@ -133,6 +133,7 @@ namespace WingCommand
                 bool air = u.definition != null && u.definition.typeIdentity.air > 0.5f;
                 float fromCover = (t.GetPosition().ToVec3() - cover).Length;
                 if (mode == StandingMode.Cover ? !(u is Aircraft) || fromCover > range : !StandingFire.Allows(allow, air)) continue;
+                if (!WeaponsFilter.AllowsTarget(doctrine.Weapons, air)) continue;
                 Vector3 to = t.GetPosition() - at;
                 float distance = to.magnitude;
                 if (distance > range || !hq.IsTargetPositionAccurate(u, FireAccuracyMetres)) continue;
@@ -142,7 +143,7 @@ namespace WingCommand
                     if (ReferenceEquals(standingOthers[i], u)) committed++;
                 foreach (WeaponStation w in a.weaponStations)
                 {
-                    if (!Usable(a, w) || !w.WeaponInfo.missile || w.WeaponInfo.gun || w.WeaponInfo.bomb) continue;
+                    if (!UsableBy(m, doctrine, w) || !w.WeaponInfo.missile || w.WeaponInfo.gun || w.WeaponInfo.bomb) continue;
                     TargetRequirements req = w.WeaponInfo.targetRequirements;
                     float maxRange = PerkRange(m, w, a, u, to);
                     if (!StandingFire.InEnvelope(distance, req.minRange, maxRange, u.radarAlt, req.minAltitude, req.maxAltitude, off, m.Perks.Boresight(req.minAlignment), a.speed, req.minOwnerSpeed)) continue;
@@ -187,6 +188,9 @@ namespace WingCommand
                 Aircraft a = m.Aircraft;
                 FactionHQ hq = a.NetworkHQ;
                 if (a.weaponStations == null || a.weaponManager == null || hq == null || hq.trackingDatabase == null) continue;
+                // Spec WMC rebuild R3: a member whose WEAPONS forbid this target or every missile aboard sits it out.
+                WingDoctrine doctrine = DoctrineFor(m);
+                if (!WeaponsFilter.AllowsTarget(doctrine.Weapons, IsAir(target))) continue;
                 // As standing fire and the game's own release gate (review M5e I2): a track accurate to 100 m, measured from
                 // the tracked position, and a weapon the game rates as able to hurt this target.
                 if (!hq.trackingDatabase.TryGetValue(target.persistentID, out TrackingInfo t) || t == null ||
@@ -197,7 +201,7 @@ namespace WingCommand
                 int shots = 0;
                 foreach (WeaponStation w in a.weaponStations)
                 {
-                    if (!Usable(a, w) || !w.WeaponInfo.missile || w.WeaponInfo.gun || w.WeaponInfo.bomb) continue;
+                    if (!UsableBy(m, doctrine, w) || !w.WeaponInfo.missile || w.WeaponInfo.gun || w.WeaponInfo.bomb) continue;
                     TargetRequirements req = w.WeaponInfo.targetRequirements;
                     float maxRange = PerkRange(m, w, a, target, to);
                     if (!StandingFire.InEnvelope(distance, req.minRange, maxRange, target.radarAlt, req.minAltitude, req.maxAltitude, off, m.Perks.Boresight(req.minAlignment), a.speed, req.minOwnerSpeed)) continue;

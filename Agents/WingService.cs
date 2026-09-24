@@ -153,6 +153,7 @@ namespace WingCommand
             StepPlanner(dt);
             SuperviseLandings();
             SuperviseCombat(dt);
+            DisciplineRadars(dt);
             SampleMembers(dt);
             Prune();
             if (Plugin.Settings.DevTools.Value && (traceClock += dt) >= GroundTraceSeconds)
@@ -963,6 +964,7 @@ namespace WingCommand
                 StepTest.Forget(m);
                 m.Ground?.Leave();
                 m.Recovery?.Leave();
+                RestoreRadar(m);
                 Unlist(m);
                 ReleasePad(m);
                 RetirePilot(m);
