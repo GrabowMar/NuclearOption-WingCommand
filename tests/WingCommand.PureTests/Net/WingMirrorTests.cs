@@ -35,6 +35,15 @@ namespace WingCommand.PureTests
         }
 
         [Fact]
+        public void ADamagedMemberCarriesTheDamagedFlag()
+        {
+            SnapshotMember m = SnapshotBuilder.Member(42u, 1, (byte)BehaviourId.StationKeep, MemberDuty.Formation, 1f, 1f,
+                fallingBehind: false, bingo: false, joker: false, winchester: false, element: 2, damaged: true);
+            Assert.Equal((byte)SnapshotFlags.Damaged, m.Flags);
+            Assert.Equal(16, (int)SnapshotFlags.Damaged);
+        }
+
+        [Fact]
         public void TheMirrorKeepsTheNewestSnapshotOfItsOwner()
         {
             var mirror = new WingMirror(7u);

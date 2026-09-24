@@ -16,26 +16,26 @@ namespace WingCommand
 
         /// <summary>Gives element <paramref name="e"/> a task (spec WMC program §3.3); an element other than A forms on its own
         /// lead, started at its members.</summary>
-        public OrderResult OrderElement(int e, WingTask task)
+        public OrderResult OrderElement(int e, WingTask task, TransitionReason reason = TransitionReason.Commanded)
         {
             if (e > 0)
             {
                 // Review P2 I3: an element's Form is its return to A.
                 if (task == null || task.Kind == TaskKind.Form)
                 {
-                    MergeElement(e);
+                    MergeElement(e, reason);
                     return OrderResult.Ok;
                 }
                 // Review P2 I2: a new task for an idle element starts a fresh lead at its members.
                 if (!PlannerOf(e).Active) PlannerOf(e).Reset();
-                OrderResult d = PlannerOf(e).Apply(task, Snapshot(e), missionTime, Events);
+                OrderResult d = PlannerOf(e).Apply(task, Snapshot(e), missionTime, Events, reason);
                 if (d.Accepted) WingOf(e)?.ResetLeader();
                 Plugin.Logger.LogInfo(d.Accepted
                     ? $"[Wing] element {ElementRoster.Letter(e)}: task {(task != null ? task.Kind : TaskKind.Form)} ordered"
                     : $"[Wing] element {ElementRoster.Letter(e)}: task refused: {d.Reason}");
                 return d;
             }
-            OrderResult r = Planner.Apply(task, Snapshot(0), missionTime, Events);
+            OrderResult r = Planner.Apply(task, Snapshot(0), missionTime, Events, reason);
             // A task replaces an escort (review M4a I5): the wing forms on the task's lead, with the player's shapes. A
             // plain anchor (the harness's lead, standing in for the player) stays, so Form returns to it.
             if (r.Accepted && task != null && task.Kind != TaskKind.Form && Escorting)

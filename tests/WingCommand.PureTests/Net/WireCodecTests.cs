@@ -48,7 +48,7 @@ namespace WingCommand.PureTests
         {
             var members = new SnapshotMember[WcSnapshot.MaxMembers];
             for (int i = 0; i < members.Length; i++)
-                members[i] = new SnapshotMember { Id = (uint)(500 + i), Slot = (byte)i, Behaviour = 1, Duty = 2, Fuel = 200, Ammo = 100, Flags = 5, Element = (byte)(i % 4) };
+                members[i] = new SnapshotMember { Id = (uint)(500 + i), Slot = (byte)i, Behaviour = 1, Duty = 2, Fuel = 200, Ammo = 100, Flags = 0x1F, Element = (byte)(i % 4) };
             return new WcSnapshot { Tick = 99, Owner = 7, Members = members };
         }
 

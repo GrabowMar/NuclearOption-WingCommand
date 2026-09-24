@@ -105,7 +105,9 @@ namespace WingCommand
         private void ClickAlert(int i)
         {
             if (last == null || alertIds[i] == 0u) return;
-            FocusAircraft(alertIds[i]);
+            // A lost aircraft is no longer anyone's to select: centre on it while it still exists.
+            if (alerts[i].Kind == AlertKind.Lost) WmcMap.Center(WmcContext.UnitOf(alertIds[i]));
+            else FocusAircraft(alertIds[i]);
         }
 
         private string AlertLine(in Alert a, WmcContext c)
@@ -113,12 +115,12 @@ namespace WingCommand
             Unit u = WmcContext.UnitOf(a.Id);
             string callsign = u is Aircraft air && !c.Client ? WingPilotRoster.Of(air)?.Callsign : null;
             return AlertList.Word(a.Kind) + "  " + WingRows.Number(a.Slot) + (string.IsNullOrEmpty(callsign) ? "" : " " + callsign)
-                + " · " + AlertList.Detail(a.Kind);
+                + " · " + AlertList.Detail(a);
         }
 
         private void RefreshSituation(WmcContext c)
         {
-            int n = AlertList.Fill(c.Rows, c.Count, alerts);
+            int n = AlertList.Fill(c.Rows, c.Count, c.Client ? null : c.Wing?.Events, c.MissionTime, alerts);
             int shown = n < AlertRows ? n : AlertRows;
             for (int i = 0; i < AlertRows; i++)
             {
@@ -131,7 +133,7 @@ namespace WingCommand
                     continue;
                 }
                 alertIds[i] = alerts[i].Id;
-                int key = (int)alerts[i].Kind * 1000003 + (int)(alerts[i].Id % 1000003u) + alerts[i].Slot * 7;
+                int key = (int)alerts[i].Kind * 1000003 + (int)(alerts[i].Id % 1000003u) + alerts[i].Slot * 7 + (int)alerts[i].Why * 131;
                 if (key == alertKeys[i]) continue;
                 alertKeys[i] = key;
                 alertTexts[i].text = AlertLine(alerts[i], c);

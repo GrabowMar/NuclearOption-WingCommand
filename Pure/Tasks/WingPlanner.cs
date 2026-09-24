@@ -53,7 +53,8 @@ namespace WingCommand
         public OrderResult Apply(WingTask task, in WingSnapshot wing, float time, WingEventRing events) =>
             Apply(task, wing, time, events, TransitionReason.Commanded);
 
-        private OrderResult Apply(WingTask task, in WingSnapshot wing, float time, WingEventRing events, TransitionReason reason)
+        /// <summary>A task change logged with <paramref name="reason"/> (a plan's or a rule's order, spec WMC rebuild R3).</summary>
+        public OrderResult Apply(WingTask task, in WingSnapshot wing, float time, WingEventRing events, TransitionReason reason)
         {
             if (task == null || task.Kind == TaskKind.Form)
             {

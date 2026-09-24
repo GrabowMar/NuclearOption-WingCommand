@@ -23,7 +23,7 @@ namespace WingCommand
             if (nobody != null) return OrderResult.Refused("Wing cannot: " + nobody);
             switch (o.Kind)
             {
-                case OrderKind.FormUp: return FormUp(w, o.Scope);
+                case OrderKind.FormUp: return FormUp(w, o.Scope, o.Reason);
                 case OrderKind.SkipLeg:
                 {
                     int e = ElementFor(w, o.Scope);
@@ -47,8 +47,8 @@ namespace WingCommand
                 return OrderResult.Refused("Cannot land there: " + why);
             ScopeTarget t = w.Roster.Resolve(o.Scope);
             if (t.Element < 0) return OrderResult.Refused("Wing cannot: " + t.Reason);
-            if (t.Everyone) MergeAll(w);
-            OrderResult r = w.OrderElement(t.Element, o.Task);
+            if (t.Everyone) MergeAll(w, o.Reason);
+            OrderResult r = w.OrderElement(t.Element, o.Task, o.Reason);
             if (!r.Accepted)
             {
                 // A detach only happens to carry an order: a refused one puts everyone back (review P2 m9).
@@ -86,12 +86,12 @@ namespace WingCommand
             }
         }
 
-        private static OrderResult FormUp(WingService w, in WingScope scope)
+        private static OrderResult FormUp(WingService w, in WingScope scope, TransitionReason reason)
         {
             if (scope.Kind == ScopeKind.Wing)
             {
-                MergeAll(w);
-                w.FormUp();
+                MergeAll(w, reason);
+                w.FormUp(reason);
                 return OrderResult.Acked("Form up", 0);
             }
             Func<WingMember, bool> who = Who(w, scope);
@@ -104,10 +104,10 @@ namespace WingCommand
                 foreach (WingMember m in chosen)
                     if (w.ElementOf(m) == e)
                     {
-                        w.MergeElement(e);
+                        w.MergeElement(e, reason);
                         break;
                     }
-            if (scope.Kind == ScopeKind.Element && scope.Element == 0 && w.Planner.Active) w.Order(WingTask.Form());
+            if (scope.Kind == ScopeKind.Element && scope.Element == 0 && w.Planner.Active) w.OrderElement(0, WingTask.Form(), reason);
             Func<WingMember, bool> these = chosen.Contains;
             w.Disengage(these);
             w.TakeOff(these);
@@ -316,10 +316,10 @@ namespace WingCommand
             return 0;
         }
 
-        private static void MergeAll(WingService w)
+        private static void MergeAll(WingService w, TransitionReason reason)
         {
             for (int e = 1; e < ElementRoster.MaxElements; e++)
-                if (w.Roster.InUse(e)) w.MergeElement(e);
+                if (w.Roster.InUse(e)) w.MergeElement(e, reason);
         }
 
         private static void Units(uint[] from)

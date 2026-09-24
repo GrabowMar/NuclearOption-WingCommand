@@ -451,6 +451,7 @@ namespace WingCommand
         private Func<WingMember, bool> attackWho;
         private readonly float[] targetDistance = new float[FormationCatalog.MaxSlots * TargetAllocator.MaxTargets];
         private readonly bool[] targetAlive = new bool[TargetAllocator.MaxTargets];
+        private readonly bool[] targetWasAlive = new bool[TargetAllocator.MaxTargets];
         private readonly int[] currentTarget = new int[FormationCatalog.MaxSlots], nextTarget = new int[FormationCatalog.MaxSlots];
         private readonly WingMember[] engagedNow = new WingMember[FormationCatalog.MaxSlots];
         private readonly float[] targetLost = new float[FormationCatalog.MaxSlots];
@@ -477,7 +478,11 @@ namespace WingCommand
             attackWho = who;
             if (targets != null)
                 foreach (Unit u in targets)
-                    if (u != null && !u.disabled && attackCount < attackTargets.Length) attackTargets[attackCount++] = u;
+                    if (u != null && !u.disabled && attackCount < attackTargets.Length)
+                    {
+                        targetWasAlive[attackCount] = true;
+                        attackTargets[attackCount++] = u;
+                    }
             int n = EngageAll(who);
             if (n == 0) attackCount = 0;
             reallocateClock = 0f;
@@ -495,6 +500,8 @@ namespace WingCommand
             {
                 targetAlive[t] = attackTargets[t] != null && !attackTargets[t].disabled;
                 any |= targetAlive[t];
+                if (targetWasAlive[t] && !targetAlive[t]) Destroyed(attackTargets[t]);
+                targetWasAlive[t] = targetAlive[t];
             }
             int k = 0;
             foreach (WingMember m in Members)
@@ -533,6 +540,23 @@ namespace WingCommand
                 engagedNow[i].TargetLost = targetLost[i];
                 Assign(engagedNow[i], nextTarget[i] >= 0 ? attackTargets[nextTarget[i]] : null);
             }
+        }
+
+        /// <summary>An attack order's target went down (spec WMC rebuild R3): logged against the member that had it.</summary>
+        private void Destroyed(Unit target)
+        {
+            WingMember by = null;
+            foreach (WingMember m in Members)
+                if (ReferenceEquals(m.AssignedTarget, target))
+                {
+                    by = m;
+                    break;
+                }
+            Events.Push(new WingEvent
+            {
+                Time = missionTime, Member = by != null ? by.Seat : -1, Kind = WingEventKind.TargetDestroyed,
+                Element = (byte)(by != null ? ElementOf(by) : 0),
+            });
         }
 
         private static void Assign(WingMember m, Unit target)
@@ -694,6 +718,8 @@ namespace WingCommand
             m.Engaged = false;
             m.AssignedTarget = null;
             m.Pilot?.SetPrimaryTarget(null);
+            // The fight's own Winchester already told the wing: the formation sample must not say it again.
+            if (reason == TransitionReason.Winchester) m.Winchester.Latched = true;
             m.Brain.FormUp(missionTime, Events);
             Events.Push(new WingEvent { Time = missionTime, Member = m.Seat, Kind = WingEventKind.Disengaged, Reason = reason });
         }

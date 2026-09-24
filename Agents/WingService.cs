@@ -153,6 +153,7 @@ namespace WingCommand
             StepPlanner(dt);
             SuperviseLandings();
             SuperviseCombat(dt);
+            SampleMembers(dt);
             Prune();
             if (Plugin.Settings.DevTools.Value && (traceClock += dt) >= GroundTraceSeconds)
             {
@@ -452,9 +453,9 @@ namespace WingCommand
             : p.pilotType == Pilot.PilotType.Helo || p.pilotType == Pilot.PilotType.Tiltwing ? p.AIHeloCombatState
             : null;
 
-        public void FormUp()
+        public void FormUp(TransitionReason reason = TransitionReason.Commanded)
         {
-            if (Planner.Active) Order(WingTask.Form());
+            if (Planner.Active) OrderElement(0, WingTask.Form(), reason);
             Disengage();
             TakeOff();
             for (int i = 0; i < Members.Count; i++) Members[i].Brain.FormUp(missionTime, Events);
@@ -777,11 +778,11 @@ namespace WingCommand
         }
 
         /// <summary>Element <paramref name="e"/> returns to A: its planner stops and its members rejoin A's shape.</summary>
-        public void MergeElement(int e)
+        public void MergeElement(int e, TransitionReason reason = TransitionReason.Commanded)
         {
             if (e <= 0) return;
             // Form through the planner so a running task is logged as cancelled (review P2 I7).
-            PlannerOf(e).Apply(WingTask.Form(), Snapshot(e), missionTime, Events);
+            PlannerOf(e).Apply(WingTask.Form(), Snapshot(e), missionTime, Events, reason);
             Settings.Forget(e);
             wings[e]?.SetFormation(Selection.Current, Selection.SpacingMetres);
             Roster.Merge(e);
@@ -940,6 +941,12 @@ namespace WingCommand
                 ReleasePad(m);
                 RetirePilot(m);
                 Metrics.Left(m.Id);
+                // Spec WMC rebuild R3: the loss is logged at the seat it flew in, before the seats compact.
+                Events.Push(new WingEvent
+                {
+                    Time = missionTime, Member = m.Seat, Kind = WingEventKind.MemberLost, Reason = LossOf(m), Element = (byte)ElementOf(m),
+                    Id = (object)m.Aircraft != null ? m.Aircraft.persistentID.Id : 0u,
+                });
                 if ((object)m.Aircraft != null) Roster.Remove(m.Aircraft.persistentID.Id);
                 Members.RemoveAt(i);
                 changed = true;
@@ -955,6 +962,15 @@ namespace WingCommand
             }
             AssignSlots();
             RosterChanged?.Invoke();
+        }
+
+        /// <summary>How a member left (the LOST alert, the log and the loss calls).</summary>
+        private static TransitionReason LossOf(WingMember m)
+        {
+            Aircraft a = m.Aircraft;
+            bool home = a != null && a.unitState == Unit.UnitState.Returned;
+            return MemberLoss.Of(m.Released, home, a != null && a.disabled, m.Pilot != null && m.Pilot.dead,
+                m.Pilot != null && m.Pilot.ejected);
         }
 
         /// <summary>Why a member left (diagnostics).</summary>

@@ -35,7 +35,8 @@ namespace WingCommand
             d.Fuel = alive ? a.GetFuelLevel() : float.NaN;
             d.Ammo = alive ? WingService.AmmoFraction(a) : float.NaN;
             d.BingoSeconds = m.Bingo.SecondsToBingo;
-            d.Damage = alive && a.partDamageTracker != null ? a.partDamageTracker.GetDetachedRatio() : float.NaN;
+            // The same hull the DAMAGED alert reads (GetDetachedRatio ignored hit-point damage).
+            d.Damage = alive ? 1f - m.Damage.Hull : float.NaN;
             d.Radar = alive && a.radar != null ? (a.radar.activated ? 1 : 0) : -1;
             Unit t = m.AssignedTarget != null ? m.AssignedTarget : m.StandingTarget;
             d.Target = t != null && !t.disabled ? (t.definition != null ? t.definition.unitName : t.unitName) : null;

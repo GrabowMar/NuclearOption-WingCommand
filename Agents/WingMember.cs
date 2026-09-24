@@ -70,6 +70,10 @@ namespace WingCommand
         public float NearFloorY = float.NaN;
         public float NoFbwSeconds;
         public bool Released;
+        /// <summary>The hull from its parts' hit points, sampled at 1 Hz (spec WMC rebuild R3: DAMAGED, INSPECT).</summary>
+        public readonly DamageWatch Damage = new DamageWatch();
+        /// <summary>Out of weapons in formation, called once (a field: updated in place).</summary>
+        public WinchesterLatch Winchester;
 
         public WingMember(Aircraft aircraft, int slot, AirframeProfile profile)
         {

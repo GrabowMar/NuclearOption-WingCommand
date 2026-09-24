@@ -234,7 +234,8 @@ namespace WingCommand
                     : MemberDuty.Formation;
                 float ammo = AmmoFraction(m.Aircraft);
                 into[n++] = SnapshotBuilder.Member(m.Aircraft.persistentID.Id, m.Seat, (byte)m.Brain.Mind.Current, duty,
-                    m.Aircraft.GetFuelLevel(), ammo, m.Brain.LastRejoin.FallingBehind, m.Bingo.Bingo, m.Bingo.Joker, ammo <= 0f, ElementOf(m));
+                    m.Aircraft.GetFuelLevel(), ammo, m.Brain.LastRejoin.FallingBehind, m.Bingo.Bingo, m.Bingo.Joker, ammo <= 0f, ElementOf(m),
+                    m.Damage.Damaged);
             }
             return n;
         }

@@ -38,6 +38,31 @@ namespace WingCommand.PureTests
         }
 
         [Fact]
+        public void APlansTaskReplacingAnotherLogsBothWithThePlansReason()
+        {
+            // Spec WMC rebuild R3 (OrderSource): the log says a plan, not the player, changed the task.
+            var p = new WingPlanner();
+            var events = new WingEventRing();
+            p.Apply(WingTask.Move(Waypoint.At(0f, 20000f)), Wing(), 0f, events);
+            Assert.True(p.Apply(WingTask.Orbit(Waypoint.At(5000f, 5000f)), Wing(), 1f, events, TransitionReason.Plan).Accepted);
+            Assert.Equal(WingEventKind.TaskCancelled, events[1].Kind);
+            Assert.Equal(TransitionReason.Plan, events[1].Reason);
+            Assert.Equal(WingEventKind.TaskStarted, events[2].Kind);
+            Assert.Equal(TransitionReason.Plan, events[2].Reason);
+        }
+
+        [Fact]
+        public void ARulesFormUpLogsTheCancelWithTheRulesReason()
+        {
+            var p = new WingPlanner();
+            var events = new WingEventRing();
+            p.Apply(WingTask.Move(Waypoint.At(0f, 20000f)), Wing(), 0f, events);
+            p.Apply(WingTask.Form(), Wing(), 1f, events, TransitionReason.Rule);
+            Assert.Equal(WingEventKind.TaskCancelled, events[1].Kind);
+            Assert.Equal(TransitionReason.Rule, events[1].Reason);
+        }
+
+        [Fact]
         public void WithTheAnchorGoneTheLeadStartsAtTheWingsCentroid()
         {
             var p = new WingPlanner();
