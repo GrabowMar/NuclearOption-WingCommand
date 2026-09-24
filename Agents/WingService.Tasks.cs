@@ -41,6 +41,9 @@ namespace WingCommand
             return r;
         }
 
+        /// <summary>SKIP: element <paramref name="e"/>'s route moves on to its next point now (spec WMC program §4).</summary>
+        public bool SkipLeg(int e) => PlannerOf(e).Skip(Snapshot(e), missionTime, Events);
+
         private bool plannerWas;
 
         /// <summary>The planner flies its lead; when the wing switches between the lead and the player (a task starting or

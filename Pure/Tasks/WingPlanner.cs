@@ -108,6 +108,16 @@ namespace WingCommand
             return null;
         }
 
+        /// <summary>Moves a Move, Route or Patrol on to its next point now (spec WMC program §4 SKIP), without calling this one
+        /// reached; a Route on its last point completes. False when there is no route to skip.</summary>
+        public bool Skip(in WingSnapshot wing, float time, WingEventRing events)
+        {
+            if (Current == null || Leg < 0) return false;
+            orbitingPoint = false;
+            Advance(wing, time, events);
+            return true;
+        }
+
         public void Step(in WingSnapshot wing, float time, float dt, WingEventRing events)
         {
             if (Current == null) return;

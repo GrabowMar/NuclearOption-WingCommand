@@ -60,11 +60,7 @@ namespace WingCommand
         private void Step(DoctrineAxis axis, int dir) =>
             WmcUi.Order(last, () => Set(DoctrineSteps.Cycle(last.Wing.Doctrine, axis, dir)));
 
-        private void Set(WingDoctrine d)
-        {
-            last.Wing.SetDoctrine(d);
-            WingToast.Show("Doctrine " + d.PatternName);
-        }
+        private static void Set(WingDoctrine d) => WingOrders.Run(new WingOrder { Kind = OrderKind.SetDoctrine, Text = d.ToString() });
 
         public void Refresh(WmcContext c)
         {

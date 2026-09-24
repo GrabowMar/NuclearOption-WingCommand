@@ -111,9 +111,7 @@ namespace WingCommand
                     return;
                 }
                 armedId = 0u;
-                last.Wing.Release(m, "released from WMC");
-                last.SelectedId = 0u;
-                WingToast.Show("Wingman released");
+                if (WingOrders.Run(WingOrder.Of(OrderKind.Release, WingScope.OfMembers(last.SelectedId))).Accepted) last.SelectedId = 0u;
             });
         }
 

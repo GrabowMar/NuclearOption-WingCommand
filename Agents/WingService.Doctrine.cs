@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using UnityEngine;
 
@@ -122,7 +123,7 @@ namespace WingCommand
         /// <summary>Spec M5 §9.2 Splash: one guided missile at <paramref name="target"/> from every member flying with the wing
         /// that has it in a missile's envelope from its slot (engaged members are the combat AI's). Returns how many fired;
         /// <paramref name="capable"/> is how many had it in envelope.</summary>
-        public int Splash(Unit target, out int capable)
+        public int Splash(Unit target, out int capable, Func<WingMember, bool> who = null)
         {
             capable = 0;
             if (target == null || target.disabled) return 0;
@@ -130,6 +131,7 @@ namespace WingCommand
             foreach (WingMember m in Members)
             {
                 if (m.Released || !m.Alive || m.Engaged || m.OnGround || m.Recovery != null || m.Settle != null) continue;
+                if (who != null && !who(m)) continue;
                 Aircraft a = m.Aircraft;
                 FactionHQ hq = a.NetworkHQ;
                 if (a.weaponStations == null || a.weaponManager == null || hq == null || hq.trackingDatabase == null) continue;

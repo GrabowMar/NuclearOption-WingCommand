@@ -86,7 +86,7 @@ namespace WingCommand
             WmcUi.Order(last, () =>
             {
                 FormationDefinition first = shapes.Find(d => d.Family == families[i]);
-                if (first != null && last.Wing.SetShape(first.Id)) WingToast.Show("Formation " + first.Name);
+                if (first != null) WingOrders.Run(new WingOrder { Kind = OrderKind.SetShape, Text = first.Id });
             });
         }
 
@@ -96,7 +96,7 @@ namespace WingCommand
             if (id == null) return;
             WmcUi.Order(last, () =>
             {
-                if (last.Wing.SetShape(id)) WingToast.Show("Formation " + last.Wing.Selection.Current.Name);
+                WingOrders.Run(new WingOrder { Kind = OrderKind.SetShape, Text = id });
             });
         }
 

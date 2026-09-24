@@ -319,5 +319,22 @@ namespace WingCommand.PureTests
             Assert.True(helos.Lead.Speed < 1f);
             Assert.True((helos.Lead.Position - new Vec3(0f, 0f, 1500f)).Horizontal.Length < 30f);
         }
+
+        [Fact]
+        public void SkipAdvancesToTheNextLegOrRefusesWithoutARoute()
+        {
+            // Spec WMC program §4: SKIP moves the route on without calling the point reached.
+            var p = new WingPlanner();
+            var events = new WingEventRing();
+            WingSnapshot w = Wing();
+            Assert.False(p.Skip(w, 0f, events));
+            Assert.True(p.Apply(WingTask.Route(Waypoint.At(0f, 10000f), Waypoint.At(5000f, 20000f), Waypoint.At(0f, 30000f)),
+                w, 0f, events).Accepted);
+            Assert.True(p.Skip(w, 1f, events));
+            Assert.Equal(1, p.Leg);
+            Assert.Equal(0, events.CountOf(WingEventKind.WaypointReached));
+            Assert.True(p.Apply(WingTask.Orbit(Waypoint.At(0f, 5000f)), w, 2f, events).Accepted);
+            Assert.False(p.Skip(w, 3f, events));
+        }
     }
 }

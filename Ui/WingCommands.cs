@@ -24,24 +24,8 @@ namespace WingCommand
         }
 
         /// <summary>Wingmen always launch from a field (the picked one, else the nearest friendly one).</summary>
-        public static void Call(int n)
-        {
-            if (!Ready(out WingService w) || SpawnService.Instance == null) return;
-            Aircraft caller = w.Player;
-            if (caller == null)
-            {
-                WingToast.Show("Not flying");
-                return;
-            }
-            AircraftDefinition type = CallAirframe() ?? caller.definition;
-            Airbase field = w.FieldFor(caller, type);
-            if (field == null)
-            {
-                WingToast.Show("No friendly field to launch from");
-                return;
-            }
-            SpawnService.Instance.LaunchFromField(field, type, n);
-        }
+        /// <summary>Wingmen always launch from a field (the picked one, else the nearest friendly one).</summary>
+        public static void Call(int n) => WingOrders.Run(new WingOrder { Kind = OrderKind.Call, Number = n });
 
         public static void NextField()
         {
@@ -52,72 +36,33 @@ namespace WingCommand
                 : "No friendly field to launch from");
         }
 
-        public static void FormUp()
-        {
-            if (!Ready(out WingService w)) return;
-            w.FormUp();
-            WingToast.Show("Form up");
-        }
+        public static void FormUp() => WingOrders.Run(WingOrder.Of(OrderKind.FormUp));
 
         /// <summary>The wing's helicopters land around you and wait (spec M4 §5).</summary>
-        public static void LandHere()
-        {
-            if (!Ready(out WingService w)) return;
-            int n = w.LandHere(out string refusal);
-            WingToast.Show(n > 0 ? $"{n} landing here" : "Cannot land here: " + refusal);
-        }
+        public static void LandHere() => WingOrders.Run(WingOrder.Of(OrderKind.LandHere));
 
-        public static void TakeOff()
-        {
-            if (!Ready(out WingService w)) return;
-            int n = w.TakeOff();
-            WingToast.Show(n > 0 ? $"{n} lifting off" : "Nobody is down");
-        }
+        public static void TakeOff() => WingOrders.Run(WingOrder.Of(OrderKind.TakeOff));
 
-        public static void NextShape()
-        {
-            if (Ready(out WingService w)) w.NextShape();
-        }
+        public static void NextShape() => WingOrders.Run(WingOrder.Of(OrderKind.NextShape));
 
-        public static void NextFamily()
-        {
-            if (Ready(out WingService w)) w.NextFamily();
-        }
+        public static void NextFamily() => WingOrders.Run(WingOrder.Of(OrderKind.NextFamily));
 
-        public static void SetSpacing(SpacingPreset preset)
-        {
-            if (Ready(out WingService w)) w.SetSpacing(preset);
-        }
+        public static void SetSpacing(SpacingPreset preset) => WingOrders.Run(new WingOrder { Kind = OrderKind.SetSpacing, Number = (int)preset });
 
         public static void CycleSpacing()
         {
-            if (Ready(out WingService w)) w.SetSpacing((SpacingPreset)(((int)w.Selection.Spacing + 1) % 4));
+            WingService w = WingService.Instance;
+            if (w?.Selection != null) SetSpacing((SpacingPreset)(((int)w.Selection.Spacing + 1) % 4));
         }
 
         /// <summary>The whole wing home to the reserve (spec M3 §4).</summary>
-        public static void Rtb() => Recover(RecoveryIntent.Rtb, "returning to base");
+        public static void Rtb() => WingOrders.Run(WingOrder.Of(OrderKind.Rtb));
 
         /// <summary>The whole wing home to refuel and rearm, then back out.</summary>
-        public static void Refit() => Recover(RecoveryIntent.Refit, "going to refit");
+        public static void Refit() => WingOrders.Run(WingOrder.Of(OrderKind.Refit));
 
-        private static void Recover(RecoveryIntent intent, string what)
-        {
-            if (!Ready(out WingService w)) return;
-            int n = w.RecoverAll(intent);
-            WingToast.Show(n > 0 ? $"{n} wingm{(n == 1 ? "an" : "en")} {what}" : "No wingman can go: no friendly field, or already going");
-        }
 
-        public static void Dismiss()
-        {
-            if (!Ready(out WingService w)) return;
-            if (w.Members.Count == 0)
-            {
-                WingToast.Show("No wingmen to dismiss");
-                return;
-            }
-            w.Dismiss();
-            WingToast.Show("Wing dismissed");
-        }
+        public static void Dismiss() => WingOrders.Run(WingOrder.Of(OrderKind.Dismiss));
 
         /// <summary>Escort the player's selected friendly unit (aircraft, vehicle or ship), else the nearest friendly
         /// aircraft ahead within 5 km (spec M2 §6).</summary>
@@ -136,8 +81,7 @@ namespace WingCommand
                 WingToast.Show("No friendly to escort");
                 return;
             }
-            w.SetEscort(target);
-            WingToast.Show("Escorting " + target.unitName);
+            WingOrders.Run(new WingOrder { Kind = OrderKind.EscortTarget, Units = new[] { target.persistentID.Id } });
         }
 
         /// <summary>Takes command of the selected friendly aircraft, else the nearest one ahead (spec M3 §5).</summary>
@@ -156,36 +100,24 @@ namespace WingCommand
                 WingToast.Show("No friendly aircraft to recruit");
                 return;
             }
-            WingToast.Show(WingRecruitment.TryRecruit(w, target, out _, out string reason)
-                ? target.unitName + " joins the wing"
-                : "Cannot recruit " + target.unitName + ": " + reason);
+            WingOrders.Run(new WingOrder { Kind = OrderKind.Recruit, Units = new[] { target.persistentID.Id } });
         }
 
         public static float MoveAheadMetres = 10000f, PatrolHalfMetres = 10000f, OrderHeightMin = 50f, ScoutAheadMetres = 20000f;
 
         /// <summary>The wing orbits the point below the player (spec M4 §2.4).</summary>
-        public static void OrbitHere() => Order(p => WingTask.Orbit(Point(p, 0f, 0f)), "orbiting here");
+        public static void OrbitHere() => Order(p => WingTask.Orbit(Point(p, 0f, 0f)));
 
         public static void HoldHere() =>
-            Order(p => WingTask.Hold(Point(p, 0f, 0f), Vec3.HeadingDeg(p.transform.forward.ToVec3())), "holding here");
+            Order(p => WingTask.Hold(Point(p, 0f, 0f), Vec3.HeadingDeg(p.transform.forward.ToVec3())));
 
         /// <summary>Spec M4 §7.1: a wing helicopter lands next to the nearest downed wing pilot for the pickup.</summary>
-        public static void Rescue()
-        {
-            if (!Ready(out WingService w)) return;
-            w.Rescue(out string result);
-            WingToast.Show("Rescue: " + result);
-        }
+        public static void Rescue() => WingOrders.Run(WingOrder.Of(OrderKind.Rescue));
 
         /// <summary>Spec M4 §7.2: helicopters carrying cargo land, deploy it and rejoin.</summary>
-        public static void DeliverCargo()
-        {
-            if (!Ready(out WingService w)) return;
-            int n = w.DeliverCargo(out string refusal);
-            WingToast.Show(n > 0 ? $"Deliver cargo: {n} landing" : "Deliver cargo: " + refusal);
-        }
+        public static void DeliverCargo() => WingOrders.Run(WingOrder.Of(OrderKind.DeliverCargo));
 
-        public static void MoveAhead() => Order(p => WingTask.Move(Point(p, MoveAheadMetres, 0f)), "moving ahead");
+        public static void MoveAhead() => Order(p => WingTask.Move(Point(p, MoveAheadMetres, 0f)));
 
         /// <summary>Spec M7 §2.4: Move 20 km ahead, reporting ground contacts on the way and while orbiting there.</summary>
         public static void ScoutAhead() => Order(p =>
@@ -193,10 +125,10 @@ namespace WingCommand
             WingTask t = WingTask.Move(Point(p, ScoutAheadMetres, 0f));
             t.Scout = true;
             return t;
-        }, "scouting ahead");
+        });
 
         public static void PatrolHere() =>
-            Order(p => WingTask.Patrol(false, Point(p, -PatrolHalfMetres, 0f), Point(p, PatrolHalfMetres, 0f)), "patrolling here");
+            Order(p => WingTask.Patrol(false, Point(p, -PatrolHalfMetres, 0f), Point(p, PatrolHalfMetres, 0f)));
 
         private static Waypoint Point(Aircraft p, float forward, float right)
         {
@@ -210,7 +142,8 @@ namespace WingCommand
             return w;
         }
 
-        private static void Order(Func<Aircraft, WingTask> make, string what)
+        /// <summary>A task built from the player's aircraft, for the whole wing (spec M4 §2.4).</summary>
+        private static void Order(Func<Aircraft, WingTask> make)
         {
             if (!Ready(out WingService w)) return;
             if (w.Player == null)
@@ -218,39 +151,18 @@ namespace WingCommand
                 WingToast.Show("Not flying");
                 return;
             }
-            OrderResult r = w.Order(make(w.Player));
-            WingToast.Show(r.Accepted ? "Wing " + what : "Wing cannot: " + r.Reason);
+            WingOrders.Run(WingOrder.Tasked(make(w.Player)));
         }
 
-        public static void Engage()
-        {
-            if (!Ready(out WingService w)) return;
-            if (!w.MayEngage(out int hostiles, out int members))
-            {
-                WingToast.Show($"Outnumbered {hostiles} to {members} - Engage again to fight anyway");
-                return;
-            }
-            int n = w.Engage();
-            WingToast.Show(n > 0 ? $"{n} engaging" : "Nobody can engage");
-        }
+        public static void Engage() => WingOrders.Run(WingOrder.Of(OrderKind.Engage));
 
         public static float GoHighMetres = 300f, GoLowMetres = -150f;
 
         /// <summary>Spec M5 §10.1.</summary>
-        public static void Stack(float metres, string what)
-        {
-            if (!Ready(out WingService w)) return;
-            w.SetStack(metres);
-            WingToast.Show(what);
-        }
+        public static void Stack(float metres, string what) => WingOrders.Run(new WingOrder { Kind = OrderKind.Stack, Number = metres, Text = what });
 
         /// <summary>Spec M5 §10.4: Buster (no afterburner) or Gate (afterburner allowed).</summary>
-        public static void Afterburner(bool allowed)
-        {
-            if (!Ready(out WingService w)) return;
-            w.SetAfterburner(allowed);
-            WingToast.Show(allowed ? "Gate: afterburner allowed" : "Buster: military power, no afterburner");
-        }
+        public static void Afterburner(bool allowed) => WingOrders.Run(new WingOrder { Kind = OrderKind.Afterburner, Flag = allowed });
 
         /// <summary>Spec M5 §10.2: the second element attacks your targets; the first stays with you.</summary>
         public static void BuddyAttack()
@@ -262,13 +174,17 @@ namespace WingCommand
                 WingToast.Show("Buddy attack: select a target first");
                 return;
             }
-            if (w.SecondElement() == 0)
+            // The second pair of the shape attacks; the first stays with you (spec M5 §10.2).
+            var pair = new List<uint>();
+            foreach (WingMember m in w.Members)
+                if (!m.Released && m.Alive && !m.OnGround && m.Recovery == null && m.Settle == null && w.PairOf(m) == 1 &&
+                    (object)m.Aircraft != null) pair.Add(m.Aircraft.persistentID.Id);
+            if (pair.Count == 0)
             {
                 WingToast.Show("Buddy attack: no second element");
                 return;
             }
-            int n = w.Attack(targets, 1);
-            WingToast.Show(n > 0 ? $"Buddy attack: {n} in, the rest with you" : "Buddy attack: nobody can attack");
+            WingOrders.Run(new WingOrder { Kind = OrderKind.Attack, Units = Ids(targets), Scope = WingScope.OfMembers(pair.ToArray()) });
         }
 
         /// <summary>The player's selected enemy targets, split across the wing (spec M5, M5b).</summary>
@@ -281,9 +197,16 @@ namespace WingCommand
                 WingToast.Show("No enemy target selected");
                 return;
             }
-            int n = w.Attack(targets);
-            string plural = targets.Count == 1 ? "" : "s";
-            WingToast.Show(n > 0 ? $"{n} attacking {targets.Count} target{plural}" : "Nobody can attack");
+            WingOrders.Run(new WingOrder { Kind = OrderKind.Attack, Units = Ids(targets) });
+        }
+
+        /// <summary>At most <see cref="WingOrder.MaxUnits"/> units as persistent ids.</summary>
+        private static uint[] Ids(List<Unit> units)
+        {
+            int n = Math.Min(units.Count, WingOrder.MaxUnits);
+            var ids = new uint[n];
+            for (int i = 0; i < n; i++) ids[i] = units[i].persistentID.Id;
+            return ids;
         }
 
         /// <summary>Spec M5 §9.2: one missile from every wingman with your target in envelope.</summary>
@@ -296,26 +219,13 @@ namespace WingCommand
                 WingToast.Show("Splash: select a target first");
                 return;
             }
-            int fired = w.Splash(targets[0], out int capable);
-            if (fired > 0) WingRadioAudio.Play(WingRadioAudio.Earcon.Splash);
-            WingToast.Show(fired > 0 ? $"Splash: {fired} firing on {targets[0].unitName}"
-                : capable > 0 ? "Splash: launchers not ready" : "Splash: nobody in range");
+            WingOrders.Run(new WingOrder { Kind = OrderKind.Splash, Units = new[] { targets[0].persistentID.Id } });
         }
 
-        public static void ClearMySix()
-        {
-            if (!Ready(out WingService w) || w.Player == null) return;
-            int found = w.ClearMySix(out int engaged);
-            WingToast.Show(found == 0 ? "Your six is clear" : engaged > 0 ? $"{engaged} clearing your six ({found} bandits)" : "Nobody can engage");
-        }
+        public static void ClearMySix() => WingOrders.Run(WingOrder.Of(OrderKind.ClearSix));
 
         /// <summary>Spec M7 §1.5: the first wingman flying with the wing calls the nearest air threat's BRA from you.</summary>
-        public static void BogeyDope()
-        {
-            if (!Ready(out WingService w) || w.Player == null) return;
-            // The radio says it; when it will not (radio off, or the line dropped), the answer is a toast (review M7a I4).
-            if (!BogeyDopeCall(w, out string answer)) WingToast.Show(answer);
-        }
+        public static void BogeyDope() => WingOrders.Run(WingOrder.Of(OrderKind.BogeyDope));
 
         /// <summary>The Bogey Dope answer on the radio (false with the reason when nobody can answer).</summary>
         public static bool BogeyDopeCall(WingService w, out string answer)
@@ -340,22 +250,9 @@ namespace WingCommand
         }
 
         /// <summary>Reserve → Escort → Sweep: what members shoot at while holding formation (spec M5 §8).</summary>
-        public static void NextDoctrine()
-        {
-            if (!Ready(out WingService w)) return;
-            WingDoctrine d = w.NextDoctrine();
-            string what = d.Targets == TargetPolicy.Hold ? "holding fire"
-                : d.Targets == TargetPolicy.Cover ? "covering you"
-                : "targets of opportunity";
-            WingToast.Show($"Doctrine {d.PatternName}: {what}");
-        }
+        public static void NextDoctrine() => WingOrders.Run(WingOrder.Of(OrderKind.NextDoctrine));
 
-        public static void Disengage()
-        {
-            if (!Ready(out WingService w)) return;
-            int n = w.Disengage();
-            WingToast.Show(n > 0 ? $"{n} disengaging" : "Nobody engaged");
-        }
+        public static void Disengage() => WingOrders.Run(WingOrder.Of(OrderKind.BreakOff));
 
         private static List<Unit> SelectedEnemies(Aircraft player)
         {
@@ -367,17 +264,7 @@ namespace WingCommand
             return enemies;
         }
 
-        public static void EscortMe()
-        {
-            if (!Ready(out WingService w)) return;
-            if (!w.Escorting)
-            {
-                WingToast.Show("Already on you");
-                return;
-            }
-            w.SetEscort(null);
-            WingToast.Show("Escorting you");
-        }
+        public static void EscortMe() => WingOrders.Run(WingOrder.Of(OrderKind.EscortMe));
 
         private static Unit SelectedFriendly(Aircraft player, WingService w)
         {

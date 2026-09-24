@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 
 namespace WingCommand
@@ -268,7 +269,7 @@ namespace WingCommand
         /// <summary>"Clear my six": an attack order on the enemy aircraft in the player's rear quarter that the faction tracks
         /// accurately (<see cref="ClearSix"/>). Returns how many were found; the wing splits them (M5b).</summary>
         /// <summary>The pair of the member's slot in its element's shape (0 when unknown).</summary>
-        private int PairOf(WingMember m)
+        public int PairOf(WingMember m)
         {
             WingFrame f = FrameOf(m);
             int slot = m.Brain.Slot;
@@ -372,21 +373,21 @@ namespace WingCommand
 
         /// <summary>Every member flying with the wing fights on its own choices (an attack order ends: review M5b I1).
         /// Returns how many are engaged.</summary>
-        public int Engage()
+        public int Engage(Func<WingMember, bool> who = null)
         {
             attackCount = 0;
-            attackElement = -1;
-            return EngageAll();
+            attackWho = null;
+            return EngageAll(who);
         }
 
         /// <summary>Every member flying with the wing switches to the game's combat state with no assigned target.</summary>
-        private int EngageAll(int element = -1)
+        private int EngageAll(Func<WingMember, bool> who = null)
         {
             int n = 0;
             foreach (WingMember m in Members)
             {
                 if (m.Released || m.OnGround || m.Recovery != null || m.Settle != null || !m.Alive) continue;
-                if (element >= 0 && PairOf(m) != element) continue;
+                if (who != null && !who(m)) continue;
                 m.AssignedTarget = null;
                 m.Pilot.SetPrimaryTarget(null);
                 if (m.Engaged)
@@ -419,8 +420,8 @@ namespace WingCommand
         private float reallocateClock;
         private readonly bool[] canAttack = new bool[FormationCatalog.MaxSlots * TargetAllocator.MaxTargets];
         private readonly float[] keepScale = new float[FormationCatalog.MaxSlots];
-        /// <summary>The element an attack order is restricted to (Buddy Attack), -1 for the whole wing.</summary>
-        private int attackElement = -1;
+        /// <summary>The members an attack order is restricted to (a scoped order, Buddy Attack), null for the whole wing.</summary>
+        private Func<WingMember, bool> attackWho;
         private readonly float[] targetDistance = new float[FormationCatalog.MaxSlots * TargetAllocator.MaxTargets];
         private readonly bool[] targetAlive = new bool[TargetAllocator.MaxTargets];
         private readonly int[] currentTarget = new int[FormationCatalog.MaxSlots], nextTarget = new int[FormationCatalog.MaxSlots];
@@ -442,15 +443,15 @@ namespace WingCommand
         /// <summary>Engage on <paramref name="targets"/> (live ones, the first 16), split across the wing
         /// (<see cref="TargetAllocator"/>) and re-allocated each second as they die (spec M5, M5b). Returns how many are
         /// engaged.</summary>
-        public int Attack(IReadOnlyList<Unit> targets, int element = -1)
+        public int Attack(IReadOnlyList<Unit> targets, Func<WingMember, bool> who = null)
         {
             attackCount = 0;
-            // Buddy Attack's order is the one element's: members of the other stay out of it (review M5f I3).
-            attackElement = element;
+            // A scoped order is those members': the others stay out of it (review M5f I3).
+            attackWho = who;
             if (targets != null)
                 foreach (Unit u in targets)
                     if (u != null && !u.disabled && attackCount < attackTargets.Length) attackTargets[attackCount++] = u;
-            int n = EngageAll(element);
+            int n = EngageAll(who);
             if (n == 0) attackCount = 0;
             reallocateClock = 0f;
             Allocate(0f);
@@ -471,7 +472,7 @@ namespace WingCommand
             int k = 0;
             foreach (WingMember m in Members)
                 if (m.Engaged && !m.Released && m.Alive && InNativeCombat(m) && k < engagedNow.Length &&
-                    (attackElement < 0 || PairOf(m) == attackElement)) engagedNow[k++] = m;
+                    (attackWho == null || attackWho(m))) engagedNow[k++] = m;
             if (k == 0)
             {
                 // Everyone taken back: the order ends rather than capturing the next Engage (review M5b I1).
@@ -536,14 +537,17 @@ namespace WingCommand
             (!w.WeaponInfo.energy || (a.GetPowerSupply() != null && a.GetPowerSupply().GetCharge() >= EnergyChargeMin));
 
         /// <summary>Every engaged member back into formation (Commanded). Returns how many.</summary>
-        public int Disengage()
+        public int Disengage(Func<WingMember, bool> who = null)
         {
-            attackCount = 0;
-            attackElement = -1;
-            judge.Reset();
+            if (who == null)
+            {
+                attackCount = 0;
+                attackWho = null;
+                judge.Reset();
+            }
             int n = 0;
             foreach (WingMember m in Members)
-                if (m.Engaged)
+                if (m.Engaged && (who == null || who(m)))
                 {
                     TakeBack(m, TransitionReason.Commanded);
                     n++;

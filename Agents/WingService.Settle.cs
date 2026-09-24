@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 
 namespace WingCommand
@@ -8,12 +9,12 @@ namespace WingCommand
     {
         /// <summary>Settles every rotary member flying with the wing. Returns how many; <paramref name="refusal"/> says why
         /// none did.</summary>
-        public int LandHere(out string refusal) => LandHere(false, out refusal);
+        public int LandHere(out string refusal, Func<WingMember, bool> who = null) => LandHere(false, out refusal, who);
 
         /// <summary>Spec M4 §7.2: every helicopter carrying cargo lands at its slot's ground point, deploys it and lifts off.</summary>
-        public int DeliverCargo(out string refusal) => LandHere(true, out refusal);
+        public int DeliverCargo(out string refusal, Func<WingMember, bool> who = null) => LandHere(true, out refusal, who);
 
-        private int LandHere(bool cargoOnly, out string refusal)
+        private int LandHere(bool cargoOnly, out string refusal, Func<WingMember, bool> who)
         {
             refusal = null;
             if (Wing == null || Wing.Frame == null)
@@ -24,6 +25,7 @@ namespace WingCommand
             int rotary = 0, free = 0, n = 0;
             foreach (WingMember m in Members)
             {
+                if (who != null && !who(m)) continue;
                 if (m.Profile.Class == AirframeClass.FixedWing || (cargoOnly && CargoStation(m.Aircraft) == null)) continue;
                 rotary++;
                 if (m.Released || !m.Alive || m.Engaged || m.Recovery != null || m.OnGround || m.Settle != null) continue;
@@ -190,11 +192,11 @@ namespace WingCommand
         }
 
         /// <summary>Every settled member lifts off. Returns how many.</summary>
-        public int TakeOff()
+        public int TakeOff(Func<WingMember, bool> who = null)
         {
             int n = 0;
             foreach (WingMember m in Members)
-                if (m.Settle != null && m.Settle.Phase != SettlePhase.Done)
+                if (m.Settle != null && m.Settle.Phase != SettlePhase.Done && (who == null || who(m)))
                 {
                     m.Settle.TakeOff();
                     n++;

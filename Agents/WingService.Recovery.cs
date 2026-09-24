@@ -57,11 +57,11 @@ namespace WingCommand
             return true;
         }
 
-        public int RecoverAll(RecoveryIntent intent)
+        public int RecoverAll(RecoveryIntent intent, Func<WingMember, bool> who = null)
         {
             int n = 0;
             foreach (WingMember m in Members)
-                if (Recover(m, intent)) n++;
+                if ((who == null || who(m)) && Recover(m, intent)) n++;
             return n;
         }
 
