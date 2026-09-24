@@ -50,6 +50,11 @@ namespace WingCommand
                     if (!(n >= 0f && n <= (float)DoctrineAxis.Radar) || n != (int)n) return "no such doctrine setting";
                     return WingDoctrine.TryAxisValue((DoctrineAxis)(int)n, o.Text, out _) ? null : "no such value";
                 }
+                case OrderKind.Maneuver:
+                {
+                    float n = o.Number;
+                    return n >= 0f && n <= (float)ReactionKind.Beam && n == (int)n ? null : "no such maneuver";
+                }
                 case OrderKind.Eject:
                     if (o.Scope.Kind != ScopeKind.Members || o.Scope.Members.Length != 1) return "eject one wingman at a time";
                     if (o.Source != OrderSource.Player) return "only you can order an ejection";

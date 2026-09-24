@@ -15,6 +15,9 @@
     {"op": "call", "method": "WingCommand.Automation.Order", "store": "guns", "args": {"kind": "SetOverride", "number": 6, "text": "Guns"}},
     {"op": "wait", "seconds": 5},
     {"op": "call", "method": "WingCommand.Automation.CombatState", "store": "quiet"},
+    {"op": "call", "method": "WingCommand.Automation.Order", "store": "maneuver", "args": {"kind": "Maneuver", "number": 1}},
+    {"op": "wait", "seconds": 30},
+    {"op": "call", "method": "WingCommand.Automation.CombatState", "store": "after_maneuver"},
 
     {"op": "spawn", "id": "b1", "type": "FS-12 Revoker", "faction": "Primeva", "at": {"map": [-1000, 30000]}, "altitude": 3000, "speed": 220, "heading": 180},
     {"op": "spawn", "id": "b2", "type": "FS-12 Revoker", "faction": "Primeva", "at": {"map": [1000, 30000]}, "altitude": 3000, "speed": 220, "heading": 180},
@@ -50,6 +53,8 @@
     {"check": "result_above", "path": "silent.accepted", "min": 1},
     {"check": "result_above", "path": "guns.accepted", "min": 1},
     {"check": "result_below", "path": "quiet.radars_on", "max": 0},
+    {"check": "result_above", "path": "maneuver.accepted", "min": 1},
+    {"check": "result_above", "path": "after_maneuver.reacts", "min": 3},
     {"check": "result_below", "path": "standing.standing_shots", "max": 0},
     {"check": "result_below", "path": "standing.radars_on", "max": 0},
     {"check": "result_above", "path": "fighting.radars_on", "min": 1},

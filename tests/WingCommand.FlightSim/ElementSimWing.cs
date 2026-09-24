@@ -128,6 +128,10 @@ namespace WingCommand.FlightSim
             }
         }
 
+        public WingPlanner PlannerOf(int e) => planners[e];
+
+        public AircraftState State(int i) => states[i];
+
         public float SlotError(int i) => (frames[elementOf[i]].Slots[Pilots[i].Slot].Ref.Pos - Plants[i].Position).Length;
 
         public float MinSeparation()

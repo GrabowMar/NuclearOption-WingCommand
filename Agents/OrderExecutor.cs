@@ -120,6 +120,13 @@ namespace WingCommand
             switch (o.Kind)
             {
                 case OrderKind.Rtb: return Recover(w, RecoveryIntent.Rtb, "returning to base", who);
+                case OrderKind.Maneuver:
+                {
+                    var kind = (ReactionKind)(int)o.Number;
+                    int n = w.React(kind, who, out string why);
+                    return n > 0 ? OrderResult.Acked($"{n} {ReactionManeuver.Words(kind)}" + (why != null ? $" ({why})" : ""))
+                        : OrderResult.Refused($"{ReactionManeuver.Label(kind)}: {why}");
+                }
                 case OrderKind.Eject:
                 {
                     WingMember m = null;

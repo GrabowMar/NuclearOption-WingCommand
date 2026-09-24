@@ -749,6 +749,7 @@ namespace WingCommand
                 { "defends", wing.Events.CountOf(TransitionReason.MissileInbound) },
                 { "standing_shots", wing.StandingShots },
                 { "radars_on", wing.RadarsOn },
+                { "reacts", wing.Reacts },
             };
         }
 

@@ -11,6 +11,8 @@ namespace WingCommand
         Eject,
         // WMC rebuild R3: one doctrine setting at the scope's level (Number = DoctrineAxis, Text = the value's word).
         SetOverride,
+        // WMC rebuild R3: a reaction maneuver for the scope (Number = ReactionKind).
+        Maneuver,
     }
 
     internal enum ScopeKind : byte { Wing, Element, Members }

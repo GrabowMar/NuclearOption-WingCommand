@@ -26,7 +26,7 @@ namespace WingCommand
         private readonly string[] shapeIds = new string[MaxShapes];
         private readonly List<FormationDefinition> shapes = new List<FormationDefinition>();
         private readonly List<string> families = new List<string>();
-        private SegmentRow spacingRow, stackRow, powerRow;
+        private SegmentRow spacingRow, stackRow, powerRow, maneuverRow;
         private int formKey = int.MinValue, shapesKey = int.MinValue;
 
         private void BuildFormation(RectTransform root)
@@ -82,10 +82,15 @@ namespace WingCommand
                 ids["tac.form.shape" + i] = shapeButtons[i];
             }
             y -= 3 * TogglePitch;
-            SegmentRow maneuvers = SegmentRow.Build(s, new Rect(0f, y, w, ToggleH), KeyWidth, "MANEUVER",
-                new[] { "BRK L", "BRK R", "PULL UP", "SPLIT", "BEAM" }, null, "tac.form.",
-                new[] { "brkl", "brkr", "pullup", "split", "beam" }, ids, null);
-            maneuvers.SetEnabled(false, "Break, pull up, split or beam — the scope flies it and comes back. Arrives with the weapons & EMCON update.");
+            maneuverRow = SegmentRow.Build(s, new Rect(0f, y, w, ToggleH), KeyWidth, "MANEUVER",
+                new[] { "BRK L", "BRK R", "PULL UP", "SPLIT", "BEAM" },
+                new[]
+                {
+                    "Hard turn 90° left, then back to the slot.", "Hard turn 90° right, then back to the slot.",
+                    "Climb 500 m straight on, then back to the slot.", "Turn 60° apart: a pair splits, one aircraft turns away from the lead.",
+                    "Turn across the nearest air threat's line of sight (from the wing's tracks), then back to the slot.",
+                }, "tac.form.", new[] { "brkl", "brkr", "pullup", "split", "beam" }, ids,
+                i => WmcUi.Order(last, () => WingOrders.Run(new WingOrder { Kind = OrderKind.Maneuver, Number = i, Scope = last.Scope })));
             y -= TogglePitch + 6f;
 
             AvStyled.Label(s, new Rect(0f, y, w, 16f), "WHOLE WING", "section-title");
@@ -184,6 +189,12 @@ namespace WingCommand
             stackRow.SetEnabled(c.CanOrder, "Orders are host only for now");
             powerRow.Set(w.AfterburnerAllowed ? 1 : 0);
             powerRow.SetEnabled(c.CanOrder, "Orders are host only for now");
+            // A maneuver is a one-shot order: nothing stays latched.
+            bool flying = false;
+            for (int i = 0; i < c.Count && !flying; i++)
+                flying = c.InScope(c.Rows[i]) && (MemberDuty)c.Rows[i].Duty == MemberDuty.Formation;
+            maneuverRow.Set(-1);
+            maneuverRow.SetEnabled(c.CanOrder && flying, !c.CanOrder ? "Orders are host only for now" : "Nobody in scope is flying in formation");
             RefreshPlanView(c, current, sel.SpacingMetres, e, members);
         }
 

@@ -60,6 +60,15 @@ namespace WingCommand.PureTests
         }
 
         [Fact]
+        public void AManeuverIsOneOfTheRowsFive()
+        {
+            Assert.Null(OrderValidator.Check(new WingOrder { Kind = OrderKind.Maneuver, Number = 0f }));
+            Assert.Null(OrderValidator.Check(new WingOrder { Kind = OrderKind.Maneuver, Number = 4f }));
+            foreach (float n in new[] { -1f, 5f, 1.5f, float.NaN })
+                Assert.Equal("no such maneuver", OrderValidator.Check(new WingOrder { Kind = OrderKind.Maneuver, Number = n }));
+        }
+
+        [Fact]
         public void AnAcceptedResultCarriesItsAck()
         {
             OrderResult r = OrderResult.Acked("2 attacking", 1);
