@@ -61,6 +61,17 @@ namespace WingCommand
             return b;
         }
 
+        private static bool Held(in HoldSpec h, ApField f)
+        {
+            switch (f)
+            {
+                case ApField.Heading: return h.Lateral == LateralHold.Heading;
+                case ApField.Altitude: return h.Vertical == VerticalHold.Altitude;
+                case ApField.VerticalSpeed: return h.Vertical == VerticalHold.VerticalSpeed;
+                default: return h.Speed;
+            }
+        }
+
         public void Refresh(WmcContext c)
         {
             PlayerAutopilot ap = PlayerAutopilot.Instance;
@@ -78,7 +89,7 @@ namespace WingCommand
             off.SetLatched(!ap.Session.Engaged);
             string text = WingHudText.Autopilot(h, ap.Session.LateralOverride, ap.Session.VerticalOverride);
             line.text = text.Length > 0 ? text : "AP off";
-            for (int i = 0; i < Fields.Length; i++) values[i].text = ApSteps.Readout(h, Fields[i]);
+            for (int i = 0; i < Fields.Length; i++) values[i].text = ApSteps.Readout(h, Fields[i], Held(h, Fields[i]));
         }
     }
 }

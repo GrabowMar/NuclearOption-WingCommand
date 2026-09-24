@@ -27,7 +27,7 @@ namespace WingCommand
 
         public float ContentHeight => 350f;
 
-        public string Hint => "Shape, spacing and stack for the whole wing.";
+        public string Hint => "Shape for " + (last != null ? last.ScopeLabel : "WING") + "; spacing, stack and power for the whole wing.";
 
         public void Build(RectTransform page, Rect body)
         {
@@ -86,7 +86,7 @@ namespace WingCommand
             WmcUi.Order(last, () =>
             {
                 FormationDefinition first = shapes.Find(d => d.Family == families[i]);
-                if (first != null) WingOrders.Run(new WingOrder { Kind = OrderKind.SetShape, Text = first.Id });
+                if (first != null) WingOrders.Run(new WingOrder { Kind = OrderKind.SetShape, Text = first.Id, Scope = last.Scope });
             });
         }
 
@@ -96,7 +96,7 @@ namespace WingCommand
             if (id == null) return;
             WmcUi.Order(last, () =>
             {
-                WingOrders.Run(new WingOrder { Kind = OrderKind.SetShape, Text = id });
+                WingOrders.Run(new WingOrder { Kind = OrderKind.SetShape, Text = id, Scope = last.Scope });
             });
         }
 
@@ -112,7 +112,8 @@ namespace WingCommand
             }
             sel.Suitable(shapes);
             FormationSelection.Families(shapes, families);
-            family = sel.Current.Family;
+            FormationDefinition current = c.Wing.ShapeOf(c.ScopeElement) ?? sel.Current;
+            family = current.Family;
             for (int i = 0; i < MaxFamilies; i++)
             {
                 bool on = i < families.Count;
@@ -127,7 +128,7 @@ namespace WingCommand
                 if (d.Family != family || n >= MaxShapes) continue;
                 shapeIds[n] = d.Id;
                 shapeButtons[n].SetText(d.Name.ToUpperInvariant());
-                shapeButtons[n].SetLatched(d.Id == sel.Current.Id);
+                shapeButtons[n].SetLatched(d.Id == current.Id);
                 shapeButtons[n++].gameObject.SetActive(true);
             }
             for (int i = n; i < MaxShapes; i++)

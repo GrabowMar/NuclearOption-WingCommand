@@ -21,6 +21,10 @@ namespace WingCommand
         /// refresh.</summary>
         public readonly WmcSelection Selection = new WmcSelection();
         public WingScope Scope;
+        /// <summary>The element the scope points at without detaching (A for the wing, the first selected member's).</summary>
+        public int ScopeElement;
+        /// <summary>The scope in words ("WING", "ELEMENT B", "#3 #4").</summary>
+        public string ScopeLabel = "WING";
 
         /// <summary>Orders run on the host (client orders are M6c-2).</summary>
         public bool CanOrder => !Client && Wing != null && Wing.Selection != null;

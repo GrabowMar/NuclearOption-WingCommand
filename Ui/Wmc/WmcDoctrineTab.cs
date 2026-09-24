@@ -22,7 +22,7 @@ namespace WingCommand
 
         public float ContentHeight => 350f;
 
-        public string Hint => "What the wing does on its own while it holds formation.";
+        public string Hint => "What " + (last != null ? last.ScopeLabel : "WING") + " does on its own while it holds formation.";
 
         public void Build(RectTransform page, Rect body)
         {
@@ -58,9 +58,10 @@ namespace WingCommand
         }
 
         private void Step(DoctrineAxis axis, int dir) =>
-            WmcUi.Order(last, () => Set(DoctrineSteps.Cycle(last.Wing.Doctrine, axis, dir)));
+            WmcUi.Order(last, () => Set(DoctrineSteps.Cycle(last.Wing.DoctrineOf(last.ScopeElement), axis, dir)));
 
-        private static void Set(WingDoctrine d) => WingOrders.Run(new WingOrder { Kind = OrderKind.SetDoctrine, Text = d.ToString() });
+        private void Set(WingDoctrine d) =>
+            WingOrders.Run(new WingOrder { Kind = OrderKind.SetDoctrine, Text = d.ToString(), Scope = last != null ? last.Scope : default });
 
         public void Refresh(WmcContext c)
         {
@@ -70,7 +71,7 @@ namespace WingCommand
                 pattern.text = "Doctrine is the host's.";
                 return;
             }
-            WingDoctrine d = c.Wing.Doctrine;
+            WingDoctrine d = c.Wing.DoctrineOf(c.ScopeElement);
             reserve.SetLatched(d.Equals(WingDoctrine.Reserve));
             escort.SetLatched(d.Equals(WingDoctrine.Escort));
             sweep.SetLatched(d.Equals(WingDoctrine.Sweep));

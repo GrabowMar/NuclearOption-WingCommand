@@ -36,12 +36,18 @@ namespace WingCommand
                 : "No friendly field to launch from");
         }
 
-        public static void FormUp() => WingOrders.Run(WingOrder.Of(OrderKind.FormUp));
+        public static void FormUp() => FormUp(default);
+
+        public static void FormUp(WingScope scope) => WingOrders.Run(WingOrder.Of(OrderKind.FormUp, scope));
 
         /// <summary>The wing's helicopters land around you and wait (spec M4 §5).</summary>
-        public static void LandHere() => WingOrders.Run(WingOrder.Of(OrderKind.LandHere));
+        public static void LandHere() => LandHere(default);
 
-        public static void TakeOff() => WingOrders.Run(WingOrder.Of(OrderKind.TakeOff));
+        public static void LandHere(WingScope scope) => WingOrders.Run(WingOrder.Of(OrderKind.LandHere, scope));
+
+        public static void TakeOff() => TakeOff(default);
+
+        public static void TakeOff(WingScope scope) => WingOrders.Run(WingOrder.Of(OrderKind.TakeOff, scope));
 
         public static void NextShape() => WingOrders.Run(WingOrder.Of(OrderKind.NextShape));
 
@@ -56,10 +62,14 @@ namespace WingCommand
         }
 
         /// <summary>The whole wing home to the reserve (spec M3 §4).</summary>
-        public static void Rtb() => WingOrders.Run(WingOrder.Of(OrderKind.Rtb));
+        public static void Rtb() => Rtb(default);
+
+        public static void Rtb(WingScope scope) => WingOrders.Run(WingOrder.Of(OrderKind.Rtb, scope));
 
         /// <summary>The whole wing home to refuel and rearm, then back out.</summary>
-        public static void Refit() => WingOrders.Run(WingOrder.Of(OrderKind.Refit));
+        public static void Refit() => Refit(default);
+
+        public static void Refit(WingScope scope) => WingOrders.Run(WingOrder.Of(OrderKind.Refit, scope));
 
 
         public static void Dismiss() => WingOrders.Run(WingOrder.Of(OrderKind.Dismiss));
@@ -106,29 +116,43 @@ namespace WingCommand
         public static float MoveAheadMetres = 10000f, PatrolHalfMetres = 10000f, OrderHeightMin = 50f, ScoutAheadMetres = 20000f;
 
         /// <summary>The wing orbits the point below the player (spec M4 §2.4).</summary>
-        public static void OrbitHere() => Order(p => WingTask.Orbit(Point(p, 0f, 0f)));
+        public static void OrbitHere() => OrbitHere(default);
 
-        public static void HoldHere() =>
-            Order(p => WingTask.Hold(Point(p, 0f, 0f), Vec3.HeadingDeg(p.transform.forward.ToVec3())));
+        public static void OrbitHere(WingScope scope) => Order(p => WingTask.Orbit(Point(p, 0f, 0f)), scope);
+
+        public static void HoldHere() => HoldHere(default);
+
+        public static void HoldHere(WingScope scope) =>
+            Order(p => WingTask.Hold(Point(p, 0f, 0f), Vec3.HeadingDeg(p.transform.forward.ToVec3())), scope);
 
         /// <summary>Spec M4 §7.1: a wing helicopter lands next to the nearest downed wing pilot for the pickup.</summary>
-        public static void Rescue() => WingOrders.Run(WingOrder.Of(OrderKind.Rescue));
+        public static void Rescue() => Rescue(default);
+
+        public static void Rescue(WingScope scope) => WingOrders.Run(WingOrder.Of(OrderKind.Rescue, scope));
 
         /// <summary>Spec M4 §7.2: helicopters carrying cargo land, deploy it and rejoin.</summary>
-        public static void DeliverCargo() => WingOrders.Run(WingOrder.Of(OrderKind.DeliverCargo));
+        public static void DeliverCargo() => DeliverCargo(default);
 
-        public static void MoveAhead() => Order(p => WingTask.Move(Point(p, MoveAheadMetres, 0f)));
+        public static void DeliverCargo(WingScope scope) => WingOrders.Run(WingOrder.Of(OrderKind.DeliverCargo, scope));
+
+        public static void MoveAhead() => MoveAhead(default);
+
+        public static void MoveAhead(WingScope scope) => Order(p => WingTask.Move(Point(p, MoveAheadMetres, 0f)), scope);
 
         /// <summary>Spec M7 §2.4: Move 20 km ahead, reporting ground contacts on the way and while orbiting there.</summary>
-        public static void ScoutAhead() => Order(p =>
+        public static void ScoutAhead() => ScoutAhead(default);
+
+        public static void ScoutAhead(WingScope scope) => Order(p =>
         {
             WingTask t = WingTask.Move(Point(p, ScoutAheadMetres, 0f));
             t.Scout = true;
             return t;
-        });
+        }, scope);
 
-        public static void PatrolHere() =>
-            Order(p => WingTask.Patrol(false, Point(p, -PatrolHalfMetres, 0f), Point(p, PatrolHalfMetres, 0f)));
+        public static void PatrolHere() => PatrolHere(default);
+
+        public static void PatrolHere(WingScope scope) =>
+            Order(p => WingTask.Patrol(false, Point(p, -PatrolHalfMetres, 0f), Point(p, PatrolHalfMetres, 0f)), scope);
 
         private static Waypoint Point(Aircraft p, float forward, float right)
         {
@@ -143,7 +167,7 @@ namespace WingCommand
         }
 
         /// <summary>A task built from the player's aircraft, for the whole wing (spec M4 §2.4).</summary>
-        private static void Order(Func<Aircraft, WingTask> make)
+        private static void Order(Func<Aircraft, WingTask> make, WingScope scope)
         {
             if (!Ready(out WingService w)) return;
             if (w.Player == null)
@@ -151,10 +175,12 @@ namespace WingCommand
                 WingToast.Show("Not flying");
                 return;
             }
-            WingOrders.Run(WingOrder.Tasked(make(w.Player)));
+            WingOrders.Run(WingOrder.Tasked(make(w.Player), scope));
         }
 
-        public static void Engage() => WingOrders.Run(WingOrder.Of(OrderKind.Engage));
+        public static void Engage() => Engage(default);
+
+        public static void Engage(WingScope scope) => WingOrders.Run(WingOrder.Of(OrderKind.Engage, scope));
 
         public static float GoHighMetres = 300f, GoLowMetres = -150f;
 
@@ -188,7 +214,9 @@ namespace WingCommand
         }
 
         /// <summary>The player's selected enemy targets, split across the wing (spec M5, M5b).</summary>
-        public static void AttackTarget()
+        public static void AttackTarget() => AttackTarget(default);
+
+        public static void AttackTarget(WingScope scope)
         {
             if (!Ready(out WingService w) || w.Player == null) return;
             List<Unit> targets = SelectedEnemies(w.Player);
@@ -197,7 +225,7 @@ namespace WingCommand
                 WingToast.Show("No enemy target selected");
                 return;
             }
-            WingOrders.Run(new WingOrder { Kind = OrderKind.Attack, Units = Ids(targets) });
+            WingOrders.Run(new WingOrder { Kind = OrderKind.Attack, Units = Ids(targets), Scope = scope });
         }
 
         /// <summary>At most <see cref="WingOrder.MaxUnits"/> units as persistent ids.</summary>
@@ -210,7 +238,9 @@ namespace WingCommand
         }
 
         /// <summary>Spec M5 §9.2: one missile from every wingman with your target in envelope.</summary>
-        public static void Splash()
+        public static void Splash() => Splash(default);
+
+        public static void Splash(WingScope scope)
         {
             if (!Ready(out WingService w) || w.Player == null) return;
             List<Unit> targets = SelectedEnemies(w.Player);
@@ -219,7 +249,7 @@ namespace WingCommand
                 WingToast.Show("Splash: select a target first");
                 return;
             }
-            WingOrders.Run(new WingOrder { Kind = OrderKind.Splash, Units = new[] { targets[0].persistentID.Id } });
+            WingOrders.Run(new WingOrder { Kind = OrderKind.Splash, Units = new[] { targets[0].persistentID.Id }, Scope = scope });
         }
 
         public static void ClearMySix() => WingOrders.Run(WingOrder.Of(OrderKind.ClearSix));
@@ -252,7 +282,9 @@ namespace WingCommand
         /// <summary>Reserve → Escort → Sweep: what members shoot at while holding formation (spec M5 §8).</summary>
         public static void NextDoctrine() => WingOrders.Run(WingOrder.Of(OrderKind.NextDoctrine));
 
-        public static void Disengage() => WingOrders.Run(WingOrder.Of(OrderKind.BreakOff));
+        public static void Disengage() => Disengage(default);
+
+        public static void Disengage(WingScope scope) => WingOrders.Run(WingOrder.Of(OrderKind.BreakOff, scope));
 
         private static List<Unit> SelectedEnemies(Aircraft player)
         {

@@ -21,20 +21,22 @@ namespace WingCommand
                     spec.HeadingDeg = ((h % 360f) + 360f) % 360f;
                     break;
                 case ApField.Altitude:
-                    spec.AltitudeM = Clamp(Finite(spec.AltitudeM) + dir * AltitudeStep, 0f, MaxAltitude);
+                    spec.AltitudeM = Step(Finite(spec.AltitudeM), AltitudeStep, dir, 0f, MaxAltitude);
                     break;
                 case ApField.VerticalSpeed:
-                    spec.VerticalSpeedMps = Clamp(Finite(spec.VerticalSpeedMps) + dir * VerticalSpeedStep, -MaxVerticalSpeed, MaxVerticalSpeed);
+                    spec.VerticalSpeedMps = Step(Finite(spec.VerticalSpeedMps), VerticalSpeedStep, dir, -MaxVerticalSpeed, MaxVerticalSpeed);
                     break;
                 default:
-                    spec.SpeedMps = Clamp(Finite(spec.SpeedMps) + dir * SpeedStepKmh / 3.6f, 0f, MaxSpeedKmh / 3.6f);
+                    spec.SpeedMps = Step(Finite(spec.SpeedMps), SpeedStepKmh / 3.6f, dir, 0f, MaxSpeedKmh / 3.6f);
                     break;
             }
         }
 
         /// <summary>The held value as the HUD writes it: "005°", "3200 m", "+2.0 m/s", "180 km/h".</summary>
-        public static string Readout(in HoldSpec spec, ApField field)
+        public static string Readout(in HoldSpec spec, ApField field, bool held = true)
         {
+            // A value no mode holds is a dash, not a made-up 0 (review M7b-1 minor).
+            if (!held) return WmcText.Unknown;
             switch (field)
             {
                 case ApField.Heading:
@@ -52,6 +54,9 @@ namespace WingCommand
 
         private static float Finite(float v) => float.IsNaN(v) || float.IsInfinity(v) ? 0f : v;
 
-        private static float Clamp(float v, float lo, float hi) => v < lo ? lo : v > hi ? hi : v;
+        /// <summary>A step in the direction pressed, stopped at the limit — a value already beyond it never moves back
+        /// towards it against the press (review M7b-1 minor).</summary>
+        private static float Step(float v, float step, int dir, float lo, float hi) =>
+            dir > 0 ? Math.Min(v + step, Math.Max(hi, v)) : dir < 0 ? Math.Max(v - step, Math.Min(lo, v)) : v;
     }
 }
