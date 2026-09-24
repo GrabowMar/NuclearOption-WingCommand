@@ -12,6 +12,9 @@ namespace WingCommand
         private float gateSpeed, gateAlt;
         private RotorShaft[] rotors;
 
+        /// <summary>The next read primes afresh (after a native state flew the aircraft).</summary>
+        public void Restart() => core.Restart();
+
         public AircraftState Read(Aircraft a, float dt)
         {
             RawAircraftSample r = Sample(a);

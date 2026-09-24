@@ -46,7 +46,7 @@ namespace WingCommand
             AirframeProfile e = Effective(p);
             e.RollRateMaxDps = Roll.RateDps;
             Controller.Track(s, applied, e);
-            Constraints.Track(s);
+            Constraints.Track(s, e);
             lastBankCmd = s.BankDeg;
             lastRollStick = applied.Roll;
         }

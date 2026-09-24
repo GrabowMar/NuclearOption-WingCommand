@@ -23,6 +23,37 @@ namespace WingCommand.PureTests
         }
 
         [Fact]
+        public void AfterARestartTheFirstReadDerivesNoAccelerationFromAStaleVelocity()
+        {
+            // Review M5a C1: a member taken back after minutes in the game's combat state read its velocity against one from
+            // before the fight: tens of g of derived acceleration seeded the load-factor command.
+            var core = new AircraftSensorCore();
+            core.Read(Level(new Vec3(0f, 0f, 200f)), Dt);
+            core.Restart();
+            AircraftState s = core.Read(Level(new Vec3(250f, -40f, 0f)), 0.02f);
+            Assert.Equal(0f, s.Acc.Length, 3);
+            Assert.True(Math.Abs(s.Nz - s.Up.Y) < 1e-3f, $"Nz {s.Nz}");
+        }
+
+        [Fact]
+        public void TrackingAnAbsurdLoadFactorIsHeldToTheEnvelope()
+        {
+            AirframeProfile p = AirframeProfile.Derive(new ProfileInputs { PublishedStallKmh = 216f, GLimit = 9f });
+            IFlightPipeline pipeline = FlightStack.NewPipeline(AirframeClass.FixedWing);
+            var s = new AircraftSensorCore().Read(Level(new Vec3(0f, 0f, 200f)), Dt);
+            s.Nz = -66f;
+            pipeline.Track(s, new ControlOutput { Throttle = 0.6f }, p);
+            s.Nz = 1f;
+            var intent = new FlightIntent
+            {
+                Ref = new RefState(s.Pos + new Vec3(0f, 0f, 2000f), new Vec3(0f, 0f, 200f), Vec3.Zero),
+                Limits = new SpeedLimits(80f, 300f, false, true), Precision = 1f,
+            };
+            pipeline.Step(pipeline.Guide(intent, s, p), s, new LimitContext { FloorY = float.NaN }, p, Dt);
+            Assert.True(pipeline.LastAttitude.Nz >= -p.NegativeGLimit - 0.5f, $"Nz {pipeline.LastAttitude.Nz}");
+        }
+
+        [Fact]
         public void FixtureUpVectorPointsUpInLevelFlight() =>
             Assert.Equal(1f, Level(new Vec3(0f, 0f, 200f)).Up.Y, 4);
 

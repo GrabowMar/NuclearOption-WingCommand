@@ -193,6 +193,9 @@ namespace WingCommand
         /// <summary>Gear comes up this high on the climb-out.</summary>
         public static float GearUpHeight = 20f;
 
+        /// <summary>A frame this long after the last one restarts the sensors (their derived acceleration would be stale).</summary>
+        public static float SensorGapSeconds = 0.1f;
+
         public void StepMember(WingMember m)
         {
             if (Wing == null || m.Released) return;
@@ -543,6 +546,12 @@ namespace WingCommand
         private WingFrame FrameFor(float time, float dt)
         {
             if (time == frameTime) return Wing.Frame;
+            // After a gap (every member in a native state), every sensor starts afresh (review M5a C1).
+            if (!float.IsNaN(frameTime) && time - frameTime > SensorGapSeconds)
+            {
+                leaderSensor.Restart();
+                foreach (WingMember x in Members) x.Sensor.Restart();
+            }
             frameTime = time;
             frameIndex++;
             FieldRegistry.Step(dt, this);

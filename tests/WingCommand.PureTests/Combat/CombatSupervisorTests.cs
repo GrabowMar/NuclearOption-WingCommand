@@ -31,6 +31,18 @@ namespace WingCommand.PureTests
         }
 
         [Fact]
+        public void AMemberWithoutATargetForLongIsTakenBack()
+        {
+            // Review M5a I2: with nothing to fight the game's combat state flies to mission objectives until the leash.
+            CombatSituation s = Fighting();
+            s.NoTargetSeconds = CombatSupervisor.NoTargetSeconds - 1f;
+            Assert.False(CombatSupervisor.TakeBack(s, out _));
+            s.NoTargetSeconds = CombatSupervisor.NoTargetSeconds + 0.1f;
+            Assert.True(CombatSupervisor.TakeBack(s, out TransitionReason reason));
+            Assert.Equal(TransitionReason.NoTarget, reason);
+        }
+
+        [Fact]
         public void BingoWinchesterAndTheLeashTakeItBack()
         {
             CombatSituation s = Fighting();

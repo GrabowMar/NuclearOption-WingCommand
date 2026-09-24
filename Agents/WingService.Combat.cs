@@ -35,6 +35,9 @@ namespace WingCommand
                 PilotBaseState combat = NativeCombatState(m.Pilot);
                 if (combat == null) continue;
                 m.Engaged = true;
+                m.NoTargetClock = 0f;
+                // Without contact the game's no-target mode flies to mission objectives (review M5a I2).
+                if (m.Pilot.flightInfo != null) m.Pilot.flightInfo.EnemyContact = true;
                 m.Pilot.SwitchState(combat);
                 if (!ReferenceEquals(m.Pilot.currentState, combat))
                 {
@@ -131,13 +134,21 @@ namespace WingCommand
         /// by the game's own analysis.</summary>
         private static bool CanAttack(Aircraft a, Unit t)
         {
+            // The game only chooses a target whose position is accurate (review M5a I4).
             TrackingInfo tracking = a.NetworkHQ != null ? a.NetworkHQ.GetTrackingData(t.persistentID) : null;
-            if (tracking == null || a.weaponStations == null) return false;
+            if (tracking == null || a.weaponStations == null || !a.NetworkHQ.IsTargetPositionAccurate(t, TargetAccuracyMetres)) return false;
             foreach (WeaponStation w in a.weaponStations)
-                if (w != null && !w.Cargo && w.Ammo > 0 && w.WeaponInfo != null &&
-                    CombatAI.AnalyzeTarget(w, a, tracking, 0f, -1f, 100f).opportunity > 0f) return true;
+                if (Usable(a, w) && CombatAI.AnalyzeTarget(w, a, tracking, 0f, -1f, 100f).opportunity > 0f) return true;
             return false;
         }
+
+        public static float TargetAccuracyMetres = 1000f, EnergyChargeMin = 0.6f;
+
+        /// <summary>A loaded, non-cargo, non-nuclear station (an energy weapon only when charged), as the game's own choice
+        /// and the aces' hunt require.</summary>
+        internal static bool Usable(Aircraft a, WeaponStation w) =>
+            w != null && !w.Cargo && w.Ammo > 0 && w.WeaponInfo != null && !w.WeaponInfo.nuclear &&
+            (!w.WeaponInfo.energy || (a.GetPowerSupply() != null && a.GetPowerSupply().GetCharge() >= EnergyChargeMin));
 
         /// <summary>Every engaged member back into formation (Commanded). Returns how many.</summary>
         public int Disengage()
@@ -185,6 +196,7 @@ namespace WingCommand
                     AnchorPresent = anchor.Present,
                     AnchorDistance = anchor.Present ? (anchor.Pos - m.Aircraft.GlobalPosition().ToVec3()).Length : 0f,
                     Ammo = AmmoFraction(m.Aircraft), Bingo = bingo,
+                    NoTargetSeconds = m.NoTargetClock = NativeTarget(m) != null ? 0f : m.NoTargetClock + dt,
                 };
                 if (!CombatSupervisor.TakeBack(s, out TransitionReason reason)) continue;
                 TakeBack(m, reason);
@@ -225,8 +237,25 @@ namespace WingCommand
             if (m.Pilot != null && !m.Pilot.dead && !ReferenceEquals(m.Pilot.currentState, m.State)) m.Pilot.SwitchState(m.State);
         }
 
+        private static readonly HarmonyLib.AccessTools.FieldRef<AIPilotCombatModes, Unit> PlaneTarget =
+            HarmonyLib.AccessTools.FieldRefAccess<AIPilotCombatModes, Unit>("currentTarget");
+        private static readonly HarmonyLib.AccessTools.FieldRef<AIHeloCombatState, Unit> HeloTarget =
+            HarmonyLib.AccessTools.FieldRefAccess<AIHeloCombatState, Unit>("currentTarget");
+
+        /// <summary>The target the game's combat state is after (null: none).</summary>
+        private static Unit NativeTarget(WingMember m)
+        {
+            PilotBaseState state = m.Pilot?.currentState;
+            if (state is AIPilotCombatModes plane) return PlaneTarget(plane);
+            if (state is AIHeloCombatState helo) return HeloTarget(helo);
+            return null;
+        }
+
         private void Disengaged(WingMember m, TransitionReason reason)
         {
+            // The game's combat states turn countermeasures on and never off (review M5a I3).
+            Aircraft a = m.Aircraft;
+            if (a != null && a.countermeasureTrigger) a.Countermeasures(false, a.countermeasureManager.activeIndex);
             m.Engaged = false;
             m.AssignedTarget = null;
             m.Pilot?.SetPrimaryTarget(null);

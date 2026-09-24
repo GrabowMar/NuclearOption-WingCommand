@@ -150,10 +150,14 @@ namespace WingCommand
         }
 
         /// <summary>Seed the authority stage from the aircraft's actual attitude (handover, spawn).</summary>
-        public void Track(in AircraftState s)
+        public void Track(in AircraftState s) => Track(s, null);
+
+        /// <summary>Takes over from the aircraft as it is; the load factor it starts slewing from is held to the airframe's
+        /// envelope (review M5a C1: a stale sensor once seeded −66 g, and the slew then held it for seconds).</summary>
+        public void Track(in AircraftState s, AirframeProfile p)
         {
             lastBank = s.BankDeg;
-            lastNz = s.Nz;
+            lastNz = p != null ? Scalar.Clamp(s.Nz, -p.NegativeGLimit, p.GLimit) : s.Nz;
             primed = true;
         }
 

@@ -34,6 +34,8 @@ namespace WingCommand
                     controlInputs.customAxis1 = 1f;
                     break;
             }
+            // A native state may have flown the aircraft for minutes: the sensor starts afresh (review M5a C1).
+            member.Sensor.Restart();
             member.Last = member.Sensor.Read(aircraft, Time.fixedDeltaTime);
             member.Brain.Track(member.Last, EngineSticks.ToPure(ControlWriter.Read(controlInputs)), member.Profile);
         }

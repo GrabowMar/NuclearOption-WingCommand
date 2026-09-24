@@ -13,19 +13,22 @@ namespace WingCommand
         public float Ammo;
         public bool Bingo, AnchorPresent;
         public NativeExit Exit;
+        /// <summary>How long the game's combat state has had no target.</summary>
+        public float NoTargetSeconds;
     }
 
     /// <summary>Spec M5 §2.2: an engaged member stays in the game's combat state until it would leave it (no target, low
-    /// fuel, cargo), is at bingo fuel, has no ammunition left, or is more than <see cref="LeashMetres"/> from the wing's
+    /// fuel, cargo), has had no target for <see cref="NoTargetSeconds"/> (review M5a I2: it would fly to mission
+    /// objectives), is at bingo fuel, has no ammunition left, or is more than <see cref="LeashMetres"/> from the wing's
     /// anchor; then it is taken back into formation with the reason.</summary>
     internal static class CombatSupervisor
     {
-        public static float LeashMetres = 20000f;
+        public static float LeashMetres = 20000f, NoTargetSeconds = 15f;
 
         public static bool TakeBack(in CombatSituation s, out TransitionReason reason)
         {
             reason = s.Bingo ? TransitionReason.Fuel
-                : s.Exit != NativeExit.None ? TransitionReason.NoTarget
+                : s.Exit != NativeExit.None || s.NoTargetSeconds > NoTargetSeconds ? TransitionReason.NoTarget
                 : s.Ammo <= 0f ? TransitionReason.Winchester
                 : s.AnchorPresent && s.AnchorDistance > LeashMetres ? TransitionReason.Leash
                 : TransitionReason.None;

@@ -39,6 +39,14 @@ namespace WingCommand
         private Vec3 lastVel, acc;
         private bool primed;
 
+        /// <summary>After a gap (a native state flew the aircraft): the next read primes afresh and derives no acceleration
+        /// from a velocity minutes old (review M5a C1).</summary>
+        public void Restart()
+        {
+            primed = false;
+            acc = Vec3.Zero;
+        }
+
         public AircraftState Read(in RawAircraftSample r, float dt)
         {
             if (!primed)
