@@ -75,6 +75,38 @@ namespace WingCommand.PureTests
         }
 
         [Fact]
+        public void AContactTheRadioDroppedIsReportedAgain()
+        {
+            // Review M7a-2 I1: a call dropped by the radio was never made again.
+            var w = new ContactWatch();
+            Assert.Equal(1, Update(w, One(7, 30f), 0f));
+            w.Forget(7);
+            Assert.Equal(1, Update(w, One(7, 30f), 1f));
+        }
+
+        [Fact]
+        public void NothingIsReportedWhileTheReportArrayIsEmpty()
+        {
+            var w = new ContactWatch();
+            ContactSample[] s = One(7, 30f);
+            Assert.Equal(0, w.Update(s, 1, 0f, new int[0]));
+            Assert.Equal(0, w.Known);
+            Assert.Equal(1, Update(w, s, 1f));
+        }
+
+        [Theory]
+        [InlineData(true, 45f, false, true)]      // air inside the forget distance: kept for hysteresis
+        [InlineData(true, 51f, false, false)]     // beyond 1.25 × range
+        [InlineData(false, 5f, false, false)]     // ground while not scouting (review M7a-2 C1: it filled the samples)
+        [InlineData(false, 9f, true, true)]
+        [InlineData(false, 11f, true, false)]
+        public void OnlyContactsThatCanMatterAreSampled(bool air, float km, bool ground, bool kept)
+        {
+            var w = new ContactWatch { Ground = ground };
+            Assert.Equal(kept, w.Considers(air, km * 1000f));
+        }
+
+        [Fact]
         public void ManyContactsStayBounded()
         {
             var w = new ContactWatch();

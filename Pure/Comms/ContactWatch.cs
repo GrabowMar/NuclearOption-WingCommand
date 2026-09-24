@@ -29,6 +29,18 @@ namespace WingCommand
 
         public void Clear() => known = 0;
 
+        /// <summary>Report this contact again when it next qualifies (the radio dropped its call: review M7a-2 I1).</summary>
+        public void Forget(uint id)
+        {
+            int k = IndexOf(id);
+            if (k >= 0) RemoveAt(k);
+        }
+
+        /// <summary>Whether a contact is worth sampling at all: air, or ground while scouting, no farther than its forget
+        /// distance (review M7a-2 C1: every far building and vehicle filled the samples and hid new bandits).</summary>
+        public bool Considers(bool air, float distance) =>
+            (air || Ground) && distance <= (air ? AirRange : GroundRange) * ForgetFactor;
+
         /// <summary>Writes the indices into <paramref name="samples"/> to report now into <paramref name="report"/>;
         /// returns how many.</summary>
         public int Update(ContactSample[] samples, int count, float now, int[] report)

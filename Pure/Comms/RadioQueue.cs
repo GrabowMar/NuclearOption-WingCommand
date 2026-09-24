@@ -18,6 +18,8 @@ namespace WingCommand
         /// <summary>Seconds it waited behind a line of its class or higher (not counted toward its age), and when that was
         /// last measured.</summary>
         public float Blocked, Seen;
+        /// <summary>The answer to a player's question: it never goes stale and goes first in its class (review M7a-2 I2).</summary>
+        public bool Answer;
     }
 
     /// <summary>Spec M7 §1.2: the wing's one radio channel.
@@ -37,6 +39,9 @@ namespace WingCommand
     {
         public static float SpeakerGap = 1.5f, RepeatSeconds = 8f, AirBase = 0.8f, AirPerChar = 0.055f, AirMin = 1.2f, AirMax = 6f;
         public static float EmergencyAge = 2f, TacticalAge = 4f, StatusAge = 10f, ChatterAge = 20f;
+        /// <summary>A hold (the voice still speaking) lasts at most this long past the line's airtime: a voice that never
+        /// reports done must not silence the radio.</summary>
+        public static float MaxHold = 10f;
         public const int Capacity = 16, MaxSpeakers = 16, RecentCapacity = 32;
 
         private struct Recent
@@ -69,6 +74,14 @@ namespace WingCommand
         public float MinSpeakerGap { get; private set; } = float.PositiveInfinity;
 
         public int SentOf(RadioClass c) => sent[(int)c];
+
+        /// <summary>A line with this key is waiting (not yet on the channel).</summary>
+        public bool Holds(string key)
+        {
+            for (int i = 0; i < count; i++)
+                if (string.Equals(lines[i].Key, key, StringComparison.Ordinal)) return true;
+            return false;
+        }
         public bool Busy(float now) => now < busyUntil;
 
         public static float Airtime(string text)
@@ -134,6 +147,7 @@ namespace WingCommand
         public bool Next(float now, out RadioLine line, bool held = false)
         {
             line = default;
+            held = held && now < busyUntil + MaxHold;
             float until = held ? Math.Max(busyUntil, now) : busyUntil;
             for (int i = count - 1; i >= 0; i--)
             {
@@ -143,7 +157,7 @@ namespace WingCommand
                     if (to > from) lines[i].Blocked += to - from;
                 }
                 lines[i].Seen = now;
-                if (now - lines[i].Queued - lines[i].Blocked <= Age(lines[i].Class)) continue;
+                if (lines[i].Answer || now - lines[i].Queued - lines[i].Blocked <= Age(lines[i].Class)) continue;
                 RemoveAt(i);
                 DroppedStale++;
             }
@@ -151,12 +165,14 @@ namespace WingCommand
             RadioClass top = RadioClass.Chatter;
             for (int i = 0; i < count; i++)
                 if (lines[i].Class > top) top = lines[i].Class;
+            // An answer first, then the oldest line, of the top class whose speaker may speak.
             int pick = -1;
-            for (int i = 0; i < count && pick < 0; i++)
-            {
-                if (lines[i].Class != top) continue;
-                if (top == RadioClass.Emergency || now - lastEnd[SpeakerSlot(lines[i].Speaker)] >= SpeakerGap - 1e-4f) pick = i;
-            }
+            for (int pass = 0; pass < 2 && pick < 0; pass++)
+                for (int i = 0; i < count && pick < 0; i++)
+                {
+                    if (lines[i].Class != top || (pass == 0 && !lines[i].Answer)) continue;
+                    if (top == RadioClass.Emergency || now - lastEnd[SpeakerSlot(lines[i].Speaker)] >= SpeakerGap - 1e-4f) pick = i;
+                }
             if (pick < 0) return false;
             bool emergency = top == RadioClass.Emergency;
             if ((now < busyUntil || held) && (!emergency || currentClass == RadioClass.Emergency)) return false;

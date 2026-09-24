@@ -102,14 +102,62 @@ namespace WingCommand.PureTests
         {
             // Review M7a I3: while the voice still speaks, only an emergency may cut in.
             var q = new RadioQueue();
+            q.Enqueue(L(3, RadioClass.Status, "x"), 0f);
+            Assert.True(q.Next(0f, out _));
             q.Enqueue(L(1, RadioClass.Status, "s"), 0f);
-            Assert.False(q.Next(0f, out _, held: true));
-            q.Enqueue(L(2, RadioClass.Emergency, "e"), 1f);
-            Assert.True(q.Next(1f, out RadioLine e, held: true));
+            float air = RadioQueue.Airtime("Copy.");
+            Assert.False(q.Next(air + 0.3f, out _, held: true));                        // x still being spoken
+            q.Enqueue(L(2, RadioClass.Emergency, "e"), air + 0.4f);
+            Assert.True(q.Next(air + 0.4f, out RadioLine e, held: true));
             Assert.Equal("e", e.Key);
-            Assert.False(q.Next(RadioQueue.StatusAge + 5f, out _, held: true));      // held lines do not go stale
-            Assert.True(q.Next(RadioQueue.StatusAge + 5f, out RadioLine s));
+            float late = air + 0.4f + air + RadioQueue.MaxHold - 0.5f;                  // past the Status age, inside the hold cap
+            Assert.False(q.Next(late, out _, held: true));                              // held lines do not go stale
+            Assert.True(q.Next(late, out RadioLine s));
             Assert.Equal("s", s.Key);
+        }
+
+        [Fact]
+        public void HoldsSaysWhetherAKeyIsQueued()
+        {
+            var q = new RadioQueue();
+            q.Enqueue(L(1, RadioClass.Status, "BANDIT:7", wing: true), 0f);
+            Assert.True(q.Holds("BANDIT:7"));
+            Assert.False(q.Holds("BANDIT:8"));
+            Assert.True(q.Next(0f, out _));
+            Assert.False(q.Holds("BANDIT:7"));
+        }
+
+        [Fact]
+        public void AnAnswerNeverGoesStaleAndGoesFirstInItsClass()
+        {
+            // Review M7a-2 I2: Bogey Dope asked in a raid went stale unheard behind the same speaker's calls.
+            var q = new RadioQueue();
+            q.Enqueue(L(1, RadioClass.Tactical, "t1"), 0f);
+            Assert.True(q.Next(0f, out _));
+            q.Enqueue(L(1, RadioClass.Tactical, "t2"), 0.1f);
+            RadioLine answer = L(1, RadioClass.Tactical, "BOGEYDOPE:1");
+            answer.Answer = true;
+            q.Enqueue(answer, 0.2f);
+            Assert.True(q.Next(RadioQueue.Airtime("Copy.") + RadioQueue.SpeakerGap, out RadioLine first));
+            Assert.Equal("BOGEYDOPE:1", first.Key);
+            Assert.Equal(1, q.Queued);
+            q.Enqueue(answer, 100f);
+            Assert.True(q.Next(200f, out RadioLine late));                 // long past any age: still said
+            Assert.Equal("BOGEYDOPE:1", late.Key);
+        }
+
+        [Fact]
+        public void AHoldLastsAtMostMaxHoldPastTheLine()
+        {
+            // A voice that never reports done must not silence the radio for the session.
+            var q = new RadioQueue();
+            q.Enqueue(L(1, RadioClass.Status, "a"), 0f);
+            Assert.True(q.Next(0f, out _));
+            q.Enqueue(L(2, RadioClass.Status, "b"), 0f);
+            float end = RadioQueue.Airtime("Copy.");
+            Assert.False(q.Next(end + 1f, out _, held: true));
+            Assert.True(q.Next(end + RadioQueue.MaxHold + 0.1f, out RadioLine b, held: true));
+            Assert.Equal("b", b.Key);
         }
 
         [Fact]

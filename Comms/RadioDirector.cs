@@ -25,8 +25,13 @@ namespace WingCommand
         public int ContactsCalled { get; private set; }
         private readonly ContactSample[] samples = new ContactSample[ContactWatch.Capacity];
         private readonly Unit[] units = new Unit[ContactWatch.Capacity];
+        private readonly Vec3[] tracked = new Vec3[ContactWatch.Capacity];
         private readonly int[] report = new int[4];
+        private static readonly int[] NoReport = new int[0];
         private float contactClock;
+        // The one contact call waiting for the channel (review M7a-2 I1: the next is chosen only once it is on air).
+        private string pendingKey;
+        private uint pendingId;
 
         public RadioDirector() => Instance = this;
 
@@ -36,6 +41,7 @@ namespace WingCommand
             WingRadioAudio.Reset();
             Contacts.Clear();
             ContactsCalled = 0;
+            pendingKey = null;
             ring = WingService.Instance?.Events;
             cursor.Seen = ring?.Total ?? 0;
         }
@@ -78,29 +84,41 @@ namespace WingCommand
             WingConfig cfg = Plugin.Settings;
             Contacts.Ground = wing.Planner.Active && wing.Planner.Current.Scout;
             if (!cfg.ContactCalls.Value && !Contacts.Ground) return;
-            int n = wing.KnownContacts(samples, units);
-            int k = Contacts.Update(samples, n, now, report);
+            if (pendingKey != null && !Queue.Holds(pendingKey))
+            {
+                // Gone from the queue without going on air: dropped (stale or full); called again when it next qualifies.
+                Contacts.Forget(pendingId);
+                pendingKey = null;
+            }
+            int n = wing.KnownContacts(Contacts, cfg.ContactCalls.Value, samples, units, tracked);
+            // While a call waits, the watch still tracks and forgets, but chooses nothing new.
+            int k = Contacts.Update(samples, n, now, pendingKey != null ? NoReport : report);
             for (int i = 0; i < k; i++)
             {
-                ContactSample c = samples[report[i]];
-                Unit u = units[report[i]];
-                if (c.Air && !cfg.ContactCalls.Value) continue;
-                WingMember speaker = NearestFlying(wing, u);
+                int at = report[i];
+                ContactSample c = samples[at];
+                Unit u = units[at];
+                WingMember speaker = NearestFlying(wing, tracked[at]);
                 if (speaker == null) continue;
                 Vec3 from = wing.Player != null ? wing.Player.GlobalPosition().ToVec3() : speaker.Last.Pos;
                 Vec3 vel = u.rb != null ? u.rb.velocity.ToVec3() : Vec3.Zero;
-                string bra = Bra.Format(from, u.GlobalPosition().ToVec3(), vel, PlayerSettings.unitSystem == PlayerSettings.UnitSystem.Imperial);
+                string bra = Bra.Format(from, tracked[at], vel, PlayerSettings.unitSystem == PlayerSettings.UnitSystem.Imperial);
                 string type = u.definition != null ? u.definition.unitName : u.unitName;
-                bool said = c.Air
-                    ? SayText(speaker, RadioClass.Tactical, "BANDIT:" + c.Id, $"Bandit, {bra}. {type}.", true)
-                    : SayText(speaker, RadioClass.Status, "CONTACT:" + c.Id, $"Contact, {bra}. {type}.", true);
-                if (said) ContactsCalled++;
+                string key = (c.Air ? "BANDIT:" : "CONTACT:") + c.Id;
+                bool queued = c.Air
+                    ? SayText(speaker, RadioClass.Tactical, key, $"Bandit, {bra}. {type}.", true)
+                    : SayText(speaker, RadioClass.Status, key, $"Contact, {bra}. {type}.", true);
+                if (queued)
+                {
+                    pendingKey = key;
+                    pendingId = c.Id;
+                }
+                else Contacts.Forget(c.Id);
             }
         }
 
-        private static WingMember NearestFlying(WingService wing, Unit u)
+        private static WingMember NearestFlying(WingService wing, Vec3 at)
         {
-            Vec3 at = u.GlobalPosition().ToVec3();
             WingMember best = null;
             float bestD = float.MaxValue;
             foreach (WingMember m in wing.Members)
@@ -126,7 +144,7 @@ namespace WingCommand
         /// <summary>The answer to a player's question: never a repeat of an earlier answer (review M7a I4). False when the
         /// radio will not say it.</summary>
         public bool Answer(WingMember speaker, string key, string text) =>
-            Enqueue(speaker, RadioClass.Tactical, key + ":" + ++asks, text, false, Time.time);
+            Enqueue(speaker, RadioClass.Tactical, key + ":" + ++asks, text, false, Time.time, answer: true);
 
         private void Say(WingMember speaker, RadioClass cls, string name, string detail, bool wingWide, float now)
         {
@@ -135,13 +153,16 @@ namespace WingCommand
             Enqueue(speaker, cls, name, ChatterDialogue.Event(persona, name, detail, seed++), wingWide, now);
         }
 
-        private bool Enqueue(WingMember speaker, RadioClass cls, string key, string text, bool wingWide, float now)
+        private bool Enqueue(WingMember speaker, RadioClass cls, string key, string text, bool wingWide, float now, bool answer = false)
         {
             RadioLevel level = Plugin.Settings.Radio.Value;
             if (level == RadioLevel.Off || (level == RadioLevel.Essential && cls == RadioClass.Chatter)) return false;
             WingPilot pilot = WingPilotRoster.Of(speaker);
             string who = pilot != null && !string.IsNullOrEmpty(pilot.Callsign) ? pilot.Callsign : "#" + speaker.Number;
-            return Queue.Enqueue(new RadioLine { Speaker = speaker.Brain.Slot, Class = cls, Key = key, WingWide = wingWide, Text = who + ": " + text }, now);
+            return Queue.Enqueue(new RadioLine
+            {
+                Speaker = speaker.Brain.Slot, Class = cls, Key = key, WingWide = wingWide, Text = who + ": " + text, Answer = answer,
+            }, now);
         }
 
         /// <summary>The member in the event's slot; for a wing-level event (or one whose member has gone), the first
@@ -163,6 +184,12 @@ namespace WingCommand
             // Spec M5 §9.3: the game's radio static on every line, a threat warble on an emergency.
             WingRadioAudio.Play(line.Class == RadioClass.Emergency ? WingRadioAudio.Earcon.ThreatAlarm : WingRadioAudio.Earcon.Transmission);
             WingToast.Show(line.Text);
+            if (line.Key == pendingKey)
+            {
+                // Contact calls count when they go on air (review M7a-2 m3).
+                ContactsCalled++;
+                pendingKey = null;
+            }
             if (!VoiceOn()) return;
             try
             {

@@ -113,10 +113,12 @@ namespace WingCommand
             return type != null;
         }
 
-        /// <summary>Spec M7 §2.2: the hostile units the player's side knows of, as contact samples (air: an air threat by the
-        /// outnumbered judge's test; ground: any other hostile unit), each with its distance to the nearest flying member.
-        /// Returns how many were written (at most the arrays' length).</summary>
-        public int KnownContacts(ContactSample[] into, Unit[] units)
+        /// <summary>Spec M7 §2.2: the contacts the player's side knows of that the watch would consider — enemy air threats
+        /// (by the outnumbered judge's test, when <paramref name="air"/>) and, while it scouts, enemy vehicles and ships —
+        /// with the distance to the nearest flying member and the tracked position (review M7a-2 C1, I3, m1: far buildings
+        /// and vehicles no longer fill the samples; missiles, pilots and buildings are never contacts; calls use what the
+        /// side knows, not the unit's true position). Returns how many were written.</summary>
+        public int KnownContacts(ContactWatch watch, bool air, ContactSample[] into, Unit[] units, Vec3[] tracked)
         {
             Aircraft any = null;
             foreach (WingMember m in Members)
@@ -130,13 +132,18 @@ namespace WingCommand
             int n = 0;
             foreach (KeyValuePair<PersistentID, TrackingInfo> pair in hq.trackingDatabase)
             {
-                if (n >= into.Length || n >= units.Length) break;
+                if (n >= into.Length || n >= units.Length || n >= tracked.Length) break;
                 TrackingInfo t = pair.Value;
                 if (t == null || !t.TryGetUnit(out Unit u) || u.disabled || u.NetworkHQ == null || u.NetworkHQ == hq) continue;
-                bool air = u is Aircraft enemy &&
-                           OutnumberedJudge.IsAirThreat(hq.IsTargetPositionAccurate(u, TargetAccuracyMetres), enemy.radarAlt,
-                               enemy.definition != null ? enemy.definition.roleIdentity.antiAir : 0f);
-                if (!air && u is Aircraft) continue;   // parked, unarmed or stale aircraft: no contact to call
+                bool isAir;
+                if (u is Aircraft enemy)
+                {
+                    if (!air || !OutnumberedJudge.IsAirThreat(hq.IsTargetPositionAccurate(u, TargetAccuracyMetres), enemy.radarAlt,
+                            enemy.definition != null ? enemy.definition.roleIdentity.antiAir : 0f)) continue;
+                    isAir = true;
+                }
+                else if (watch.Ground && (u is GroundVehicle || u is Ship)) isAir = false;
+                else continue;
                 Vec3 at = t.GetPosition().ToVec3();
                 float nearest = float.MaxValue;
                 foreach (WingMember m in Members)
@@ -144,8 +151,10 @@ namespace WingCommand
                     if (m.Released || !m.Alive || m.OnGround) continue;
                     nearest = System.Math.Min(nearest, (m.Last.Pos - at).Length);
                 }
-                into[n] = new ContactSample { Id = pair.Key.Id, Air = air, Distance = nearest };
+                if (!watch.Considers(isAir, nearest)) continue;
+                into[n] = new ContactSample { Id = pair.Key.Id, Air = isAir, Distance = nearest };
                 units[n] = u;
+                tracked[n] = at;
                 n++;
             }
             return n;
