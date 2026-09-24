@@ -58,7 +58,21 @@ namespace WingCommand
         public WmcRoom()
         {
             Instance = this;
-            Register(RoomNotches.Tactical, new RoomTactical());
+            Tactical = new RoomTactical();
+            Register(RoomNotches.Tactical, Tactical);
+        }
+
+        /// <summary>The TACTICAL page (automation reads its counters).</summary>
+        public RoomTactical Tactical { get; }
+
+        /// <summary>One refresh of the open page now (automation: a change made in the same call shows in its report).</summary>
+        public void RefreshNow()
+        {
+            if (!open) return;
+            WmcContext c = Context();
+            if (c == null) return;
+            RefreshHeader(c);
+            if (page >= 0) pages[page]?.Refresh(c);
         }
 
         public bool IsOpen => open;

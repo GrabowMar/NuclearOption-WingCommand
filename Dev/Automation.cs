@@ -612,6 +612,48 @@ namespace WingCommand
             };
         }
 
+        /// <summary>Spec WMC program §6: the room as a player drives it — <c>open</c>, <c>page</c>, <c>fit</c>, <c>zoom</c> (factor
+        /// at the view centre), <c>click_ahead_km</c>/<c>click_right_km</c> with <c>button</c> "left" or "right" through TACTICAL's
+        /// own click path, <c>press</c> a room control, <c>close</c> — then report it.</summary>
+        public static Dictionary<string, object> WmcRoom(Dictionary<string, object> args)
+        {
+            WmcRoom room = global::WingCommand.WmcRoom.Instance;
+            if (room == null) return Fail("WmcRoom", "no room");
+            if (Arg(args, "open") is bool open && open) room.Open(Number(args, "page", -1));
+            RoomTactical t = room.Tactical;
+            if (Arg(args, "fit") is bool fit && fit) t?.FitNow();
+            if (Arg(args, "zoom") != null) t?.ZoomCentre((float)Convert.ToDouble(Arg(args, "zoom"), CultureInfo.InvariantCulture));
+            if ((Arg(args, "click_ahead_km") != null || Arg(args, "click_right_km") != null) && t != null)
+            {
+                Aircraft player = WingService.Instance?.Player;
+                if (player == null) return Fail("WmcRoom", "not flying");
+                float ahead = Kilometres(args, "click_ahead_km"), right = Kilometres(args, "click_right_km");
+                GlobalPosition at = player.GlobalPosition();
+                UnityEngine.Vector3 f = player.transform.forward, r = player.transform.right;
+                f.y = r.y = 0f;
+                f.Normalize();
+                r.Normalize();
+                t.ClickWorld(at.x + f.x * ahead + r.x * right, at.z + f.z * ahead + r.z * right, Text(args, "button") != "left", Arg(args, "shift") is bool sh && sh);
+            }
+            bool pressed = false;
+            string press = Text(args, "press");
+            if (!string.IsNullOrEmpty(press) && t != null && t.Controls.TryGetValue(press, out NOAvionics.Ui.AvButton b) && b != null && b.gameObject.activeInHierarchy)
+            {
+                b.OnPointerClick(new UnityEngine.EventSystems.PointerEventData(UnityEngine.EventSystems.EventSystem.current)
+                    { button = UnityEngine.EventSystems.PointerEventData.InputButton.Left });
+                pressed = true;
+            }
+            room.RefreshNow();
+            if (Arg(args, "close") is bool close && close) room.Close();
+            return new Dictionary<string, object>
+            {
+                { "ok", true }, { "open", room.IsOpen ? 1 : 0 }, { "page", room.Page }, { "keyboard_held", room.KeyboardHeld ? 1 : 0 },
+                { "pressed", pressed ? 1 : 0 }, { "markers", t?.Markers ?? 0 }, { "legs", t?.LegCount ?? 0 }, { "contacts", t?.ContactCount ?? 0 },
+                { "fields", t?.FieldCount ?? 0 }, { "mpp", t?.MetresPerPixel ?? 0f }, { "cards", t?.Cards ?? 0 },
+                { "card_member", t != null && t.CardMember != 0u ? 1 : 0 }, { "last", WingToast.Last ?? "" },
+            };
+        }
+
         private static float Kilometres(Dictionary<string, object> args, string key) =>
             Arg(args, key) is object v ? (float)Convert.ToDouble(v, CultureInfo.InvariantCulture) * 1000f : 0f;
 

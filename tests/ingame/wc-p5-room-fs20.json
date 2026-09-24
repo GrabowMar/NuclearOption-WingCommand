@@ -1,0 +1,204 @@
+{
+  "name": "wc-p5-room-fs20",
+  "mods": [
+    "wingcommand"
+  ],
+  "timeout_s": 150,
+  "ops": [
+    {
+      "op": "spawn",
+      "id": "lead",
+      "type": "FS-20 Vortex",
+      "at": {
+        "map": [
+          0,
+          0
+        ]
+      },
+      "altitude": 3000,
+      "speed": 200,
+      "heading": 0
+    },
+    {
+      "op": "fly",
+      "id": "lead",
+      "program": [
+        {
+          "level": 280
+        }
+      ]
+    },
+    {
+      "op": "wait",
+      "seconds": 2
+    },
+    {
+      "op": "call",
+      "method": "WingCommand.Automation.FormOn",
+      "store": "form",
+      "args": {
+        "lead": "lead",
+        "count": 4,
+        "shape": "finger-four-right",
+        "spacing": "Standard"
+      }
+    },
+    {
+      "op": "wait",
+      "seconds": 45
+    },
+    {
+      "op": "call",
+      "method": "WingCommand.Automation.WmcRoom",
+      "store": "open",
+      "args": {
+        "open": true,
+        "page": 0
+      }
+    },
+    {
+      "op": "wait",
+      "seconds": 1
+    },
+    {
+      "op": "call",
+      "method": "WingCommand.Automation.WmcRoom",
+      "store": "shown"
+    },
+    {
+      "op": "call",
+      "method": "WingCommand.Automation.Wmc",
+      "store": "sel",
+      "args": {
+        "select": [
+          4,
+          5
+        ]
+      }
+    },
+    {
+      "op": "call",
+      "method": "WingCommand.Automation.WmcMap",
+      "store": "orbit_mode",
+      "args": {
+        "mode": "orbit"
+      }
+    },
+    {
+      "op": "call",
+      "method": "WingCommand.Automation.WmcRoom",
+      "store": "click",
+      "args": {
+        "click_ahead_km": 12,
+        "button": "right"
+      }
+    },
+    {
+      "op": "wait",
+      "seconds": 3
+    },
+    {
+      "op": "call",
+      "method": "WingCommand.Automation.Elements",
+      "store": "elements"
+    },
+    {
+      "op": "call",
+      "method": "WingCommand.Automation.WmcRoom",
+      "store": "routed"
+    },
+    {
+      "op": "call",
+      "method": "WingCommand.Automation.WmcRoom",
+      "store": "before_zoom"
+    },
+    {
+      "op": "call",
+      "method": "WingCommand.Automation.WmcRoom",
+      "store": "zoomed",
+      "args": {
+        "zoom": 2
+      }
+    },
+    {
+      "op": "call",
+      "method": "WingCommand.Automation.WmcRoom",
+      "store": "fit",
+      "args": {
+        "fit": true
+      }
+    },
+    {
+      "op": "call",
+      "method": "WingCommand.Automation.WmcMap",
+      "store": "off",
+      "args": {
+        "mode": "off"
+      }
+    },
+    {
+      "op": "call",
+      "method": "WingCommand.Automation.WmcRoom",
+      "store": "form_b",
+      "args": {
+        "press": "room.el1.form"
+      }
+    },
+    {
+      "op": "call",
+      "method": "WingCommand.Automation.WmcRoom",
+      "store": "closed",
+      "args": {
+        "close": true
+      }
+    },
+    {
+      "op": "end"
+    }
+  ],
+  "checks": [
+    {
+      "check": "status_ok"
+    },
+    {
+      "check": "result_above",
+      "path": "form.spawned",
+      "min": 3
+    },
+    {
+      "check": "result_above",
+      "path": "open.open",
+      "min": 1
+    },
+    {
+      "check": "result_above",
+      "path": "shown.markers",
+      "min": 4
+    },
+    {
+      "check": "result_above",
+      "path": "shown.cards",
+      "min": 1
+    },
+    {
+      "check": "result_above",
+      "path": "elements.b",
+      "min": 1
+    },
+    {
+      "check": "result_above",
+      "path": "routed.legs",
+      "min": 1
+    },
+    {
+      "check": "result_above",
+      "path": "routed.cards",
+      "min": 2
+    },
+    {
+      "check": "result_above",
+      "path": "form_b.pressed",
+      "min": 1
+    }
+  ]
+}

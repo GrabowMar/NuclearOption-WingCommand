@@ -12,7 +12,7 @@ namespace WingCommand
     internal sealed class WmcScopeBar
     {
         public const float Height = 26f;
-        private const float ChipWidth = 26f, ClearWidth = 58f, RecruitWidth = 136f;
+        private const float ChipWidth = 26f, ClearWidth = 58f, RecruitWidth = 136f, RoomWidth = 50f;
 
         private readonly AvButton[] chips = new AvButton[ElementRoster.MaxElements];
         private readonly List<uint> members = new List<uint>();
@@ -30,7 +30,11 @@ namespace WingCommand
             float x = area.x + AvScreen.SpineInset, w = area.width - AvScreen.SpineInset - AvTokens.Space2;
             AvStyled.Box(parent, new Rect(x, area.y, w, Height), "row");
             AvStyled.Label(parent, new Rect(x + 8f, area.y - 2f, 74f, Height - 4f), "ORDERS TO", "metric-key");
-            float right = x + w - ClearWidth - 2f;
+            AvButton room = AvStyled.Button(parent, new Rect(x + w - RoomWidth - 2f, area.y - 2f, RoomWidth, Height - 4f), "ROOM", "btn",
+                () => WmcRoom.Instance?.Open());
+            room.WithTooltip("Open the Wing Command room: the theatre map, elements and the deep member card.");
+            ids["scope.room"] = room;
+            float right = x + w - RoomWidth - 2f - ClearWidth - 2f;
             clear = AvStyled.Button(parent, new Rect(right, area.y - 2f, ClearWidth, Height - 4f), "CLEAR", "btn", Clear);
             clear.WithTooltip("Orders go to the whole wing again.");
             ids["scope.clear"] = clear;
