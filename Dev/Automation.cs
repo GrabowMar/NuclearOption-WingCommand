@@ -481,6 +481,16 @@ namespace WingCommand
             return new Dictionary<string, object> { { "ok", true }, { "fired", fired }, { "capable", capable }, { "shots", wing.SplashShots } };
         }
 
+        /// <summary>Spec M5 §10.1: set the stack (args: metres).</summary>
+        public static Dictionary<string, object> Stack(Dictionary<string, object> args)
+        {
+            WingService wing = WingService.Instance;
+            if (wing == null) return Fail("Stack", "the wing is not active");
+            float metres = args != null && args.TryGetValue("metres", out object v) ? System.Convert.ToSingle(v, System.Globalization.CultureInfo.InvariantCulture) : 0f;
+            wing.SetStack(metres);
+            return new Dictionary<string, object> { { "ok", true }, { "stack", wing.Stack } };
+        }
+
         /// <summary>Asks for Bogey Dope as the radial entry does.</summary>
         public static Dictionary<string, object> BogeyDope(Dictionary<string, object> args)
         {

@@ -267,6 +267,23 @@ namespace WingCommand
 
         /// <summary>"Clear my six": an attack order on the enemy aircraft in the player's rear quarter that the faction tracks
         /// accurately (<see cref="ClearSix"/>). Returns how many were found; the wing splits them (M5b).</summary>
+        /// <summary>The element of the member's slot in the current shape (0 when unknown).</summary>
+        private int ElementOf(WingMember m)
+        {
+            WingFrame f = Wing?.Frame;
+            int slot = m.Brain.Slot;
+            return f == null || slot < 0 || slot >= f.Slots.Length ? 0 : f.Slots[slot].Element;
+        }
+
+        /// <summary>Spec M5 §10.2: members of the second element flying with the wing (Buddy Attack can use).</summary>
+        public int SecondElement()
+        {
+            int n = 0;
+            foreach (WingMember m in Members)
+                if (!m.Released && m.Alive && !m.OnGround && m.Recovery == null && m.Settle == null && ElementOf(m) == 1) n++;
+            return n;
+        }
+
         public int ClearMySix(out int engaged)
         {
             engaged = 0;
@@ -362,12 +379,13 @@ namespace WingCommand
         }
 
         /// <summary>Every member flying with the wing switches to the game's combat state with no assigned target.</summary>
-        private int EngageAll()
+        private int EngageAll(int element = -1)
         {
             int n = 0;
             foreach (WingMember m in Members)
             {
                 if (m.Released || m.OnGround || m.Recovery != null || m.Settle != null || !m.Alive) continue;
+                if (element >= 0 && ElementOf(m) != element) continue;
                 m.AssignedTarget = null;
                 m.Pilot.SetPrimaryTarget(null);
                 if (m.Engaged)
@@ -420,13 +438,13 @@ namespace WingCommand
         /// <summary>Engage on <paramref name="targets"/> (live ones, the first 16), split across the wing
         /// (<see cref="TargetAllocator"/>) and re-allocated each second as they die (spec M5, M5b). Returns how many are
         /// engaged.</summary>
-        public int Attack(IReadOnlyList<Unit> targets)
+        public int Attack(IReadOnlyList<Unit> targets, int element = -1)
         {
             attackCount = 0;
             if (targets != null)
                 foreach (Unit u in targets)
                     if (u != null && !u.disabled && attackCount < attackTargets.Length) attackTargets[attackCount++] = u;
-            int n = EngageAll();
+            int n = EngageAll(element);
             if (n == 0) attackCount = 0;
             reallocateClock = 0f;
             Allocate(0f);

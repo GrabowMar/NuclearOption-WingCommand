@@ -234,6 +234,35 @@ namespace WingCommand
             WingToast.Show(n > 0 ? $"{n} engaging" : "Nobody can engage");
         }
 
+        public static float GoHighMetres = 300f, GoLowMetres = -150f;
+
+        /// <summary>Spec M5 §10.1.</summary>
+        public static void Stack(float metres, string what)
+        {
+            if (!Ready(out WingService w)) return;
+            w.SetStack(metres);
+            WingToast.Show(what);
+        }
+
+        /// <summary>Spec M5 §10.2: the second element attacks your targets; the first stays with you.</summary>
+        public static void BuddyAttack()
+        {
+            if (!Ready(out WingService w) || w.Player == null) return;
+            List<Unit> targets = SelectedEnemies(w.Player);
+            if (targets.Count == 0)
+            {
+                WingToast.Show("Buddy attack: select a target first");
+                return;
+            }
+            if (w.SecondElement() == 0)
+            {
+                WingToast.Show("Buddy attack: no second element");
+                return;
+            }
+            int n = w.Attack(targets, 1);
+            WingToast.Show(n > 0 ? $"Buddy attack: {n} in, the rest with you" : "Buddy attack: nobody can attack");
+        }
+
         /// <summary>The player's selected enemy targets, split across the wing (spec M5, M5b).</summary>
         public static void AttackTarget()
         {

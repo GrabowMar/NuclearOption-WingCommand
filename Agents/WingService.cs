@@ -553,6 +553,15 @@ namespace WingCommand
             return null;
         }
 
+        /// <summary>Spec M5 §10.1: Go High / Go Low / Level for the whole shape (the wing's own solver; a new wing starts
+        /// level).</summary>
+        public void SetStack(float metres)
+        {
+            if (Wing != null) Wing.Solver.StackOffset = metres;
+        }
+
+        public float Stack => Wing != null ? Wing.Solver.StackOffset : 0f;
+
         public bool IsMember(Aircraft a)
         {
             for (int i = 0; i < Members.Count; i++)

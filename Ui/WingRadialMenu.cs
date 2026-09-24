@@ -120,10 +120,6 @@ namespace WingCommand
                 Leaf("Move Ahead", WingCommands.MoveAhead, "move"),
                 Leaf("Scout Ahead", WingCommands.ScoutAhead, "move"),
                 Leaf("Patrol Here", WingCommands.PatrolHere, "move"),
-                Leaf("Land Here", WingCommands.LandHere, "rtb"),
-                Leaf("Take Off", WingCommands.TakeOff, "rejoin"),
-                Leaf("Deliver Cargo", WingCommands.DeliverCargo, "rtb"),
-                Leaf("Rescue", WingCommands.Rescue, "rtb"),
                 Leaf("Escort Target", WingCommands.EscortTarget, "selection"),
                 Leaf("Escort Me", WingCommands.EscortMe, "rejoin"),
                 Leaf("Dismiss", WingCommands.Dismiss, "rtb"),
@@ -133,6 +129,11 @@ namespace WingCommand
             {
                 Leaf("RTB", WingCommands.Rtb, "rtb"),
                 Leaf("Refit", WingCommands.Refit, "rtb"),
+                // Helicopter landings (spec M4 §5, §7) live with the recovery orders: the Orders page stays readable.
+                Leaf("Land Here", WingCommands.LandHere, "rtb"),
+                Leaf("Take Off", WingCommands.TakeOff, "rejoin"),
+                Leaf("Deliver Cargo", WingCommands.DeliverCargo, "rtb"),
+                Leaf("Rescue", WingCommands.Rescue, "rtb"),
                 Back(),
             };
             combatMenu = new[]
@@ -140,6 +141,7 @@ namespace WingCommand
                 Leaf("Engage", WingCommands.Engage, "selection"),
                 Leaf("Attack Target", WingCommands.AttackTarget, "selection"),
                 Leaf("Splash", WingCommands.Splash, "selection"),
+                Leaf("Buddy Attack", WingCommands.BuddyAttack, "selection"),
                 Leaf("Clear My Six", WingCommands.ClearMySix, "selection"),
                 Leaf("Bogey Dope", WingCommands.BogeyDope, "selection"),
                 Leaf("Disengage", WingCommands.Disengage, "rejoin"),
@@ -159,6 +161,9 @@ namespace WingCommand
             {
                 Leaf("Next Shape", WingCommands.NextShape, "formation"),
                 Leaf("Next Family", WingCommands.NextFamily, "formation"),
+                Leaf("Go High", () => WingCommands.Stack(WingCommands.GoHighMetres, "Going high"), "formation"),
+                Leaf("Go Low", () => WingCommands.Stack(WingCommands.GoLowMetres, "Going low"), "formation"),
+                Leaf("Level", () => WingCommands.Stack(0f, "Level with you"), "formation"),
                 Back(),
             };
             spacingMenu = new[]
