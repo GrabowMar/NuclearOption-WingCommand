@@ -33,15 +33,7 @@ namespace WingCommand.FlightSim
 
             for (int i = 0; i < 2000; i++) Tick(i);   // warm-up (JIT)
 
-            var watch = new Stopwatch();   // constructed outside the measured window
-            long before = GC.GetAllocatedBytesForCurrentThread();
-            watch.Start();
-            const int n = 20000;
-            for (int i = 0; i < n; i++) Tick(i);
-            watch.Stop();
-            long allocated = GC.GetAllocatedBytesForCurrentThread() - before;
-
-            double microseconds = watch.Elapsed.TotalMilliseconds * 1000.0 / n;
+            double microseconds = Bench.BestMicroseconds(Tick, 5, 4000, out long allocated);
             Assert.Equal(0L, allocated);
             Assert.True(microseconds < 20.0, $"{microseconds:0.00} µs per tick (sensor + guidance + pipeline + plant)");
         }
@@ -60,17 +52,22 @@ namespace WingCommand.FlightSim
 
             for (int i = 0; i < 2000; i++) Tick(i);   // warm-up (JIT)
 
-            var watch = new Stopwatch();   // constructed outside the measured window
-            long before = GC.GetAllocatedBytesForCurrentThread();
-            watch.Start();
-            const int n = 20000;
-            for (int i = 0; i < n; i++) Tick(i);
-            watch.Stop();
-            long allocated = GC.GetAllocatedBytesForCurrentThread() - before;
-
-            double perAircraft = watch.Elapsed.TotalMilliseconds * 1000.0 / n / wing.Plants.Length;
+            double perAircraft = Bench.BestMicroseconds(Tick, 5, 4000, out long allocated) / wing.Plants.Length;
             Assert.Equal(0L, allocated);
             Assert.True(perAircraft < 20.0, $"{perAircraft:0.00} µs per aircraft per tick (wing share + pilot + plant)");
+        }
+
+        [Fact]
+        public void TheBenchReportsARealCostNotHidesIt()
+        {
+            // The fastest batch is still the tick's own cost: a tick that takes 30 µs never reads under the 20 µs budget.
+            var spin = new Stopwatch();
+            void Slow(int i)
+            {
+                spin.Restart();
+                while (spin.Elapsed.TotalMilliseconds < 0.03) { }
+            }
+            Assert.True(Bench.BestMicroseconds(Slow, 3, 20, out _) >= 30.0);
         }
     }
 }

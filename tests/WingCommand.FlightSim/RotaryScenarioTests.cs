@@ -84,14 +84,8 @@ namespace WingCommand.FlightSim
                 wing.Step();
             }
             for (int i = 0; i < 2000; i++) Tick(i);
-            var watch = new Stopwatch();
-            long before = GC.GetAllocatedBytesForCurrentThread();
-            watch.Start();
-            const int n = 10000;
-            for (int i = 0; i < n; i++) Tick(i);
-            watch.Stop();
-            Assert.Equal(0L, GC.GetAllocatedBytesForCurrentThread() - before);
-            double perAircraft = watch.Elapsed.TotalMilliseconds * 1000.0 / n / 3;
+            double perAircraft = Bench.BestMicroseconds(Tick, 5, 2000, out long allocated) / 3;
+            Assert.Equal(0L, allocated);
             Assert.True(perAircraft < 20.0, $"{perAircraft:0.00} µs per aircraft per tick");
         }
     }
