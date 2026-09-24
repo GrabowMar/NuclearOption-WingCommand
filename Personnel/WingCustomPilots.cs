@@ -54,12 +54,12 @@ namespace WingCommand
                     FileName = dir,
                     UseShellExecute = true,
                 });
-                WingCommandManager.Instance?.Toast("Opened Pilots folder");
+                WingToast.Show("Opened Pilots folder");
             }
             catch (Exception e)
             {
                 Plugin.Logger.LogWarning("[CustomPilots] Could not open folder: " + e.Message);
-                WingCommandManager.Instance?.Toast("Pilots folder: " + dir);
+                WingToast.Show("Pilots folder: " + dir);
             }
         }
 

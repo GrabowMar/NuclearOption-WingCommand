@@ -92,13 +92,14 @@ public class Unit : UnityEngine.Object
 }
 public class Aircraft : Unit {
     public Pilot Pilot;
+    public Pilot[] pilots => Pilot != null ? new[] { Pilot } : new Pilot[0];
     public bool Rotary = true, AtHome;
     public UnityEngine.Rigidbody rb = new UnityEngine.Rigidbody();
     public MissileWarning Warning = new MissileWarning();
     public MissileWarning GetMissileWarningSystem() => Warning;
 }
 public class MissileWarning { public bool Active; public bool IsWarning() => Active; }
-public class AircraftDefinition { public string unitName = "helo"; public int captureCapacity = 1; }
+public class AircraftDefinition { public string unitName = "helo"; public int captureCapacity = 1; public float value; }
 public class FactionHQ {}
 public class Player
 {
@@ -182,6 +183,10 @@ namespace WingCommand
         public static bool IsRotary(Aircraft a) => a.Rotary;
         public static Pilot PrimaryPilot(Aircraft a) => a == null ? null : a.Pilot;
         public WingMember Find(Aircraft a) => Members.Find(m => m.Aircraft == a);
+    }
+    internal static class WingToast
+    {
+        public static void Show(string message) => WingCommandManager.Instance.Messages.Add(message);
     }
     internal class WingCommandManager
     {

@@ -20,6 +20,15 @@ namespace WingCommand
             typeof(RunwayLockPatch),
             typeof(EjectGuard),
             typeof(SwitchStateGuard),
+            typeof(WingPilotFatalDamagePatch),
+            typeof(WingPilotKillerPatch),
+            typeof(WingLuckPatch),
+            typeof(WingFlareReflexPatch),
+            typeof(WingEcmSpecialistPatch),
+            typeof(WingSurvivorSpawnPatch),
+            typeof(WingSurvivorReturnPatch),
+            typeof(WingSurvivorDeathPatch),
+            typeof(WingSurvivorCapturePatch),
         };
 
         /// <summary>"DeclaringType.Method" names that must be patched after <see cref="Apply"/>.</summary>
@@ -37,6 +46,14 @@ namespace WingCommand
             "Runway.IsAvailableForTakeoff",
             "Aircraft.StartEjectionSequence",
             "Pilot.SwitchState",
+            "Pilot.ApplyDamage",
+            "Missile.SetAimpoint",
+            "FlareEjector.Fire",
+            "RadarJammer.Fire",
+            "PilotDismounted.OnStartServer",
+            "PilotDismounted.UnitDisabled",
+            "PilotDismounted.SetPilotState",
+            "PilotDismounted.Capture",
         };
 
         internal static void Apply(Harmony harmony, ManualLogSource log)

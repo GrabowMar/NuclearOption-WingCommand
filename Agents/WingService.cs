@@ -61,6 +61,8 @@ namespace WingCommand
         {
             Members.Clear();
             FieldRegistry.Clear();
+            WingPilotRoster.Reset();
+            WingKillCredit.Reset();
             Events = new WingEventRing();
             floor = new TerrainFloor();
             LeaderUnit = null;
@@ -103,6 +105,8 @@ namespace WingCommand
             LastFrameAiMs = aiTicks * 1000.0 / Stopwatch.Frequency;
             aiTicks = 0;
             LogEvents();
+            WingSearchAndRescue.Tick();
+            WingKillCredit.Tick();
         }
 
         public void FixedTick(float dt)
@@ -132,6 +136,7 @@ namespace WingCommand
                 return null;
             }
             var m = new WingMember(a, Members.Count, WingProfiles.For(a)) { Id = nextMemberId++ };
+            FlyAs(m, WingPilotRoster.Assign(a));
             m.State = new WingFlightState(m);
             if (ground != null) m.Ground = ground(m);
             Members.Add(m);
@@ -139,6 +144,30 @@ namespace WingCommand
             Plugin.Logger.LogInfo($"[Wing] #{m.Number} {a.definition.unitName} joined");
             RosterChanged?.Invoke();
             return m;
+        }
+
+        /// <summary>The squadron pilot in the seat sets how precisely and how hard the member flies (rank and perks,
+        /// scaled by Squadron/RankEffect; progression off flies every pilot at the base skill).</summary>
+        private static void FlyAs(WingMember m, WingPilot pilot)
+        {
+            if (pilot == null) return;
+            float effect = Plugin.Settings.PilotProgression.Value ? Plugin.Settings.RankEffect.Value : 0f;
+            PilotSkill.For(pilot.Rank, pilot.Perks, effect, out float precision, out float aggression);
+            m.Brain.Precision = precision;
+            m.Brain.Aggression = aggression;
+            Plugin.Logger.LogInfo($"[Pilot] {pilot.Callsign} ({WingPilotRoster.RankName(pilot.Rank)}) flies #{m.Number}: " +
+                                  $"precision {precision:0.00}, aggression {aggression:0.00}");
+        }
+
+        /// <summary>The seat is empty: back in the pool when the aircraft came home or was handed over alive; lost when
+        /// the pilot died; an ejection is settled by search and rescue.</summary>
+        private static void RetirePilot(WingMember m)
+        {
+            if (m.Aircraft == null) return;
+            bool home = m.Aircraft.unitState == Unit.UnitState.Returned;
+            bool down = m.Pilot == null || m.Pilot.dead || m.Pilot.ejected;
+            if (home) WingPilotRoster.NoteSortie(m.Aircraft);
+            WingPilotRoster.Retire(m.Aircraft.persistentID, home || !down);
         }
 
         /// <summary>Gear comes up this high on the climb-out.</summary>
@@ -549,6 +578,7 @@ namespace WingCommand
                 if (!m.Released && m.Alive && ours) continue;
                 StepTest.Forget(m);
                 m.Ground?.Leave();
+                RetirePilot(m);
                 Metrics.Left(m.Id);
                 Members.RemoveAt(i);
                 changed = true;

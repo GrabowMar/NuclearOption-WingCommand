@@ -68,17 +68,12 @@
     <Quarantine Include="Economy\WingLaunchFields.cs" Milestone="M3" />
     <Quarantine Include="Economy\WingLoadoutTemplates.cs" Milestone="M3" />
     <Quarantine Include="Interop\WingSquad.cs" Milestone="M3" />
-    <Quarantine Include="Personnel\WingCustomPilots.cs" Milestone="M3" />
-    <Quarantine Include="Personnel\WingKillCredit.cs" Milestone="M3" />
-    <Quarantine Include="Personnel\WingPilotLoss.cs" Milestone="M3" />
     <Quarantine Include="Ui\CombatHUDHitAudioPatch.cs" Milestone="M7" />
     <Quarantine Include="Ui\WingMarkerBadge.cs" Milestone="M4" />
     <Quarantine Include="Economy\HangarDeliveryCompletionPatch.cs" Milestone="M3" />
     <Quarantine Include="Economy\EconomyFacade.cs" Milestone="M3" />
     <Quarantine Include="Economy\WingShopDelivery.cs" Milestone="M3" />
     <Quarantine Include="Economy\WingShop.cs" Milestone="M3" />
-    <Quarantine Include="Personnel\PilotPortrait.cs" Milestone="M3" />
-    <Quarantine Include="Personnel\WingSurvivalPerks.cs" Milestone="M3" />
     <Quarantine Include="Ui\WmcScreen.CustomPilots.cs" Milestone="M3" />
     <Quarantine Include="Ui\WmcScreen.Loadout.cs" Milestone="M3" />
     <Quarantine Include="Ui\WmcScreen.Shell.cs" Milestone="M7" />
@@ -87,13 +82,10 @@
     <Quarantine Include="Combat\SlotEngagement.cs" Milestone="M5" />
     <Quarantine Include="Comms\WingComms.cs" Milestone="M4" />
     <Quarantine Include="Core\WingCommandSelection.cs" Milestone="M4" />
-    <Quarantine Include="Personnel\PersonnelFacade.cs" Milestone="M3" />
     <Quarantine Include="Personnel\WingDeparture.cs" Milestone="M3" />
     <Quarantine Include="Personnel\WingDepartureChatter.cs" Milestone="M3" />
-    <Quarantine Include="Personnel\WingPilots.cs" Milestone="M3" />
     <Quarantine Include="Personnel\WingRecovery.cs" Milestone="M3" />
     <Quarantine Include="Personnel\WingRecruitment.cs" Milestone="M3" />
-    <Quarantine Include="Personnel\WingSearchAndRescue.cs" Milestone="M3" />
     <Quarantine Include="Personnel\WingTakeover.cs" Milestone="M3" />
     <Quarantine Include="Ui\MapCommandLayer.cs" Milestone="M4" />
     <Quarantine Include="Ui\TacticalMapOverlay.cs" Milestone="M4" />

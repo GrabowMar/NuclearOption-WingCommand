@@ -33,6 +33,9 @@ namespace WingCommand
         public ConfigEntry<KeyboardShortcut> KeyApVerticalSpeed { get; }
         public ConfigEntry<KeyboardShortcut> KeyApSpeed { get; }
         public ConfigEntry<KeyboardShortcut> KeyApOff { get; }
+        public ConfigEntry<bool> PilotProgression { get; }
+        public ConfigEntry<float> RankEffect { get; }
+        public ConfigEntry<bool> SandboxFreeCalls { get; }
         public ConfigEntry<bool> VerboseLogging { get; }
         public ConfigEntry<bool> DevTools { get; }
         public ConfigEntry<bool> Overlay { get; }
@@ -63,6 +66,15 @@ namespace WingCommand
             CallAirframe = c.Bind("Wing", "CallAirframe", "", new ConfigDescription(
                 "Airframe to call, by unit name (for example FS-20). Empty calls your own type. Fixed-wing only in this build.",
                 null, new ConfigurationManagerAttributes { Order = 87 }));
+
+            PilotProgression = c.Bind("Squadron", "PilotProgression", true, new ConfigDescription(
+                "Pilots earn XP, ranks and perks, and fly better with rank.", null, new ConfigurationManagerAttributes { Order = 85 }));
+            RankEffect = c.Bind("Squadron", "RankEffect", 1f, new ConfigDescription(
+                "How much rank changes how a pilot flies and fights (0 off, 1 normal, 2 double).",
+                new AcceptableValueRange<float>(0f, 2f), new ConfigurationManagerAttributes { Order = 84 }));
+            SandboxFreeCalls = c.Bind("Squadron", "SandboxFreeCalls", false, new ConfigDescription(
+                "Calls cost nothing: no allocation is charged and no stock is checked (hangar spawns still draw the " +
+                "faction's own supply, as the game does).", null, new ConfigurationManagerAttributes { Order = 83 }));
 
             ShowHud = c.Bind("Hud", "Show", true, new ConfigDescription(
                 "Show the wing strip and autopilot annunciator.", null, new ConfigurationManagerAttributes { Order = 80 }));

@@ -288,7 +288,7 @@ namespace WingCommand
             {
                 AdvanceSelected(pilot);
             }
-            WingCommandManager.Instance?.Toast(
+            WingToast.Show(
                 pilot.Callsign + " (" + pilot.Name + ") was lost - " + RankName(pilot.Rank) +
                 ", " + pilot.Kills + " kill(s)");
             Plugin.Logger.LogWarning(
@@ -419,7 +419,7 @@ namespace WingCommand
             string gained = "";
             for (int i = previousPerks; i < pilot.Perks.Count; i++)
                 gained += (i == previousPerks ? " — " : ", ") + PilotPerks.Name(pilot.Perks[i]);
-            WingCommandManager.Instance?.Toast(
+            WingToast.Show(
                 pilot.Callsign + " promoted to " + RankName(pilot.Rank) + gained);
         }
 
@@ -444,7 +444,7 @@ namespace WingCommand
             }
             else if (selectedPilot == pilot) AdvanceSelected(pilot);
             if (killed) losses[id] = pilot;
-            WingCommandManager.Instance?.Toast(pilot.Callsign + " — " + message);
+            WingToast.Show(pilot.Callsign + " — " + message);
         }
 
         public static void NoteKill(Aircraft aircraft, Unit victim)
@@ -455,9 +455,8 @@ namespace WingCommand
             pilot.Kills++;
             Award(aircraft, WingTuning.XpPerKill, "kill");
 
-            if (victim != null)
-                WingComms.Say(WingCommandManager.Instance?.Wing?.Find(aircraft),
-                              WingComms.Call.Splash, victim.unitName);
+            // ponytail: the radio call returns with comms (M4/M7); the log keeps the credit visible meanwhile.
+            if (victim != null) Plugin.LogVerbose($"[Pilot] {pilot.Callsign}: splash {victim.unitName}");
         }
 
         /// <summary>Award a completed sortie on base recovery.</summary>
