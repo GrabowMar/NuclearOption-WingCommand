@@ -1,3 +1,7 @@
+// Data contracts between orders, the planner and the engine. Some fields are filled only by the map (M4b), the engine
+// or the tests, so the mod assembly may not assign them yet.
+#pragma warning disable CS0649
+
 namespace WingCommand
 {
     internal enum TaskKind : byte { Form, Move, Route, Patrol, Orbit, Hold }
