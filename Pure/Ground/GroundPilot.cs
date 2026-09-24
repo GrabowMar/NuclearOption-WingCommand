@@ -97,6 +97,7 @@ namespace WingCommand
             this.spawn = spawn;
             hangar = hangarIndex;
             this.startNode = startNode;
+            lastPose = spawn;
         }
 
         private int StartNode(Vec3 pos) =>
@@ -128,6 +129,16 @@ namespace WingCommand
             Enter(GroundPhase.TaxiIn, time);
             Log(events, time, slot, WingEventKind.Taxiing);
             return true;
+        }
+
+        /// <summary>Stands where it is (a helicopter down on a pad, or a jet with no stand to taxi to).</summary>
+        public void StandHere(Pose at, float time)
+        {
+            field.Departures.Remove(Owner);
+            lastPose = at;
+            arriving = true;
+            standNode = -1;
+            Enter(GroundPhase.Stand, time);
         }
 
         /// <summary>From its stand, out again: parked, then the departure as from a spawn (the engine expects it at the
