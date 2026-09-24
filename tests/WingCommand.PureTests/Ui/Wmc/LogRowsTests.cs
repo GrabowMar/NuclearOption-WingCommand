@@ -68,6 +68,8 @@ namespace WingCommand.PureTests
         private static (WingEventRing, RadioLog, SnapshotMember[]) Mixed()
         {
             var events = new WingEventRing();
+            events.Seat(0, 1u);
+            events.Seat(2, 3u);
             events.Push(new WingEvent { Time = 5f, Member = -1, Kind = WingEventKind.TaskStarted, Task = TaskKind.Orbit, Element = 1 });
             events.Push(new WingEvent { Time = 6f, Member = -1, Kind = WingEventKind.TaskStarted, Task = TaskKind.Move, Element = 0 });
             events.Push(new WingEvent { Time = 7f, Member = 2, Kind = WingEventKind.Bingo });
@@ -84,19 +86,38 @@ namespace WingCommand.PureTests
             // Spec WMC program §4 LOG: an element's task events and its members' events, no radio.
             var (events, radio, rows) = Mixed();
             var into = new List<LogRow>();
-            Assert.Equal(2, LogRows.Fill(events, radio, into, LogRows.MaxRows, new LogFilter { Element = 1, Seat = -1, Rows = rows, Count = 2 }));
+            Assert.Equal(2, LogRows.Fill(events, radio, into, LogRows.MaxRows, new LogFilter { Element = 1, Rows = rows, Count = 2 }));
             Assert.Equal(7f, into[0].Time);
             Assert.Equal("ORBIT started", into[1].Text);
         }
 
         [Fact]
-        public void FilterBySeatKeepsTheMembersEvents()
+        public void FilterByAircraftKeepsItsEvents()
         {
             var (events, radio, rows) = Mixed();
             var into = new List<LogRow>();
-            Assert.Equal(1, LogRows.Fill(events, radio, into, LogRows.MaxRows, new LogFilter { Element = -1, Seat = 0, Rows = rows, Count = 2 }));
+            Assert.Equal(1, LogRows.Fill(events, radio, into, LogRows.MaxRows, new LogFilter { Element = -1, ById = true, Id = 1u, Rows = rows, Count = 2 }));
             Assert.Equal(8f, into[0].Time);
+            Assert.Equal(1u, into[0].Id);
             Assert.Equal(5, LogRows.Fill(events, radio, into, LogRows.MaxRows, LogFilter.None));
+            // Selected but gone: nothing matches.
+            Assert.Equal(0, LogRows.Fill(events, radio, into, LogRows.MaxRows, new LogFilter { Element = -1, ById = true, Id = 0u }));
+        }
+
+        [Fact]
+        public void TheAircraftFilterFollowsTheAircraftNotTheSeat()
+        {
+            // Review P3 I5: #2 (seat 0, id 1) is lost, id 3 moves up to seat 0; its filter keeps only its own events.
+            var (events, radio, rows) = Mixed();
+            events.Seat(0, 3u);
+            events.Push(new WingEvent { Time = 10f, Member = 0, Kind = WingEventKind.Joker });
+            rows = new[] { new SnapshotMember { Id = 3, Slot = 0, Element = 1 } };
+            var into = new List<LogRow>();
+            Assert.Equal(2, LogRows.Fill(events, radio, into, LogRows.MaxRows, new LogFilter { Element = -1, ById = true, Id = 3u, Rows = rows, Count = 1 }));
+            Assert.Equal(10f, into[0].Time);
+            Assert.Equal(7f, into[1].Time);
+            // The element filter finds the member by aircraft too: the seat-0 Bingo at 8 s was id 1, not in B.
+            Assert.Equal(3, LogRows.Fill(events, radio, into, LogRows.MaxRows, new LogFilter { Element = 1, Rows = rows, Count = 1 }));
         }
     }
 }

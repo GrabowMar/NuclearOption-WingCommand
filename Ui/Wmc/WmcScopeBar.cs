@@ -25,7 +25,7 @@ namespace WingCommand
             AvStyled.Box(parent, new Rect(x, area.y, w, Height), "row");
             AvStyled.Label(parent, new Rect(x + 8f, area.y - 2f, 74f, Height - 4f), "ORDERS TO", "metric-key");
             float right = x + w - ClearWidth - 2f;
-            clear = AvStyled.Button(parent, new Rect(right, area.y - 2f, ClearWidth, Height - 4f), "CLEAR", "btn", () => last?.Selection.Clear());
+            clear = AvStyled.Button(parent, new Rect(right, area.y - 2f, ClearWidth, Height - 4f), "CLEAR", "btn", Clear);
             clear.WithTooltip("Orders go to the whole wing again.");
             ids["scope.clear"] = clear;
             for (int e = ElementRoster.MaxElements - 1; e >= 0; e--)
@@ -42,6 +42,13 @@ namespace WingCommand
             label.overflowMode = TextOverflowModes.Ellipsis;
         }
 
+        private void Clear()
+        {
+            if (last == null) return;
+            last.Selection.Clear();
+            last.Rescope();
+        }
+
         private void Pick(int e)
         {
             if (last == null) return;
@@ -49,12 +56,13 @@ namespace WingCommand
             for (int i = 0; i < last.Count; i++)
                 if (last.Rows[i].Element == e) members.Add(last.Rows[i].Id);
             if (members.Count > 0) last.Selection.SelectElement(e, members);
+            last.Rescope();
         }
 
         public void Refresh(WmcContext c)
         {
             last = c;
-            label.text = c.Selection.Label(c.Rows, c.Count);
+            label.text = c.ScopeLabel;
             for (int e = 0; e < chips.Length; e++)
             {
                 bool present = false;

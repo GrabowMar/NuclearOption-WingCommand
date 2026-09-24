@@ -28,6 +28,9 @@ namespace WingCommand
         public TaskKind Task;
         /// <summary>The element the event is about (0 = A).</summary>
         public byte Element;
+        /// <summary>The member's aircraft (persistent id) when the event was logged, stamped by the ring from its seat
+        /// table; 0 for a wing event or an unknown seat (review P3 I5: seats renumber, aircraft do not).</summary>
+        public uint Id;
     }
 
     /// <summary>Fixed-capacity ring of wing events, oldest first. Push never allocates; when full the oldest
@@ -44,9 +47,19 @@ namespace WingCommand
         /// <summary>Index 0 is the oldest retained event.</summary>
         public WingEvent this[int index] => items[(next - Count + index + Capacity) % Capacity];
 
+        public const int MaxSeats = 32;
+        private readonly uint[] seats = new uint[MaxSeats];
+
+        /// <summary>The aircraft flying in <paramref name="seat"/> from now on (the service calls it whenever seats change).</summary>
+        public void Seat(int seat, uint id)
+        {
+            if (seat >= 0 && seat < MaxSeats) seats[seat] = id;
+        }
+
         public void Push(in WingEvent e)
         {
             items[next] = e;
+            if (e.Id == 0u && e.Member >= 0 && e.Member < MaxSeats) items[next].Id = seats[e.Member];
             next = (next + 1) % Capacity;
             if (Count < Capacity) Count++;
             Total++;

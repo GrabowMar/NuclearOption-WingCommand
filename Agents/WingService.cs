@@ -187,6 +187,7 @@ namespace WingCommand
             m.Brain.AfterburnerAllowed = afterburner;
             m.Voice = nextVoice++;
             Members.Add(m);
+            Events.Seat(m.Seat, a.persistentID.Id);
             AssignSlots();
             m.Pilot.SwitchState(m.State);
             Plugin.Logger.LogInfo($"[Wing] #{m.Number} {a.definition.unitName} joined");
@@ -664,13 +665,19 @@ namespace WingCommand
             frameTime = time;
             frameIndex++;
             // Before any frame is built this tick (review P2 I2, I3): an emptied element forgets its lead; an element whose
-            // task ended (done, failed, cancelled, or never given) goes back to A.
+            // task ended (done, failed, cancelled, or never given) goes back to A. Review P3 I2: however it emptied (merge,
+            // detach elsewhere, losses), a letter handed out again starts from the wing's shape and doctrine.
+            Settings.ForgetEmpty(Roster);
             for (int e = 1; e < ElementRoster.MaxElements; e++)
             {
                 WingPlanner p = planners[e];
                 if (!Roster.InUse(e))
                 {
-                    if (p != null && (p.Active || p.Lead != null)) p.Reset();
+                    if (p != null && (p.Active || p.Lead != null))
+                    {
+                        p.Reset();
+                        wings[e]?.SetFormation(Selection.Current, Selection.SpacingMetres);
+                    }
                     continue;
                 }
                 if (p == null || !p.Active) MergeElement(e);
@@ -941,7 +948,11 @@ namespace WingCommand
             if (!changed) return;
             // A wing that emptied starts level when it is next called (review M5f I2).
             if (Members.Count == 0 && Wing != null) Wing.Solver.ResetStack();
-            for (int i = 0; i < Members.Count; i++) Members[i].Seat = i;
+            for (int i = 0; i < Members.Count; i++)
+            {
+                Members[i].Seat = i;
+                Events.Seat(i, (object)Members[i].Aircraft != null ? Members[i].Aircraft.persistentID.Id : 0u);
+            }
             AssignSlots();
             RosterChanged?.Invoke();
         }

@@ -20,9 +20,8 @@ namespace WingCommand
         private TMP_Text[] labels;
         private Image[] rails;
         private AvButton[] hits;
-        private int[] members;
+        private uint[] members;
         private TMP_Text empty;
-        private WmcContext last;
         private readonly AvButton[] chips = new AvButton[6];
         private int filterElement = -1;
         private bool filterSelected;
@@ -54,7 +53,7 @@ namespace WingCommand
             labels = new TMP_Text[n];
             rails = new Image[n];
             hits = new AvButton[n];
-            members = new int[n];
+            members = new uint[n];
             for (int i = 0; i < n; i++)
             {
                 int k = i;
@@ -83,21 +82,14 @@ namespace WingCommand
 
         private void Click(int i)
         {
-            // Review focus 4: the slot may have renumbered or gone; UnitAtSlot returns null and Center does nothing.
-            if (last == null || members == null || i >= members.Length || members[i] < 0) return;
-            WmcMap.Center(last.UnitAtSlot(members[i]));
+            // Review P3 I5: by aircraft, never by seat (seats renumber); a gone aircraft centres nothing.
+            if (members == null || i >= members.Length || members[i] == 0u) return;
+            WmcMap.Center(WmcContext.UnitOf(members[i]));
         }
 
         public void Refresh(WmcContext c)
         {
-            last = c;
-            int seat = -1;
-            if (filterSelected)
-            {
-                int k = WingRows.IndexOf(c.Rows, c.Count, c.Selection.Single);
-                if (k >= 0) seat = c.Rows[k].Slot;
-            }
-            var filter = new LogFilter { Element = filterElement, Seat = filterSelected ? (seat >= 0 ? seat : int.MaxValue) : -1, Rows = c.Rows, Count = c.Count };
+            var filter = new LogFilter { Element = filterElement, ById = filterSelected, Id = c.Selection.Single, Rows = c.Rows, Count = c.Count };
             int n = LogRows.Fill(c.Wing?.Events, RadioDirector.Instance?.Log, rows, labels.Length, filter);
             for (int k = 0; k < chips.Length; k++)
                 chips[k].SetLatched(k == 5 ? filterSelected : k == 0 ? !filterSelected && filterElement < 0 : !filterSelected && filterElement == k - 1);
@@ -108,10 +100,10 @@ namespace WingCommand
             {
                 bool on = i < n;
                 if (roots[i].activeSelf != on) roots[i].SetActive(on);
-                members[i] = on ? rows[i].Member : -1;
+                members[i] = on ? rows[i].Id : 0u;
                 if (!on) continue;
                 // A radio line or a wing-level event has no one to centre on: no false click target (review P1 m3).
-                hits[i].SetEnabled(members[i] >= 0);
+                hits[i].SetEnabled(members[i] != 0u);
                 LogRow r = rows[i];
                 WmcUi.SetRail(rails[i], r.Radio ? "info" : r.Member < 0 ? "armed" : "ready");
                 labels[i].text = WmcText.Clock(r.Time) + "  " + (r.Radio ? r.Text : LogRows.Who(r.Member) + " " + r.Text);

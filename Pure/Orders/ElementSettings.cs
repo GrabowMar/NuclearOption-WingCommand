@@ -28,6 +28,14 @@ namespace WingCommand
             doctrines[e] = null;
         }
 
+        /// <summary>Forgets every element B-D with nobody in it (review P3 I2): a letter handed out again starts from the
+        /// wing's settings however it emptied (merge, detach elsewhere, losses).</summary>
+        public void ForgetEmpty(ElementRoster roster)
+        {
+            for (int e = 1; e < ElementRoster.MaxElements; e++)
+                if (roster.Count(e) == 0) Forget(e);
+        }
+
         public void Clear()
         {
             for (int e = 1; e < ElementRoster.MaxElements; e++) Forget(e);

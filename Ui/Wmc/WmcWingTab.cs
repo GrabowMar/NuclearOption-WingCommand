@@ -45,7 +45,7 @@ namespace WingCommand
         private AvButton center, detach, rtb, refit, release;
         private float x, width, listTop;
         private WmcContext last;
-        private float armedAt = float.NegativeInfinity;
+        private readonly ConfirmGate releaseGate = new ConfirmGate();
 
         public WmcWingTab(Dictionary<string, AvButton> controls) => ids = controls;
 
@@ -135,6 +135,7 @@ namespace WingCommand
         {
             if (last == null || rowIds[index] == 0u) return;
             last.Selection.Toggle(rowIds[index]);
+            last.Rescope();
         }
 
         private void PickElement(int e)
@@ -144,6 +145,7 @@ namespace WingCommand
             for (int i = 0; i < last.Count; i++)
                 if (last.Rows[i].Element == e) members.Add(last.Rows[i].Id);
             if (members.Count > 0) last.Selection.SelectElement(e, members);
+            last.Rescope();
         }
 
         private void Center()
@@ -188,14 +190,17 @@ namespace WingCommand
                     WingToast.Show("Select the wingmen to release");
                     return;
                 }
-                if (Time.unscaledTime - armedAt > 3f)
+                // Review P3 I4: a second press confirms only for the aircraft the first one asked about.
+                if (!releaseGate.Press(last.ScopeLabel, Time.unscaledTime))
                 {
-                    armedAt = Time.unscaledTime;
-                    WingToast.Show($"Release {last.Selection.Label(last.Rows, last.Count)}? Press RELEASE again");
+                    WingToast.Show($"Release {last.ScopeLabel}? Press RELEASE again");
                     return;
                 }
-                armedAt = float.NegativeInfinity;
-                if (WingOrders.Run(WingOrder.Of(OrderKind.Release, last.Scope)).Accepted) last.Selection.Clear();
+                if (WingOrders.Run(WingOrder.Of(OrderKind.Release, last.Scope)).Accepted)
+                {
+                    last.Selection.Clear();
+                    last.Rescope();
+                }
             });
         }
 

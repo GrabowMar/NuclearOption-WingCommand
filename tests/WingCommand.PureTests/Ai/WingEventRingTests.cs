@@ -37,5 +37,22 @@ namespace WingCommand.PureTests
             Assert.Equal(1, ring.CountOf(TransitionReason.MissileInbound));
             Assert.Equal(1, ring.CountOf(TransitionReason.MissileClear));
         }
+
+        [Fact]
+        public void PushStampsTheSeatsAircraft()
+        {
+            // Review P3 I5: an event names the aircraft, so a seat renumbered later never borrows it.
+            var ring = new WingEventRing();
+            ring.Seat(1, 12u);
+            ring.Push(new WingEvent { Member = 1, Kind = WingEventKind.Bingo });
+            ring.Push(new WingEvent { Member = -1, Kind = WingEventKind.AnchorLost });
+            ring.Seat(1, 13u);
+            ring.Push(new WingEvent { Member = 1, Kind = WingEventKind.Bingo });
+            ring.Push(new WingEvent { Member = 40, Kind = WingEventKind.Bingo });
+            Assert.Equal(12u, ring[0].Id);
+            Assert.Equal(0u, ring[1].Id);
+            Assert.Equal(13u, ring[2].Id);
+            Assert.Equal(0u, ring[3].Id);
+        }
     }
 }

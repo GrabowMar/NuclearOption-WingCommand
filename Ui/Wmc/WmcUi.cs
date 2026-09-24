@@ -26,6 +26,22 @@ namespace WingCommand
         /// <summary>The scope in words ("WING", "ELEMENT B", "#3 #4").</summary>
         public string ScopeLabel = "WING";
 
+        /// <summary>Scope, label and element from the selection over this refresh's rows. The panel calls it on refresh, and
+        /// every selection handler calls it at once (review P3 I3), so an order pressed right after a click goes to what
+        /// the click chose.</summary>
+        public void Rescope()
+        {
+            Scope = Selection.Scope(Rows, Count);
+            ScopeLabel = Selection.Label(Rows, Count);
+            ScopeElement = 0;
+            if (Scope.Kind == ScopeKind.Element) ScopeElement = Scope.Element;
+            else if (Scope.Kind == ScopeKind.Members)
+            {
+                int i = WingRows.IndexOf(Rows, Count, Scope.Members[0]);
+                if (i >= 0) ScopeElement = Rows[i].Element;
+            }
+        }
+
         /// <summary>Orders run on the host (client orders are M6c-2).</summary>
         public bool CanOrder => !Client && Wing != null && Wing.Selection != null;
 
@@ -40,14 +56,6 @@ namespace WingCommand
 
         /// <summary>The aircraft with this persistent id, or null.</summary>
         public static Unit UnitOf(uint id) => id != 0u && new PersistentID { Id = id }.TryGetUnit(out Unit u) ? u : null;
-
-        /// <summary>The aircraft of the row flying a slot now (host or client), or null.</summary>
-        public Unit UnitAtSlot(int slot)
-        {
-            for (int i = 0; i < Count; i++)
-                if (Rows[i].Slot == slot) return UnitOf(Rows[i].Id);
-            return null;
-        }
     }
 
     internal interface IWmcTab

@@ -8,29 +8,34 @@ namespace WingCommand
         public float Time;
         /// <summary>The member's slot when the event was logged, -1 for the wing or a radio line.</summary>
         public int Member;
+        /// <summary>The member's aircraft (persistent id), 0 for the wing or a radio line.</summary>
+        public uint Id;
         public string Text;
         public bool Radio;
     }
 
     /// <summary>Which lines LOG shows (spec WMC program §4): everything, one element (its task events and its members'
-    /// events, by the element each seat flies in now), or one member's events. Radio lines only when unfiltered.</summary>
+    /// events, by the element each aircraft flies in now), or one aircraft's events (<see cref="ById"/>; id 0 matches
+    /// nothing). Radio lines only when unfiltered.</summary>
     internal struct LogFilter
     {
-        public int Element, Seat;
+        public int Element;
+        public bool ById;
+        public uint Id;
         public SnapshotMember[] Rows;
         public int Count;
 
-        public static LogFilter None => new LogFilter { Element = -1, Seat = -1 };
+        public static LogFilter None => new LogFilter { Element = -1 };
 
-        public bool Any => Element >= 0 || Seat >= 0;
+        public bool Any => Element >= 0 || ById;
 
         public bool Match(in WingEvent e)
         {
-            if (Seat >= 0) return e.Member == Seat;
+            if (ById) return Id != 0u && e.Id == Id;
             if (Element < 0) return true;
             if (e.Member < 0) return e.Element == Element;
             for (int i = 0; i < Count && Rows != null; i++)
-                if (Rows[i].Slot == e.Member) return Rows[i].Element == Element;
+                if (e.Id != 0u && Rows[i].Id == e.Id) return Rows[i].Element == Element;
             return false;
         }
     }
@@ -120,7 +125,7 @@ namespace WingCommand
                 if (takeEvent)
                 {
                     WingEvent ev = events[e--];
-                    into.Add(new LogRow { Time = ev.Time, Member = ev.Member, Text = Describe(ev) });
+                    into.Add(new LogRow { Time = ev.Time, Member = ev.Member, Id = ev.Id, Text = Describe(ev) });
                 }
                 else
                 {

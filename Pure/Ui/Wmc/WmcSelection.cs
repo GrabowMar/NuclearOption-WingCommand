@@ -33,11 +33,16 @@ namespace WingCommand
             element = -1;
         }
 
-        /// <summary>Drops aircraft no longer in the wing.</summary>
+        /// <summary>Drops aircraft no longer in the wing; an element choice whose aircraft moved to another element (a merge,
+        /// a detach) becomes a choice of those aircraft (review P3 I1), so the scope never names an emptied letter.</summary>
         public void Prune(SnapshotMember[] rows, int count)
         {
             for (int i = ids.Count - 1; i >= 0; i--)
-                if (WingRows.IndexOf(rows, count, ids[i]) < 0) ids.RemoveAt(i);
+            {
+                int k = WingRows.IndexOf(rows, count, ids[i]);
+                if (k < 0) ids.RemoveAt(i);
+                else if (element >= 0 && rows[k].Element != element) element = -1;
+            }
             if (ids.Count == 0) element = -1;
         }
 

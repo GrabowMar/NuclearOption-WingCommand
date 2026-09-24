@@ -74,5 +74,21 @@ namespace WingCommand.PureTests
             s.Clear();
             Assert.Equal(ScopeKind.Wing, s.Scope(Rows(), 4).Kind);
         }
+
+        [Fact]
+        public void AnElementScopeEndsWhenItsMembersMoveOut()
+        {
+            // Review P3 I1: B merged into A; the selection stays #4 #5 as members, never "ELEMENT B".
+            var s = new WmcSelection();
+            s.SelectElement(1, new List<uint> { 13, 14 });
+            SnapshotMember[] rows = Rows();
+            rows[2].Element = 0;
+            rows[3].Element = 0;
+            s.Prune(rows, 4);
+            WingScope scope = s.Scope(rows, 4);
+            Assert.Equal(ScopeKind.Members, scope.Kind);
+            Assert.Equal(new uint[] { 13, 14 }, scope.Members);
+            Assert.Equal("#4 #5", s.Label(rows, 4));
+        }
     }
 }

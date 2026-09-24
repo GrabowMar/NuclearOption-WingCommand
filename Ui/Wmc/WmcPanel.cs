@@ -265,15 +265,7 @@ namespace WingCommand
             }
             // Review focus 1: a selected aircraft that left drops out; the scope follows the selection.
             context.Selection.Prune(context.Rows, context.Count);
-            context.Scope = context.Selection.Scope(context.Rows, context.Count);
-            context.ScopeLabel = context.Selection.Label(context.Rows, context.Count);
-            context.ScopeElement = 0;
-            if (context.Scope.Kind == ScopeKind.Element) context.ScopeElement = context.Scope.Element;
-            else if (context.Scope.Kind == ScopeKind.Members)
-            {
-                int i = WingRows.IndexOf(context.Rows, context.Count, context.Scope.Members[0]);
-                if (i >= 0) context.ScopeElement = context.Rows[i].Element;
-            }
+            context.Rescope();
         }
 
         /// <summary>One refresh now (automation: a selection made this call reaches the scope before a press).</summary>
