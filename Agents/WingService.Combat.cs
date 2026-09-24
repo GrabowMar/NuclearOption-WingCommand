@@ -118,7 +118,28 @@ namespace WingCommand
         {
             Aircraft a = m.Aircraft;
             MissileWarning warning = a.GetMissileWarningSystem();
-            if (warning == null || !warning.TryGetNearestIncoming(out Missile missile) || missile == null || missile.disabled)
+            List<Missile> known = warning != null ? warning.knownMissiles : null;
+            Missile nearest = null, current = null;
+            float nearestSqr = float.MaxValue, currentSqr = float.MaxValue;
+            if (known != null)
+            {
+                GlobalPosition at = a.GlobalPosition();
+                foreach (Missile x in known)
+                {
+                    if (x == null || x.disabled) continue;
+                    float d = FastMath.SquareDistance(x.GlobalPosition(), at);
+                    if (d < nearestSqr)
+                    {
+                        nearestSqr = d;
+                        nearest = x;
+                    }
+                    if (ReferenceEquals(x, m.ThreatMissile)) currentSqr = d;
+                    if (ReferenceEquals(x, m.ThreatMissile)) current = x;
+                }
+            }
+            // The missile being defended against stays unless another is clearly closer (review M5c I2).
+            Missile missile = current != null && MissileDefence.KeepCurrent(currentSqr, nearestSqr) ? current : nearest;
+            if (missile == null)
             {
                 m.ThreatMissile = null;
                 return default;
@@ -126,14 +147,30 @@ namespace WingCommand
             if (!ReferenceEquals(missile, m.ThreatMissile))
             {
                 m.ThreatMissile = missile;
-                string seeker = a.countermeasureManager != null ? a.countermeasureManager.ChooseCountermeasure(missile) : "";
-                m.ThreatSeeker = seeker == "IR" ? MissileSeeker.Infrared : MissileSeeker.Radar;
+                m.ThreatSerial++;
+                string seeker = missile.GetSeekerType();
+                // The game's choice (it also selects the matching station and resets the trigger): only on a new seeker type.
+                if (seeker != m.ThreatSeekerType)
+                {
+                    m.ThreatSeekerType = seeker;
+                    m.ThreatChoice = a.countermeasureManager != null ? a.countermeasureManager.ChooseCountermeasure(missile) : "";
+                }
+                m.ThreatSeeker = m.ThreatChoice == "IR" ? MissileSeeker.Infrared : MissileSeeker.Radar;
+                Plugin.Logger.LogInfo($"[Wing] #{m.Number} missile inbound ({seeker}; {m.ThreatSeeker})");
             }
             return new MissileThreat
             {
-                Present = true, Pos = missile.GlobalPosition().ToVec3(), Seeker = m.ThreatSeeker,
+                Present = true, Id = m.ThreatSerial, Pos = missile.GlobalPosition().ToVec3(), Seeker = m.ThreatSeeker,
                 Vel = missile.rb != null ? missile.rb.velocity.ToVec3() : Vec3.Zero,
             };
+        }
+
+        /// <summary>The member leaves formation flight mid-defence: defence forgotten, trigger off (review M5c I3).</summary>
+        private void EndDefence(WingMember m)
+        {
+            m.Brain.EndDefence(missionTime, Events);
+            m.ThreatMissile = null;
+            if ((object)m.Aircraft != null && m.Aircraft != null) Trigger(m.Aircraft, false);
         }
 
         /// <summary>The countermeasure trigger to <paramref name="on"/> (never on with no matching station).</summary>
@@ -233,6 +270,7 @@ namespace WingCommand
                 }
                 PilotBaseState combat = NativeCombatState(m.Pilot);
                 if (combat == null) continue;
+                EndDefence(m);
                 m.Engaged = true;
                 m.NoTargetClock = 0f;
                 // Without contact the game's no-target mode flies to mission objectives (review M5a I2).

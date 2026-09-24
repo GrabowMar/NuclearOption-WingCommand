@@ -383,6 +383,7 @@ namespace WingCommand
         {
             if (m.Released) return;
             m.Released = true;
+            EndDefence(m);
             ReleasePad(m);
             bool despawn = m.Ground != null && m.Ground.DespawnOnRelease(m.Last);
             m.Ground?.Leave();

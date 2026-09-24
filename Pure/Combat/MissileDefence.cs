@@ -9,6 +9,8 @@ namespace WingCommand
     internal struct MissileThreat
     {
         public bool Present;
+        /// <summary>Which missile (the caller's serial): a new one chooses its own notch side.</summary>
+        public int Id;
         public Vec3 Pos, Vel;
         public MissileSeeker Seeker;
     }
@@ -37,12 +39,30 @@ namespace WingCommand
         public static float ChaffImpactSeconds = 8f, ChaffAlignDeg = 20f, PullUpImpactSeconds = 2f, PullUpHeight = 1000f;
         /// <summary>The aggression the member flies Defend with (the envelope's bank and load ceilings).</summary>
         public static float DefendAggression = 1f;
+        /// <summary>Idle only above this × the loaded minimum speed and never under GCAS (review M5c I5).</summary>
+        public static float IdleMinSpeedFactor = 1.3f;
+        /// <summary>Another missile replaces the one defended against only when this much closer (review M5c I2).</summary>
+        public static float SwitchCloserFraction = 0.8f;
 
         private float seen, clear;
+        private int lastId;
 
         public bool Active { get; private set; }
         /// <summary>The notch side for the current threat (0: none chosen).</summary>
         public int Side { get; private set; }
+
+        /// <summary>Forget the defence (the member leaves formation flight: recovery, combat, release).</summary>
+        public void End()
+        {
+            Active = false;
+            Side = 0;
+            seen = clear = 0f;
+            lastId = 0;
+        }
+
+        /// <summary>Keep defending against the current missile unless another is clearly closer (squared distances).</summary>
+        public static bool KeepCurrent(float currentSqr, float nearestSqr) =>
+            nearestSqr >= SwitchCloserFraction * SwitchCloserFraction * currentSqr;
 
         public static float ReactionFor(float precision) => MaxReaction - (MaxReaction - MinReaction) * Scalar.Clamp01(precision);
 
@@ -59,6 +79,9 @@ namespace WingCommand
                 return default;
             }
             clear = 0f;
+            // A new missile chooses its own notch side (review M5c I1); the reaction is not restarted.
+            if (t.Id != lastId) Side = 0;
+            lastId = t.Id;
             if (!Active)
             {
                 seen += dt;

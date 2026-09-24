@@ -249,5 +249,82 @@ namespace WingCommand.PureTests
             Assert.Equal(1, inbound);
             Assert.Equal(1, clear);
         }
+
+        private static MissileThreat Infrared(Vec3 at) => new MissileThreat
+        {
+            Present = true, Id = 1, Pos = at + new Vec3(0f, 0f, 4000f), Vel = new Vec3(0f, 0f, -600f), Seeker = MissileSeeker.Infrared,
+        };
+
+        [Fact]
+        public void ARotaryMembersCollectiveIsNeverOverridden()
+        {
+            // Review M5c C1: idle throttle is a helicopter's collective at 0: it fell.
+            AirframeProfile helo = AirframeProfile.Derive(new ProfileInputs { Class = AirframeClass.Rotary, MaxSpeed = 80f });
+            var wing = new FormationWing(new FormationDefinition
+            {
+                Id = "one", Slots = new[] { new SlotDef(-1f, 1f, 0f) }, Element = new[] { 0 },
+                SpacingMin = 40f, SpacingDefault = 80f, SpacingMax = 160f,
+            }, 80f);
+            var pilot = new FormationPilot(0, AirframeClass.Rotary);
+            var members = new WingMemberInput[1];
+            Vec3 lead = new Vec3(0f, 300f, 0f), slow = new Vec3(0f, 0f, 40f);
+            for (int i = 0; i < 4 * 60; i++)
+            {
+                lead += slow * Dt;
+                AircraftState s = TestStates.Flying(lead + new Vec3(-80f, 0f, -80f), slow);
+                if (i >= 60) pilot.Threat = Infrared(s.Pos);
+                members[0] = new WingMemberInput { State = s, Capability = new MemberCapability { MaxSpeed = 64f }, Radius = 9f };
+                WingFrame frame = wing.Update(new AnchorSample { Pos = lead, Vel = slow, Present = true, Airborne = true },
+                    members, 1, float.NaN, 60f, 8f, Dt);
+                pilot.Step(frame, s, helo, i * Dt, Dt, null);
+            }
+            Assert.Equal(BehaviourId.Defend, pilot.Mind.Current);
+            Assert.True(pilot.LastOutput.Throttle > 0.2f, $"collective {pilot.LastOutput.Throttle:0.00}");
+        }
+
+        [Fact]
+        public void EndDefenceHandsBackToRejoinWithAReason()
+        {
+            // Review M5c I3: a member recovered or engaged mid-defence must not keep Defend (Form Up was ignored).
+            var rig = new Rig();
+            for (int i = 0; i < 60; i++) rig.Step();
+            rig.Pilot.Threat = Infrared(rig.LeaderPos);
+            for (int i = 0; i < 90; i++) rig.Step();
+            Assert.Equal(BehaviourId.Defend, rig.Pilot.Mind.Current);
+            rig.Pilot.EndDefence(10f, rig.Events);
+            Assert.Equal(BehaviourId.Rejoin, rig.Pilot.Mind.Current);
+            Assert.False(rig.Pilot.Defence.Active);
+            WingEvent last = rig.Events[rig.Events.Count - 1];
+            Assert.Equal(TransitionReason.Commanded, last.Reason);
+            Assert.Equal(BehaviourId.Defend, last.From);
+        }
+
+        [Fact]
+        public void IdleIsNotForcedOnASlowMember()
+        {
+            // Review M5c I5: idle below 1.3 × the loaded minimum speed (or under GCAS) risks a stall at low level.
+            var rig = new Rig();
+            float slow = 1.1f * Fighter.MinimumSpeed(1f);
+            Vec3 vel = new Vec3(0f, 0f, slow);
+            for (int i = 0; i < 60; i++) rig.Step(memberVel: vel);
+            rig.Pilot.Threat = Infrared(rig.LeaderPos);
+            for (int i = 0; i < 90; i++) rig.Step(memberVel: vel);
+            Assert.Equal(BehaviourId.Defend, rig.Pilot.Mind.Current);
+            Assert.True(rig.Pilot.LastOutput.Throttle > 0f, "idle forced on a member barely above its minimum speed");
+        }
+
+        [Fact]
+        public void TheThrottlePicksUpFromTheOverrideWhenItEnds()
+        {
+            // Review M5c I4: the first tick without the override jumped from idle to the energy loop's own output.
+            var rig = new Rig();
+            for (int i = 0; i < 120; i++) rig.Step();
+            rig.Pilot.Threat = Infrared(rig.LeaderPos);
+            for (int i = 0; i < 180; i++) rig.Step();
+            Assert.Equal(0f, rig.Pilot.LastOutput.Throttle);
+            rig.Pilot.Threat = default;
+            rig.Step();
+            Assert.True(rig.Pilot.LastOutput.Throttle < 0.2f, $"throttle jumped to {rig.Pilot.LastOutput.Throttle:0.00}");
+        }
     }
 }

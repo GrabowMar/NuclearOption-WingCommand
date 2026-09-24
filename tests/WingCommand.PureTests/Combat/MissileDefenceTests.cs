@@ -97,5 +97,31 @@ namespace WingCommand.PureTests
             Assert.False(Run(d, default, 0.6f).Active);
             Assert.Equal(0, d.Side);
         }
+
+        [Fact]
+        public void ANewMissileChoosesItsOwnSide()
+        {
+            // Review M5c I1: a second missile from the south kept the first's side and turned the member west (180°).
+            var d = new MissileDefence();
+            MissileThreat a = From(3000f, 600f);
+            a.Id = 1;
+            Run(d, a, 1.5f);
+            var b = new MissileThreat { Present = true, Id = 2, Pos = new Vec3(0f, 3000f, -3000f), Vel = new Vec3(0f, 0f, 600f) + East, Seeker = MissileSeeker.Radar };
+            DefenceCommand c = Run(d, b, 0.1f);
+            Assert.True(c.Active, "no new reaction delay");
+            Assert.True(c.Ref.Vel.X > 0f, $"notch velocity {c.Ref.Vel}");
+        }
+
+        [Fact]
+        public void EndForgetsTheDefence()
+        {
+            // Review M5c I3: a member taken back for recovery or combat starts afresh next time.
+            var d = new MissileDefence();
+            Run(d, From(3000f, 600f), 1.5f);
+            d.End();
+            Assert.False(d.Active);
+            Assert.Equal(0, d.Side);
+            Assert.False(Run(d, From(3000f, 600f), 0.5f).Active, "the reaction applies again");
+        }
     }
 }

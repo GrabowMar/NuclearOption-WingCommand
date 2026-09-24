@@ -43,6 +43,10 @@ namespace WingCommand
         public readonly FireCadence Cadence = new FireCadence();
         public Unit StandingTarget;
         public MissileSeeker ThreatSeeker;
+        /// <summary>A serial per new missile (a new one picks its own notch side), the last seeker type classified and the
+        /// game's countermeasure choice for it.</summary>
+        public int ThreatSerial;
+        public string ThreatSeekerType, ThreatChoice;
         /// <summary>The ground pilot's last output (the ground trace).</summary>
         public ControlOutput GroundOutput;
         public bool StopLogged;

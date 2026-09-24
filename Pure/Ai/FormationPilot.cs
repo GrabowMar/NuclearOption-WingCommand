@@ -31,6 +31,8 @@ namespace WingCommand
         public RejoinOutput LastRejoin;
         public ControlOutput LastOutput;
         private HoldOrbit orbit;
+        private BehaviourId beforeDefend;
+        private bool overrideWas, trackPending;
         private bool gcasWas, emergencyWas;
         private int conversions;
 
@@ -55,14 +57,19 @@ namespace WingCommand
             if (LastRejoin.FallingBehindStarted) Log(events, time, WingEventKind.FallingBehind);
             if (LastRejoin.FallingBehindCleared) Log(events, time, WingEventKind.FallingBehindCleared);
 
-            // Survive first (spec M5 §7.2): the missile defence enters and leaves Defend itself, past any dwell.
-            LastDefence = Defence.Step(Threat, s, LastRejoin.Ref, Precision, dt);
+            // Survive first (spec M5 §7.2): the missile defence enters and leaves Defend itself, past any dwell. Home is
+            // what the member was flying (review M5c I5): its slot, its trail, its hold, else the rejoin path.
+            BehaviourId basis = Mind.Current == BehaviourId.Defend ? beforeDefend : Mind.Current;
+            RefState home = basis == BehaviourId.StationKeep ? slot.Ref
+                : basis == BehaviourId.Trail && frame.TrailValid[Slot] ? frame.TrailRef[Slot]
+                : basis == BehaviourId.HoldOverhead ? new RefState(HoldCenter(leader), leader.Vel, Vec3.Zero)
+                : LastRejoin.Ref;
+            LastDefence = Defence.Step(Threat, s, home, Precision, dt);
             if (LastDefence.Active != (Mind.Current == BehaviourId.Defend))
             {
                 BehaviourId was = Mind.Current;
                 BehaviourId to = LastDefence.Active ? BehaviourId.Defend : BehaviourId.Rejoin;
-                // Leaving: the loops pick up from the throttle the defence held (bumpless).
-                if (!LastDefence.Active) Pipeline.Track(s, LastOutput, p);
+                if (LastDefence.Active) beforeDefend = was;
                 Mind.Force(to);
                 events?.Push(new WingEvent
                 {
@@ -111,6 +118,14 @@ namespace WingCommand
             else if (Mind.Current == BehaviourId.Defend) reference = LastDefence.Ref;
             // Evading at full effort, as the game's evasion does (aimEffort 1).
             float aggression = Mind.Current == BehaviourId.Defend ? MissileDefence.DefendAggression : Aggression;
+            // The throttle override is a fixed wing's (a helicopter's throttle is its collective: review M5c C1); idle only
+            // when safe. The tick it stops, the loops pick up from the throttle it held (review M5c I4).
+            bool fixedWing = Pipeline is FixedWingPipeline || (Pipeline is TiltwingPipeline tw && tw.Mode == TiltwingMode.Plane);
+            bool idle = LastDefence.Idle && s.Tas >= MissileDefence.IdleMinSpeedFactor * p.MinimumSpeed(1f) && !Pipeline.GcasActive;
+            bool overriding = fixedWing && Mind.Current == BehaviourId.Defend && (idle || LastDefence.Full);
+            if ((overrideWas && !overriding) || trackPending) Pipeline.Track(s, LastOutput, p);
+            overrideWas = overriding;
+            trackPending = false;
 
             LastIntent = new FlightIntent
             {
@@ -130,9 +145,9 @@ namespace WingCommand
                 Clearance = Clearance, Aggression = aggression, CollisionBias = frame.Bias[Slot],
             };
             LastOutput = Pipeline.Step(guidance, s, ctx, p, dt);
-            if (Mind.Current == BehaviourId.Defend && (LastDefence.Idle || LastDefence.Full))
+            if (overriding)
             {
-                LastOutput.Throttle = LastDefence.Idle ? 0f : 1f;
+                LastOutput.Throttle = idle ? 0f : 1f;
                 LastOutput.Airbrake = false;
             }
 
@@ -154,6 +169,8 @@ namespace WingCommand
         /// floor and the wing's collision bias.</summary>
         public ControlOutput FlyIntent(in FlightIntent intent, WingFrame frame, in AircraftState s, AirframeProfile p, float dt)
         {
+            if (trackPending) Pipeline.Track(s, LastOutput, p);
+            trackPending = false;
             LastIntent = intent;
             GuidanceCommand guidance = LastGuidance = Pipeline.Guide(intent, s, p);
             bool near = frame.HasNearFloor[Slot];
@@ -163,6 +180,23 @@ namespace WingCommand
                 Clearance = Clearance, Aggression = intent.Aggression, CollisionBias = frame.Bias[Slot],
             };
             return LastOutput = Pipeline.Step(guidance, s, ctx, p, dt);
+        }
+
+        /// <summary>The member leaves formation flight (recovery, combat, release) mid-defence: the defence is forgotten and
+        /// the mind rejoins, logged (review M5c I3); the next flight picks up from the held throttle.</summary>
+        public void EndDefence(float time, WingEventRing events)
+        {
+            Defence.End();
+            Threat = default;
+            if (overrideWas) trackPending = true;
+            overrideWas = false;
+            if (Mind.Current != BehaviourId.Defend) return;
+            Mind.Force(BehaviourId.Rejoin);
+            events?.Push(new WingEvent
+            {
+                Time = time, Member = Slot, Kind = WingEventKind.BehaviourChanged,
+                From = BehaviourId.Defend, To = BehaviourId.Rejoin, Reason = TransitionReason.Commanded,
+            });
         }
 
         /// <summary>"Form up": every member rejoins now, logged as a commanded transition.</summary>
