@@ -101,6 +101,7 @@ namespace WingCommand
                 WingMember m = wing.Members[i];
                 bool behind = m.Brain.LastRejoin.FallingBehind;
                 string phase = WingHudText.Duty(m.Engaged, m.Recovery != null, m.Recovery != null ? m.Recovery.Intent : RecoveryIntent.Rtb)
+                               ?? (m.Settle != null ? WingHudText.Settle(m.Settle.Phase) : null)
                                ?? WingHudText.Phase(m.Brain.Mind.Current, behind);
                 string binding = WingHudText.Binding(m.Brain.Pipeline.Report);
                 float error = (wing.Wing.Frame.Slots[m.Brain.Slot].Ref.Pos - m.Last.Pos).Length;

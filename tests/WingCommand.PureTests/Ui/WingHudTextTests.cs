@@ -11,6 +11,7 @@ namespace WingCommand.PureTests
         [InlineData((int)BehaviourId.HoldOverhead, false, "HOLD")]
         [InlineData((int)BehaviourId.Trail, false, "TRAIL")]
         [InlineData((int)BehaviourId.Rejoin, true, "BEHIND")]
+        [InlineData((int)BehaviourId.Defend, true, "DEFEND")]   // review M5c minor: evading outranks falling behind
         public void PhaseCodes(int behaviour, bool behind, string expected) =>
             Assert.Equal(expected, WingHudText.Phase((BehaviourId)behaviour, behind));
 
@@ -72,6 +73,16 @@ namespace WingCommand.PureTests
 
         [Fact]
         public void NothingEngagedShowsNothing() => Assert.Equal("", WingHudText.Autopilot(default, false, false));
+
+        [Fact]
+        public void SettlePhasesShowLandDownLift()
+        {
+            Assert.Equal("LAND", WingHudText.Settle(SettlePhase.Approach));
+            Assert.Equal("LAND", WingHudText.Settle(SettlePhase.Descend));
+            Assert.Equal("DOWN", WingHudText.Settle(SettlePhase.Down));
+            Assert.Equal("LIFT", WingHudText.Settle(SettlePhase.LiftOff));
+            Assert.Null(WingHudText.Settle(SettlePhase.Done));
+        }
 
         [Fact]
         public void DutyShowsFightAndRecovery()

@@ -11,7 +11,8 @@ namespace WingCommand
     {
         public static string Phase(BehaviourId behaviour, bool fallingBehind)
         {
-            if (fallingBehind) return "BEHIND";
+            // Evading a missile outranks falling behind (the rejoin planner keeps running under the defence).
+            if (fallingBehind && behaviour != BehaviourId.Defend) return "BEHIND";
             switch (behaviour)
             {
                 case BehaviourId.StationKeep: return "SLOT";
@@ -35,6 +36,13 @@ namespace WingCommand
         }
 
         public static float BingoShowSeconds = 600f;
+
+        /// <summary>A helicopter landing here: LAND on the way down, DOWN on the ground, LIFT on the way up (spec M4 §5).</summary>
+        public static string Settle(SettlePhase phase) =>
+            phase == SettlePhase.Approach || phase == SettlePhase.Descend ? "LAND"
+            : phase == SettlePhase.Down ? "DOWN"
+            : phase == SettlePhase.LiftOff ? "LIFT"
+            : null;
 
         /// <summary>FIGHT while engaged, RTB/REFIT while recovering (spec M5 §6.2), else null (the formation phase).</summary>
         public static string Duty(bool engaged, bool recovering, RecoveryIntent intent) =>
