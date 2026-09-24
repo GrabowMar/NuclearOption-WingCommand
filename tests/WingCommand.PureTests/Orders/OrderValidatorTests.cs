@@ -26,7 +26,7 @@ namespace WingCommand.PureTests
             Assert.Equal("no target", OrderValidator.Check(WingOrder.Of(OrderKind.EscortTarget)));
             Assert.Equal("nothing selected to recruit", OrderValidator.Check(WingOrder.Of(OrderKind.Recruit)));
             Assert.Equal("no name", OrderValidator.Check(WingOrder.Of(OrderKind.SetShape)));
-            Assert.Equal("name too long", OrderValidator.Check(new WingOrder { Kind = OrderKind.RenameElement, Text = new string('x', 33) }));
+            Assert.Equal("name too long", OrderValidator.Check(new WingOrder { Kind = OrderKind.RenameElement, Text = new string('x', 49) }));
             Assert.Equal("call 1 to 7 aircraft", OrderValidator.Check(new WingOrder { Kind = OrderKind.Call, Number = 0f }));
             Assert.Equal("stack out of range", OrderValidator.Check(new WingOrder { Kind = OrderKind.Stack, Number = float.NaN }));
             Assert.Equal("no such spacing", OrderValidator.Check(new WingOrder { Kind = OrderKind.SetSpacing, Number = 4f }));
@@ -42,6 +42,14 @@ namespace WingCommand.PureTests
             Assert.Equal("2 attacking", r.Ack);
             Assert.Equal(1, r.Element);
             Assert.Equal(-1, OrderResult.Ok.Element);
+        }
+
+        [Fact]
+        public void TheLongestCustomDoctrineFitsAnOrder()
+        {
+            // Review P2 I6: a custom doctrine travels as its config text.
+            var d = new WingDoctrine(MissileGuard.Lead, MissileResponse.Press, FormationInterval.Standard, false, TargetPolicy.Ground, EngagementReach.Long);
+            Assert.Null(OrderValidator.Check(new WingOrder { Kind = OrderKind.SetDoctrine, Text = d.ToString() }));
         }
     }
 }

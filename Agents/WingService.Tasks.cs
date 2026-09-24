@@ -20,6 +20,14 @@ namespace WingCommand
         {
             if (e > 0)
             {
+                // Review P2 I3: an element's Form is its return to A.
+                if (task == null || task.Kind == TaskKind.Form)
+                {
+                    MergeElement(e);
+                    return OrderResult.Ok;
+                }
+                // Review P2 I2: a new task for an idle element starts a fresh lead at its members.
+                if (!PlannerOf(e).Active) PlannerOf(e).Reset();
                 OrderResult d = PlannerOf(e).Apply(task, Snapshot(e), missionTime, Events);
                 if (d.Accepted) WingOf(e)?.ResetLeader();
                 Plugin.Logger.LogInfo(d.Accepted
@@ -54,9 +62,8 @@ namespace WingCommand
             {
                 if (!Roster.InUse(e)) continue;
                 WingPlanner p = PlannerOf(e);
+                // An element whose task ended goes back to A at the next frame build (review focus 3).
                 if (p.Active) p.Step(Snapshot(e), missionTime, dt, Events);
-                // Review focus 3: an element whose task ended (done, failed, cancelled) goes back to A next tick.
-                if (!p.Active) mergePending[e] = true;
             }
             if (Planner.Active) Planner.Step(Snapshot(0), missionTime, dt, Events);
             if (Planner.Active == plannerWas) return;

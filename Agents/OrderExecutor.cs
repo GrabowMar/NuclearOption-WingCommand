@@ -17,9 +17,12 @@ namespace WingCommand
             if (invalid != null) return OrderResult.Refused("Wing cannot: " + invalid);
             WingService w = WingService.Instance;
             if (w?.Selection == null) return OrderResult.Refused("Wing Command is not ready");
+            if (o.Kind == OrderKind.Task) return Task(w, o);
+            // Review P2 I5: an order that reaches nobody is refused, and nobody moves.
+            string nobody = w.Roster.Check(o.Scope);
+            if (nobody != null) return OrderResult.Refused("Wing cannot: " + nobody);
             switch (o.Kind)
             {
-                case OrderKind.Task: return Task(w, o);
                 case OrderKind.FormUp: return FormUp(w, o.Scope);
                 case OrderKind.SkipLeg:
                 {
@@ -45,8 +48,8 @@ namespace WingCommand
             OrderResult r = w.OrderElement(t.Element, o.Task);
             if (!r.Accepted)
             {
-                // A detach only happens to carry an order: a refused one leaves nobody detached.
-                if (t.Detached) w.MergeElement(t.Element);
+                // A detach only happens to carry an order: a refused one puts everyone back (review P2 m9).
+                if (t.Detached) w.Roster.UndoDetach();
                 return OrderResult.Refused("Wing cannot: " + r.Reason);
             }
             string who = t.Element == 0 ? "Wing" : w.Roster.Name(t.Element);
@@ -76,18 +79,24 @@ namespace WingCommand
                 return OrderResult.Acked("Form up", 0);
             }
             Func<WingMember, bool> who = Who(w, scope);
+            // The members first: merging moves them to A, after which the element filter matches nobody (review P2 I4).
+            var chosen = new List<WingMember>();
+            foreach (WingMember m in w.Members)
+                if (who(m)) chosen.Add(m);
             // ponytail: forming up some members brings their whole elements back to A.
             for (int e = 1; e < ElementRoster.MaxElements; e++)
-            {
-                bool any = false;
-                foreach (WingMember m in w.Members)
-                    if (w.ElementOf(m) == e && who(m)) any = true;
-                if (any) w.MergeElement(e);
-            }
+                foreach (WingMember m in chosen)
+                    if (w.ElementOf(m) == e)
+                    {
+                        w.MergeElement(e);
+                        break;
+                    }
             if (scope.Kind == ScopeKind.Element && scope.Element == 0 && w.Planner.Active) w.Order(WingTask.Form());
-            w.Disengage(who);
-            w.TakeOff(who);
-            return OrderResult.Acked("Rejoining", 0);
+            Func<WingMember, bool> these = chosen.Contains;
+            w.Disengage(these);
+            w.TakeOff(these);
+            foreach (WingMember m in chosen) m.Brain.FormUp(w.MissionTime, w.Events);
+            return OrderResult.Acked(chosen.Count == 1 ? "Rejoining" : $"{chosen.Count} rejoining", 0);
         }
 
         private static OrderResult Immediate(WingService w, WingOrder o, Func<WingMember, bool> who)

@@ -24,6 +24,7 @@ namespace WingCommand
         private readonly Dictionary<uint, int> of = new Dictionary<uint, int>();
         private readonly string[] names = new string[MaxElements];
         private readonly List<uint> picked = new List<uint>();
+        private readonly List<KeyValuePair<uint, int>> moved = new List<KeyValuePair<uint, int>>();
 
         public static string Letter(int e) => ((char)('A' + e)).ToString();
 
@@ -73,8 +74,35 @@ namespace WingCommand
                 if (of[id] == e) into.Add(id);
         }
 
+        /// <summary>Why an order for <paramref name="scope"/> would reach nobody (null: it reaches someone); moves no one
+        /// (review P2 I5).</summary>
+        public string Check(in WingScope scope)
+        {
+            switch (scope.Kind)
+            {
+                case ScopeKind.Element:
+                    return InUse(scope.Element) ? null : "element " + Letter(scope.Element) + " is empty";
+                case ScopeKind.Members:
+                    if (scope.Members != null)
+                        foreach (uint id in scope.Members)
+                            if (of.ContainsKey(id)) return null;
+                    return "nobody selected is in the wing";
+                default:
+                    return null;
+            }
+        }
+
+        /// <summary>Puts the members the last detach moved back where they were (a refused order: review P2 m9).</summary>
+        public void UndoDetach()
+        {
+            foreach (KeyValuePair<uint, int> m in moved)
+                if (of.ContainsKey(m.Key)) of[m.Key] = m.Value;
+            moved.Clear();
+        }
+
         public ScopeTarget Resolve(in WingScope scope)
         {
+            moved.Clear();
             switch (scope.Kind)
             {
                 case ScopeKind.Wing:
@@ -95,9 +123,11 @@ namespace WingCommand
             for (int e = 1; e < MaxElements && free < 0; e++)
                 if (Count(e) == 0) free = e;
             if (free < 0) return Refuse("all four elements are in use");
+            names[free] = null;   // a reused letter starts without the last element's name
             foreach (uint id in picked)
             {
                 int was = of[id];
+                moved.Add(new KeyValuePair<uint, int>(id, was));
                 of[id] = free;
                 if (was > 0 && Count(was) == 0) names[was] = null;
             }

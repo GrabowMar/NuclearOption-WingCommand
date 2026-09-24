@@ -31,7 +31,8 @@ namespace WingCommand
 #pragma warning disable CS0649
     internal sealed class WingOrder
     {
-        public const int MaxUnits = 8, MaxText = 32;
+        // MaxText fits a custom doctrine's config text (~40 characters, review P2 I6).
+        public const int MaxUnits = 8, MaxText = 48;
         public OrderKind Kind;
         public WingScope Scope;
         public WingTask Task;

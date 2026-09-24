@@ -145,5 +145,39 @@ namespace WingCommand.PureTests
             r.Members(1, into);
             Assert.Equal(new uint[] { 12, 14 }, into);
         }
+
+        [Fact]
+        public void CheckRefusesEmptyElementsAndStrangersWithoutMovingAnyone()
+        {
+            // Review P2 I5: an immediate order's scope is checked without detaching.
+            ElementRoster r = Four();
+            Assert.Null(r.Check(WingScope.Wing));
+            Assert.Null(r.Check(WingScope.OfMembers(12, 99)));
+            Assert.Equal("nobody selected is in the wing", r.Check(WingScope.OfMembers(99)));
+            Assert.Equal("element C is empty", r.Check(WingScope.OfElement(2)));
+            Assert.Equal(4, r.Count(0));
+        }
+
+        [Fact]
+        public void UndoDetachRestoresTheOldElements()
+        {
+            // Review P2 m9: a refused split leaves everyone where they were.
+            ElementRoster r = Four();
+            r.Resolve(WingScope.OfMembers(13, 14));
+            r.Resolve(WingScope.OfMembers(14));
+            r.UndoDetach();
+            Assert.Equal(1, r.ElementOf(13));
+            Assert.Equal(1, r.ElementOf(14));
+            Assert.False(r.InUse(2));
+        }
+
+        [Fact]
+        public void AReusedLetterStartsWithoutAName()
+        {
+            ElementRoster r = Four();
+            r.Rename(1, "COBRA");
+            r.Resolve(WingScope.OfMembers(13));
+            Assert.Equal("B", r.Name(1));
+        }
     }
 }

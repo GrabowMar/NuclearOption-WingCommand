@@ -54,7 +54,6 @@ namespace WingCommand
         private readonly CollisionBody[] others = new CollisionBody[FormationCatalog.MaxSlots];
         private readonly FormationWing[] wings = new FormationWing[ElementRoster.MaxElements];
         private readonly WingPlanner[] planners = new WingPlanner[ElementRoster.MaxElements];
-        private readonly bool[] mergePending = new bool[ElementRoster.MaxElements];
 
         /// <summary>Which element each member flies in (spec WMC program §3.3).</summary>
         public ElementRoster Roster { get; private set; } = new ElementRoster();
@@ -240,14 +239,15 @@ namespace WingCommand
             {
                 FrameFor(Time.fixedTime, dt);
                 WingFrame frame = FrameOf(m);
-                // ponytail: a member whose element grew after this tick's frames coasts one tick on its last inputs.
-                if (frame == null || m.Brain.Slot >= frame.Count) return;
-                if ((m.Recovery != null || m.ReserveNow) && StepRecovery(m, frame, dt)) return;
+                // Slots follow this tick's frames (review P2 C1); the check only guards a member that joined after them.
+                bool framed = frame != null && m.Brain.Slot < frame.Count;
+                if (framed && (m.Recovery != null || m.ReserveNow) && StepRecovery(m, frame, dt)) return;
                 if (m.OnGround)
                 {
                     StepGround(m, dt);
                     return;
                 }
+                if (!framed) return;
                 if (StepSettle(m, frame, dt)) return;
                 m.NoFbwSeconds = m.Last.FbwActive ? 0f : m.NoFbwSeconds + dt;
                 if (m.NoFbwSeconds >= NoFbwReleaseSeconds)
@@ -592,6 +592,8 @@ namespace WingCommand
         public void SetStack(float metres)
         {
             if (Wing != null) Wing.Solver.StackOffset = metres;
+            for (int e = 1; e < ElementRoster.MaxElements; e++)
+                if (wings[e] != null) wings[e].Solver.StackOffset = metres;
         }
 
         public float Stack => Wing != null ? Wing.Solver.StackOffset : 0f;
@@ -638,13 +640,18 @@ namespace WingCommand
             }
             frameTime = time;
             frameIndex++;
-            // Elements whose task ended merge here, before any frame is built this tick (review focus 1).
+            // Before any frame is built this tick (review P2 I2, I3): an emptied element forgets its lead; an element whose
+            // task ended (done, failed, cancelled, or never given) goes back to A.
             for (int e = 1; e < ElementRoster.MaxElements; e++)
-                if (mergePending[e])
+            {
+                WingPlanner p = planners[e];
+                if (!Roster.InUse(e))
                 {
-                    mergePending[e] = false;
-                    MergeElement(e);
+                    if (p != null && (p.Active || p.Lead != null)) p.Reset();
+                    continue;
                 }
+                if (p == null || !p.Active) MergeElement(e);
+            }
             FieldRegistry.Step(dt, this);
             foreach (WingMember m in Members) m.Last = m.Sensor.Read(m.Aircraft, dt);
             AnchorSample leader = SampleAnchor(dt);
@@ -656,7 +663,13 @@ namespace WingCommand
                 int n = 0, o = 0;
                 foreach (WingMember m in Members)
                 {
-                    if (ElementOf(m) == e) inputs[n++] = Input(m);
+                    if (ElementOf(m) == e)
+                    {
+                        // Review P2 C1: the slot is the member's index in this tick's input list, by construction.
+                        m.Brain.Slot = n;
+                        m.Brain.Seat = m.Seat;
+                        inputs[n++] = Input(m);
+                    }
                     else if (o < others.Length)
                         others[o++] = new CollisionBody
                         {
@@ -737,8 +750,9 @@ namespace WingCommand
         public void MergeElement(int e)
         {
             if (e <= 0) return;
+            // Form through the planner so a running task is logged as cancelled (review P2 I7).
+            PlannerOf(e).Apply(WingTask.Form(), Snapshot(e), missionTime, Events);
             Roster.Merge(e);
-            PlannerOf(e).Reset();
             AssignSlots();
             Plugin.Logger.LogInfo($"[Wing] element {ElementRoster.Letter(e)} rejoined A");
         }
@@ -750,7 +764,6 @@ namespace WingCommand
             {
                 wings[e] = null;
                 planners[e] = null;
-                mergePending[e] = false;
             }
         }
 
