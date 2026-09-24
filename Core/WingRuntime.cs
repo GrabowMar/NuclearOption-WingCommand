@@ -48,6 +48,8 @@ namespace WingCommand
 
         private void Update()
         {
+            // The network is up before a mission is (the lobby): its hooks and hellos run regardless.
+            WingNet.Tick(Time.unscaledDeltaTime);
             bool playable = InPlayableState;
             if (playable != active)
             {

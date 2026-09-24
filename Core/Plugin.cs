@@ -53,6 +53,7 @@ namespace WingCommand
 
             harmony = new Harmony(PluginGuid);
             PatchManifest.Apply(harmony, Logger);
+            WingNet.Init();
             GameAccess.Initialise();
             WingData.Load(Logger);
 

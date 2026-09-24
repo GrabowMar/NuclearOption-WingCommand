@@ -363,6 +363,14 @@ namespace WingCommand
             };
         }
 
+        /// <summary>The transport's handshake counts (spec M6 §7; spike S1 in single-player: the host greets its own client).</summary>
+        public static Dictionary<string, object> NetState(Dictionary<string, object> args) => new Dictionary<string, object>
+        {
+            { "ok", true }, { "disabled", WingNet.Disabled ? 1 : 0 }, { "greeted", WingNet.Greeted }, { "replies", WingNet.Replies },
+            { "host_greeted", WingNet.HostGreeted ? 1 : 0 }, { "in", WingNet.In }, { "out", WingNet.Out },
+            { "decode_failures", WingNet.DecodeFailures },
+        };
+
         /// <summary>Sets the wing's doctrine by name (Reserve, Escort, Sweep or a custom line).</summary>
         public static Dictionary<string, object> Doctrine(Dictionary<string, object> args)
         {

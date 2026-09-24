@@ -1,0 +1,19 @@
+{
+  "name": "wc-m6b-loopback",
+  "mods": ["wingcommand"],
+  "timeout_s": 120,
+  "ops": [
+    {"op": "spawn", "id": "lead", "type": "FS-20 Vortex", "at": {"map": [0, 0]}, "altitude": 3000, "speed": 200, "heading": 0},
+    {"op": "wait", "seconds": 10},
+    {"op": "call", "method": "WingCommand.Automation.NetState", "store": "net"},
+    {"op": "end"}
+  ],
+  "checks": [
+    {"check": "status_ok"},
+    {"check": "result_below", "path": "net.disabled", "max": 0},
+    {"check": "result_above", "path": "net.greeted", "min": 1},
+    {"check": "result_above", "path": "net.replies", "min": 1},
+    {"check": "result_above", "path": "net.host_greeted", "min": 1},
+    {"check": "result_below", "path": "net.decode_failures", "max": 0}
+  ]
+}
