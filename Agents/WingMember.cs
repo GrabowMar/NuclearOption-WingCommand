@@ -43,6 +43,8 @@ namespace WingCommand
         public readonly FireCadence Cadence = new FireCadence();
         /// <summary>A helicopter landing here or down (spec M4 §5); null when flying with the wing.</summary>
         public SettlePilot Settle;
+        /// <summary>The seated pilot's combat perks as modifiers (spec M5 §11).</summary>
+        public PerkEffects Perks = PerkEffects.None;
         /// <summary>What the settle is for once down (spec M4 §7); null: hold until Take Off.</summary>
         public SettleJob Job;
         /// <summary>The downed pilot a rescue settle waits for.</summary>

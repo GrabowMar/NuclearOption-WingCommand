@@ -48,7 +48,7 @@ namespace WingCommand
         /// <summary>After the member's flight step: a missile from the slot when the doctrine allows one (spec M5 §8.2).</summary>
         private void FireFromSlot(WingMember m, float dt)
         {
-            if (!m.Cadence.Due(dt)) return;
+            if (!m.Cadence.Due(dt, m.Perks.IntervalScale)) return;
             m.StandingTarget = null;
             if (m.Engaged || m.Recovery != null || m.OnGround || m.Released || !HoldsFormation(m.Brain.Mind.Current)) return;
             StandingMode mode = StandingFire.Decide(Doctrine.Targets, out DoctrineAllow allow);
@@ -56,7 +56,7 @@ namespace WingCommand
             Aircraft a = m.Aircraft;
             FactionHQ hq = a != null ? a.NetworkHQ : null;
             if (hq == null || hq.trackingDatabase == null || a.weaponStations == null || a.weaponManager == null) return;
-            float range = WingDoctrineRules.EngageRange(Doctrine.Reach);
+            float range = WingDoctrineRules.EngageRange(Doctrine.Reach) * m.Perks.ReachScale;
             AnchorSample anchor = Planner.Active ? Planner.Sample() : AnchorNow();
             Vec3 cover = anchor.Present ? anchor.Pos : a.GlobalPosition().ToVec3();
             int others = 0;
@@ -91,7 +91,8 @@ namespace WingCommand
                 {
                     if (!Usable(a, w) || !w.WeaponInfo.missile || w.WeaponInfo.gun || w.WeaponInfo.bomb) continue;
                     TargetRequirements req = w.WeaponInfo.targetRequirements;
-                    if (!StandingFire.InEnvelope(distance, req.minRange, req.maxRange, u.radarAlt, req.minAltitude, req.maxAltitude, off, req.minAlignment, a.speed, req.minOwnerSpeed)) continue;
+                    float maxRange = PerkRange(m, w, a, u, to);
+                    if (!StandingFire.InEnvelope(distance, req.minRange, maxRange, u.radarAlt, req.minAltitude, req.maxAltitude, off, m.Perks.Boresight(req.minAlignment), a.speed, req.minOwnerSpeed)) continue;
                     if (StandingFire.Saturated(committed, t.missileAttacks, w.WeaponInfo.CalcAttacksNeeded(u))) continue;
                     OpportunityThreat ot = CombatAI.AnalyzeTarget(w, a, t, 0f, distance, 1f);
                     if (ot.opportunity <= 0f) continue;
@@ -139,11 +140,13 @@ namespace WingCommand
                 Vector3 to = t.GetPosition() - a.GlobalPosition();
                 float distance = to.magnitude, off = Vector3.Angle(a.transform.forward, to);
                 bool inEnvelope = false;
+                int shots = 0;
                 foreach (WeaponStation w in a.weaponStations)
                 {
                     if (!Usable(a, w) || !w.WeaponInfo.missile || w.WeaponInfo.gun || w.WeaponInfo.bomb) continue;
                     TargetRequirements req = w.WeaponInfo.targetRequirements;
-                    if (!StandingFire.InEnvelope(distance, req.minRange, req.maxRange, target.radarAlt, req.minAltitude, req.maxAltitude, off, req.minAlignment, a.speed, req.minOwnerSpeed)) continue;
+                    float maxRange = PerkRange(m, w, a, target, to);
+                    if (!StandingFire.InEnvelope(distance, req.minRange, maxRange, target.radarAlt, req.minAltitude, req.maxAltitude, off, m.Perks.Boresight(req.minAlignment), a.speed, req.minOwnerSpeed)) continue;
                     if (CombatAI.AnalyzeTarget(w, a, t, 0f, distance, 1f).opportunity <= 0f) continue;
                     if (!w.WeaponInfo.overHorizon && !target.LineOfSight(a.transform.position - Vector3.up * a.definition.spawnOffset.y, 1000f)) continue;
                     inEnvelope = true;
@@ -154,15 +157,31 @@ namespace WingCommand
                     if (launched)
                     {
                         fired++;
+                        shots++;
                         Plugin.Logger.LogInfo($"[Wing] #{m.Number} splash on {target.unitName}");
                         CallFox(m, w, target);
                     }
-                    if (attempted) break;
+                    // SalvoSpecialist: a second missile from another station (spec M5 §11).
+                    if (attempted && (!launched || shots >= m.Perks.SplashShots)) break;
                 }
                 if (inEnvelope) capable++;
             }
             SplashShots += fired;
             return fired;
+        }
+
+        /// <summary>A missile's max range with the member's range perks (HeadOnJoust, ApexHunter: spec M5 §11).</summary>
+        private static float PerkRange(WingMember m, WeaponStation w, Aircraft a, Unit target, Vector3 to)
+        {
+            TargetRequirements req = w.WeaponInfo.targetRequirements;
+            Vector3 targetVel = target.rb != null ? target.rb.velocity : Vector3.zero;
+            Vector3 rel = targetVel - (a.rb != null ? a.rb.velocity : Vector3.zero);
+            float d = Mathf.Max(to.magnitude, 1f);
+            float closing = -Vector3.Dot(rel, to / d);
+            // Aspect: the target's heading against the line back to us (0 = straight at us).
+            float aspect = targetVel.sqrMagnitude > 1f ? Vector3.Angle(targetVel, -to) : 180f;
+            bool radar = req.minIR <= 0f;
+            return m.Perks.MaxRange(req.maxRange, radar, a.GlobalPosition().y, closing, aspect);
         }
 
         /// <summary>Spec M7 §3: the launch on the radio (one Fox call per speaker per repeat window).</summary>

@@ -417,6 +417,7 @@ namespace WingCommand
         private int attackCount;
         private float reallocateClock;
         private readonly bool[] canAttack = new bool[FormationCatalog.MaxSlots * TargetAllocator.MaxTargets];
+        private readonly float[] keepScale = new float[FormationCatalog.MaxSlots];
         private readonly float[] targetDistance = new float[FormationCatalog.MaxSlots * TargetAllocator.MaxTargets];
         private readonly bool[] targetAlive = new bool[TargetAllocator.MaxTargets];
         private readonly int[] currentTarget = new int[FormationCatalog.MaxSlots], nextTarget = new int[FormationCatalog.MaxSlots];
@@ -491,7 +492,8 @@ namespace WingCommand
                     if (ReferenceEquals(m.AssignedTarget, attackTargets[t])) currentTarget[i] = t;
                 }
             }
-            TargetAllocator.Assign(k, attackCount, canAttack, targetDistance, targetAlive, currentTarget, targetLost, dt, nextTarget);
+            for (int i = 0; i < k; i++) keepScale[i] = engagedNow[i].Perks.KeepScale;
+            TargetAllocator.Assign(k, attackCount, canAttack, targetDistance, targetAlive, currentTarget, targetLost, dt, nextTarget, keepScale);
             for (int i = 0; i < k; i++)
             {
                 engagedNow[i].TargetLost = targetLost[i];

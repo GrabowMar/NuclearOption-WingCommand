@@ -25,6 +25,8 @@ namespace WingCommand
         /// <summary>Slot index; the engine reassigns it when a member ahead of it is lost.</summary>
         public int Slot;
         public float Precision = 1f, Aggression = 0.5f, Clearance = 60f;
+        /// <summary>Spec M5 §11: EarlyWarning (seconds off the missile reaction) and BreakTurn (instant inside this range).</summary>
+        public float ReactionDelta, BreakRange;
         public bool AfterburnerAllowed = true;
         public FlightIntent LastIntent;
         public GuidanceCommand LastGuidance;
@@ -64,7 +66,7 @@ namespace WingCommand
                 : basis == BehaviourId.Trail && frame.TrailValid[Slot] ? frame.TrailRef[Slot]
                 : basis == BehaviourId.HoldOverhead ? new RefState(HoldCenter(leader), leader.Vel, Vec3.Zero)
                 : LastRejoin.Ref;
-            LastDefence = Defence.Step(Threat, s, home, Precision, dt);
+            LastDefence = Defence.Step(Threat, s, home, Precision, dt, ReactionDelta, BreakRange);
             if (LastDefence.Active != (Mind.Current == BehaviourId.Defend))
             {
                 BehaviourId was = Mind.Current;

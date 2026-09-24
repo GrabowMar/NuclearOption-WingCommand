@@ -22,7 +22,7 @@ namespace WingCommand
     internal sealed partial class WingService : IWingService
     {
         public const int ProbeTicks = 12;
-        public static float Clearance = 60f, NoFbwReleaseSeconds = 1f;
+        public static float Clearance = 60f, NoFbwReleaseSeconds = 1f, MinClearance = 25f;
 
         public static WingService Instance { get; private set; }
 
@@ -188,6 +188,11 @@ namespace WingCommand
             PilotSkill.For(pilot.Rank, pilot.Perks, effect, out float precision, out float aggression);
             m.Brain.Precision = precision;
             m.Brain.Aggression = aggression;
+            // Spec M5 §11: the combat perks where Wing Command flies and fires.
+            m.Perks = PerkEffects.For(pilot.Perks);
+            m.Brain.Clearance = System.Math.Max(MinClearance, Clearance + m.Perks.ClearanceDelta);
+            m.Brain.ReactionDelta = m.Perks.ReactionDelta;
+            m.Brain.BreakRange = m.Perks.BreakRange;
             Plugin.Logger.LogInfo($"[Pilot] {pilot.Callsign} ({WingPilotRoster.RankName(pilot.Rank)}) flies #{m.Number}: " +
                                   $"precision {precision:0.00}, aggression {aggression:0.00}");
         }
