@@ -275,14 +275,33 @@ namespace WingCommand
         {
             WingService wing = WingService.Instance;
             if (wing == null) return Fail("Task", "the wing is not active");
+            WingTask task = BuildTask(args, wing, "kind", out string error);
+            if (task == null) return Fail("Task", error);
+            OrderResult r = wing.Order(task);
+            return new Dictionary<string, object> { { "ok", true }, { "accepted", r.Accepted }, { "reason", r.Reason ?? "" } };
+        }
+
+        /// <summary>A task from hook arguments: <paramref name="kindKey"/> names the TaskKind; offsets, alt, speed, seconds,
+        /// loop and left as <see cref="Task"/> reads them. Null with the error.</summary>
+        private static WingTask BuildTask(Dictionary<string, object> args, WingService wing, string kindKey, out string error)
+        {
+            error = null;
             // The wing's anchor (the harness spawns its lead without a player, review M4a I1), else the player.
-            if (!Enum.TryParse(Text(args, "kind") ?? "", true, out TaskKind kind)) return Fail("Task", "unknown kind");
+            if (!Enum.TryParse(Text(args, kindKey) ?? "", true, out TaskKind kind))
+            {
+                error = "unknown task kind";
+                return null;
+            }
             var points = new List<Waypoint>();
             if (args.TryGetValue("offsets", out object raw) && raw is List<object> list)
             {
                 // Only points need a lead (a Form order has none; during a task the leader is the virtual anchor).
                 Unit lead = Arg(args, "leadUnit") as Unit ?? wing.LeaderUnit ?? wing.Player;
-                if (lead == null) return Fail("Task", "no lead to place the points from");
+                if (lead == null)
+                {
+                    error = "no lead to place the points from";
+                    return null;
+                }
                 Vec3 at = lead.GlobalPosition().ToVec3();
                 Vec3 f = lead.transform.forward.ToVec3().Horizontal.Normalized;
                 foreach (object o in list)
@@ -300,8 +319,65 @@ namespace WingCommand
             if (args.TryGetValue("seconds", out object seconds)) task.Seconds = Convert.ToSingle(seconds, CultureInfo.InvariantCulture);
             task.Loop = args.TryGetValue("loop", out object loop) && loop is bool l && l;
             task.Left = args.TryGetValue("left", out object left) && left is bool lf && lf;
-            OrderResult r = wing.Order(task);
-            return new Dictionary<string, object> { { "ok", true }, { "accepted", r.Accepted }, { "reason", r.Reason ?? "" } };
+            return task;
+        }
+
+        /// <summary>Spec WMC program §3.2: one order through the executor. kind: an OrderKind name (Task takes the Task hook's
+        /// arguments with its kind under "task"); scope: element (a letter) or members (their #numbers); text, number and
+        /// flag as the order carries them.</summary>
+        public static Dictionary<string, object> Order(Dictionary<string, object> args)
+        {
+            WingService wing = WingService.Instance;
+            if (wing == null) return Fail("Order", "the wing is not active");
+            if (!Enum.TryParse(Text(args, "kind") ?? "", true, out OrderKind kind)) return Fail("Order", "unknown kind");
+            var o = new WingOrder
+            {
+                Kind = kind, Text = Text(args, "text"), Number = Number(args, "number", 0),
+                Flag = Arg(args, "flag") is bool flag && flag,
+            };
+            string letter = Text(args, "element");
+            if (!string.IsNullOrEmpty(letter)) o.Scope = WingScope.OfElement(char.ToUpperInvariant(letter[0]) - 'A');
+            else if (Arg(args, "members") is List<object> numbers)
+            {
+                var ids = new List<uint>();
+                foreach (object n in numbers)
+                {
+                    int number = (int)Math.Round(Convert.ToDouble(n, CultureInfo.InvariantCulture));
+                    foreach (WingMember m in wing.Members)
+                        if (m.Number == number && (object)m.Aircraft != null) ids.Add(m.Aircraft.persistentID.Id);
+                }
+                o.Scope = WingScope.OfMembers(ids.ToArray());
+            }
+            if (kind == OrderKind.Task)
+            {
+                o.Task = BuildTask(args, wing, "task", out string error);
+                if (o.Task == null) return Fail("Order", error);
+            }
+            OrderResult r = OrderExecutor.Execute(o);
+            return new Dictionary<string, object>
+            {
+                { "ok", true }, { "accepted", r.Accepted }, { "ack", r.Ack ?? "" }, { "reason", r.Reason ?? "" }, { "element", r.Element },
+            };
+        }
+
+        /// <summary>Spec WMC program §3.3: elements in use and their member counts (a, b, c, d).</summary>
+        public static Dictionary<string, object> Elements(Dictionary<string, object> args)
+        {
+            WingService wing = WingService.Instance;
+            if (wing == null) return Fail("Elements", "the wing is not active");
+            var result = new Dictionary<string, object> { { "ok", true } };
+            int inUse = 0;
+            for (int e = 0; e < ElementRoster.MaxElements; e++)
+            {
+                bool used = wing.Roster.InUse(e);
+                if (used) inUse++;
+                string key = ElementRoster.Letter(e).ToLowerInvariant();
+                result[key] = used ? wing.Roster.Count(e) : 0;
+                WingPlanner planner = wing.PlannerOf(e);
+                result[key + "_task"] = used && planner.Active ? planner.Current.Kind.ToString() : "Form";
+            }
+            result["in_use"] = inUse;
+            return result;
         }
 
         /// <summary>The wing's task now and how many task events it logged.</summary>
