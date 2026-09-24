@@ -73,7 +73,8 @@
       "method": "WingCommand.Automation.Wmc",
       "store": "orders",
       "args": {
-        "tab": 1
+        "tab": 0,
+        "sub": 0
       }
     },
     {
@@ -83,12 +84,28 @@
     {
       "op": "call",
       "method": "WingCommand.Automation.Wmc",
-      "store": "orbit",
+      "store": "orbit_sel",
       "args": {
         "select": [
           3
-        ],
-        "press": "orders.orbit"
+        ]
+      }
+    },
+    {
+      "op": "call",
+      "method": "WingCommand.Automation.WmcMap",
+      "store": "orbit",
+      "args": {
+        "mode": "orbit",
+        "ahead_km": 6
+      }
+    },
+    {
+      "op": "call",
+      "method": "WingCommand.Automation.WmcMap",
+      "store": "orbit_off",
+      "args": {
+        "mode": "off"
       }
     },
     {
@@ -110,15 +127,7 @@
       "method": "WingCommand.Automation.Wmc",
       "store": "form_up",
       "args": {
-        "press": "orders.form"
-      }
-    },
-    {
-      "op": "call",
-      "method": "WingCommand.Automation.Wmc",
-      "store": "doct",
-      "args": {
-        "tab": 3
+        "press": "tac.orders.formup"
       }
     },
     {
@@ -128,17 +137,18 @@
     {
       "op": "call",
       "method": "WingCommand.Automation.Wmc",
-      "store": "sweep",
+      "store": "targets",
       "args": {
-        "press": "doct.sweep"
+        "press": "tac.orders.targets.both"
       }
     },
     {
       "op": "call",
       "method": "WingCommand.Automation.Wmc",
-      "store": "log",
+      "store": "fit",
       "args": {
-        "tab": 5
+        "tab": 0,
+        "sub": 0
       }
     },
     {
@@ -166,23 +176,28 @@
     },
     {
       "check": "result_above",
-      "path": "orbit.pressed",
+      "path": "orbit.armed",
       "min": 1
     },
     {
       "check": "result_above",
-      "path": "sweep.pressed",
+      "path": "targets.pressed",
       "min": 1
-    },
-    {
-      "check": "result_above",
-      "path": "log.tab",
-      "min": 5
     },
     {
       "check": "result_above",
       "path": "elements.b",
       "min": 1
+    },
+    {
+      "check": "result_below",
+      "path": "fit.overflow",
+      "max": 0
+    },
+    {
+      "check": "result_below",
+      "path": "fit.tab",
+      "max": 0
     }
   ]
 }
