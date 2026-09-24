@@ -5,20 +5,22 @@ namespace WingCommand
     internal enum SettlePhase : byte { Approach, Descend, Down, LiftOff, Done }
 
     /// <summary>Spec M4 §5.2: a helicopter lands at a ground point and waits there. Approach — hover-fly to
-    /// <see cref="ApproachHeight"/> over the point; Descend — straight down at <see cref="DescentRate"/> (a reference
-    /// sinking below the ground so it settles); Down — below <see cref="TouchdownHeight"/> and slower than
+    /// <see cref="ApproachHeight"/> over the point; Descend — straight down, the sink rate easing from
+    /// <see cref="DescentRate"/> to <see cref="TouchdownRate"/> near the ground (<see cref="FlareGain"/> per metre of
+    /// height), flown as the reference's own vertical speed at the aircraft's height (no height error to catch up: the
+    /// FlightSim touched down at 3 m/s when the reference ran ahead); Down — below <see cref="TouchdownHeight"/> and slower than
     /// <see cref="TouchdownSpeed"/> vertically: collective 0 and brakes, until <see cref="TakeOff"/> (lifted over
     /// <see cref="BounceHeight"/> it descends again); LiftOff — up to <see cref="LiftOffHeight"/>, then Done. The member's
     /// own rotary pipeline flies it with the terrain floor off, as the lift-off from a pad does. A settle that has not
     /// touched down within <see cref="SettleSeconds"/> gives up.</summary>
     internal sealed class SettlePilot
     {
-        public static float ApproachHeight = 15f, ApproachReached = 3f, DescentRate = 1.5f, TouchdownHeight = 0.4f,
-            TouchdownSpeed = 1f, BounceHeight = 2f, LiftOffHeight = 20f, SettleSeconds = 60f;
+        public static float ApproachHeight = 15f, ApproachReached = 3f, DescentRate = 1.5f, TouchdownRate = 0.4f, FlareGain = 0.25f,
+            TouchdownHeight = 0.4f, TouchdownSpeed = 1f, BounceHeight = 2f, LiftOffHeight = 20f, SettleSeconds = 60f;
 
         public readonly Vec3 Point;
         private readonly float headingDeg;
-        private float since, sinkY;
+        private float since;
         private ControlOutput last;
         private bool trackOnLift;
 
@@ -48,10 +50,7 @@ namespace WingCommand
                     if (time - since > SettleSeconds) return GiveUp(time, events, slot);
                     Vec3 over = Point + Vec3.Up * ApproachHeight;
                     if ((over - s.Pos).Horizontal.Length < ApproachReached && Math.Abs(s.Pos.Y - over.Y) < ApproachReached)
-                    {
                         Phase = SettlePhase.Descend;
-                        sinkY = s.Pos.Y;
-                    }
                     return last = Fly(over, Vec3.Zero, s, p, pipeline, dt);
                 case SettlePhase.Descend:
                     if (time - since > SettleSeconds) return GiveUp(time, events, slot);
@@ -61,14 +60,12 @@ namespace WingCommand
                         Log(events, time, slot, WingEventKind.Landed);
                         return last = Held();
                     }
-                    // The reference sinks at the descent rate and on below the ground, so the aircraft settles on it.
-                    sinkY = Math.Max(Point.Y - 2f, Math.Min(sinkY, s.Pos.Y) - DescentRate * dt);
-                    return last = Fly(new Vec3(Point.X, sinkY, Point.Z), new Vec3(0f, -DescentRate, 0f), s, p, pipeline, dt);
+                    float rate = Scalar.Clamp(s.RadarAlt * FlareGain, TouchdownRate, DescentRate);
+                    return last = Fly(new Vec3(Point.X, s.Pos.Y, Point.Z), new Vec3(0f, -rate, 0f), s, p, pipeline, dt);
                 case SettlePhase.Down:
                     if (s.RadarAlt > BounceHeight)
                     {
                         Phase = SettlePhase.Descend;
-                        sinkY = s.Pos.Y;
                         pipeline.Track(s, last, p);
                     }
                     return last = Held();
