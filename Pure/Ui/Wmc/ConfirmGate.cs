@@ -21,5 +21,8 @@ namespace WingCommand
             until = now + Window;
             return false;
         }
+
+        /// <summary>A question is open for <paramref name="target"/> (the label shows "?").</summary>
+        public bool IsArmed(string target, float now) => armed != null && armed == target && now <= until;
     }
 }

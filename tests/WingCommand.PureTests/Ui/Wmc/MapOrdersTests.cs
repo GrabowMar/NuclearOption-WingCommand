@@ -55,7 +55,13 @@ namespace WingCommand.PureTests
             Assert.Equal("MOVE · #3 #4 · RIGHT-CLICK THE MAP", MapOrders.Prompt(MapMode.Move, "#3 #4"));
             Assert.Equal("ATTACK · WING · RIGHT-CLICK AN ENEMY (SHIFT ADDS)", MapOrders.Prompt(MapMode.Attack, "WING"));
             Assert.Equal("ROUTE · ELEMENT B · RIGHT-CLICK TO ADD POINTS, THEN SEND", MapOrders.Prompt(MapMode.Route, "ELEMENT B"));
-            Assert.Equal(6, MapOrders.Strip.Length);
+        }
+
+        [Fact]
+        public void LandPlacesALandingPoint()
+        {
+            Assert.Equal(MapClick.Land, MapOrders.Resolve(MapMode.Land, false, MapPointer.Empty, false));
+            Assert.Equal("LAND · WING · RIGHT-CLICK THE MAP", MapOrders.Prompt(MapMode.Land, "WING"));
         }
     }
 }

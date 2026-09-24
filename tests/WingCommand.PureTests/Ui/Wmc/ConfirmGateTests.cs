@@ -31,5 +31,16 @@ namespace WingCommand.PureTests
             Assert.False(g.Press("#3", 10f + ConfirmGate.Window + 0.1f));
             Assert.True(g.Press("#3", 11f + ConfirmGate.Window));
         }
+
+        [Fact]
+        public void IsArmedOnlyForTheAskedTargetInsideTheWindow()
+        {
+            var g = new ConfirmGate();
+            Assert.False(g.IsArmed("#3", 10f));
+            g.Press("#3", 10f);
+            Assert.True(g.IsArmed("#3", 12f));
+            Assert.False(g.IsArmed("#2", 12f));
+            Assert.False(g.IsArmed("#3", 13.5f));
+        }
     }
 }
