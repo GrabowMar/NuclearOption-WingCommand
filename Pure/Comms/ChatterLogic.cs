@@ -751,6 +751,51 @@ namespace WingCommand
                         new[] { "Parked and ready for turnaround! Fuel me up!", "Recovered! Get this bird rearmed!" },
                         new[] { "Engines spooling down. Airframe recovered cleanly.", "Safe on the pad. Ready for servicing." },
                         new[] { "Shut down complete. Time to inspect the coffee machine.", "Recovered. Maintenance can start complaining." });
+                case "JOKER":
+                {
+                    string m = subject ?? "a few";
+                    return Pick(persona, seed,
+                        new[] { "Joker fuel, " + m + " minutes to bingo.", "Joker. " + m + " minutes to bingo." },
+                        new[] { "Joker! " + m + " minutes of fight left!", "Joker fuel! " + m + " minutes, make them count!" },
+                        new[] { "Joker fuel. " + m + " minutes to bingo.", "Passing joker. Bingo in " + m + " minutes." },
+                        new[] { "Joker. " + m + " minutes before this gets awkward.", "Joker fuel. " + m + " minutes of optimism left." });
+                }
+                case "FALLINGBEHIND":
+                    return Pick(persona, seed,
+                        new[] { "Falling behind, Lead. Cutting off to catch up.", "Can't keep up. Taking the inside." },
+                        new[] { "Slow down, Lead! Cutting across to you!", "You're leaving me! Cutting the corner!" },
+                        new[] { "Dropping back. Cutting inside to rejoin.", "Losing ground, Lead. Taking the short way." },
+                        new[] { "Lead, this isn't a race. Cutting off.", "Admiring your tail from far away. Cutting in." });
+                case "PULLUP":
+                    return Pick(persona, seed,
+                        new[] { "Terrain! Pulling up.", "Too low. Pulling up." },
+                        new[] { "Ground! Pulling up hard!", "Whoa, terrain! Climbing!" },
+                        new[] { "Terrain warning. Pulling up.", "Low. Climbing out." },
+                        new[] { "The ground is getting friendly. Pulling up.", "Terrain. Not today." });
+                case "BREAKOFF":
+                    return Pick(persona, seed,
+                        new[] { "Too close! Breaking off.", "Traffic! Breaking away." },
+                        new[] { "Watch it! Breaking off!", "Too close! Getting clear!" },
+                        new[] { "Close aboard. Opening out.", "Traffic close. Breaking away." },
+                        new[] { "Personal space, please. Breaking off.", "That was a bit intimate. Opening out." });
+                case "LEADLOST":
+                    return Pick(persona, seed,
+                        new[] { "Lost Lead. Holding.", "No contact with Lead. Holding position." },
+                        new[] { "Lead's gone! Holding here!", "Where's Lead? Holding!" },
+                        new[] { "Lead lost. Holding overhead.", "No Lead. Holding steady." },
+                        new[] { "Lead has left the building. Holding.", "Misplaced our Lead. Holding." });
+                case "GOAROUND":
+                    return Pick(persona, seed,
+                        new[] { "Going around.", "Missed approach. Going around." },
+                        new[] { "Botched it! Going around!", "Waved off! Coming around again!" },
+                        new[] { "Going around for another approach.", "Missed. Setting up again." },
+                        new[] { "That runway moved. Going around.", "Practice approach. Going around." });
+                case "TASKDONE":
+                    return Pick(persona, seed,
+                        new[] { "Task complete.", "Done here, Lead." },
+                        new[] { "Job's done! What's next?", "Finished! Give us more!" },
+                        new[] { "Task complete. Awaiting orders.", "All done here." },
+                        new[] { "Task complete. Applause optional.", "Done. Try to look surprised." });
                 case "UNABLEORDER":
                     return Pick(persona, seed,
                         new[] { "Unable.", "Negative. Unable to comply." },
