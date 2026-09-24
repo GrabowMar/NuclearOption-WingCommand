@@ -222,6 +222,48 @@ namespace WingCommand
             return Ok("path", path);
         }
 
+        /// <summary>Spike S6 (carriers): any airbase by name (args.field), read as the ground code would (roads, hangars, runways,
+        /// pads) and dumped in the fixture format (args.path, default %TEMP%/wingcommand-airbase-NAME.json), with what a deck
+        /// adds: attached or not, the runways' and hangars' velocities, elevator hangars, arrestor and ski-jump runways.</summary>
+        public static Dictionary<string, object> DumpAirbase(Dictionary<string, object> args)
+        {
+            string name = Text(args, "field");
+            Airbase airbase = null;
+            foreach (Airbase b in UnityEngine.Object.FindObjectsOfType<Airbase>())
+                if (b != null && string.Equals(b.name, name, StringComparison.OrdinalIgnoreCase)) airbase = b;
+            if (airbase == null) return Fail("DumpAirbase", $"no airbase '{name}'");
+            AirbaseSample sample = AirbaseAdapter.Read(airbase);
+            string path = Text(args, "path") ?? System.IO.Path.Combine(System.IO.Path.GetTempPath(), "wingcommand-airbase-" + airbase.name + ".json");
+            System.IO.File.WriteAllText(path, AirbaseSample.ToDumpJson(MissionManager.CurrentMission?.Name, new[] { sample }));
+            float runwaySpeed = 0f, hangarSpeed = 0f;
+            int arrestor = 0, skiJump = 0, doors = 0;
+            if (airbase.runways != null)
+                foreach (Airbase.Runway r in airbase.runways)
+                {
+                    if (r == null) continue;
+                    runwaySpeed = Math.Max(runwaySpeed, r.GetVelocity().magnitude);
+                    if (r.Arrestor) arrestor++;
+                    if (r.SkiJump) skiJump++;
+                }
+            if (airbase.hangars != null)
+                foreach (Hangar h in airbase.hangars)
+                    if (h != null) hangarSpeed = Math.Max(hangarSpeed, h.GetVelocity().magnitude);
+            foreach (HangarSample h in sample.Hangars)
+                if (h.CarrierDoors) doors++;
+            string unit = airbase.TryGetAttachedUnit(out Unit attached) && attached != null ? attached.unitName : "";
+            Plugin.Logger.LogInfo($"[Automation] DumpAirbase {airbase.name}: attached {sample.Attached} ({unit}), {sample.Roads.Length} roads, " +
+                                  $"{sample.Hangars.Length} hangars ({doors} elevator), {sample.Runways.Length} runways ({arrestor} arrestor, " +
+                                  $"{skiJump} ski-jump), {sample.ServicePoints.Length} service points, {sample.Pads.Length} pads, " +
+                                  $"deck speed {runwaySpeed:0.0}/{hangarSpeed:0.0} m/s → {path}");
+            return new Dictionary<string, object>
+            {
+                { "ok", true }, { "path", path }, { "attached", sample.Attached }, { "roads", sample.Roads.Length },
+                { "hangars", sample.Hangars.Length }, { "elevators", doors }, { "runways", sample.Runways.Length },
+                { "arrestor", arrestor }, { "ski_jump", skiJump }, { "service_points", sample.ServicePoints.Length },
+                { "pads", sample.Pads.Length }, { "deck_speed", runwaySpeed },
+            };
+        }
+
         /// <summary>What calls have cost this mission: charged, refunded, and the player's allocation now; the squadron's
         /// pilots flying, free and lost; with args.type, the faction's stock of that airframe (−1: unknown).</summary>
         public static Dictionary<string, object> Economy(Dictionary<string, object> args)
