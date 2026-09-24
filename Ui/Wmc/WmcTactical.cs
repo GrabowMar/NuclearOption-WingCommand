@@ -15,12 +15,6 @@ namespace WingCommand
     {
         public const int SubOrders = 0, SubForm = 1, SubRoute = 2;
         private static readonly string[] SubLabels = { "ORDERS", "FORMATION", "ROUTE" };
-        private static readonly string[] SubPending =
-        {
-            null,
-            "FORMATION: the plan view, shapes, spacing, stack and maneuvers. Arrives in the next update.",
-            "ROUTE: quick routes for the scope and your own autopilot. Arrives in the next update.",
-        };
         private const float ChipGap = 3f, AllWidth = 38f, PresetWidth = 30f;
 
         private readonly Dictionary<string, AvButton> ids;
@@ -64,16 +58,22 @@ namespace WingCommand
 
             subArea = Container(page, "TacticalSub", new Rect(0f, listTop, panelWidth, 10f));
             subTabs = WmcKit.SubTabs(subArea, new Rect(x, 0f, width, BezelLayout.SubTabs), SubLabels, "tac.sub.", ids, ShowSub);
-            for (int i = 1; i < subTabs.Length; i++)
-            {
-                subTabs[i].SetEnabled(false);
-                subTabs[i].WithTooltip(SubPending[i]);
-            }
-            subRoots[SubOrders] = Container(subArea, "TacticalOrders", new Rect(0f, 0f, panelWidth, 10f)).gameObject;
-            AvKit.Stretch((RectTransform)subRoots[SubOrders].transform);
-            BuildOrders((RectTransform)subRoots[SubOrders].transform);
+            subTabs[SubOrders].WithTooltip("Doctrine, the order grid and the situation.");
+            subTabs[SubForm].WithTooltip("The plan view, shapes, maneuvers; spacing, stack and power for the wing.");
+            subTabs[SubRoute].WithTooltip("The scope's quick route, and your own autopilot with NAV.");
+            BuildOrders(SubRoot(SubOrders, "TacticalOrders"));
+            BuildFormation(SubRoot(SubForm, "TacticalFormation"));
+            BuildRoute(SubRoot(SubRoute, "TacticalRoute"));
             Layout(BezelLayout.RowPitch);
             ShowSub(SubOrders);
+        }
+
+        private RectTransform SubRoot(int k, string name)
+        {
+            RectTransform rt = Container(subArea, name, new Rect(0f, 0f, panelWidth, 10f));
+            AvKit.Stretch(rt);
+            subRoots[k] = rt.gameObject;
+            return rt;
         }
 
         private static RectTransform Container(RectTransform parent, string name, Rect r)
@@ -93,6 +93,8 @@ namespace WingCommand
             float top = listTop - height - BezelLayout.ScopeGap;
             AvKit.Place(subArea, new Rect(0f, top, panelWidth, top - bottom));
             LayoutOrders(top - bottom);
+            LayoutFormation(top - bottom);
+            LayoutRoute(top - bottom);
         }
 
         private void ShowSub(int k)
@@ -249,6 +251,8 @@ namespace WingCommand
             RefreshScope(c);
             RefreshList(c);
             if (sub == SubOrders) RefreshOrders(c);
+            else if (sub == SubForm) RefreshFormation(c);
+            else if (sub == SubRoute) RefreshRoute(c);
         }
 
         public void Metrics(WmcContext c, WmcMetricRow m)

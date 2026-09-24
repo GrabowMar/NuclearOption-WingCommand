@@ -89,7 +89,7 @@ namespace WingCommand
                 ? $"WING  {sel.Current.Name.ToUpperInvariant()}  {sel.Spacing.ToString().ToUpperInvariant()}  {wing.Doctrine.PatternName}"
                 : "AUTOPILOT";
             autopilot.text = ap != null
-                ? WingHudText.Autopilot(ap.Session.Spec, ap.Session.LateralOverride, ap.Session.VerticalOverride)
+                ? WingHudText.Autopilot(ap.Session.Spec, ap.Session.LateralOverride, ap.Session.VerticalOverride, ap.Nav.Index, ap.Nav.Count)
                 : "";
             for (int i = 0; i < rows.Length; i++)
             {

@@ -18,6 +18,8 @@ namespace WingCommand
 
         public string Name => "Autopilot";
         public readonly AutopilotSession Session = new AutopilotSession();
+        /// <summary>NAV (spec WMC rebuild §ROUTE): the route the player drew, flown as a heading hold to its active point.</summary>
+        public readonly NavFollower Nav = new NavFollower();
 
         private Aircraft bound;
         private AircraftSensor sensor;
@@ -70,6 +72,24 @@ namespace WingCommand
             Announce();
         }
 
+        /// <summary>NAV: fly <paramref name="points"/>; a first point that sets an altitude or a speed engages that hold too.
+        /// Refuses (with the reason) when there is nothing to fly.</summary>
+        public bool EngageNav(Waypoint[] points, int count)
+        {
+            if (points == null || count <= 0)
+            {
+                WingToast.Show("NAV: draw a route first (ROUTE › DRAW, then right-click the map)");
+                return false;
+            }
+            if (!Prepare()) return false;
+            Nav.Load(points, count);
+            Session.SetLateral(LateralHold.Nav, last);
+            if (!float.IsNaN(points[0].Altitude) && Session.Spec.Vertical != VerticalHold.Altitude) Session.SetVertical(VerticalHold.Altitude, last);
+            if (!float.IsNaN(points[0].Speed) && !Session.Spec.Speed) Session.SetSpeed(true, last, playerThrottle);
+            Announce();
+            return true;
+        }
+
         /// <summary>Spec M7b §3 AP: step a held value (the WMC ± buttons); the hold keeps flying to the new value.</summary>
         public void Adjust(ApField field, int direction) => ApSteps.Adjust(ref Session.Spec, field, direction);
 
@@ -117,6 +137,9 @@ namespace WingCommand
             }
             if (t.Recaptured) pipeline.Track(last, lastApplied, profile);
 
+            // NAV steers the heading (and a point's altitude and speed) each tick; past the last point it leaves a heading hold.
+            if (Session.Spec.Lateral == LateralHold.Nav && !Nav.Step(last.Pos, last.Speed, ref Session.Spec))
+                WingToast.Show("NAV: last point passed, holding heading");
             GuidanceCommand g = HoldGuidance.Evaluate(Session.Spec, last, profile);
             var ctx = new LimitContext { FloorY = float.NaN, Clearance = 0f, Aggression = Aggression };
             ControlOutput o = pipeline.Step(g, last, ctx, profile, dt);
@@ -212,7 +235,7 @@ namespace WingCommand
 
         private void Announce()
         {
-            string text = WingHudText.Autopilot(Session.Spec, Session.LateralOverride, Session.VerticalOverride);
+            string text = WingHudText.Autopilot(Session.Spec, Session.LateralOverride, Session.VerticalOverride, Nav.Index, Nav.Count);
             WingToast.Show(text.Length == 0 ? "Autopilot off" : text);
         }
 
