@@ -8,7 +8,7 @@
     <!-- Milestone prerelease tag; keep in step with Plugin.PluginPrerelease. -->
     <VersionPrerelease>alpha.5</VersionPrerelease>
     <InformationalVersion>$(Version)-$(VersionPrerelease)</InformationalVersion>
-    <LangVersion>latest</LangVersion>
+    <LangVersion>12</LangVersion>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
     <DebugType>portable</DebugType>
     <!-- Suppress reference-assembly warnings from Unity runtime assemblies. -->

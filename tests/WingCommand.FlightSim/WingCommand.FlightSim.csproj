@@ -5,7 +5,7 @@
        calibrated from in-game telemetry; they never ship. -->
   <PropertyGroup>
     <TargetFramework>net8.0</TargetFramework>
-    <LangVersion>latest</LangVersion>
+    <LangVersion>12</LangVersion>
     <Nullable>disable</Nullable>
     <IsPackable>false</IsPackable>
     <RootNamespace>WingCommand.FlightSim</RootNamespace>
