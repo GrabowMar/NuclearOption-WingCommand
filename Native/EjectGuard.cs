@@ -17,6 +17,7 @@ namespace WingCommand
         private static bool Prefix(Aircraft __instance)
         {
             if (WingService.Instance == null || !WingService.Instance.ProtectsFromEjection(__instance)) return true;
+            WingService.Instance.EjectionBlocked(__instance);
             Blocked++;
             if (logged.Add(__instance))
                 Plugin.Logger.LogWarning($"[Ground] blocked a native ejection of {__instance.definition.unitName} under ground supervision");

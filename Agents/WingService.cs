@@ -279,6 +279,14 @@ namespace WingCommand
 
         /// <summary>A member under ground supervision, or in the game's landing for us, whose aircraft is intact is never
         /// ejected by native checks.</summary>
+        /// <summary>The eject guard skipped an ejection of <paramref name="a"/>: a member in the game's landing is taken back
+        /// at the next tick (review M3b I5: the game's helicopter landing with no field only ejects, every tick).</summary>
+        public void EjectionBlocked(Aircraft a)
+        {
+            foreach (WingMember m in Members)
+                if (ReferenceEquals(m.Aircraft, a) && m.Recovery != null && m.Recovery.Phase == RecoveryPhase.Landing) m.EjectBlocked = true;
+        }
+
         public bool ProtectsFromEjection(Aircraft a)
         {
             foreach (WingMember m in Members)
@@ -581,6 +589,8 @@ namespace WingCommand
                 if (!m.Released && m.Alive && ours) continue;
                 StepTest.Forget(m);
                 m.Ground?.Leave();
+                m.Recovery?.Leave();
+                Unlist(m);
                 RetirePilot(m);
                 Metrics.Left(m.Id);
                 Members.RemoveAt(i);

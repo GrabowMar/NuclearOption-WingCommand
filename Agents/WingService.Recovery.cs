@@ -15,10 +15,13 @@ namespace WingCommand
     /// there, a refit member is refuelled and rearmed after its refit time and departs again, rejoining once
     /// airborne.</item>
     /// <item>Three failed landings, or a landing where no field can take it, return it to the reserve.</item>
+    /// <item>Carriers are not recovery fields until M3d; a member the game lands on one goes back to the reserve.</item>
     /// </list></summary>
     internal sealed partial class WingService
     {
         public static float BingoCheckSeconds = 1f, BingoFieldSeconds = 10f, TouchdownFieldRadius = 5000f;
+        /// <summary>A landed member stays on the runway's landing list until it is off the runway, at most this long.</summary>
+        public static float RunwayListSeconds = 60f;
 
         /// <summary>Sends a member home. False when it cannot go (no friendly field, already going, released).</summary>
         public bool Recover(WingMember m, RecoveryIntent intent)
@@ -38,7 +41,7 @@ namespace WingCommand
             Airbase airbase = RecoveryField(m);
             FieldTraffic field = airbase != null ? FieldRegistry.For(airbase) : null;
             if (field == null) return false;
-            m.Recovery = new RecoveryPilot(m.Id, field, m.Profile.Class, intent);
+            m.Recovery = new RecoveryPilot(m.Id, field, m.Profile.Class, intent, m.Brain.Slot);
             Plugin.Logger.LogInfo($"[Wing] #{m.Number} {(intent == RecoveryIntent.Rtb ? "returning to base" : "going to refit")} at {airbase.name}");
             return true;
         }
@@ -51,10 +54,12 @@ namespace WingCommand
             return n;
         }
 
-        /// <summary>The picked launch field while it is friendly, else the friendly field nearest the member.</summary>
+        /// <summary>The picked launch field while it is friendly, else the friendly field nearest the member. Not a carrier
+        /// (review M3b I7: the field's graph is a snapshot that does not move with the deck).</summary>
         private Airbase RecoveryField(WingMember m)
         {
             List<Airbase> fields = FriendlyFields(m.Aircraft);
+            fields.RemoveAll(b => b.AttachedAirbase);   // ponytail: carriers recover with M3d's deck frame
             if (LaunchField != null && fields.Contains(LaunchField)) return LaunchField;
             return fields.Count > 0 ? fields[0] : null;
         }
@@ -72,7 +77,7 @@ namespace WingCommand
             switch (r.Phase)
             {
                 case RecoveryPhase.Approach:
-                    FlightIntent intent = r.ApproachIntent(m.Last, m.Profile, out bool handOver);
+                    FlightIntent intent = r.ApproachIntent(m.Last, m.Profile, missionTime, dt, out bool handOver);
                     ControlWriter.Fly(m.Aircraft, m.Brain.FlyIntent(intent, frame, m.Last, m.Profile, dt), m.Profile.Class);
                     if (!handOver) return true;
                     // Landing first: the guards protect it from the moment the game's state enters (its search may fail
@@ -95,6 +100,7 @@ namespace WingCommand
         private void StepRecoveryGround(WingMember m)
         {
             Aircraft a = m.Aircraft;
+            if (m.ListedAt != null && (!m.Recovery.Ground.ArrivingOnRunway || missionTime > m.ListedUntil)) Unlist(m);
             RecoveryAction action = m.Recovery.Update(missionTime, a.GetFuelLevel(), AmmoFraction(a), Events, m.Brain.Slot);
             if (action == RecoveryAction.Reserve)
             {
@@ -130,6 +136,7 @@ namespace WingCommand
             {
                 bool down = m.Aircraft.radarAlt < 2f;
                 bool touchdown = (next != null && ReferenceEquals(next, pilot.AITaxiState)) || (down && ReferenceEquals(next, pilot.parkedState));
+                NativeLandingBridge.LeavePad(pilot, m.Aircraft);
                 if (touchdown) Touchdown(m);
                 else
                 {
@@ -146,18 +153,22 @@ namespace WingCommand
         }
 
         /// <summary>Down: a ground pilot on the field it landed at takes it to a stand (set before our state is entered,
-        /// so the gear stays down); a site with no field for ground operations returns it to the reserve.</summary>
+        /// so the gear stays down); it stays on the runway's landing list while it is still on the runway (review M3b I3:
+        /// native departures look only at that list). A carrier, or a site with no field for ground operations, returns it
+        /// to the reserve.</summary>
         private void Touchdown(WingMember m)
         {
             Aircraft a = m.Aircraft;
-            Airbase airbase = NearestAirbase(a.transform.position);
-            NativeLandingBridge.Deregister(airbase, a);
-            FieldTraffic field = airbase != null ? FieldRegistry.For(airbase) : null;
+            Airbase airbase = NativeLandingBridge.Field(m.Pilot) ?? NearestAirbase(a.transform.position);
+            FieldTraffic field = airbase != null && !airbase.AttachedAirbase ? FieldRegistry.For(airbase) : null;
             if (field == null)
             {
+                NativeLandingBridge.Deregister(airbase, a);
                 m.ReserveNow = true;
                 return;
             }
+            m.ListedAt = airbase;
+            m.ListedUntil = missionTime + RunwayListSeconds;
             Transform t = a.transform;
             Rigidbody rb = a.rb;
             var s = new AircraftState
@@ -170,18 +181,40 @@ namespace WingCommand
             Plugin.Logger.LogInfo($"[Wing] #{m.Number} down at {airbase.name}; taxiing in");
         }
 
-        /// <summary>Overdue landings are taken back (the game's state may hover or circle for ever).</summary>
+        /// <summary>Landings that are overdue (the game's state may hover or circle for ever), or whose state tried to eject
+        /// the pilot (the guard skipped it; the game's helicopter landing with no field does nothing else), are taken back:
+        /// down on the surface it is a touchdown, in the air a failed landing.</summary>
         private void SuperviseLandings()
         {
             foreach (WingMember m in Members)
             {
                 RecoveryPilot r = m.Recovery;
+                bool blocked = m.EjectBlocked;
+                m.EjectBlocked = false;
                 if (m.Released || r == null || r.Phase != RecoveryPhase.Landing || !NativeLandingBridge.Landing(m.Pilot)) continue;
-                if (!r.LandingOverdue(missionTime)) continue;
-                r.LandingFailed(missionTime, Events, m.Brain.Slot);
+                if (!blocked && !r.LandingOverdue(missionTime)) continue;
+                NativeLandingBridge.LeavePad(m.Pilot, m.Aircraft);
+                string why = blocked ? "the game's landing gave up" : "landing overdue";
+                if (m.Aircraft.radarAlt < 2f)
+                {
+                    Touchdown(m);
+                    Plugin.Logger.LogInfo($"[Wing] #{m.Number} {why} on the ground; taken back there");
+                }
+                else
+                {
+                    r.LandingFailed(missionTime, Events, m.Brain.Slot);
+                    Plugin.Logger.LogInfo($"[Wing] #{m.Number} {why}; approaching again");
+                }
                 NativeLandingBridge.TakeBack(m);
-                Plugin.Logger.LogInfo($"[Wing] #{m.Number} landing overdue; approaching again");
             }
+        }
+
+        /// <summary>Off the landing list it was kept on after touchdown.</summary>
+        private static void Unlist(WingMember m)
+        {
+            if (m.ListedAt == null) return;
+            if ((object)m.Aircraft != null) NativeLandingBridge.Deregister(m.ListedAt, m.Aircraft);
+            m.ListedAt = null;
         }
 
         private void CheckBingo(WingMember m, float dt)
@@ -207,8 +240,10 @@ namespace WingCommand
         {
             if (m.Released) return;
             m.Released = true;
+            m.Recovery?.Leave();
             m.Recovery = null;
             m.Ground?.Leave();
+            Unlist(m);
             if (m.Aircraft != null && !m.Aircraft.disabled) m.Aircraft.ReturnToInventory();
             Plugin.Logger.LogInfo($"[Wing] #{m.Number} returned to the reserve: {why}");
         }

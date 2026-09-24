@@ -28,11 +28,102 @@ namespace WingCommand.PureTests
             // Runway 0 runs north from z = 0: landing northwards, the approach point is 5 km south of the threshold.
             Vec3 point = recovery.ApproachPoint(Flying(new Vec3(0f, 800f, 9000f), Vec3.Forward));
             Assert.True((point - new Vec3(0f, RecoveryPilot.ApproachHeight, -RecoveryPilot.ApproachDistance)).Length < 1f, $"{point}");
-            recovery.ApproachIntent(Flying(new Vec3(3000f, 800f, 3000f), Vec3.Forward), Jet(), out bool far);
+            recovery.ApproachIntent(Flying(new Vec3(3000f, 800f, 3000f), Vec3.Forward), Jet(), 0f, Dt, out bool far);
             Assert.False(far);
-            FlightIntent intent = recovery.ApproachIntent(Flying(new Vec3(300f, 500f, -5200f), Vec3.Forward), Jet(), out bool near);
+            FlightIntent intent = recovery.ApproachIntent(Flying(new Vec3(300f, 500f, -5200f), Vec3.Forward), Jet(), 0f, Dt, out bool near);
             Assert.True(near);
             Assert.True((intent.Ref.Pos - point).Length < 1f);
+        }
+
+        private static AircraftState AtApproach(RecoveryPilot r) =>
+            Flying(r.ApproachPoint(Flying(new Vec3(0f, 800f, -9000f), Vec3.Forward)) + new Vec3(100f, 0f, 0f), Vec3.Forward);
+
+        [Fact]
+        public void TheWingStacksAtTheApproachPointOneLevelPerMember()
+        {
+            // Review M3b C1: a whole-wing RTB flew every member to one point with no separation.
+            var field = new FieldTraffic(TestFields.WithServicePointAndExit(), 0, false);
+            var first = new RecoveryPilot(1, field, AirframeClass.FixedWing, RecoveryIntent.Rtb, 0);
+            var third = new RecoveryPilot(3, field, AirframeClass.FixedWing, RecoveryIntent.Rtb, 2);
+            AircraftState s = Flying(new Vec3(0f, 800f, 9000f), Vec3.Forward);
+            Assert.Equal(2f * RecoveryPilot.StackStep, third.ApproachPoint(s).Y - first.ApproachPoint(s).Y, 1);
+        }
+
+        [Fact]
+        public void OnlyOneJetAtATimeIsHandedToTheLandingTheNextAfterTheSpacing()
+        {
+            // Review M3b C1: members arriving together were handed over within a tick into one pattern.
+            var field = new FieldTraffic(TestFields.WithServicePointAndExit(), 0, false);
+            var a = new RecoveryPilot(1, field, AirframeClass.FixedWing, RecoveryIntent.Rtb, 0);
+            var b = new RecoveryPilot(2, field, AirframeClass.FixedWing, RecoveryIntent.Rtb, 1);
+            a.ApproachIntent(AtApproach(a), Jet(), 10f, Dt, out bool aGoes);
+            Assert.True(aGoes);
+            a.LandingBegun(10f);
+            b.ApproachIntent(AtApproach(b), Jet(), 11f, Dt, out bool bGoes);
+            Assert.False(bGoes, "the second waits while the first lands");
+            b.ApproachIntent(AtApproach(b), Jet(), 10f + FieldTraffic.LandingSpacingSeconds + 1f, Dt, out bGoes);
+            Assert.True(bGoes, "the next follows once the spacing has passed");
+        }
+
+        [Fact]
+        public void AJetDownFreesTheLandingForTheNextAtOnce()
+        {
+            var field = new FieldTraffic(TestFields.WithServicePointAndExit(), 0, false);
+            var a = new RecoveryPilot(1, field, AirframeClass.FixedWing, RecoveryIntent.Rtb, 0);
+            var b = new RecoveryPilot(2, field, AirframeClass.FixedWing, RecoveryIntent.Rtb, 1);
+            a.ApproachIntent(AtApproach(a), Jet(), 10f, Dt, out _);
+            a.LandingBegun(10f);
+            a.Landed(field, new TestGroundPlant(new Pose(new Vec3(0f, 0f, 930f), Vec3.Forward)).Read(Dt), 40f, new WingEventRing(), 0);
+            b.ApproachIntent(AtApproach(b), Jet(), 41f, Dt, out bool bGoes);
+            Assert.True(bGoes);
+        }
+
+        [Fact]
+        public void AJetWaitingToLandOrbitsTheApproachPoint()
+        {
+            var field = new FieldTraffic(TestFields.WithServicePointAndExit(), 0, false);
+            var a = new RecoveryPilot(1, field, AirframeClass.FixedWing, RecoveryIntent.Rtb, 0);
+            var b = new RecoveryPilot(2, field, AirframeClass.FixedWing, RecoveryIntent.Rtb, 1);
+            a.ApproachIntent(AtApproach(a), Jet(), 10f, Dt, out _);
+            a.LandingBegun(10f);
+            AircraftState s = AtApproach(b);
+            Vec3 point = b.ApproachPoint(s);
+            float radius = HoldOrbit.RadiusFor(FormationPilot.OrbitSpeed(Jet()));
+            Vec3 first = b.ApproachIntent(s, Jet(), 11f, Dt, out _).Ref.Pos;
+            Vec3 later = first;
+            for (int i = 1; i <= 10 * 30; i++) later = b.ApproachIntent(s, Jet(), 11f + i * Dt, Dt, out _).Ref.Pos;
+            Assert.Equal(radius, (first - point).Horizontal.Length, 0);
+            Assert.Equal(radius, (later - point).Horizontal.Length, 0);
+            Assert.True((later - first).Length > 100f, "the rabbit goes round");
+            Assert.Equal(point.Y, later.Y, 1);
+        }
+
+        [Fact]
+        public void AfterAFailedLandingItWaitsBeforeTryingAgain()
+        {
+            // Review M3b I1: a landing failing at the approach point was retried on the next tick (three tries in ~80 ms).
+            var field = new FieldTraffic(TestFields.WithServicePointAndExit(), 0, false);
+            var a = new RecoveryPilot(1, field, AirframeClass.FixedWing, RecoveryIntent.Rtb, 0);
+            a.ApproachIntent(AtApproach(a), Jet(), 10f, Dt, out _);
+            a.LandingBegun(10f);
+            a.LandingFailed(10f, new WingEventRing(), 0);
+            a.ApproachIntent(AtApproach(a), Jet(), 11f, Dt, out bool again);
+            Assert.False(again);
+            a.ApproachIntent(AtApproach(a), Jet(), 10f + RecoveryPilot.RetrySeconds + 0.1f, Dt, out again);
+            Assert.True(again);
+        }
+
+        [Fact]
+        public void WithNoStandLeftALandedJetGoesBackToTheReserveEvenOnRefit()
+        {
+            // Review M3b I2: a jet with nowhere to stand must not be serviced on the runway.
+            var field = new FieldTraffic(TestFields.WithServicePointAndExit(), 0, false);
+            for (int n = 0; n < field.Graph.NodeCount; n++) field.Obstacles.Add(field.Graph.NodePos(n));
+            var recovery = new RecoveryPilot(1, field, AirframeClass.FixedWing, RecoveryIntent.Refit);
+            var events = new WingEventRing();
+            recovery.LandingBegun(0f);
+            recovery.Landed(field, new TestGroundPlant(new Pose(new Vec3(0f, 0f, 930f), Vec3.Forward)).Read(Dt), 5f, events, 0);
+            Assert.Equal(RecoveryAction.Reserve, recovery.Update(5f, 0.5f, 1f, events, 0));
         }
 
         [Fact]

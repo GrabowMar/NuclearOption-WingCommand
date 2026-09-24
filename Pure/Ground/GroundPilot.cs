@@ -91,6 +91,7 @@ namespace WingCommand
         private float[] cum = new float[0];
         private int progress;
         private float phaseStart = float.NaN, liftoffTime = float.NaN, settleStart = float.NaN, rollStart = float.NaN;
+        private int restands;
         private bool enqueued, taxiReleased, clearedThreshold, rolling, airborneReported, exitedHangar, relocationPending, relocationWanted;
         private Pose relocation;
         private Vec3 relocateFrom;
@@ -108,6 +109,17 @@ namespace WingCommand
             this.startNode = startNode;
             lastPose = spawn;
         }
+
+        /// <summary>A fallback stand keeps this far outside every runway's edges; a stand found taken on the way is given up
+        /// for another at most <see cref="MaxRestands"/> times.</summary>
+        public static float StandRunwayMargin = 30f;
+        public static int MaxRestands = 2;
+
+        /// <summary>The stand it taxis to or stands on (−1: none, or standing where it stopped).</summary>
+        public int StandNode => standNode;
+
+        /// <summary>Arriving and still on a runway (it keeps the field's departure runway busy, review M3b I3).</summary>
+        public bool ArrivingOnRunway => arriving && Phase == GroundPhase.TaxiIn && OnRunway(lastPose.Pos, 0f);
 
         private int StartNode(Vec3 pos) =>
             hangar >= 0 ? field.Graph.HangarExit(hangar) : startNode >= 0 ? startNode : field.Graph.NearestNode(pos);
@@ -132,9 +144,10 @@ namespace WingCommand
             arriving = true;
             standNode = stand;
             enqueued = relocationWanted = false;
+            restands = 0;
             backEdge = deadEndEdge = -1;
             RouteFrom(new[] { s.Pos }, ArrivalStart(s));
-            Watchdog.Restart(s.Pos);
+            Watchdog.Rearm(s.Pos);
             Enter(GroundPhase.TaxiIn, time);
             Log(events, time, slot, WingEventKind.Taxiing);
             return true;
@@ -167,22 +180,32 @@ namespace WingCommand
             phaseStart = float.NaN;
         }
 
-        /// <summary>The nearest stand nobody else has: service points, else hangar exits, else the node nearest the field
-        /// centre.</summary>
-        private int ChooseStand(Vec3 pos)
+        /// <summary>The nearest stand nobody else has (other than <paramref name="except"/>): service points, else hangar
+        /// exits, else a taxiway node at least <see cref="StandRunwayMargin"/> off every runway — a dead end (parking)
+        /// first. −1 when there is none.</summary>
+        private int ChooseStand(Vec3 pos, int except = -1)
         {
             TaxiGraph g = field.Graph;
             int best = -1;
             float bestD = float.MaxValue;
-            for (int i = 0; i < field.Field.ServicePoints.Length; i++) ConsiderStand(g.ServiceNode(i), pos, ref best, ref bestD);
+            for (int i = 0; i < field.Field.ServicePoints.Length; i++) ConsiderStand(g.ServiceNode(i), except, pos, ref best, ref bestD);
             if (best < 0)
-                for (int h = 0; h < field.Field.Hangars.Length; h++) ConsiderStand(g.HangarExit(h), pos, ref best, ref bestD);
-            return best >= 0 ? best : g.NearestNode(field.Field.Center);
+                for (int h = 0; h < field.Field.Hangars.Length; h++) ConsiderStand(g.HangarExit(h), except, pos, ref best, ref bestD);
+            if (best >= 0) return best;
+            int end = -1;
+            float endD = float.MaxValue;
+            for (int n = 0; n < g.NodeCount; n++)
+            {
+                if (g.Kind(n) != NodeKind.Road || OnRunway(g.NodePos(n), StandRunwayMargin)) continue;
+                if (g.EdgesOf(n).Count == 1) ConsiderStand(n, except, pos, ref end, ref endD);
+                else ConsiderStand(n, except, pos, ref best, ref bestD);
+            }
+            return end >= 0 ? end : best;
         }
 
-        private void ConsiderStand(int node, Vec3 pos, ref int best, ref float bestD)
+        private void ConsiderStand(int node, int except, Vec3 pos, ref int best, ref float bestD)
         {
-            if (node < 0 || !field.StandFree(node, Owner)) return;
+            if (node < 0 || node == except || !field.StandFree(node, Owner)) return;
             int owner = field.Reservations.OwnerOfNode(node);
             Vec3 at = field.Graph.NodePos(node);
             if ((owner >= 0 && owner != Owner) || field.Occupied(at, ServiceSpots.ClearRadius, Owner)) return;
@@ -190,6 +213,45 @@ namespace WingCommand
             if (d >= bestD) return;
             bestD = d;
             best = node;
+        }
+
+        private bool OnRunway(Vec3 pos, float margin)
+        {
+            foreach (RunwaySample r in field.Field.Runways)
+                if (r.Contains(pos, margin)) return true;
+            return false;
+        }
+
+        /// <summary>The stand was taken on the way (review M3b I6): another one; else, once off the runway, it stands where
+        /// it is (the engine then treats it as on its stand). On a runway it tries again at the watchdog's next cycle.</summary>
+        private bool Restand(in AircraftState s, float time, WingEventRing events, int slot)
+        {
+            relocationWanted = false;
+            int next = restands < MaxRestands ? ChooseStand(s.Pos, standNode) : -1;
+            if (next >= 0)
+            {
+                restands++;
+                field.Reservations.ReleaseAll(Owner);
+                field.TakeStand(Owner, next);
+                standNode = next;
+                backEdge = deadEndEdge = -1;
+                RouteFrom(new[] { s.Pos }, ArrivalStart(s));
+                Watchdog.Rearm(s.Pos);
+                Log(events, time, slot, WingEventKind.Taxiing);
+                return true;
+            }
+            if (OnRunway(s.Pos, 0f))
+            {
+                Watchdog.Rearm(s.Pos);
+                return false;
+            }
+            field.Reservations.ReleaseAll(Owner);
+            field.LeaveStand(Owner);
+            holdClaim[0] = field.Graph.NearestNode(s.Pos);
+            field.Reservations.TryAdvance(Owner, TaxiPriority.TaxiIn, holdClaim, noEdges, 0, 0);
+            StandHere(new Pose(s.Pos, s.Fwd), time);
+            Log(events, time, slot, WingEventKind.Parked);
+            return true;
         }
 
         /// <summary>On a runway: the nearest runway exit ahead (else the nearest one); elsewhere the nearest node.</summary>
@@ -233,6 +295,7 @@ namespace WingCommand
         {
             field.Report(Owner, s.Pos);
             lastPose = new Pose(s.Pos, s.Fwd);
+            field.ReportArriving(Owner, ArrivingOnRunway);
             ControlOutput o;
             switch (Phase)
             {
@@ -312,7 +375,7 @@ namespace WingCommand
             if (relocationWanted)
             {
                 if ((s.Pos - relocateFrom).Horizontal.Length > RelocateCancelMetres) relocationWanted = false;
-                else if (Relocate(time, events, slot)) return new ControlOutput { Brake = 1f };
+                else if (Relocate(s, time, events, slot)) return new ControlOutput { Brake = 1f };
             }
             float along = Along(s.Pos);
             int step = StepAt(along);
@@ -443,7 +506,7 @@ namespace WingCommand
                 case WatchdogAction.Relocate:
                     relocationWanted = true;
                     relocateFrom = s.Pos;
-                    if (Relocate(time, events, slot)) return new ControlOutput { Brake = 1f };
+                    if (Relocate(s, time, events, slot)) return new ControlOutput { Brake = 1f };
                     break;
             }
 
@@ -786,13 +849,14 @@ namespace WingCommand
             (field.Reservations.Blocked(e) ? RerouteCost : 0f) + (field.Reservations.Against(e, from) ? OppositeCost : 0f);
 
         /// <summary>Once, when the goal (hold-short or stand) is free: claimed, then the engine moves the aircraft there.
-        /// False while it is not free.</summary>
-        private bool Relocate(float time, WingEventRing events, int slot)
+        /// False while it is not free (an arriving member looks for another stand instead, <see cref="Restand"/>).</summary>
+        private bool Relocate(in AircraftState s, float time, WingEventRing events, int slot)
         {
             int hold = Goal;
             Vec3 at = field.Graph.NodePos(hold);
             int owner = field.Reservations.OwnerOfNode(hold);
-            if ((owner >= 0 && owner != Owner) || field.Occupied(at, RelocateClearRadius, Owner)) return false;
+            if ((owner >= 0 && owner != Owner) || field.Occupied(at, RelocateClearRadius, Owner))
+                return arriving && Restand(s, time, events, slot);
             field.Reservations.ReleaseAll(Owner);
             holdClaim[0] = hold;
             field.Reservations.TryAdvance(Owner, arriving ? TaxiPriority.TaxiIn : TaxiPriority.Departing, holdClaim, noEdges, 0, 0);

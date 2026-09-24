@@ -40,6 +40,13 @@ namespace WingCommand
             return WatchdogAction.None;
         }
 
+        /// <summary>A new goal: reroute and relocation may each fire once more.</summary>
+        public void Rearm(Vec3 pos)
+        {
+            rerouted = relocated = false;
+            Restart(pos);
+        }
+
         /// <summary>After a relocation or a reroute the clock restarts from where the aircraft is.</summary>
         public void Restart(Vec3 pos)
         {

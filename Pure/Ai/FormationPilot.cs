@@ -122,7 +122,7 @@ namespace WingCommand
         }
 
         /// <summary>Flies an intent of its own (the recovery approach) through this member's pipeline, with its own terrain
-        /// floor and no formation bias.</summary>
+        /// floor and the wing's collision bias.</summary>
         public ControlOutput FlyIntent(in FlightIntent intent, WingFrame frame, in AircraftState s, AirframeProfile p, float dt)
         {
             LastIntent = intent;
@@ -131,7 +131,7 @@ namespace WingCommand
             var ctx = new LimitContext
             {
                 FloorY = near ? frame.NearFloorY[Slot] : float.NaN, NearFloorY = frame.NearFloorY[Slot], HasNearFloor = near,
-                Clearance = Clearance, Aggression = intent.Aggression,
+                Clearance = Clearance, Aggression = intent.Aggression, CollisionBias = frame.Bias[Slot],
             };
             return LastOutput = Pipeline.Step(guidance, s, ctx, p, dt);
         }

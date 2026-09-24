@@ -164,5 +164,68 @@ namespace WingCommand.PureTests
             }
             Assert.Equal(GroundPhase.ClimbOut, pilot.Phase);
         }
+        [Fact]
+        public void TheLastResortStandIsARoadNodeOffEveryRunway()
+        {
+            // Review M3b I2: with the service points and hangar exits taken, the stand was the node nearest the field
+            // centre — on five of eight real fields a runway node.
+            AirbaseSample sample = TestFields.WithServicePointAndExit();
+            sample.Center = new Vec3(0f, 0f, 1000f);
+            var field = new FieldTraffic(sample, 0, false);
+            field.Obstacles.Add(new Vec3(-200f, 0f, 300f));
+            for (int h = 0; h < sample.Hangars.Length; h++) field.Obstacles.Add(field.Graph.NodePos(field.Graph.HangarExit(h)));
+            var landed = new Pose(new Vec3(0f, 0f, 930f), Vec3.Forward);
+            var pilot = new GroundPilot(4, field, AirframeClass.FixedWing, landed, -1);
+            Assert.True(pilot.TaxiIn(new TestGroundPlant(landed).Read(Dt), 0f, new WingEventRing(), 0));
+            Vec3 stand = field.Graph.NodePos(pilot.StandNode);
+            Assert.Equal(NodeKind.Road, field.Graph.Kind(pilot.StandNode));
+            foreach (RunwaySample r in sample.Runways) Assert.False(r.Contains(stand, GroundPilot.StandRunwayMargin), $"stand {stand}");
+        }
+
+        [Fact]
+        public void AMemberTaxiingInOnTheRunwayKeepsItBusyForDepartures()
+        {
+            // Review M3b I3: the runway counted as free while our landed member still rolled along it to an exit.
+            var field = new FieldTraffic(TestFields.WithServicePointAndExit(), 0, false);
+            var landed = new Pose(new Vec3(0f, 0f, 930f), Vec3.Forward);
+            var plant = new TestGroundPlant(landed) { Speed = 10f };
+            var pilot = new GroundPilot(4, field, AirframeClass.FixedWing, landed, -1);
+            IFlightPipeline pipeline = FlightStack.NewPipeline(AirframeClass.FixedWing);
+            var events = new WingEventRing();
+            Assert.True(pilot.TaxiIn(plant.Read(Dt), 0f, events, 0));
+            plant.Step(pilot.Step(plant.Read(Dt), Jet(), pipeline, 0f, Dt, events, 0), Dt);
+            field.Step(Dt);
+            Assert.True(field.Departures.RunwayBusy);
+            for (int i = 1; i < 240 * 30 && pilot.Phase == GroundPhase.TaxiIn; i++)
+            {
+                plant.Step(pilot.Step(plant.Read(Dt), Jet(), pipeline, i * Dt, Dt, events, 0), Dt);
+                field.Step(Dt);
+            }
+            Assert.Equal(GroundPhase.Stand, pilot.Phase);
+            Assert.False(field.Departures.RunwayBusy);
+        }
+
+        [Fact]
+        public void AMemberWhoseStandIsTakenOnTheWayStandsElsewhere()
+        {
+            // Review M3b I6: a stand occupied after it was chosen stranded the member short of it for good.
+            var field = new FieldTraffic(TestFields.WithServicePointAndExit(), 0, false);
+            var landed = new Pose(new Vec3(0f, 0f, 930f), Vec3.Forward);
+            var plant = new TestGroundPlant(landed) { Speed = 10f };
+            var pilot = new GroundPilot(4, field, AirframeClass.FixedWing, landed, -1);
+            IFlightPipeline pipeline = FlightStack.NewPipeline(AirframeClass.FixedWing);
+            var events = new WingEventRing();
+            Assert.True(pilot.TaxiIn(plant.Read(Dt), 0f, events, 0));
+            Assert.Equal(field.Graph.ServiceNode(0), pilot.StandNode);
+            field.Obstacles.Add(new Vec3(-200f, 0f, 300f));
+            for (int i = 0; i < 400 * 30 && pilot.Phase == GroundPhase.TaxiIn; i++)
+            {
+                field.Step(Dt);
+                plant.Step(pilot.Step(plant.Read(Dt), Jet(), pipeline, i * Dt, Dt, events, 0), Dt);
+            }
+            Assert.Equal(GroundPhase.Stand, pilot.Phase);
+            Assert.True((plant.Pos - new Vec3(-200f, 0f, 300f)).Horizontal.Length > ServiceSpots.ClearRadius, $"stands at {plant.Pos}");
+            Assert.False(field.Runway.Contains(plant.Pos, FieldTraffic.RunwayMargin), $"stands at {plant.Pos}");
+        }
     }
 }

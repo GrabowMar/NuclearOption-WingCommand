@@ -51,6 +51,22 @@ namespace WingCommand.PureTests
         }
 
         [Fact]
+        public void AnOwnIntentStillFliesTheWingsCollisionBias()
+        {
+            // Review M3b C1: the recovery approach dropped the frame's collision bias.
+            var rig = new Rig();
+            WingFrame frame = rig.Step();
+            frame.Bias[0] = new Vec3(3f, 0f, 0f);
+            AircraftState s = TestStates.Flying(rig.LeaderPos + new Vec3(-80f, 0f, -80f), North);
+            var intent = new FlightIntent
+            {
+                Ref = new RefState(s.Pos + North * 10f, North, Vec3.Zero), Limits = new SpeedLimits(80f, 300f, false, true),
+            };
+            rig.Pilot.FlyIntent(intent, frame, s, Fighter, Dt);
+            Assert.True(rig.Pilot.Pipeline.Report.CollisionActive);
+        }
+
+        [Fact]
         public void IntentCarriesTheLeadersHeadingForSlowMembersToFace()
         {
             var rig = new Rig();

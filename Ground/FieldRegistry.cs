@@ -30,7 +30,10 @@ namespace WingCommand
             AirbaseSample sample = AirbaseAdapter.Read(airbase);
             if (!FieldTraffic.TryPickRunway(sample, out int runway, out bool reverse)) return null;
             var traffic = new FieldTraffic(sample, runway, reverse);
-            fields.Add(new Entry { Airbase = airbase, Traffic = traffic });
+            var entry = new Entry { Airbase = airbase, Traffic = traffic };
+            fields.Add(entry);
+            // Foreign aircraft known at once: a stand chosen right after a landing here must see them (review M3b I6).
+            Refresh(entry, WingService.Instance);
             Plugin.Logger.LogInfo($"[Ground] {sample.Name}: {traffic.Graph.NodeCount} nodes, {traffic.Graph.EdgeCount} edges, " +
                                   $"{sample.Hangars.Length} hangars, runway {runway}{(reverse ? " reversed" : "")} " +
                                   $"({sample.Runways[runway].Width:0} m wide)");

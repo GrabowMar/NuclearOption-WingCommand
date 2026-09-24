@@ -14,6 +14,9 @@ namespace WingCommand
     {
         public static float DeadlockPeriod = 1f, RunwayMargin = 5f, BlockSeconds = 20f, BlockCorridor = 10f, StandingRadius = 3f;
         public static float PassedRadius = 20f;
+        /// <summary>A jet handed to the game's landing has the runway to itself until it is down, its landing fails, or
+        /// this long has passed (the next then lands behind it: the game spaces aircraft already on final).</summary>
+        public static float LandingSpacingSeconds = 60f;
 
         public readonly AirbaseSample Field;
         public readonly TaxiGraph Graph;
@@ -36,6 +39,9 @@ namespace WingCommand
         private List<float> standingFor = new List<float>(), nextStandingFor = new List<float>();
         private readonly bool[] blockedHere;
         private float sinceCheck;
+        private int lander = -1;
+        private readonly HashSet<int> onRunway = new HashSet<int>();
+        private float landerSince;
 
         public FieldTraffic(AirbaseSample field, int runwayIndex, bool reverse)
         {
@@ -70,6 +76,28 @@ namespace WingCommand
         }
 
         public void Report(int owner, Vec3 pos) => positions[owner] = pos;
+
+        /// <summary>An arriving member still on a runway (it keeps the departure runway busy while on it).</summary>
+        public void ReportArriving(int owner, bool onTheRunway)
+        {
+            if (onTheRunway) onRunway.Add(owner);
+            else onRunway.Remove(owner);
+        }
+
+        /// <summary>The runway is <paramref name="owner"/>'s to land on (spec M3 §4, review M3b C1): nobody else was handed
+        /// to the game's landing here within <see cref="LandingSpacingSeconds"/>, or it is already its own.</summary>
+        public bool TryClaimLanding(int owner, float time)
+        {
+            if (lander >= 0 && lander != owner && time - landerSince < LandingSpacingSeconds) return false;
+            if (lander != owner) landerSince = time;
+            lander = owner;
+            return true;
+        }
+
+        public void ReleaseLanding(int owner)
+        {
+            if (lander == owner) lander = -1;
+        }
 
         public bool TryGetPosition(int owner, out Vec3 pos) => positions.TryGetValue(owner, out pos);
 
@@ -136,6 +164,8 @@ namespace WingCommand
             bool busy = false;
             foreach (Vec3 o in Obstacles)
                 if (Runway.Contains(o, RunwayMargin)) busy = true;
+            foreach (int owner in onRunway)
+                if (positions.TryGetValue(owner, out Vec3 at) && Runway.Contains(at, RunwayMargin)) busy = true;
             Departures.RunwayBusy = busy;
             TrackStanding(dt);
             sinceCheck += dt;
@@ -207,6 +237,8 @@ namespace WingCommand
             stands.Remove(owner);
             routes.Remove(owner);
             ConsumeVictim(owner);
+            ReleaseLanding(owner);
+            onRunway.Remove(owner);
         }
     }
 }

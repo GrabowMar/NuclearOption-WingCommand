@@ -23,6 +23,11 @@ namespace WingCommand
         public float BingoClock, BingoFieldAt;
         /// <summary>Diagnostics: when the member last came to a stop on the ground, and whether that stop was logged.</summary>
         public float StoppedSince = float.NaN;
+        /// <summary>Still on the game's landing list of this field after touchdown (until off the runway).</summary>
+        public Airbase ListedAt;
+        public float ListedUntil;
+        /// <summary>The eject guard blocked the game's landing state ejecting it: take it back.</summary>
+        public bool EjectBlocked;
         public bool StopLogged;
         public Airbase BingoField;
         /// <summary>Stable for the member's life in the wing (slots renumber when a member ahead leaves).</summary>
