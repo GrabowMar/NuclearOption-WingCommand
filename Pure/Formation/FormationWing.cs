@@ -18,6 +18,9 @@ namespace WingCommand
         /// <summary>Stable for the member's life in the wing (slots renumber when a member ahead leaves); trail state is
         /// kept by it.</summary>
         public int Id;
+        /// <summary>Collision rank (a higher rank yields); 0 means index + 1, the one-element rule. Elements pass seat + 1
+        /// so members of different elements yield the same way (spec WMC program §3.3).</summary>
+        public int Rank;
         /// <summary>Still on the ground (taxiing, lining up, rolling): never holds the stagger gate behind it and is not
         /// part of the collision check.</summary>
         public bool Grounded;
@@ -105,17 +108,20 @@ namespace WingCommand
 
         public WingFrame Update(in AnchorSample leader, WingMemberInput[] members, int count, float floorY,
             float clearance, float leaderRadius, float dt) =>
-            Update(leader, false, default, members, count, floorY, clearance, leaderRadius, dt);
+            Update(leader, false, default, members, count, null, 0, floorY, clearance, leaderRadius, dt);
 
         /// <summary>As <see cref="Update(in AnchorSample, WingMemberInput[], int, float, float, float, float)"/>, with
         /// <paramref name="body"/> as the wing's collision body 0 instead of the anchor (the player's aircraft while the
         /// wing forms on a task's virtual lead, review M4a C2; not present: no body 0).</summary>
         public WingFrame Update(in AnchorSample leader, in AnchorSample body, WingMemberInput[] members, int count, float floorY,
             float clearance, float leaderRadius, float dt) =>
-            Update(leader, true, body, members, count, floorY, clearance, leaderRadius, dt);
+            Update(leader, true, body, members, count, null, 0, floorY, clearance, leaderRadius, dt);
 
-        private WingFrame Update(in AnchorSample leader, bool separateBody, in AnchorSample body, WingMemberInput[] members,
-            int count, float floorY, float clearance, float leaderRadius, float dt)
+        /// <summary>The full update: <paramref name="separateBody"/> makes <paramref name="body"/> the collision body 0 instead
+        /// of the anchor; <paramref name="others"/> are aircraft outside this wing's slots (other elements' members) that
+        /// its members also keep clear of, each with its own rank (spec WMC program §3.3).</summary>
+        public WingFrame Update(in AnchorSample leader, bool separateBody, in AnchorSample body, WingMemberInput[] members,
+            int count, CollisionBody[] others, int otherCount, float floorY, float clearance, float leaderRadius, float dt)
         {
             count = Math.Min(count, N);
             Frame.Leader = Estimator.Update(leader, dt);
@@ -162,10 +168,12 @@ namespace WingCommand
             for (int i = 0; i < count; i++)
                 bodies[i + 1] = new CollisionBody
                 {
-                    Pos = members[i].State.Pos, Vel = members[i].State.Vel, Radius = members[i].Radius, Rank = i + 1,
-                    Ignored = members[i].Grounded,
+                    Pos = members[i].State.Pos, Vel = members[i].State.Vel, Radius = members[i].Radius,
+                    Rank = members[i].Rank > 0 ? members[i].Rank : i + 1, Ignored = members[i].Grounded,
                 };
-            Collision.Update(bodies, count + 1, Frame.Spacing, dt);
+            int extra = others == null ? 0 : Math.Min(otherCount, bodies.Length - count - 1);
+            for (int k = 0; k < extra; k++) bodies[count + 1 + k] = others[k];
+            Collision.Update(bodies, count + 1 + extra, Frame.Spacing, dt);
             for (int i = 0; i < count; i++)
             {
                 Frame.Bias[i] = Collision.Bias[i + 1];

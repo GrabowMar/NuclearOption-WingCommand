@@ -24,6 +24,9 @@ namespace WingCommand
         public DefenceCommand LastDefence;
         /// <summary>Slot index; the engine reassigns it when a member ahead of it is lost.</summary>
         public int Slot;
+        /// <summary>The member's seat in the wing (its `#n` is seat + 2): events and calls name it; the slot is its place in
+        /// its element's shape (spec WMC program §3.3). Equal to the slot until the wing splits.</summary>
+        public int Seat;
         public float Precision = 1f, Aggression = 0.5f, Clearance = 60f;
         /// <summary>Spec M5 §11: EarlyWarning (seconds off the missile reaction) and BreakTurn (instant inside this range).</summary>
         public float ReactionDelta, BreakRange;
@@ -41,6 +44,7 @@ namespace WingCommand
         public FormationPilot(int slot, AirframeClass cls)
         {
             Slot = slot;
+            Seat = slot;
             Pipeline = FlightStack.NewPipeline(cls);
         }
 
@@ -75,7 +79,7 @@ namespace WingCommand
                 Mind.Force(to);
                 events?.Push(new WingEvent
                 {
-                    Time = time, Member = Slot, Kind = WingEventKind.BehaviourChanged, From = was, To = to,
+                    Time = time, Member = Seat, Kind = WingEventKind.BehaviourChanged, From = was, To = to,
                     Reason = LastDefence.Active ? TransitionReason.MissileInbound : TransitionReason.MissileClear,
                 });
             }
@@ -100,7 +104,7 @@ namespace WingCommand
             {
                 events?.Push(new WingEvent
                 {
-                    Time = time, Member = Slot, Kind = WingEventKind.BehaviourChanged,
+                    Time = time, Member = Seat, Kind = WingEventKind.BehaviourChanged,
                     From = from, To = Mind.Current, Reason = reason,
                 });
                 if (Mind.Current == BehaviourId.HoldOverhead) orbit.Begin(HoldCenter(leader), OrbitSpeed(p), s.Pos);
@@ -196,7 +200,7 @@ namespace WingCommand
             Mind.Force(BehaviourId.Rejoin);
             events?.Push(new WingEvent
             {
-                Time = time, Member = Slot, Kind = WingEventKind.BehaviourChanged,
+                Time = time, Member = Seat, Kind = WingEventKind.BehaviourChanged,
                 From = BehaviourId.Defend, To = BehaviourId.Rejoin, Reason = TransitionReason.Commanded,
             });
         }
@@ -209,7 +213,7 @@ namespace WingCommand
             if (from == BehaviourId.Defend || !Mind.Force(BehaviourId.Rejoin)) return;
             events?.Push(new WingEvent
             {
-                Time = time, Member = Slot, Kind = WingEventKind.BehaviourChanged,
+                Time = time, Member = Seat, Kind = WingEventKind.BehaviourChanged,
                 From = from, To = BehaviourId.Rejoin, Reason = TransitionReason.Commanded,
             });
         }
@@ -220,7 +224,7 @@ namespace WingCommand
         /// <summary>Hold orbit speed: three quarters of cruise, never under 1.5 × the loaded minimum.</summary>
         internal static float OrbitSpeed(AirframeProfile p) => Math.Max(1.5f * p.MinimumSpeed(1f), 0.75f * p.CruiseSpeed);
 
-        private void Log(WingEventRing events, float time, WingEventKind kind) =>
-            events?.Push(new WingEvent { Time = time, Member = Slot, Kind = kind });
+        internal void Log(WingEventRing events, float time, WingEventKind kind) =>
+            events?.Push(new WingEvent { Time = time, Member = Seat, Kind = kind });
     }
 }

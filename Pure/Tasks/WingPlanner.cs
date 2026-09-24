@@ -31,6 +31,11 @@ namespace WingCommand
         /// <summary>The point the lead flies to (Move, Route, Patrol), −1 in an orbit or hold.</summary>
         public int Leg { get; private set; } = -1;
 
+        /// <summary>The element this planner flies (0 = A); its task events carry it (spec WMC program §3.3).</summary>
+        public readonly int Element;
+
+        public WingPlanner(int element = 0) => Element = element;
+
         public void Reset()
         {
             Current = null;
@@ -244,7 +249,7 @@ namespace WingCommand
 
         private Vec3 Point(in Waypoint p) => new Vec3(p.X, Lead.Position.Y, p.Z);
 
-        private static void Log(WingEventRing events, float time, WingEventKind kind, TransitionReason reason, TaskKind task) =>
-            events?.Push(new WingEvent { Time = time, Member = -1, Kind = kind, Reason = reason, Task = task });
+        private void Log(WingEventRing events, float time, WingEventKind kind, TransitionReason reason, TaskKind task) =>
+            events?.Push(new WingEvent { Time = time, Member = -1, Kind = kind, Reason = reason, Task = task, Element = (byte)Element });
     }
 }

@@ -322,5 +322,31 @@ namespace WingCommand.PureTests
                 Assert.True(Scalar.IsFinite(frame.Slots[i].Ref.Pos.X) && Scalar.IsFinite(frame.Slots[i].Ref.Vel.Z) &&
                             Scalar.IsFinite(frame.Slots[i].Ref.Acc.Y));
         }
+
+        [Fact]
+        public void ForeignBodiesPushTheBias()
+        {
+            // Spec WMC program §3.3: another element's member closing head-on, 300 m ahead of ours.
+            WingMemberInput[] m = Members(new Vec3(0f, 2000f, -2000f));
+            m[0].Rank = 3;
+            var others = new[] { new CollisionBody { Pos = new Vec3(0f, 2000f, -1700f), Vel = new Vec3(0f, 0f, -200f), Radius = 8f, Rank = 2 } };
+            float alone = new FormationWing(FingerFour(), 80f)
+                .Update(Leader(), false, default, m, 1, null, 0, float.NaN, 60f, 8f, Dt).Bias[0].Length;
+            float crossed = new FormationWing(FingerFour(), 80f)
+                .Update(Leader(), false, default, m, 1, others, 1, float.NaN, 60f, 8f, Dt).Bias[0].Length;
+            Assert.Equal(0f, alone, 3);
+            Assert.True(crossed > 0f);
+        }
+
+        [Fact]
+        public void ALowerRankDoesNotYieldToAForeignBody()
+        {
+            WingMemberInput[] m = Members(new Vec3(0f, 2000f, -2000f));
+            m[0].Rank = 1;
+            var others = new[] { new CollisionBody { Pos = new Vec3(0f, 2000f, -1700f), Vel = new Vec3(0f, 0f, -200f), Radius = 8f, Rank = 5 } };
+            WingFrame f = new FormationWing(FingerFour(), 80f)
+                .Update(Leader(), false, default, m, 1, others, 1, float.NaN, 60f, 8f, Dt);
+            Assert.Equal(0f, f.Bias[0].Length, 3);
+        }
     }
 }

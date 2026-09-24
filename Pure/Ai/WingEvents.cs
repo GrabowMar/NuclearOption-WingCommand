@@ -26,6 +26,8 @@ namespace WingCommand
         public TransitionReason Reason;
         /// <summary>The task an event of a task is about.</summary>
         public TaskKind Task;
+        /// <summary>The element the event is about (0 = A).</summary>
+        public byte Element;
     }
 
     /// <summary>Fixed-capacity ring of wing events, oldest first. Push never allocates; when full the oldest
