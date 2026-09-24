@@ -23,7 +23,7 @@ namespace NOAvionics.Ui
         /// <summary>How far a page spine sits inside the panel padding.</summary>
         public const float SpineInset = 14f;
 
-        private const float MetricRowHeight = 64f;
+        private const float MetricRowHeight = 76f;
 
         private readonly GameObject[] pages;
         private readonly Action<int> onTab;
@@ -75,7 +75,7 @@ namespace NOAvionics.Ui
             int metricCount = metrics == null ? 0 : metrics.Length;
 
             var screen = new AvScreen(Math.Max(1, labels.Length), onTab);
-            AvNode shell = AvBox.Column("screen").Pad(AvTokens.Pad).Gaps(AvTokens.Space2)
+            AvNode shell = AvBox.Column("screen").Gaps(AvTokens.Space2)
                 .Add(AvBox.Row("databar").Height(chipCount > 0 ? AvTokens.ScreenHeaderHeight : AvTokens.TitleBarHeight));
 
             if (metricCount > 0)
@@ -87,7 +87,7 @@ namespace NOAvionics.Ui
 
             if (labels.Length > 0)
             {
-                AvNode tabs = AvBox.Row("tabs").Height(AvTokens.TabBarHeight).Gaps(AvTokens.Space1);
+                AvNode tabs = AvBox.Row("tabs").Height(AvTokens.TabBarHeight).Gaps(0f);
                 for (int i = 0; i < labels.Length; i++) tabs.Add(AvBox.Cell("t" + i).Grow());
                 shell.Add(tabs);
             }
@@ -128,18 +128,37 @@ namespace NOAvionics.Ui
             }
 
             screen.Tabs = new AvButton[labels.Length];
+            if (labels.Length > 0)
+                AvStyled.Box(content, shell.At("tabs"), "tabbar");
             for (int i = 0; i < labels.Length; i++)
             {
                 int index = i;
                 screen.Tabs[i] = AvStyled.Button(
                     content, shell.At("tabs.t" + i), labels[i], "tab",
                     () => screen.SetPage(index), AvButtonStyle.Tab);
+                screen.Tabs[i].UseStripSurface();
+                if (i > 0)
+                {
+                    Rect tab = shell.At("tabs.t" + i);
+                    AvKit.Rule(content, new Rect(tab.x, tab.y - 5f, 1f,
+                        tab.height - 10f), AvTheme.Frame);
+                }
+            }
+            if (labels.Length > 0)
+            {
+                Rect tabs = shell.At("tabs");
+                AvKit.Rule(content, new Rect(tabs.x, tabs.y, tabs.width, 1f), AvTheme.Frame);
             }
 
             screen.Body = shell.At("body");
             screen.Status = AvStyled.StatusStrip(content, shell.At("status"), out Image statusRail);
             screen.StatusRail = statusRail;
             screen.displayGlass = AvDisplayGlass.Attach(content);
+            // Glass is kept as the front sibling when native adapters add content later.
+            // Its children therefore give the panel a frame that always paints last.
+            if (screen.displayGlass != null)
+                AvKit.Outline(screen.displayGlass.rectTransform,
+                    new Rect(-6f, 6f, width, height), AvTheme.Frame);
             return screen;
         }
 

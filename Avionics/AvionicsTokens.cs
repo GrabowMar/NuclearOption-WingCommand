@@ -184,9 +184,9 @@ namespace NOAvionics
         /// </summary>
         public const float PanelHeightMax = 896f;
         public const float TitleBarHeight = 28f;
-        public const float ScreenHeaderHeight = 54f;
+        public const float ScreenHeaderHeight = 62f;
         public const float ChipRailHeight = 18f;
-        public const float TabBarHeight = 30f;
+        public const float TabBarHeight = 34f;
         public const float StatusStripHeight = 56f;
 
         // --------------------------------------------------------------- button scales

@@ -92,13 +92,13 @@
 
 /* ------------------------------------------------------------ 4. data bar */
 
-.databar           { height: 54; }
-.id-plate          { background: surface-raised; border: 1 frame; }
+.databar           { height: 62; }
+.id-plate          { background: surface-raised; }
 .id-tag            { color: text-primary; font: 14 bold; tracking: 1; align: center; }
 .databar-state     { font: 13; color: text-primary; tracking: 0; }
 .databar-state-key { font: 13 bold; color: text-primary; tracking: 1; }
 
-.chip        { font: 11; color: text-dim; tracking: 0; background: surface-inert; }
+.chip        { font: 12; color: text-dim; tracking: 0; background: surface-inert; }
 .chip.live   { color: text-primary; }
 .chip.warn   { color: warning; }
 .chip.danger { color: alert; }
@@ -107,13 +107,13 @@
 
 /* -------------------------------------------------------------- 5. metrics */
 
-.metrics       { height: 64; background: surface-sunken; }
-.metric        { pad: 4 10; background: surface-inert; }
+.metrics       { height: 76; background: surface-sunken; }
+.metric        { pad: 5 9; background: surface-inert; }
 .metric-key    { font: 10.5; color: rail-info; tracking: 0; }
-.metric-value  { font: 21 bold; color: text-primary; tabular: on; tracking: 0; }
+.metric-value  { font: 22 bold; color: text-primary; tabular: on; tracking: 0; }
 .metric-unit   { font: 10.5; color: text-dim; tracking: 0; }
-.metric-cap    { font: 10.5; color: text-dim; tracking: 0; align: right; }
-.metric-track  { height: 2; background: surface-track; }
+.metric-cap    { font: 10.5; color: text-dim; tracking: 0; align: left; }
+.metric-track  { height: 3; background: surface-track; }
 
 /* One hero reading per page — a tuned frequency, a countdown. Sized between the
    metric value and a display face, tabular so it does not jitter as it changes. */
@@ -122,7 +122,7 @@
 
 /* ----------------------------------------------------------------- 6. tabs */
 
-.tabbar      { height: 30; border: 1 hairline; background: surface-sunken; }
+.tabbar      { height: 34; border: 1 hairline; background: surface-sunken; }
 .tab         { font: 11 bold; color: text-dim; tracking: 0; background: surface-sunken; border: 1 hairline; align: center; }
 .tab:hover   { color: text-primary; background: surface; border: 1 frame; }
 .tab:latched { color: text-primary; background: surface-raised; border: 1 frame; rail: 2 accent; }

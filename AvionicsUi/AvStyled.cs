@@ -193,16 +193,32 @@ namespace NOAvionics.Ui
         public static DataBar TopBar(
             RectTransform parent, Rect area, string id, int chipCount)
         {
+            bool twoRows = area.height >= AvTokens.ScreenHeaderHeight;
+            // The screen stack reserves one gutter after the header. Give that space to
+            // telemetry so its lower edge meets the connected tab strip.
+            if (twoRows && chipCount > 0)
+                area.height += AvTokens.Space2;
             Box(parent, area, "databar");
 
-            bool twoRows = area.height >= AvTokens.ScreenHeaderHeight;
-            float titleHeight = twoRows ? 26f : area.height;
-            if (twoRows)
-                AvKit.Rule(parent, new Rect(area.x, area.y - titleHeight - 1f, area.width, 1f),
-                           AvTheme.Frame.WithAlpha(0.72f));
+            float titleHeight = twoRows ? 32f : area.height;
             float tagWidth = 20f + id.Length * 9f;
+            if (twoRows)
+            {
+                AvKit.Rule(parent, new Rect(area.x, area.y, area.width, 1f), AvTheme.RailInfo);
+                AvKit.Rule(parent, new Rect(area.x, area.y - titleHeight, area.width, 1f),
+                    AvTheme.Frame);
+                AvKit.Rule(parent, new Rect(area.x, area.y - area.height + 1f, area.width, 1f),
+                    AvTheme.Frame);
+            }
             Box(parent, new Rect(area.x, area.y, tagWidth, titleHeight), "id-plate");
             AvKit.Rule(parent, new Rect(area.x, area.y, 3f, titleHeight), AvTheme.RailInfo);
+            if (twoRows)
+            {
+                AvKit.Rule(parent, new Rect(area.x + tagWidth, area.y, 1f, titleHeight),
+                    AvTheme.Frame);
+                AvKit.Rule(parent, new Rect(area.x + area.width - 58f, area.y,
+                    1f, titleHeight), AvTheme.Frame);
+            }
             Label(parent, new Rect(area.x + 5f, area.y, tagWidth - 5f, titleHeight), id, "id-tag",
                   align: TextAlignmentOptions.Center);
 
@@ -214,20 +230,20 @@ namespace NOAvionics.Ui
             };
             if (twoRows)
                 bar.PageIndex = Label(parent,
-                    new Rect(area.x + area.width - 48f, area.y, 48f, titleHeight),
+                    new Rect(area.x + area.width - 57f, area.y, 51f, titleHeight),
                     "", "databar-state-key", align: TextAlignmentOptions.MidlineRight);
 
             const float preferredChipWidth = 82f;
-            const float chipGap = AvTokens.Space1;
+            float chipGap = twoRows ? 0f : AvTokens.Space1;
             const float stateGap = 8f;
             float gapsWidth = Mathf.Max(0, chipCount - 1) * chipGap;
             float chipWidth = chipCount <= 0 ? 0f : twoRows
-                ? Mathf.Max(0f, (area.width - gapsWidth) / chipCount)
+                ? Mathf.Max(0f, area.width / chipCount)
                 : Mathf.Min(preferredChipWidth, Mathf.Max(0f, (area.width - tagWidth - 140f - stateGap - gapsWidth) / chipCount));
             float chipsWidth = chipCount * chipWidth + gapsWidth;
             float chipsX = twoRows ? area.x : area.x + area.width - chipsWidth;
             float stateX = area.x + tagWidth + stateGap;
-            float stateRight = twoRows ? area.x + area.width - 54f
+            float stateRight = twoRows ? area.x + area.width - 64f
                 : chipCount == 0 ? area.x + area.width : chipsX - stateGap;
             bar.State = Label(parent,
                               new Rect(stateX, area.y, Mathf.Max(0f, stateRight - stateX), titleHeight),
@@ -241,13 +257,18 @@ namespace NOAvionics.Ui
             for (int i = 0; i < chipCount; i++)
             {
                 var chipRect = new Rect(chipsX + i * (chipWidth + chipGap),
-                                        twoRows ? area.y - 32f : area.y - (area.height - 20f) * 0.5f,
-                                        chipWidth, 20f);
+                                        twoRows ? area.y - titleHeight - 1f : area.y - (area.height - 20f) * 0.5f,
+                                        chipWidth, twoRows ? area.height - titleHeight - 1f : 20f);
                 bar.ChipBoxes[i] = Box(parent, chipRect, "chip");
+                if (twoRows && i > 0)
+                    AvKit.Rule(parent, new Rect(chipRect.x, chipRect.y - 5f,
+                        1f, chipRect.height - 10f), AvTheme.Frame);
                 bar.ChipRails[i] = AvKit.Rule(parent,
-                    new Rect(chipRect.x + 6f, chipRect.y - 7f, 4f, 6f), AvTheme.RailInert);
+                    new Rect(chipRect.x + 7f, chipRect.y - (chipRect.height - 10f) * 0.5f,
+                        3f, 10f), AvTheme.RailInert);
                 bar.Chips[i] = Label(parent,
-                    new Rect(chipRect.x + 16f, chipRect.y, Mathf.Max(0f, chipWidth - 20f), chipRect.height),
+                    new Rect(chipRect.x + 16f, chipRect.y,
+                        Mathf.Max(0f, chipWidth - 23f), chipRect.height),
                     "", "chip", align: TextAlignmentOptions.Left);
                 bar.Chips[i].enableWordWrapping = false;
                 bar.Chips[i].enableAutoSizing = true;
@@ -314,31 +335,36 @@ namespace NOAvionics.Ui
         public static Metric MetricCell(RectTransform parent, Rect area, string key, string unit)
         {
             AvStyle style = AvStyleHost.Style("metric");
-            float padL = style.HasPad ? style.PadLeft : 10f;
-            float padR = style.HasPad ? style.PadRight : 10f;
+            float padL = style.HasPad ? style.PadLeft : 14f;
+            float padR = style.HasPad ? style.PadRight : 14f;
+
+            AvKit.Rule(parent, new Rect(area.x + padL - 4f, area.y - 7f, 1f, 46f),
+                       AvTheme.RailInfo.WithAlpha(0.72f));
+            AvKit.Rule(parent, new Rect(area.x + area.width - 10f, area.y - 6f, 8f, 1f),
+                       AvTheme.Frame);
 
             float x = area.x + padL;
             float w = Mathf.Max(0f, area.width - padL - padR);
-            float y = area.y - 2f;
+            float y = area.y - 5f;
 
             var metric = new Metric();
 
-            Label(parent, new Rect(x, y, w, 11f), key, "metric-key");
-            metric.Unit = Label(parent, new Rect(x, y, w, 11f), unit, "metric-unit",
-                                align: TextAlignmentOptions.Right);
+            Label(parent, new Rect(x, y, w, 12f), key, "metric-key");
+            y -= 14f;
+
+            metric.Value = Label(parent, new Rect(x, y, w, 25f), "—", "metric-value");
+            y -= 27f;
+            metric.Unit = Label(parent, new Rect(x, y, w, 11f), unit, "metric-unit");
+            metric.Value.enableAutoSizing = true;
+            metric.Value.fontSizeMin = AvTokens.FontBody;
+            metric.Value.fontSizeMax = metric.Value.fontSize;
             y -= 12f;
 
-            metric.Value = Label(parent, new Rect(x, y, w, 18f), "—", "metric-value");
-            metric.Value.enableAutoSizing = true;
-            metric.Value.fontSizeMin = AvTokens.FontSmall;
-            metric.Value.fontSizeMax = metric.Value.fontSize;
-            y -= 17f;
-
-            metric.Caption = Label(parent, new Rect(x, y, w, 10f), "", "metric-cap");
+            metric.Caption = Label(parent, new Rect(x, y, w, 11f), "", "metric-cap");
             y = area.y - area.height + 2f;
 
             AvStyle track = AvStyleHost.Style("metric-track");
-            float th = track.HasHeight ? track.Height : 2f;
+            float th = track.HasHeight ? track.Height : 3f;
             AvKit.Panel(parent, new Rect(x, y, w, th),
                         AvStyleHost.Resolve(track.Background, AvTheme.Unity(AvTokens.Hairline)));
             metric.Fill = AvKit.Panel(parent, new Rect(x, y, 0f, th), AvTheme.Accent);

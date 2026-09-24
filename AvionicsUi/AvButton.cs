@@ -116,6 +116,19 @@ namespace NOAvionics.Ui
 
         public void SetAction(Action action) => onClick = action;
 
+        /// <summary>Top-level tabs form one edge-to-edge segmented strip.</summary>
+        public void UseStripSurface()
+        {
+            if (fill != null)
+            {
+                fill.sprite = null;
+                fill.type = Image.Type.Simple;
+            }
+            if (frame != null)
+                foreach (Image edge in frame)
+                    if (edge != null) edge.enabled = false;
+        }
+
         public void SetText(string text)
         {
             if (label != null) label.text = text;
@@ -204,9 +217,19 @@ namespace NOAvionics.Ui
             if (!interactable) return;
 
             AvInput.Deselect(gameObject);
-
-            try { onClick?.Invoke(); }
-            catch (Exception e) { Debug.LogError("Avionics button click failed: " + e); }
+            try
+            {
+                onClick?.Invoke();
+                AvUiSound.Play(style == AvButtonStyle.Tab ? AvUiCue.Navigate
+                    : style == AvButtonStyle.Toggle ? (latched ? AvUiCue.Engage : AvUiCue.Release)
+                    : style == AvButtonStyle.Primary ? AvUiCue.Confirm
+                    : style == AvButtonStyle.Danger ? AvUiCue.Caution : AvUiCue.Press);
+            }
+            catch (Exception e)
+            {
+                AvUiSound.Play(AvUiCue.Caution);
+                Debug.LogError("Avionics button click failed: " + e);
+            }
         }
 
         public void OnPointerEnter(PointerEventData eventData)
@@ -214,6 +237,7 @@ namespace NOAvionics.Ui
             hovered = true;
             PublishTooltip(entering: true);
             Apply();
+            if (interactable) AvUiSound.Play(AvUiCue.Hover);
         }
 
         public void OnPointerExit(PointerEventData eventData)

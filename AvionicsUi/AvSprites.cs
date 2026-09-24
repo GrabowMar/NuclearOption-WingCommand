@@ -3,7 +3,7 @@ using UnityEngine;
 namespace NOAvionics.Ui
 {
     /// <summary>
-    /// Cached, lightly chamfered panel and control masks. Widget masks are white so the
+    /// Cached panel and control masks. Widget masks are white so the
     /// shared palette is applied once by Image.color, rather than multiplied into baked ink.
     /// </summary>
     public static class AvSprites
@@ -25,9 +25,9 @@ namespace NOAvionics.Ui
                 new Rect(0f, 0f, Texture2D.whiteTexture.width, Texture2D.whiteTexture.height),
                 new Vector2(0.5f, 0.5f), 100f, 0u, SpriteMeshType.FullRect));
 
-        /// <summary>Outer panel frame with a 1.5px edge and nearly opaque ground;
+        /// <summary>Straight outer frame, matching the field log and theater wire;
         /// the subtle lower-edge fade preserves readability over a bright map.</summary>
-        public static Sprite Panel => panelSprite != null ? panelSprite : (panelSprite = CreateChamferSprite("Avionics_Panel", 48, 7f, 1.5f, 10f, fillMode: FillMode.Gradient));
+        public static Sprite Panel => panelSprite != null ? panelSprite : (panelSprite = CreateChamferSprite("Avionics_Panel", 48, 0f, 1f, 10f, fillMode: FillMode.Gradient));
 
         /// <summary>Subtle 2px chamfer for a tinted card.</summary>
         public static Sprite Card => cardSprite != null ? cardSprite : (cardSprite = CreateChamferSprite("Avionics_Card", 32, 2f, 1f, 8f, fillMode: FillMode.Tinted));
