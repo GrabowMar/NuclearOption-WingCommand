@@ -69,7 +69,9 @@ namespace WingCommand
                 if (!TryPreset(spacingName, out SpacingPreset spacing)) return Fail("Launch", $"no spacing '{spacingName}'");
                 wing.SetSpacing(spacing);
             }
-            int launched = SpawnService.Instance.LaunchFromField(field, type, count);
+            // Scenarios test flight and ground behaviour: calls are free unless the scenario asks otherwise.
+            bool sandbox = !args.TryGetValue("sandbox", out object free) || !(free is bool b) || b;
+            int launched = SpawnService.Instance.LaunchFromField(field, type, count, sandbox);
             Plugin.Logger.LogInfo($"[Automation] Launch: {launched} × {type.unitName} from {field.name}");
             return launched > 0 ? Ok("launched", launched) : Fail("Launch", "nothing launched; see the log");
         }
@@ -217,6 +219,18 @@ namespace WingCommand
             System.IO.File.WriteAllText(path, AirbaseSample.ToDumpJson(MissionManager.CurrentMission?.Name, samples));
             Plugin.Logger.LogInfo($"[Automation] DumpFields: {samples.Count} fields to {path}");
             return Ok("path", path);
+        }
+
+        /// <summary>What calls have cost this mission: charged, refunded, and the player's allocation now.</summary>
+        public static Dictionary<string, object> Economy(Dictionary<string, object> args)
+        {
+            GameManager.GetLocalPlayer(out NuclearOption.Networking.Player player);
+            float allocation = player != null ? player.Allocation : -1f;
+            Plugin.Logger.LogInfo($"[Automation] Economy: charged {WingLedger.Charged:0}, refunded {WingLedger.Refunded:0}, allocation {allocation:0}");
+            return new Dictionary<string, object>
+            {
+                { "ok", true }, { "charged", WingLedger.Charged }, { "refunded", WingLedger.Refunded }, { "allocation", allocation },
+            };
         }
 
         /// <summary>Sends every member home to the reserve (spec M3 §4).</summary>

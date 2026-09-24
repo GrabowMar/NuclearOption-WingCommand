@@ -39,6 +39,7 @@ namespace WingCommand
             public FieldTraffic Traffic;
             public Pose Spawn;
             public int HangarIndex = -1, StartNode = -1;
+            public WingLedger.Charge Charge;
             public float Since;
             public bool Settling;
         }
@@ -208,9 +209,11 @@ namespace WingCommand
 
         /// <summary>Launch up to <paramref name="n"/> wingmen of <paramref name="definition"/> from <paramref name="airbase"/>
         /// (spec M3 §3): each through a free hangar that can spawn the type, as the game does (doors, supply), or, on a
-        /// field without one, at its service points. They start on the ground and taxi out. Returns how many.</summary>
-        public int LaunchFromField(Airbase airbase, AircraftDefinition definition, int n)
+        /// field without one, at its service points. They start on the ground and taxi out. Each is paid for first
+        /// (<see cref="WingLedger"/>; <paramref name="sandbox"/> or Squadron/SandboxFreeCalls: free). Returns how many.</summary>
+        public int LaunchFromField(Airbase airbase, AircraftDefinition definition, int n, bool sandbox = false)
         {
+            sandbox |= Plugin.Settings.SandboxFreeCalls.Value;
             WingService wing = WingService.Instance;
             // The player calls; without a player aircraft (automation) the anchor stands in.
             Aircraft player = wing?.Player != null ? wing.Player : wing?.Leader;
@@ -252,12 +255,25 @@ namespace WingCommand
             }
             var used = new HashSet<Hangar>();
             int launched = 0;
+            string refused = null;
             for (int k = 0; k < n; k++)
             {
                 try
                 {
-                    GroundLaunch launch = FromHangar(airbase, definition, traffic, used) ?? FromServicePoint(definition, traffic, hq, player);
+                    CallQuote quote = WingLedger.Quote(definition, hq, true, sandbox);
+                    if (!quote.Allowed)
+                    {
+                        refused = quote.Reason;
+                        break;
+                    }
+                    GroundLaunch launch = FromHangar(airbase, definition, traffic, used);
+                    if (launch == null)
+                    {
+                        quote = WingLedger.Quote(definition, hq, false, sandbox);
+                        launch = FromServicePoint(definition, traffic, hq, player);
+                    }
                     if (launch == null) break;
+                    launch.Charge = WingLedger.Take(quote, hq, definition);
                     launch.Since = Time.time;
                     groundPending.Add(launch);
                     launched++;
@@ -269,7 +285,8 @@ namespace WingCommand
                 }
             }
             WingToast.Show(launched > 0
-                ? launched + " × " + definition.unitName + " launching from " + airbase.name
+                ? launched + " × " + definition.unitName + " launching from " + airbase.name + (refused != null ? " (then: " + refused + ")" : "")
+                : refused != null ? "Cannot call " + definition.unitName + ": " + refused
                 : airbase.name + " could not launch " + definition.unitName);
             return launched;
         }
@@ -331,6 +348,7 @@ namespace WingCommand
                         if (Time.time - g.Since > HangarSpawnTimeoutSeconds)
                         {
                             Plugin.Logger.LogWarning("[Spawn] a hangar never produced its aircraft; launch dropped");
+                            WingLedger.Refund(g.Charge);
                             groundPending.RemoveAt(i);
                         }
                         continue;
@@ -339,6 +357,7 @@ namespace WingCommand
                 }
                 if (g.Aircraft == null || g.Aircraft.disabled)
                 {
+                    WingLedger.Refund(g.Charge);
                     groundPending.RemoveAt(i);
                     continue;
                 }
@@ -348,6 +367,7 @@ namespace WingCommand
                     if (Time.time - g.Since > AdoptTimeoutSeconds)
                     {
                         Plugin.Logger.LogWarning("[Spawn] " + g.Aircraft.definition.unitName + " never initialised its AI; not adopted");
+                        WingLedger.Refund(g.Charge);
                         groundPending.RemoveAt(i);
                     }
                     continue;
@@ -358,8 +378,13 @@ namespace WingCommand
                     continue;
                 }
                 groundPending.RemoveAt(i);
-                if (WingService.Instance == null || !WingService.Instance.AdoptGround(g.Aircraft, g.Traffic, g.Spawn, g.HangarIndex, g.StartNode))
+                if (WingService.Instance != null && WingService.Instance.AdoptGround(g.Aircraft, g.Traffic, g.Spawn, g.HangarIndex, g.StartNode))
+                    WingLedger.Joined(g.Aircraft, g.Charge);
+                else
+                {
+                    WingLedger.Refund(g.Charge);
                     Plugin.Logger.LogWarning("[Spawn] " + g.Aircraft.definition.unitName + " could not join the wing and keeps the game's AI");
+                }
             }
         }
 

@@ -63,6 +63,7 @@ namespace WingCommand
             FieldRegistry.Clear();
             WingPilotRoster.Reset();
             WingKillCredit.Reset();
+            WingLedger.Reset();
             Events = new WingEventRing();
             floor = new TerrainFloor();
             LeaderUnit = null;
@@ -167,6 +168,8 @@ namespace WingCommand
             bool home = m.Aircraft.unitState == Unit.UnitState.Returned;
             bool down = m.Pilot == null || m.Pilot.dead || m.Pilot.ejected;
             if (home) WingPilotRoster.NoteSortie(m.Aircraft);
+            if (home) WingLedger.Returned(m.Aircraft);
+            else WingLedger.Forget(m.Aircraft);
             WingPilotRoster.Retire(m.Aircraft.persistentID, home || !down);
         }
 
