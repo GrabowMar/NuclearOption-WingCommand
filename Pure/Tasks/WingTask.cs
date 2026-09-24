@@ -10,7 +10,9 @@ namespace WingCommand
     /// their last point, Orbit and Hold with a duration go back to Form.</summary>
     internal enum FollowOn : byte { Default, Orbit, Form }
 
-    internal enum ArrivalAction : byte { None, Orbit }
+    /// <summary>What happens at a task point: Orbit it for Seconds; Land: the element's helicopters settle there; Cargo: those
+    /// carrying cargo land, deploy it and lift off (spec WMC program §4-§5).</summary>
+    internal enum ArrivalAction : byte { None, Orbit, Land, Cargo }
 
     /// <summary>A task point: x/z in world metres; Altitude (world Y) and Speed NaN when the task's own apply; an action
     /// on arrival (orbit it for Seconds).</summary>

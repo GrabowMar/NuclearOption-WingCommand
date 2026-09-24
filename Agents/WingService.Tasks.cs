@@ -64,11 +64,21 @@ namespace WingCommand
                 WingPlanner p = PlannerOf(e);
                 // An element whose task ended goes back to A at the next frame build (review focus 3).
                 if (p.Active) p.Step(Snapshot(e), missionTime, dt, Events);
+                Settle(e, p.TakeArrival());
             }
             if (Planner.Active) Planner.Step(Snapshot(0), missionTime, dt, Events);
+            Settle(0, Planner.TakeArrival());
             if (Planner.Active == plannerWas) return;
             plannerWas = Planner.Active;
             Wing?.ResetLeader();
+        }
+
+        /// <summary>A LAND or CARGO point reached (spec WMC program §4-§5): the element's helicopters settle there.</summary>
+        private void Settle(int e, ArrivalAction a)
+        {
+            if (a != ArrivalAction.Land && a != ArrivalAction.Cargo) return;
+            int n = LandHere(a == ArrivalAction.Cargo, out string refusal, m => ElementOf(m) == e);
+            if (n == 0) WingToast.Show(Roster.Name(e) + ": cannot land here: " + refusal);
         }
 
         /// <summary>While a task runs, the wing's collision body 0 is the player's aircraft (flying, not a member), not the

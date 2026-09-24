@@ -336,5 +336,46 @@ namespace WingCommand.PureTests
             Assert.True(p.Apply(WingTask.Orbit(Waypoint.At(0f, 5000f)), w, 2f, events).Accepted);
             Assert.False(p.Skip(w, 3f, events));
         }
+
+        [Theory]
+        [InlineData(ArrivalAction.Land)]
+        [InlineData(ArrivalAction.Cargo)]
+        internal void ALandOrCargoPointRaisesItsArrivalOnce(ArrivalAction action)
+        {
+            // Spec §5 CARGO / §4 route arrival actions: the service settles the element's helicopters when the lead arrives.
+            var p = new WingPlanner(1);
+            Waypoint at = Waypoint.At(0f, 6000f);
+            at.Action = action;
+            var events = new WingEventRing();
+            Assert.True(p.Apply(WingTask.Move(at), Wing(), 0f, events).Accepted);
+            Assert.Equal(ArrivalAction.None, p.TakeArrival());
+            Run(p, Wing(), events, 0f, 200f, () => events.CountOf(WingEventKind.WaypointReached) > 0);
+            Assert.Equal(1, events.CountOf(WingEventKind.WaypointReached));
+            Assert.Equal(action, p.TakeArrival());
+            Assert.Equal(ArrivalAction.None, p.TakeArrival());
+        }
+
+        [Fact]
+        public void APlainPointRaisesNoArrival()
+        {
+            var p = new WingPlanner(1);
+            var events = new WingEventRing();
+            p.Apply(WingTask.Move(Waypoint.At(0f, 6000f)), Wing(), 0f, events);
+            Run(p, Wing(), events, 0f, 200f, () => events.CountOf(WingEventKind.WaypointReached) > 0);
+            Assert.Equal(1, events.CountOf(WingEventKind.WaypointReached));
+            Assert.Equal(ArrivalAction.None, p.TakeArrival());
+        }
+
+        [Fact]
+        public void SkippingALandPointRaisesNothing()
+        {
+            var p = new WingPlanner(1);
+            Waypoint land = Waypoint.At(0f, 30000f);
+            land.Action = ArrivalAction.Land;
+            var events = new WingEventRing();
+            p.Apply(WingTask.Route(land, Waypoint.At(0f, 60000f)), Wing(), 0f, events);
+            Assert.True(p.Skip(Wing(), 1f, events));
+            Assert.Equal(ArrivalAction.None, p.TakeArrival());
+        }
     }
 }

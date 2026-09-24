@@ -24,6 +24,7 @@ namespace WingCommand
         private Vec3 legFrom;
         private float since, sinceDecision, orbitUntil, startAltitude;
         private bool orbitingPoint;
+        private ArrivalAction arrived;
 
         public WingTask Current { get; private set; }
         public TaskLead Lead { get; private set; }
@@ -42,6 +43,7 @@ namespace WingCommand
             Lead = null;
             Leg = -1;
             orbitingPoint = false;
+            arrived = ArrivalAction.None;
         }
 
         public AnchorSample Sample() => Lead.Sample();
@@ -69,6 +71,7 @@ namespace WingCommand
             legFrom = Lead.Position;
             since = sinceDecision = 0f;
             orbitingPoint = false;
+            arrived = ArrivalAction.None;
             startAltitude = wing.WingAirborne ? wing.Centroid.Y : Lead.Position.Y;
             Log(events, time, WingEventKind.TaskStarted, reason, task.Kind);
             return OrderResult.Ok;
@@ -106,6 +109,14 @@ namespace WingCommand
             }
             if (!float.IsNaN(t.Altitude) && (t.Altitude < 0f || t.Altitude > MaxAltitude)) return "the altitude is out of range";
             return null;
+        }
+
+        /// <summary>The LAND/CARGO action of the point just reached, once; the service settles the element's helicopters.</summary>
+        public ArrivalAction TakeArrival()
+        {
+            ArrivalAction a = arrived;
+            arrived = ArrivalAction.None;
+            return a;
         }
 
         /// <summary>Moves a Move, Route or Patrol on to its next point now (spec WMC program §4 SKIP), without calling this one
@@ -157,6 +168,13 @@ namespace WingCommand
                     Waypoint p = Current.Points[Leg];
                     if (!Reached(Point(p))) return;
                     Log(events, time, WingEventKind.WaypointReached, TransitionReason.None, Current.Kind);
+                    if (p.Action == ArrivalAction.Land || p.Action == ArrivalAction.Cargo)
+                    {
+                        // Raised after advancing: completing the task (its follow-on) must not swallow the arrival.
+                        Advance(wing, time, events);
+                        arrived = p.Action;
+                        return;
+                    }
                     if (p.Action == ArrivalAction.Orbit && p.Seconds > 0f)
                     {
                         orbitingPoint = true;

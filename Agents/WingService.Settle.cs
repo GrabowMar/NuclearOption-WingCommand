@@ -14,6 +14,21 @@ namespace WingCommand
         /// <summary>Spec M4 §7.2: every helicopter carrying cargo lands at its slot's ground point, deploys it and lifts off.</summary>
         public int DeliverCargo(out string refusal, Func<WingMember, bool> who = null) => LandHere(true, out refusal, who);
 
+        /// <summary>Whether an order that lands (or delivers cargo) has a helicopter to do it among <paramref name="who"/>.</summary>
+        public bool CanSettle(Func<WingMember, bool> who, bool cargo, out string reason)
+        {
+            reason = null;
+            foreach (WingMember m in Members)
+            {
+                if (who != null && !who(m)) continue;
+                if (m.Profile.Class == AirframeClass.FixedWing || !m.Alive || m.Released) continue;
+                if (cargo && CargoStation(m.Aircraft) == null) continue;
+                return true;
+            }
+            reason = cargo ? "no helicopter carries cargo" : "no helicopters to land";
+            return false;
+        }
+
         private int LandHere(bool cargoOnly, out string refusal, Func<WingMember, bool> who)
         {
             refusal = null;

@@ -42,6 +42,9 @@ namespace WingCommand
 
         private static OrderResult Task(WingService w, WingOrder o)
         {
+            // A LAND or CARGO point needs a helicopter among those it goes to; refused before anyone detaches.
+            if (Settles(o.Task, out bool cargo) && !w.CanSettle(Who(w, o.Scope), cargo, out string why))
+                return OrderResult.Refused("Cannot land there: " + why);
             ScopeTarget t = w.Roster.Resolve(o.Scope);
             if (t.Element < 0) return OrderResult.Refused("Wing cannot: " + t.Reason);
             if (t.Everyone) MergeAll(w);
@@ -54,6 +57,19 @@ namespace WingCommand
             }
             string who = t.Element == 0 ? "Wing" : w.Roster.Name(t.Element);
             return OrderResult.Acked($"{who}: {TaskWords(o.Task)}", t.Element);
+        }
+
+        private static bool Settles(WingTask t, out bool cargo)
+        {
+            cargo = false;
+            bool any = false;
+            if (t?.Points == null) return false;
+            foreach (Waypoint p in t.Points)
+            {
+                if (p.Action == ArrivalAction.Cargo) cargo = any = true;
+                else if (p.Action == ArrivalAction.Land) any = true;
+            }
+            return any;
         }
 
         private static string TaskWords(WingTask t)
