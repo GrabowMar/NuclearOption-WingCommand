@@ -333,9 +333,12 @@ namespace WingCommand
         {
             WingService wing = WingService.Instance;
             if (wing == null) return Fail("Engage", "the wing is not active");
-            Unit target = Arg(args, "targetUnit") as Unit;
-            int n = wing.Engage(target);
-            Plugin.Logger.LogInfo($"[Automation] Engage: {n} engaged{(target != null ? " on " + target.unitName : "")}");
+            // target, target2, target3...: registered unit ids (the harness passes each as <key>Unit), split across the wing.
+            var targets = new List<Unit>();
+            for (int i = 1; i <= TargetAllocator.MaxTargets; i++)
+                if (Arg(args, i == 1 ? "targetUnit" : "target" + i + "Unit") is Unit u) targets.Add(u);
+            int n = targets.Count > 0 ? wing.Attack(targets) : wing.Engage(null);
+            Plugin.Logger.LogInfo($"[Automation] Engage: {n} engaged on {targets.Count} target(s)");
             return n > 0 ? Ok("engaged", n) : Fail("Engage", "nobody could engage");
         }
 
@@ -353,7 +356,7 @@ namespace WingCommand
             if (wing == null) return Fail("CombatState", "the wing is not active");
             return new Dictionary<string, object>
             {
-                { "ok", true }, { "engaged", wing.EngagedCount }, { "members", wing.Members.Count },
+                { "ok", true }, { "engaged", wing.EngagedCount }, { "assigned", wing.AssignedCount }, { "members", wing.Members.Count },
                 { "engage_events", wing.Events.CountOf(WingEventKind.Engaged) },
                 { "disengage_events", wing.Events.CountOf(WingEventKind.Disengaged) },
                 { "redirected", SwitchStateGuard.Redirected },

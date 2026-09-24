@@ -1,3 +1,5 @@
+using System.Collections.Generic;
+
 namespace WingCommand
 {
     /// <summary>Supervised engagement (spec M5 §2): members fight in the game's own combat state; every way out of it is
@@ -45,9 +47,102 @@ namespace WingCommand
             return n;
         }
 
+        public static float ReallocateSeconds = 1f;
+        private readonly Unit[] attackTargets = new Unit[TargetAllocator.MaxTargets];
+        private int attackCount;
+        private float reallocateClock;
+        private readonly bool[] canAttack = new bool[FormationCatalog.MaxSlots * TargetAllocator.MaxTargets];
+        private readonly float[] targetDistance = new float[FormationCatalog.MaxSlots * TargetAllocator.MaxTargets];
+        private readonly bool[] targetAlive = new bool[TargetAllocator.MaxTargets];
+        private readonly int[] currentTarget = new int[FormationCatalog.MaxSlots], nextTarget = new int[FormationCatalog.MaxSlots];
+        private readonly WingMember[] engagedNow = new WingMember[FormationCatalog.MaxSlots];
+
+        /// <summary>Members with an attack order's target (automation reads it).</summary>
+        public int AssignedCount
+        {
+            get
+            {
+                int n = 0;
+                foreach (WingMember m in Members)
+                    if (m.Engaged && m.AssignedTarget != null) n++;
+                return n;
+            }
+        }
+
+        /// <summary>Engage on <paramref name="targets"/> (live ones, the first 16), split across the wing
+        /// (<see cref="TargetAllocator"/>) and re-allocated each second as they die (spec M5, M5b). Returns how many are
+        /// engaged.</summary>
+        public int Attack(IReadOnlyList<Unit> targets)
+        {
+            attackCount = 0;
+            if (targets != null)
+                foreach (Unit u in targets)
+                    if (u != null && !u.disabled && attackCount < attackTargets.Length) attackTargets[attackCount++] = u;
+            int n = Engage(null);
+            Allocate();
+            return n;
+        }
+
+        /// <summary>The attack order's targets across the engaged members; with none alive the order ends and members
+        /// fight on their own choices.</summary>
+        private void Allocate()
+        {
+            if (attackCount == 0) return;
+            bool any = false;
+            for (int t = 0; t < attackCount; t++)
+            {
+                targetAlive[t] = attackTargets[t] != null && !attackTargets[t].disabled;
+                any |= targetAlive[t];
+            }
+            int k = 0;
+            foreach (WingMember m in Members)
+                if (m.Engaged && !m.Released && k < engagedNow.Length) engagedNow[k++] = m;
+            if (!any)
+            {
+                attackCount = 0;
+                for (int i = 0; i < k; i++) Assign(engagedNow[i], null);
+                return;
+            }
+            for (int i = 0; i < k; i++)
+            {
+                WingMember m = engagedNow[i];
+                currentTarget[i] = -1;
+                Vec3 at = m.Aircraft.GlobalPosition().ToVec3();
+                for (int t = 0; t < attackCount; t++)
+                {
+                    int cell = i * attackCount + t;
+                    canAttack[cell] = targetAlive[t] && CanAttack(m.Aircraft, attackTargets[t]);
+                    targetDistance[cell] = targetAlive[t] ? (attackTargets[t].GlobalPosition().ToVec3() - at).Length : float.MaxValue;
+                    if (ReferenceEquals(m.AssignedTarget, attackTargets[t])) currentTarget[i] = t;
+                }
+            }
+            TargetAllocator.Assign(k, attackCount, canAttack, targetDistance, targetAlive, currentTarget, nextTarget);
+            for (int i = 0; i < k; i++) Assign(engagedNow[i], nextTarget[i] >= 0 ? attackTargets[nextTarget[i]] : null);
+        }
+
+        private static void Assign(WingMember m, Unit target)
+        {
+            if (ReferenceEquals(m.AssignedTarget, target)) return;
+            m.AssignedTarget = target;
+            m.Pilot?.SetPrimaryTarget(target);
+        }
+
+        /// <summary>The member's faction tracks <paramref name="t"/> and one of its loaded non-cargo stations can attack it,
+        /// by the game's own analysis.</summary>
+        private static bool CanAttack(Aircraft a, Unit t)
+        {
+            TrackingInfo tracking = a.NetworkHQ != null ? a.NetworkHQ.GetTrackingData(t.persistentID) : null;
+            if (tracking == null || a.weaponStations == null) return false;
+            foreach (WeaponStation w in a.weaponStations)
+                if (w != null && !w.Cargo && w.Ammo > 0 && w.WeaponInfo != null &&
+                    CombatAI.AnalyzeTarget(w, a, tracking, 0f, -1f, 100f).opportunity > 0f) return true;
+            return false;
+        }
+
         /// <summary>Every engaged member back into formation (Commanded). Returns how many.</summary>
         public int Disengage()
         {
+            attackCount = 0;
             int n = 0;
             foreach (WingMember m in Members)
                 if (m.Engaged)
@@ -98,6 +193,11 @@ namespace WingCommand
                     WingToast.Show($"#{m.Number} bingo fuel; returning to base");
                     Recover(m, RecoveryIntent.Rtb);
                 }
+            }
+            if (attackCount > 0 && (reallocateClock += dt) >= ReallocateSeconds)
+            {
+                reallocateClock = 0f;
+                Allocate();
             }
         }
 

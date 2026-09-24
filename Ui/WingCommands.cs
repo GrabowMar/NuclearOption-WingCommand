@@ -190,18 +190,19 @@ namespace WingCommand
             WingToast.Show(n > 0 ? $"{n} engaging" : "Nobody can engage");
         }
 
-        /// <summary>The player's selected enemy target for every engaged member.</summary>
+        /// <summary>The player's selected enemy targets, split across the wing (spec M5, M5b).</summary>
         public static void AttackTarget()
         {
             if (!Ready(out WingService w) || w.Player == null) return;
-            Unit target = SelectedEnemy(w.Player);
-            if (target == null)
+            List<Unit> targets = SelectedEnemies(w.Player);
+            if (targets.Count == 0)
             {
                 WingToast.Show("No enemy target selected");
                 return;
             }
-            int n = w.Engage(target);
-            WingToast.Show(n > 0 ? $"{n} attacking {target.unitName}" : "Nobody can attack");
+            int n = w.Attack(targets);
+            string plural = targets.Count == 1 ? "" : "s";
+            WingToast.Show(n > 0 ? $"{n} attacking {targets.Count} target{plural}" : "Nobody can attack");
         }
 
         public static void Disengage()
@@ -211,13 +212,14 @@ namespace WingCommand
             WingToast.Show(n > 0 ? $"{n} disengaging" : "Nobody engaged");
         }
 
-        private static Unit SelectedEnemy(Aircraft player)
+        private static List<Unit> SelectedEnemies(Aircraft player)
         {
+            var enemies = new List<Unit>();
             List<Unit> targets = player.weaponManager != null ? player.weaponManager.GetTargetList() : null;
-            if (targets == null) return null;
+            if (targets == null) return enemies;
             foreach (Unit u in targets)
-                if (u != null && !u.disabled && u.NetworkHQ != null && u.NetworkHQ != player.NetworkHQ) return u;
-            return null;
+                if (u != null && !u.disabled && u.NetworkHQ != null && u.NetworkHQ != player.NetworkHQ) enemies.Add(u);
+            return enemies;
         }
 
         public static void EscortMe()
