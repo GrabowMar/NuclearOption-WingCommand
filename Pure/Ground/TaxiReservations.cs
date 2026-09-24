@@ -11,7 +11,9 @@ namespace WingCommand
     /// convoy; each keeps its distance to <see cref="Ahead"/>), and nobody enters against that direction.</item>
     /// <item>An owner claims along its route item by item (edge, far node, next edge, ...) and stops at the first item
     /// it cannot have; what stopped it is remembered for <see cref="FindDeadlock"/>. It releases each node and edge
-    /// once past it. The sole owner of an edge may turn back on it (its direction flips); a convoy may not.</item>
+    /// once past it. The sole owner of an edge may turn back on it (its direction flips); a convoy may not. Only the
+    /// head of a convoy (the first on the edge) may claim the node at its far end. The route's first node is claimed
+    /// only when asked (<c>claimStart</c>: not by an owner already past it).</item>
     /// <item>A blocked edge (a wreck, native traffic) is never granted.</item>
     /// <item>A deadlock's victim is an owner waiting to enter an edge (it stands at a node it holds and can take another
     /// way there) before one waiting for a node (it would have to turn back), then the lowest priority, then the highest
@@ -54,6 +56,9 @@ namespace WingCommand
 
         public bool Blocked(int edge) => blocked[edge];
 
+        /// <summary>The owner <paramref name="owner"/> last found holding what it asked for (−1: none).</summary>
+        public int WaitingFor(int owner) => waitingFor.TryGetValue(owner, out int holder) ? holder : -1;
+
         public void Block(int edge, bool isBlocked) => blocked[edge] = isBlocked;
 
         /// <summary>Someone is on <paramref name="edge"/> travelling towards <paramref name="fromNode"/>.</summary>
@@ -72,14 +77,16 @@ namespace WingCommand
         public void NoDetour(int owner) => noDetour.Add(owner);
 
         /// <summary>Claims along the route from step <paramref name="from"/> for up to <paramref name="steps"/> steps (a
-        /// step is edge k then node k+1; the route's first node is claimed too when <paramref name="from"/> is 0).
+        /// step is edge k then node k+1; the route's first node is claimed too when <paramref name="from"/> is 0 and
+        /// <paramref name="claimStart"/>; the last step's far node only when <paramref name="lastNode"/>).
         /// Returns how many items it holds from there (0..2·steps); stops at the first item it cannot have.</summary>
-        public int TryAdvance(int owner, TaxiPriority priority, IReadOnlyList<int> nodes, IReadOnlyList<int> edges, int from, int steps)
+        public int TryAdvance(int owner, TaxiPriority priority, IReadOnlyList<int> nodes, IReadOnlyList<int> edges, int from, int steps,
+            bool claimStart = true, bool lastNode = true)
         {
             priorities[owner] = priority;
             waitingFor.Remove(owner);
             waitingOnEdge.Remove(owner);
-            if (from == 0 && nodes.Count > 0 && !ClaimNode(owner, nodes[0])) return 0;
+            if (claimStart && from == 0 && nodes.Count > 0 && !ClaimNode(owner, nodes[0])) return 0;
             int granted = 0;
             for (int k = from; k < from + steps && k < edges.Count; k++)
             {
@@ -87,6 +94,14 @@ namespace WingCommand
                 int direction = graph.EdgeFrom(e) == nodes[k] ? 1 : -1;
                 if (!ClaimEdge(owner, e, direction)) return granted;
                 granted++;
+                if (!lastNode && k == from + steps - 1) break;
+                if (edgeUsers[e][0] != owner)
+                {
+                    // Behind others on the edge: its far node is theirs to take first.
+                    waitingFor[owner] = edgeUsers[e][0];
+                    waitingOnEdge.Remove(owner);
+                    return granted;
+                }
                 if (!ClaimNode(owner, nodes[k + 1])) return granted;
                 granted++;
             }

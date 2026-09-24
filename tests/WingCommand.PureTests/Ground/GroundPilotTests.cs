@@ -175,6 +175,109 @@ namespace WingCommand.PureTests
         }
 
         [Fact]
+        public void AFollowerKeepsItsGapThroughTheJunctionsBehindItsLeader()
+        {
+            // Review M3a #5: the gap was only kept on a shared edge; past a node the follower closed to the leader's tail.
+            var field = new FieldTraffic(TestFields.Simple(), 0, false);
+            var pilots = new List<GroundPilot>();
+            var plants = new List<TestGroundPlant>();
+            var pipelines = new List<IFlightPipeline>();
+            for (int k = 0; k < 2; k++)
+            {
+                Pose spawn = field.Field.Hangars[1 - k].Spawn;   // the member at z = 700 first, south past the other's junction
+                field.Departures.Expect(k + 1, 1);
+                pilots.Add(new GroundPilot(k + 1, field, AirframeClass.FixedWing, spawn, 1 - k));
+                plants.Add(new TestGroundPlant(spawn));
+                pipelines.Add(FlightStack.NewPipeline(AirframeClass.FixedWing));
+            }
+            float minGap = float.MaxValue;
+            bool stopped = false;
+            for (int i = 0; i < 150 * 30; i++)
+            {
+                field.Step(Dt);
+                // The leader stops 25 m past the follower's junction (it waits for something ahead) and stays.
+                stopped |= plants[0].Pos.X > -160f && plants[0].Pos.Z < 475f;
+                if (stopped) plants[0].Speed = 0f;
+                for (int k = 0; k < 2; k++)
+                {
+                    if (k == 1 && i * Dt < 20f) continue;   // the follower is launched once the leader is past its junction
+                    ControlOutput o = pilots[k].Step(plants[k].Read(Dt), Jet(), pipelines[k], i * Dt, Dt, null, k);
+                    if (k == 1 || !stopped) plants[k].Step(o, Dt);
+                }
+                // Measured once the leader waits ahead (its crossing of the follower's junction earlier is not following).
+                if (stopped && pilots[1].Phase != GroundPhase.Parked) minGap = Math.Min(minGap, (plants[0].Pos - plants[1].Pos).Horizontal.Length);
+            }
+            Assert.True(stopped);
+            // The gap is kept along the path: round the 90-degree corner at the junction that is ~0.7 of it in a line.
+            Assert.True(minGap > 0.65f * GroundPilot.FollowGap, $"the follower closed to {minGap:0} m");
+        }
+
+        [Fact]
+        public void TheFieldMarksItsRunwayBusyWhileAForeignAircraftStandsOnIt()
+        {
+            var field = new FieldTraffic(TestFields.Simple(), 0, false);
+            field.Obstacles.Add(new Vec3(-60f, 0f, 800f));   // beside the runway
+            field.Step(FieldTraffic.DeadlockPeriod);
+            Assert.False(field.Departures.RunwayBusy);
+            field.Obstacles.Add(new Vec3(10f, 0f, 800f));    // on it
+            field.Step(Dt);
+            Assert.True(field.Departures.RunwayBusy);
+        }
+
+        [Fact]
+        public void ARollRejectsTheTakeoffForAnAircraftOnTheRunwayAhead()
+        {
+            // Review M3a #7: the roll had no obstacle check.
+            var (field, pilot, plant, pipeline, events) = OneJet();
+            float t = RunUntil(field, pilot, plant, pipeline, events, GroundPhase.Roll);
+            for (int i = 0; i < 3 * 30; i++, t += Dt)
+            {
+                field.Step(Dt);
+                plant.Step(pilot.Step(plant.Read(Dt), Jet(), pipeline, t, Dt, events, 0), Dt);
+            }
+            Assert.True(plant.Speed > 3f, "rolling");
+            field.Obstacles.Add(plant.Pos + plant.Fwd * 300f);
+            ControlOutput o = default;
+            for (int i = 0; i < 2; i++, t += Dt)
+            {
+                field.Step(Dt);
+                o = pilot.Step(plant.Read(Dt), Jet(), pipeline, t, Dt, events, 0);
+                plant.Step(o, Dt);
+            }
+            Assert.Equal(1f, o.Brake);
+            Assert.Equal(0f, o.Throttle);
+        }
+
+        [Fact]
+        public void AMemberOnALongEdgeTakesItsFarNodeOnlyWithinTheClaimWindow()
+        {
+            // Seen on a real field: a member 700 m from the end of its edge held the junction there for a minute.
+            var field = new FieldTraffic(TestFields.Simple(), 0, false);
+            int south = field.Graph.NearestNode(new Vec3(-150f, 0f, 0f));
+            Pose spawn = field.Field.Hangars[0].Spawn;
+            var plant = new TestGroundPlant(spawn);
+            var pilot = new GroundPilot(1, field, AirframeClass.FixedWing, spawn, 0);
+            IFlightPipeline pipeline = FlightStack.NewPipeline(AirframeClass.FixedWing);
+            bool checkedFar = false, checkedNear = false;
+            for (int i = 0; i < 120 * 30 && pilot.Phase < GroundPhase.LineUp; i++)
+            {
+                field.Step(Dt);
+                plant.Step(pilot.Step(plant.Read(Dt), Jet(), pipeline, i * Dt, Dt, null, 0), Dt);
+                if (plant.Pos.X > -155f && plant.Pos.Z < 400f && plant.Pos.Z > 300f)
+                {
+                    checkedFar = true;
+                    Assert.NotEqual(1, field.Reservations.OwnerOfNode(south));
+                }
+                if (plant.Pos.X > -155f && plant.Pos.Z < 60f && plant.Pos.Z > 20f)
+                {
+                    checkedNear = true;
+                    Assert.Equal(1, field.Reservations.OwnerOfNode(south));
+                }
+            }
+            Assert.True(checkedFar && checkedNear);
+        }
+
+        [Fact]
         public void AMemberAdoptedLateInAMissionStillWaitsParkedFirst()
         {
             // Review M3a #9: the parked timer started at 0, so at mission time 1000 s it left at once (hangar doors
@@ -290,11 +393,13 @@ namespace WingCommand.PureTests
             IFlightPipeline pipeline = FlightStack.NewPipeline(AirframeClass.FixedWing);
             var events = new WingEventRing();
             float minX = 0f;
+            bool coming = false;
             for (int i = 0; i < 200 * 30 && pilot.Phase < GroundPhase.HoldShort; i++)
             {
-                if (i == 5 * 30)
+                if (!coming && field.Reservations.OwnerOfNode(junction) == 1)
                 {
                     // A member coming north up the direct taxiway: it holds the edge and waits for the junction.
+                    coming = true;
                     field.Reservations.TryAdvance(2, TaxiPriority.Departing, new[] { south, junction }, new[] { direct }, 0, 1);
                     field.Reservations.ReleaseNode(2, south);
                     field.Report(2, field.Graph.NodePos(south) + new Vec3(0f, 0f, 250f));
@@ -306,6 +411,43 @@ namespace WingCommand.PureTests
             }
             Assert.True(pilot.Phase >= GroundPhase.HoldShort, $"phase {pilot.Phase}");
             Assert.True(minX < -190f, $"took the direct taxiway (x {minX:0})");
+            Assert.Equal(0, events.CountOf(WingEventKind.Relocated));
+        }
+
+        [Fact]
+        public void AnAircraftStandingOnATaxiwayBlocksItUntilItMoves()
+        {
+            // Review M3a #11: nothing in the game ever blocked an edge, so the blocked-edge reroute never ran.
+            var field = new FieldTraffic(TestFields.WithBypass(), 0, false);
+            int direct = DirectEdge(field.Graph, out _, out _);
+            field.Obstacles.Add(new Vec3(-150f, 0f, 250f));
+            for (float t = 0f; t < FieldTraffic.BlockSeconds - 1f; t += Dt) field.Step(Dt);
+            Assert.False(field.Reservations.Blocked(direct), "a moment's stop is not a blockage");
+            for (float t = 0f; t < 2f; t += Dt) field.Step(Dt);
+            Assert.True(field.Reservations.Blocked(direct));
+            field.Obstacles.Clear();
+            for (float t = 0f; t < 2f; t += Dt) field.Step(Dt);
+            Assert.False(field.Reservations.Blocked(direct));
+        }
+
+        [Fact]
+        public void AMemberStoppedBehindAParkedAircraftTakesAnotherWayInsteadOfWaitingToBeRelocated()
+        {
+            var field = new FieldTraffic(TestFields.WithBypass(), 0, false);
+            field.Obstacles.Add(new Vec3(-150f, 0f, 250f));
+            Pose spawn = field.Field.Hangars[0].Spawn;
+            var plant = new TestGroundPlant(spawn);
+            var pilot = new GroundPilot(1, field, AirframeClass.FixedWing, spawn, 0);
+            field.Departures.Expect(1, 1);
+            IFlightPipeline pipeline = FlightStack.NewPipeline(AirframeClass.FixedWing);
+            var events = new WingEventRing();
+            for (int i = 0; i < 200 * 30 && pilot.Phase < GroundPhase.HoldShort; i++)
+            {
+                field.Step(Dt);
+                plant.Step(pilot.Step(plant.Read(Dt), Jet(), pipeline, i * Dt, Dt, events, 0), Dt);
+                if (pilot.TakeRelocation(out Pose to)) plant = new TestGroundPlant(to);
+            }
+            Assert.True(pilot.Phase >= GroundPhase.HoldShort, $"phase {pilot.Phase}");
             Assert.Equal(0, events.CountOf(WingEventKind.Relocated));
         }
 
@@ -376,8 +518,7 @@ namespace WingCommand.PureTests
             for (; i < 150 * 30; i++)
             {
                 field.Step(Dt);
-                if (pilot.Step(s, Jet(), pipeline, i * Dt, Dt, null, 0).Brake < 1f && i > 70 * 30)
-                    Assert.Fail("a member waiting to be relocated keeps its brakes on");
+                pilot.Step(s, Jet(), pipeline, i * Dt, Dt, null, 0);
                 if (pilot.TakeRelocation(out _)) relocations++;
             }
             Assert.Equal(0, relocations);

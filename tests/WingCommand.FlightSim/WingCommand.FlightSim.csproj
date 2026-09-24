@@ -19,6 +19,7 @@
 
   <ItemGroup>
     <None Include="..\..\Assets\Data\formations.json" Link="formations.json" CopyToOutputDirectory="PreserveNewest" />
+    <None Include="..\WingCommand.PureTests\Fixtures\airbases\*.json" Link="Fixtures\airbases\%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 
   <ItemGroup Label="Production engine-free code under test">

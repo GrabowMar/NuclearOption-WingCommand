@@ -26,6 +26,15 @@ namespace WingCommand
 
         /// <summary>Unit direction of travel: Start → End, or End → Start when reversed.</summary>
         public Vec3 Direction(bool reverse) => ((reverse ? Start - End : End - Start).Horizontal).Normalized;
+
+        /// <summary><paramref name="p"/> is on the runway: between its ends and within half its width plus
+        /// <paramref name="margin"/> of the centreline.</summary>
+        public bool Contains(Vec3 p, float margin)
+        {
+            Vec3 dir = Direction(false), d = (p - Start).Horizontal;
+            float along = Vec3.Dot(d, dir);
+            return along >= -margin && along <= Length + margin && (d - dir * along).Length < 0.5f * Width + margin;
+        }
     }
 
     internal sealed class HangarSample

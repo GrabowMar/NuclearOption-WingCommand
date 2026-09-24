@@ -222,9 +222,9 @@ namespace WingCommand
         }
 
         /// <summary>Adopt an aircraft launched on a field: it starts on the ground under a <see cref="GroundPilot"/>.</summary>
-        public bool AdoptGround(Aircraft a, FieldTraffic field, Pose spawn, int hangarIndex)
+        public bool AdoptGround(Aircraft a, FieldTraffic field, Pose spawn, int hangarIndex, int startNode)
         {
-            WingMember m = AdoptMember(a, n => new GroundPilot(n.Id, field, n.Profile.Class, spawn, hangarIndex));
+            WingMember m = AdoptMember(a, n => new GroundPilot(n.Id, field, n.Profile.Class, spawn, hangarIndex, startNode));
             if (m == null) return false;
             if (m.Profile.Class == AirframeClass.FixedWing)
             {
@@ -375,6 +375,14 @@ namespace WingCommand
         }
 
         /// <summary>A wing member cannot be an anchor: it would chase a slot that moves with it.</summary>
+        /// <summary>An aircraft of ours still on the ground at <paramref name="field"/>, null when there is none.</summary>
+        public Aircraft GroundAircraftOn(FieldTraffic field)
+        {
+            foreach (WingMember m in Members)
+                if (!m.Released && m.OnGround && m.Ground.Field == field && m.Aircraft != null && !m.Aircraft.disabled) return m.Aircraft;
+            return null;
+        }
+
         public bool IsMember(Aircraft a)
         {
             for (int i = 0; i < Members.Count; i++)

@@ -9,15 +9,18 @@ namespace WingCommand
     /// <list type="bullet">
     /// <item>Road ends become nodes; ends within the merge radius are one node (as the game's own network merges
     /// them); each road is one edge carrying its polyline. Every edge can be travelled both ways.</item>
-    /// <item>Synthetic nodes: a hangar exit <see cref="HangarExitDistance"/> in front of each hangar's spawn; per
+    /// <item>Synthetic nodes: a hangar exit <see cref="HangarExitDistance"/> in front of each hangar's spawn; a node on
+    /// each service point (where hangar-less launches stand); per
     /// runway end usable for takeoff a threshold (where the roll starts) and a hold-short (the runway's entry point
     /// nearest that end, else one computed off the runway toward the field centre), joined by the lineup edge. A
     /// synthetic node that lands on no road end is snapped onto the nearest edge, splitting it.</item>
-    /// <item>A field without roads joins each hangar exit straight to each hold-short.</item>
+    /// <item>A field without roads joins each hangar exit and service point straight to each hold-short.</item>
     /// </list></summary>
     internal sealed class TaxiGraph
     {
         public static float HangarExitDistance = 40f, HoldShortBack = 60f, HoldShortSide = 40f, EntrySearchRadius = 400f;
+        /// <summary>An entry point this close to the runway's edge (or on it: carriers) is not a place to hold short.</summary>
+        public static float EntryClearance = 5f;
 
         private readonly List<Vec3> positions = new List<Vec3>();
         private readonly List<NodeKind> kinds = new List<NodeKind>();
@@ -25,7 +28,7 @@ namespace WingCommand
         private readonly List<Vec3[]> points = new List<Vec3[]>();
         private readonly List<float> lengths = new List<float>();
         private readonly List<List<int>> adjacency = new List<List<int>>();
-        private int[] hangarExits = new int[0];
+        private int[] hangarExits = new int[0], serviceNodes = new int[0];
         private int[,] holdShorts = new int[0, 2], thresholds = new int[0, 2];
         private float mergeRadius;
 
@@ -46,6 +49,10 @@ namespace WingCommand
 
         /// <summary>The hold-short before rolling on runway <paramref name="runway"/> in the given direction (−1: none).</summary>
         public int HoldShort(int runway, bool reverse) => runway >= 0 && runway < holdShorts.GetLength(0) ? holdShorts[runway, reverse ? 1 : 0] : -1;
+
+        /// <summary>The node of service point <paramref name="i"/>, −1 when the field has no such point.</summary>
+        public int ServiceNode(int i) => i >= 0 && i < serviceNodes.Length ? serviceNodes[i] : -1;
+
 
         public int Threshold(int runway, bool reverse) => runway >= 0 && runway < thresholds.GetLength(0) ? thresholds[runway, reverse ? 1 : 0] : -1;
 
@@ -91,6 +98,8 @@ namespace WingCommand
                 Pose spawn = field.Hangars[i].Spawn;
                 g.hangarExits[i] = g.Synthetic(spawn.Pos + spawn.Fwd.Horizontal.Normalized * HangarExitDistance, NodeKind.HangarExit);
             }
+            g.serviceNodes = new int[field.ServicePoints.Length];
+            for (int i = 0; i < field.ServicePoints.Length; i++) g.serviceNodes[i] = g.Synthetic(field.ServicePoints[i].Pos, NodeKind.Service);
 
             g.holdShorts = new int[field.Runways.Length, 2];
             g.thresholds = new int[field.Runways.Length, 2];
@@ -111,7 +120,7 @@ namespace WingCommand
                 }
 
             if (!roads)
-                foreach (int exit in g.hangarExits)
+                foreach (int exit in Concat(g.hangarExits, g.serviceNodes))
                     for (int r = 0; r < field.Runways.Length; r++)
                         for (int d = 0; d < 2; d++)
                             if (g.holdShorts[r, d] >= 0)
@@ -119,8 +128,17 @@ namespace WingCommand
             return g;
         }
 
-        /// <summary>The runway's entry point nearest the threshold (within <see cref="EntrySearchRadius"/>), else a point
-        /// <see cref="HoldShortBack"/> before the threshold and clear of the runway edge on the side of the field centre.</summary>
+        private static int[] Concat(int[] a, int[] b)
+        {
+            var all = new int[a.Length + b.Length];
+            a.CopyTo(all, 0);
+            b.CopyTo(all, a.Length);
+            return all;
+        }
+
+        /// <summary>The runway's entry point nearest the threshold (within <see cref="EntrySearchRadius"/>, off the runway by
+        /// <see cref="EntryClearance"/>), else a point <see cref="HoldShortBack"/> before the threshold and clear of the
+        /// runway edge on the side of the field centre.</summary>
         private static Vec3 HoldShortPosition(AirbaseSample field, RunwaySample runway, bool reverse, Vec3 threshold)
         {
             float best = EntrySearchRadius;
@@ -128,6 +146,7 @@ namespace WingCommand
             bool have = false;
             foreach (Pose entry in runway.Entries)
             {
+                if (runway.Contains(entry.Pos, EntryClearance)) continue;
                 float d = (entry.Pos - threshold).Horizontal.Length;
                 if (d < best)
                 {

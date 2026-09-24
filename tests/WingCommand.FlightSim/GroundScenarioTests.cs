@@ -137,7 +137,8 @@ namespace WingCommand.FlightSim
             Assert.True(Math.Abs(a0.Z - a1.Z) < 5f && Math.Abs(Math.Abs(a0.X - a1.X) - 30f) < 5f, $"row 1 at {a0} and {a1}");
             float last = 0f;
             foreach (Member m in members) last = Math.Max(last, m.DoneAt);
-            Assert.True(last < 300f, $"the last member finished its climb-out at {last:0} s");
+            // Spec M3 §9 T1: the 4-ship is off the field within 180 s.
+            Assert.True(last < 180f, $"the last member finished its climb-out at {last:0} s");
         }
 
         [Fact]

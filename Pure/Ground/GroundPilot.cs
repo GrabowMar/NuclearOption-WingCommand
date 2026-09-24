@@ -9,15 +9,19 @@ namespace WingCommand
     /// <list type="bullet">
     /// <item>Parked: brakes for <see cref="ParkedSeconds"/>, then routes to the departure hold-short.</item>
     /// <item>TaxiOut / HoldShort: pure pursuit along the route, claiming <see cref="ClaimAhead"/> of it; it stops where its
-    /// claims end, <see cref="FollowGap"/> behind the member ahead on its edge, and <see cref="ObstacleGap"/> short of a
-    /// foreign aircraft within <see cref="ObstacleCorridor"/> of its path. Reaching the last edge it joins the departure
-    /// queue (HoldShort) and creeps to the hold-short node.</item>
+    /// claims end, <see cref="FollowGap"/> short of another member and <see cref="ObstacleGap"/> short of a foreign
+    /// aircraft within <see cref="ObstacleCorridor"/> of its path or ahead of its nose (whatever edges they hold). Two
+    /// members stopped for each other: the lower id goes first when its path passes the other with its span plus
+    /// <see cref="PassMargin"/> to spare; when it cannot, neither wait counts as legitimate (the watchdog acts). On
+    /// the last edge, or <see cref="QueueReach"/> from the hold-short along its route (a queue longer than the last
+    /// edge), it joins the departure queue (HoldShort) and creeps to the hold-short node.</item>
     /// <item>LineUp: once the sequencer lets it, from the hold-short across the threshold to its row and lane, aligned
     /// over the last <see cref="LineupRunIn"/>; it releases its taxi claims once clear of the hold-short and tells the
     /// sequencer when it is past the threshold. Stopped on its slot it is lined up when within
     /// <see cref="LineupAlignDeg"/> of the runway heading or after <see cref="AlignSettleSeconds"/> (the roll steers the
     /// rest).</item>
-    /// <item>Roll: on the sequencer's word, full throttle along its lane to the takeoff speed.</item>
+    /// <item>Roll: on the sequencer's word, full throttle along its lane to the takeoff speed; braked while a foreign
+    /// aircraft is in the lane ahead.</item>
     /// <item>Aborted: not lined up within <see cref="LineUpSeconds"/>, or not at takeoff speed
     /// <see cref="RollSeconds"/> after starting the roll, it leaves the field (the runway lock goes with it) and the
     /// engine returns it to the reserve.</item>
@@ -29,24 +33,26 @@ namespace WingCommand
     /// blocked edge within its claims, a deadlock naming it the victim, or the watchdog (no progress) reroutes it: short
     /// of the edge to avoid, it keeps its route and claims up to the node before it and takes another way from there;
     /// on that edge, it turns back to that node when nobody follows it. With no other way it keeps its route (a victim
-    /// tells the field, which picks another). The watchdog then relocates it once to the hold-short, braked until the
-    /// hold-short is free (no claim, nobody within <see cref="RelocateClearRadius"/>) and claimed.</item>
+    /// tells the field, which picks another). The watchdog then relocates it once to the hold-short, as soon as the
+    /// hold-short is free (no claim, nobody within <see cref="RelocateClearRadius"/>) and claimed; it keeps trying to
+    /// taxi meanwhile, and a member that gets going again (<see cref="RelocateCancelMetres"/>) is not moved.</item>
     /// </list></summary>
     internal sealed class GroundPilot
     {
-        public static float ParkedSeconds = 2f, ClaimAhead = 80f, NodeClearRadius = 15f, FollowGap = 40f;
-        public static float ObstacleCorridor = 15f, ObstacleGap = 30f, ObstacleLookahead = 150f;
+        public static float ParkedSeconds = 2f, ClaimAhead = 80f, NodeClearRadius = 15f, FollowGap = 40f, QueueReach = 400f;
+        public static float ObstacleCorridor = 15f, ObstacleGap = 30f, ObstacleLookahead = 150f, PassMargin = 2f;
         public static float ThresholdEntry = 10f, ClearedPastThreshold = 30f, LineupRunIn = 25f, AlignTail = 80f;
         public static float LineupTolerance = 3f, LineupAlignDeg = 10f, StoppedSpeed = 0.5f;
         public static float LiftOffHeight = 30f, HoverExitHeight = 3f, HoverExitReached = 5f;
         public static float ClimbOutHeight = 150f, ClimbOutSeconds = 30f, ClimbOutAboveRunway = 300f, ClimbOutSpeedFactor = 1.3f;
-        public static float RerouteCost = 1e4f, OppositeCost = 1000f, RelocateClearRadius = 30f;
+        public static float RerouteCost = 1e4f, OppositeCost = 1000f, RelocateClearRadius = 30f, RelocateCancelMetres = 10f;
         public static float AlignSettleSeconds = 5f, LineUpSeconds = 120f, RollSeconds = 60f;
 
         public readonly int Owner;
         public readonly StuckWatchdog Watchdog = new StuckWatchdog();
         public GroundPhase Phase { get; private set; } = GroundPhase.Parked;
         public bool Done => Phase == GroundPhase.Done;
+        public FieldTraffic Field => field;
         /// <summary>Set by the engine at spawn: a structure overhead (a helicopter must leave the hangar first).</summary>
         public bool RoofOverhead;
         public ControlOutput LastOutput;
@@ -54,7 +60,7 @@ namespace WingCommand
         private readonly FieldTraffic field;
         private readonly AirframeClass cls;
         private readonly Pose spawn;
-        private readonly int hangar;
+        private readonly int hangar, startNode;
         private readonly GroundController controller = new GroundController();
         private readonly List<int> nodes = new List<int>(), edges = new List<int>();
         private readonly List<int> nodePathIndex = new List<int>();
@@ -67,16 +73,23 @@ namespace WingCommand
         private float phaseStart = float.NaN, liftoffTime = float.NaN, settleStart = float.NaN, rollStart = float.NaN;
         private bool enqueued, taxiReleased, clearedThreshold, rolling, airborneReported, exitedHangar, relocationPending, relocationWanted;
         private Pose relocation;
+        private Vec3 relocateFrom;
         private int lineupSlotIndex;
 
-        public GroundPilot(int owner, FieldTraffic field, AirframeClass cls, Pose spawn, int hangarIndex)
+        /// <summary>A member launched from hangar <paramref name="hangarIndex"/> (−1: none) joins the taxi graph at that
+        /// hangar's exit, else at <paramref name="startNode"/> (a service spot's), else at the node nearest to it.</summary>
+        public GroundPilot(int owner, FieldTraffic field, AirframeClass cls, Pose spawn, int hangarIndex, int startNode = -1)
         {
             Owner = owner;
             this.field = field;
             this.cls = cls;
             this.spawn = spawn;
             hangar = hangarIndex;
+            this.startNode = startNode;
         }
+
+        private int StartNode(Vec3 pos) =>
+            hangar >= 0 ? field.Graph.HangarExit(hangar) : startNode >= 0 ? startNode : field.Graph.NearestNode(pos);
 
         private bool Vertical => cls != AirframeClass.FixedWing;
 
@@ -99,7 +112,7 @@ namespace WingCommand
                         }
                         else
                         {
-                            RouteFrom(new[] { s.Pos }, hangar >= 0 ? field.Graph.HangarExit(hangar) : field.Graph.NearestNode(s.Pos));
+                            RouteFrom(new[] { s.Pos }, StartNode(s.Pos));
                             Enter(GroundPhase.TaxiOut, time);
                             Log(events, time, slot, WingEventKind.Taxiing);
                         }
@@ -155,8 +168,8 @@ namespace WingCommand
         {
             if (relocationWanted)
             {
-                Relocate(time, events, slot);
-                return new ControlOutput { Brake = 1f };
+                if ((s.Pos - relocateFrom).Horizontal.Length > RelocateCancelMetres) relocationWanted = false;
+                else if (Relocate(time, events, slot)) return new ControlOutput { Brake = 1f };
             }
             float along = Along(s.Pos);
             int step = StepAt(along);
@@ -165,10 +178,18 @@ namespace WingCommand
             float total = cum[cum.Length - 1];
             float stopAt = total;
             bool reservationWait = false;
+            float obstacle = ObstacleStop(along, s, p, out int member);
             if (edges.Count > 0)
             {
                 int steps = 1;
                 while (step + steps < edges.Count && NodeAt(step + steps) < along + ClaimAhead) steps++;
+                if (member >= 0)
+                {
+                    // Never claim past a member ahead on the path: what lies beyond it is its to take first.
+                    int limit = 0;
+                    while (step + limit < edges.Count && NodeAt(step + limit + 1) < obstacle + FollowGap) limit++;
+                    steps = Math.Min(steps, limit);
+                }
                 for (int k = step; k < edges.Count; k++)
                 {
                     if (!field.Reservations.Blocked(edges[k])) continue;
@@ -183,10 +204,16 @@ namespace WingCommand
                     stopAt = NodeAt(k);
                     break;
                 }
-                int items = steps > 0 ? field.Reservations.TryAdvance(Owner, TaxiPriority.Departing, nodes, edges, step, steps) : 0;
+                // The last step's far node only once it is within the claim window (a long edge's far end is not held
+                // from the other end of it).
+                bool lastNode = NodeAt(step + steps) < along + ClaimAhead;
+                int items = steps > 0
+                    ? field.Reservations.TryAdvance(Owner, TaxiPriority.Departing, nodes, edges, step, steps,
+                        along <= NodeAt(0) + NodeClearRadius, lastNode)
+                    : 0;
                 bool toGoal = step + steps >= edges.Count && items >= 2 * steps;
                 waitEdge = waitNode = -1;
-                if (!toGoal)
+                if (!toGoal && steps > 0)
                 {
                     int full = items / 2;
                     waitEdge = step + full;
@@ -197,22 +224,21 @@ namespace WingCommand
                     }
                     else if (items == 0 && along < NodeAt(0)) stopAt = Math.Min(stopAt, NodeAt(0) - NodeClearRadius);
                     else stopAt = Math.Min(stopAt, NodeAt(step + full));
-                    reservationWait = steps > 0 && stopAt - along < 3f;
-                }
-                int ahead = field.Reservations.Ahead(Owner, edges[Math.Min(step, edges.Count - 1)]);
-                if (ahead >= 0 && field.TryGetPosition(ahead, out Vec3 at))
-                {
-                    float follow = along + (at - s.Pos).Horizontal.Length - FollowGap;
-                    if (follow < stopAt)
-                    {
-                        stopAt = follow;
-                        reservationWait = true;
-                    }
+                    // Waiting for a holder that waits for us (a mixed cycle the deadlock check cannot see) is not
+                    // legitimate: the watchdog acts.
+                    reservationWait = stopAt - along < 3f && field.WaitsFor(field.Reservations.WaitingFor(Owner)) != Owner;
                 }
             }
-            stopAt = Math.Min(stopAt, ObstacleStop(along, s));
+            field.ReportWait(Owner, obstacle < stopAt ? member : -1);
+            if (obstacle < stopAt)
+            {
+                stopAt = obstacle;
+                // Queued behind another member is a legitimate wait (unless it waits for us too); stuck behind a foreign
+                // aircraft is not.
+                reservationWait |= member >= 0 && field.WaitsFor(member) != Owner && stopAt - along < 3f;
+            }
 
-            if (!enqueued && (edges.Count == 0 || along >= NodeAt(edges.Count - 1)))
+            if (!enqueued && (edges.Count == 0 || along >= NodeAt(edges.Count - 1) || total - along <= QueueReach))
             {
                 enqueued = true;
                 field.Departures.Enqueue(Owner, time);
@@ -240,8 +266,9 @@ namespace WingCommand
                     break;
                 case WatchdogAction.Relocate:
                     relocationWanted = true;
-                    Relocate(time, events, slot);
-                    return new ControlOutput { Brake = 1f };
+                    relocateFrom = s.Pos;
+                    if (Relocate(time, events, slot)) return new ControlOutput { Brake = 1f };
+                    break;
             }
 
             GroundCommand c = GroundGuidance.Pursue(path, ref progress, s, stopAt - along);
@@ -311,8 +338,12 @@ namespace WingCommand
             }
             GroundCommand c = GroundGuidance.Pursue(path, ref progress, s, 1e6f);
             ControlOutput o = controller.Step(c, s, p, 0f);
-            o.Throttle = 1f;
-            o.Brake = 0f;
+            // Anything foreign in the lane ahead (the whole runway: one long segment): hold or reject the takeoff.
+            float along = Along(s.Pos);
+            bool blocked = false;
+            foreach (Vec3 obstacle in field.Obstacles) blocked |= OnPathAt(obstacle, along, s, out _) < float.MaxValue;
+            o.Throttle = blocked ? 0f : 1f;
+            o.Brake = blocked ? 1f : 0f;
             float speed = Vec3.Dot(s.Vel, s.Fwd.Horizontal.Normalized);
             if (speed < p.TakeoffSpeed && time - rollStart > RollSeconds) return Abort(time, events, slot);
             if (speed >= p.TakeoffSpeed)
@@ -491,17 +522,18 @@ namespace WingCommand
         private float RouteCost(int e, int from) =>
             (field.Reservations.Blocked(e) ? RerouteCost : 0f) + (field.Reservations.Against(e, from) ? OppositeCost : 0f);
 
-        /// <summary>Once, when the hold-short is free: claimed, then the engine moves the aircraft there.</summary>
-        private void Relocate(float time, WingEventRing events, int slot)
+        /// <summary>Once, when the hold-short is free: claimed, then the engine moves the aircraft there. False while it
+        /// is not free.</summary>
+        private bool Relocate(float time, WingEventRing events, int slot)
         {
             int hold = field.Graph.HoldShort(field.RunwayIndex, field.Reverse);
             Vec3 at = field.Graph.NodePos(hold);
             int owner = field.Reservations.OwnerOfNode(hold);
-            if ((owner >= 0 && owner != Owner) || field.Occupied(at, RelocateClearRadius, Owner)) return;
+            if ((owner >= 0 && owner != Owner) || field.Occupied(at, RelocateClearRadius, Owner)) return false;
             field.Reservations.ReleaseAll(Owner);
             holdClaim[0] = hold;
-            if (field.Reservations.TryAdvance(Owner, TaxiPriority.Departing, holdClaim, noEdges, 0, 0) == 0 &&
-                field.Reservations.OwnerOfNode(hold) != Owner) return;
+            field.Reservations.TryAdvance(Owner, TaxiPriority.Departing, holdClaim, noEdges, 0, 0);
+            if (field.Reservations.OwnerOfNode(hold) != Owner) return false;
             relocationWanted = false;
             Vec3 threshold = field.Reverse ? field.Runway.End : field.Runway.Start;
             relocation = new Pose(at, (threshold - at).Horizontal.Normalized);
@@ -510,6 +542,7 @@ namespace WingCommand
             RouteFrom(new[] { at }, hold);
             Watchdog.Restart(at);
             Log(events, time, slot, WingEventKind.Relocated);
+            return true;
         }
 
         /// <summary>The path is <paramref name="prefix"/> (from where the aircraft is) followed by the route from
@@ -588,37 +621,64 @@ namespace WingCommand
             return cum[i] + t;
         }
 
-        /// <summary>Where to stop for a foreign aircraft (a very long distance when none): on the path ahead, and whatever
-        /// the path says, anything in the corridor ahead of the nose.</summary>
-        private float ObstacleStop(float along, in AircraftState s)
+        /// <summary>Where to stop for another aircraft (a very long distance when none): foreign ones
+        /// <see cref="ObstacleGap"/> short, members <see cref="FollowGap"/> short (<paramref name="member"/>: a member
+        /// sets it).</summary>
+        /// <summary>Where to stop for another aircraft (a very long distance when none): foreign ones
+        /// <see cref="ObstacleGap"/> short, members <see cref="FollowGap"/> short (<paramref name="member"/>: the member
+        /// that sets it, −1 when none).</summary>
+        private float ObstacleStop(float along, in AircraftState s, AirframeProfile p, out int member)
         {
             float stop = float.MaxValue;
-            if (field.Obstacles.Count == 0 || path.Length < 2) return stop;
-            Vec3 nose = s.Fwd.Horizontal.SqrLength > 1e-4f ? s.Fwd.Horizontal.Normalized : Vec3.Forward;
-            Vec3 side = Vec3.Cross(Vec3.Up, nose);
+            member = -1;
+            if (path.Length < 2) return stop;
             foreach (Vec3 o in field.Obstacles)
             {
-                Vec3 d = (o - s.Pos).Horizontal;
-                float ahead = Vec3.Dot(d, nose);
-                if (ahead > 0f && Math.Abs(Vec3.Dot(d, side)) < ObstacleCorridor) stop = Math.Min(stop, along + ahead - ObstacleGap);
+                float at = OnPathAt(o, along, s, out _);
+                if (at - ObstacleGap < stop) stop = at - ObstacleGap;
+            }
+            foreach (KeyValuePair<int, Vec3> m in field.Positions)
+            {
+                if (m.Key == Owner) continue;
+                float at = OnPathAt(m.Value, along, s, out float lateral);
+                if (at == float.MaxValue) continue;
+                // It waits for us: the lower id goes first, when it passes clear of it.
+                if (Owner < m.Key && field.WaitsFor(m.Key) == Owner && lateral >= p.SpanM + PassMargin) continue;
+                if (at - FollowGap >= stop) continue;
+                stop = at - FollowGap;
+                member = m.Key;
+            }
+            return stop;
+        }
+
+        /// <summary>How far along the path this one would reach an aircraft at <paramref name="o"/> (float.MaxValue: never):
+        /// one within <see cref="ObstacleCorridor"/> of the path ahead (up to <see cref="ObstacleLookahead"/>), or of the
+        /// line ahead of the nose; <paramref name="lateral"/> is how far it stands off that line.</summary>
+        private float OnPathAt(Vec3 o, float along, in AircraftState s, out float lateral)
+        {
+            float at = float.MaxValue;
+            lateral = float.MaxValue;
+            Vec3 nose = s.Fwd.Horizontal.SqrLength > 1e-4f ? s.Fwd.Horizontal.Normalized : Vec3.Forward;
+            Vec3 d = (o - s.Pos).Horizontal;
+            float ahead = Vec3.Dot(d, nose), side = Math.Abs(Vec3.Dot(d, Vec3.Cross(Vec3.Up, nose)));
+            if (ahead > 0f && ahead < ObstacleLookahead && side < ObstacleCorridor)
+            {
+                at = along + ahead;
+                lateral = side;
             }
             for (int i = Math.Min(progress, path.Length - 2); i < path.Length - 1 && cum[i] < along + ObstacleLookahead; i++)
             {
-                Vec3 a = path[i].Horizontal, b = path[i + 1].Horizontal, ab = b - a;
+                Vec3 a = path[i].Horizontal, ab = path[i + 1].Horizontal - a;
                 float len = ab.Length;
                 if (len < 1e-4f) continue;
-                Vec3 u = ab / len;
-                foreach (Vec3 o in field.Obstacles)
-                {
-                    Vec3 ao = o.Horizontal - a;
-                    float t = Vec3.Dot(ao, u);
-                    if (t < 0f || t > len) continue;
-                    float lateral = (ao - u * t).Length;
-                    float at = cum[i] + t;
-                    if (lateral < ObstacleCorridor && at > along) stop = Math.Min(stop, at - ObstacleGap);
-                }
+                Vec3 u = ab / len, ao = o.Horizontal - a;
+                float t = Vec3.Dot(ao, u), off = (ao - u * t).Length;
+                if (t < 0f || t > len || off >= ObstacleCorridor || cum[i] + t <= along) continue;
+                at = Math.Min(at, cum[i] + t);
+                lateral = Math.Min(lateral, off);
+                break;
             }
-            return stop;
+            return at;
         }
 
         private void Enter(GroundPhase phase, float time)

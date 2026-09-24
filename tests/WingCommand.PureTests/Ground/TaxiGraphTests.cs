@@ -35,6 +35,17 @@ namespace WingCommand.PureTests
         }
 
         [Fact]
+        public void AnEntryPointOnTheRunwayIsNeverTheHoldShort()
+        {
+            // Review M3a #7: navalbase entry points lie on the centreline, so the group gathered on the runway.
+            AirbaseSample field = TestFields.Simple();
+            field.Runways[0].Entries = new[] { new Pose(new Vec3(0f, 0f, 30f), new Vec3(0f, 0f, 1f)) };
+            TaxiGraph g = TaxiGraph.Build(field);
+            Vec3 hold = g.NodePos(g.HoldShort(0, false));
+            Assert.True(Math.Abs(hold.X) > 0.5f * field.Runways[0].Width, $"hold-short at {hold}, on the runway");
+        }
+
+        [Fact]
         public void TheRouteFromAHangarToTheHoldShortFollowsTheTaxiway()
         {
             TaxiGraph g = TaxiGraph.Build(TestFields.Simple());

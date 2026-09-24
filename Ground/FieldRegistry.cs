@@ -6,7 +6,8 @@ namespace WingCommand
     /// stepped once per physics tick before its members; every <see cref="RefreshSeconds"/> it learns the foreign
     /// aircraft standing on it (obstacles for taxi guidance) and whether a native landing is registered on its
     /// departure runway (departures do not line up then). It also answers the runway lock for the native takeoff
-    /// check (<see cref="RunwayLockPatch"/>).</summary>
+    /// check (<see cref="RunwayLockPatch"/>), and while the lock is held one of our aircraft heads the game's takeoff
+    /// queue, so native taxiing and crossing traffic sees the runway in use and waits before entering it.</summary>
     internal static class FieldRegistry
     {
         public static float RefreshSeconds = 1f, ObstacleMaxRadarAlt = 3f;
@@ -15,6 +16,7 @@ namespace WingCommand
         {
             public Airbase Airbase;
             public FieldTraffic Traffic;
+            public Aircraft Queued;
         }
 
         private static readonly List<Entry> fields = new List<Entry>();
@@ -50,7 +52,43 @@ namespace WingCommand
                 }
                 if (refresh) Refresh(e, wing);
                 e.Traffic.Step(dt);
+                SyncTakeoffQueue(e, wing);
             }
+        }
+
+        /// <summary>Only into an empty queue (a native aircraft at its head already marks the runway in use), so no native
+        /// aircraft ever waits behind ours; ours leaves the queue with the lock.</summary>
+        private static void SyncTakeoffQueue(Entry e, WingService wing)
+        {
+            Airbase.Runway runway = RunwayOf(e);
+            if (runway == null) return;
+            if (!e.Traffic.Departures.RunwayLocked)
+            {
+                Dequeue(e, runway);
+                return;
+            }
+            if (e.Queued != null && !e.Queued.disabled) return;
+            e.Queued = null;
+            Aircraft a = wing?.GroundAircraftOn(e.Traffic);
+            if (a == null || !runway.ClearForTakeoff(a, false)) return;
+            runway.SetUsageDirection(e.Traffic.Reverse);
+            runway.QueueTakeoff(a);
+            e.Queued = a;
+        }
+
+        private static void Dequeue(Entry e, Airbase.Runway runway)
+        {
+            if (e.Queued == null) return;
+            runway.DequeueTakeoff(e.Queued);
+            e.Queued = null;
+        }
+
+        private static Airbase.Runway RunwayOf(Entry e)
+        {
+            if (e.Airbase.runways == null) return null;
+            foreach (Airbase.Runway r in e.Airbase.runways)
+                if (r != null && r.index == e.Traffic.Runway.Index) return r;
+            return null;
         }
 
         /// <summary>True when <paramref name="runway"/> is held by a Wing Command departure and <paramref name="querier"/>
@@ -64,7 +102,16 @@ namespace WingCommand
             return false;
         }
 
-        public static void Clear() => fields.Clear();
+        public static void Clear()
+        {
+            foreach (Entry e in fields)
+                if (e.Airbase != null)
+                {
+                    Airbase.Runway runway = RunwayOf(e);
+                    if (runway != null) Dequeue(e, runway);
+                }
+            fields.Clear();
+        }
 
         private static void Refresh(Entry e, WingService wing)
         {

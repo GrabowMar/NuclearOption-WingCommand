@@ -29,21 +29,23 @@ namespace WingCommand
 
     /// <summary>One field's departures (spec M3 §3.4–3.5). Expected members gather at the hold-short; the group lines
     /// up once all have arrived (or <see cref="GatherTimeout"/> after the first), taking the runway lock (never while a
-    /// native landing is pending). The group is the queue at that moment, its <see cref="Abreast"/> the fewest any of its
+    /// native landing is pending or a foreign aircraft is on the runway, <see cref="RunwayBusy"/>). The group is the
+    /// queue at that moment, its <see cref="Abreast"/> the fewest any of its
     /// types allows; both stay fixed until the lock is released, and a member arriving later waits for the next group.
-    /// Members line up one at a time in queue order as the previous clears the threshold; rows roll in queue order, each
-    /// <see cref="RowInterval"/> after the previous; the lock is released when the last member of the group is airborne.
-    /// A member removed on the ground (lost, released) never blocks its row.</summary>
+    /// Members line up one at a time as the previous clears the threshold, whoever of the group reaches the hold-short
+    /// next, each into the next slot (the first row furthest down the runway); rows roll in order, each
+    /// <see cref="RowInterval"/> after the previous and never into a busy runway; the lock is released when the last
+    /// member of the group is airborne. A member removed on the ground (lost, released) never blocks its row.</summary>
     internal sealed class DepartureSequencer
     {
         public static float RowInterval = 10f, GatherTimeout = 90f, ClearHeight = 75f;
 
-        public bool NativeLandingPending;
+        public bool NativeLandingPending, RunwayBusy;
         public bool RunwayLocked { get; private set; }
 
         private readonly List<int> expected = new List<int>();
         private readonly List<int> queue = new List<int>();
-        private readonly List<int> group = new List<int>();
+        private readonly List<int> group = new List<int>(), order = new List<int>();
         private readonly Dictionary<int, int> abreastOf = new Dictionary<int, int>();
         private readonly HashSet<int> linedUp = new HashSet<int>(), airborne = new HashSet<int>(), removed = new HashSet<int>();
         private readonly HashSet<int> cleared = new HashSet<int>();
@@ -83,7 +85,7 @@ namespace WingCommand
             if (!queue.Contains(owner)) return false;
             if (!RunwayLocked)
             {
-                if (NativeLandingPending) return false;
+                if (NativeLandingPending || RunwayBusy) return false;
                 if (float.IsNaN(firstArrival)) firstArrival = time;
                 bool gathered = true;
                 foreach (int o in expected)
@@ -94,19 +96,22 @@ namespace WingCommand
                 lockedAbreast = Fewest(group, group);
                 RunwayLocked = true;
             }
-            int index = group.IndexOf(owner);
-            if (index < 0) return false;
-            for (int j = 0; j < index; j++)
-                if (!cleared.Contains(group[j]) && !removed.Contains(group[j])) return false;
+            if (!group.Contains(owner)) return false;
+            if (order.Contains(owner)) return true;
+            foreach (int o in order)
+                if (!cleared.Contains(o) && !removed.Contains(o)) return false;
+            order.Add(owner);
             return true;
         }
 
         /// <summary>The member is well past the threshold on its way to its slot: the next may line up.</summary>
         public void ClearedThreshold(int owner) => cleared.Add(owner);
 
+        /// <summary>The member's slot: its place in the lineup order (the next free slot before it lines up).</summary>
         public void SlotOf(int owner, out int row, out int column)
         {
-            int i = Math.Max(0, (RunwayLocked ? group : queue).IndexOf(owner));
+            int i = order.IndexOf(owner);
+            if (i < 0) i = order.Count;
             row = i / Abreast;
             column = i % Abreast;
         }
@@ -118,9 +123,20 @@ namespace WingCommand
         {
             SlotOf(owner, out int row, out _);
             if (rowRolledAt.ContainsKey(row)) return true;
-            int abreast = Abreast;
+            if (RunwayBusy) return false;
+            int abreast = Abreast, pending = 0;
+            foreach (int o in group)
+                if (!order.Contains(o) && !removed.Contains(o)) pending++;
             for (int i = row * abreast; i < Math.Min(group.Count, (row + 1) * abreast); i++)
-                if (!linedUp.Contains(group[i]) && !removed.Contains(group[i])) return false;
+            {
+                if (i >= order.Count)
+                {
+                    // Slots beyond the lineup so far: still to be filled while members are on their way.
+                    if (i < order.Count + pending) return false;
+                    continue;
+                }
+                if (!linedUp.Contains(order[i]) && !removed.Contains(order[i])) return false;
+            }
             if (row > 0 && (!rowRolledAt.TryGetValue(row - 1, out float previous) || time - previous < RowInterval)) return false;
             rowRolledAt[row] = time;
             return true;
@@ -157,6 +173,7 @@ namespace WingCommand
             foreach (int o in group) Forget(o);
             foreach (int o in removed) Forget(o);
             group.Clear();
+            order.Clear();
             linedUp.Clear();
             cleared.Clear();
             airborne.Clear();

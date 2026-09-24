@@ -40,6 +40,17 @@ namespace WingCommand.PureTests
             return d;
         }
 
+        /// <summary>Each member in turn is granted the lineup, clears the threshold and is lined up.</summary>
+        private static void LineUp(DepartureSequencer d, float time, params int[] owners)
+        {
+            foreach (int o in owners)
+            {
+                Assert.True(d.MayLineUp(o, time), $"{o} may line up");
+                d.ClearedThreshold(o);
+                d.LinedUp(o);
+            }
+        }
+
         [Fact]
         public void AMixedGroupLinesUpAsFewAbreastAsItsWidestTypeAllows()
         {
@@ -66,10 +77,9 @@ namespace WingCommand.PureTests
             Assert.Equal(2, d.Abreast);
             Assert.Equal(1, d.Rows);
             d.ClearedThreshold(1);
-            d.ClearedThreshold(2);
-            Assert.False(d.MayLineUp(3, 2f));
             d.LinedUp(1);
-            d.LinedUp(2);
+            LineUp(d, 2f, 2);
+            Assert.False(d.MayLineUp(3, 2f));
             Assert.True(d.MayRoll(1, 3f));
             d.Airborne(1);
             d.Airborne(2);
@@ -90,6 +100,7 @@ namespace WingCommand.PureTests
             d.Enqueue(4, 12f);
             Assert.True(d.MayLineUp(1, 12f));
             Assert.True(d.RunwayLocked);
+            LineUp(d, 12f, 1, 2, 3);
             d.SlotOf(3, out int row, out int column);
             Assert.Equal(1, row);
             Assert.Equal(0, column);
@@ -110,6 +121,41 @@ namespace WingCommand.PureTests
         }
 
         [Fact]
+        public void WhoeverReachesTheHoldShortNextLinesUpIntoTheNextSlot()
+        {
+            // Queued early (400 m out) the queue order need not be the order at the hold-short: slots follow the lineup.
+            DepartureSequencer d = FourShip();
+            for (int o = 1; o <= 4; o++) d.Enqueue(o, 0f);
+            Assert.True(d.MayLineUp(2, 1f), "2 got to the hold-short first");
+            Assert.False(d.MayLineUp(1, 1f), "one at a time");
+            d.SlotOf(2, out int row, out int column);
+            Assert.Equal((0, 0), (row, column));
+            d.ClearedThreshold(2);
+            Assert.True(d.MayLineUp(1, 2f));
+            d.SlotOf(1, out row, out column);
+            Assert.Equal((0, 1), (row, column));
+            Assert.Equal(2, d.Rows);
+        }
+
+        [Fact]
+        public void ARowMissingARemovedMemberStillRolls()
+        {
+            DepartureSequencer d = FourShip();
+            for (int o = 1; o <= 3; o++) d.Enqueue(o, 0f);
+            d.Remove(4);
+            Assert.True(d.MayLineUp(1, 0f));
+            d.ClearedThreshold(1);
+            Assert.True(d.MayLineUp(2, 0f));
+            d.ClearedThreshold(2);
+            Assert.True(d.MayLineUp(3, 0f));
+            d.LinedUp(1);
+            d.LinedUp(2);
+            d.LinedUp(3);
+            Assert.True(d.MayRoll(1, 1f));
+            Assert.True(d.MayRoll(3, 1f + DepartureSequencer.RowInterval + 0.1f), "row 2 has no fourth member to wait for");
+        }
+
+        [Fact]
         public void AGroupThatNeverGathersLinesUpAfterTheTimeout()
         {
             DepartureSequencer d = FourShip();
@@ -123,11 +169,29 @@ namespace WingCommand.PureTests
         {
             DepartureSequencer d = FourShip();
             for (int o = 1; o <= 4; o++) d.Enqueue(o, 0f);
-            for (int o = 1; o <= 4; o++) d.LinedUp(o);
+            LineUp(d, 0f, 1, 2, 3, 4);
             Assert.True(d.MayRoll(1, 20f));
             Assert.True(d.MayRoll(2, 20f));
             Assert.False(d.MayRoll(3, 20f + DepartureSequencer.RowInterval - 1f));
             Assert.True(d.MayRoll(3, 20f + DepartureSequencer.RowInterval + 0.1f));
+        }
+
+        [Fact]
+        public void NothingLinesUpOrStartsItsRollWhileAForeignAircraftIsOnTheRunway()
+        {
+            // Review M3a #7: native traffic on the runway was not checked.
+            DepartureSequencer d = FourShip();
+            for (int o = 1; o <= 4; o++) d.Enqueue(o, 0f);
+            d.RunwayBusy = true;
+            Assert.False(d.MayLineUp(1, 5f));
+            d.RunwayBusy = false;
+            LineUp(d, 6f, 1, 2);
+            d.RunwayBusy = true;
+            Assert.False(d.MayRoll(1, 7f));
+            d.RunwayBusy = false;
+            Assert.True(d.MayRoll(1, 8f));
+            d.RunwayBusy = true;
+            Assert.True(d.MayRoll(2, 8f), "a row that has started rolls on together");
         }
 
         [Fact]
@@ -146,11 +210,9 @@ namespace WingCommand.PureTests
         {
             DepartureSequencer d = FourShip();
             for (int o = 1; o <= 4; o++) d.Enqueue(o, 0f);
-            Assert.True(d.MayLineUp(1, 0f));
-            d.LinedUp(1);
-            d.LinedUp(2);
+            LineUp(d, 0f, 1, 2);
             d.Remove(4);   // lost on the ground
-            d.LinedUp(3);
+            LineUp(d, 0f, 3);
             Assert.True(d.MayRoll(1, 1f));
             Assert.True(d.MayRoll(3, 1f + DepartureSequencer.RowInterval + 0.1f), "row 2 rolls without its missing member");
             d.Airborne(1);

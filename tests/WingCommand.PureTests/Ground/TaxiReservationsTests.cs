@@ -64,6 +64,27 @@ namespace WingCommand.PureTests
         }
 
         [Fact]
+        public void OnlyTheHeadOfAConvoyMayTakeTheNodeAtTheEndOfItsEdge()
+        {
+            // Seen on a real field: a member joining a long edge behind others asked first for the node at its far end
+            // and took it, so the convoy ahead could not reach the hold-short.
+            TaxiGraph g = Line();
+            var r = new TaxiReservations(g);
+            var route = Path(g, 0f, 0f, 300f, 0f);   // A, A-B, B, ...
+            int b = route.nodes[1];
+            r.TryAdvance(3, TaxiPriority.Departing, new[] { b }, new int[0], 0, 0);   // someone holds B
+            Assert.Equal(1, r.TryAdvance(1, TaxiPriority.Departing, route.nodes, route.edges, 0, 1));   // A, A-B
+            r.ReleaseNode(1, route.nodes[0]);                                                       // 1 is past A
+            Assert.Equal(1, r.TryAdvance(2, TaxiPriority.Departing, route.nodes, route.edges, 0, 1));   // A, A-B behind 1
+            r.ReleaseAll(3);                                                                        // B comes free
+            Assert.Equal(1, r.TryAdvance(2, TaxiPriority.Departing, route.nodes, route.edges, 0, 1));
+            Assert.NotEqual(2, r.OwnerOfNode(b));
+            // The leader, past A (which 2 now holds), claims on from its edge.
+            Assert.Equal(2, r.TryAdvance(1, TaxiPriority.Departing, route.nodes, route.edges, 0, 1, claimStart: false));
+            Assert.Equal(1, r.OwnerOfNode(b));
+        }
+
+        [Fact]
         public void OppositeDirectionsNeverShareAnEdge()
         {
             TaxiGraph g = Line();

@@ -1,14 +1,18 @@
+using System;
 using System.Collections.Generic;
 
 namespace WingCommand
 {
     /// <summary>One airbase's Wing Command traffic (spec M3 §2.2): its graph, the reservations and departures every member
     /// there shares, the departure runway and direction, where each member is, and foreign aircraft standing on the
-    /// field (<see cref="Obstacles"/>, refreshed by the engine). Stepped once per tick before its members; it checks
-    /// for a reservation deadlock every <see cref="DeadlockPeriod"/> and names the member that must back off.</summary>
+    /// field (<see cref="Obstacles"/>, refreshed by the engine). Stepped once per tick before its members: the departure
+    /// runway is busy while a foreign aircraft is on it (within <see cref="RunwayMargin"/>); every
+    /// <see cref="DeadlockPeriod"/> it blocks each taxi edge a foreign aircraft has stood on (within
+    /// <see cref="BlockCorridor"/>, still for <see cref="BlockSeconds"/>) until it moves, checks for a reservation
+    /// deadlock and names the member that must back off.</summary>
     internal sealed class FieldTraffic
     {
-        public static float DeadlockPeriod = 1f;
+        public static float DeadlockPeriod = 1f, RunwayMargin = 5f, BlockSeconds = 20f, BlockCorridor = 10f, StandingRadius = 3f;
 
         public readonly AirbaseSample Field;
         public readonly TaxiGraph Graph;
@@ -18,6 +22,10 @@ namespace WingCommand
         public readonly bool Reverse;
         public readonly List<Vec3> Obstacles = new List<Vec3>();
         private readonly Dictionary<int, Vec3> positions = new Dictionary<int, Vec3>();
+        private readonly Dictionary<int, int> waitsFor = new Dictionary<int, int>();
+        private List<Vec3> standing = new List<Vec3>(), nextStanding = new List<Vec3>();
+        private List<float> standingFor = new List<float>(), nextStandingFor = new List<float>();
+        private readonly bool[] blockedHere;
         private float sinceCheck;
 
         public FieldTraffic(AirbaseSample field, int runwayIndex, bool reverse)
@@ -25,6 +33,7 @@ namespace WingCommand
             Field = field;
             Graph = TaxiGraph.Build(field);
             Reservations = new TaxiReservations(Graph);
+            blockedHere = new bool[Graph.EdgeCount];
             RunwayIndex = runwayIndex;
             Reverse = reverse;
         }
@@ -55,6 +64,14 @@ namespace WingCommand
 
         public bool TryGetPosition(int owner, out Vec3 pos) => positions.TryGetValue(owner, out pos);
 
+        /// <summary>Where each member on the field last was.</summary>
+        public Dictionary<int, Vec3> Positions => positions;
+
+        /// <summary>The member <paramref name="owner"/> is stopped for (−1: none), as it last reported.</summary>
+        public int WaitsFor(int owner) => waitsFor.TryGetValue(owner, out int other) ? other : -1;
+
+        public void ReportWait(int owner, int other) => waitsFor[owner] = other;
+
         /// <summary>Another member or a foreign aircraft stands within <paramref name="radius"/> of <paramref name="at"/>.</summary>
         public bool Occupied(Vec3 at, float radius, int except)
         {
@@ -67,10 +84,60 @@ namespace WingCommand
 
         public void Step(float dt)
         {
+            bool busy = false;
+            foreach (Vec3 o in Obstacles)
+                if (Runway.Contains(o, RunwayMargin)) busy = true;
+            Departures.RunwayBusy = busy;
+            TrackStanding(dt);
             sinceCheck += dt;
             if (sinceCheck < DeadlockPeriod) return;
             sinceCheck = 0f;
+            BlockWhereStanding();
             Victim = Reservations.FindDeadlock(out int victim) ? victim : -1;
+        }
+
+        /// <summary>How long each foreign aircraft has stood where it is (one that moved more than
+        /// <see cref="StandingRadius"/> starts again).</summary>
+        private void TrackStanding(float dt)
+        {
+            nextStanding.Clear();
+            nextStandingFor.Clear();
+            foreach (Vec3 o in Obstacles)
+            {
+                float since = 0f;
+                for (int i = 0; i < standing.Count; i++)
+                    if ((standing[i] - o).Horizontal.Length < StandingRadius) since = Math.Max(since, standingFor[i] + dt);
+                nextStanding.Add(o);
+                nextStandingFor.Add(since);
+            }
+            (standing, nextStanding) = (nextStanding, standing);
+            (standingFor, nextStandingFor) = (nextStandingFor, standingFor);
+        }
+
+        private void BlockWhereStanding()
+        {
+            for (int e = 0; e < Graph.EdgeCount; e++)
+            {
+                bool block = false;
+                for (int i = 0; i < standing.Count && !block; i++)
+                    block = standingFor[i] >= BlockSeconds && Near(Graph.EdgePoints(e), standing[i], BlockCorridor);
+                if (block == blockedHere[e]) continue;
+                blockedHere[e] = block;
+                Reservations.Block(e, block);
+            }
+        }
+
+        private static bool Near(Vec3[] polyline, Vec3 p, float radius)
+        {
+            Vec3 q = p.Horizontal;
+            for (int k = 1; k < polyline.Length; k++)
+            {
+                Vec3 a = polyline[k - 1].Horizontal, ab = polyline[k].Horizontal - a;
+                float len2 = ab.SqrLength;
+                float t = len2 < 1e-6f ? 0f : Math.Max(0f, Math.Min(1f, Vec3.Dot(q - a, ab) / len2));
+                if ((a + ab * t - q).Length < radius) return true;
+            }
+            return false;
         }
 
         public void ConsumeVictim(int owner)
@@ -87,6 +154,7 @@ namespace WingCommand
             Reservations.ReleaseAll(owner);
             Departures.Remove(owner);
             positions.Remove(owner);
+            waitsFor.Remove(owner);
             ConsumeVictim(owner);
         }
     }

@@ -18,6 +18,14 @@ namespace WingCommand.PureTests
             return field;
         }
 
+        /// <summary><see cref="Simple"/> with a service point beside the taxiway at z = 300, 200 m from any junction.</summary>
+        public static AirbaseSample WithServicePoint()
+        {
+            AirbaseSample field = Simple();
+            field.ServicePoints = new[] { new Pose(new Vec3(-200f, 0f, 300f), new Vec3(1f, 0f, 0f)) };
+            return field;
+        }
+
         public static AirbaseSample Simple(float runwayWidth = 60f, bool roads = true) => new AirbaseSample
         {
             Name = "test_field",
