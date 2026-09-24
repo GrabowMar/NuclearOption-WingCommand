@@ -858,7 +858,8 @@ namespace WingCommand
             int hold = Goal;
             Vec3 at = field.Graph.NodePos(hold);
             int owner = field.Reservations.OwnerOfNode(hold);
-            if ((owner >= 0 && owner != Owner) || field.Occupied(at, RelocateClearRadius, Owner))
+            if ((owner >= 0 && owner != Owner) || field.Occupied(at, RelocateClearRadius, Owner) ||
+                field.RelocatedNear(at, RelocateClearRadius, Owner))
                 return arriving && Restand(s, time, events, slot);
             field.Reservations.ReleaseAll(Owner);
             holdClaim[0] = hold;
@@ -869,6 +870,7 @@ namespace WingCommand
             Vec3 facing = arriving ? lastPose.Fwd.Horizontal : (threshold - at).Horizontal;
             relocation = new Pose(at, facing.SqrLength > 1e-4f ? facing.Normalized : Vec3.Forward);
             relocationPending = true;
+            field.NoteRelocation(Owner, at);
             backEdge = -1;
             RouteFrom(new[] { at }, hold);
             Watchdog.Restart(at);

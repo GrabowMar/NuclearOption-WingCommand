@@ -17,6 +17,9 @@ namespace WingCommand
         /// <summary>A jet handed to the game's landing has the runway to itself until it is down, its landing fails, or
         /// this long has passed (the next then lands behind it: the game spaces aircraft already on final).</summary>
         public static float LandingSpacingSeconds = 60f;
+        /// <summary>A spot a member was relocated to is nobody else's to be relocated to for this long, whatever the
+        /// positions say (a report can lag the move).</summary>
+        public static float RelocationGuardSeconds = 20f;
 
         public readonly AirbaseSample Field;
         public readonly TaxiGraph Graph;
@@ -40,6 +43,15 @@ namespace WingCommand
         private readonly bool[] blockedHere;
         private float sinceCheck;
         private int lander = -1;
+        private float clock;
+        private readonly List<RelocationMark> relocations = new List<RelocationMark>();
+
+        private struct RelocationMark
+        {
+            public int Owner;
+            public Vec3 At;
+            public float Until;
+        }
         private readonly HashSet<int> onRunway = new HashSet<int>();
         private float landerSince;
 
@@ -133,6 +145,19 @@ namespace WingCommand
             return true;
         }
 
+        /// <summary>A member was relocated to <paramref name="at"/>: nobody else is for <see cref="RelocationGuardSeconds"/>.</summary>
+        public void NoteRelocation(int owner, Vec3 at) =>
+            relocations.Add(new RelocationMark { Owner = owner, At = at, Until = clock + RelocationGuardSeconds });
+
+        /// <summary>Another member was relocated within <paramref name="radius"/> of <paramref name="at"/> in the last
+        /// <see cref="RelocationGuardSeconds"/>.</summary>
+        public bool RelocatedNear(Vec3 at, float radius, int except)
+        {
+            foreach (RelocationMark m in relocations)
+                if (m.Owner != except && m.Until > clock && (m.At - at).Horizontal.Length < radius) return true;
+            return false;
+        }
+
         public void ReleaseLanding(int owner)
         {
             if (lander == owner) lander = -1;
@@ -200,6 +225,9 @@ namespace WingCommand
 
         public void Step(float dt)
         {
+            clock += dt;
+            for (int i = relocations.Count - 1; i >= 0; i--)
+                if (relocations[i].Until <= clock) relocations.RemoveAt(i);
             bool busy = false;
             foreach (Vec3 o in Obstacles)
                 if (Runway.Contains(o, RunwayMargin)) busy = true;

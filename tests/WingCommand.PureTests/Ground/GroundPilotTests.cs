@@ -534,6 +534,37 @@ namespace WingCommand.PureTests
         }
 
         [Fact]
+        public void ASpotSomeoneWasJustMovedToIsNotGivenToAnotherWhateverTheirReportSays()
+        {
+            // In game (boscali_north, M3b RTB run): two stuck members were relocated 0.4 s apart onto the same hold-short
+            // and collided; the first had lined up (claims released) while its reported position still lagged.
+            var field = new FieldTraffic(TestFields.Simple(), 0, false);
+            Pose a = field.Field.Hangars[0].Spawn, b = field.Field.Hangars[1].Spawn;
+            var first = new GroundPilot(1, field, AirframeClass.FixedWing, a, 0);
+            var second = new GroundPilot(2, field, AirframeClass.FixedWing, b, 1);
+            var sa = new AircraftState { Pos = a.Pos, Fwd = a.Fwd, Up = Vec3.Up, Right = Vec3.Cross(Vec3.Up, a.Fwd) };
+            var sb = new AircraftState { Pos = b.Pos, Fwd = b.Fwd, Up = Vec3.Up, Right = Vec3.Cross(Vec3.Up, b.Fwd) };
+            IFlightPipeline pa = FlightStack.NewPipeline(AirframeClass.FixedWing), pb = FlightStack.NewPipeline(AirframeClass.FixedWing);
+            float firstAt = float.NaN, secondAt = float.NaN;
+            for (int i = 0; i < 200 * 30; i++)
+            {
+                float t = i * Dt;
+                field.Step(Dt);
+                first.Step(sa, Jet(), pa, t, Dt, null, 0);
+                if (first.TakeRelocation(out _))
+                {
+                    firstAt = t;
+                    field.Reservations.ReleaseAll(1);   // it lined up at once; its report still shows the old spot
+                }
+                second.Step(sb, Jet(), pb, t, Dt, null, 1);
+                if (second.TakeRelocation(out _) && float.IsNaN(secondAt)) secondAt = t;
+            }
+            Assert.False(float.IsNaN(firstAt));
+            Assert.True(float.IsNaN(secondAt) || secondAt - firstAt >= FieldTraffic.RelocationGuardSeconds,
+                $"moved onto the same spot {secondAt - firstAt:0.0} s later");
+        }
+
+        [Fact]
         public void LeavingTheFieldFreesEveryClaim()
         {
             var field = new FieldTraffic(TestFields.Simple(), 0, false);
