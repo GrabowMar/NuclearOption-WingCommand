@@ -33,6 +33,7 @@ namespace WingCommand
             if (Down(s.KeyNextShape)) WingCommands.NextShape();
             if (Down(s.KeyNextSpacing)) WingCommands.CycleSpacing();
             if (Down(s.KeyDismiss)) WingCommands.Dismiss();
+            if (Down(s.KeyWmcRoom)) WmcRoom.Instance?.Toggle();
             if (Down(s.KeyApLevel)) WingCommands.Autopilot(ApCommand.Level);
             if (Down(s.KeyApHeading)) WingCommands.Autopilot(ApCommand.Heading);
             if (Down(s.KeyApAltitude)) WingCommands.Autopilot(ApCommand.Altitude);

@@ -268,6 +268,9 @@ namespace WingCommand
             return button.GetComponent<Image>();
         }
 
+        /// <summary>The context's rows and scope now, bezel or not (the room reads it).</summary>
+        public void FillContext() => Fill();
+
         private void Fill()
         {
             WingService wing = WingService.Instance;
