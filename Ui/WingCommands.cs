@@ -59,6 +59,21 @@ namespace WingCommand
             WingToast.Show("Form up");
         }
 
+        /// <summary>The wing's helicopters land around you and wait (spec M4 §5).</summary>
+        public static void LandHere()
+        {
+            if (!Ready(out WingService w)) return;
+            int n = w.LandHere(out string refusal);
+            WingToast.Show(n > 0 ? $"{n} landing here" : "Cannot land here: " + refusal);
+        }
+
+        public static void TakeOff()
+        {
+            if (!Ready(out WingService w)) return;
+            int n = w.TakeOff();
+            WingToast.Show(n > 0 ? $"{n} lifting off" : "Nobody is down");
+        }
+
         public static void NextShape()
         {
             if (Ready(out WingService w)) w.NextShape();

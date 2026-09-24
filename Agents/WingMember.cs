@@ -41,6 +41,8 @@ namespace WingCommand
         public Missile ThreatMissile;
         /// <summary>Standing fire from the slot (spec M5 §8): the cadence and the last target.</summary>
         public readonly FireCadence Cadence = new FireCadence();
+        /// <summary>A helicopter landing here or down (spec M4 §5); null when flying with the wing.</summary>
+        public SettlePilot Settle;
         public Unit StandingTarget;
         public MissileSeeker ThreatSeeker;
         /// <summary>A serial per new missile (a new one picks its own notch side), the last seeker type classified and the

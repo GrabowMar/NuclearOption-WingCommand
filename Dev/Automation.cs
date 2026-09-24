@@ -371,6 +371,36 @@ namespace WingCommand
             { "decode_failures", WingNet.DecodeFailures },
         };
 
+        /// <summary>The wing's helicopters land around the anchor (spec M4 §5).</summary>
+        public static Dictionary<string, object> LandHere(Dictionary<string, object> args)
+        {
+            WingService wing = WingService.Instance;
+            if (wing == null) return Fail("LandHere", "the wing is not active");
+            int n = wing.LandHere(out string refusal);
+            return new Dictionary<string, object> { { "ok", true }, { "landing", n }, { "refusal", refusal ?? "" } };
+        }
+
+        public static Dictionary<string, object> TakeOff(Dictionary<string, object> args)
+        {
+            WingService wing = WingService.Instance;
+            if (wing == null) return Fail("TakeOff", "the wing is not active");
+            return Ok("lifting", wing.TakeOff());
+        }
+
+        /// <summary>Settled members per phase, and landings/lift-offs logged.</summary>
+        public static Dictionary<string, object> Settled(Dictionary<string, object> args)
+        {
+            WingService wing = WingService.Instance;
+            if (wing == null) return Fail("Settled", "the wing is not active");
+            return new Dictionary<string, object>
+            {
+                { "ok", true }, { "approach", wing.Settled(SettlePhase.Approach) }, { "descend", wing.Settled(SettlePhase.Descend) },
+                { "down", wing.Settled(SettlePhase.Down) }, { "lifting", wing.Settled(SettlePhase.LiftOff) },
+                { "landed", wing.Events.CountOf(WingEventKind.Landed) }, { "airborne", wing.Events.CountOf(WingEventKind.Airborne) },
+                { "failed", wing.Events.CountOf(WingEventKind.LandingFailed) }, { "members", wing.Members.Count },
+            };
+        }
+
         /// <summary>Sets the wing's doctrine by name (Reserve, Escort, Sweep or a custom line).</summary>
         public static Dictionary<string, object> Doctrine(Dictionary<string, object> args)
         {

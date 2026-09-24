@@ -213,6 +213,7 @@ namespace WingCommand
                     StepGround(m, dt);
                     return;
                 }
+                if (StepSettle(m, dt)) return;
                 m.NoFbwSeconds = m.Last.FbwActive ? 0f : m.NoFbwSeconds + dt;
                 if (m.NoFbwSeconds >= NoFbwReleaseSeconds)
                 {
@@ -383,6 +384,7 @@ namespace WingCommand
         {
             if (m.Released) return;
             m.Released = true;
+            m.Settle = null;
             EndDefence(m);
             ReleasePad(m);
             bool despawn = m.Ground != null && m.Ground.DespawnOnRelease(m.Last);
@@ -411,6 +413,7 @@ namespace WingCommand
         {
             if (Planner.Active) Order(WingTask.Form());
             Disengage();
+            TakeOff();
             for (int i = 0; i < Members.Count; i++) Members[i].Brain.FormUp(missionTime, Events);
         }
 

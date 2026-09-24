@@ -30,6 +30,7 @@ namespace WingCommand
             if (m.Released || m.Recovery != null) return false;
             if (m.Engaged) TakeBack(m, TransitionReason.Commanded);
             EndDefence(m);
+            m.Settle = null;
             if (m.OnGround)
             {
                 if (m.Ground.TaxiIn(m.Last, missionTime, Events, m.Brain.Slot))

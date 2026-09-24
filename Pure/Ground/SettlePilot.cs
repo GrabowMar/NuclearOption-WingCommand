@@ -11,12 +11,13 @@ namespace WingCommand
     /// FlightSim touched down at 3 m/s when the reference ran ahead); Down — below <see cref="TouchdownHeight"/> and slower than
     /// <see cref="TouchdownSpeed"/> vertically: collective 0 and brakes, until <see cref="TakeOff"/> (lifted over
     /// <see cref="BounceHeight"/> it descends again); LiftOff — up to <see cref="LiftOffHeight"/>, then Done. The member's
-    /// own rotary pipeline flies it with the terrain floor off, as the lift-off from a pad does. A settle that has not
-    /// touched down within <see cref="SettleSeconds"/> gives up.</summary>
+    /// own rotary pipeline flies it with the terrain floor off, as the lift-off from a pad does. An approach longer than
+    /// <see cref="ApproachSeconds"/> (an order given high up takes a while) or a descent longer than
+    /// <see cref="SettleSeconds"/> gives up.</summary>
     internal sealed class SettlePilot
     {
         public static float ApproachHeight = 15f, ApproachReached = 3f, DescentRate = 1.5f, TouchdownRate = 0.4f, FlareGain = 0.25f,
-            TouchdownHeight = 0.4f, TouchdownSpeed = 1f, BounceHeight = 2f, LiftOffHeight = 20f, SettleSeconds = 60f;
+            TouchdownHeight = 0.4f, TouchdownSpeed = 1f, BounceHeight = 2f, LiftOffHeight = 20f, SettleSeconds = 60f, ApproachSeconds = 180f;
 
         public readonly Vec3 Point;
         private readonly float headingDeg;
@@ -47,10 +48,13 @@ namespace WingCommand
             switch (Phase)
             {
                 case SettlePhase.Approach:
-                    if (time - since > SettleSeconds) return GiveUp(time, events, slot);
+                    if (time - since > ApproachSeconds) return GiveUp(time, events, slot);
                     Vec3 over = Point + Vec3.Up * ApproachHeight;
                     if ((over - s.Pos).Horizontal.Length < ApproachReached && Math.Abs(s.Pos.Y - over.Y) < ApproachReached)
+                    {
                         Phase = SettlePhase.Descend;
+                        since = time;
+                    }
                     return last = Fly(over, Vec3.Zero, s, p, pipeline, dt);
                 case SettlePhase.Descend:
                     if (time - since > SettleSeconds) return GiveUp(time, events, slot);

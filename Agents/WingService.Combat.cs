@@ -260,7 +260,7 @@ namespace WingCommand
             int n = 0;
             foreach (WingMember m in Members)
             {
-                if (m.Released || m.OnGround || m.Recovery != null || !m.Alive) continue;
+                if (m.Released || m.OnGround || m.Recovery != null || m.Settle != null || !m.Alive) continue;
                 m.AssignedTarget = null;
                 m.Pilot.SetPrimaryTarget(null);
                 if (m.Engaged)

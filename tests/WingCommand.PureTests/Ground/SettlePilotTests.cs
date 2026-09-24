@@ -64,13 +64,27 @@ namespace WingCommand.PureTests
         }
 
         [Fact]
-        public void ASettleThatNeverTouchesDownGivesUp()
+        public void ALongApproachFromHighIsAllowedButADescentThatNeverTouchesDownGivesUp()
+        {
+            // An order given at 600 m: the approach alone takes over a minute; the timeouts are per phase.
+            (SettlePilot s, IFlightPipeline pipe, WingEventRing e) = New();
+            s.Step(At(600f, dx: 30f), Helo, pipe, 0f, Dt, e, 0);
+            s.Step(At(300f, dx: 30f), Helo, pipe, SettlePilot.SettleSeconds + 1f, Dt, e, 0);
+            Assert.Equal(SettlePhase.Approach, s.Phase);
+            s.Step(At(SettlePilot.ApproachHeight), Helo, pipe, 100f, Dt, e, 0);
+            Assert.Equal(SettlePhase.Descend, s.Phase);
+            s.Step(At(8f), Helo, pipe, 100f + SettlePilot.SettleSeconds + 1f, Dt, e, 0);
+            Assert.Equal(SettlePhase.Done, s.Phase);
+            Assert.Equal(1, e.CountOf(WingEventKind.LandingFailed));
+        }
+
+        [Fact]
+        public void AnApproachThatNeverArrivesGivesUp()
         {
             (SettlePilot s, IFlightPipeline pipe, WingEventRing e) = New();
             s.Step(At(40f, dx: 30f), Helo, pipe, 0f, Dt, e, 0);
-            s.Step(At(40f, dx: 30f), Helo, pipe, SettlePilot.SettleSeconds + 1f, Dt, e, 0);
+            s.Step(At(40f, dx: 30f), Helo, pipe, SettlePilot.ApproachSeconds + 1f, Dt, e, 0);
             Assert.Equal(SettlePhase.Done, s.Phase);
-            Assert.Equal(1, e.CountOf(WingEventKind.LandingFailed));
         }
     }
 }
