@@ -30,6 +30,11 @@ namespace WingCommand
         private bool haveState, throttleActive, faulted;
         private float playerThrottle, apThrottle;
 
+        /// <summary>NAV's drawn speed floor, as a multiple of the loaded minimum (above the session's 1.1 × drop-out).</summary>
+        public static float NavSpeedMargin = 1.3f;
+
+        private float navFloor = float.NaN, navFloorAt = float.NegativeInfinity;
+
         public PlayerAutopilot() => Instance = this;
 
         public void Activate() => Unbind();
@@ -84,8 +89,16 @@ namespace WingCommand
             if (!Prepare()) return false;
             Nav.Load(points, count);
             Session.SetLateral(LateralHold.Nav, last);
-            if (!float.IsNaN(points[0].Altitude) && Session.Spec.Vertical != VerticalHold.Altitude) Session.SetVertical(VerticalHold.Altitude, last);
-            if (!float.IsNaN(points[0].Speed) && !Session.Spec.Speed) Session.SetSpeed(true, last, playerThrottle);
+            // Review R2: a later point's altitude or speed was written into a hold that was off; engage what any point sets.
+            bool altitude = false, speed = false;
+            for (int i = 0; i < count && i < points.Length; i++)
+            {
+                altitude |= !float.IsNaN(points[i].Altitude);
+                speed |= !float.IsNaN(points[i].Speed);
+            }
+            if (altitude && Session.Spec.Vertical != VerticalHold.Altitude) Session.SetVertical(VerticalHold.Altitude, last);
+            if (speed && !Session.Spec.Speed) Session.SetSpeed(true, last, playerThrottle);
+            navFloorAt = float.NegativeInfinity;
             Announce();
             return true;
         }
@@ -138,8 +151,18 @@ namespace WingCommand
             if (t.Recaptured) pipeline.Track(last, lastApplied, profile);
 
             // NAV steers the heading (and a point's altitude and speed) each tick; past the last point it leaves a heading hold.
-            if (Session.Spec.Lateral == LateralHold.Nav && !Nav.Step(last.Pos, last.Speed, ref Session.Spec))
-                WingToast.Show("NAV: last point passed, holding heading");
+            if (Session.Spec.Lateral == LateralHold.Nav)
+            {
+                // Review R2 I3: the drawn altitude never goes below the terrain ahead plus clearance (sampled 5 times a second);
+                // a drawn speed never below 1.3 × the loaded minimum (the session drops every mode at 1.1 ×).
+                if (Time.time >= navFloorAt)
+                {
+                    navFloorAt = Time.time + 0.2f;
+                    navFloor = TerrainProbe.LookAhead(last.Pos, last.Vel);
+                }
+                if (!Nav.Step(last.Pos, last.Speed, navFloor, profile.MinimumSpeed(1f) * NavSpeedMargin, ref Session.Spec))
+                    WingToast.Show("NAV: last point passed, holding heading");
+            }
             GuidanceCommand g = HoldGuidance.Evaluate(Session.Spec, last, profile);
             var ctx = new LimitContext { FloorY = float.NaN, Clearance = 0f, Aggression = Aggression };
             ControlOutput o = pipeline.Step(g, last, ctx, profile, dt);

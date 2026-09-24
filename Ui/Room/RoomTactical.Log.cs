@@ -41,6 +41,9 @@ namespace WingCommand
             rt.SetParent(mapRect, false);
             AvKit.Place(rt, new Rect(0f, -mapH + h, mapW, h));
             logRoot = go;
+            // Review R2 I4: the drawer covers the map; clicks and wheel on it are never the map's.
+            Image back = AvKit.Panel(rt, new Rect(0f, 0f, mapW, h), AvTheme.Surface);
+            back.raycastTarget = true;
             AvStyled.Box(rt, new Rect(0f, 0f, mapW, h), "panel");
             AvKit.Rule(rt, new Rect(0f, 0f, mapW, 1f), AvTheme.Frame);
             float cw = Mathf.Min(110f, (mapW - 24f - WmcUi.Gap * 5f) / 6f);

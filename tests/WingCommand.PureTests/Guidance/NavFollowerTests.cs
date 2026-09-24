@@ -62,6 +62,53 @@ namespace WingCommand.PureTests
         }
 
         [Fact]
+        public void APointPassedAlongTheLegIsCapturedOutsideTheRadius()
+        {
+            // Review R2 I1: a point inside the 30-degree turn circle was orbited forever (WingPlanner.Reached's rule).
+            var nav = new NavFollower();
+            nav.Load(new[] { P(10000f, 0f), P(10000f, 10000f) }, 2);
+            var spec = new HoldSpec { Lateral = LateralHold.Nav };
+            nav.Step(Vec3.Zero, 40f, ref spec);                           // the leg starts here, heading east
+            nav.Step(new Vec3(10500f, 1000f, 3000f), 40f, ref spec);      // 3 km off the point, but past it along the leg
+            Assert.Equal(1, nav.Index);
+        }
+
+        [Fact]
+        public void TheLastLegsBearingIsHeldAfterTheRoute()
+        {
+            // Review R2 m: after a short last leg the hold keeps that leg's bearing, not the bearing at capture.
+            var nav = new NavFollower();
+            nav.Load(new[] { P(0f, 20000f), P(2000f, 20000f) }, 2);
+            var spec = new HoldSpec { Lateral = LateralHold.Nav };
+            nav.Step(Vec3.Zero, 250f, ref spec);
+            nav.Step(new Vec3(0f, 1000f, 17500f), 250f, ref spec);        // first point captured (3 km at 250 m/s)
+            Assert.False(nav.Step(new Vec3(100f, 1000f, 18500f), 250f, ref spec));
+            Assert.Equal(90f, spec.HeadingDeg, 1);
+        }
+
+        [Fact]
+        public void APointBelowTheTerrainFloorIsFlownAtTheFloorPlusClearance()
+        {
+            // Review R2 I3: NAV flew a drawn 150 m point into a 600 m ridge.
+            var nav = new NavFollower();
+            nav.Load(new[] { P(0f, 20000f, 100f) }, 1);
+            var spec = new HoldSpec { Lateral = LateralHold.Nav };
+            nav.Step(Vec3.Zero, 200f, 500f, 0f, ref spec);
+            Assert.Equal(500f + NavFollower.Clearance, spec.AltitudeM);
+        }
+
+        [Fact]
+        public void APointSpeedBelowTheSafeMinimumIsRaised()
+        {
+            // Review R2 (re-graded): a 60 m/s point dropped the whole autopilot as "too slow" mid-route.
+            var nav = new NavFollower();
+            nav.Load(new[] { P(0f, 20000f, float.NaN, 60f) }, 1);
+            var spec = new HoldSpec { Lateral = LateralHold.Nav };
+            nav.Step(Vec3.Zero, 200f, float.NaN, 90f, ref spec);
+            Assert.Equal(90f, spec.SpeedMps);
+        }
+
+        [Fact]
         public void NothingLoadedIsNotActive()
         {
             var nav = new NavFollower();

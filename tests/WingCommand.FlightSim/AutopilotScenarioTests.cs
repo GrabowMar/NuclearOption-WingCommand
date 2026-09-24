@@ -132,5 +132,23 @@ namespace WingCommand.FlightSim
                 Assert.True(closest[k] <= NavFollower.CaptureRadius(plant.Speed) + 50f, $"point {k + 1} missed by {closest[k]:0} m");
             Assert.Equal(2500f, hold.AltitudeM);   // the second point set the altitude; the third kept it
         }
+
+        [Fact]
+        public void NavFliesATightBoxAtHighSpeedWithoutCirclingAPoint()
+        {
+            // Review R2 I1: at 250 m/s a 30-degree turn is ~11 km wide; a corner inside it was orbited forever.
+            var (plant, pilot) = Start(speed: 250f);
+            var route = new[] { Waypoint.At(0f, 10000f), Waypoint.At(10000f, 10000f), Waypoint.At(10000f, 0f), Waypoint.At(0f, 0f) };
+            var nav = new NavFollower();
+            nav.Load(route, route.Length);
+            var hold = new HoldSpec { Lateral = LateralHold.Nav, Vertical = VerticalHold.Altitude, AltitudeM = 2000f, Speed = true, SpeedMps = 250f };
+            int i = 0;
+            for (; i < 60 * 60 * 12 && nav.Active; i++)
+            {
+                nav.Step(plant.Position, plant.Speed, ref hold);
+                pilot.StepHold(hold, Dt);
+            }
+            Assert.False(nav.Active, $"stuck on point {nav.Index + 1} after {i * Dt:0} s");
+        }
     }
 }

@@ -26,7 +26,7 @@ namespace WingCommand
         private readonly string[] shapeIds = new string[MaxShapes];
         private readonly List<FormationDefinition> shapes = new List<FormationDefinition>();
         private readonly List<string> families = new List<string>();
-        private SegmentRow spacingRow, stackRow;
+        private SegmentRow spacingRow, stackRow, powerRow;
         private int formKey = int.MinValue, shapesKey = int.MinValue;
 
         private void BuildFormation(RectTransform root)
@@ -95,10 +95,13 @@ namespace WingCommand
                 "tac.form.spacing", new[] { "0", "1", "2", "3" }, ids,
                 i => WmcUi.Order(last, () => WingCommands.SetSpacing((SpacingPreset)i)));
             y -= TogglePitch;
-            stackRow = SegmentRow.Build(s, new Rect(0f, y, w, ToggleH), KeyWidth, "STACK", new[] { "HIGH", "LEVEL", "LOW", "BUSTER", "GATE" },
-                new[] { "The wing flies above you.", "Level with you.", "The wing flies below you.",
-                    "Full power, no afterburner.", "Afterburner allowed." },
-                "tac.form.", new[] { "high", "level", "low", "buster", "gate" }, ids, PickStack);
+            stackRow = SegmentRow.Build(s, new Rect(0f, y, w, ToggleH), KeyWidth, "STACK", new[] { "HIGH", "LEVEL", "LOW" },
+                new[] { "The wing flies above you.", "Level with you.", "The wing flies below you." },
+                "tac.form.", new[] { "high", "level", "low" }, ids, PickStack);
+            y -= TogglePitch;
+            powerRow = SegmentRow.Build(s, new Rect(0f, y, w, ToggleH), KeyWidth, "POWER", new[] { "BUSTER", "GATE" },
+                new[] { "Full power, no afterburner.", "Afterburner allowed." }, "tac.form.", new[] { "buster", "gate" }, ids,
+                i => WmcUi.Order(last, () => WingCommands.Afterburner(i == 1)));
             y -= TogglePitch;
             formScroll.SetContentHeight(-y + 4f);
         }
@@ -131,9 +134,7 @@ namespace WingCommand
             {
                 case 0: WingCommands.Stack(WingCommands.GoHighMetres, "Going high"); break;
                 case 1: WingCommands.Stack(0f, "Level with you"); break;
-                case 2: WingCommands.Stack(WingCommands.GoLowMetres, "Going low"); break;
-                case 3: WingCommands.Afterburner(false); break;
-                default: WingCommands.Afterburner(true); break;
+                default: WingCommands.Stack(WingCommands.GoLowMetres, "Going low"); break;
             }
         });
 
@@ -181,6 +182,8 @@ namespace WingCommand
             spacingRow.SetEnabled(c.CanOrder, "Orders are host only for now");
             stackRow.Set(stackWord);
             stackRow.SetEnabled(c.CanOrder, "Orders are host only for now");
+            powerRow.Set(w.AfterburnerAllowed ? 1 : 0);
+            powerRow.SetEnabled(c.CanOrder, "Orders are host only for now");
             RefreshPlanView(c, current, sel.SpacingMetres, e, members);
         }
 
@@ -218,7 +221,7 @@ namespace WingCommand
         }
 
         /// <summary>Slots from the shape at the wing's spacing; live dots are each member's offset from its element's leader —
-        /// you for A, the element's task lead for B–D — in the leader's heading frame.</summary>
+        /// the task lead while the element has a task, else A's anchor or you — in the leader's heading frame.</summary>
         private void RefreshPlanView(WmcContext c, FormationDefinition shape, float spacing, int e, int members)
         {
             PlanView.Fit(shape.Slots, spacing, PlanSize, out float mpp);
@@ -255,16 +258,17 @@ namespace WingCommand
         {
             at = Vec3.Zero;
             heading = 0f;
-            if (e == 0)
+            // Review R2 I2: A forms on its task lead while it has a task, else on its anchor (FORM ON / ESCORT) or you.
+            if (e == 0 && !w.Planner.Active)
             {
-                Aircraft p = w.Player;
-                if (p == null) return false;
-                at = p.GlobalPosition().ToVec3();
-                Vector3 f = p.transform.forward;
+                Unit u = w.LeaderUnit != null ? w.LeaderUnit : w.Player;
+                if (u == null) return false;
+                at = u.GlobalPosition().ToVec3();
+                Vector3 f = u.transform.forward;
                 heading = Vec3.HeadingDeg(new Vec3(f.x, 0f, f.z));
                 return true;
             }
-            WingPlanner planner = w.Roster.InUse(e) ? w.PlannerOf(e) : null;
+            WingPlanner planner = e == 0 ? w.Planner : w.Roster.InUse(e) ? w.PlannerOf(e) : null;
             if (planner?.Lead == null) return false;
             at = planner.Lead.Position;
             heading = planner.Lead.HeadingDeg;
