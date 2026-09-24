@@ -207,7 +207,8 @@ namespace WingCommand
     [HarmonyPatch(typeof(DynamicMap), "MapControls")]
     internal static class WmcMapControlsPatch
     {
+        // The room covers the map: its wheel and drags are the room's, not the game map's underneath.
         [HarmonyPrefix]
-        private static bool Prefix() => !WmcMapInput.ConsumesNow();
+        private static bool Prefix() => !WmcMapInput.ConsumesNow() && !(WmcRoom.Instance != null && WmcRoom.Instance.IsOpen);
     }
 }

@@ -55,7 +55,11 @@ namespace WingCommand
         private float nextRefresh;
         private bool open, held;
 
-        public WmcRoom() => Instance = this;
+        public WmcRoom()
+        {
+            Instance = this;
+            Register(RoomNotches.Tactical, new RoomTactical());
+        }
 
         public bool IsOpen => open;
         public int Page => page;

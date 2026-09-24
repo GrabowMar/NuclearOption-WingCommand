@@ -291,9 +291,9 @@ namespace WingCommand
             if (c != null && c.gameObject.activeSelf) c.gameObject.SetActive(false);
         }
 
-        private static Sprite Disc() => disc != null ? disc : disc = Circle("WmcDisc", 16, 0f);
+        internal static Sprite Disc() => disc != null ? disc : disc = Circle("WmcDisc", 16, 0f);
 
-        private static Sprite Ring() => ring != null ? ring : ring = Circle("WmcRing", 64, 2f);
+        internal static Sprite Ring() => ring != null ? ring : ring = Circle("WmcRing", 64, 2f);
 
         /// <summary>An anti-aliased white disc (<paramref name="stroke"/> 0) or ring, made once.</summary>
         private static Sprite Circle(string name, int size, float stroke)
