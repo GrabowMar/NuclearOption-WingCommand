@@ -206,8 +206,10 @@ namespace WingCommand
             };
             for (int i = 0; i < tabs.Length; i++)
             {
-                GameObject page = shell.CreatePage(i, "Wmc" + TabLabels[i]);
-                tabs[i].Build((RectTransform)page.transform, shell.Body);
+                var page = (RectTransform)shell.CreatePage(i, "Wmc" + TabLabels[i]).transform;
+                // Review focus 2: a page taller than the body scrolls instead of painting over the status strip.
+                RectTransform parent = AvScreen.Scroll(page, shell.Body, tabs[i].ContentHeight, out Rect area);
+                tabs[i].Build(parent, area);
             }
 
             MFDScreen s = root.AddComponent<MFDScreen>();
@@ -261,9 +263,9 @@ namespace WingCommand
             Fill();
             WingSummary s = WingRows.Summary(context.Rows, context.Count);
             shell.Metrics[0].Set(WmcText.Percent(s.MinFuel).TrimEnd('%'), s.Bingo ? "BINGO" : "", WingRows.Bar(s.MinFuel),
-                WmcUi.Level(float.IsNaN(s.MinFuel) ? 1f : s.MinFuel));
+                WmcUi.LevelColor(WmcStyle.Level(s.MinFuel)));
             shell.Metrics[1].Set(WmcText.Percent(s.MinAmmo).TrimEnd('%'), "", WingRows.Bar(s.MinAmmo),
-                WmcUi.Level(float.IsNaN(s.MinAmmo) ? 1f : s.MinAmmo));
+                WmcUi.LevelColor(WmcStyle.Level(s.MinAmmo)));
             shell.Metrics[2].Set(s.Count + "/" + WingService.MaxMembers, "", s.Count / (float)WingService.MaxMembers, AvTheme.Friendly);
 
             WingService wing = context.Wing;

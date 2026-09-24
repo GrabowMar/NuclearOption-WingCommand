@@ -20,13 +20,14 @@ namespace WingCommand
 
         public WmcDoctrineTab(Dictionary<string, AvButton> controls) => ids = controls;
 
-        public float ContentHeight => 0f;
+        public float ContentHeight => 350f;
 
         public string Hint => "What the wing does on its own while it holds formation.";
 
         public void Build(RectTransform page, Rect body)
         {
-            float y = WmcUi.Title(page, body, body.y, "PATTERN");
+            body = WmcUi.Page(page, body, ContentHeight);
+            float y = WmcUi.Head(page, body, body.y, "PATTERN");
             float w = (body.width - WmcUi.Gap * 2f) / 3f;
             reserve = Preset(page, body.x, y, w, "RESERVE", "doct.reserve", WingDoctrine.Reserve);
             escort = Preset(page, body.x + w + WmcUi.Gap, y, w, "ESCORT", "doct.escort", WingDoctrine.Escort);
@@ -34,7 +35,7 @@ namespace WingCommand
             y -= WmcUi.Row + WmcUi.Gap;
             pattern = AvStyled.Label(page, new Rect(body.x, y, body.width, 18f), "", "row-sub");
             y -= 18f + WmcUi.Gap;
-            y = WmcUi.Title(page, body, y, "AXES");
+            y = WmcUi.Head(page, body, y, "AXES");
             for (int i = 0; i < Axes.Length; i++)
             {
                 DoctrineAxis axis = Axes[i];

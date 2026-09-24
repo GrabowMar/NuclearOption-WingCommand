@@ -20,13 +20,14 @@ namespace WingCommand
 
         public WmcApTab(Dictionary<string, AvButton> controls) => ids = controls;
 
-        public float ContentHeight => 0f;
+        public float ContentHeight => 290f;
 
         public string Hint => "Your stick overrides a hold; it recaptures when you let go.";
 
         public void Build(RectTransform page, Rect body)
         {
-            float y = WmcUi.Title(page, body, body.y, "MODES");
+            body = WmcUi.Page(page, body, ContentHeight);
+            float y = WmcUi.Head(page, body, body.y, "MODES");
             float w = (body.width - WmcUi.Gap * 5f) / 6f;
             lvl = Mode(page, body.x, y, w, "LVL", "ap.level", ApCommand.Level);
             hdg = Mode(page, body.x + (w + WmcUi.Gap), y, w, "HDG", "ap.heading", ApCommand.Heading);
@@ -35,9 +36,11 @@ namespace WingCommand
             spd = Mode(page, body.x + 4f * (w + WmcUi.Gap), y, w, "SPD", "ap.speed", ApCommand.Speed);
             off = Mode(page, body.x + 5f * (w + WmcUi.Gap), y, w, "OFF", "ap.off", ApCommand.Off);
             y -= WmcUi.Row + WmcUi.Gap;
-            line = AvStyled.Label(page, new Rect(body.x, y, body.width, 18f), "", "row-name");
-            y -= 18f + WmcUi.Gap;
-            y = WmcUi.Title(page, body, y, "HELD VALUES");
+            line = AvStyled.Label(page, new Rect(body.x, y, body.width, 32f), "", "readout");
+            line.enableWordWrapping = false;
+            line.overflowMode = TextOverflowModes.Ellipsis;
+            y -= 32f + WmcUi.Gap;
+            y = WmcUi.Head(page, body, y, "HELD VALUES");
             for (int i = 0; i < Fields.Length; i++)
             {
                 ApField f = Fields[i];

@@ -63,11 +63,13 @@ namespace WingCommand
     {
         public const float Row = AvTokens.RowHeight, Gap = AvTokens.Space1, TitleHeight = 18f;
 
-        /// <summary>A section title at <paramref name="y"/>; returns the y below it.</summary>
-        public static float Title(RectTransform parent, Rect body, float y, string text)
+        /// <summary>A page's spine (its full content height) and the inner rect its content hangs in, right of the spine
+        /// (the synced shell has no outer padding; Boscali's panels lay out the same way).</summary>
+        public static Rect Page(RectTransform page, Rect body, float contentHeight)
         {
-            AvStyled.Label(parent, new Rect(body.x, y, body.width, TitleHeight), text, "section-title");
-            return y - TitleHeight - Gap;
+            AvStyled.Spine(page, new Rect(body.x, body.y, 1f, Mathf.Max(body.height, contentHeight)));
+            return new Rect(body.x + AvScreen.SpineInset, body.y,
+                body.width - AvScreen.SpineInset - AvTokens.Space2, body.height);
         }
 
         /// <summary>Buttons <paramref name="columns"/> to a row, registered under their ids; returns the y below.</summary>
@@ -103,9 +105,6 @@ namespace WingCommand
             fill.color = color;
         }
 
-        /// <summary>A fuel/ammo colour: alert below 15%, caution below 35%.</summary>
-        public static Color Level(float fraction) =>
-            fraction < 0.15f ? AvTheme.Alert : fraction < 0.35f ? AvTheme.Warning : AvTheme.Friendly;
 
         /// <summary>A section head (spine tick + section-title, optional note); returns the y below it.</summary>
         public static float Head(RectTransform parent, Rect body, float y, string title, string note = null)

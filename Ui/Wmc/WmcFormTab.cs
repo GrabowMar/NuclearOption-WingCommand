@@ -25,13 +25,14 @@ namespace WingCommand
 
         public WmcFormTab(Dictionary<string, AvButton> controls) => ids = controls;
 
-        public float ContentHeight => 0f;
+        public float ContentHeight => 350f;
 
         public string Hint => "Shape, spacing and stack for the whole wing.";
 
         public void Build(RectTransform page, Rect body)
         {
-            float y = WmcUi.Title(page, body, body.y, "FAMILY");
+            body = WmcUi.Page(page, body, ContentHeight);
+            float y = WmcUi.Head(page, body, body.y, "FAMILY");
             float w = (body.width - WmcUi.Gap * (MaxFamilies - 1)) / MaxFamilies;
             for (int i = 0; i < MaxFamilies; i++)
             {
@@ -41,7 +42,7 @@ namespace WingCommand
                 ids["form.family" + i] = familyButtons[i];
             }
             y -= WmcUi.Row + WmcUi.Gap;
-            y = WmcUi.Title(page, body, y, "SHAPE");
+            y = WmcUi.Head(page, body, y, "SHAPE");
             float sw = (body.width - WmcUi.Gap * 2f) / 3f;
             for (int i = 0; i < MaxShapes; i++)
             {
@@ -52,7 +53,7 @@ namespace WingCommand
                 ids["form.shape" + i] = shapeButtons[i];
             }
             y -= (MaxShapes / 3) * (WmcUi.Row + WmcUi.Gap);
-            y = WmcUi.Title(page, body, y, "SPACING");
+            y = WmcUi.Head(page, body, y, "SPACING");
             string[] names = { "CLOSE", "STANDARD", "OPEN", "SPREAD" };
             float pw = (body.width - WmcUi.Gap * 3f) / 4f;
             for (int i = 0; i < 4; i++)
@@ -63,7 +64,7 @@ namespace WingCommand
                 ids["form.spacing" + i] = spacingButtons[i];
             }
             y -= WmcUi.Row + WmcUi.Gap;
-            y = WmcUi.Title(page, body, y, "STACK AND POWER");
+            y = WmcUi.Head(page, body, y, "STACK AND POWER");
             float fw = (body.width - WmcUi.Gap * 4f) / 5f;
             high = Toggle(page, body.x, y, fw, "HIGH", "form.high", () => WingCommands.Stack(WingCommands.GoHighMetres, "Going high"));
             level = Toggle(page, body.x + (fw + WmcUi.Gap), y, fw, "LEVEL", "form.level", () => WingCommands.Stack(0f, "Level with you"));
