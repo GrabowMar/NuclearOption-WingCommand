@@ -21,7 +21,7 @@ namespace WingCommand
                 gateOf = a;
                 hasGate = GameAccess.TryReadFbwGate(a, out gateSpeed, out gateAlt);
                 alwaysOn = a.GetControlsFilter() is HeloControlsFilter;   // no speed or height gate (native C4)
-                rotors = a.GetComponentsInChildren<RotorShaft>();
+                rotors = RotorsOf(a);
             }
             r.RotorRpm = RotorRpm(rotors);
             r.FbwAlwaysOn = alwaysOn;
@@ -29,6 +29,19 @@ namespace WingCommand
             r.FbwGateMinSpeed = gateSpeed;
             r.FbwGateMinRadarAlt = gateAlt;
             return core.Read(r, dt);
+        }
+
+        /// <summary>The aircraft's rotor shafts: each registers itself in <c>Aircraft.engines</c> (the game finds them through
+        /// its parts; they are not all under the aircraft's transform, so GetComponentsInChildren found none and the rotor
+        /// speed read 0 — the collective governor never acted, in game 2026-09-24).</summary>
+        private static RotorShaft[] RotorsOf(Aircraft a)
+        {
+            var found = new System.Collections.Generic.List<RotorShaft>();
+            if (a.engines != null)
+                foreach (IEngine e in a.engines)
+                    if (e is RotorShaft r && r != null) found.Add(r);
+            if (found.Count == 0) found.AddRange(a.GetComponentsInChildren<RotorShaft>(true));
+            return found.ToArray();
         }
 
         /// <summary>The mean rotor speed over nominal of the aircraft's rotor shafts (0 without any).</summary>
