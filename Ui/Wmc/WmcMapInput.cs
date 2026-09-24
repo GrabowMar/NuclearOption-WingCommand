@@ -78,6 +78,12 @@ namespace WingCommand
                 pressed = false;
                 return;
             }
+            // Review P5 I2: under the room (and on the frame it closed) a right-click is the room's, never the map's.
+            if (WmcRoom.Instance != null && WmcRoom.Instance.JustOpen)
+            {
+                pressed = false;
+                return;
+            }
             if (Mode != MapMode.Off && Input.GetKeyDown(KeyCode.Escape))
             {
                 Disarm();

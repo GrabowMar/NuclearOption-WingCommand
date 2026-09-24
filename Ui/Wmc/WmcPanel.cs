@@ -80,7 +80,8 @@ namespace WingCommand
             }
             MfdPresentation.Tick();
             // Every frame: the right button is followed per frame (spec WMC program §5).
-            context.Map.Update(context, Visible);
+            // Review P5 I4: the room places map orders too; a mode armed there stays armed.
+            context.Map.Update(context, Visible || (WmcRoom.Instance != null && WmcRoom.Instance.IsOpen));
             overlay.Tick(context, Visible);
             if (!Visible || Time.unscaledTime < nextRefresh) return;
             nextRefresh = Time.unscaledTime + WingFidelity.Interval(0.2f);

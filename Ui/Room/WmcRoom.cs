@@ -53,7 +53,9 @@ namespace WingCommand
         private Rect window, body;
         private int page = -1;
         private float nextRefresh;
-        private bool open, held;
+        private bool open, held, pauseHeld, pauseWas, releasePending, faulted;
+        private int closedFrame = -10;
+        private Vector2 laidOut;
 
         public WmcRoom()
         {
@@ -87,7 +89,11 @@ namespace WingCommand
             enabled[notch] = p != null;
         }
 
-        public void Activate() => Teardown();
+        public void Activate()
+        {
+            faulted = false;
+            Teardown();
+        }
 
         public void Deactivate() => Teardown();
 
@@ -105,6 +111,11 @@ namespace WingCommand
         /// enabled one.</summary>
         public void Open(int notch = -1)
         {
+            if (faulted)
+            {
+                WingToast.Show("The Wing Command room hit an error and is off for this mission");
+                return;
+            }
             DynamicMap map = SceneSingleton<DynamicMap>.i;
             if (map == null || !DynamicMap.AllowedToOpen)
             {
@@ -123,6 +134,15 @@ namespace WingCommand
                 WingKeyboardGuard.Capture();
                 held = true;
             }
+            // Review P5 C1: the game pauses on Unity's own Esc (GameplayUI), which a disabled Rewired keyboard does not stop;
+            // while the room is open Esc is the room's.
+            if (!pauseHeld)
+            {
+                pauseWas = GameplayUI.AllowPauseKeybind;
+                GameplayUI.AllowPauseKeybind = false;
+                pauseHeld = true;
+            }
+            releasePending = false;
             int target = notch >= 0 && notch < RoomNotches.Count && enabled[notch] ? notch
                 : page >= 0 && enabled[page] ? page : RoomNotches.Next(RoomNotches.Count - 1, +1, enabled);
             if (!enabled[target]) target = -1;
@@ -139,21 +159,35 @@ namespace WingCommand
             if (page >= 0) pages[page]?.Hide();
             if (canvas != null) canvas.enabled = false;
             AvButton.ClearTooltip();
-            ReleaseKeyboard();
+            // The keyboard and the pause key come back a frame later, so the Esc that closed the room neither pauses the game
+            // nor reaches Rewired (Boscali's OPS window does the same).
+            closedFrame = Time.frameCount;
+            releasePending = true;
             AvUiSound.Play(AvUiCue.Release);
         }
 
-        private void ReleaseKeyboard()
+        /// <summary>The room was open this frame or the last (a click that closed it is not the map's).</summary>
+        public bool JustOpen => open || Time.frameCount <= closedFrame + 1;
+
+        private void ReleaseInput()
         {
-            if (!held) return;
-            held = false;
-            WingKeyboardGuard.Release();
+            releasePending = false;
+            if (held)
+            {
+                held = false;
+                WingKeyboardGuard.Release();
+            }
+            if (pauseHeld)
+            {
+                pauseHeld = false;
+                GameplayUI.AllowPauseKeybind = pauseWas;
+            }
         }
 
         private void Teardown()
         {
             Close();
-            ReleaseKeyboard();
+            ReleaseInput();
             if (root != null) UnityEngine.Object.Destroy(root);
             root = null;
             canvas = null;
@@ -175,6 +209,7 @@ namespace WingCommand
 
         public void Tick(float dt)
         {
+            if (releasePending && Time.frameCount > closedFrame + 1) ReleaseInput();
             if (!open) return;
             if (!DynamicMap.mapMaximized || GameplayUI.GameIsPaused)
             {
@@ -186,6 +221,28 @@ namespace WingCommand
                 Close();
                 return;
             }
+            // Review P5 I1: the runtime only stops ticking a faulted service; it never deactivates it. A fault here closes the
+            // room and gives the keyboard back before the runtime switches the room off for the mission.
+            try
+            {
+                TickOpen();
+            }
+            catch
+            {
+                Teardown();
+                faulted = true;
+                throw;
+            }
+        }
+
+        private void TickOpen()
+        {
+            // Review P5 I5: the canvas scaler settles after the first open (and a resolution can change): lay out again.
+            if (canvasRect.rect.size != laidOut)
+            {
+                Layout();
+                if (page >= 0 && !built[page]) Select(page, WmcPanel.Instance?.Context);
+            }
             WmcContext c = WmcPanel.Instance != null ? WmcPanel.Instance.Context : null;
             if (Chord(c) || c == null) return;
             IRoomPage p = page >= 0 ? pages[page] : null;
@@ -195,7 +252,9 @@ namespace WingCommand
                 c = Context();
                 RefreshHeader(c);
                 p?.Refresh(c);
-                footer.text = p != null ? p.Hint : "Nothing here yet.";
+                // Review P5 I3: the room covers the bezel's status strip and the game's messages.
+                footer.text = RoomFooter.Text(AvButton.HoveredTooltip, WingToast.Last, Time.unscaledTime - WingToast.LastAt,
+                    p != null ? p.Hint : "Nothing here yet.");
             }
             p?.Tick(c);
         }
@@ -316,6 +375,7 @@ namespace WingCommand
         private void Layout()
         {
             Rect size = canvasRect.rect;
+            laidOut = size.size;
             window = AvRoomFrame.WindowRect(size.width > 0f ? size.width : Reference, size.height > 0f ? size.height : ReferenceHeight);
             float w = window.width, h = window.height;
             AvKit.Place(frame, new Rect(window.x, -window.y, w, h));

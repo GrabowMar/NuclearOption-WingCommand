@@ -608,6 +608,7 @@ namespace WingCommand
                 { "scope", c.ScopeLabel }, { "scope_element", c.ScopeElement },
                 { "patrolling", p != null && p.Active && p.Current.Kind == TaskKind.Patrol ? 1 : 0 },
                 { "moving", p != null && p.Active && p.Current.Kind == TaskKind.Move ? 1 : 0 },
+                { "orbiting", p != null && p.Active && p.Current.Kind == TaskKind.Orbit ? 1 : 0 },
                 { "last", WingToast.Last ?? "" },
             };
         }
@@ -622,7 +623,9 @@ namespace WingCommand
             if (Arg(args, "open") is bool open && open) room.Open(Number(args, "page", -1));
             RoomTactical t = room.Tactical;
             if (Arg(args, "fit") is bool fit && fit) t?.FitNow();
+            float mppBefore = t != null ? t.MetresPerPixel : 0f;
             if (Arg(args, "zoom") != null) t?.ZoomCentre((float)Convert.ToDouble(Arg(args, "zoom"), CultureInfo.InvariantCulture));
+            float zoomRatio = t != null && mppBefore > 0f ? t.MetresPerPixel / mppBefore : 1f;
             if ((Arg(args, "click_ahead_km") != null || Arg(args, "click_right_km") != null) && t != null)
             {
                 Aircraft player = WingService.Instance?.Player;
@@ -650,7 +653,7 @@ namespace WingCommand
                 { "ok", true }, { "open", room.IsOpen ? 1 : 0 }, { "page", room.Page }, { "keyboard_held", room.KeyboardHeld ? 1 : 0 },
                 { "pressed", pressed ? 1 : 0 }, { "markers", t?.Markers ?? 0 }, { "legs", t?.LegCount ?? 0 }, { "contacts", t?.ContactCount ?? 0 },
                 { "fields", t?.FieldCount ?? 0 }, { "mpp", t?.MetresPerPixel ?? 0f }, { "cards", t?.Cards ?? 0 },
-                { "card_member", t != null && t.CardMember != 0u ? 1 : 0 }, { "last", WingToast.Last ?? "" },
+                { "card_member", t != null && t.CardMember != 0u ? 1 : 0 }, { "zoom_ratio", zoomRatio }, { "last", WingToast.Last ?? "" },
             };
         }
 
