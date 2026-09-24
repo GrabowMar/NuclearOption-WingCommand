@@ -50,9 +50,11 @@ namespace WingCommand.PureTests
         }
 
         [Fact]
-        public void OnlyOneJetAtATimeIsHandedToTheLandingTheNextAfterTheSpacing()
+        public void OnlyOneJetAtATimeIsHandedToTheLandingUntilTheFirstIsDown()
         {
-            // Review M3b C1: members arriving together were handed over within a tick into one pattern.
+            // Review M3b C1: members arriving together were handed over within a tick into one pattern. In game a 60 s
+            // spacing was not enough: the game's pattern takes longer, and its final approach aborts when another
+            // aircraft on the landing list is ahead and closing.
             var field = new FieldTraffic(TestFields.WithServicePointAndExit(), 0, false);
             var a = new RecoveryPilot(1, field, AirframeClass.FixedWing, RecoveryIntent.Rtb, 0);
             var b = new RecoveryPilot(2, field, AirframeClass.FixedWing, RecoveryIntent.Rtb, 1);
@@ -61,8 +63,10 @@ namespace WingCommand.PureTests
             a.LandingBegun(10f);
             b.ApproachIntent(AtApproach(b), Jet(), 11f, Dt, out bool bGoes);
             Assert.False(bGoes, "the second waits while the first lands");
-            b.ApproachIntent(AtApproach(b), Jet(), 10f + FieldTraffic.LandingSpacingSeconds + 1f, Dt, out bGoes);
-            Assert.True(bGoes, "the next follows once the spacing has passed");
+            b.ApproachIntent(AtApproach(b), Jet(), 10f + 61f, Dt, out bGoes);
+            Assert.False(bGoes, "still waiting a minute later while the first is in the pattern");
+            b.ApproachIntent(AtApproach(b), Jet(), 10f + FieldTraffic.LandingHoldMaxSeconds + 1f, Dt, out bGoes);
+            Assert.True(bGoes, "a turn never given back lapses");
         }
 
         [Fact]

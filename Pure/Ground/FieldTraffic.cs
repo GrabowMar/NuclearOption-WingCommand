@@ -14,9 +14,10 @@ namespace WingCommand
     {
         public static float DeadlockPeriod = 1f, RunwayMargin = 5f, BlockSeconds = 20f, BlockCorridor = 10f, StandingRadius = 3f;
         public static float PassedRadius = 20f;
-        /// <summary>A jet handed to the game's landing has the runway to itself until it is down, its landing fails, or
-        /// this long has passed (the next then lands behind it: the game spaces aircraft already on final).</summary>
-        public static float LandingSpacingSeconds = 60f;
+        /// <summary>A jet handed to the game's landing has the runway to itself until it is down, its landing fails, or this
+        /// long has passed (a turn never given back lapses). In game a 60 s spacing let two jets into the pattern, and the
+        /// game's final approach aborts when another aircraft on the landing list is ahead and closing.</summary>
+        public static float LandingHoldMaxSeconds = 300f;
         /// <summary>A spot a member was relocated to is nobody else's to be relocated to for this long, whatever the
         /// positions say (a report can lag the move).</summary>
         public static float RelocationGuardSeconds = 20f;
@@ -135,11 +136,11 @@ namespace WingCommand
             else onRunway.Remove(owner);
         }
 
-        /// <summary>The runway is <paramref name="owner"/>'s to land on (spec M3 §4, review M3b C1): nobody else was handed
-        /// to the game's landing here within <see cref="LandingSpacingSeconds"/>, or it is already its own.</summary>
+        /// <summary>The runway is <paramref name="owner"/>'s to land on (spec M3 §4, review M3b C1): nobody else holds the
+        /// game's landing here (held until released, at most <see cref="LandingHoldMaxSeconds"/>), or it is its own.</summary>
         public bool TryClaimLanding(int owner, float time)
         {
-            if (lander >= 0 && lander != owner && time - landerSince < LandingSpacingSeconds) return false;
+            if (lander >= 0 && lander != owner && time - landerSince < LandingHoldMaxSeconds) return false;
             if (lander != owner) landerSince = time;
             lander = owner;
             return true;

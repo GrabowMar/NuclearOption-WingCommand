@@ -15,6 +15,12 @@ namespace WingCommand
         private static readonly AccessTools.FieldRef<AIHeloLandingState, Airbase.VerticalLandingPoint> Pad =
             AccessTools.FieldRefAccess<AIHeloLandingState, Airbase.VerticalLandingPoint>("landingPoint");
 
+        private static readonly System.Reflection.FieldInfo ModeField = AccessTools.Field(typeof(AIPilotLandingState), "landingMode");
+
+        /// <summary>The game's landing mode (its private enum, by name) for the diagnostics; "" when not in the jet landing.</summary>
+        public static string Mode(Pilot p) =>
+            p != null && p.currentState is AIPilotLandingState s && ModeField != null ? ModeField.GetValue(s)?.ToString() ?? "" : "";
+
         public static bool Begin(WingMember m)
         {
             Pilot p = m.Pilot;

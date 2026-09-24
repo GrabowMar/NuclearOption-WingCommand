@@ -46,6 +46,9 @@ namespace WingCommand
         /// <summary>A serial per new missile (a new one picks its own notch side), the last seeker type classified and the
         /// game's countermeasure choice for it.</summary>
         public int ThreatSerial;
+        /// <summary>The game's landing mode last seen (diagnostics) and when it was read.</summary>
+        public string LandingMode = "";
+        public float LandingModeClock;
         public string ThreatSeekerType, ThreatChoice;
         /// <summary>The ground pilot's last output (the ground trace).</summary>
         public ControlOutput GroundOutput;

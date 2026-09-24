@@ -202,6 +202,7 @@ namespace WingCommand
                 bool blocked = m.EjectBlocked;
                 m.EjectBlocked = false;
                 if (m.Released || r == null || r.Phase != RecoveryPhase.Landing || !NativeLandingBridge.Landing(m.Pilot)) continue;
+                LogLandingMode(m);
                 if (!blocked && !r.LandingOverdue(missionTime)) continue;
                 string why = blocked ? "the game's landing gave up" : "landing overdue";
                 if (m.Aircraft.radarAlt < 2f)
@@ -217,6 +218,24 @@ namespace WingCommand
                 }
                 NativeLandingBridge.TakeBack(m);
             }
+        }
+
+        public static float LandingModeSeconds = 0.5f;
+
+        /// <summary>Diagnostics: each change of the game's landing mode, with where the aircraft is (twice a second).</summary>
+        private void LogLandingMode(WingMember m)
+        {
+            if ((m.LandingModeClock += Time.fixedDeltaTime) < LandingModeSeconds) return;
+            m.LandingModeClock = 0f;
+            string mode = NativeLandingBridge.Mode(m.Pilot);
+            if (mode == m.LandingMode) return;
+            Aircraft a = m.Aircraft;
+            Airbase field = NativeLandingBridge.Field(m.Pilot);
+            float toField = field != null ? (field.transform.position - a.transform.position).magnitude : -1f;
+            Plugin.Logger.LogInfo($"[Recovery] #{m.Number} game landing {(m.LandingMode.Length > 0 ? m.LandingMode : "start")} -> " +
+                                  $"{(mode.Length > 0 ? mode : "left")} at t={missionTime:0}: {toField:0} m from the field, radar alt " +
+                                  $"{a.radarAlt:0}, speed {a.speed:0}, gear {a.gearState}");
+            m.LandingMode = mode;
         }
 
         /// <summary>Out of the pad's queue it kept after a helicopter touchdown.</summary>

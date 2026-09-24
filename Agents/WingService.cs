@@ -796,11 +796,14 @@ namespace WingCommand
                     RecoveryPilot r = m.Recovery;
                     if (r != null && (r.Phase == RecoveryPhase.Approach || r.Phase == RecoveryPhase.Landing))
                     {
+                        // Live values: the sensor is not read while the game's landing flies the aircraft.
+                        Vec3 pos = m.Aircraft.GlobalPosition().ToVec3();
                         Vec3 point = r.ApproachPoint(m.Last);
                         Plugin.Logger.LogInfo($"[Recovery] trace t={missionTime:0} #{m.Number} {r.Phase} to {r.Field.Field.Name}: " +
-                                              $"{(point - m.Last.Pos).Horizontal.Length:0} m from the approach point, alt {m.Last.Pos.Y:0} " +
-                                              $"(point {point.Y:0}), v {m.Last.Tas:0}, holding {r.Holding}, tries {r.FailedLandings}, " +
-                                              $"state {m.Pilot?.currentState?.GetType().Name ?? "none"}");
+                                              $"{(point - pos).Horizontal.Length:0} m from the approach point, alt {pos.Y:0} " +
+                                              $"(point {point.Y:0}), radar {m.Aircraft.radarAlt:0}, v {m.Aircraft.speed:0}, holding {r.Holding}, " +
+                                              $"tries {r.FailedLandings}, state {m.Pilot?.currentState?.GetType().Name ?? "none"} " +
+                                              $"{NativeLandingBridge.Mode(m.Pilot)}");
                     }
                     continue;
                 }
