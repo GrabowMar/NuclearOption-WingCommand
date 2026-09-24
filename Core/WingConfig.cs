@@ -60,6 +60,8 @@ namespace WingCommand
         public ConfigEntry<RadioLevel> Radio { get; }
         public ConfigEntry<RadioVoice> RadioVoiceMode { get; }
         public ConfigEntry<bool> ContactCalls { get; }
+        public ConfigEntry<string> VoicePacks { get; }
+        public ConfigEntry<float> VoicePackVolume { get; }
         public ConfigEntry<bool> VerboseLogging { get; }
         public ConfigEntry<bool> DevTools { get; }
         public ConfigEntry<bool> Overlay { get; }
@@ -126,6 +128,12 @@ namespace WingCommand
             RadioVoiceMode = c.Bind("Radio", "Voice", RadioVoice.FollowGame, new ConfigDescription(
                 "Speak wingman calls with the game's text-to-speech: Off, On, or FollowGame (on when the game's chat " +
                 "text-to-speech is on; its speed and volume are used either way).", null, new ConfigurationManagerAttributes { Order = 79 }));
+            VoicePacks = c.Bind("Radio", "VoicePacks", "", new ConfigDescription(
+                "Yappinator-format voice packs for wingman calls, comma-separated (wingman #2 uses the first, #3 the second, " +
+                "round robin). Packs are folders under config/WingCommand/v1/voicepacks or Yappinator's plugins/WSOYappinator/audio. " +
+                "Calls a pack has no clip for use the text-to-speech. Empty: no packs.", null, new ConfigurationManagerAttributes { Order = 77 }));
+            VoicePackVolume = c.Bind("Radio", "VoicePackVolume", 0.8f, new ConfigDescription(
+                "Voice pack volume.", new AcceptableValueRange<float>(0f, 1f), new ConfigurationManagerAttributes { Order = 76 }));
             ContactCalls = c.Bind("Radio", "ContactCalls", true, new ConfigDescription(
                 "Wingmen call new enemy aircraft within 40 km with bearing, range, altitude and aspect from you. Scout Ahead " +
                 "reports ground contacts either way.", null, new ConfigurationManagerAttributes { Order = 78 }));

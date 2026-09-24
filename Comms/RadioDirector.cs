@@ -49,6 +49,7 @@ namespace WingCommand
         {
             Queue = new RadioQueue();
             WingRadioAudio.Reset();
+            VoicePacks.Activate();
             Contacts.Clear();
             ContactsCalled = 0;
             pendingKey = null;
@@ -70,6 +71,7 @@ namespace WingCommand
                 cursor.Seen = 0;
             }
             float now = Time.time;
+            VoicePacks.Tick();
             while (cursor.Next(ring, out WingEvent e))
             {
                 if (!RadioCalls.For(e, out RadioCall call)) continue;
@@ -208,6 +210,8 @@ namespace WingCommand
                 ContactsCalled++;
                 pendingKey = null;
             }
+            // A voice pack clip for this call (spec M7 §5) instead of the TTS.
+            if (VoicePacks.TryPlay(line.Speaker + 2, CallOf(line.Key))) return;
             if (!VoiceOn()) return;
             try
             {
@@ -222,8 +226,17 @@ namespace WingCommand
         }
 
         /// <summary>The voice is still speaking the last line (the queue waits for it, but an emergency cuts in).</summary>
+        /// <summary>The call a line's key names ("SPLASH:1234" → "SPLASH").</summary>
+        private static string CallOf(string key)
+        {
+            if (key == null) return null;
+            int colon = key.IndexOf(':');
+            return colon < 0 ? key : key.Substring(0, colon);
+        }
+
         private bool Speaking()
         {
+            if (VoicePacks.Playing) return true;
             if (voice == null || voiceBroken) return false;
             try
             {
