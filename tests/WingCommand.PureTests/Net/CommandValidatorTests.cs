@@ -24,21 +24,59 @@ namespace WingCommand.PureTests
         }
 
         [Theory]
-        [InlineData(false, (int)CommandKind.Task, 1f, 1000f, "wing")]
-        [InlineData(true, 0, 1f, 1000f, "command")]
-        [InlineData(true, 200, 1f, 1000f, "command")]
-        [InlineData(true, (int)CommandKind.Task, 1f, 60000f, "map")]
-        [InlineData(true, (int)CommandKind.Task, 1f, float.NaN, "map")]
-        [InlineData(true, (int)CommandKind.Task, 1f, float.PositiveInfinity, "map")]
-        public void EachRefusalHasItsReason(bool owns, int kind, float unused, float x, string word)
+        [InlineData(0, 1000f, "command")]
+        [InlineData(200, 1000f, "command")]
+        [InlineData((int)CommandKind.Task, 60000f, "map")]
+        [InlineData((int)CommandKind.Task, float.NaN, "map")]
+        [InlineData((int)CommandKind.Task, float.PositiveInfinity, "map")]
+        public void EachRefusalHasItsReasonAndCostsAToken(int kind, float x, string word)
         {
+            // Review M6a I3 (ruling): every command past the ownership check costs a token, refused or not.
             WcCommand c = Move(1, x);
             c.Kind = (CommandKind)kind;
             var s = new SenderState();
-            Assert.False(CommandValidator.Check(c, Context(owns), s, unused, out string reason));
+            Assert.False(CommandValidator.Check(c, Context(), s, 0f, out string reason));
             Assert.Contains(word, reason);
             Assert.Equal(0u, s.LastSeq);
+            Assert.Equal(CommandValidator.Burst - 1f, s.Tokens, 3);
+        }
+
+        [Fact]
+        public void ASenderWithoutAWingIsRefusedForFree()
+        {
+            var s = new SenderState();
+            Assert.False(CommandValidator.Check(Move(1), Context(false), s, 0f, out string reason));
+            Assert.Contains("wing", reason);
             Assert.Equal(CommandValidator.Burst, s.Tokens, 3);
+        }
+
+        [Fact]
+        public void RefusalsCannotBeSentFasterThanTheBucket()
+        {
+            var s = new SenderState();
+            for (int i = 0; i < (int)CommandValidator.Burst; i++) CommandValidator.Check(Move(1, float.NaN), Context(), s, 0f, out _);
+            Assert.False(CommandValidator.Check(Move(1), Context(), s, 0f, out string reason));
+            Assert.Contains("fast", reason);
+        }
+
+        [Theory]
+        [InlineData(-2000f, float.NaN, true)]
+        [InlineData(-2000f, 1e30f, false)]                 // review M6a I2: altitude beyond the ceiling
+        [InlineData(float.NegativeInfinity, float.NaN, false)]
+        [InlineData(float.NaN, float.NaN, false)]
+        [InlineData(-2000f, float.NegativeInfinity, false)]
+        public void WaypointsAreFiniteOnTheMapAndUnderTheCeiling(float z, float alt, bool ok) =>
+            Assert.Equal(ok, CommandValidator.Check(Move(1, 1000f, z, alt), Context(), new SenderState(), 0f, out _));
+
+        [Fact]
+        public void ArgumentsMustBeFinite()
+        {
+            // Review M6a I2: a NaN spacing would reach the slot solver.
+            var c = new WcCommand { Seq = 1, Kind = CommandKind.Spacing, Args = new[] { float.NaN } };
+            Assert.False(CommandValidator.Check(c, Context(), new SenderState(), 0f, out string reason));
+            Assert.Contains("argument", reason);
+            c.Args = new[] { 1.5f };
+            Assert.True(CommandValidator.Check(c, Context(), new SenderState(), 0f, out _));
         }
 
         [Fact]

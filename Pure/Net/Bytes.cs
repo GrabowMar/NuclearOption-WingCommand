@@ -9,7 +9,10 @@ namespace WingCommand
         public const byte Version = 1;
         public const int MaxString = 64, MaxMessage = 1024;
 
+        /// <summary>Reading is strict (invalid UTF-8 fails the read); writing is lenient (a lone surrogate becomes U+FFFD
+        /// instead of an exception: review M6a I1).</summary>
         internal static readonly UTF8Encoding Utf8 = new UTF8Encoding(false, true);
+        internal static readonly UTF8Encoding Utf8Write = new UTF8Encoding(false, false);
     }
 
     /// <summary>Little-endian writer into a caller's buffer (spec M6 §2.1): no allocation for numbers; past the end it
@@ -67,17 +70,21 @@ namespace WingCommand
         public void String(string s)
         {
             s = s ?? "";
-            int bytes = Protocol.Utf8.GetByteCount(s);
-            int chars = s.Length;
-            while (bytes > Protocol.MaxString)
+            // One pass over the characters: the longest whole-character prefix within MaxString bytes (a surrogate pair
+            // is 4 bytes and never split; a lone surrogate is written as the 3-byte replacement character).
+            int bytes = 0, chars = 0;
+            while (chars < s.Length)
             {
-                chars--;
-                if (chars > 0 && char.IsLowSurrogate(s[chars]) && char.IsHighSurrogate(s[chars - 1])) chars--;
-                bytes = Protocol.Utf8.GetByteCount(s.ToCharArray(0, chars));
+                char c = s[chars];
+                bool pair = char.IsHighSurrogate(c) && chars + 1 < s.Length && char.IsLowSurrogate(s[chars + 1]);
+                int width = pair ? 4 : c < 0x80 ? 1 : c < 0x800 ? 2 : 3;
+                if (bytes + width > Protocol.MaxString) break;
+                bytes += width;
+                chars += pair ? 2 : 1;
             }
             if (!Room(1 + bytes)) return;
             buffer[Length++] = (byte)bytes;
-            Length += Protocol.Utf8.GetBytes(s, 0, chars, buffer, Length);
+            Length += Protocol.Utf8Write.GetBytes(s, 0, chars, buffer, Length);
         }
     }
 

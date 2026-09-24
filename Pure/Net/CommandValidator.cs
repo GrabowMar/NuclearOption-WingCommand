@@ -26,25 +26,35 @@ namespace WingCommand
     /// <summary>Spec M6 §2.3: the host checks every client command before it touches a wing — the sender owns a wing, the
     /// command is known, its sequence number is above the last (replays and reordering on the unreliable channel), the
     /// sender's token bucket (burst <see cref="Burst"/>, <see cref="RefillPerSecond"/> a second) has a token, every
-    /// waypoint is finite and on the map (altitude may be left out: NaN), and every unit id is one the host knows. A
-    /// refusal consumes no token and does not advance the sequence.</summary>
+    /// waypoint is finite, on the map and under <see cref="MaxAltitude"/> (altitude may be left out: NaN), every
+    /// argument is finite, and every unit id is one the host knows. Every command past the ownership check costs a token,
+    /// refused or not (review M6a I3: refusals are not free to send); a refusal does not advance the sequence.</summary>
     internal static class CommandValidator
     {
-        public static float Burst = 20f, RefillPerSecond = 10f;
+        public static float Burst = 20f, RefillPerSecond = 10f, MaxAltitude = 30000f;
 
         public static bool Check(in WcCommand c, in CommandContext ctx, SenderState s, float now, out string reason)
         {
             s.Tokens = Math.Min(Burst, s.Tokens + Math.Max(0f, now - s.At) * RefillPerSecond);
             s.At = now;
-            reason = !ctx.OwnsWing ? "no wing to command"
-                : c.Kind == CommandKind.None || c.Kind > CommandKind.Doctrine ? "unknown command"
+            if (!ctx.OwnsWing)
+            {
+                reason = "no wing to command";
+                return false;
+            }
+            if (s.Tokens < 1f)
+            {
+                reason = "commands too fast";
+                return false;
+            }
+            s.Tokens -= 1f;
+            reason = c.Kind == CommandKind.None || c.Kind > CommandKind.Doctrine ? "unknown command"
                 : c.Seq <= s.LastSeq ? "out-of-order sequence"
-                : s.Tokens < 1f ? "commands too fast"
                 : !WaypointsOnMap(c, ctx.MapHalfSize) ? "waypoint off the map"
+                : !ArgsFinite(c) ? "argument not a number"
                 : !UnitsKnown(c, ctx) ? "unknown unit"
                 : null;
             if (reason != null) return false;
-            s.Tokens -= 1f;
             s.LastSeq = c.Seq;
             return true;
         }
@@ -55,8 +65,16 @@ namespace WingCommand
             foreach (WcWaypoint w in c.Waypoints)
             {
                 if (!Finite(w.X) || !Finite(w.Z) || Math.Abs(w.X) > half || Math.Abs(w.Z) > half) return false;
-                if (!float.IsNaN(w.Alt) && !Finite(w.Alt)) return false;
+                if (!float.IsNaN(w.Alt) && (!Finite(w.Alt) || Math.Abs(w.Alt) > MaxAltitude)) return false;
             }
+            return true;
+        }
+
+        private static bool ArgsFinite(in WcCommand c)
+        {
+            if (c.Args == null) return true;
+            foreach (float a in c.Args)
+                if (!Finite(a)) return false;
             return true;
         }
 
