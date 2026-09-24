@@ -17,10 +17,14 @@ namespace WingCommand
         {
             WingService wing = WingService.Instance;
             if (wing == null || __instance == null || __instance.dead) return;
+            PilotBaseState asked = state;
             PilotBaseState ours = wing.LeaveNativeLanding(__instance, state) ?? wing.LeaveNativeCombat(__instance, state);
-            if (ours == null || ReferenceEquals(ours, state)) return;
-            state = ours;
-            Redirected++;
+            if (ours != null && !ReferenceEquals(ours, state))
+            {
+                state = ours;
+                Redirected++;
+            }
+            wing.TraceSwitch(__instance, asked, state);
         }
     }
 }

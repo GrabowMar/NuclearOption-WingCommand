@@ -14,7 +14,9 @@
     {"op": "spawn", "id": "b3", "type": "FS-12 Revoker", "faction": "Primeva", "at": {"map": [-1500, 27500]}, "altitude": 3200, "speed": 220, "heading": 180},
     {"op": "spawn", "id": "b4", "type": "FS-12 Revoker", "faction": "Primeva", "at": {"map": [1500, 27500]}, "altitude": 3200, "speed": 220, "heading": 180},
     {"op": "record", "ids": ["lead"], "hz": 2},
-    {"op": "wait", "seconds": 150},
+    {"op": "wait", "seconds": 45},
+    {"op": "call", "method": "WingCommand.Automation.CombatState", "store": "early"},
+    {"op": "wait", "seconds": 105},
     {"op": "call", "method": "WingCommand.Automation.CombatState", "store": "fight"},
     {"op": "call", "method": "WingCommand.Automation.Metrics", "store": "wing"},
     {"op": "end"}
@@ -22,6 +24,7 @@
   "checks": [
     {"check": "status_ok"},
     {"check": "result_above", "path": "form.spawned", "min": 2},
-    {"check": "result_above", "path": "fight.members", "min": 1}
+    {"check": "result_above", "path": "early.defends", "min": 1},
+    {"check": "result_below", "path": "early.jokers", "max": 0}
   ]
 }

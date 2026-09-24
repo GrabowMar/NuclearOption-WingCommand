@@ -288,7 +288,8 @@ namespace WingCommand
             }
             if (m.BingoField == null) return false;
             float distance = (m.BingoField.transform.position - m.Aircraft.transform.position).magnitude;
-            bool bingo = m.Bingo.Update(m.Aircraft.GetFuelLevel(), distance, m.Last.Tas, step);
+            bool afterburner = m.Profile.Class == AirframeClass.FixedWing && m.Last.Throttle >= m.Profile.AfterburnerThrottle;
+            bool bingo = m.Bingo.Update(m.Aircraft.GetFuelLevel(), distance, m.Profile.CruiseSpeed, step, afterburner);
             if (m.Bingo.JokerNow)
             {
                 Events.Push(new WingEvent { Time = missionTime, Member = m.Brain.Slot, Kind = WingEventKind.Joker });

@@ -14,7 +14,7 @@ namespace WingCommand
 
     /// <summary>Bingo fuel for one member (spec M3 §4): it learns the burn rate in flight (fraction of the tanks per
     /// second, low-passed over <see cref="RateTau"/>) and trips once when the fuel left no longer covers the flight to the
-    /// field (distance / speed at that rate) plus <see cref="ReserveFraction"/> of the tanks. A refuel (fuel back above
+    /// field (distance / cruise speed at the rate learned outside afterburner) plus <see cref="ReserveFraction"/> of the tanks. A refuel (fuel back above
     /// the need plus <see cref="ClearMargin"/>) clears it.</summary>
     internal sealed class BingoMonitor
     {
@@ -32,18 +32,20 @@ namespace WingCommand
         /// <summary>Seconds until bingo at the learned burn rate (+inf before a rate is learned).</summary>
         public float SecondsToBingo => float.IsNaN(rate) || rate <= 0f ? float.PositiveInfinity : (lastFuel - need) / rate;
 
-        /// <summary>True on the tick bingo is first reached.</summary>
-        public bool Update(float fuel, float distanceToField, float speed, float dt)
+        /// <summary>True on the tick bingo is first reached. The flight home is judged at <paramref name="cruiseSpeed"/>
+        /// and the burn rate learned outside <paramref name="afterburner"/> (in game a defensive break in afterburner, slow
+        /// at its end, called Joker and Bingo a second apart 15 km from the field).</summary>
+        public bool Update(float fuel, float distanceToField, float cruiseSpeed, float dt, bool afterburner = false)
         {
             JokerNow = false;
-            if (!float.IsNaN(lastFuel) && dt > 0f)
+            if (!float.IsNaN(lastFuel) && dt > 0f && !afterburner)
             {
                 float instant = Math.Max(0f, (lastFuel - fuel) / dt);
                 rate = float.IsNaN(rate) ? instant : rate + (instant - rate) * Math.Min(1f, dt / RateTau);
             }
             lastFuel = fuel;
             if (float.IsNaN(rate) || rate <= 0f) return false;
-            float needed = rate * distanceToField / Math.Max(speed, MinSpeed) + ReserveFraction;
+            float needed = rate * distanceToField / Math.Max(cruiseSpeed, MinSpeed) + ReserveFraction;
             need = needed;
             if (Joker && fuel > needed + JokerMargin + ClearMargin) Joker = false;
             if (!Joker && fuel < needed + JokerMargin)

@@ -487,6 +487,22 @@ namespace WingCommand
             }
         }
 
+        /// <summary>Every state switch of a wing member (diagnostics: in game two engaged members left the wing with no state
+        /// and nothing said why).</summary>
+        public void TraceSwitch(Pilot pilot, PilotBaseState asked, PilotBaseState next)
+        {
+            foreach (WingMember m in Members)
+            {
+                if (!ReferenceEquals(m.Pilot, pilot)) continue;
+                string from = pilot.currentState == null ? "none" : ReferenceEquals(pilot.currentState, m.State) ? "ours" : pilot.currentState.GetType().Name;
+                string to = next == null ? "none" : ReferenceEquals(next, m.State) ? "ours" : next.GetType().Name;
+                string redirected = ReferenceEquals(asked, next) ? "" : $" (asked {(asked == null ? "none" : asked.GetType().Name)})";
+                Plugin.Logger.LogInfo($"[Native] #{m.Number} state {from} -> {to}{redirected}, engaged {m.Engaged}, " +
+                                      $"fuel {m.Aircraft.GetFuelLevel():0.00}, disabled {m.Aircraft.disabled}");
+                return;
+            }
+        }
+
         /// <summary>The game's combat state leaving for landing or transport: our state instead (null: not ours).</summary>
         public PilotBaseState LeaveNativeCombat(Pilot pilot, PilotBaseState next)
         {

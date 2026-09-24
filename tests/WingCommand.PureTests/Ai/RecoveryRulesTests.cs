@@ -35,6 +35,36 @@ namespace WingCommand.PureTests
         }
 
         [Fact]
+        public void AfterburnerBurnIsNotLearnedAsTheRateHome()
+        {
+            // In game (wc-m5c-defend) a defensive break in afterburner raised the learned rate and called Joker and Bingo
+            // a second apart 15 km from the field. Dry 0.001/s, then 10 s of afterburner at 0.005/s: the rate home stays
+            // 0.001 (need 0.25, Joker below 0.40) and 0.449 is no Joker.
+            var b = new BingoMonitor();
+            b.Update(0.500f, 30000f, 200f, 1f);
+            b.Update(0.499f, 30000f, 200f, 1f);
+            float fuel = 0.499f;
+            for (int i = 0; i < 10; i++)
+            {
+                fuel -= 0.005f;
+                b.Update(fuel, 30000f, 200f, 1f, afterburner: true);
+            }
+            Assert.Equal(0.001f, b.BurnRate, 5);
+            Assert.False(b.Joker);
+        }
+
+        [Fact]
+        public void ARateLearnedOnlyInAfterburnerIsNoRate()
+        {
+            var b = new BingoMonitor();
+            b.Update(0.90f, 30000f, 200f, 1f, afterburner: true);
+            b.Update(0.88f, 30000f, 200f, 1f, afterburner: true);
+            Assert.True(float.IsPositiveInfinity(b.SecondsToBingo));
+            b.Update(0.879f, 30000f, 200f, 1f);
+            Assert.Equal(0.001f, b.BurnRate, 5);
+        }
+
+        [Fact]
         public void BingoNeverTripsBeforeABurnRateIsKnown()
         {
             var bingo = new BingoMonitor();
