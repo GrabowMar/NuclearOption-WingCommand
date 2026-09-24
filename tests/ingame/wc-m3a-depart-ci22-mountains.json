@@ -99,7 +99,7 @@
     },
     {
       "check": "result_above",
-      "path": "ground.airborne",
+      "path": "ground.flying",
       "min": 3
     },
     {

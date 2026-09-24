@@ -5,12 +5,14 @@ using Xunit;
 namespace WingCommand.PureTests
 {
     /// <summary>A kinematic taxiing aircraft: bicycle model (nose wheel = yaw × steering lock), 3 m/s² per unit throttle,
-    /// 4 m/s² per unit brake, a little rolling drag; it stays on the ground.</summary>
+    /// 4 m/s² per unit brake, a little rolling drag. Pitch stick rotates it (8°/s per unit above 20 m/s, settling back
+    /// without); it lifts off only at <see cref="LiftSpeed"/> with the nose 6° up, then climbs (the in-game jets stayed
+    /// on their wheels when nobody rotated them).</summary>
     internal sealed class TestGroundPlant
     {
         public Vec3 Pos, Fwd;
-        public float Speed;
-        public float WheelbaseM = 6.6f, SteerLockDeg = 45f;
+        public float Speed, PitchDeg;
+        public float WheelbaseM = 6.6f, SteerLockDeg = 45f, LiftSpeed = 70f;
 
         public TestGroundPlant(Pose at)
         {
@@ -21,7 +23,7 @@ namespace WingCommand.PureTests
         public AircraftState Read(float dt) => new AircraftState
         {
             Pos = Pos, Vel = Fwd * Speed, Fwd = Fwd, Up = Vec3.Up, Right = Vec3.Cross(Vec3.Up, Fwd), Tas = Speed,
-            RadarAlt = Pos.Y, Dt = dt,
+            RadarAlt = Pos.Y, Dt = dt, PitchDeg = PitchDeg,
         };
 
         public void Step(in ControlOutput o, float dt)
@@ -32,6 +34,8 @@ namespace WingCommand.PureTests
             Vec3 right = Vec3.Cross(Vec3.Up, Fwd);
             Fwd = (Fwd * (float)Math.Cos(turn) + right * (float)Math.Sin(turn)).Normalized;
             Pos += Fwd * Speed * dt;
+            PitchDeg = Scalar.Clamp(Speed > 20f && o.Pitch > 0f ? PitchDeg + o.Pitch * 8f * dt : PitchDeg - 5f * dt, 0f, 15f);
+            if (Speed >= LiftSpeed && PitchDeg >= 6f) Pos += Vec3.Up * (0.1f * Speed * dt);
         }
     }
 
@@ -97,6 +101,60 @@ namespace WingCommand.PureTests
             Assert.True(pilot.DespawnOnRelease(s));
             s.RadarAlt = 25f;
             Assert.False(pilot.DespawnOnRelease(s));
+        }
+
+        [Fact]
+        public void TheRollRotatesFromSeventyPercentOfTakeoffSpeedAndClimbsOutOnlyOffTheGround()
+        {
+            // In game the jets were handed to the flight pipeline at takeoff speed on their wheels, never rotated,
+            // drifted off the runway and stopped in the grass (RTB never started).
+            (FieldTraffic field, GroundPilot pilot, TestGroundPlant plant, IFlightPipeline pipeline, WingEventRing events) = OneJet();
+            float t = RunUntil(field, pilot, plant, pipeline, events, GroundPhase.Roll);
+            AirframeProfile p = Jet();
+            bool early = false, rotated = false;
+            for (int i = 0; i < 60 * 30 && pilot.Phase == GroundPhase.Roll; i++, t += Dt)
+            {
+                field.Step(Dt);
+                float speed = plant.Speed;
+                ControlOutput o = pilot.Step(plant.Read(Dt), p, pipeline, t, Dt, events, 0);
+                if (speed < 0.65f * p.TakeoffSpeed && o.Pitch > 0f) early = true;
+                if (speed > 0.75f * p.TakeoffSpeed && o.Pitch > 0.1f) rotated = true;
+                plant.Step(o, Dt);
+            }
+            Assert.False(early, "rotated below 0.7 × takeoff speed");
+            Assert.True(rotated, "never rotated");
+            Assert.Equal(GroundPhase.ClimbOut, pilot.Phase);
+            Assert.True(plant.Pos.Y > 1f, $"climb-out began at {plant.Pos.Y:0.0} m");
+        }
+
+        [Fact]
+        public void AJetThatNeverLeavesTheGroundAbortsInsteadOfClimbingOut()
+        {
+            (FieldTraffic field, GroundPilot pilot, TestGroundPlant plant, IFlightPipeline pipeline, WingEventRing events) = OneJet();
+            plant.LiftSpeed = float.PositiveInfinity;
+            float t = RunUntil(field, pilot, plant, pipeline, events, GroundPhase.Roll);
+            for (int i = 0; i < 90 * 30 && pilot.Phase == GroundPhase.Roll; i++, t += Dt)
+            {
+                field.Step(Dt);
+                plant.Step(pilot.Step(plant.Read(Dt), Jet(), pipeline, t, Dt, events, 0), Dt);
+            }
+            Assert.Equal(GroundPhase.Aborted, pilot.Phase);
+            Assert.Equal(0, events.CountOf(WingEventKind.Airborne));
+        }
+
+        [Fact]
+        public void ClimbOutHoldsFullThrottle()
+        {
+            (FieldTraffic field, GroundPilot pilot, TestGroundPlant plant, IFlightPipeline pipeline, WingEventRing events) = OneJet();
+            float t = RunUntil(field, pilot, plant, pipeline, events, GroundPhase.ClimbOut);
+            for (int i = 0; i < 3 * 30 && pilot.Phase == GroundPhase.ClimbOut; i++, t += Dt)
+            {
+                field.Step(Dt);
+                ControlOutput o = pilot.Step(plant.Read(Dt), Jet(), pipeline, t, Dt, events, 0);
+                Assert.Equal(1f, o.Throttle);
+                Assert.False(o.Airbrake);
+                plant.Step(o, Dt);
+            }
         }
 
         /// <summary>One jet from its hangar until it reaches <paramref name="until"/>; the time reached.</summary>

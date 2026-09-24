@@ -109,7 +109,7 @@
     },
     {
       "check": "result_above",
-      "path": "departed.airborne",
+      "path": "departed.flying",
       "min": 2
     },
     {

@@ -82,15 +82,18 @@ namespace WingCommand
         {
             WingService wing = WingService.Instance;
             if (wing == null) return Fail("Ground", "the wing is not active");
-            int grounded = 0, airborne = 0;
+            // flying: really up (radar altitude above 30 m), not just off our ground phases (a jet left in the grass
+            // after its roll once counted as airborne).
+            int grounded = 0, airborne = 0, flying = 0;
             foreach (WingMember m in wing.Members)
             {
                 if (m.OnGround) grounded++;
                 else airborne++;
+                if (!m.OnGround && m.Aircraft != null && m.Aircraft.radarAlt > 30f) flying++;
             }
             var result = new Dictionary<string, object>
             {
-                { "ok", true }, { "grounded", grounded }, { "airborne", airborne },
+                { "ok", true }, { "grounded", grounded }, { "airborne", airborne }, { "flying", flying },
                 { "relocated", wing.Events.CountOf(WingEventKind.Relocated) },
                 { "rerouted", wing.Events.CountOf(WingEventKind.Rerouted) },
                 { "rolled", wing.Events.CountOf(WingEventKind.Rolling) },

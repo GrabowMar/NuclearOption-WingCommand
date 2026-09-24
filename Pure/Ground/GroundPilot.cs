@@ -57,6 +57,11 @@ namespace WingCommand
         public static float LineupTolerance = 3f, LineupAlignDeg = 10f, StoppedSpeed = 0.5f;
         public static float LiftOffHeight = 30f, HoverExitHeight = 3f, HoverExitReached = 5f;
         public static float ClimbOutHeight = 150f, ClimbOutSeconds = 30f, ClimbOutAboveRunway = 300f, ClimbOutSpeedFactor = 1.3f;
+        /// <summary>The takeoff roll rotates from <see cref="RotateFraction"/> × the takeoff speed toward
+        /// <see cref="RotatePitchDeg"/> nose-up (pitch stick <see cref="RotateGain"/> per degree short), as the game's own
+        /// takeoff aims up from 0.7 × takeoff speed; climb-out begins only above <see cref="WheelsOffHeight"/> radar altitude
+        /// (the fly-by-wire is off on the wheels) and holds full throttle, as the game's does.</summary>
+        public static float RotateFraction = 0.7f, RotatePitchDeg = 10f, RotateGain = 0.08f, WheelsOffHeight = 1.5f;
         public static float RerouteCost = 1e4f, OppositeCost = 1000f, RelocateClearRadius = 30f, RelocateCancelMetres = 10f;
         public static float AlignSettleSeconds = 5f, LineUpSeconds = 120f, RollSeconds = 60f;
         public static float PullAsideMetres = 45f, PullAsideSeconds = 90f;
@@ -674,13 +679,17 @@ namespace WingCommand
             o.Throttle = blocked ? 0f : 1f;
             o.Brake = blocked ? 1f : 0f;
             float speed = Vec3.Dot(s.Vel, s.Fwd.Horizontal.Normalized);
-            if (speed < p.TakeoffSpeed && time - rollStart > RollSeconds) return Abort(time, events, slot);
-            if (speed >= p.TakeoffSpeed)
+            if (!blocked && speed >= RotateFraction * p.TakeoffSpeed)
+                o.Pitch = Scalar.Clamp((RotatePitchDeg - s.PitchDeg) * RotateGain, 0f, 1f);
+            if (s.RadarAlt > WheelsOffHeight)
             {
                 pipeline.Track(s, o, p);
                 liftoffTime = time;
                 Enter(GroundPhase.ClimbOut, time);
+                return o;
             }
+            // Still on the wheels this long: reject the takeoff rather than report a jet in the grass as airborne.
+            if (time - rollStart > RollSeconds) return Abort(time, events, slot);
             return o;
         }
 
@@ -703,6 +712,8 @@ namespace WingCommand
             };
             GuidanceCommand g = pipeline.Guide(intent, s, p);
             ControlOutput o = pipeline.Step(g, s, new LimitContext { FloorY = float.NaN, Aggression = 0.3f }, p, dt);
+            o.Throttle = 1f;
+            o.Airbrake = false;
             if (!airborneReported && s.RadarAlt > DepartureSequencer.ClearHeight)
             {
                 airborneReported = true;
