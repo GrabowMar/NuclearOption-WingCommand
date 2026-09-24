@@ -67,8 +67,8 @@ namespace WingCommand
             framed = false;
             float mapX = Board + Pad * 2f, mapW = area.width - Board - Card - Pad * 4f;
             float top = -Pad;
-            // The strip: the same map-order modes as ORDERS, and FIT.
-            float bw = (mapW - WmcUi.Gap * 7f) / 8f;
+            // The strip: the map-order modes, FIT and the LOG drawer.
+            float bw = (mapW - WmcUi.Gap * 8f) / 9f;
             for (int i = 0; i < Modes.Length; i++)
             {
                 MapMode m = Modes[i];
@@ -79,6 +79,10 @@ namespace WingCommand
             AvButton fit = AvStyled.Button(body, new Rect(mapX + 7 * (bw + WmcUi.Gap), top, bw, StripHeight), "FIT", "btn", Fit);
             fit.WithTooltip("Frame the wing and its routes; press again to frame the whole theatre.");
             ids["room.fit"] = fit;
+            logToggle = AvStyled.Button(body, new Rect(mapX + 8 * (bw + WmcUi.Gap), top, bw, StripHeight), "LOG", "btn",
+                () => SetLog(!LogOpen), AvButtonStyle.Toggle);
+            logToggle.WithTooltip("Wing events and radio lines; click a wingman's line to centre the map on it.");
+            ids["room.log"] = logToggle;
             prompt = AvStyled.Label(body, new Rect(mapX, top - StripHeight - 4f, mapW, PromptHeight), "", "hint");
             prompt.enableWordWrapping = false;
             prompt.overflowMode = TextOverflowModes.Ellipsis;
@@ -112,6 +116,7 @@ namespace WingCommand
             AvKit.Stretch(catcher.rectTransform);
             catcher.gameObject.AddComponent<MapInput>().Page = this;
             view.Resize(mapW, mapH);
+            BuildLog(mapRect, mapW, mapH);
 
             BuildBoards(body, area);
         }
@@ -148,6 +153,7 @@ namespace WingCommand
             prompt.text = c.Map.Prompt(c.ScopeLabel) ?? (c.Selection.Count > 0 ? "Right-click the map to MOVE " + c.ScopeLabel + "."
                 : "Arm a mode, then right-click the map; or select wingmen and right-click to move them.");
             RefreshBoards(c);
+            RefreshLog(c);
         }
 
         public void Tick(WmcContext c)

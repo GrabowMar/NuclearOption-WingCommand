@@ -86,7 +86,8 @@ namespace WingCommand
             if (!enabled)
             {
                 if (screen != null && screen.isActive) screen.CloseScreen(screen.transform.localPosition);
-                context.Map.Update(context, false);
+                // A mode armed in the room stays armed while the room is open (R2: the disabled panel used to disarm it).
+                context.Map.Update(context, WmcRoom.Instance != null && WmcRoom.Instance.IsOpen);
                 overlay.Hide();
                 return;
             }

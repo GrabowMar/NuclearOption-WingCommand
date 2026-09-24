@@ -14,7 +14,7 @@ namespace WingCommand
     internal sealed class WmcRoom : IWingService
     {
         private const int SortingOrder = 29990;   // under Boscali's OPS window (30000) if both are open
-        private const float Reference = 1920f, ReferenceHeight = 1080f, NotchGap = 4f, NotchMax = 164f, CloseWidth = 132f;
+        private const float Reference = 1920f, ReferenceHeight = 1080f, NotchGap = 4f, NotchMax = 220f, CloseWidth = 132f;
         private const float HeaderHeight = 44f, FooterHeight = 26f, BackdropAlpha = 0.72f;
 
         private sealed class Notch

@@ -101,5 +101,36 @@ namespace WingCommand.FlightSim
             Assert.True(peak < 255f, $"peak speed {peak:0.0}");
             Assert.InRange(plant.Speed, 245f, 255f);
         }
+
+        [Fact]
+        public void NavFliesAThreePointRouteAndEndsInAHeadingHold()
+        {
+            // Spec WMC rebuild §ROUTE: NAV flies the route the player drew; each point is passed inside the capture radius.
+            var (plant, pilot) = Start();
+            Waypoint p0 = Waypoint.At(0f, 12000f), p1 = Waypoint.At(12000f, 12000f), p2 = Waypoint.At(12000f, 0f);
+            p1.Altitude = 2500f;
+            var route = new[] { p0, p1, p2 };
+            var nav = new NavFollower();
+            nav.Load(route, route.Length);
+            var hold = new HoldSpec { Lateral = LateralHold.Nav, Vertical = VerticalHold.Altitude, AltitudeM = 2000f };
+            var closest = new[] { float.MaxValue, float.MaxValue, float.MaxValue };
+            int i = 0;
+            for (; i < 60 * 60 * 6 && nav.Active; i++)
+            {
+                nav.Step(plant.Position, plant.Speed, ref hold);
+                pilot.StepHold(hold, Dt);
+                for (int k = 0; k < route.Length; k++)
+                {
+                    float dx = route[k].X - plant.Position.X, dz = route[k].Z - plant.Position.Z;
+                    closest[k] = Math.Min(closest[k], (float)Math.Sqrt(dx * dx + dz * dz));
+                }
+            }
+            Assert.False(nav.Active, $"still flying leg {nav.Index + 1} after {i * Dt:0} s");
+            Assert.True(i * Dt > 120f, $"the route took only {i * Dt:0} s");   // 36 km at 200 m/s plus two turns
+            Assert.Equal(LateralHold.Heading, hold.Lateral);
+            for (int k = 0; k < route.Length; k++)
+                Assert.True(closest[k] <= NavFollower.CaptureRadius(plant.Speed) + 50f, $"point {k + 1} missed by {closest[k]:0} m");
+            Assert.Equal(2500f, hold.AltitudeM);   // the second point set the altitude; the third kept it
+        }
     }
 }

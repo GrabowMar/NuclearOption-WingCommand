@@ -630,6 +630,7 @@ namespace WingCommand
             if (Arg(args, "open") is bool open && open) room.Open(Number(args, "page", -1));
             RoomTactical t = room.Tactical;
             if (Arg(args, "fit") is bool fit && fit) t?.FitNow();
+            if (Arg(args, "log") is bool log) t?.SetLog(log);
             float mppBefore = t != null ? t.MetresPerPixel : 0f;
             if (Arg(args, "zoom") != null) t?.ZoomCentre((float)Convert.ToDouble(Arg(args, "zoom"), CultureInfo.InvariantCulture));
             float zoomRatio = t != null && mppBefore > 0f ? t.MetresPerPixel / mppBefore : 1f;
@@ -661,6 +662,7 @@ namespace WingCommand
                 { "pressed", pressed ? 1 : 0 }, { "markers", t?.Markers ?? 0 }, { "legs", t?.LegCount ?? 0 }, { "contacts", t?.ContactCount ?? 0 },
                 { "fields", t?.FieldCount ?? 0 }, { "mpp", t?.MetresPerPixel ?? 0f }, { "cards", t?.Cards ?? 0 },
                 { "card_member", t != null && t.CardMember != 0u ? 1 : 0 }, { "zoom_ratio", zoomRatio }, { "last", WingToast.Last ?? "" },
+                { "log_open", t != null && t.LogOpen ? 1 : 0 }, { "log_rows", t?.LogRowsShown ?? 0 },
             };
         }
 

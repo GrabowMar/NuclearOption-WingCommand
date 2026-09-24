@@ -109,6 +109,22 @@
     },
     {
       "op": "call",
+      "method": "WingCommand.Automation.WmcRoom",
+      "store": "log",
+      "args": {
+        "log": true
+      }
+    },
+    {
+      "op": "call",
+      "method": "WingCommand.Automation.WmcRoom",
+      "store": "log_off",
+      "args": {
+        "log": false
+      }
+    },
+    {
+      "op": "call",
       "method": "WingCommand.Automation.WmcMap",
       "store": "orbit_check"
     },
@@ -243,6 +259,16 @@
       "check": "result_below",
       "path": "after_close.keyboard_held",
       "max": 0
+    },
+    {
+      "check": "result_above",
+      "path": "log.log_rows",
+      "min": 1
+    },
+    {
+      "check": "result_above",
+      "path": "log.log_open",
+      "min": 1
     }
   ]
 }
