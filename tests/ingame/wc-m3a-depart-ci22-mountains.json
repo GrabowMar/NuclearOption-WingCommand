@@ -42,7 +42,7 @@
       "args": {
         "lead": "lead",
         "field": "airbase_mountains",
-        "count": 2,
+        "count": 4,
         "type": "CI-22 Cricket"
       }
     },
@@ -82,12 +82,12 @@
     {
       "check": "result_above",
       "path": "launch.launched",
-      "min": 2
+      "min": 4
     },
     {
       "check": "result_above",
       "path": "ground.airborne",
-      "min": 2
+      "min": 4
     },
     {
       "check": "result_below",
@@ -102,6 +102,11 @@
     {
       "check": "result_below",
       "path": "wing.left",
+      "max": 0
+    },
+    {
+      "check": "result_below",
+      "path": "ground.aborted",
       "max": 0
     }
   ]

@@ -103,6 +103,11 @@
       "check": "result_below",
       "path": "wing.left",
       "max": 0
+    },
+    {
+      "check": "result_below",
+      "path": "ground.aborted",
+      "max": 0
     }
   ]
 }
