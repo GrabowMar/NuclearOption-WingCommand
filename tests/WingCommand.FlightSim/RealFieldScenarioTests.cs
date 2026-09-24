@@ -66,6 +66,34 @@ namespace WingCommand.FlightSim
         [InlineData(4)]
         public void BoscaliNorthDepartsFromItsHangarsWithoutRelocationsOrAborts(int count)
         {
+            int[] hangars = new int[count];
+            for (int k = 0; k < count; k++) hangars[k] = k;
+            DepartBoscaliNorth(hangars);
+        }
+
+        /// <summary>Every pair of the field's hangars (the game hands out whichever can spawn the type).</summary>
+        [Fact]
+        public void BoscaliNorthDepartsAPairFromAnyTwoHangars()
+        {
+            var failures = new List<string>();
+            for (int a = 0; a < 8; a++)
+                for (int b = a + 1; b < 8; b++)
+                {
+                    string why = TryDepartBoscaliNorth(new[] { a, b });
+                    if (why != null) failures.Add($"hangars {a},{b}: {why}");
+                }
+            Assert.True(failures.Count == 0, string.Join("; ", failures));
+        }
+
+        private static void DepartBoscaliNorth(int[] hangars)
+        {
+            string why = TryDepartBoscaliNorth(hangars);
+            Assert.True(why == null, why);
+        }
+
+        private static string TryDepartBoscaliNorth(int[] hangars)
+        {
+            int count = hangars.Length;
             AirbaseSample sample = AirbaseSample.FromDumpJson(File.ReadAllText(Path.Combine(AppContext.BaseDirectory, "Fixtures", "airbases",
                 "boscali-north-hangars.json"))).Single();
             Assert.True(FieldTraffic.TryPickRunway(sample, out int runway, out bool reverse));
@@ -76,9 +104,9 @@ namespace WingCommand.FlightSim
             var pipelines = new List<IFlightPipeline>();
             for (int k = 0; k < count; k++)
             {
-                Pose spawn = sample.Hangars[k].Spawn;
+                Pose spawn = sample.Hangars[hangars[k]].Spawn;
                 field.Departures.Expect(k, LineupPlanner.Abreast(field.Runway.Width, p.SpanM));
-                pilots.Add(new GroundPilot(k, field, AirframeClass.FixedWing, spawn, k));
+                pilots.Add(new GroundPilot(k, field, AirframeClass.FixedWing, spawn, hangars[k]));
                 plants.Add(new DepartingPlant(PlantParams.GenericFighter, spawn, p.TakeoffSpeed, p.WheelbaseM, p.SteerLockDeg));
                 pipelines.Add(FlightStack.NewPipeline(AirframeClass.FixedWing));
             }
@@ -94,9 +122,10 @@ namespace WingCommand.FlightSim
                 }
             }
             for (int k = 0; k < count; k++)
-                Assert.True(pilots[k].Done, $"member {k} is {pilots[k].Phase} ({pilots[k].Stop}) at {plants[k].Position}");
-            Assert.Equal(0, events.CountOf(WingEventKind.Relocated));
-            Assert.Equal(0, events.CountOf(WingEventKind.DepartureAborted));
+                if (!pilots[k].Done) return $"member {k} (hangar {hangars[k]}) is {pilots[k].Phase} ({pilots[k].Stop}) at {plants[k].Position}";
+            if (events.CountOf(WingEventKind.Relocated) > 0) return $"{events.CountOf(WingEventKind.Relocated)} relocations";
+            if (events.CountOf(WingEventKind.DepartureAborted) > 0) return "aborted";
+            return null;
         }
     }
 }
