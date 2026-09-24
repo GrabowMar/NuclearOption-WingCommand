@@ -1,0 +1,39 @@
+{
+  "name": "wc-m5d-outnumbered-fs20",
+  "mods": ["wingcommand"],
+  "timeout_s": 420,
+  "ops": [
+    {"op": "spawn", "id": "lead", "type": "FS-20 Vortex", "at": {"map": [0, 0]}, "altitude": 3000, "speed": 200, "heading": 0},
+    {"op": "fly", "id": "lead", "program": [{"level": 5}, {"orbit": {"bank": 25, "seconds": 380}}]},
+    {"op": "wait", "seconds": 2},
+    {"op": "call", "method": "WingCommand.Automation.FormOn", "store": "form",
+     "args": {"lead": "lead", "count": 2, "shape": "finger-four-right", "spacing": "Standard"}},
+    {"op": "wait", "seconds": 60},
+    {"op": "spawn", "id": "b1", "type": "FS-12 Revoker", "faction": "Primeva", "at": {"map": [-2000, 11000]}, "altitude": 3000, "speed": 200, "heading": 180},
+    {"op": "spawn", "id": "b2", "type": "FS-12 Revoker", "faction": "Primeva", "at": {"map": [0, 11000]}, "altitude": 3000, "speed": 200, "heading": 180},
+    {"op": "spawn", "id": "b3", "type": "FS-12 Revoker", "faction": "Primeva", "at": {"map": [2000, 11000]}, "altitude": 3000, "speed": 200, "heading": 180},
+    {"op": "spawn", "id": "b4", "type": "FS-12 Revoker", "faction": "Primeva", "at": {"map": [-2000, 12500]}, "altitude": 3300, "speed": 200, "heading": 180},
+    {"op": "spawn", "id": "b5", "type": "FS-12 Revoker", "faction": "Primeva", "at": {"map": [0, 12500]}, "altitude": 3300, "speed": 200, "heading": 180},
+    {"op": "spawn", "id": "b6", "type": "FS-12 Revoker", "faction": "Primeva", "at": {"map": [2000, 12500]}, "altitude": 3300, "speed": 200, "heading": 180},
+    {"op": "wait", "seconds": 10},
+    {"op": "call", "method": "WingCommand.Automation.EngageCommand", "store": "first"},
+    {"op": "wait", "seconds": 2},
+    {"op": "call", "method": "WingCommand.Automation.EngageCommand", "store": "second"},
+    {"op": "wait", "seconds": 45},
+    {"op": "call", "method": "WingCommand.Automation.CombatState", "store": "fight"},
+    {"op": "call", "method": "WingCommand.Automation.Disengage", "store": "disengage"},
+    {"op": "wait", "seconds": 3},
+    {"op": "call", "method": "WingCommand.Automation.EngageCommand", "store": "third"},
+    {"op": "call", "method": "WingCommand.Automation.Metrics", "store": "wing"},
+    {"op": "end"}
+  ],
+  "checks": [
+    {"check": "status_ok"},
+    {"check": "result_above", "path": "form.spawned", "min": 2},
+    {"check": "result_above", "path": "first.hostiles", "min": 4},
+    {"check": "result_above", "path": "first.refused", "min": 1},
+    {"check": "result_above", "path": "second.engaged", "min": 1},
+    {"check": "result_below", "path": "fight.fallbacks", "max": 0},
+    {"check": "result_above", "path": "third.refused", "min": 1}
+  ]
+}

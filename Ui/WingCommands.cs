@@ -186,6 +186,11 @@ namespace WingCommand
         public static void Engage()
         {
             if (!Ready(out WingService w)) return;
+            if (!w.MayEngage(out int hostiles, out int members))
+            {
+                WingToast.Show($"Outnumbered {hostiles} to {members} - Engage again to fight anyway");
+                return;
+            }
             int n = w.Engage();
             WingToast.Show(n > 0 ? $"{n} engaging" : "Nobody can engage");
         }

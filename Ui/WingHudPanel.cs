@@ -100,10 +100,11 @@ namespace WingCommand
                 }
                 WingMember m = wing.Members[i];
                 bool behind = m.Brain.LastRejoin.FallingBehind;
-                string phase = WingHudText.Phase(m.Brain.Mind.Current, behind);
+                string phase = WingHudText.Duty(m.Engaged, m.Recovery != null, m.Recovery != null ? m.Recovery.Intent : RecoveryIntent.Rtb)
+                               ?? WingHudText.Phase(m.Brain.Mind.Current, behind);
                 string binding = WingHudText.Binding(m.Brain.Pipeline.Report);
                 float error = (wing.Wing.Frame.Slots[m.Brain.Slot].Ref.Pos - m.Last.Pos).Length;
-                rows[i].text = WingHudText.Member(m.Brain.Slot, phase, error, binding);
+                rows[i].text = WingHudText.Member(m.Brain.Slot, phase, error, binding, WingHudText.BingoTime(m.Bingo.SecondsToBingo));
                 rows[i].color = behind || binding == "GCAS" || binding == "COLL" ? AvTheme.Warning : WingUi.TextPrimary;
             }
             float lines = 2 + n;

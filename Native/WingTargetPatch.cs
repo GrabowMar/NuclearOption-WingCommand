@@ -14,7 +14,13 @@ namespace WingCommand
         {
             if (!(searcher is Aircraft a) || stationList == null || WingService.Instance == null) return;
             Unit target = WingService.Instance.AssignedTarget(a);
-            if (target == null || target.disabled || a.NetworkHQ == null) return;
+            if (target == null)
+            {
+                // Fighting on its own choice: spread off the others' and the player's targets (spec M5 §6.4).
+                if (__result.target != null) WingService.Instance.Spread(a, stationList, ref __result);
+                return;
+            }
+            if (target.disabled || a.NetworkHQ == null) return;
             TrackingInfo tracking = a.NetworkHQ.GetTrackingData(target.persistentID);
             // The game only chooses a target whose position is accurate (review M5a I4): a stale track would be circled.
             if (tracking == null || !a.NetworkHQ.IsTargetPositionAccurate(target, WingService.TargetAccuracyMetres)) return;

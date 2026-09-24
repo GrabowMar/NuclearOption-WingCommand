@@ -236,9 +236,7 @@ namespace WingCommand
 
         private void CheckBingo(WingMember m, float dt)
         {
-            if (!BingoNow(m, dt)) return;
-            WingToast.Show($"#{m.Number} bingo fuel; returning to base");
-            Recover(m, RecoveryIntent.Rtb);
+            if (BingoNow(m, dt)) FollowOn(m, TransitionReason.Fuel);
         }
 
         /// <summary>Once a second: true (and a Bingo event) the tick the member reaches bingo fuel for its home field.</summary>
@@ -255,7 +253,13 @@ namespace WingCommand
             }
             if (m.BingoField == null) return false;
             float distance = (m.BingoField.transform.position - m.Aircraft.transform.position).magnitude;
-            if (!m.Bingo.Update(m.Aircraft.GetFuelLevel(), distance, m.Last.Tas, step)) return false;
+            bool bingo = m.Bingo.Update(m.Aircraft.GetFuelLevel(), distance, m.Last.Tas, step);
+            if (m.Bingo.JokerNow)
+            {
+                Events.Push(new WingEvent { Time = missionTime, Member = m.Brain.Slot, Kind = WingEventKind.Joker });
+                WingToast.Show($"#{m.Number} joker fuel, {System.Math.Ceiling(m.Bingo.SecondsToBingo / 60f):0} min to bingo");
+            }
+            if (!bingo) return false;
             Events.Push(new WingEvent { Time = missionTime, Member = m.Brain.Slot, Kind = WingEventKind.Bingo });
             return true;
         }

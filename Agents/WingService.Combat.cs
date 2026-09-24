@@ -17,6 +17,147 @@ namespace WingCommand
             }
         }
 
+        private readonly OutnumberedJudge judge = new OutnumberedJudge();
+        private float outnumberedClock;
+        private readonly Unit[] othersTargets = new Unit[FormationCatalog.MaxSlots];
+
+        /// <summary>Enemy aircraft around the engaged members at the last check (automation reads it).</summary>
+        public int LastHostiles { get; private set; }
+        /// <summary>Times the wing fell back outnumbered this session.</summary>
+        public int FallBacks { get; private set; }
+
+        private static float FallBackRatio => Plugin.Settings != null ? Plugin.Settings.FallBackRatio.Value : 0f;
+
+        /// <summary>The radial Engage asks first (spec M5 §6.3): false while outnumbered, unless this is the second press
+        /// within the confirmation window.</summary>
+        public bool MayEngage(out int hostiles, out int members)
+        {
+            hostiles = 0;
+            members = 0;
+            Vec3 sum = default;
+            Aircraft any = null;
+            foreach (WingMember m in Members)
+            {
+                if (m.Released || m.OnGround || m.Recovery != null || !m.Alive) continue;
+                members++;
+                sum += m.Aircraft.GlobalPosition().ToVec3();
+                any = m.Aircraft;
+            }
+            if (members == 0) return true;
+            hostiles = CountHostiles(any, sum / members);
+            return judge.AllowEngage(hostiles, members, FallBackRatio, missionTime);
+        }
+
+        /// <summary>Enemy aircraft <paramref name="a"/>'s faction tracks within <see cref="OutnumberedJudge.RadiusMetres"/>
+        /// of <paramref name="centre"/>.</summary>
+        private static int CountHostiles(Aircraft a, Vec3 centre)
+        {
+            FactionHQ hq = a != null ? a.NetworkHQ : null;
+            if (hq == null || hq.trackingDatabase == null) return 0;
+            float r2 = OutnumberedJudge.RadiusMetres * OutnumberedJudge.RadiusMetres;
+            int n = 0;
+            foreach (KeyValuePair<PersistentID, TrackingInfo> pair in hq.trackingDatabase)
+            {
+                TrackingInfo t = pair.Value;
+                if (t == null || !t.TryGetUnit(out Unit u) || !(u is Aircraft) || u.disabled || u.NetworkHQ == null || u.NetworkHQ == hq) continue;
+                if ((t.GetPosition().ToVec3() - centre).SqrLength <= r2) n++;
+            }
+            return n;
+        }
+
+        /// <summary>Once a second while members fight on their own choices: outnumbered for the dwell → every engaged
+        /// member back into formation (spec M5 §6.3).</summary>
+        private void JudgeOdds(float dt)
+        {
+            if ((outnumberedClock += dt) < 1f) return;
+            float step = outnumberedClock;
+            outnumberedClock = 0f;
+            int engaged = 0;
+            Vec3 sum = default;
+            Aircraft any = null;
+            foreach (WingMember m in Members)
+            {
+                if (!m.Engaged || m.Released || !m.Alive || !InNativeCombat(m)) continue;
+                engaged++;
+                sum += m.Aircraft.GlobalPosition().ToVec3();
+                any = m.Aircraft;
+            }
+            if (engaged == 0)
+            {
+                // The override lasts one engagement.
+                if (judge.Overridden) judge.Reset();
+                return;
+            }
+            if (attackCount > 0) return;
+            LastHostiles = CountHostiles(any, sum / engaged);
+            if (!judge.Update(LastHostiles, engaged, FallBackRatio, step)) return;
+            foreach (WingMember m in Members)
+                if (m.Engaged) TakeBack(m, TransitionReason.Outnumbered);
+            FallBacks++;
+            judge.Reset();
+            WingToast.Show($"Outnumbered {LastHostiles} to {engaged}; falling back");
+        }
+
+        /// <summary>After a take-back or bingo, the doctrine's follow-on (spec M5 §6.1).</summary>
+        private void FollowOn(WingMember m, TransitionReason reason)
+        {
+            WingConfig cfg = Plugin.Settings;
+            if (cfg == null || !CombatDoctrine.FollowOn(reason, cfg.AfterWinchester.Value, cfg.AfterBingo.Value, out RecoveryIntent intent)) return;
+            string why = reason == TransitionReason.Fuel ? "bingo fuel" : "Winchester";
+            WingToast.Show($"#{m.Number} {why}; {(intent == RecoveryIntent.Refit ? "going to refit" : "returning to base")}");
+            Recover(m, intent);
+        }
+
+        /// <summary>Spec M5 §6.4: an engaged member fighting on its own choice spreads off targets other members are already
+        /// after and off the player's target: the game's score under <see cref="TargetSpread"/> pressure. The game's
+        /// opportunity and bravery gate stand (only a non-null choice is re-scored).</summary>
+        public void Spread(Aircraft a, List<WeaponStation> stations, ref CombatAI.TargetSearchResults result)
+        {
+            WingMember self = null;
+            foreach (WingMember m in Members)
+                if (ReferenceEquals(m.Aircraft, a)) self = m;
+            if (self == null || !self.Engaged || self.AssignedTarget != null || a.NetworkHQ == null || a.NetworkHQ.trackingDatabase == null) return;
+            int others = 0;
+            foreach (WingMember m in Members)
+            {
+                if (ReferenceEquals(m, self) || !m.Engaged || others >= othersTargets.Length) continue;
+                Unit t = NativeTarget(m);
+                if (t != null) othersTargets[others++] = t;
+            }
+            List<Unit> playerTargets = Player != null && Player.weaponManager != null ? Player.weaponManager.GetTargetList() : null;
+            GlobalPosition at = a.GlobalPosition();
+            Unit best = null;
+            WeaponStation bestStation = null;
+            float bestScore = 0f;
+            foreach (KeyValuePair<PersistentID, TrackingInfo> pair in a.NetworkHQ.trackingDatabase)
+            {
+                TrackingInfo tracking = pair.Value;
+                if (tracking == null || !tracking.TryGetUnit(out Unit u) || u == null || u.disabled || u.NetworkHQ == null || u.NetworkHQ == a.NetworkHQ) continue;
+                if (!a.NetworkHQ.IsTargetPositionAccurate(u, TargetAccuracyMetres)) continue;
+                float range = FastMath.Distance(tracking.GetPosition(), at);
+                int committed = 0;
+                for (int i = 0; i < others; i++)
+                    if (ReferenceEquals(othersTargets[i], u)) committed++;
+                bool players = playerTargets != null && playerTargets.Contains(u);
+                for (int s = 0; s < stations.Count; s++)
+                {
+                    WeaponStation w = stations[s];
+                    if (!Usable(a, w)) continue;
+                    OpportunityThreat ot = CombatAI.AnalyzeTarget(w, a, tracking, 0f, range, 100f);
+                    if (ot.opportunity <= 0f) continue;
+                    int capacity = u is Missile ? 1 : System.Math.Max(1, System.Math.Min(4, (int)System.Math.Ceiling(w.WeaponInfo.CalcAttacksNeeded(u))));
+                    float score = TargetSpread.Score(ot.opportunity, ot.threat, range, w.WeaponInfo.targetRequirements.maxRange, committed, players, capacity);
+                    if (score <= bestScore) continue;
+                    bestScore = score;
+                    best = u;
+                    bestStation = w;
+                }
+            }
+            for (int i = 0; i < others; i++) othersTargets[i] = null;
+            if (best == null || (ReferenceEquals(best, result.target) && ReferenceEquals(bestStation, result.chosenWeaponStation))) return;
+            result = new CombatAI.TargetSearchResults(best, bestStation, result.opportunity, result.outOfAmmo);
+        }
+
         /// <summary>Every member flying with the wing fights on its own choices (an attack order ends: review M5b I1).
         /// Returns how many are engaged.</summary>
         public int Engage()
@@ -176,6 +317,7 @@ namespace WingCommand
         public int Disengage()
         {
             attackCount = 0;
+            judge.Reset();
             int n = 0;
             foreach (WingMember m in Members)
                 if (m.Engaged)
@@ -222,12 +364,9 @@ namespace WingCommand
                 };
                 if (!CombatSupervisor.TakeBack(s, out TransitionReason reason)) continue;
                 TakeBack(m, reason);
-                if (reason == TransitionReason.Fuel)
-                {
-                    WingToast.Show($"#{m.Number} bingo fuel; returning to base");
-                    Recover(m, RecoveryIntent.Rtb);
-                }
+                FollowOn(m, reason);
             }
+            JudgeOdds(dt);
             if (attackCount > 0 && (reallocateClock += dt) >= ReallocateSeconds)
             {
                 float step = reallocateClock;
@@ -250,6 +389,9 @@ namespace WingCommand
             var s = new CombatSituation { Exit = exit, Ammo = 1f, Bingo = m.Bingo.Bingo };
             CombatSupervisor.TakeBack(s, out TransitionReason reason);
             Disengaged(m, reason);
+            // Recover never switches states, so it is safe inside the SwitchState prefix (review focus 1: a native
+            // low-fuel exit with our bingo tripped goes home).
+            FollowOn(m, reason);
             return m.State;
         }
 

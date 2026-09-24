@@ -39,6 +39,9 @@ namespace WingCommand
         public ConfigEntry<bool> TakeoverOnDeath { get; }
         public ConfigEntry<float> RecruitmentCostRate { get; }
         public ConfigEntry<string> LoadoutTemplates { get; }
+        public ConfigEntry<WinchesterAction> AfterWinchester { get; }
+        public ConfigEntry<BingoAction> AfterBingo { get; }
+        public ConfigEntry<float> FallBackRatio { get; }
         public ConfigEntry<bool> VerboseLogging { get; }
         public ConfigEntry<bool> DevTools { get; }
         public ConfigEntry<bool> Overlay { get; }
@@ -85,6 +88,16 @@ namespace WingCommand
             RecruitmentCostRate = c.Bind("Squadron", "RecruitmentCostRate", 0.25f, new ConfigDescription(
                 "Taking command of a faction aircraft already flying costs this share of its value, once per aircraft.",
                 new AcceptableValueRange<float>(0f, 1f), new ConfigurationManagerAttributes { Order = 81 }));
+            AfterWinchester = c.Bind("Combat", "AfterWinchester", WinchesterAction.Rejoin, new ConfigDescription(
+                "A wingman out of ammunition in a fight: Rejoin the formation, Rtb (land and return to the reserve), or Refit " +
+                "(land, rearm and take off again).", null, new ConfigurationManagerAttributes { Order = 90 }));
+            AfterBingo = c.Bind("Combat", "AfterBingo", BingoAction.Rtb, new ConfigDescription(
+                "A wingman at bingo fuel: Rtb (land and return to the reserve) or Refit (land, refuel and take off again).",
+                null, new ConfigurationManagerAttributes { Order = 89 }));
+            FallBackRatio = c.Bind("Combat", "FallBackRatio", 2f, new ConfigDescription(
+                "An engaged wing facing this many enemy aircraft per fighting wingman falls back into formation; Engage while " +
+                "outnumbered asks you to press it again. 0 turns it off.",
+                new AcceptableValueRange<float>(0f, 10f), new ConfigurationManagerAttributes { Order = 88 }));
             LoadoutTemplates = c.Bind("Loadout", "SavedTemplates", "", new ConfigDescription(
                 "Saved per-pylon loadout templates (airframe|id|name|store keys; records separated by semicolons). " +
                 "Clear it to delete every template.", null, new ConfigurationManagerAttributes { IsAdvanced = true, Order = 60 }));

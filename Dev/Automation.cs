@@ -342,6 +342,20 @@ namespace WingCommand
             return n > 0 ? Ok("engaged", n) : Fail("Engage", "nobody could engage");
         }
 
+        /// <summary>The radial Engage: refused while outnumbered unless pressed again within the window (spec M5 §6.3).</summary>
+        public static Dictionary<string, object> EngageCommand(Dictionary<string, object> args)
+        {
+            WingService wing = WingService.Instance;
+            if (wing == null) return Fail("EngageCommand", "the wing is not active");
+            bool allowed = wing.MayEngage(out int hostiles, out int members);
+            int n = allowed ? wing.Engage() : 0;
+            Plugin.Logger.LogInfo($"[Automation] EngageCommand: {(allowed ? n + " engaged" : "refused")} ({hostiles} hostiles, {members} members)");
+            return new Dictionary<string, object>
+            {
+                { "ok", true }, { "refused", allowed ? 0 : 1 }, { "hostiles", hostiles }, { "members", members }, { "engaged", n },
+            };
+        }
+
         public static Dictionary<string, object> Disengage(Dictionary<string, object> args)
         {
             WingService wing = WingService.Instance;
@@ -360,6 +374,8 @@ namespace WingCommand
                 { "engage_events", wing.Events.CountOf(WingEventKind.Engaged) },
                 { "disengage_events", wing.Events.CountOf(WingEventKind.Disengaged) },
                 { "redirected", SwitchStateGuard.Redirected },
+                { "hostiles", wing.LastHostiles }, { "fallbacks", wing.FallBacks },
+                { "jokers", wing.Events.CountOf(WingEventKind.Joker) },
             };
         }
 
