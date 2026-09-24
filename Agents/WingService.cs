@@ -64,6 +64,7 @@ namespace WingCommand
             WingPilotRoster.Reset();
             WingKillCredit.Reset();
             WingLedger.Reset();
+            Planner.Reset();
             WingTakeover.Reset();
             WingRecruitment.Reset();
             flyingPlayer = null;
@@ -121,6 +122,7 @@ namespace WingCommand
         {
             missionTime += dt;
             TrackLeader();
+            StepPlanner(dt);
             SuperviseLandings();
             Prune();
             if (Plugin.Settings.DevTools.Value && (traceClock += dt) >= GroundTraceSeconds)
@@ -379,6 +381,7 @@ namespace WingCommand
 
         public void FormUp()
         {
+            if (Planner.Active) Order(WingTask.Form());
             for (int i = 0; i < Members.Count; i++) Members[i].Brain.FormUp(missionTime, Events);
         }
 
@@ -411,6 +414,7 @@ namespace WingCommand
         /// <summary>Forms the wing on <paramref name="a"/> instead of the player; null forms on the player again.</summary>
         public void SetAnchor(Aircraft a)
         {
+            if (Planner.Active) Order(WingTask.Form());
             Anchor = a;
             Escorting = false;
             Plugin.Logger.LogInfo(a != null
@@ -423,6 +427,7 @@ namespace WingCommand
         /// escort and the wing forms on the player again in the shape it flew before.</summary>
         public void SetEscort(Unit u)
         {
+            if (Planner.Active) Order(WingTask.Form());
             if (u is Aircraft a && IsMember(a)) u = null;
             Anchor = u;
             Escorting = u != null;
@@ -632,6 +637,7 @@ namespace WingCommand
 
         private AnchorSample SampleAnchor(float dt)
         {
+            if (Planner.Active) return Planner.Sample();
             bool player = Anchor == null;
             Unit u = LeaderUnit;
             if (!Alive(u)) return new AnchorSample { Present = false, IsPlayer = player };
@@ -768,6 +774,12 @@ namespace WingCommand
             {
                 WingEvent e = Events[i];
                 Metrics.Event(e.Kind);
+                if (e.Kind >= WingEventKind.TaskStarted)
+                {
+                    Plugin.Logger.LogInfo(string.Format(CultureInfo.InvariantCulture, "[Wing] t={0:0.0} task {1} {2} ({3})",
+                        e.Time, e.Task, e.Kind, e.Reason));
+                    continue;
+                }
                 Plugin.Logger.LogInfo(string.Format(CultureInfo.InvariantCulture, "[Wing] t={0:0.0} #{1} {2} {3}->{4} ({5})",
                     e.Time, e.Member + 2, e.Kind, e.From, e.To, e.Reason));
                 if (e.Kind == WingEventKind.FallingBehind) WingToast.Show($"#{e.Member + 2} falling behind");
