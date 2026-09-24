@@ -33,7 +33,9 @@ namespace WingCommand
     /// Commands and snapshots are M6c's.</summary>
     internal static class WingNet
     {
-        public static float HelloSeconds = 1f, SilentSeconds = 10f;
+        public static float HelloSeconds = 1f, SilentSeconds = 10f, SnapshotSeconds = 0.5f;
+        /// <summary>The owner id of the host's own wing (per-player wings and their ids are M6c-2).</summary>
+        public const uint HostWing = 1u;
 
         public static int Greeted { get; private set; }
         public static int Replies { get; private set; }
@@ -43,9 +45,14 @@ namespace WingCommand
         /// <summary>The host greeted this client (a client may send only then).</summary>
         public static bool HostGreeted { get; private set; }
         public static bool Disabled { get; private set; }
+        public static int SnapshotsIn { get; private set; }
+        /// <summary>This client's copy of its wing (null until the first snapshot).</summary>
+        public static WingMirror Mirror { get; private set; }
 
         private static bool hooked;
-        private static float helloClock;
+        private static float helloClock, snapshotClock;
+        private static uint snapshotTick;
+        private static readonly SnapshotMember[] snapshotMembers = new SnapshotMember[WcSnapshot.MaxMembers];
         private static readonly byte[] buffer = new byte[Protocol.MaxMessage];
         private static readonly Dictionary<INetworkPlayer, float> hellos = new Dictionary<INetworkPlayer, float>();
         private static readonly HashSet<INetworkPlayer> answered = new HashSet<INetworkPlayer>();
@@ -98,7 +105,13 @@ namespace WingCommand
                 if (nm.Server.Active) OnServerStarted();
                 if (nm.Client.Active) OnClientStarted();
             }
-            if (!nm.Server.Active || (helloClock += dt) < HelloSeconds) return;
+            if (!nm.Server.Active) return;
+            if ((snapshotClock += dt) >= SnapshotSeconds)
+            {
+                snapshotClock = 0f;
+                SendSnapshots(nm.Server);
+            }
+            if ((helloClock += dt) < HelloSeconds) return;
             helloClock = 0f;
             Greet(nm.Server, Time.unscaledTime);
         }
@@ -115,6 +128,7 @@ namespace WingCommand
         private static void OnClientStarted()
         {
             HostGreeted = false;
+            Mirror = null;
             // Only the host sends to a client; the client's connection to it is its only player.
             NetworkManagerNuclearOption.i.Client.MessageHandler.RegisterHandler<WcToClient>(FromHost, true);
             Plugin.Logger.LogInfo("[Net] client handlers registered");
@@ -156,10 +170,40 @@ namespace WingCommand
             DecodeFailures++;
         }
 
+        /// <summary>The host's own wing to its own local player, twice a second, unreliable (a snapshot supersedes the last).
+        /// Remote players get nothing until their own wings exist (M6c-2) rather than the host's wing.</summary>
+        private static void SendSnapshots(NetworkServer server)
+        {
+            WingService wing = WingService.Instance;
+            if (wing == null) return;
+            foreach (INetworkPlayer p in answered)
+            {
+                if (!p.IsHost) continue;
+                int n = wing.FillSnapshot(snapshotMembers);
+                var members = new SnapshotMember[n];
+                Array.Copy(snapshotMembers, members, n);
+                var w = new ByteWriter(buffer);
+                new WcSnapshot { Tick = ++snapshotTick, Owner = HostWing, Members = members }.Encode(w);
+                p.Send(new WcToClient { Payload = buffer, Count = w.Length }, Channel.Unreliable);
+                Out++;
+            }
+        }
+
         private static void FromHost(INetworkPlayer player, WcToClient m)
         {
             In++;
             ByteReader r = WireCodec.Open(m.Payload, 0, m.Count, out MessageKind kind);
+            if (kind == MessageKind.Snapshot)
+            {
+                if (!HostGreeted || !WcSnapshot.TryDecode(r, out WcSnapshot snapshot))
+                {
+                    DecodeFailures++;
+                    return;
+                }
+                if (Mirror == null) Mirror = new WingMirror(snapshot.Owner);
+                if (Mirror.Apply(snapshot, Time.unscaledTime)) SnapshotsIn++;
+                return;
+            }
             if (kind != MessageKind.Hello || !WcHello.TryDecode(r, out WcHello hello))
             {
                 DecodeFailures++;

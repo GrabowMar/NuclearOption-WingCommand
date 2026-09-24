@@ -44,6 +44,26 @@ namespace WingCommand
             return n;
         }
 
+        /// <summary>The wing as snapshot entries (spec M6 §8). Returns how many were written.</summary>
+        public int FillSnapshot(SnapshotMember[] into)
+        {
+            int n = 0;
+            foreach (WingMember m in Members)
+            {
+                if (n >= into.Length || m.Released || !m.Alive) continue;
+                MemberDuty duty = m.Engaged ? MemberDuty.Engaged
+                    : m.Recovery != null ? MemberDuty.Recovering
+                    : m.Brain.Mind.Current == BehaviourId.Defend ? MemberDuty.Defending
+                    : m.Settle != null ? MemberDuty.Settled
+                    : m.OnGround ? MemberDuty.Grounded
+                    : MemberDuty.Formation;
+                float ammo = AmmoFraction(m.Aircraft);
+                into[n++] = SnapshotBuilder.Member(m.Aircraft.persistentID.Id, m.Brain.Slot, (byte)m.Brain.Mind.Current, duty,
+                    m.Aircraft.GetFuelLevel(), ammo, m.Brain.LastRejoin.FallingBehind, m.Bingo.Bingo, m.Bingo.Joker, ammo <= 0f);
+            }
+            return n;
+        }
+
         /// <summary>Members per settle phase (automation reads it).</summary>
         public int Settled(SettlePhase phase)
         {

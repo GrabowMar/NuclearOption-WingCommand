@@ -369,7 +369,10 @@ namespace WingCommand
         {
             { "ok", true }, { "disabled", WingNet.Disabled ? 1 : 0 }, { "greeted", WingNet.Greeted }, { "replies", WingNet.Replies },
             { "host_greeted", WingNet.HostGreeted ? 1 : 0 }, { "in", WingNet.In }, { "out", WingNet.Out },
-            { "decode_failures", WingNet.DecodeFailures },
+            { "decode_failures", WingNet.DecodeFailures }, { "snapshots_in", WingNet.SnapshotsIn },
+            { "mirror_members", WingNet.Mirror != null ? WingNet.Mirror.Count : -1 },
+            { "mirror_stale", WingNet.Mirror == null || WingNet.Mirror.Stale(UnityEngine.Time.unscaledTime) ? 1 : 0 },
+            { "wing_members", WingService.Instance != null ? WingService.Instance.Members.Count : -1 },
         };
 
         /// <summary>The wing's helicopters land around the anchor (spec M4 §5).</summary>
