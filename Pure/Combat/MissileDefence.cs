@@ -35,6 +35,8 @@ namespace WingCommand
         public static float MinReaction = 1f, MaxReaction = 4f, ClearSeconds = 1f;
         public static float NotchDistance = 1000f, NotchDescent = 300f, EarlyImpactSeconds = 7f, EarlyBlend = 0.3f;
         public static float ChaffImpactSeconds = 8f, ChaffAlignDeg = 20f, PullUpImpactSeconds = 2f, PullUpHeight = 1000f;
+        /// <summary>The aggression the member flies Defend with (the envelope's bank and load ceilings).</summary>
+        public static float DefendAggression = 1f;
 
         private float seen, clear;
 

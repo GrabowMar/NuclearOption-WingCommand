@@ -109,13 +109,15 @@ namespace WingCommand
                 spacing = 0f;
             }
             else if (Mind.Current == BehaviourId.Defend) reference = LastDefence.Ref;
+            // Evading at full effort, as the game's evasion does (aimEffort 1).
+            float aggression = Mind.Current == BehaviourId.Defend ? MissileDefence.DefendAggression : Aggression;
 
             LastIntent = new FlightIntent
             {
                 Ref = reference,
                 Limits = new SpeedLimits(p.MinimumSpeed(1f), p.MaxSpeed, AfterburnerAllowed, true),
                 Precision = Precision,
-                Aggression = Aggression,
+                Aggression = aggression,
                 Spacing = spacing,
                 TerrainClearance = Clearance,
                 HasHeading = Mind.Current != BehaviourId.HoldOverhead && Mind.Current != BehaviourId.Defend,
@@ -125,7 +127,7 @@ namespace WingCommand
             var ctx = new LimitContext
             {
                 FloorY = frame.FloorY, NearFloorY = frame.NearFloorY[Slot], HasNearFloor = frame.HasNearFloor[Slot],
-                Clearance = Clearance, Aggression = Aggression, CollisionBias = frame.Bias[Slot],
+                Clearance = Clearance, Aggression = aggression, CollisionBias = frame.Bias[Slot],
             };
             LastOutput = Pipeline.Step(guidance, s, ctx, p, dt);
             if (Mind.Current == BehaviourId.Defend && (LastDefence.Idle || LastDefence.Full))
