@@ -21,7 +21,7 @@ namespace WingCommand
             typeof(RotaryGuidance), typeof(RotaryController), typeof(RotaryPipeline), typeof(TiltwingPipeline), typeof(AnchorTrail),
             typeof(FaultGuard), typeof(StepSequence), typeof(EscortPick),
             typeof(TaxiGraph), typeof(GroundGuidance), typeof(GroundController), typeof(LineupPlanner), typeof(DepartureSequencer),
-            typeof(StuckWatchdog), typeof(GroundPilot), typeof(FieldTraffic), typeof(ServiceSpots), typeof(RecoveryPilot), typeof(PilotSkill), typeof(RefitTimer), typeof(BingoMonitor),
+            typeof(StuckWatchdog), typeof(GroundPilot), typeof(FieldTraffic), typeof(ServiceSpots), typeof(RecoveryPilot), typeof(PilotSkill), typeof(RefitTimer), typeof(BingoMonitor), typeof(TaskLead),
         };
 
         /// <summary>Returns the keys it could not apply, in input order.</summary>
