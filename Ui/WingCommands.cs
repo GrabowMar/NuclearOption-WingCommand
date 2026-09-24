@@ -186,7 +186,7 @@ namespace WingCommand
         public static void Engage()
         {
             if (!Ready(out WingService w)) return;
-            int n = w.Engage(null);
+            int n = w.Engage();
             WingToast.Show(n > 0 ? $"{n} engaging" : "Nobody can engage");
         }
 

@@ -35,6 +35,8 @@ namespace WingCommand
         public Unit AssignedTarget;
         /// <summary>How long the game's combat state has had no target.</summary>
         public float NoTargetClock;
+        /// <summary>How long the member has been unable to attack its assigned target (<see cref="TargetAllocator"/>).</summary>
+        public float TargetLost;
         /// <summary>The ground pilot's last output (the ground trace).</summary>
         public ControlOutput GroundOutput;
         public bool StopLogged;

@@ -337,7 +337,7 @@ namespace WingCommand
             var targets = new List<Unit>();
             for (int i = 1; i <= TargetAllocator.MaxTargets; i++)
                 if (Arg(args, i == 1 ? "targetUnit" : "target" + i + "Unit") is Unit u) targets.Add(u);
-            int n = targets.Count > 0 ? wing.Attack(targets) : wing.Engage(null);
+            int n = targets.Count > 0 ? wing.Attack(targets) : wing.Engage();
             Plugin.Logger.LogInfo($"[Automation] Engage: {n} engaged on {targets.Count} target(s)");
             return n > 0 ? Ok("engaged", n) : Fail("Engage", "nobody could engage");
         }

@@ -17,16 +17,23 @@ namespace WingCommand
             }
         }
 
-        /// <summary>Every member flying with the wing switches to the game's combat state; <paramref name="target"/> (may be
-        /// null) is the one each should attack. Returns how many are engaged.</summary>
-        public int Engage(Unit target)
+        /// <summary>Every member flying with the wing fights on its own choices (an attack order ends: review M5b I1).
+        /// Returns how many are engaged.</summary>
+        public int Engage()
+        {
+            attackCount = 0;
+            return EngageAll();
+        }
+
+        /// <summary>Every member flying with the wing switches to the game's combat state with no assigned target.</summary>
+        private int EngageAll()
         {
             int n = 0;
             foreach (WingMember m in Members)
             {
                 if (m.Released || m.OnGround || m.Recovery != null || !m.Alive) continue;
-                m.AssignedTarget = target;
-                m.Pilot.SetPrimaryTarget(target);
+                m.AssignedTarget = null;
+                m.Pilot.SetPrimaryTarget(null);
                 if (m.Engaged)
                 {
                     n++;
@@ -59,6 +66,7 @@ namespace WingCommand
         private readonly bool[] targetAlive = new bool[TargetAllocator.MaxTargets];
         private readonly int[] currentTarget = new int[FormationCatalog.MaxSlots], nextTarget = new int[FormationCatalog.MaxSlots];
         private readonly WingMember[] engagedNow = new WingMember[FormationCatalog.MaxSlots];
+        private readonly float[] targetLost = new float[FormationCatalog.MaxSlots];
 
         /// <summary>Members with an attack order's target (automation reads it).</summary>
         public int AssignedCount
@@ -81,14 +89,16 @@ namespace WingCommand
             if (targets != null)
                 foreach (Unit u in targets)
                     if (u != null && !u.disabled && attackCount < attackTargets.Length) attackTargets[attackCount++] = u;
-            int n = Engage(null);
-            Allocate();
+            int n = EngageAll();
+            if (n == 0) attackCount = 0;
+            reallocateClock = 0f;
+            Allocate(0f);
             return n;
         }
 
         /// <summary>The attack order's targets across the engaged members; with none alive the order ends and members
         /// fight on their own choices.</summary>
-        private void Allocate()
+        private void Allocate(float dt)
         {
             if (attackCount == 0) return;
             bool any = false;
@@ -99,7 +109,13 @@ namespace WingCommand
             }
             int k = 0;
             foreach (WingMember m in Members)
-                if (m.Engaged && !m.Released && k < engagedNow.Length) engagedNow[k++] = m;
+                if (m.Engaged && !m.Released && m.Alive && InNativeCombat(m) && k < engagedNow.Length) engagedNow[k++] = m;
+            if (k == 0)
+            {
+                // Everyone taken back: the order ends rather than capturing the next Engage (review M5b I1).
+                attackCount = 0;
+                return;
+            }
             if (!any)
             {
                 attackCount = 0;
@@ -110,6 +126,7 @@ namespace WingCommand
             {
                 WingMember m = engagedNow[i];
                 currentTarget[i] = -1;
+                targetLost[i] = m.TargetLost;
                 Vec3 at = m.Aircraft.GlobalPosition().ToVec3();
                 for (int t = 0; t < attackCount; t++)
                 {
@@ -119,13 +136,18 @@ namespace WingCommand
                     if (ReferenceEquals(m.AssignedTarget, attackTargets[t])) currentTarget[i] = t;
                 }
             }
-            TargetAllocator.Assign(k, attackCount, canAttack, targetDistance, targetAlive, currentTarget, nextTarget);
-            for (int i = 0; i < k; i++) Assign(engagedNow[i], nextTarget[i] >= 0 ? attackTargets[nextTarget[i]] : null);
+            TargetAllocator.Assign(k, attackCount, canAttack, targetDistance, targetAlive, currentTarget, targetLost, dt, nextTarget);
+            for (int i = 0; i < k; i++)
+            {
+                engagedNow[i].TargetLost = targetLost[i];
+                Assign(engagedNow[i], nextTarget[i] >= 0 ? attackTargets[nextTarget[i]] : null);
+            }
         }
 
         private static void Assign(WingMember m, Unit target)
         {
             if (ReferenceEquals(m.AssignedTarget, target)) return;
+            Plugin.Logger.LogInfo($"[Wing] #{m.Number} target {(target != null ? target.unitName : "own choice")}");
             m.AssignedTarget = target;
             m.Pilot?.SetPrimaryTarget(target);
         }
@@ -208,8 +230,9 @@ namespace WingCommand
             }
             if (attackCount > 0 && (reallocateClock += dt) >= ReallocateSeconds)
             {
+                float step = reallocateClock;
                 reallocateClock = 0f;
-                Allocate();
+                Allocate(step);
             }
         }
 
