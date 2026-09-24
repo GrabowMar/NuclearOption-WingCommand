@@ -20,7 +20,7 @@ namespace WingCommand
 
         public WmcDoctrineTab(Dictionary<string, AvButton> controls) => ids = controls;
 
-        public float ContentHeight => 350f;
+        public float ContentHeight => 318f;
 
         public string Hint => "What " + (last != null ? last.ScopeLabel : "WING") + " does on its own while it holds formation.";
 

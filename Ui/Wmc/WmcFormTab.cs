@@ -25,7 +25,7 @@ namespace WingCommand
 
         public WmcFormTab(Dictionary<string, AvButton> controls) => ids = controls;
 
-        public float ContentHeight => 350f;
+        public float ContentHeight => 314f;
 
         public string Hint => "Shape for " + (last != null ? last.ScopeLabel : "WING") + "; spacing, stack and power for the whole wing.";
 

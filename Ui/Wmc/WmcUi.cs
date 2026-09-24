@@ -143,11 +143,20 @@ namespace WingCommand
             return AvStyleHost.Resolve(style.Background, AvTheme.SurfaceInert);
         }
 
+        private static readonly Dictionary<string, Color> railColors = new Dictionary<string, Color>();
+
+        /// <summary>Colours a rail by its stylesheet class, each class resolved once (no string per refresh: review P1 m6).
+        /// ponytail: a theme change mid-mission keeps the first colours; clear the cache on theme change if that matters.</summary>
         public static void SetRail(Image rail, string railClass)
         {
             if (rail == null) return;
-            AvStyle style = AvStyleHost.Style("rail " + railClass);
-            rail.color = AvStyleHost.Resolve(style.Background, AvTheme.RailInert);
+            if (!railColors.TryGetValue(railClass, out Color c))
+            {
+                AvStyle style = AvStyleHost.Style("rail " + railClass);
+                c = AvStyleHost.Resolve(style.Background, AvTheme.RailInert);
+                railColors[railClass] = c;
+            }
+            if (rail.color != c) rail.color = c;
         }
 
         /// <summary>The row-value colour of a level class ("ok", "warn", "bad", "").</summary>

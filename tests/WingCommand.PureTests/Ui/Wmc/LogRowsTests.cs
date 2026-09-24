@@ -64,5 +64,39 @@ namespace WingCommand.PureTests
             Assert.Equal(0, LogRows.Fill(null, null, rows));
             Assert.Empty(rows);
         }
+
+        private static (WingEventRing, RadioLog, SnapshotMember[]) Mixed()
+        {
+            var events = new WingEventRing();
+            events.Push(new WingEvent { Time = 5f, Member = -1, Kind = WingEventKind.TaskStarted, Task = TaskKind.Orbit, Element = 1 });
+            events.Push(new WingEvent { Time = 6f, Member = -1, Kind = WingEventKind.TaskStarted, Task = TaskKind.Move, Element = 0 });
+            events.Push(new WingEvent { Time = 7f, Member = 2, Kind = WingEventKind.Bingo });
+            events.Push(new WingEvent { Time = 8f, Member = 0, Kind = WingEventKind.Bingo });
+            var radio = new RadioLog();
+            radio.Push(9f, "Viper 2: copy");
+            var rows = new[] { new SnapshotMember { Id = 1, Slot = 0, Element = 0 }, new SnapshotMember { Id = 3, Slot = 2, Element = 1 } };
+            return (events, radio, rows);
+        }
+
+        [Fact]
+        public void FilterByElementKeepsItsEvents()
+        {
+            // Spec WMC program §4 LOG: an element's task events and its members' events, no radio.
+            var (events, radio, rows) = Mixed();
+            var into = new List<LogRow>();
+            Assert.Equal(2, LogRows.Fill(events, radio, into, LogRows.MaxRows, new LogFilter { Element = 1, Seat = -1, Rows = rows, Count = 2 }));
+            Assert.Equal(7f, into[0].Time);
+            Assert.Equal("ORBIT started", into[1].Text);
+        }
+
+        [Fact]
+        public void FilterBySeatKeepsTheMembersEvents()
+        {
+            var (events, radio, rows) = Mixed();
+            var into = new List<LogRow>();
+            Assert.Equal(1, LogRows.Fill(events, radio, into, LogRows.MaxRows, new LogFilter { Element = -1, Seat = 0, Rows = rows, Count = 2 }));
+            Assert.Equal(8f, into[0].Time);
+            Assert.Equal(5, LogRows.Fill(events, radio, into, LogRows.MaxRows, LogFilter.None));
+        }
     }
 }

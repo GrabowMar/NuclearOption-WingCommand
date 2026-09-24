@@ -20,7 +20,7 @@ namespace WingCommand
 
         public WmcApTab(Dictionary<string, AvButton> controls) => ids = controls;
 
-        public float ContentHeight => 290f;
+        public float ContentHeight => 246f;
 
         public string Hint => "Your stick overrides a hold; it recaptures when you let go.";
 
@@ -39,6 +39,10 @@ namespace WingCommand
             line = AvStyled.Label(page, new Rect(body.x, y, body.width, 32f), "", "readout");
             line.enableWordWrapping = false;
             line.overflowMode = TextOverflowModes.Ellipsis;
+            // A long annunciator shrinks to fit rather than losing its tail (review P1 m7).
+            line.enableAutoSizing = true;
+            line.fontSizeMin = 16f;
+            line.fontSizeMax = line.fontSize;
             y -= 32f + WmcUi.Gap;
             y = WmcUi.Head(page, body, y, "HELD VALUES");
             for (int i = 0; i < Fields.Length; i++)

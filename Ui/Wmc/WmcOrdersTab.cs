@@ -17,7 +17,7 @@ namespace WingCommand
 
         public WmcOrdersTab(Dictionary<string, AvButton> controls) => ids = controls;
 
-        public float ContentHeight => 360f;
+        public float ContentHeight => 340f;
 
         public string Hint => last != null && !last.CanOrder ? (last.Client ? "Orders are host only for now." : "Not ready.")
             : "Orders go to " + (last != null ? last.ScopeLabel : "WING") + ". Form Up brings them back.";
@@ -26,7 +26,8 @@ namespace WingCommand
         {
             body = WmcUi.Page(page, body, ContentHeight);
             var cardRect = new Rect(body.x, body.y, body.width, 34f);
-            WmcUi.Card(page, cardRect, null, out _, out Image rail);
+            AvButton cardHit = WmcUi.Card(page, cardRect, null, out _, out Image rail);
+            cardHit.SetEnabled(false);   // a read-out, not a control (review P1 m3)
             WmcUi.SetRail(rail, "info");
             card = AvStyled.Label(page, new Rect(body.x + 12f, body.y - 8f, body.width - 22f, 18f), "", "row-main");
             card.enableWordWrapping = false;

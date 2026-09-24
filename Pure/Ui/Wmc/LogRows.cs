@@ -12,6 +12,29 @@ namespace WingCommand
         public bool Radio;
     }
 
+    /// <summary>Which lines LOG shows (spec WMC program §4): everything, one element (its task events and its members'
+    /// events, by the element each seat flies in now), or one member's events. Radio lines only when unfiltered.</summary>
+    internal struct LogFilter
+    {
+        public int Element, Seat;
+        public SnapshotMember[] Rows;
+        public int Count;
+
+        public static LogFilter None => new LogFilter { Element = -1, Seat = -1 };
+
+        public bool Any => Element >= 0 || Seat >= 0;
+
+        public bool Match(in WingEvent e)
+        {
+            if (Seat >= 0) return e.Member == Seat;
+            if (Element < 0) return true;
+            if (e.Member < 0) return e.Element == Element;
+            for (int i = 0; i < Count && Rows != null; i++)
+                if (Rows[i].Slot == e.Member) return Rows[i].Element == Element;
+            return false;
+        }
+    }
+
     /// <summary>The LOG tab (spec M7b §3): notable wing events and radio lines, newest first. Behaviour flips are
     /// the HUD's business and are left out.</summary>
     internal static class LogRows
@@ -77,14 +100,18 @@ namespace WingCommand
         }
 
         /// <summary>Newest first, at most <paramref name="max"/> rows; on a tie the event goes first. Returns the count.</summary>
-        public static int Fill(WingEventRing events, RadioLog radio, List<LogRow> into, int max = MaxRows)
+        public static int Fill(WingEventRing events, RadioLog radio, List<LogRow> into, int max = MaxRows) =>
+            Fill(events, radio, into, max, LogFilter.None);
+
+        public static int Fill(WingEventRing events, RadioLog radio, List<LogRow> into, int max, in LogFilter filter)
         {
             into.Clear();
+            if (filter.Any) radio = null;
             int e = (events?.Count ?? 0) - 1, r = (radio?.Count ?? 0) - 1;
             while (into.Count < max && (e >= 0 || r >= 0))
             {
                 // Skip events that are not listed without spending a row.
-                if (e >= 0 && Describe(events[e]) == null)
+                if (e >= 0 && (Describe(events[e]) == null || !filter.Match(events[e])))
                 {
                     e--;
                     continue;
