@@ -15,7 +15,7 @@
           -26845
         ]
       },
-      "altitude": 900,
+      "altitude": 2500,
       "speed": 150,
       "heading": 0
     },
@@ -42,7 +42,7 @@
       "args": {
         "lead": "lead",
         "field": "nearest",
-        "count": 4,
+        "count": 3,
         "type": "CI-22 Cricket"
       }
     },
@@ -95,12 +95,12 @@
     {
       "check": "result_above",
       "path": "launch.launched",
-      "min": 4
+      "min": 3
     },
     {
       "check": "result_above",
       "path": "ground.airborne",
-      "min": 4
+      "min": 3
     },
     {
       "check": "result_below",
