@@ -20,11 +20,21 @@ namespace WingCommand
         private bool voiceBroken;
         private WindowsTTS voice;
 
+        /// <summary>Spec M7 §2: new contacts are called once a second.</summary>
+        public ContactWatch Contacts { get; } = new ContactWatch();
+        public int ContactsCalled { get; private set; }
+        private readonly ContactSample[] samples = new ContactSample[ContactWatch.Capacity];
+        private readonly Unit[] units = new Unit[ContactWatch.Capacity];
+        private readonly int[] report = new int[4];
+        private float contactClock;
+
         public RadioDirector() => Instance = this;
 
         public void Activate()
         {
             Queue = new RadioQueue();
+            Contacts.Clear();
+            ContactsCalled = 0;
             ring = WingService.Instance?.Events;
             cursor.Seen = ring?.Total ?? 0;
         }
@@ -52,7 +62,55 @@ namespace WingCommand
                 string name = call.Name == "WINCHESTER" ? RadioCalls.WinchesterLine(Plugin.Settings.AfterWinchester.Value) : call.Name;
                 Say(speaker, call.Class, name, detail, call.WingWide, now);
             }
+            if ((contactClock += dt) >= 1f)
+            {
+                contactClock = 0f;
+                CallContacts(wing, now);
+            }
             while (Queue.Queued > 0 && Queue.Next(now, out RadioLine line, Speaking())) Transmit(line);
+        }
+
+        /// <summary>Spec M7 §2.3: new air threats (and, scouting, ground units) called by the flying member nearest them, with
+        /// BRA from the player.</summary>
+        private void CallContacts(WingService wing, float now)
+        {
+            WingConfig cfg = Plugin.Settings;
+            Contacts.Ground = wing.Planner.Active && wing.Planner.Current.Scout;
+            if (!cfg.ContactCalls.Value && !Contacts.Ground) return;
+            int n = wing.KnownContacts(samples, units);
+            int k = Contacts.Update(samples, n, now, report);
+            for (int i = 0; i < k; i++)
+            {
+                ContactSample c = samples[report[i]];
+                Unit u = units[report[i]];
+                if (c.Air && !cfg.ContactCalls.Value) continue;
+                WingMember speaker = NearestFlying(wing, u);
+                if (speaker == null) continue;
+                Vec3 from = wing.Player != null ? wing.Player.GlobalPosition().ToVec3() : speaker.Last.Pos;
+                Vec3 vel = u.rb != null ? u.rb.velocity.ToVec3() : Vec3.Zero;
+                string bra = Bra.Format(from, u.GlobalPosition().ToVec3(), vel, PlayerSettings.unitSystem == PlayerSettings.UnitSystem.Imperial);
+                string type = u.definition != null ? u.definition.unitName : u.unitName;
+                bool said = c.Air
+                    ? SayText(speaker, RadioClass.Tactical, "BANDIT:" + c.Id, $"Bandit, {bra}. {type}.", true)
+                    : SayText(speaker, RadioClass.Status, "CONTACT:" + c.Id, $"Contact, {bra}. {type}.", true);
+                if (said) ContactsCalled++;
+            }
+        }
+
+        private static WingMember NearestFlying(WingService wing, Unit u)
+        {
+            Vec3 at = u.GlobalPosition().ToVec3();
+            WingMember best = null;
+            float bestD = float.MaxValue;
+            foreach (WingMember m in wing.Members)
+            {
+                if (m.Released || !m.Alive || m.OnGround) continue;
+                float d = (m.Last.Pos - at).SqrLength;
+                if (d >= bestD) continue;
+                bestD = d;
+                best = m;
+            }
+            return best;
         }
 
         /// <summary>A call in <paramref name="speaker"/>'s persona (<paramref name="name"/>: a chatter line, see

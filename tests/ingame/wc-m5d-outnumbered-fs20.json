@@ -38,6 +38,7 @@
     {"check": "result_below", "path": "fight.fallbacks", "max": 0},
     {"check": "result_below", "path": "dope.clean", "max": 0},
     {"check": "result_above", "path": "radio.radio_sent", "min": 2},
+    {"check": "result_above", "path": "radio.radio_contacts", "min": 1},
     {"check": "result_above", "path": "radio.radio_min_gap", "min": 1.5},
     {"check": "result_above", "path": "third.refused", "min": 1}
   ]

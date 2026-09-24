@@ -435,6 +435,7 @@ namespace WingCommand
                 { "radio_tactical", q.SentOf(RadioClass.Tactical) }, { "radio_status", q.SentOf(RadioClass.Status) },
                 { "radio_chatter", q.SentOf(RadioClass.Chatter) }, { "radio_stale", q.DroppedStale },
                 { "radio_repeat", q.DroppedRepeat }, { "radio_full", q.DroppedFull },
+                { "radio_contacts", RadioDirector.Instance.ContactsCalled },
                 // +inf (no speaker spoke twice) is reported as a large number so JSON stays valid.
                 { "radio_min_gap", float.IsInfinity(q.MinSpeakerGap) ? 999f : q.MinSpeakerGap },
             };

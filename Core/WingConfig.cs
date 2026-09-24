@@ -49,6 +49,7 @@ namespace WingCommand
         public ConfigEntry<string> Doctrine { get; }
         public ConfigEntry<RadioLevel> Radio { get; }
         public ConfigEntry<RadioVoice> RadioVoiceMode { get; }
+        public ConfigEntry<bool> ContactCalls { get; }
         public ConfigEntry<bool> VerboseLogging { get; }
         public ConfigEntry<bool> DevTools { get; }
         public ConfigEntry<bool> Overlay { get; }
@@ -115,6 +116,9 @@ namespace WingCommand
             RadioVoiceMode = c.Bind("Radio", "Voice", RadioVoice.FollowGame, new ConfigDescription(
                 "Speak wingman calls with the game's text-to-speech: Off, On, or FollowGame (on when the game's chat " +
                 "text-to-speech is on; its speed and volume are used either way).", null, new ConfigurationManagerAttributes { Order = 79 }));
+            ContactCalls = c.Bind("Radio", "ContactCalls", true, new ConfigDescription(
+                "Wingmen call new enemy aircraft within 40 km with bearing, range, altitude and aspect from you. Scout Ahead " +
+                "reports ground contacts either way.", null, new ConfigurationManagerAttributes { Order = 78 }));
             LoadoutTemplates = c.Bind("Loadout", "SavedTemplates", "", new ConfigDescription(
                 "Saved per-pylon loadout templates (airframe|id|name|store keys; records separated by semicolons). " +
                 "Clear it to delete every template.", null, new ConfigurationManagerAttributes { IsAdvanced = true, Order = 60 }));

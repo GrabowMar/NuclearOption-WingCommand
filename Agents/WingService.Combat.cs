@@ -105,6 +105,44 @@ namespace WingCommand
             return type != null;
         }
 
+        /// <summary>Spec M7 §2.2: the hostile units the player's side knows of, as contact samples (air: an air threat by the
+        /// outnumbered judge's test; ground: any other hostile unit), each with its distance to the nearest flying member.
+        /// Returns how many were written (at most the arrays' length).</summary>
+        public int KnownContacts(ContactSample[] into, Unit[] units)
+        {
+            Aircraft any = null;
+            foreach (WingMember m in Members)
+                if (!m.Released && m.Alive && !m.OnGround)
+                {
+                    any = m.Aircraft;
+                    break;
+                }
+            FactionHQ hq = any != null ? any.NetworkHQ : null;
+            if (hq == null || hq.trackingDatabase == null) return 0;
+            int n = 0;
+            foreach (KeyValuePair<PersistentID, TrackingInfo> pair in hq.trackingDatabase)
+            {
+                if (n >= into.Length || n >= units.Length) break;
+                TrackingInfo t = pair.Value;
+                if (t == null || !t.TryGetUnit(out Unit u) || u.disabled || u.NetworkHQ == null || u.NetworkHQ == hq) continue;
+                bool air = u is Aircraft enemy &&
+                           OutnumberedJudge.IsAirThreat(hq.IsTargetPositionAccurate(u, TargetAccuracyMetres), enemy.radarAlt,
+                               enemy.definition != null ? enemy.definition.roleIdentity.antiAir : 0f);
+                if (!air && u is Aircraft) continue;   // parked, unarmed or stale aircraft: no contact to call
+                Vec3 at = t.GetPosition().ToVec3();
+                float nearest = float.MaxValue;
+                foreach (WingMember m in Members)
+                {
+                    if (m.Released || !m.Alive || m.OnGround) continue;
+                    nearest = System.Math.Min(nearest, (m.Last.Pos - at).Length);
+                }
+                into[n] = new ContactSample { Id = pair.Key.Id, Air = air, Distance = nearest };
+                units[n] = u;
+                n++;
+            }
+            return n;
+        }
+
         /// <summary>Once a second while members fight on their own choices: outnumbered for the dwell → every engaged
         /// member back into formation (spec M5 §6.3).</summary>
         private void JudgeOdds(float dt)
