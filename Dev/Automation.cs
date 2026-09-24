@@ -104,6 +104,7 @@ namespace WingCommand
                 { "reserved", wing.Events.CountOf(WingEventKind.Reserved) },
                 { "serviced", wing.Events.CountOf(WingEventKind.Serviced) },
                 { "native_switches_redirected", SwitchStateGuard.Redirected },
+                { "bounces_held", BounceGuard.Held },
                 { "ejections_blocked", EjectGuard.Blocked },
             };
             var members = new List<object>();

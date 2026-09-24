@@ -2,6 +2,7 @@ using System;
 
 namespace WingCommand
 {
+#pragma warning disable CS0649 // set by the M6b transport (and the tests)
     /// <summary>What the host knows when a client's command arrives (spec M6 §2.3).</summary>
     internal struct CommandContext
     {
@@ -12,6 +13,7 @@ namespace WingCommand
         /// <summary>A unit id the host accepts as a target (alive, known to the sender's faction).</summary>
         public Func<uint, bool> Knows;
     }
+#pragma warning restore CS0649
 
     /// <summary>One sender's validation state: the last accepted sequence number and its token bucket.</summary>
     internal sealed class SenderState

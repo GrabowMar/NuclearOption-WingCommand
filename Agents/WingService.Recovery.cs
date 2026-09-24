@@ -222,6 +222,14 @@ namespace WingCommand
 
         public static float LandingModeSeconds = 0.5f;
 
+        /// <summary>A member of this wing in the game's landing on a recovery (the bounce guard asks).</summary>
+        public bool Landing(Aircraft a)
+        {
+            foreach (WingMember m in Members)
+                if (ReferenceEquals(m.Aircraft, a)) return !m.Released && m.Recovery != null && m.Recovery.Phase == RecoveryPhase.Landing;
+            return false;
+        }
+
         /// <summary>Diagnostics: each change of the game's landing mode, with where the aircraft is (twice a second).</summary>
         private void LogLandingMode(WingMember m)
         {
