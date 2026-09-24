@@ -774,7 +774,20 @@ namespace WingCommand
             traced.Clear();
             foreach (WingMember m in Members)
             {
-                if (m.Released || !m.OnGround) continue;
+                if (m.Released) continue;
+                if (!m.OnGround)
+                {
+                    RecoveryPilot r = m.Recovery;
+                    if (r != null && (r.Phase == RecoveryPhase.Approach || r.Phase == RecoveryPhase.Landing))
+                    {
+                        Vec3 point = r.ApproachPoint(m.Last);
+                        Plugin.Logger.LogInfo($"[Recovery] trace t={missionTime:0} #{m.Number} {r.Phase} to {r.Field.Field.Name}: " +
+                                              $"{(point - m.Last.Pos).Horizontal.Length:0} m from the approach point, alt {m.Last.Pos.Y:0} " +
+                                              $"(point {point.Y:0}), v {m.Last.Tas:0}, holding {r.Holding}, tries {r.FailedLandings}, " +
+                                              $"state {m.Pilot?.currentState?.GetType().Name ?? "none"}");
+                    }
+                    continue;
+                }
                 GroundPilot g = m.Ground;
                 Plugin.Logger.LogInfo($"[Ground] trace t={missionTime:0} #{m.Number} id {m.Id} {g.Phase} stop={g.Stop}" +
                                       $"{(g.StopWho >= 0 ? " (" + NumberOf(g.StopWho) + ")" : "")} at ({m.Last.Pos.X:0}, {m.Last.Pos.Z:0}) " +

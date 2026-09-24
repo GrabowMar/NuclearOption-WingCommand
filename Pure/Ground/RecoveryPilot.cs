@@ -46,6 +46,9 @@ namespace WingCommand
         private HoldOrbit hold;
         private bool holding, noStand;
 
+        /// <summary>Holding at the approach point for its turn (diagnostics).</summary>
+        public bool Holding => holding;
+
         /// <param name="stack">The member's level in the approach stack (its slot).</param>
         public RecoveryPilot(int owner, FieldTraffic field, AirframeClass cls, RecoveryIntent intent, int stack = 0)
         {
