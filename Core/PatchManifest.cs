@@ -40,6 +40,9 @@ namespace WingCommand
             typeof(Interop.WingSquad.AceTargetPatch),
             typeof(WmcMapControlsPatch),
             typeof(WmcMapSelection.ClickIconPatch),
+            typeof(WingMapTint.MapIconColorPatch),
+            typeof(WingMapTint.ShowAirbasePatch),
+            typeof(WingHudTint.UpdateColorPatch),
         };
 
         /// <summary>"DeclaringType.Method" names that must be patched after <see cref="Apply"/>.</summary>
@@ -71,6 +74,12 @@ namespace WingCommand
             "CombatAI.ChooseHQTarget",
             "DynamicMap.MapControls",
             "UnitMapIcon.ClickIcon",
+            "MapIcon.UpdateColor",
+            "UnitMapIcon.UnitMapIcon_UpdateColor",
+            "UnitMapIcon.SetIcon",
+            "UnitMapIcon.UpdateIcon",
+            "DynamicMap.ShouldShowAirbase",
+            "HUDUnitMarker.UpdateColor",
         };
 
         internal static void Apply(Harmony harmony, ManualLogSource log)

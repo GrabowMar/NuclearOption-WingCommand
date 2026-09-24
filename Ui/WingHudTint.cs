@@ -3,124 +3,66 @@ using System.Reflection;
 using HarmonyLib;
 using UnityEngine;
 
-// Harmony calls postfixes by reflection, so suppress IDE0051 in this file.
+// Harmony calls postfixes by reflection.
 #pragma warning disable IDE0051
 
 namespace WingCommand
 {
-    /// <summary>Shared wing/target identity on native HUD markers. Cache private UpdateColor for patching
-    /// and restoring native colour when roles change.</summary>
+    /// <summary>Wing marks on the game's HUD markers (spec WMC program §5): members in their element's colour, the wing's
+    /// targets and downed pilots; the player's own selected target keeps the game's colour and brackets.</summary>
     internal static class WingHudTint
     {
         private static MethodInfo updateColor;
         private static bool resolved;
 
-        /// <summary>Resolve native marker repaint once; disable HUD tinting on failure.</summary>
-        public static void Initialise()
+        /// <summary>The game's colour back (then the current mark, if any).</summary>
+        public static void Restore(Unit unit)
         {
-            resolved = true;
-            updateColor = AccessTools.Method(typeof(HUDUnitMarker), "UpdateColor");
-
-            if (updateColor == null)
+            if (!TryMarker(unit, out HUDUnitMarker marker)) return;
+            if (!resolved)
             {
-                Plugin.Logger.LogWarning(
-                    "HUDUnitMarker.UpdateColor not found; wing HUD symbology will not " +
-                    "reset when a unit leaves the wing.");
+                resolved = true;
+                updateColor = AccessTools.Method(typeof(HUDUnitMarker), "UpdateColor");
+                if (updateColor == null) Plugin.Logger.LogWarning("[Map] HUDUnitMarker.UpdateColor not found; HUD marks will not clear");
             }
-        }
-
-        /// <summary>Apply or clear one unit's wing HUD tint.</summary>
-        public static void Refresh(Unit unit)
-        {
-            if (unit == null || Plugin.Settings.Highlight.Value == HighlightMode.Off) return;
-
             try
             {
-                CombatHUD hud = SceneSingleton<CombatHUD>.i;
-                if (hud == null) return;
-                if (!hud.TryGetMarker(unit, out HUDUnitMarker marker) || marker == null) return;
-
-                Apply(marker);
+                updateColor?.Invoke(marker, null);
             }
-            catch (Exception e)
+            catch (Exception)
             {
-                if (Plugin.Settings.VerboseLogging.Value)
-                    Plugin.Logger.LogWarning("HUD marker refresh failed: " + e.Message);
+                // A marker torn down between the poll and the repaint.
             }
         }
 
-        /// <summary>Periodically reassert colours because native marker creation, fading, and
-        /// track-staleness paths can recolour outside UpdateColor.</summary>
-        public static void Reassert(WingRegistry wing)
+        /// <summary>The mark again: the game recolours markers on creation, fades and stale tracks.</summary>
+        public static void Reassert(Unit unit)
         {
-            if (Plugin.Settings.Highlight.Value == HighlightMode.Off) return;
+            if (TryMarker(unit, out HUDUnitMarker marker)) Apply(marker);
+        }
 
+        private static bool TryMarker(Unit unit, out HUDUnitMarker marker)
+        {
+            marker = null;
             CombatHUD hud = SceneSingleton<CombatHUD>.i;
-            if (hud == null) return;
-
-            if (wing != null)
-            {
-                foreach (WingMember m in wing.Members)
-                {
-                    if (m.Aircraft != null && hud.TryGetMarker(m.Aircraft, out HUDUnitMarker marker))
-                        Apply(marker);
-                }
-            }
-
-            foreach (Unit u in WingMarkers.EngagedTargets)
-            {
-                if (u != null && hud.TryGetMarker(u, out HUDUnitMarker marker))
-                    Apply(marker);
-            }
+            return unit != null && hud != null && hud.TryGetMarker(unit, out marker) && marker != null;
         }
 
         private static void Apply(HUDUnitMarker marker)
         {
-            if (marker.image == null) return;
-
-            // Preserve native player-selected target colour and brackets over wing tint.
-            if (marker.selected) return;
-
-            WingMarkers.Role role = WingMarkers.RoleOf(marker.unit);
-            if (role == WingMarkers.Role.None)
-            {
-                Restore(marker);
-                return;
-            }
-
-            // Retain native alpha for range, stale tracks, and jamming.
-            Color tint = WingMarkers.ColorFor(role);
+            if (marker.image == null || marker.selected || Plugin.Settings.MapMarkers.Value == HighlightMode.Off) return;
+            WingMarkers.Role role = WingMarkers.RoleOf(marker.unit, out int element, out _);
+            if (role == WingMarkers.Role.None) return;
+            // The game's alpha carries range, stale tracks and jamming.
+            Color tint = WingMarkers.ColorOf(role, element);
             marker.image.color = new Color(tint.r, tint.g, tint.b, marker.image.color.a);
         }
 
-        private static void Restore(HUDUnitMarker marker)
-        {
-            if (!resolved) Initialise();
-            if (updateColor == null) return;
-
-            try { updateColor.Invoke(marker, null); }
-            catch { /* Ignore transient marker teardown without per-poll logging. */ }
-        }
-
-        /// <summary>Apply tint immediately after native repaint, including theme/faction changes and newly
-        /// visible tracks.</summary>
         [HarmonyPatch(typeof(HUDUnitMarker), "UpdateColor")]
         internal static class UpdateColorPatch
         {
             [HarmonyPostfix]
-            private static void Postfix(HUDUnitMarker __instance)
-            {
-                if (Plugin.Settings.Highlight.Value == HighlightMode.Off) return;
-                if (__instance.image == null) return;
-                if (__instance.selected) return;
-
-                WingMarkers.Role role = WingMarkers.RoleOf(__instance.unit);
-                if (role == WingMarkers.Role.None) return;
-
-                Color tint = WingMarkers.ColorFor(role);
-                __instance.image.color =
-                    new Color(tint.r, tint.g, tint.b, __instance.image.color.a);
-            }
+            private static void Postfix(HUDUnitMarker __instance) => Apply(__instance);
         }
     }
 }

@@ -58,23 +58,15 @@
     <Quarantine Include="Economy\EconomyFacade.cs" Milestone="M7" />
     <Quarantine Include="Comms\WingChatterHud.cs" Milestone="M4" />
     <Quarantine Include="Ui\CombatHUDHitAudioPatch.cs" Milestone="M7" />
-    <Quarantine Include="Ui\WingMarkerBadge.cs" Milestone="M4" />
     <Quarantine Include="Ui\WmcScreen.CustomPilots.cs" Milestone="M7" />
     <Quarantine Include="Ui\WmcScreen.Loadout.cs" Milestone="M7" />
     <Quarantine Include="Ui\WmcScreen.Shell.cs" Milestone="M7" />
     <Quarantine Include="Ui\WmcScreen.Supply.cs" Milestone="M7" />
     <Quarantine Include="Ui\WmcScreen.TacticalPreview.cs" Milestone="M4" />
-    <Quarantine Include="Core\WingCommandSelection.cs" Milestone="M4" />
-    <Quarantine Include="Ui\MapCommandLayer.cs" Milestone="M4" />
-    <Quarantine Include="Ui\TacticalMapOverlay.cs" Milestone="M4" />
     <Quarantine Include="Ui\WingDebugActions.cs" Milestone="M7" />
     <Quarantine Include="Ui\WingHud.cs" Milestone="M7" />
-    <Quarantine Include="Ui\WingHudTint.cs" Milestone="M7" />
-    <Quarantine Include="Ui\WingMapTint.cs" Milestone="M4" />
-    <Quarantine Include="Ui\WingMarkers.cs" Milestone="M4" />
     <Quarantine Include="Ui\WingRadialOverlay.cs" Milestone="M7" />
-    <Quarantine Include="Ui\WmcScreen.Groups.cs" Milestone="M4" />
-    <Quarantine Include="Ui\WmcScreen.RouteNodes.cs" Milestone="M4" />
+    <Quarantine Include="Ui\WmcScreen.Groups.cs" Milestone="P10" />
     <Quarantine Include="Ui\WmcScreen.Tactical.cs" Milestone="M4" />
     <Quarantine Include="Ui\WmcScreen.TacticalBento.cs" Milestone="M4" />
     <Quarantine Include="Ui\WmcScreen.TacticalNavigation.cs" Milestone="M4" />

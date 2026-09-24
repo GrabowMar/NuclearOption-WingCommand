@@ -61,6 +61,8 @@ namespace WingCommand
 
         public void Tick(float dt)
         {
+            // Map and HUD marks do not need the panel (spec WMC program §5); they ride on its tick.
+            WingMarkers.Tick(WingService.Instance);
             bool enabled = !gaveUp && Plugin.Settings.ShowWmc.Value && GameAccess.MfdAvailable;
             if (!enabled)
             {
@@ -128,6 +130,7 @@ namespace WingCommand
             context.Map.Disarm();
             context.Draft.Clear();
             overlay.Destroy();
+            WingMarkers.Reset();
             nextAttempt = nextRefresh = 0f;
             gaveUp = false;
         }

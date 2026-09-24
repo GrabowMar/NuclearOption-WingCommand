@@ -8,6 +8,9 @@ namespace WingCommand
 
     internal enum RadioVoice { Off, FollowGame, On }
 
+    /// <summary>What the map and HUD mark (spec WMC program §5).</summary>
+    internal enum HighlightMode { Off, Wing, WingAndTargets }
+
     /// <summary>Wing Command 1.0 settings. The first 1.0 launch archives the 0.9 file beside itself so every
     /// key starts from its 1.0 default (BepInEx only applies defaults to keys it has not seen). Data files
     /// (formations, profiles, roster) live under <see cref="DataRoot"/>.</summary>
@@ -25,6 +28,7 @@ namespace WingCommand
         public ConfigEntry<string> CallAirframe { get; }
         public ConfigEntry<bool> ShowHud { get; }
         public ConfigEntry<bool> ShowWmc { get; }
+        public ConfigEntry<HighlightMode> MapMarkers { get; }
         public ConfigEntry<float> HudX { get; }
         public ConfigEntry<float> HudY { get; }
         public ConfigEntry<KeyboardShortcut> KeyCallWingman { get; }
@@ -152,6 +156,9 @@ namespace WingCommand
                 new ConfigurationManagerAttributes { Order = 78 }));
             ShowWmc = c.Bind("Wmc", "Show", true, new ConfigDescription(
                 "Show the WMC panel on a map bezel button (maximized map).", null, new ConfigurationManagerAttributes { Order = 70 }));
+            MapMarkers = c.Bind("Wmc", "MapMarkers", HighlightMode.WingAndTargets, new ConfigDescription(
+                "Mark wingmen (element colour and badge) and, with WingAndTargets, the wing's targets on map and HUD icons.",
+                null, new ConfigurationManagerAttributes { Order = 69 }));
 
             KeyCallWingman = Key(c, "CallWingman", "Call one wingman (Wing/CallAirframe, or your type).", 50);
             KeyFormUp = Key(c, "FormUp", "Every wingman rejoins now.", 49);
