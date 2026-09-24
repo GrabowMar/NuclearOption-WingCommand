@@ -8,24 +8,37 @@ using UnityEngine.UI;
 
 namespace WingCommand
 {
-    /// <summary>Spec M7b §3: the WMC bezel panel on the maximized map — an <see cref="AvScreen"/> (display glass
-    /// included) with six tabs, claimed through <see cref="BezelRegistry.Wmc"/>, refreshed at 5 Hz.</summary>
+    /// <summary>Spec WMC rebuild §bezel shell: the WMC bezel panel on the maximized map — the 0.9 four tabs TACTICAL · SUPPLY ·
+    /// LOADOUT · WING on an <see cref="AvScreen"/> (display glass included), claimed through <see cref="BezelRegistry.Wmc"/>,
+    /// refreshed at 5 Hz. The header's metric tiles change with the tab; ROOM opens the planning room from every tab.</summary>
     internal sealed class WmcPanel : IWingService
     {
-        public const int TabWing = 0, TabOrders = 1, TabForm = 2, TabDoctrine = 3, TabAp = 4, TabLog = 5;
-        public static readonly string[] TabLabels = { "WING", "ORDERS", "FORM", "DOCT", "AP", "LOG" };
+        public const int TabTactical = 0, TabSupply = 1, TabLoadout = 2, TabWing = 3;
+        public static readonly string[] TabLabels = { "TACTICAL", "SUPPLY", "LOADOUT", "WING" };
+
+        private static readonly string[] PendingTabs =
+        {
+            null,
+            "SUPPLY: the 0.9 shop on the 1.0 ledger (pilot, airframe, fit, base, requisition). Arrives in a later update.",
+            "LOADOUT: templates, hardpoints and livery. Arrives in a later update.",
+            "WING: the squadron roster and the pilot dossier. Arrives in a later update.",
+        };
 
         public static WmcPanel Instance { get; private set; }
         public string Name => "WMC";
 
         private readonly Dictionary<string, AvButton> controls = new Dictionary<string, AvButton>();
         private readonly WmcContext context = new WmcContext();
-        private readonly WmcScopeBar scopeBar = new WmcScopeBar();
         private readonly WmcMapOverlay overlay = new WmcMapOverlay();
-        private IWmcTab[] tabs;
+        private readonly int[] headerKeys = { -1, -1, -1, -1 };
+        private string profileShown;
+        private IWmcPage[] pages;
+        private WmcTactical tactical;
+        private WmcMetricRow metrics;
         private MFDScreen screen;
         private Button bezelButton;
         private GameObject root;
+        private RectTransform content;
         private AvScreen shell;
         private float nextAttempt, nextRefresh;
         private bool gaveUp;
@@ -37,10 +50,16 @@ namespace WingCommand
         }
 
         public bool Visible => screen != null && screen.isActive && DynamicMap.mapMaximized;
+        /// <summary>TACTICAL is the page on show (an unarmed right-click MOVE is TACTICAL's only; spec WMC rebuild).</summary>
+        public bool TacticalShowing => Visible && shell != null && shell.Page == TabTactical;
         public int Page => shell != null ? shell.Page : -1;
+        public int Sub => tactical != null ? tactical.Sub : -1;
         public IReadOnlyDictionary<string, AvButton> Controls => controls;
         public WmcContext Context => context;
         public WmcMapOverlay Overlay => overlay;
+        public WmcTactical Tactical => tactical;
+        /// <summary>Labels that would still spill out of their box (the automation's text-fit audit).</summary>
+        public int Overflow => content != null ? WmcKit.Overflow(content) : 0;
 
         public void Activate()
         {
@@ -97,19 +116,26 @@ namespace WingCommand
             nextRefresh = 0f;
         }
 
-        /// <summary>Latch a tab (automation; the tab bar calls <see cref="AvScreen.SetPage"/> itself).</summary>
+        /// <summary>Latch a tab (automation; the tab bar calls <see cref="AvScreen.SetPage"/> itself). A tab not built yet stays
+        /// where it is.</summary>
         public void Show(int tab)
         {
-            if (shell == null || tab < 0 || tab >= TabLabels.Length) return;
+            if (shell == null || tab < 0 || tab >= TabLabels.Length || pages[tab] == null) return;
             shell.SetPage(tab);
             nextRefresh = 0f;
         }
 
-        /// <summary>Press a control by id as a click would (automation). False when there is none or it is hidden; a
-        /// disabled button ignores the click itself (its state is private to the shared toolkit).</summary>
+        /// <summary>Press a control by id as a click would (automation). A TACTICAL control shows TACTICAL and its sub-page
+        /// first. False when there is none or it is hidden; a disabled button ignores the click itself.</summary>
         public bool Press(string id)
         {
-            if (!controls.TryGetValue(id, out AvButton b) || b == null || !b.gameObject.activeInHierarchy) return false;
+            if (id != null && id.StartsWith("tac.", StringComparison.Ordinal) && tactical != null)
+            {
+                Show(TabTactical);
+                tactical.ShowSubFor(id);
+                Refresh();
+            }
+            if (!controls.TryGetValue(id ?? "", out AvButton b) || b == null || !b.gameObject.activeInHierarchy) return false;
             b.OnPointerClick(new UnityEngine.EventSystems.PointerEventData(UnityEngine.EventSystems.EventSystem.current)
                 { button = UnityEngine.EventSystems.PointerEventData.InputButton.Left });
             nextRefresh = 0f;
@@ -122,12 +148,18 @@ namespace WingCommand
             BezelRegistry.Release(BezelRegistry.Wmc);
             if (root != null) UnityEngine.Object.Destroy(root);
             root = null;
+            content = null;
             screen = null;
             bezelButton = null;
             shell = null;
-            tabs = null;
+            pages = null;
+            tactical = null;
+            metrics = null;
+            profileShown = null;
+            for (int i = 0; i < headerKeys.Length; i++) headerKeys[i] = -1;
             controls.Clear();
             context.Selection.Clear();
+            context.Inspected = 0u;
             context.Map.Disarm();
             context.Draft.Clear();
             overlay.Destroy();
@@ -219,31 +251,30 @@ namespace WingCommand
             background.raycastTarget = true;
 
             var contentObject = new GameObject("Content", typeof(RectTransform));
-            var content = (RectTransform)contentObject.transform;
+            content = (RectTransform)contentObject.transform;
             content.SetParent(rootRect, false);
             AvKit.Stretch(content);
 
+            // Keys are the panel's own (they change per tab); the toolkit's metric row gets none.
             shell = AvScreen.Build(content, "WMC", TabLabels,
-                new[] { new[] { "FUEL MIN", "%" }, new[] { "AMMO MIN", "%" }, new[] { "WING", "" } },
-                3, AvTokens.PanelWidth, height, _ => nextRefresh = 0f);
+                new[] { new[] { "", "" }, new[] { "", "" }, new[] { "", "" } }, 4, AvTokens.PanelWidth, height, OnTab);
+            metrics = new WmcMetricRow(content, shell.Metrics);
+            BuildRoomButton();
 
-            tabs = new IWmcTab[]
+            tactical = new WmcTactical(controls);
+            pages = new IWmcPage[] { tactical, null, null, null };
+            for (int i = 0; i < pages.Length; i++)
             {
-                new WmcWingTab(controls), new WmcOrdersTab(controls), new WmcFormTab(controls),
-                new WmcDoctrineTab(controls), new WmcApTab(controls), new WmcLogTab(controls),
-            };
-            // The scope bar sits above every page (spec WMC program §4); pages lay out below it.
-            Rect body = shell.Body;
-            scopeBar.Build(shell.Content, new Rect(body.x, body.y, body.width, WmcScopeBar.Height), controls);
-            float drop = WmcScopeBar.Height + AvTokens.Space2;
-            var pageBody = new Rect(body.x, body.y - drop, body.width, body.height - drop);
-            for (int i = 0; i < tabs.Length; i++)
-            {
+                if (pages[i] == null)
+                {
+                    shell.Tabs[i].SetEnabled(false);
+                    shell.Tabs[i].WithTooltip(PendingTabs[i]);
+                    continue;
+                }
                 var page = (RectTransform)shell.CreatePage(i, "Wmc" + TabLabels[i]).transform;
-                // Review focus 2: a page taller than the body scrolls instead of painting over the status strip.
-                RectTransform parent = AvScreen.Scroll(page, pageBody, tabs[i].ContentHeight, out Rect area);
-                tabs[i].Build(parent, area);
+                pages[i].Build(page, shell.Body);
             }
+            for (int i = 0; i < shell.Tabs.Length; i++) controls["tab." + TabLabels[i].ToLowerInvariant()] = shell.Tabs[i];
 
             MFDScreen s = root.AddComponent<MFDScreen>();
             s.shortName = "WMC";
@@ -257,8 +288,31 @@ namespace WingCommand
                 root = null;
                 return null;
             }
-            shell.SetPage(TabWing);
+            // No "…" anywhere (spec WMC rebuild): every label overflows and shrinks to the 10 px floor instead.
+            WmcKit.FitAll(content);
+            shell.SetPage(TabTactical);
             return s;
+        }
+
+        /// <summary>ROOM in the title row, where the page index sat (four labelled tabs need no "01/04").</summary>
+        private void BuildRoomButton()
+        {
+            AvStyled.DataBar bar = shell.DataBar;
+            if (bar?.PageIndex == null) return;
+            RectTransform slot = bar.PageIndex.rectTransform;
+            bar.PageIndex.gameObject.SetActive(false);
+            Vector2 at = slot.anchoredPosition;
+            AvButton room = AvStyled.Button(content, new Rect(at.x + 1f, at.y - 4f, slot.rect.width - 2f, 24f), "ROOM", "btn",
+                () => WmcRoom.Instance?.Open(), AvButtonStyle.Quiet);
+            room.WithTooltip("Open the planning room: plans, behaviour, squadron and workshop.");
+            controls["hdr.room"] = room;
+        }
+
+        private void OnTab(int tab)
+        {
+            metrics?.SetKeys(WmcHeader.Keys(tab));
+            AvKit.Popup.CloseAny();
+            nextRefresh = 0f;
         }
 
         private static Image FindHighlight(Button button)
@@ -295,36 +349,63 @@ namespace WingCommand
             }
             // Review focus 1: a selected aircraft that left drops out; the scope follows the selection.
             context.Selection.Prune(context.Rows, context.Count);
+            if (context.Inspected != 0u && WingRows.IndexOf(context.Rows, context.Count, context.Inspected) < 0) context.Inspected = 0u;
             context.Rescope();
         }
 
         /// <summary>One refresh now (automation: a selection made this call reaches the scope before a press).</summary>
         public void Refresh()
         {
-            if (shell == null || tabs == null) return;
+            if (shell == null || pages == null) return;
             Fill();
-            WingSummary s = WingRows.Summary(context.Rows, context.Count);
-            shell.Metrics[0].Set(WmcText.Percent(s.MinFuel).TrimEnd('%'), s.Bingo ? "BINGO" : "", WingRows.Bar(s.MinFuel),
-                WmcUi.LevelColor(WmcStyle.Level(s.MinFuel)));
-            shell.Metrics[1].Set(WmcText.Percent(s.MinAmmo).TrimEnd('%'), "", WingRows.Bar(s.MinAmmo),
-                WmcUi.LevelColor(WmcStyle.Level(s.MinAmmo)));
-            shell.Metrics[2].Set(s.Count + "/" + WingService.MaxMembers, "", s.Count / (float)WingService.MaxMembers, AvTheme.Friendly);
-
-            WingService wing = context.Wing;
-            string task = wing != null && wing.Planner.Active ? wing.Planner.Current.Kind.ToString().ToUpperInvariant() : "FORM";
-            if (shell.DataBar?.State != null) shell.DataBar.State.text = task;
-            shell.DataBar?.SetChip(0, context.Client ? "CLIENT" : "HOST", !context.Client);
-            PlayerAutopilot ap = PlayerAutopilot.Instance;
-            shell.DataBar?.SetChip(1, "AP", ap != null && ap.Session.Engaged);
-            shell.DataBar?.SetChip(2, "MAP", DynamicMap.mapMaximized);
-
-            scopeBar.Refresh(context);
+            RefreshHeader();
             int page = shell.Page;
-            if (page >= 0 && page < tabs.Length) tabs[page].Refresh(context);
-
+            IWmcPage p = page >= 0 && page < pages.Length ? pages[page] : null;
+            if (p != null)
+            {
+                p.Metrics(context, metrics);
+                p.Refresh(context);
+            }
             bool fresh = WingToast.Last != null && Time.unscaledTime - WingToast.LastAt < 6f;
-            string hint = page >= 0 && page < tabs.Length ? tabs[page].Hint : "";
-            shell.WriteStatus(null, null, fresh ? WingToast.Last : hint);
+            shell.WriteStatus(p?.Alert, context.Map.Prompt(context.ScopeLabel), fresh ? WingToast.Last : p?.Hint ?? "");
         }
+
+        /// <summary>Title and chips, each rebuilt only when its inputs change (no strings per refresh in steady state).</summary>
+        private void RefreshHeader()
+        {
+            int airborne = 0;
+            for (int i = 0; i < context.Count; i++)
+            {
+                var duty = (MemberDuty)context.Rows[i].Duty;
+                if (duty != MemberDuty.Grounded && duty != MemberDuty.Settled) airborne++;
+            }
+            int max = WingService.MaxMembers;
+            if (Changed(0, context.Count * 10000 + max * 100 + airborne) && shell.DataBar?.State != null)
+                shell.DataBar.State.text = WmcHeader.Title(context.Count, max, airborne);
+            int pending = !context.Client && SpawnService.Instance != null ? SpawnService.Instance.PendingTotal : 0;
+            if (Changed(1, context.Count * 1000 + pending * 10 + (context.Client ? 4 : 0) + (context.Stale ? 2 : 0)))
+                Chip(0, WmcHeader.Link(context.Count, pending, context.Client, context.Stale, out string s0), s0);
+            // Behaviour profiles arrive in R12; until then the chip names the scope element's doctrine pattern.
+            string profile = context.Wing != null && !context.Client ? context.Wing.DoctrineOf(context.ScopeElement).PatternName : WmcText.Unknown;
+            if (!ReferenceEquals(profile, profileShown) && profile != profileShown)
+            {
+                profileShown = profile;
+                Chip(1, WmcHeader.Profile(profile, false, out string s1), s1);
+            }
+            bool offline = context.Client || !WingSupplyReserve.HasFaction;
+            if (Changed(2, WingSupplyReserve.Count * 100 + WingSupplyReserve.Capacity * 2 + (offline ? 1 : 0)))
+                Chip(2, WmcHeader.Reserve(WingSupplyReserve.Count, WingSupplyReserve.Capacity, offline, out string s2), s2);
+            if (Changed(3, (int)context.Map.Mode * 2 + (context.Client ? 1 : 0)))
+                Chip(3, WmcHeader.Mode(context.Map.Mode, context.Client, out string s3), s3);
+        }
+
+        private bool Changed(int slot, int key)
+        {
+            if (headerKeys[slot] == key) return false;
+            headerKeys[slot] = key;
+            return true;
+        }
+
+        private void Chip(int i, string text, string state) => shell.DataBar?.SetChip(i, text, state);
     }
 }

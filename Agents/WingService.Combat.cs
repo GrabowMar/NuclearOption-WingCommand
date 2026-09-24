@@ -59,6 +59,33 @@ namespace WingCommand
             return judge.AllowEngage(hostiles, members, FallBackRatio, missionTime);
         }
 
+        private float hostilesAt = float.NegativeInfinity;
+        private int hostilesNear;
+
+        /// <summary>Enemy air threats the wing's side tracks within <see cref="OutnumberedJudge.RadiusMetres"/> of the player
+        /// (or the members' centre), for the WMC header's THREAT tile; sampled once a mission second.</summary>
+        public int HostilesNear()
+        {
+            if (missionTime - hostilesAt < 1f && missionTime >= hostilesAt) return hostilesNear;
+            hostilesAt = missionTime;
+            Aircraft from = Player;
+            Vec3 centre = from != null ? from.GlobalPosition().ToVec3() : Vec3.Zero;
+            if (from == null)
+            {
+                int n = 0;
+                foreach (WingMember m in Members)
+                {
+                    if (m.Released || !m.Alive) continue;
+                    from = from ?? m.Aircraft;
+                    centre += m.Last.Pos;
+                    n++;
+                }
+                if (n > 0) centre *= 1f / n;
+            }
+            hostilesNear = from != null ? CountHostiles(from, centre) : 0;
+            return hostilesNear;
+        }
+
         /// <summary>Enemy aircraft <paramref name="a"/>'s faction tracks within <see cref="OutnumberedJudge.RadiusMetres"/>
         /// of <paramref name="centre"/>.</summary>
         private static int CountHostiles(Aircraft a, Vec3 centre)

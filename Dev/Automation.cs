@@ -512,8 +512,11 @@ namespace WingCommand
             return Ok("doctrine", d.PatternName);
         }
 
-        /// <summary>Spec M7b §8: open the panel (<c>open</c>: maximize the map and select WMC), latch a tab (<c>tab</c> 0–5)
-        /// and/or press a control by id (<c>press</c>), then report the panel's state.</summary>
+        /// <summary>Spec WMC rebuild: open the panel (<c>open</c>: maximize the map and select WMC), latch a tab (<c>tab</c> 0
+        /// TACTICAL … 3 WING) and a TACTICAL sub-page (<c>sub</c> 0 ORDERS, 1 FORMATION, 2 ROUTE), and/or press a control by id
+        /// (<c>press</c>; a TACTICAL id shows its tab and sub-page first), then report the panel's state — including
+        /// <c>overflow</c> (labels that would spill out of their box: the no-"…" check), the alerts shown and the order-grid
+        /// cells that cannot be pressed now.</summary>
         public static Dictionary<string, object> Wmc(Dictionary<string, object> args)
         {
             WmcPanel panel = WmcPanel.Instance;
@@ -521,6 +524,8 @@ namespace WingCommand
             if (args != null && args.TryGetValue("open", out object open) && open is bool o && o) panel.Open();
             if (args != null && args.TryGetValue("tab", out object tab) && tab != null)
                 panel.Show(Convert.ToInt32(tab, CultureInfo.InvariantCulture));
+            if (Arg(args, "sub") != null && panel.Tactical != null)
+                panel.Tactical.ShowSubFor(new[] { "tac.orders.", "tac.form.", "tac.route." }[Math.Max(0, Math.Min(2, (int)Number(args, "sub", 0)))]);
             // Spec WMC program §4: the scope — clear, an element by letter, or wingmen by their #numbers.
             WmcSelection selection = panel.Context.Selection;
             if (Arg(args, "clear") is bool clear && clear) selection.Clear();
@@ -547,8 +552,11 @@ namespace WingCommand
             return new Dictionary<string, object>
             {
                 { "ok", string.IsNullOrEmpty(press) || pressed }, { "visible", panel.Visible }, { "tab", panel.Page },
-                { "pressed", pressed }, { "members", panel.Context.Count }, { "controls", panel.Controls.Count },
+                { "sub", panel.Sub }, { "pressed", pressed }, { "members", panel.Context.Count }, { "controls", panel.Controls.Count },
                 { "scope", panel.Context.Selection.Label(panel.Context.Rows, panel.Context.Count) },
+                { "overflow", panel.Overflow }, { "alerts", panel.Tactical?.AlertsShown ?? 0 },
+                { "armed", panel.Context.Map.Mode != MapMode.Off ? 1 : 0 },
+                { "disabled", panel.Tactical != null ? string.Join(",", panel.Tactical.DisabledOrders()) : "" },
             };
         }
 
@@ -590,13 +598,12 @@ namespace WingCommand
             }
             else if (Arg(args, "x") != null && Arg(args, "z") != null)
                 c.Map.Place(c, new GlobalPosition(Number(args, "x", 0), 0f, Number(args, "z", 0)), null, shift);
+            // TACTICAL › ROUTE's controls (built in R2; until then nothing is pressed).
             int pressed = 0;
             foreach (string control in new[] { "loop", "send", "skip", "save", "clear", "undo" })
             {
                 if (!(Arg(args, control) is bool on) || !on) continue;
-                panel.Show(WmcPanel.TabOrders);
-                panel.Refresh();
-                if (panel.Press("orders.route." + control)) pressed++;
+                if (panel.Press("tac.route." + control)) pressed++;
             }
             panel.Refresh();
             WingPlanner p = wing.Roster.InUse(c.ScopeElement) ? wing.PlannerOf(c.ScopeElement) : null;

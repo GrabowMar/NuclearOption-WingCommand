@@ -5,6 +5,16 @@ namespace WingCommand.PureTests
     public class TaskCardTests
     {
         [Fact]
+        public void ShortFitsAnElementHeader()
+        {
+            Assert.Equal("FORM", TaskCard.Short(null, -1, Vec3.Zero, 200f));
+            WingTask route = WingTask.Route(Waypoint.At(0f, 10000f), Waypoint.At(0f, 20000f), Waypoint.At(0f, 30000f));
+            Assert.Equal("ROUTE · LEG 2/3 · ETA 1:40", TaskCard.Short(route, 1, Vec3.Zero, 200f));
+            Assert.Equal("ORBIT · ON STATION", TaskCard.Short(WingTask.Orbit(Waypoint.At(0f, 500f)), -1, Vec3.Zero, 200f));
+            Assert.Equal("MOVE · ETA —", TaskCard.Short(WingTask.Move(Waypoint.At(0f, 5000f)), 0, Vec3.Zero, 0f));
+        }
+
+        [Fact]
         public void TaskCardHandlesNoPointsAndNullTask()
         {
             Assert.Equal("FORM · on you", TaskCard.Text(null, -1, Vec3.Zero, 200f));

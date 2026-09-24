@@ -140,7 +140,8 @@ namespace WingCommand
         private void RefreshCard(WmcContext c)
         {
             // The deep card follows the one selected wingman; gone, it drops (review focus 5).
-            WingMember m = c.Client ? null : c.MemberOf(c.Selection.Single);
+            // INSPECT › on the bezel names the aircraft to show; else the one selected.
+            WingMember m = c.Client ? null : c.MemberOf(c.Inspected != 0u ? c.Inspected : c.Selection.Single);
             CardMember = m != null && (object)m.Aircraft != null ? m.Aircraft.persistentID.Id : 0u;
             bool show = CardMember != 0u;
             memberHint.gameObject.SetActive(!show);

@@ -71,7 +71,11 @@ namespace WingCommand
         /// <summary>Every frame while the panel is installed: follow the right button and place a click.</summary>
         public void Update(WmcContext c, bool visible)
         {
-            selected = c != null ? c.Selection.Count : 0;
+            // Spec WMC rebuild: with nothing armed, a right-click MOVE for the selection is TACTICAL's only (the 0.9 rule); on
+            // SUPPLY, LOADOUT or WING the right-click stays the game's. The room places its own orders (it is open over the map).
+            bool tactical = WmcPanel.Instance != null && WmcPanel.Instance.TacticalShowing;
+            bool room = WmcRoom.Instance != null && WmcRoom.Instance.IsOpen;
+            selected = c != null && (tactical || room) ? c.Selection.Count : 0;
             if (!visible)
             {
                 if (Mode != MapMode.Off) Disarm();
@@ -114,7 +118,7 @@ namespace WingCommand
         {
             MapPointer pointer = unit == null || unit.disabled ? MapPointer.Empty
                 : DynamicMap.GetFactionMode(unit.NetworkHQ, false) == FactionMode.Enemy ? MapPointer.Enemy : MapPointer.Other;
-            MapClick click = MapOrders.Resolve(Mode, c.Selection.Count > 0, pointer, shift);
+            MapClick click = MapOrders.Resolve(Mode, selected > 0, pointer, shift);
             if (click == MapClick.None) return;
             if (click == MapClick.NeedEnemy)
             {
@@ -147,6 +151,9 @@ namespace WingCommand
                 }
                 case MapClick.Cargo:
                     at.Action = ArrivalAction.Cargo;
+                    return WingOrder.Tasked(WingTask.Move(at), c.Scope);
+                case MapClick.Land:
+                    at.Action = ArrivalAction.Land;
                     return WingOrder.Tasked(WingTask.Move(at), c.Scope);
                 case MapClick.Attack:
                 case MapClick.AddTarget:
