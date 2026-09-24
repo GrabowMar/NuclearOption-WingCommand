@@ -447,6 +447,9 @@ namespace WingCommand
             WingToast.Show(pilot.Callsign + " — " + message);
         }
 
+        /// <summary>A wing pilot was credited with a kill (shooter, victim).</summary>
+        public static event System.Action<Aircraft, Unit> Killed;
+
         public static void NoteKill(Aircraft aircraft, Unit victim)
         {
             WingPilot pilot = Of(aircraft);
@@ -455,8 +458,10 @@ namespace WingCommand
             pilot.Kills++;
             Award(aircraft, WingTuning.XpPerKill, "kill");
 
-            // ponytail: the radio call returns with comms (M4/M7); the log keeps the credit visible meanwhile.
-            if (victim != null) Plugin.LogVerbose($"[Pilot] {pilot.Callsign}: splash {victim.unitName}");
+            if (victim == null) return;
+            Plugin.LogVerbose($"[Pilot] {pilot.Callsign}: splash {victim.unitName}");
+            // Spec M7 §3: the radio says it (it listens here; Personnel does not reach into the wing).
+            Killed?.Invoke(aircraft, victim);
         }
 
         /// <summary>Award a completed sortie on base recovery.</summary>

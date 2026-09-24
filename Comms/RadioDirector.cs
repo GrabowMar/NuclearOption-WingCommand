@@ -33,7 +33,17 @@ namespace WingCommand
         private string pendingKey;
         private uint pendingId;
 
-        public RadioDirector() => Instance = this;
+        public RadioDirector()
+        {
+            Instance = this;
+            WingPilotRoster.Killed += OnKill;
+        }
+
+        private void OnKill(Aircraft shooter, Unit victim)
+        {
+            WingMember m = WingService.Instance?.MemberOf(shooter);
+            if (m != null) SayKill(m, victim.persistentID.Id, victim.definition != null ? victim.definition.unitName : victim.unitName);
+        }
 
         public void Activate()
         {
@@ -136,6 +146,14 @@ namespace WingCommand
         /// <see cref="ChatterDialogue.Event"/>).</summary>
         public void Say(WingMember speaker, RadioClass cls, string name, string detail, bool wingWide) =>
             Say(speaker, cls, name, detail, wingWide, Time.time);
+
+        /// <summary>Spec M7 §3: a kill, keyed by the victim so one kill is one call.</summary>
+        public void SayKill(WingMember speaker, uint victim, string type)
+        {
+            WingPilot pilot = WingPilotRoster.Of(speaker);
+            ChatterPersona persona = pilot != null ? pilot.Persona : ChatterPersona.Professional;
+            Enqueue(speaker, RadioClass.Tactical, "SPLASH:" + victim, ChatterDialogue.Event(persona, "SPLASH", type, seed++), true, Time.time);
+        }
 
         /// <summary>Exact words from <paramref name="speaker"/>. False when the radio will not say it (off, or dropped).</summary>
         public bool SayText(WingMember speaker, RadioClass cls, string key, string text, bool wingWide) =>

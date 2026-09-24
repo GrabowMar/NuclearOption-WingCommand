@@ -64,6 +64,12 @@ namespace WingCommand.PureTests
         public void WinchesterSaysWhatTheMemberDoesNext(object after, string name) =>
             Assert.Equal(name, RadioCalls.WinchesterLine((WinchesterAction)after));
 
+        [Theory]
+        [InlineData(true, "FOX2")]
+        [InlineData(false, "FOX3")]
+        public void AFoxCallNamesTheSeeker(bool infrared, string name) =>
+            Assert.Equal(name, RadioCalls.FoxLine(infrared));
+
         [Fact]
         public void JokerSaysTheMinutesToBingo() =>
             Assert.Contains("3", ChatterDialogue.Event(ChatterPersona.Professional, "JOKER", "3", 0));

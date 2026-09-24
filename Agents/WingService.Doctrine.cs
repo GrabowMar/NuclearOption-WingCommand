@@ -115,6 +115,7 @@ namespace WingCommand
             if (!launched) return;
             StandingShots++;
             Plugin.Logger.LogInfo($"[Wing] #{m.Number} fox on {best.unitName} ({Doctrine.PatternName})");
+            CallFox(m, bestStation, best);
         }
 
         /// <summary>Spec M5 §9.2 Splash: one guided missile at <paramref name="target"/> from every member flying with the wing
@@ -154,6 +155,7 @@ namespace WingCommand
                     {
                         fired++;
                         Plugin.Logger.LogInfo($"[Wing] #{m.Number} splash on {target.unitName}");
+                        CallFox(m, w, target);
                     }
                     if (attempted) break;
                 }
@@ -161,6 +163,16 @@ namespace WingCommand
             }
             SplashShots += fired;
             return fired;
+        }
+
+        /// <summary>Spec M7 §3: the launch on the radio (one Fox call per speaker per repeat window).</summary>
+        private static void CallFox(WingMember m, WeaponStation w, Unit target)
+        {
+            RadioDirector radio = RadioDirector.Instance;
+            if (radio == null) return;
+            bool infrared = w.WeaponInfo.targetRequirements.minIR > 0f;
+            string type = target.definition != null ? target.definition.unitName : target.unitName;
+            radio.Say(m, RadioClass.Tactical, RadioCalls.FoxLine(infrared), type, false);
         }
 
         /// <summary>Missiles fired by Splash this mission (automation reads it).</summary>

@@ -55,6 +55,9 @@ namespace WingCommand
         /// (review M7a I1: the default follow-on rejoins).</summary>
         public static string WinchesterLine(WinchesterAction after) => after == WinchesterAction.Rejoin ? "OUTOFAMMO" : "WINCHESTER";
 
+        /// <summary>Spec M7 §3: the launch call for a missile's seeker (infrared → Fox 2, else Fox 3, as 0.9).</summary>
+        public static string FoxLine(bool infrared) => infrared ? "FOX2" : "FOX3";
+
         private static bool Make(RadioClass c, string name, bool wing, out RadioCall call)
         {
             call = new RadioCall { Class = c, Name = name, WingWide = wing };

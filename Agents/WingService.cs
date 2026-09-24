@@ -562,6 +562,14 @@ namespace WingCommand
 
         public float Stack => Wing != null ? Wing.Solver.StackOffset : 0f;
 
+        /// <summary>The member flying this aircraft, or null.</summary>
+        public WingMember MemberOf(Aircraft a)
+        {
+            for (int i = 0; i < Members.Count; i++)
+                if (ReferenceEquals(Members[i].Aircraft, a)) return Members[i];
+            return null;
+        }
+
         public bool IsMember(Aircraft a)
         {
             for (int i = 0; i < Members.Count; i++)
