@@ -20,6 +20,8 @@ namespace WingCommand
 
         public WmcApTab(Dictionary<string, AvButton> controls) => ids = controls;
 
+        public float ContentHeight => 0f;
+
         public string Hint => "Your stick overrides a hold; it recaptures when you let go.";
 
         public void Build(RectTransform page, Rect body)

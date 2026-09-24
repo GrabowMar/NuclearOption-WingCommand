@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using NOAvionics;
 using NOAvionics.Ui;
+using TMPro;
 using UnityEngine;
 using UnityEngine.UI;
 
@@ -52,6 +53,9 @@ namespace WingCommand
 
         /// <summary>The status strip's ambient line while the tab shows.</summary>
         string Hint { get; }
+
+        /// <summary>The page's content height; the panel wraps a taller page in a scroll viewport.</summary>
+        float ContentHeight { get; }
     }
 
     /// <summary>Layout helpers the WMC tabs share.</summary>
@@ -102,6 +106,40 @@ namespace WingCommand
         /// <summary>A fuel/ammo colour: alert below 15%, caution below 35%.</summary>
         public static Color Level(float fraction) =>
             fraction < 0.15f ? AvTheme.Alert : fraction < 0.35f ? AvTheme.Warning : AvTheme.Friendly;
+
+        /// <summary>A section head (spine tick + section-title, optional note); returns the y below it.</summary>
+        public static float Head(RectTransform parent, Rect body, float y, string title, string note = null)
+        {
+            AvStyled.SpineTick(parent, body.x - AvScreen.SpineInset, y - 8f);
+            AvStyled.Label(parent, new Rect(body.x, y, body.width, 16f), title, "section-title");
+            if (!string.IsNullOrEmpty(note))
+                AvStyled.Label(parent, new Rect(body.x, y, body.width, 16f), note, "section-title-note",
+                    align: TextAlignmentOptions.MidlineRight);
+            return y - 16f - Gap;
+        }
+
+        /// <summary>A `.row` card with a state rail; the whole card is the click target and highlights on hover.</summary>
+        public static AvButton Card(RectTransform parent, Rect r, Action click, out Image fill, out Image rail)
+        {
+            fill = AvStyled.Box(parent, r, "row");
+            if (fill != null) fill.raycastTarget = false;
+            rail = AvStyled.Rail(parent, new Rect(r.x, r.y, 3f, r.height), "info");
+            AvButton hit = AvKit.HitButton(parent, r, click);
+            if (fill != null) hit.SetRowHighlight(fill, AvTheme.SurfaceInert, AvTheme.SurfaceRaised);
+            return hit;
+        }
+
+        public static void SetRail(Image rail, string railClass)
+        {
+            if (rail == null) return;
+            AvStyle style = AvStyleHost.Style("rail " + railClass);
+            rail.color = AvStyleHost.Resolve(style.Background, AvTheme.RailInert);
+        }
+
+        /// <summary>The row-value colour of a level class ("ok", "warn", "bad", "").</summary>
+        public static Color LevelColor(string level) =>
+            level == "bad" ? AvTheme.RailDanger : level == "warn" ? AvTheme.RailCaution : level == "ok" ? AvTheme.RailReady
+            : AvTheme.TextPrimary;
 
         /// <summary>Run an order only where orders run; otherwise say why (review focus 1).</summary>
         public static void Order(WmcContext c, Action act)

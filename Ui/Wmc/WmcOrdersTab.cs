@@ -16,6 +16,8 @@ namespace WingCommand
 
         public WmcOrdersTab(Dictionary<string, AvButton> controls) => ids = controls;
 
+        public float ContentHeight => 0f;
+
         public string Hint => last != null && !last.CanOrder ? (last.Client ? "Orders are host only for now." : "Not ready.")
             : "Orders go to the whole wing. Form Up brings it back.";
 

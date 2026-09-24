@@ -20,6 +20,8 @@ namespace WingCommand
 
         public WmcDoctrineTab(Dictionary<string, AvButton> controls) => ids = controls;
 
+        public float ContentHeight => 0f;
+
         public string Hint => "What the wing does on its own while it holds formation.";
 
         public void Build(RectTransform page, Rect body)

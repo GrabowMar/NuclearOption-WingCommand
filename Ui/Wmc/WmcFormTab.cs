@@ -25,6 +25,8 @@ namespace WingCommand
 
         public WmcFormTab(Dictionary<string, AvButton> controls) => ids = controls;
 
+        public float ContentHeight => 0f;
+
         public string Hint => "Shape, spacing and stack for the whole wing.";
 
         public void Build(RectTransform page, Rect body)

@@ -20,6 +20,8 @@ namespace WingCommand
 
         public WmcLogTab(Dictionary<string, AvButton> controls) => ids = controls;
 
+        public float ContentHeight => 0f;
+
         public string Hint => "Click a wingman's line to centre the map on it.";
 
         public void Build(RectTransform page, Rect body)

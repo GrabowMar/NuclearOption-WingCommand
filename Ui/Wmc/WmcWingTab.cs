@@ -31,6 +31,8 @@ namespace WingCommand
 
         public WmcWingTab(Dictionary<string, AvButton> controls) => ids = controls;
 
+        public float ContentHeight => 0f;
+
         public string Hint => last != null && last.Count == 0 ? "No wingmen. Call aircraft from the radial menu."
             : "Select a wingman to centre the map on it or release it.";
 
