@@ -276,7 +276,8 @@ namespace WingCommand
             }
         }
 
-        private void Refresh()
+        /// <summary>One refresh now (automation: a selection made this call reaches the scope before a press).</summary>
+        public void Refresh()
         {
             if (shell == null || tabs == null) return;
             Fill();

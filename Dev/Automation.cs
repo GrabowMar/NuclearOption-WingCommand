@@ -521,12 +521,34 @@ namespace WingCommand
             if (args != null && args.TryGetValue("open", out object open) && open is bool o && o) panel.Open();
             if (args != null && args.TryGetValue("tab", out object tab) && tab != null)
                 panel.Show(Convert.ToInt32(tab, CultureInfo.InvariantCulture));
+            // Spec WMC program §4: the scope — clear, an element by letter, or wingmen by their #numbers.
+            WmcSelection selection = panel.Context.Selection;
+            if (Arg(args, "clear") is bool clear && clear) selection.Clear();
+            string letter = Text(args, "element");
+            if (!string.IsNullOrEmpty(letter) && WingService.Instance != null)
+            {
+                int e = char.ToUpperInvariant(letter[0]) - 'A';
+                var ids = new List<uint>();
+                foreach (WingMember m in WingService.Instance.Members)
+                    if (WingService.Instance.ElementOf(m) == e && (object)m.Aircraft != null) ids.Add(m.Aircraft.persistentID.Id);
+                if (ids.Count > 0) selection.SelectElement(e, ids);
+            }
+            if (Arg(args, "select") is List<object> numbers && WingService.Instance != null)
+                foreach (object n in numbers)
+                {
+                    int number = (int)Math.Round(Convert.ToDouble(n, CultureInfo.InvariantCulture));
+                    foreach (WingMember m in WingService.Instance.Members)
+                        if (m.Number == number && (object)m.Aircraft != null) selection.Toggle(m.Aircraft.persistentID.Id);
+                }
+            // Refresh now so a press in the same call acts on this scope.
+            panel.Refresh();
             string press = Text(args, "press");
             bool pressed = !string.IsNullOrEmpty(press) && panel.Press(press);
             return new Dictionary<string, object>
             {
                 { "ok", string.IsNullOrEmpty(press) || pressed }, { "visible", panel.Visible }, { "tab", panel.Page },
                 { "pressed", pressed }, { "members", panel.Context.Count }, { "controls", panel.Controls.Count },
+                { "scope", panel.Context.Selection.Label(panel.Context.Rows, panel.Context.Count) },
             };
         }
 
