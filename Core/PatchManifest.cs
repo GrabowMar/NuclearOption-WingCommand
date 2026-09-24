@@ -39,6 +39,7 @@ namespace WingCommand
             typeof(Interop.WingSquad.SurvivorCapturePatch),
             typeof(Interop.WingSquad.AceTargetPatch),
             typeof(WmcMapControlsPatch),
+            typeof(WmcMapSelection.ClickIconPatch),
         };
 
         /// <summary>"DeclaringType.Method" names that must be patched after <see cref="Apply"/>.</summary>
@@ -69,6 +70,7 @@ namespace WingCommand
             "GameManager.FinishGame",
             "CombatAI.ChooseHQTarget",
             "DynamicMap.MapControls",
+            "UnitMapIcon.ClickIcon",
         };
 
         internal static void Apply(Harmony harmony, ManualLogSource log)

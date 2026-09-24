@@ -7,17 +7,23 @@ using UnityEngine;
 namespace WingCommand
 {
     /// <summary>The scope bar under the tab strip (spec WMC program §4): who the next order goes to — the whole wing, an
-    /// element, or the selected wingmen — with a chip per element in use and CLEAR.</summary>
+    /// element, or the selected wingmen — with a chip per element in use and CLEAR; RECRUIT n when friendly AI aircraft are
+    /// selected on the map (spec §5).</summary>
     internal sealed class WmcScopeBar
     {
         public const float Height = 26f;
-        private const float ChipWidth = 26f, ClearWidth = 58f;
+        private const float ChipWidth = 26f, ClearWidth = 58f, RecruitWidth = 136f;
 
         private readonly AvButton[] chips = new AvButton[ElementRoster.MaxElements];
         private readonly List<uint> members = new List<uint>();
         private TMP_Text label;
-        private AvButton clear;
+        private AvButton clear, recruit;
         private WmcContext last;
+        private readonly List<Aircraft> recruits = new List<Aircraft>(WingOrder.MaxUnits);
+        private readonly ConfirmGate recruitGate = new ConfirmGate();
+        private float recruitCost, labelWidth;
+        private int shownCount = -1;
+        private float shownCost = -1f;
 
         public void Build(RectTransform parent, Rect area, Dictionary<string, AvButton> ids)
         {
@@ -37,9 +43,59 @@ namespace WingCommand
                 chips[e].WithTooltip("Orders go to element " + ElementRoster.Letter(e) + ".");
                 ids["scope.element" + e] = chips[e];
             }
-            label = AvStyled.Label(parent, new Rect(x + 84f, area.y - 2f, right - x - 88f, Height - 4f), "WING", "row-name");
+            recruit = AvStyled.Button(parent, new Rect(right - RecruitWidth - 4f, area.y - 2f, RecruitWidth, Height - 4f), "RECRUIT", "btn", Recruit);
+            recruit.WithTooltip("Take command of the friendly aircraft selected on the map (press twice; the cost is shown).");
+            ids["scope.recruit"] = recruit;
+            recruit.gameObject.SetActive(false);
+            labelWidth = right - x - 88f;
+            label = AvStyled.Label(parent, new Rect(x + 84f, area.y - 2f, labelWidth, Height - 4f), "WING", "row-name");
             label.enableWordWrapping = false;
             label.overflowMode = TextOverflowModes.Ellipsis;
+        }
+
+        /// <summary>Friendly AI aircraft selected on the map that could join (host only), and what they cost.</summary>
+        private void CountRecruits(WmcContext c)
+        {
+            recruits.Clear();
+            recruitCost = 0f;
+            DynamicMap map = SceneSingleton<DynamicMap>.i;
+            if (map == null || c.Wing == null || c.Client) return;
+            foreach (MapIcon icon in map.selectedIcons)
+            {
+                if (recruits.Count >= WingOrder.MaxUnits) break;
+                if (!(icon is UnitMapIcon u) || !(u.unit is Aircraft a) || !c.Wing.CanRecruit(a, out _)) continue;
+                recruits.Add(a);
+                CallQuote q = WingRecruitment.Quote(a);
+                if (q.Allowed) recruitCost += q.Charge;
+            }
+        }
+
+        private void Recruit()
+        {
+            if (last == null || recruits.Count == 0) return;
+            WmcUi.Order(last, () =>
+            {
+                string cost = CallCost.Money(recruitCost);
+                if (!recruitGate.Press(recruits.Count + "|" + cost, Time.unscaledTime))
+                {
+                    WingToast.Show($"Recruit {recruits.Count} for {cost}? Press RECRUIT again");
+                    return;
+                }
+                var units = new uint[recruits.Count];
+                for (int i = 0; i < units.Length; i++) units[i] = recruits[i].persistentID.Id;
+                if (!WingOrders.Run(new WingOrder { Kind = OrderKind.Recruit, Units = units }).Accepted) return;
+                // The recruited leave the game's selection (or the player's target list), as in 0.9.
+                DynamicMap map = SceneSingleton<DynamicMap>.i;
+                CombatHUD hud = SceneSingleton<CombatHUD>.i;
+                bool flying = hud != null && hud.aircraft != null && !hud.aircraft.disabled;
+                foreach (Aircraft a in recruits)
+                {
+                    if (a == null) continue;
+                    if (flying && hud.GetTargetList().Contains(a)) hud.DeSelectUnit(a);
+                    else map?.DeselectIcon(a);
+                }
+                recruits.Clear();
+            });
         }
 
         private void Clear()
@@ -63,6 +119,19 @@ namespace WingCommand
         {
             last = c;
             label.text = c.ScopeLabel;
+            CountRecruits(c);
+            bool show = recruits.Count > 0;
+            if (recruit.gameObject.activeSelf != show)
+            {
+                recruit.gameObject.SetActive(show);
+                label.rectTransform.sizeDelta = new Vector2(show ? labelWidth - RecruitWidth - 8f : labelWidth, label.rectTransform.sizeDelta.y);
+            }
+            if (show && (recruits.Count != shownCount || recruitCost != shownCost))
+            {
+                shownCount = recruits.Count;
+                shownCost = recruitCost;
+                recruit.SetText("RECRUIT " + shownCount + " · " + CallCost.Money(recruitCost));
+            }
             for (int e = 0; e < chips.Length; e++)
             {
                 bool present = false;
