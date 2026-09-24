@@ -48,12 +48,13 @@ namespace WingCommand.PureTests
         }
 
         [Theory]
-        [InlineData(true, 5000f, true)]
-        [InlineData(true, 3000f, false)]  // too low
-        [InlineData(false, 5000f, false)] // infrared
-        public void ApexHunterOnlyRadarAndHigh(bool radar, float altitude, bool bonus)
+        [InlineData(true, 5000f, 45f, true)]
+        [InlineData(true, 3000f, 45f, false)]  // too low
+        [InlineData(false, 5000f, 45f, false)] // infrared
+        [InlineData(true, 5000f, 150f, false)] // flying away: the missile would fall short (review M5g C2)
+        public void ApexHunterOnlyRadarHighAndNotFlyingAway(bool radar, float altitude, float aspect, bool bonus)
         {
-            float r = With(PilotPerk.ApexHunter).MaxRange(10000f, radar, altitude, 0f, 90f);
+            float r = With(PilotPerk.ApexHunter).MaxRange(10000f, radar, altitude, 0f, aspect);
             Assert.Equal(bonus ? 10000f * PerkEffects.ApexRange : 10000f, r, 1);
         }
 

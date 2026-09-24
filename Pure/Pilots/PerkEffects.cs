@@ -7,7 +7,7 @@ namespace WingCommand
     internal struct PerkEffects
     {
         public static float QuickDrawInterval = 0.6f, StandoffReach = 1.3f, SnapshotBoresight = 1.4f, HeadOnRange = 1.25f,
-            HeadOnClosing = 350f, HeadOnConeDeg = 30f, ApexRange = 1.4f, ApexAltitude = 4000f, TargetMasterKeep = 1.5f,
+            HeadOnClosing = 350f, HeadOnConeDeg = 30f, ApexRange = 1.4f, ApexAltitude = 4000f, ApexMaxAspectDeg = 90f, TargetMasterKeep = 1.5f,
             TerrainHuggerClearance = -25f, EarlyWarningReaction = -1.5f, BreakTurnRange = 2500f;
 
         public float IntervalScale, ReachScale, BoresightScale, KeepScale, ClearanceDelta, ReactionDelta, BreakRange;
@@ -42,12 +42,13 @@ namespace WingCommand
 
         /// <summary>A missile's max range with the range perks: HeadOnJoust for a head-on (within
         /// <see cref="HeadOnConeDeg"/>), fast (over <see cref="HeadOnClosing"/>) closure; ApexHunter for a radar missile
-        /// from above <see cref="ApexAltitude"/>. Never shorter.</summary>
+        /// from above <see cref="ApexAltitude"/> at a target not flying away (under <see cref="ApexMaxAspectDeg"/>: a
+        /// fleeing target outruns the extra range, review M5g C2). Never shorter.</summary>
         public float MaxRange(float maxRange, bool radar, float ownAltitude, float closingSpeed, float aspectDeg)
         {
             float scale = 1f;
             if (HeadOnJoust && closingSpeed > HeadOnClosing && aspectDeg < HeadOnConeDeg) scale *= HeadOnRange;
-            if (ApexHunter && radar && ownAltitude > ApexAltitude) scale *= ApexRange;
+            if (ApexHunter && radar && ownAltitude > ApexAltitude && aspectDeg < ApexMaxAspectDeg) scale *= ApexRange;
             return maxRange * scale;
         }
 

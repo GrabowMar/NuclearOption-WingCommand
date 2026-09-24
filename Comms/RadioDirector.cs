@@ -39,10 +39,10 @@ namespace WingCommand
             WingPilotRoster.Killed += OnKill;
         }
 
-        private void OnKill(Aircraft shooter, Unit victim)
+        private void OnKill(Aircraft shooter, uint victimId, string victimType)
         {
             WingMember m = WingService.Instance?.MemberOf(shooter);
-            if (m != null) SayKill(m, victim.persistentID.Id, victim.definition != null ? victim.definition.unitName : victim.unitName);
+            if (m != null && !m.Released) SayKill(m, victimId, victimType);
         }
 
         public void Activate()

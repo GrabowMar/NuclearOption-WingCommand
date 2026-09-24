@@ -111,12 +111,12 @@ namespace WingCommand
                 case PilotPerk.EnergyFighter: return "Preserves airspeed above corner speed in sustained maneuvers, trading altitude to prevent dogfight stalls.";
                 case PilotPerk.ApexHunter: return "Radar missiles in standing fire and Splash launch from 40% farther above 4,000 m; a little more aggressive flying.";
                 case PilotPerk.Bombardier: return "Not active in 1.0 yet: bombing runs are flown by the game's combat AI.";
-                case PilotPerk.SalvoSpecialist: return "Splash fires two missiles from this pilot instead of one.";
+                case PilotPerk.SalvoSpecialist: return "Splash also fires from a second missile type in reach (up to two missiles).";
                 case PilotPerk.WildWeasel: return "Not active in 1.0 yet: target choice in a fight is the game's combat AI's.";
                 case PilotPerk.TargetMaster: return "Holds an attack order's target 50% longer through a short loss (a target saturated with missiles in flight).";
                 case PilotPerk.WingmanInstinct: return "30% faster rejoin acceleration and 25% tighter station-keeping in escort formations.";
                 case PilotPerk.CombatSpread: return "Not active in 1.0 yet: the formation's spacing is set for the whole wing.";
-                case PilotPerk.TerrainHugger: return "25 m less terrain clearance while flying with the wing.";
+                case PilotPerk.TerrainHugger: return "25 m lower pull-up margin and low-level bank limit (the formation's height stays the wing's).";
                 case PilotPerk.BreakTurn: return "Reacts at once to a missile inside 2,500 m while flying with the wing.";
                 case PilotPerk.EarlyWarning: return "Reacts 1.5 seconds sooner to an incoming missile while flying with the wing.";
                 case PilotPerk.Burnthrough: return "Not active in 1.0 yet: radar locks are the game's own.";

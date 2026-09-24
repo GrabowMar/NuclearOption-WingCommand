@@ -447,21 +447,22 @@ namespace WingCommand
             WingToast.Show(pilot.Callsign + " — " + message);
         }
 
-        /// <summary>A wing pilot was credited with a kill (shooter, victim).</summary>
-        public static event System.Action<Aircraft, Unit> Killed;
+        /// <summary>A wing pilot was credited with a kill (shooter, victim id, victim type).</summary>
+        public static event System.Action<Aircraft, uint, string> Killed;
 
-        public static void NoteKill(Aircraft aircraft, Unit victim)
+        /// <summary>A kill by a wing pilot: counted and awarded when <paramref name="award"/> (pilot progression), and
+        /// always announced (spec M7 §3: the radio listens; Personnel does not reach into the wing).</summary>
+        public static void NoteKill(Aircraft aircraft, uint victimId, string victimType, bool award)
         {
             WingPilot pilot = Of(aircraft);
             if (pilot == null) return;
-
-            pilot.Kills++;
-            Award(aircraft, WingTuning.XpPerKill, "kill");
-
-            if (victim == null) return;
-            Plugin.LogVerbose($"[Pilot] {pilot.Callsign}: splash {victim.unitName}");
-            // Spec M7 §3: the radio says it (it listens here; Personnel does not reach into the wing).
-            Killed?.Invoke(aircraft, victim);
+            if (award)
+            {
+                pilot.Kills++;
+                Award(aircraft, WingTuning.XpPerKill, "kill");
+            }
+            Plugin.LogVerbose($"[Pilot] {pilot.Callsign}: splash {victimType}");
+            Killed?.Invoke(aircraft, victimId, victimType);
         }
 
         /// <summary>Award a completed sortie on base recovery.</summary>

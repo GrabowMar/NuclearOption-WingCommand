@@ -65,10 +65,12 @@ namespace WingCommand.PureTests
             Assert.Equal(name, RadioCalls.WinchesterLine((WinchesterAction)after));
 
         [Theory]
-        [InlineData(true, "FOX2")]
-        [InlineData(false, "FOX3")]
-        public void AFoxCallNamesTheSeeker(bool infrared, string name) =>
-            Assert.Equal(name, RadioCalls.FoxLine(infrared));
+        [InlineData(true, true, false, "FOX2")]
+        [InlineData(true, false, false, "FOX3")]
+        [InlineData(false, false, true, "MAGNUM")]   // review M5g I2: an anti-radiation shot at the ground
+        [InlineData(false, false, false, "RIFLE")]   // any other air-to-ground missile
+        public void AShotCallNamesWhatWasFired(bool air, bool infrared, bool antiRadar, string name) =>
+            Assert.Equal(name, RadioCalls.ShotLine(air, infrared, antiRadar));
 
         [Fact]
         public void JokerSaysTheMinutesToBingo() =>

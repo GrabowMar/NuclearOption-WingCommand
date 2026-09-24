@@ -190,7 +190,7 @@ namespace WingCommand
             m.Brain.Precision = precision;
             m.Brain.Aggression = aggression;
             // Spec M5 §11: the combat perks where Wing Command flies and fires.
-            m.Perks = PerkEffects.For(pilot.Perks);
+            m.Perks = effect > 0f ? PerkEffects.For(pilot.Perks) : PerkEffects.None;
             m.Brain.Clearance = System.Math.Max(MinClearance, Clearance + m.Perks.ClearanceDelta);
             m.Brain.ReactionDelta = m.Perks.ReactionDelta;
             m.Brain.BreakRange = m.Perks.BreakRange;

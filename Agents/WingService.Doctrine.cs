@@ -94,7 +94,7 @@ namespace WingCommand
                     float maxRange = PerkRange(m, w, a, u, to);
                     if (!StandingFire.InEnvelope(distance, req.minRange, maxRange, u.radarAlt, req.minAltitude, req.maxAltitude, off, m.Perks.Boresight(req.minAlignment), a.speed, req.minOwnerSpeed)) continue;
                     if (StandingFire.Saturated(committed, t.missileAttacks, w.WeaponInfo.CalcAttacksNeeded(u))) continue;
-                    OpportunityThreat ot = CombatAI.AnalyzeTarget(w, a, t, 0f, distance, 1f);
+                    OpportunityThreat ot = CombatAI.AnalyzeTarget(w, a, t, 0f, distance, maxRange / Mathf.Max(req.maxRange, 1f));
                     if (ot.opportunity <= 0f) continue;
                     int capacity = System.Math.Max(1, System.Math.Min(4, (int)System.Math.Ceiling(w.WeaponInfo.CalcAttacksNeeded(u))));
                     float score = mode == StandingMode.Cover
@@ -147,7 +147,7 @@ namespace WingCommand
                     TargetRequirements req = w.WeaponInfo.targetRequirements;
                     float maxRange = PerkRange(m, w, a, target, to);
                     if (!StandingFire.InEnvelope(distance, req.minRange, maxRange, target.radarAlt, req.minAltitude, req.maxAltitude, off, m.Perks.Boresight(req.minAlignment), a.speed, req.minOwnerSpeed)) continue;
-                    if (CombatAI.AnalyzeTarget(w, a, t, 0f, distance, 1f).opportunity <= 0f) continue;
+                    if (CombatAI.AnalyzeTarget(w, a, t, 0f, distance, maxRange / Mathf.Max(req.maxRange, 1f)).opportunity <= 0f) continue;
                     if (!w.WeaponInfo.overHorizon && !target.LineOfSight(a.transform.position - Vector3.up * a.definition.spawnOffset.y, 1000f)) continue;
                     inEnvelope = true;
                     bool launched = FireAt(m, w, target, out bool attempted);
@@ -180,7 +180,8 @@ namespace WingCommand
             float closing = -Vector3.Dot(rel, to / d);
             // Aspect: the target's heading against the line back to us (0 = straight at us).
             float aspect = targetVel.sqrMagnitude > 1f ? Vector3.Angle(targetVel, -to) : 180f;
-            bool radar = req.minIR <= 0f;
+            // An air-to-air radar missile (not infrared); never a ground shot (laser, TV, anti-radiation): review M5g C2.
+            bool radar = target is Aircraft && req.minIR <= 0f;
             return m.Perks.MaxRange(req.maxRange, radar, a.GlobalPosition().y, closing, aspect);
         }
 
@@ -189,9 +190,9 @@ namespace WingCommand
         {
             RadioDirector radio = RadioDirector.Instance;
             if (radio == null) return;
-            bool infrared = w.WeaponInfo.targetRequirements.minIR > 0f;
+            TargetRequirements req = w.WeaponInfo.targetRequirements;
             string type = target.definition != null ? target.definition.unitName : target.unitName;
-            radio.Say(m, RadioClass.Tactical, RadioCalls.FoxLine(infrared), type, false);
+            radio.Say(m, RadioClass.Tactical, RadioCalls.ShotLine(target is Aircraft, req.minIR > 0f, req.minRadar > 0f), type, false);
         }
 
         /// <summary>Missiles fired by Splash this mission (automation reads it).</summary>

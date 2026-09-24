@@ -23,6 +23,7 @@ namespace WingCommand
             typeof(BounceGuard),
             typeof(WingPilotFatalDamagePatch),
             typeof(WingPilotKillerPatch),
+            typeof(WingKillMessagePatch),
             typeof(WingLuckPatch),
             typeof(WingFlareReflexPatch),
             typeof(WingEcmSpecialistPatch),
