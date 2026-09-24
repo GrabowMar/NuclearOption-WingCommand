@@ -52,6 +52,15 @@ namespace WingCommand.PureTests
         }
 
         [Fact]
+        public void ALostSurvivorEndsTheRescueBeforeTouchdown()
+        {
+            // Review M4c-2 I2: a survivor taken or killed during the approach still got a landing in a hostile area.
+            var job = new SettleJob(SettleTask.Rescue);
+            Assert.Equal(SettleAction.None, Run(job, SettlePhase.Approach, 5f));
+            Assert.Equal(SettleAction.TakeOff, Run(job, SettlePhase.Approach, 0.1f, rescued: true));
+        }
+
+        [Fact]
         public void RescueTakesOffWhenRescuedOrAfterTheWait()
         {
             var rescued = new SettleJob(SettleTask.Rescue);

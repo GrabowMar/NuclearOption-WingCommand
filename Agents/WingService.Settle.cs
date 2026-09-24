@@ -44,7 +44,7 @@ namespace WingCommand
             return n;
         }
 
-        public static float RescueStandoff = 60f, RescueMinFuel = 0.25f;
+        public static float RescueStandoff = 60f, RescueMinFuel = 0.25f, SettleSeparation = 40f, RescueApproachMargin = 90f;
         /// <summary>Cargo deployed this mission (automation reads it).</summary>
         public int CargoDeployed { get; private set; }
         private readonly List<Unit> downed = new List<Unit>();
@@ -57,10 +57,18 @@ namespace WingCommand
             WingSearchAndRescue.CollectDowned(downed);
             Vec3 from = Player != null ? Player.GlobalPosition().ToVec3() : Vec3.Zero;
             Unit survivor = null;
+            WingMember already = null;
             float best = float.MaxValue;
             foreach (Unit u in downed)
             {
                 if (!(u is PilotDismounted p) || p.disabled || p.IsSlung() || p.radarAlt > 3f || p.transform.position.GlobalY() < 0.5f) continue;
+                // One helicopter per survivor (review M4c-2 C1).
+                WingMember going = RescuerOf(u);
+                if (going != null)
+                {
+                    already = going;
+                    continue;
+                }
                 float d = (u.GlobalPosition().ToVec3() - from).SqrLength;
                 if (d >= best) continue;
                 best = d;
@@ -68,7 +76,7 @@ namespace WingCommand
             }
             if (survivor == null)
             {
-                result = "no downed wing pilot on land";
+                result = already != null ? $"#{already.Number} is already on the way" : "no downed wing pilot on land";
                 return null;
             }
             Vec3 at = survivor.GlobalPosition().ToVec3();
@@ -97,8 +105,14 @@ namespace WingCommand
                 Vec3 dir = side == 0 ? toward : side == 1 ? new Vec3(toward.Z, 0f, -toward.X) : side == 2 ? -toward : new Vec3(-toward.Z, 0f, toward.X);
                 Vec3 point = at + dir * RescueStandoff;
                 if (!TerrainProbe.Landing(point, out float groundY, out float normalY) || !SettlePilot.Landable(true, normalY)) continue;
+                if (NearAnotherSettle(heli, point)) continue;
                 EndDefence(heli);
-                heli.Settle = new SettlePilot(new Vec3(point.X, groundY, point.Z), Vec3.HeadingDeg(at - point), missionTime);
+                heli.Settle = new SettlePilot(new Vec3(point.X, groundY, point.Z), Vec3.HeadingDeg(at - point), missionTime)
+                {
+                    // A far survivor gets the time to fly there (review M4c-2 I1).
+                    ApproachLimit = System.Math.Max(SettlePilot.ApproachSeconds,
+                        (heli.Last.Pos - point).Horizontal.Length / System.Math.Max(heli.Profile.CruiseSpeed, 20f) * 1.5f + RescueApproachMargin),
+                };
                 heli.Job = new SettleJob(SettleTask.Rescue);
                 heli.RescueTarget = survivor;
                 WingPilot pilot = WingSearchAndRescue.PilotOf(survivor as PilotDismounted);
@@ -108,6 +122,24 @@ namespace WingCommand
             }
             result = "no dry, level ground near them";
             return null;
+        }
+
+        /// <summary>The member on a rescue of this survivor, or null.</summary>
+        private WingMember RescuerOf(Unit survivor)
+        {
+            foreach (WingMember m in Members)
+                if (m.Settle != null && m.Settle.Phase != SettlePhase.Done && m.Job != null && m.Job.Task == SettleTask.Rescue &&
+                    ReferenceEquals(m.RescueTarget, survivor)) return m;
+            return null;
+        }
+
+        /// <summary>Another member already landing within <see cref="SettleSeparation"/> of the point (review M4c-2 C1).</summary>
+        private bool NearAnotherSettle(WingMember self, Vec3 point)
+        {
+            foreach (WingMember m in Members)
+                if (!ReferenceEquals(m, self) && m.Settle != null && m.Settle.Phase != SettlePhase.Done &&
+                    (m.Settle.Point - point).Horizontal.Length < SettleSeparation) return true;
+            return false;
         }
 
         /// <summary>The station carrying cargo (troops, vehicles, supplies), or null.</summary>
@@ -125,7 +157,8 @@ namespace WingCommand
             SettleJob job = m.Job;
             if (job == null) return;
             Unit t = m.RescueTarget;
-            bool rescued = job.Task == SettleTask.Rescue && (t == null || t.disabled);
+            // Taken aboard (the game destroys it), dead, or on another helicopter's sling (review M4c-2 I2).
+            bool rescued = job.Task == SettleTask.Rescue && (t == null || t.disabled || t.IsSlung());
             SettleAction act = job.Step(s.Phase, dt, rescued);
             if ((act & SettleAction.FireCargo) != 0)
             {
@@ -133,10 +166,18 @@ namespace WingCommand
                 WeaponStation cargo = CargoStation(m.Aircraft);
                 if (cargo != null && m.Pilot != null)
                 {
-                    m.Aircraft.weaponManager.currentWeaponStation = cargo;
+                    WeaponManager wm = m.Aircraft.weaponManager;
+                    wm.currentWeaponStation = cargo;
+                    wm.ClearTargetList();
+                    int before = cargo.Ammo;
                     m.Pilot.Fire();
-                    CargoDeployed++;
-                    Plugin.Logger.LogInfo($"[Wing] #{m.Number} cargo deployed");
+                    // Counted only when something left (the game's fire returns silently when it cannot: review M4c-2 I3).
+                    if (cargo.Ammo < before)
+                    {
+                        CargoDeployed++;
+                        Plugin.Logger.LogInfo($"[Wing] #{m.Number} cargo deployed");
+                    }
+                    else Plugin.Logger.LogInfo($"[Wing] #{m.Number} cargo did not deploy");
                 }
             }
             if ((act & SettleAction.TakeOff) != 0)

@@ -10,7 +10,7 @@ namespace WingCommand
 
     /// <summary>Spec M4 §7.3: a settled helicopter's job once down. Hold waits for Take Off; Cargo fires its cargo once
     /// <see cref="CargoDelay"/> after touchdown and lifts off <see cref="CargoWait"/> later; Rescue lifts off when the
-    /// survivor is gone or after <see cref="RescueWait"/>. Only time down counts, summed across bounces: a bounce neither
+    /// survivor is gone (even before touchdown) or after <see cref="RescueWait"/>. Only time down counts, summed across bounces: a bounce neither
     /// fires twice nor restarts the wait.</summary>
     internal sealed class SettleJob
     {
@@ -27,7 +27,14 @@ namespace WingCommand
 
         public SettleAction Step(SettlePhase phase, float dt, bool rescued)
         {
-            if (done || Task == SettleTask.Hold || phase != SettlePhase.Down) return SettleAction.None;
+            if (done || Task == SettleTask.Hold) return SettleAction.None;
+            // A survivor gone (taken, killed, slung by another) before touchdown: no landing (review M4c-2 I2).
+            if (Task == SettleTask.Rescue && rescued && phase != SettlePhase.Down)
+            {
+                done = true;
+                return SettleAction.TakeOff;
+            }
+            if (phase != SettlePhase.Down) return SettleAction.None;
             DownTotal += dt;
             SettleAction act = SettleAction.None;
             if (Task == SettleTask.Cargo)

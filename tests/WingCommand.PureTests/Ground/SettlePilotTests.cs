@@ -124,6 +124,20 @@ namespace WingCommand.PureTests
         }
 
         [Fact]
+        public void AFarPointGetsALongerApproach()
+        {
+            // Review M4c-2 I1: a survivor 20 km out was out of reach inside the 180 s Land Here approach.
+            var s = new SettlePilot(Point, 0f, 0f) { ApproachLimit = 400f };
+            IFlightPipeline pipe = FlightStack.NewPipeline(AirframeClass.Rotary);
+            var e = new WingEventRing();
+            s.Step(At(40f, dx: 3000f), Helo, pipe, 0f, Dt, e, 0, Far);
+            s.Step(At(40f, dx: 3000f), Helo, pipe, SettlePilot.ApproachSeconds + 100f, Dt, e, 0, Far);
+            Assert.Equal(SettlePhase.Approach, s.Phase);
+            s.Step(At(40f, dx: 3000f), Helo, pipe, 401f, Dt, e, 0, Far);
+            Assert.Equal(SettlePhase.Done, s.Phase);
+        }
+
+        [Fact]
         public void AnApproachThatNeverArrivesGivesUp()
         {
             (SettlePilot s, IFlightPipeline pipe, WingEventRing e) = New();

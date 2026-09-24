@@ -42,6 +42,9 @@ namespace WingCommand
         }
 
         public SettlePhase Phase { get; private set; }
+        /// <summary>How long the approach may take before giving up (<see cref="ApproachSeconds"/>, or longer for a far
+        /// point: review M4c-2 I1).</summary>
+        public float ApproachLimit = ApproachSeconds;
         /// <summary>The reference last flown (diagnostics, tests).</summary>
         public Vec3 Target { get; private set; }
 
@@ -66,7 +69,7 @@ namespace WingCommand
             {
                 case SettlePhase.Approach:
                 {
-                    if (time - since > ApproachSeconds) return GiveUp(time, events, slot);
+                    if (time - since > ApproachLimit) return GiveUp(time, events, slot);
                     Vec3 over = Point + Vec3.Up * ApproachHeight;
                     bool near = (over - s.Pos).Horizontal.Length < ApproachNear;
                     if (!near) over = new Vec3(over.X, Math.Max(over.Y, s.Pos.Y), over.Z);
