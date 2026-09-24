@@ -145,6 +145,42 @@ namespace WingCommand
                 : "Cannot recruit " + target.unitName + ": " + reason);
         }
 
+        public static float MoveAheadMetres = 10000f, PatrolHalfMetres = 10000f;
+
+        /// <summary>The wing orbits the point below the player (spec M4 §2.4).</summary>
+        public static void OrbitHere() => Order(p => WingTask.Orbit(Point(p, 0f, 0f)), "orbiting here");
+
+        public static void HoldHere() =>
+            Order(p => WingTask.Hold(Point(p, 0f, 0f), Vec3.HeadingDeg(p.transform.forward.ToVec3())), "holding here");
+
+        public static void MoveAhead() => Order(p => WingTask.Move(Point(p, MoveAheadMetres, 0f)), "moving ahead");
+
+        public static void PatrolHere() =>
+            Order(p => WingTask.Patrol(false, Point(p, -PatrolHalfMetres, 0f), Point(p, PatrolHalfMetres, 0f)), "patrolling here");
+
+        private static Waypoint Point(Aircraft p, float forward, float right)
+        {
+            Vec3 at = p.GlobalPosition().ToVec3();
+            Vec3 f = p.transform.forward.ToVec3().Horizontal;
+            f = f.SqrLength > 1e-4f ? f.Normalized : Vec3.Forward;
+            Vec3 there = at + f * forward + new Vec3(f.Z, 0f, -f.X) * right;
+            Waypoint w = Waypoint.At(there.X, there.Z);
+            w.Altitude = at.Y;
+            return w;
+        }
+
+        private static void Order(Func<Aircraft, WingTask> make, string what)
+        {
+            if (!Ready(out WingService w)) return;
+            if (w.Player == null)
+            {
+                WingToast.Show("Not flying");
+                return;
+            }
+            OrderResult r = w.Order(make(w.Player));
+            WingToast.Show(r.Accepted ? "Wing " + what : "Wing cannot: " + r.Reason);
+        }
+
         public static void EscortMe()
         {
             if (!Ready(out WingService w)) return;

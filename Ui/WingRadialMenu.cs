@@ -13,7 +13,7 @@ namespace WingCommand
     /// <list type="bullet">
     /// <item>Pages are shown by swapping <c>actionsMain</c> and rebuilding the native wheel.</item>
     /// <item>The stock wheel comes back after a leaf action, or 6 s after the wheel closes.</item>
-    /// <item>Pages: Call Wingmen, Form Up, Formation, Spacing, Autopilot, Escort, Dismiss.</item>
+    /// <item>Pages: Call Wingmen, Form Up, Formation, Spacing, Autopilot, Escort, Recover, Orders (with Dismiss).</item>
     /// </list></summary>
     internal static class WingRadialMenu
     {
@@ -21,7 +21,7 @@ namespace WingCommand
         private const float RestoreAfterSeconds = 6f;
 
         private static WingMenuAction rootEntry;
-        private static WingMenuAction[] mainMenu, callMenu, formationMenu, spacingMenu, autopilotMenu, escortMenu, recoverMenu;
+        private static WingMenuAction[] mainMenu, callMenu, formationMenu, spacingMenu, autopilotMenu, escortMenu, recoverMenu, ordersMenu;
         private static RadialMenuAction[] stockActions;
         private static RadialMenuAction[] baselineWheel;
         private static bool inSubmenu;
@@ -110,7 +110,16 @@ namespace WingCommand
                 Icon(WingMenuAction.Create("Autopilot", _ => ShowAutopilot()), "move"),
                 Icon(WingMenuAction.Create("Escort", _ => Swap(escortMenu, submenu: true)), "selection"),
                 Icon(WingMenuAction.Create("Recover", _ => Swap(recoverMenu, submenu: true)), "rtb"),
+                Icon(WingMenuAction.Create("Orders", _ => Swap(ordersMenu, submenu: true)), "move"),
+            };
+            ordersMenu = new[]
+            {
+                Leaf("Orbit Here", WingCommands.OrbitHere, "move"),
+                Leaf("Hold Here", WingCommands.HoldHere, "move"),
+                Leaf("Move Ahead", WingCommands.MoveAhead, "move"),
+                Leaf("Patrol Here", WingCommands.PatrolHere, "move"),
                 Leaf("Dismiss", WingCommands.Dismiss, "rtb"),
+                Back(),
             };
             recoverMenu = new[]
             {
@@ -166,6 +175,7 @@ namespace WingCommand
             ApplyAll(autopilotMenu, template);
             ApplyAll(escortMenu, template);
             ApplyAll(recoverMenu, template);
+            ApplyAll(ordersMenu, template);
         }
 
         private static void ShowFormation()

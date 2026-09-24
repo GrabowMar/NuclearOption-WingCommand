@@ -264,6 +264,53 @@ namespace WingCommand
             };
         }
 
+        /// <summary>Gives the wing a task (spec M4): kind Move|Route|Patrol|Orbit|Hold|Form; offsets [[forward, right], …]
+        /// metres from the lead; alt (world Y), speed, seconds, loop, left optional.</summary>
+        public static Dictionary<string, object> Task(Dictionary<string, object> args)
+        {
+            WingService wing = WingService.Instance;
+            if (wing == null) return Fail("Task", "the wing is not active");
+            Aircraft lead = wing.Player;
+            if (lead == null) return Fail("Task", "no player aircraft");
+            if (!Enum.TryParse(Text(args, "kind") ?? "", true, out TaskKind kind)) return Fail("Task", "unknown kind");
+            var points = new List<Waypoint>();
+            Vec3 at = lead.GlobalPosition().ToVec3();
+            Vec3 f = lead.transform.forward.ToVec3().Horizontal.Normalized;
+            if (args.TryGetValue("offsets", out object raw) && raw is List<object> list)
+                foreach (object o in list)
+                    if (o is List<object> pair && pair.Count == 2)
+                    {
+                        float forward = Convert.ToSingle(pair[0], CultureInfo.InvariantCulture);
+                        float right = Convert.ToSingle(pair[1], CultureInfo.InvariantCulture);
+                        Vec3 p = at + f * forward + new Vec3(f.Z, 0f, -f.X) * right;
+                        points.Add(Waypoint.At(p.X, p.Z));
+                    }
+            var task = new WingTask { Kind = kind, Points = points.ToArray() };
+            if (args.TryGetValue("alt", out object alt)) task.Altitude = Convert.ToSingle(alt, CultureInfo.InvariantCulture);
+            if (args.TryGetValue("speed", out object speed)) task.Speed = Convert.ToSingle(speed, CultureInfo.InvariantCulture);
+            if (args.TryGetValue("seconds", out object seconds)) task.Seconds = Convert.ToSingle(seconds, CultureInfo.InvariantCulture);
+            task.Loop = args.TryGetValue("loop", out object loop) && loop is bool l && l;
+            task.Left = args.TryGetValue("left", out object left) && left is bool lf && lf;
+            OrderResult r = wing.Order(task);
+            return new Dictionary<string, object> { { "ok", true }, { "accepted", r.Accepted }, { "reason", r.Reason ?? "" } };
+        }
+
+        /// <summary>The wing's task now and how many task events it logged.</summary>
+        public static Dictionary<string, object> TaskState(Dictionary<string, object> args)
+        {
+            WingService wing = WingService.Instance;
+            if (wing == null) return Fail("TaskState", "the wing is not active");
+            WingPlanner p = wing.Planner;
+            return new Dictionary<string, object>
+            {
+                { "ok", true }, { "active", p.Active }, { "kind", p.Active ? (int)p.Current.Kind : 0 }, { "leg", p.Leg },
+                { "started", wing.Events.CountOf(WingEventKind.TaskStarted) },
+                { "completed", wing.Events.CountOf(WingEventKind.TaskCompleted) },
+                { "cancelled", wing.Events.CountOf(WingEventKind.TaskCancelled) },
+                { "failed", wing.Events.CountOf(WingEventKind.TaskFailed) },
+            };
+        }
+
         /// <summary>What calls have cost this mission: charged, refunded, and the player's allocation now; the squadron's
         /// pilots flying, free and lost; with args.type, the faction's stock of that airframe (−1: unknown).</summary>
         public static Dictionary<string, object> Economy(Dictionary<string, object> args)
