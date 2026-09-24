@@ -48,6 +48,10 @@ namespace WingCommand
             Intent = intent;
         }
 
+        /// <summary>A member recalled on the ground (already turned round by its ground pilot): recovered from there.</summary>
+        public static RecoveryPilot FromGround(int owner, GroundPilot ground, RecoveryIntent intent, AirframeClass cls = AirframeClass.FixedWing) =>
+            new RecoveryPilot(owner, ground.Field, cls, intent) { Ground = ground, Phase = RecoveryPhase.Ground };
+
         private bool Vertical => cls != AirframeClass.FixedWing;
 
         public Vec3 ApproachPoint(in AircraftState s)

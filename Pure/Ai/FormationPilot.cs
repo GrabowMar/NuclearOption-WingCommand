@@ -121,6 +121,21 @@ namespace WingCommand
             return LastOutput;
         }
 
+        /// <summary>Flies an intent of its own (the recovery approach) through this member's pipeline, with its own terrain
+        /// floor and no formation bias.</summary>
+        public ControlOutput FlyIntent(in FlightIntent intent, WingFrame frame, in AircraftState s, AirframeProfile p, float dt)
+        {
+            LastIntent = intent;
+            GuidanceCommand guidance = LastGuidance = Pipeline.Guide(intent, s, p);
+            bool near = frame.HasNearFloor[Slot];
+            var ctx = new LimitContext
+            {
+                FloorY = near ? frame.NearFloorY[Slot] : float.NaN, NearFloorY = frame.NearFloorY[Slot], HasNearFloor = near,
+                Clearance = Clearance, Aggression = intent.Aggression,
+            };
+            return LastOutput = Pipeline.Step(guidance, s, ctx, p, dt);
+        }
+
         /// <summary>"Form up": every member rejoins now, logged as a commanded transition.</summary>
         public void FormUp(float time, WingEventRing events)
         {

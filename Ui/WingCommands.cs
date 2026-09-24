@@ -78,6 +78,19 @@ namespace WingCommand
             if (Ready(out WingService w)) w.SetSpacing((SpacingPreset)(((int)w.Selection.Spacing + 1) % 4));
         }
 
+        /// <summary>The whole wing home to the reserve (spec M3 §4).</summary>
+        public static void Rtb() => Recover(RecoveryIntent.Rtb, "returning to base");
+
+        /// <summary>The whole wing home to refuel and rearm, then back out.</summary>
+        public static void Refit() => Recover(RecoveryIntent.Refit, "going to refit");
+
+        private static void Recover(RecoveryIntent intent, string what)
+        {
+            if (!Ready(out WingService w)) return;
+            int n = w.RecoverAll(intent);
+            WingToast.Show(n > 0 ? $"{n} wingm{(n == 1 ? "an" : "en")} {what}" : "No wingman can go: no friendly field, or already going");
+        }
+
         public static void Dismiss()
         {
             if (!Ready(out WingService w)) return;

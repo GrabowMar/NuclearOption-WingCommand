@@ -153,6 +153,28 @@ namespace WingCommand.PureTests
         }
 
         [Fact]
+        public void AMemberRecalledWhileTaxiingOutIsRecoveredFromWhereItIs()
+        {
+            var field = new FieldTraffic(TestFields.WithServicePointAndExit(), 0, false);
+            Pose spawn = field.Field.Hangars[1].Spawn;
+            var plant = new TestGroundPlant(spawn);
+            var ground = new GroundPilot(1, field, AirframeClass.FixedWing, spawn, 1);
+            IFlightPipeline pipeline = FlightStack.NewPipeline(AirframeClass.FixedWing);
+            var events = new WingEventRing();
+            float t = 0f;
+            for (int i = 0; i < 20 * 30; i++, t += Dt)
+            {
+                field.Step(Dt);
+                plant.Step(ground.Step(plant.Read(Dt), Jet(), pipeline, t, Dt, events, 0), Dt);
+            }
+            Assert.True(ground.TaxiIn(plant.Read(Dt), t, events, 0));
+            RecoveryPilot recovery = RecoveryPilot.FromGround(1, ground, RecoveryIntent.Rtb);
+            Assert.Equal(RecoveryPhase.Ground, recovery.Phase);
+            RunGround(recovery, field, plant, pipeline, events, t, 0.9f, 1f, a => a != RecoveryAction.None, out RecoveryAction action);
+            Assert.Equal(RecoveryAction.Reserve, action);
+        }
+
+        [Fact]
         public void ALandedHelicopterOnRtbGoesStraightBackToTheReserve()
         {
             var field = new FieldTraffic(TestFields.WithServicePointAndExit(), 0, false);

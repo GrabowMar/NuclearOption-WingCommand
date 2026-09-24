@@ -21,7 +21,7 @@ namespace WingCommand
         private const float RestoreAfterSeconds = 6f;
 
         private static WingMenuAction rootEntry;
-        private static WingMenuAction[] mainMenu, callMenu, formationMenu, spacingMenu, autopilotMenu, escortMenu;
+        private static WingMenuAction[] mainMenu, callMenu, formationMenu, spacingMenu, autopilotMenu, escortMenu, recoverMenu;
         private static RadialMenuAction[] stockActions;
         private static RadialMenuAction[] baselineWheel;
         private static bool inSubmenu;
@@ -109,7 +109,14 @@ namespace WingCommand
                 Icon(WingMenuAction.Create("Spacing", _ => ShowSpacing()), "posture"),
                 Icon(WingMenuAction.Create("Autopilot", _ => ShowAutopilot()), "move"),
                 Icon(WingMenuAction.Create("Escort", _ => Swap(escortMenu, submenu: true)), "selection"),
+                Icon(WingMenuAction.Create("Recover", _ => Swap(recoverMenu, submenu: true)), "rtb"),
                 Leaf("Dismiss", WingCommands.Dismiss, "rtb"),
+            };
+            recoverMenu = new[]
+            {
+                Leaf("RTB", WingCommands.Rtb, "rtb"),
+                Leaf("Refit", WingCommands.Refit, "rtb"),
+                Back(),
             };
             escortMenu = new[]
             {
@@ -157,6 +164,7 @@ namespace WingCommand
             ApplyAll(spacingMenu, template);
             ApplyAll(autopilotMenu, template);
             ApplyAll(escortMenu, template);
+            ApplyAll(recoverMenu, template);
         }
 
         private static void ShowFormation()

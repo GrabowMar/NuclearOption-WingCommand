@@ -14,6 +14,14 @@ namespace WingCommand
         /// <summary>Set while the member is on the ground after a field launch (taxi, lineup, roll, climb-out); the
         /// formation brain takes over when it is done.</summary>
         public GroundPilot Ground;
+        /// <summary>Set while the member goes home (RTB, Refit, bingo) until it is back in the reserve or airborne again.</summary>
+        public RecoveryPilot Recovery;
+        /// <summary>A recovery asked for while it could not turn round (lining up, rolling): it starts once airborne.</summary>
+        public RecoveryIntent PendingRecovery;
+        public bool HasPendingRecovery, ReserveNow;
+        public readonly BingoMonitor Bingo = new BingoMonitor();
+        public float BingoClock, BingoFieldAt;
+        public Airbase BingoField;
         /// <summary>Stable for the member's life in the wing (slots renumber when a member ahead leaves).</summary>
         public int Id;
         public AircraftState Last;

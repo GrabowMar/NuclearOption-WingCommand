@@ -19,7 +19,7 @@ namespace WingCommand
     /// <item>The shape use follows the anchor: rotary shapes behind a helicopter, escort shapes while escorting.</item>
     /// <item><see cref="Metrics"/> accumulates formation quality for the automated in-game scenarios.</item>
     /// </list></summary>
-    internal sealed class WingService : IWingService
+    internal sealed partial class WingService : IWingService
     {
         public const int ProbeTicks = 12;
         public static float Clearance = 60f, NoFbwReleaseSeconds = 1f;
@@ -109,6 +109,7 @@ namespace WingCommand
         {
             missionTime += dt;
             TrackLeader();
+            SuperviseLandings();
             Prune();
             if (++probeTick >= ProbeTicks)
             {
@@ -151,6 +152,7 @@ namespace WingCommand
             try
             {
                 WingFrame frame = FrameFor(Time.fixedTime, dt);
+                if ((m.Recovery != null || m.ReserveNow) && StepRecovery(m, frame, dt)) return;
                 if (m.OnGround)
                 {
                     StepGround(m, dt);
@@ -162,6 +164,7 @@ namespace WingCommand
                     Release(m, "no fly-by-wire (too slow or on the ground)");
                     return;
                 }
+                if (m.Recovery == null && !m.HasPendingRecovery) CheckBingo(m, dt);
                 if (StepTest.Fly(m, dt)) return;
                 ControlOutput o = StepTest.Adjust(m, m.Brain.Step(frame, m.Last, m.Profile, missionTime, dt, Events), dt);
                 ControlWriter.Fly(m.Aircraft, o, m.Profile.Class);
@@ -212,6 +215,11 @@ namespace WingCommand
                 Release(m, "could not take off");
                 return;
             }
+            if (m.Recovery != null)
+            {
+                StepRecoveryGround(m);
+                if (m.Released) return;
+            }
             bool climbing = m.Ground.Phase == GroundPhase.ClimbOut || m.Ground.Done;
             if (climbing && m.Last.RadarAlt > GearUpHeight && m.Aircraft.gearState != LandingGear.GearState.LockedRetracted)
                 m.Aircraft.SetGear(false);
@@ -219,6 +227,7 @@ namespace WingCommand
             m.Brain.Track(m.Last, o, m.Profile);
             m.Brain.FormUp(missionTime, Events);
             Plugin.Logger.LogInfo($"[Wing] #{m.Number} airborne from the field; rejoining");
+            AirborneAfterGround(m);
         }
 
         /// <summary>Adopt an aircraft launched on a field: it starts on the ground under a <see cref="GroundPilot"/>.</summary>
@@ -235,11 +244,13 @@ namespace WingCommand
             return true;
         }
 
-        /// <summary>A member still under ground supervision whose aircraft is intact is never ejected by native checks.</summary>
+        /// <summary>A member under ground supervision, or in the game's landing for us, whose aircraft is intact is never
+        /// ejected by native checks.</summary>
         public bool ProtectsFromEjection(Aircraft a)
         {
             foreach (WingMember m in Members)
-                if (ReferenceEquals(m.Aircraft, a)) return m.OnGround && !a.disabled && !m.Released;
+                if (ReferenceEquals(m.Aircraft, a))
+                    return !a.disabled && !m.Released && (m.OnGround || (m.Recovery != null && m.Recovery.Phase == RecoveryPhase.Landing));
             return false;
         }
 
@@ -532,7 +543,9 @@ namespace WingCommand
             for (int i = Members.Count - 1; i >= 0; i--)
             {
                 WingMember m = Members[i];
-                if (!m.Released && m.Alive && ReferenceEquals(m.Pilot.currentState, m.State)) continue;
+                bool ours = ReferenceEquals(m.Pilot.currentState, m.State) ||
+                            (m.Recovery != null && m.Recovery.Phase == RecoveryPhase.Landing && NativeLandingBridge.Landing(m.Pilot));
+                if (!m.Released && m.Alive && ours) continue;
                 StepTest.Forget(m);
                 m.Ground?.Leave();
                 Metrics.Left(m.Id);

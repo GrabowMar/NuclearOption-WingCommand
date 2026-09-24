@@ -93,6 +93,12 @@ namespace WingCommand
                 { "rerouted", wing.Events.CountOf(WingEventKind.Rerouted) },
                 { "rolled", wing.Events.CountOf(WingEventKind.Rolling) },
                 { "aborted", wing.Events.CountOf(WingEventKind.DepartureAborted) },
+                { "landed", wing.Events.CountOf(WingEventKind.Landed) },
+                { "landing_failed", wing.Events.CountOf(WingEventKind.LandingFailed) },
+                { "parked", wing.Events.CountOf(WingEventKind.Parked) },
+                { "reserved", wing.Events.CountOf(WingEventKind.Reserved) },
+                { "serviced", wing.Events.CountOf(WingEventKind.Serviced) },
+                { "native_switches_redirected", SwitchStateGuard.Redirected },
                 { "ejections_blocked", EjectGuard.Blocked },
             };
             Plugin.Logger.LogInfo($"[Automation] Ground: {grounded} on the ground, {airborne} airborne, " +
@@ -189,6 +195,21 @@ namespace WingCommand
             if (!(Arg(args, "idUnit") is Unit u) || u.disabled) return Fail("Escort", "'id' does not name a live unit");
             wing.SetEscort(u);
             return Ok("escort", u.unitName);
+        }
+
+        /// <summary>Sends every member home to the reserve (spec M3 §4).</summary>
+        public static Dictionary<string, object> Rtb(Dictionary<string, object> args) => Recover(RecoveryIntent.Rtb, "Rtb");
+
+        /// <summary>Sends every member home to refuel and rearm, then back out.</summary>
+        public static Dictionary<string, object> Refit(Dictionary<string, object> args) => Recover(RecoveryIntent.Refit, "Refit");
+
+        private static Dictionary<string, object> Recover(RecoveryIntent intent, string hook)
+        {
+            WingService wing = WingService.Instance;
+            if (wing == null) return Fail(hook, "the wing is not active");
+            int n = wing.RecoverAll(intent);
+            Plugin.Logger.LogInfo($"[Automation] {hook}: {n} of {wing.Members.Count} wingmen going");
+            return n > 0 ? Ok("recovering", n) : Fail(hook, "no wingman could go (no friendly field, or already going)");
         }
 
         /// <summary>Hands every member to the game's AI and forms on the player again.</summary>

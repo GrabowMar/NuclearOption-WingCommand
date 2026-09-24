@@ -4,8 +4,8 @@ using HarmonyLib;
 namespace WingCommand
 {
     /// <summary>The native taxi, takeoff and landing states eject pilots of aircraft they think are stuck or tilted
-    /// (native §B). A wing aircraft under ground supervision is never ejected that way: the ejection is skipped while
-    /// it is intact and its ground pilot is not done (logged once per aircraft).</summary>
+    /// (native §B). A wing aircraft under ground supervision, or landing for us in the game's landing state, is never
+    /// ejected that way: the ejection is skipped while it is intact (logged once per aircraft).</summary>
     [HarmonyPatch(typeof(Aircraft), nameof(Aircraft.StartEjectionSequence))]
     internal static class EjectGuard
     {
