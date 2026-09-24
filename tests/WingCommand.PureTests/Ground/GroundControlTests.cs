@@ -50,6 +50,22 @@ namespace WingCommand.PureTests
         }
 
         [Fact]
+        public void AnAircraftThatWillNotMoveAtTheTaxiLimitGetsMorePowerUntilItDoes()
+        {
+            // In game (boscali_north, 2026-09-24): FS-20s sat still on the grass for over a minute at the 0.6 taxi limit.
+            var controller = new GroundController();
+            var c = new GroundCommand { Speed = 6f };
+            AircraftState still = OnGround(Vec3.Zero, Vec3.Forward, 0f);
+            float throttle = 0f;
+            for (int i = 0; i < 20 * 60; i++) throttle = controller.Step(c, still, Jet(), Dt).Throttle;
+            Assert.True(throttle > GroundController.ThrottleMax + 0.1f, $"throttle {throttle:0.00}");
+            Assert.True(throttle <= GroundController.BreakawayMax + 1e-4f);
+            AircraftState rolling = OnGround(Vec3.Zero, Vec3.Forward, 3f);
+            for (int i = 0; i < 5 * 60; i++) throttle = controller.Step(c, rolling, Jet(), Dt).Throttle;
+            Assert.True(throttle <= GroundController.ThrottleMax + 1e-4f, $"moving again at throttle {throttle:0.00}");
+        }
+
+        [Fact]
         public void ARightCornerCommandsRightYawAndSlowsBeforeIt()
         {
             Vec3[] path = { Vec3.Zero, new Vec3(0f, 0f, 60f), new Vec3(60f, 0f, 60f) };

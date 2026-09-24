@@ -125,12 +125,16 @@ namespace WingCommand
     /// <summary>Ground stick, throttle and brake (spec M3 §2.1): the nose wheel from the bicycle model
     /// (yaw = atan(κ·wheelbase) / steering lock, the lock's sign included), taxi speed by a PI on throttle (up to
     /// <see cref="ThrottleMax"/>), and brakes with the throttle closed when over speed by more than
-    /// <see cref="OverspeedBand"/> or told to stop.</summary>
+    /// <see cref="OverspeedBand"/> or told to stop. Breakaway: an aircraft asked to move that stays under
+    /// <see cref="StuckSpeed"/> for <see cref="BreakawaySeconds"/> gets a throttle limit rising at
+    /// <see cref="BreakawayRate"/> per second up to <see cref="BreakawayMax"/>, back to the taxi limit once it moves (grass,
+    /// slopes, a heavy load).</summary>
     internal sealed class GroundController
     {
         public static float SpeedKp = 0.15f, SpeedKi = 0.05f, BrakeGain = 0.3f, ThrottleMax = 0.6f, OverspeedBand = 1f;
+        public static float BreakawayMax = 0.85f, BreakawaySeconds = 3f, BreakawayRate = 0.05f, StuckSpeed = 0.5f;
 
-        private float integrator;
+        private float integrator, stuck;
 
         public ControlOutput Step(in GroundCommand c, in AircraftState s, AirframeProfile p, float dt)
         {
@@ -140,20 +144,22 @@ namespace WingCommand
             float speed = Vec3.Dot(s.Vel, fwd);
             if (c.Stop)
             {
-                integrator = 0f;
+                integrator = stuck = 0f;
                 return new ControlOutput { Yaw = yaw, Brake = 1f };
             }
             float error = c.Speed - speed;
+            stuck = c.Speed > StuckSpeed && speed < StuckSpeed ? stuck + dt : 0f;
+            float limit = Math.Min(BreakawayMax, ThrottleMax + BreakawayRate * Math.Max(0f, stuck - BreakawaySeconds));
             if (error < -OverspeedBand)
             {
                 integrator = Math.Max(0f, integrator - SpeedKi * dt);
                 return new ControlOutput { Yaw = yaw, Brake = Scalar.Clamp01(BrakeGain * -error) };
             }
-            integrator = Scalar.Clamp(integrator + SpeedKi * error * dt, 0f, ThrottleMax);
-            return new ControlOutput { Yaw = yaw, Throttle = Scalar.Clamp(SpeedKp * error + integrator, 0f, ThrottleMax) };
+            integrator = Scalar.Clamp(integrator + SpeedKi * error * dt, 0f, limit);
+            return new ControlOutput { Yaw = yaw, Throttle = Scalar.Clamp(SpeedKp * error + integrator, 0f, limit) };
         }
 
         /// <summary>Taking over (a spawn, or a native state): the integrator restarts.</summary>
-        public void Reset() => integrator = 0f;
+        public void Reset() => integrator = stuck = 0f;
     }
 }
