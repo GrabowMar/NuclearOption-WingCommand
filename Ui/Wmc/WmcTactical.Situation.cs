@@ -55,7 +55,7 @@ namespace WingCommand
             AvStyled.Box(cardsRoot, new Rect(0f, 0f, half, CardH), "card");
             taskTitle = WmcKit.Text(cardsRoot, new Rect(8f, -4f, half - 70f, 16f), "section-title");
             planLink = AvStyled.Button(cardsRoot, new Rect(half - 60f, -3f, 54f, 18f), "PLAN ›", "btn",
-                () => WmcRoom.Instance?.Open(RoomNotches.Tactical), AvButtonStyle.Quiet);
+                () => WmcRoom.Instance?.Open(RoomNotches.Plan), AvButtonStyle.Quiet);
             planLink.WithTooltip("Open the planning room on this element's task.");
             ids["tac.orders.plan"] = planLink;
             for (int i = 0; i < CardLines; i++) taskLines[i] = WmcKit.Text(cardsRoot, new Rect(8f, -24f - i * 20f, half - 14f, 18f), "row-sub");

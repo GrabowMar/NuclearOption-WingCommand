@@ -61,7 +61,7 @@ namespace WingCommand
         {
             Instance = this;
             Tactical = new RoomTactical();
-            Register(RoomNotches.Tactical, Tactical);
+            Register(RoomNotches.Plan, Tactical);
         }
 
         /// <summary>The TACTICAL page (automation reads its counters).</summary>

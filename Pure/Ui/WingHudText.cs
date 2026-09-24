@@ -63,10 +63,19 @@ namespace WingCommand
             string.Format(CultureInfo.InvariantCulture, "{0}  {1,-6}{2,5:0}m  {3}", slot + 2, phase, slotErrorM, binding)
                 .TrimEnd();
 
-        public static string Autopilot(in HoldSpec h, bool lateralOverride, bool verticalOverride)
+        public static string Autopilot(in HoldSpec h, bool lateralOverride, bool verticalOverride) =>
+            Autopilot(h, lateralOverride, verticalOverride, -1, 0);
+
+        /// <summary>The annunciator; NAV names the leg flown (<paramref name="navIndex"/> of <paramref name="navCount"/>, 0-based)
+        /// when it is known.</summary>
+        public static string Autopilot(in HoldSpec h, bool lateralOverride, bool verticalOverride, int navIndex, int navCount)
         {
             var sb = new StringBuilder();
             if (h.Lateral == LateralHold.Level) Part(sb, "LVL", lateralOverride);
+            else if (h.Lateral == LateralHold.Nav)
+                Part(sb, navCount > 0 && navIndex >= 0
+                    ? "NAV " + (navIndex + 1).ToString(CultureInfo.InvariantCulture) + "/" + navCount.ToString(CultureInfo.InvariantCulture)
+                    : "NAV", lateralOverride);
             else if (h.Lateral == LateralHold.Heading)
             {
                 int hdg = (int)Math.Round(h.HeadingDeg) % 360;

@@ -4,52 +4,52 @@ namespace WingCommand.PureTests
 {
     public class RoomNotchesTests
     {
-        private static bool[] OnlyTactical()
+        private static bool[] OnlyPlan()
         {
             var e = new bool[RoomNotches.Count];
-            e[RoomNotches.Tactical] = true;
+            e[RoomNotches.Plan] = true;
             return e;
         }
 
         [Fact]
-        public void NineNotchesWithKeys()
+        public void FourNotchesWithKeys()
         {
-            Assert.Equal(9, RoomNotches.Labels.Length);
-            Assert.Equal("TACTICAL", RoomNotches.Labels[0]);
-            Assert.Equal("DEBRIEF", RoomNotches.Labels[8]);
+            // The user's answer 2026-09-24: PLAN · BEHAVIOUR · SQUADRON · WORKSHOP, not nine.
+            Assert.Equal(4, RoomNotches.Count);
+            Assert.Equal(new[] { "PLAN", "BEHAVIOUR", "SQUADRON", "WORKSHOP" }, RoomNotches.Labels);
             Assert.Equal("CTRL 1", RoomNotches.Key(0));
-            Assert.Equal("CTRL 9", RoomNotches.Key(8));
-            Assert.Equal(9, RoomNotches.Pending.Length);
+            Assert.Equal("CTRL 4", RoomNotches.Key(3));
+            Assert.Equal("", RoomNotches.Key(4));
+            Assert.Equal(4, RoomNotches.Pending.Length);
         }
 
         [Fact]
         public void TabSkipsDisabledNotchesAndWraps()
         {
             var e = new bool[RoomNotches.Count];
-            e[0] = e[3] = e[7] = true;
-            Assert.Equal(3, RoomNotches.Next(0, +1, e));
-            Assert.Equal(7, RoomNotches.Next(3, +1, e));
-            Assert.Equal(0, RoomNotches.Next(7, +1, e));
-            Assert.Equal(7, RoomNotches.Next(0, -1, e));
-            Assert.Equal(0, RoomNotches.Next(0, +1, OnlyTactical()));   // the only one stays
+            e[0] = e[2] = true;
+            Assert.Equal(2, RoomNotches.Next(0, +1, e));
+            Assert.Equal(0, RoomNotches.Next(2, +1, e));
+            Assert.Equal(2, RoomNotches.Next(0, -1, e));
+            Assert.Equal(0, RoomNotches.Next(0, +1, OnlyPlan()));   // the only one stays
         }
 
         [Fact]
-        public void ADigitForADisabledNotchDoesNothing()
+        public void ADigitForADisabledOrMissingNotchDoesNothing()
         {
-            Assert.Equal(0, RoomNotches.ForDigit(1, OnlyTactical()));
-            Assert.Equal(-1, RoomNotches.ForDigit(2, OnlyTactical()));
-            Assert.Equal(-1, RoomNotches.ForDigit(0, OnlyTactical()));
-            Assert.Equal(-1, RoomNotches.ForDigit(10, OnlyTactical()));
+            Assert.Equal(0, RoomNotches.ForDigit(1, OnlyPlan()));
+            Assert.Equal(-1, RoomNotches.ForDigit(2, OnlyPlan()));
+            Assert.Equal(-1, RoomNotches.ForDigit(5, OnlyPlan()));
+            Assert.Equal(-1, RoomNotches.ForDigit(0, OnlyPlan()));
         }
 
         [Fact]
         public void NotchesShrinkToFitTheRoom()
         {
-            Assert.Equal(164f, RoomNotches.Width(2000f, 9, 164f, 4f));
-            float w = RoomNotches.Width(1100f, 9, 164f, 4f);
-            Assert.True(w * 9 + 4f * 8 <= 1100f + 0.01f);
-            Assert.Equal(0f, RoomNotches.Width(-5f, 9, 164f, 4f));
+            Assert.Equal(220f, RoomNotches.Width(2000f, 4, 220f, 4f));
+            float w = RoomNotches.Width(700f, 4, 220f, 4f);
+            Assert.True(w * 4 + 4f * 3 <= 700f + 0.01f);
+            Assert.Equal(0f, RoomNotches.Width(-5f, 4, 220f, 4f));
         }
     }
 }

@@ -2,31 +2,25 @@ using System;
 
 namespace WingCommand
 {
-    /// <summary>The room's nine notches (spec WMC program §6): labels, keyboard navigation over the enabled ones, and a notch
-    /// width that fits the room.</summary>
+    /// <summary>The planning room's four notches (spec WMC rebuild §Big panel): PLAN · BEHAVIOUR · SQUADRON · WORKSHOP — labels,
+    /// keyboard navigation over the enabled ones, and a notch width that fits the room.</summary>
     internal static class RoomNotches
     {
-        public const int Count = 9;
-        public const int Tactical = 0, Packages = 1, Supply = 2, Loadout = 3, Squadron = 4, Studio = 5, Shapes = 6, Settings = 7, Debrief = 8;
+        public const int Count = 4;
+        public const int Plan = 0, Behaviour = 1, Squadron = 2, Workshop = 3;
 
-        public static readonly string[] Labels =
-            { "TACTICAL", "PACKAGES", "SUPPLY", "LOADOUT", "SQUADRON", "STUDIO", "SHAPES", "SETTINGS", "DEBRIEF" };
+        public static readonly string[] Labels = { "PLAN", "BEHAVIOUR", "SQUADRON", "WORKSHOP" };
 
-        /// <summary>What an unbuilt notch will hold (its disabled tooltip).</summary>
+        /// <summary>What a notch holds (its tooltip; an unbuilt notch's disabled tooltip).</summary>
         public static readonly string[] Pending =
         {
-            "The theatre map, elements and the deep member card.",
-            "Packages and the timeline arrive in a later update.",
-            "The shop (airframes, stock, deliveries) arrives in a later update.",
-            "Loadout templates arrive in a later update.",
-            "The squadron roster and records arrive in a later update.",
-            "The pilot studio arrives in a later update.",
-            "The formation shape editor arrives in a later update.",
-            "Wing Command settings arrive in a later update.",
-            "The after-action debrief arrives in a later update.",
+            "The theatre map, elements, task plans and the deep aircraft card.",
+            "Behaviour profiles, tuning and reaction rules. Arrives in a later update.",
+            "Pilot records and the pilot studio. Arrives in a later update.",
+            "The formation shape editor and Wing Command settings. Arrives in a later update.",
         };
 
-        private static readonly string[] keys = { "CTRL 1", "CTRL 2", "CTRL 3", "CTRL 4", "CTRL 5", "CTRL 6", "CTRL 7", "CTRL 8", "CTRL 9" };
+        private static readonly string[] keys = { "CTRL 1", "CTRL 2", "CTRL 3", "CTRL 4" };
 
         public static string Key(int i) => i >= 0 && i < Count ? keys[i] : "";
 
@@ -40,7 +34,7 @@ namespace WingCommand
             return current;
         }
 
-        /// <summary>The notch for Ctrl+<paramref name="digit"/> (1-9), or -1.</summary>
+        /// <summary>The notch for Ctrl+<paramref name="digit"/> (1-4), or -1.</summary>
         public static int ForDigit(int digit, bool[] enabled)
         {
             int i = digit - 1;

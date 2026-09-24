@@ -2,7 +2,8 @@ using System;
 
 namespace WingCommand
 {
-    internal enum LateralHold : byte { None, Level, Heading }
+    /// <summary>Nav flies as Heading; <see cref="NavFollower"/> steers the heading to the route's active point.</summary>
+    internal enum LateralHold : byte { None, Level, Heading, Nav }
     internal enum VerticalHold : byte { None, Altitude, VerticalSpeed }
 
 // Filled by the player autopilot (M1c) and the FlightSim.
@@ -40,7 +41,7 @@ namespace WingCommand
             Vec3 right = Vec3.Cross(Vec3.Up, horizontal).Normalized;
             Vec3 accel = Vec3.Zero;
 
-            if (h.Lateral == LateralHold.Heading)
+            if (h.Lateral == LateralHold.Heading || h.Lateral == LateralHold.Nav)
             {
                 float cap = h.BankCapDeg > 0f ? h.BankCapDeg : 30f;
                 float maxRate = Scalar.G * (float)Math.Tan(cap * Scalar.Deg2Rad) / speed;

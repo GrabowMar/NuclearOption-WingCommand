@@ -162,7 +162,7 @@ namespace WingCommand
         {
             if (last == null || rowViews[index].Id == 0u) return;
             last.Inspected = rowViews[index].Id;
-            WmcRoom.Instance?.Open(RoomNotches.Tactical);
+            WmcRoom.Instance?.Open(RoomNotches.Plan);
         }
 
         private void TurnPage(int dir)
