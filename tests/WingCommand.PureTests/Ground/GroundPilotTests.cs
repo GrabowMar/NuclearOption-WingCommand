@@ -552,6 +552,39 @@ namespace WingCommand.PureTests
         }
 
         [Fact]
+        public void AHelicopterSpoolsItsRotorUpOnTheGroundBeforeLiftingOff()
+        {
+            // In game: spawned with the rotor stopped, full collective at once kept it from ever spinning up.
+            var field = new FieldTraffic(TestFields.Simple(), 0, false);
+            Pose spawn = field.Field.Hangars[1].Spawn;
+            var pilot = new GroundPilot(3, field, AirframeClass.Rotary, spawn, 1);
+            AirframeProfile helo = AirframeProfile.Derive(new ProfileInputs { Class = AirframeClass.Rotary, MaxSpeed = 134f });
+            IFlightPipeline pipeline = FlightStack.NewPipeline(AirframeClass.Rotary);
+            var s = new AircraftState { Pos = spawn.Pos, Fwd = spawn.Fwd, Up = Vec3.Up, Right = Vec3.Cross(Vec3.Up, spawn.Fwd), RotorRpm = 0.3f };
+            ControlOutput o = default;
+            for (int i = 0; i < 10 * 30; i++) o = pilot.Step(s, helo, pipeline, i * Dt, Dt, null, 0);
+            Assert.Equal(GroundPhase.Parked, pilot.Phase);
+            Assert.Equal(GroundPilot.SpoolCollective, o.Throttle, 3);
+            Assert.Equal(1f, o.Brake);
+            s.RotorRpm = GroundPilot.SpoolRpm + 0.01f;
+            pilot.Step(s, helo, pipeline, 10f, Dt, null, 0);
+            Assert.Equal(GroundPhase.LiftOff, pilot.Phase);
+        }
+
+        [Fact]
+        public void AHelicopterWithNoRotorReadingLiftsOffAfterTheSpoolTimeout()
+        {
+            var field = new FieldTraffic(TestFields.Simple(), 0, false);
+            Pose spawn = field.Field.Hangars[1].Spawn;
+            var pilot = new GroundPilot(3, field, AirframeClass.Rotary, spawn, 1);
+            AirframeProfile helo = AirframeProfile.Derive(new ProfileInputs { Class = AirframeClass.Rotary, MaxSpeed = 134f });
+            IFlightPipeline pipeline = FlightStack.NewPipeline(AirframeClass.Rotary);
+            var s = new AircraftState { Pos = spawn.Pos, Fwd = spawn.Fwd, Up = Vec3.Up, Right = Vec3.Cross(Vec3.Up, spawn.Fwd), RotorRpm = 0f };
+            for (int i = 0; i < (GroundPilot.SpoolSeconds + 1f) * 30; i++) pilot.Step(s, helo, pipeline, i * Dt, Dt, null, 0);
+            Assert.Equal(GroundPhase.LiftOff, pilot.Phase);
+        }
+
+        [Fact]
         public void AHelicopterLiftsOffInPlaceAndIsDoneAboveTheLiftOffHeight()
         {
             var field = new FieldTraffic(TestFields.Simple(), 0, false);

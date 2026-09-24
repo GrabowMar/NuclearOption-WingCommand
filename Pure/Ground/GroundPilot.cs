@@ -31,7 +31,9 @@ namespace WingCommand
     /// <item>ClimbOut: the flight pipeline flies the runway's extended centreline climbing to
     /// <see cref="ClimbOutAboveRunway"/>; done at <see cref="ClimbOutHeight"/> radar altitude or after
     /// <see cref="ClimbOutSeconds"/>.</item>
-    /// <item>Helicopters and tiltwings lift off in place (LiftOff), hover-taxiing out first when a roof is overhead.</item>
+    /// <item>Helicopters and tiltwings lift off in place (LiftOff), hover-taxiing out first when a roof is overhead; a
+    /// helicopter first spools its rotor to <see cref="SpoolRpm"/> at <see cref="SpoolCollective"/> (at most
+    /// <see cref="SpoolSeconds"/>).</item>
     /// <item>TaxiIn (spec M3 §4): after a landing, or recalled before lining up, to the nearest free stand (a service
     /// point, else a hangar exit, else the node nearest the field centre), from the runway exit ahead when on a runway;
     /// it claims with Landing priority while on a runway, TaxiIn off it; the same taxiing rules apply. Stand: stopped
@@ -58,6 +60,7 @@ namespace WingCommand
         public static float RerouteCost = 1e4f, OppositeCost = 1000f, RelocateClearRadius = 30f, RelocateCancelMetres = 10f;
         public static float AlignSettleSeconds = 5f, LineUpSeconds = 120f, RollSeconds = 60f;
         public static float PullAsideMetres = 45f, PullAsideSeconds = 90f;
+        public static float SpoolRpm = 0.9f, SpoolCollective = 0.05f, SpoolSeconds = 30f;
 
         public readonly int Owner;
         public readonly StuckWatchdog Watchdog = new StuckWatchdog();
@@ -234,9 +237,12 @@ namespace WingCommand
             switch (Phase)
             {
                 case GroundPhase.Parked:
-                    o = new ControlOutput { Brake = 1f };
+                    // A helicopter spools its rotor up at low collective first, as the game's own takeoff does: full
+                    // collective on a stopped rotor keeps it from ever reaching speed.
+                    o = new ControlOutput { Brake = 1f, Throttle = Vertical ? SpoolCollective : 0f };
                     if (float.IsNaN(phaseStart)) phaseStart = time;
-                    if (time - phaseStart >= ParkedSeconds)
+                    bool spooled = cls != AirframeClass.Rotary || s.RotorRpm >= SpoolRpm || time - phaseStart >= SpoolSeconds;
+                    if (time - phaseStart >= ParkedSeconds && (!Vertical || spooled))
                     {
                         if (Vertical)
                         {
