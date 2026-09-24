@@ -60,13 +60,16 @@ namespace WingCommand
             recruitCost = 0f;
             DynamicMap map = SceneSingleton<DynamicMap>.i;
             if (map == null || c.Wing == null || c.Client) return;
+            // Review P4 I3: only as many as the wing has room for, and only those the ledger allows.
+            int room = WingService.MaxMembers - c.Wing.Members.Count - (SpawnService.Instance != null ? SpawnService.Instance.PendingTotal : 0);
             foreach (MapIcon icon in map.selectedIcons)
             {
-                if (recruits.Count >= WingOrder.MaxUnits) break;
+                if (recruits.Count >= WingOrder.MaxUnits || recruits.Count >= room) break;
                 if (!(icon is UnitMapIcon u) || !(u.unit is Aircraft a) || !c.Wing.CanRecruit(a, out _)) continue;
-                recruits.Add(a);
                 CallQuote q = WingRecruitment.Quote(a);
-                if (q.Allowed) recruitCost += q.Charge;
+                if (!q.Allowed) continue;
+                recruits.Add(a);
+                recruitCost += q.Charge;
             }
         }
 

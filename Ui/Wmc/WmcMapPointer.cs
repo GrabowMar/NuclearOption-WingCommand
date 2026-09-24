@@ -44,11 +44,34 @@ namespace WingCommand
                 bool overMap = (map.mapBackground != null && target.IsChildOf(map.mapBackground.transform)) ||
                                (map.mapImage != null && target.IsChildOf(map.mapImage.transform));
                 hits.Clear();
+                if (overMap) unit = NearestSelected(map, out overIcon);
                 return overMap;
             }
             hits.Clear();
-            // Empty map areas count even when their artwork is no raycast target.
+            // Empty map areas count even when their artwork is no raycast target. The game turns hit-testing off on the icons
+            // it has selected (the player's targets): those are found by distance instead (review P4 I4).
+            unit = NearestSelected(map, out overIcon);
             return true;
+        }
+
+        private const float SelectedPickPixels = 24f;
+
+        private static Unit NearestSelected(DynamicMap map, out bool overIcon)
+        {
+            overIcon = false;
+            Unit best = null;
+            float bestSq = SelectedPickPixels * SelectedPickPixels;
+            Vector2 mouse = Input.mousePosition;
+            foreach (MapIcon icon in map.selectedIcons)
+            {
+                if (!(icon is UnitMapIcon u) || u.unit == null || u.unit.disabled || !u.gameObject.activeInHierarchy) continue;
+                float d = ((Vector2)u.transform.position - mouse).sqrMagnitude;
+                if (d >= bestSq) continue;
+                bestSq = d;
+                best = u.unit;
+            }
+            overIcon = best != null;
+            return best;
         }
     }
 }

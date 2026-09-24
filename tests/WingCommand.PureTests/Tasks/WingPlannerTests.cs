@@ -377,5 +377,24 @@ namespace WingCommand.PureTests
             Assert.True(p.Skip(Wing(), 1f, events));
             Assert.Equal(ArrivalAction.None, p.TakeArrival());
         }
+
+        [Fact]
+        public void ALandPointIsReachedCloseToIt()
+        {
+            // Review P4 I1: helicopters settle around the lead; a LAND/CARGO point is reached near it, not 800 m out.
+            var p = new WingPlanner(1);
+            Waypoint land = Waypoint.At(0f, 6000f);
+            land.Action = ArrivalAction.Land;
+            var events = new WingEventRing();
+            p.Apply(WingTask.Move(land), Wing(), 0f, events);
+            Vec3 at = Vec3.Zero;
+            Run(p, Wing(), events, 0f, 200f, () =>
+            {
+                at = p.Lead.Position;
+                return events.CountOf(WingEventKind.WaypointReached) > 0;
+            });
+            Assert.Equal(1, events.CountOf(WingEventKind.WaypointReached));
+            Assert.True((at - new Vec3(0f, at.Y, 6000f)).Horizontal.Length <= WingPlanner.SettleArriveRadius + 20f);
+        }
     }
 }

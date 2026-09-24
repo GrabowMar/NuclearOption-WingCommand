@@ -83,5 +83,19 @@ namespace WingCommand.PureTests
             Assert.Equal(4, legs.Count);
             Assert.True(legs[3].Closing);
         }
+
+        [Fact]
+        public void APatrolLabelsEachPointOnce()
+        {
+            // Review P4 I2: past its first point, the lead's leg and the circuit leg end at the same point; one label.
+            WingTask loop = WingTask.Patrol(true, Waypoint.At(0f, 0f), Waypoint.At(0f, 10000f), Waypoint.At(10000f, 10000f));
+            RouteView.Task(loop, 1, new Vec3(0f, 0f, 4000f), 200f, legs, rings);
+            int twos = 0;
+            foreach (RouteLeg l in legs)
+                if (l.Number == 2) twos++;
+            Assert.Equal(1, twos);
+            Assert.Equal(2, legs[0].Number);               // the lead's leg keeps it, with the ETA
+            Assert.False(float.IsNaN(legs[0].Eta));
+        }
     }
 }

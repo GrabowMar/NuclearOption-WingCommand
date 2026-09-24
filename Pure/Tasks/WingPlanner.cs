@@ -17,6 +17,8 @@ namespace WingCommand
         /// <see cref="MinSpeedMargin"/> times the highest loaded minimum, so jets can leave high cover behind it (review M4a
         /// I3).</summary>
         public static float DecisionPeriod = 0.5f, ArriveRadius = 800f, CruiseFraction = 0.85f, MinSpeedMargin = 0.1f;
+        /// <summary>How close a LAND or CARGO point is reached: the helicopters settle around the lead (review P4 I1).</summary>
+        public static float SettleArriveRadius = 150f;
         public static float LeadClearance = 150f, MaxAltitude = 15000f;
         public const int MaxPoints = 16;
 
@@ -166,7 +168,8 @@ namespace WingCommand
                         return;
                     }
                     Waypoint p = Current.Points[Leg];
-                    if (!Reached(Point(p))) return;
+                    bool settle = p.Action == ArrivalAction.Land || p.Action == ArrivalAction.Cargo;
+                    if (!Reached(Point(p), settle ? SettleArriveRadius : ArriveRadius)) return;
                     Log(events, time, WingEventKind.WaypointReached, TransitionReason.None, Current.Kind);
                     if (p.Action == ArrivalAction.Land || p.Action == ArrivalAction.Cargo)
                     {
@@ -191,9 +194,9 @@ namespace WingCommand
 
         /// <summary>Within <see cref="ArriveRadius"/> of the point, or past it along the leg (a point inside the lead's turn
         /// is never flown over).</summary>
-        private bool Reached(Vec3 point)
+        private bool Reached(Vec3 point, float radius)
         {
-            if ((Lead.Position - point).Horizontal.Length < ArriveRadius) return true;
+            if ((Lead.Position - point).Horizontal.Length < radius) return true;
             Vec3 leg = (point - legFrom).Horizontal;
             float length = leg.Length;
             return length > 1f && Vec3.Dot((Lead.Position - legFrom).Horizontal, leg * (1f / length)) >= length;

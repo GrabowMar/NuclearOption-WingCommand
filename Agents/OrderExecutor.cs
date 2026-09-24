@@ -215,19 +215,21 @@ namespace WingCommand
                 {
                     // Spec WMC program §5: every friendly selected on the map, in one order; one answer.
                     Units(o.Units);
-                    int joined = 0;
+                    int joined = 0, asked = 0;
                     string first = null, refusal = null;
                     foreach (Unit u in units)
                     {
                         if (!(u is Aircraft target)) continue;
+                        asked++;
                         if (WingRecruitment.TryRecruit(w, target, out _, out string reason))
                         {
                             if (joined++ == 0) first = target.unitName;
                         }
-                        else if (refusal == null) refusal = "Cannot recruit " + target.unitName + ": " + reason;
+                        else if (refusal == null) refusal = reason;
                     }
-                    if (joined == 0) return OrderResult.Refused(refusal ?? "No friendly aircraft to recruit");
-                    return OrderResult.Acked(joined == 1 ? first + " joins the wing" : joined + " aircraft join the wing");
+                    // Review P4 I3: the answer says who joined and why the rest did not.
+                    return joined == 0 ? OrderResult.Refused(RecruitWords.Refusal(refusal))
+                        : OrderResult.Acked(RecruitWords.Ack(joined, asked, first, refusal));
                 }
                 case OrderKind.Call: return Call(w, (int)o.Number);
                 case OrderKind.SetShape:

@@ -50,10 +50,11 @@ namespace WingCommand
                     int next = Math.Min(Math.Max(0, leg), p.Length - 1);
                     float km = Distance(lead.X, lead.Z, p[next].X, p[next].Z) / 1000f;
                     legs.Add(new RouteLeg { FromX = lead.X, FromZ = lead.Z, ToX = p[next].X, ToZ = p[next].Z, Number = next + 1, Km = km, Eta = Eta(km, speed) });
+                    // The circuit leg into the point the lead's leg already labels stays unlabelled (review P4 I2).
                     for (int i = 0; i + 1 < p.Length; i++)
                         legs.Add(new RouteLeg
                         {
-                            FromX = p[i].X, FromZ = p[i].Z, ToX = p[i + 1].X, ToZ = p[i + 1].Z, Number = i + 2,
+                            FromX = p[i].X, FromZ = p[i].Z, ToX = p[i + 1].X, ToZ = p[i + 1].Z, Number = i + 1 == next ? 0 : i + 2,
                             Km = Distance(p[i].X, p[i].Z, p[i + 1].X, p[i + 1].Z) / 1000f, Eta = float.NaN,
                         });
                     int last = p.Length - 1;
