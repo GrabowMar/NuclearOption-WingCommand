@@ -37,6 +37,16 @@ namespace WingCommand
         public ConfigEntry<KeyboardShortcut> KeyApVerticalSpeed { get; }
         public ConfigEntry<KeyboardShortcut> KeyApSpeed { get; }
         public ConfigEntry<KeyboardShortcut> KeyApOff { get; }
+        /// <summary>Spec M7 §4: joystick bindings by command name, and the button logger.</summary>
+        public System.Collections.Generic.KeyValuePair<string, ConfigEntry<string>>[] Hotas { get; }
+        public ConfigEntry<bool> HotasLogButtons { get; }
+
+        /// <summary>The commands a joystick button can run (Hotas section order).</summary>
+        internal static readonly string[] HotasCommands =
+        {
+            "CallWingman", "FormUp", "NextShape", "NextSpacing", "Dismiss", "Engage", "Disengage", "AttackTarget", "Splash",
+            "ClearMySix", "BogeyDope", "Rtb", "OrbitHere", "GoHigh", "GoLow", "Level", "ApOff",
+        };
         public ConfigEntry<bool> PilotProgression { get; }
         public ConfigEntry<float> RankEffect { get; }
         public ConfigEntry<bool> SandboxFreeCalls { get; }
@@ -143,6 +153,17 @@ namespace WingCommand
             KeyApVerticalSpeed = Key(c, "AutopilotVerticalSpeed", "Autopilot: hold the current vertical speed.", 42);
             KeyApSpeed = Key(c, "AutopilotSpeed", "Autopilot: toggle speed hold at the current speed.", 41);
             KeyApOff = Key(c, "AutopilotOff", "Autopilot: all holds off.", 40);
+
+            Hotas = new System.Collections.Generic.KeyValuePair<string, ConfigEntry<string>>[HotasCommands.Length];
+            for (int i = 0; i < HotasCommands.Length; i++)
+                Hotas[i] = new System.Collections.Generic.KeyValuePair<string, ConfigEntry<string>>(HotasCommands[i],
+                    c.Bind("Hotas", HotasCommands[i], "", new ConfigDescription(
+                        "Joystick button for " + HotasCommands[i] + ": <device>:<button>, e.g. \"T.16000M:5\" or \"any:5\" " +
+                        "(part of the joystick's name, button counted from 1). Empty: unbound. Turn on LogButtons to find them.",
+                        null, new ConfigurationManagerAttributes { Order = 30 - i })));
+            HotasLogButtons = c.Bind("Hotas", "LogButtons", false, new ConfigDescription(
+                "Write every joystick button press to the log as \"[Hotas] <joystick>: button <n>\" (to find names and numbers).",
+                null, new ConfigurationManagerAttributes { Order = 31 }));
 
             DevTools = c.Bind("Debug", "DevTools", false, new ConfigDescription(
                 "Enable developer tools: debug overlay, telemetry recorder, step tests and calibration.",
