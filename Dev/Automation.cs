@@ -379,6 +379,7 @@ namespace WingCommand
                 { "redirected", SwitchStateGuard.Redirected },
                 { "hostiles", wing.LastHostiles }, { "fallbacks", wing.FallBacks },
                 { "jokers", wing.Events.CountOf(WingEventKind.Joker) },
+                { "defends", wing.Events.CountOf(TransitionReason.MissileInbound) },
             };
         }
 

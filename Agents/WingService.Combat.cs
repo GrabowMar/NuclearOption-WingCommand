@@ -111,6 +111,39 @@ namespace WingCommand
             WingToast.Show($"Outnumbered {LastHostiles} to {engaged}; falling back");
         }
 
+        /// <summary>The nearest missile guiding on the member (spec M5 §7.1): the game's missile warning; a new missile is
+        /// classified once by the game's own choice of countermeasure (which also selects the station): "IR" is
+        /// infrared, anything else radar.</summary>
+        private static MissileThreat ReadThreat(WingMember m)
+        {
+            Aircraft a = m.Aircraft;
+            MissileWarning warning = a.GetMissileWarningSystem();
+            if (warning == null || !warning.TryGetNearestIncoming(out Missile missile) || missile == null || missile.disabled)
+            {
+                m.ThreatMissile = null;
+                return default;
+            }
+            if (!ReferenceEquals(missile, m.ThreatMissile))
+            {
+                m.ThreatMissile = missile;
+                string seeker = a.countermeasureManager != null ? a.countermeasureManager.ChooseCountermeasure(missile) : "";
+                m.ThreatSeeker = seeker == "IR" ? MissileSeeker.Infrared : MissileSeeker.Radar;
+            }
+            return new MissileThreat
+            {
+                Present = true, Pos = missile.GlobalPosition().ToVec3(), Seeker = m.ThreatSeeker,
+                Vel = missile.rb != null ? missile.rb.velocity.ToVec3() : Vec3.Zero,
+            };
+        }
+
+        /// <summary>The countermeasure trigger to <paramref name="on"/> (never on with no matching station).</summary>
+        private static void Trigger(Aircraft a, bool on)
+        {
+            if (a.countermeasureManager == null || a.countermeasureTrigger == on) return;
+            if (on && a.countermeasureManager.activeIndex == byte.MaxValue) return;
+            a.Countermeasures(on, a.countermeasureManager.activeIndex);
+        }
+
         /// <summary>After a take-back or bingo, the doctrine's follow-on (spec M5 §6.1).</summary>
         private void FollowOn(WingMember m, TransitionReason reason)
         {

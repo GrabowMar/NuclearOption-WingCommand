@@ -26,5 +26,16 @@ namespace WingCommand.PureTests
             Assert.Equal(1, ring.CountOf(WingEventKind.FallingBehind, 1));
             Assert.Equal(2, ring.CountOf(WingEventKind.FallingBehind));
         }
+
+        [Fact]
+        public void CountOfAReasonCountsOnlyBehaviourTransitions()
+        {
+            var ring = new WingEventRing();
+            ring.Push(new WingEvent { Kind = WingEventKind.BehaviourChanged, Reason = TransitionReason.MissileInbound });
+            ring.Push(new WingEvent { Kind = WingEventKind.Disengaged, Reason = TransitionReason.MissileInbound });
+            ring.Push(new WingEvent { Kind = WingEventKind.BehaviourChanged, Reason = TransitionReason.MissileClear });
+            Assert.Equal(1, ring.CountOf(TransitionReason.MissileInbound));
+            Assert.Equal(1, ring.CountOf(TransitionReason.MissileClear));
+        }
     }
 }

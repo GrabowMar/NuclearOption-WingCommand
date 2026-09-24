@@ -219,8 +219,10 @@ namespace WingCommand
                 }
                 if (m.Recovery == null && !m.HasPendingRecovery) CheckBingo(m, dt);
                 if (StepTest.Fly(m, dt)) return;
+                m.Brain.Threat = ReadThreat(m);
                 ControlOutput o = StepTest.Adjust(m, m.Brain.Step(frame, m.Last, m.Profile, missionTime, dt, Events), dt);
                 ControlWriter.Fly(m.Aircraft, o, m.Profile.Class);
+                Trigger(m.Aircraft, m.Brain.Mind.Current == BehaviourId.Defend && m.Brain.LastDefence.Countermeasures);
                 int slot = m.Brain.Slot;
                 Metrics.Sample(m.Id, (frame.Slots[slot].Ref.Pos - m.Last.Pos).Length,
                     m.Brain.Mind.Current == BehaviourId.StationKeep, m.Last.Tas, missionTime, dt);
