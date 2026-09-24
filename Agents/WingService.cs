@@ -796,7 +796,10 @@ namespace WingCommand
             if (m.StopLogged || missionTime - m.StoppedSince < LongStopSeconds) return;
             m.StopLogged = true;
             Plugin.Logger.LogInfo($"[Ground] #{m.Number} stopped {LongStopSeconds:0} s in {phase} at ({m.Last.Pos.X:0}, {m.Last.Pos.Z:0}): " +
-                                  $"{m.Ground.Stop}{(m.Ground.StopWho >= 0 ? " (member " + NumberOf(m.Ground.StopWho) + ")" : "")}");
+                                  $"{m.Ground.Stop}{(m.Ground.StopWho >= 0 ? " (member " + NumberOf(m.Ground.StopWho) + ")" : "")}; " +
+                                  $"command {m.Ground.LastCommand.Speed:0.0} m/s{(m.Ground.LastCommand.Stop ? " stop" : "")}, " +
+                                  $"{m.Ground.StopDistance:0} m to the stop, throttle {m.Last.Throttle:0.00}, brake {m.Aircraft.GetInputs().brake:0.00}, " +
+                                  $"radar {m.Last.RadarAlt:0.0}, pitch {m.Last.PitchDeg:0.0}, bank {m.Last.BankDeg:0.0}, gear {m.Aircraft.gearState}");
         }
 
         public static float GroundTraceSeconds = 10f;

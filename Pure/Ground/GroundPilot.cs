@@ -74,6 +74,9 @@ namespace WingCommand
         public FieldTraffic Field => traffic;
         /// <summary>While taxiing: what its stop point is set by, and whose (a member or a claim holder, −1: none).</summary>
         public GroundStop Stop { get; private set; }
+        /// <summary>The last pursuit command and the distance to where it must stop (diagnostics).</summary>
+        public GroundCommand LastCommand { get; private set; }
+        public float StopDistance { get; private set; }
         public int StopWho { get; private set; } = -1;
         /// <summary>Set by the engine at spawn: a structure overhead (a helicopter must leave the hangar first).</summary>
         public bool RoofOverhead;
@@ -519,6 +522,8 @@ namespace WingCommand
             }
 
             GroundCommand c = GroundGuidance.Pursue(path, ref progress, s, stopAt - along);
+            LastCommand = c;
+            StopDistance = stopAt - along;
             return controller.Step(c, s, p, dt);
         }
 
