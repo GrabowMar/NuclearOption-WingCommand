@@ -156,25 +156,14 @@ namespace WingCommand
             public static float CurrentPriceOf(AircraftDefinition definition) => 0f;
         }
     }
-    // The 0.9 order enum the quarantined Personnel sources still use; M3 moves them to the 1.0 task API.
-    internal enum WingOrder { Formation, OrbitHere, LandHere, Attack, ReturnToBase }
-
-    internal class WingDirective
-    {
-        public WingOrder Order;
-        public GlobalPosition Point;
-        public static WingDirective AtPoint(WingOrder order, GlobalPosition point) => new WingDirective { Order = order, Point = point };
-    }
     internal class WingMember
     {
         public Aircraft Aircraft;
         public string Name = "Rescuer";
         public bool IsCommandable = true, IsPanicking;
         public float Fuel = 1f;
-        public WingOrder Order;
         public bool LoadoutKnown;
         public WingLoadoutChoice Loadout;
-        public void Apply(WingDirective directive) { Order = directive.Order; }
     }
     internal class WingRegistry
     {

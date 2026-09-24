@@ -57,9 +57,13 @@ namespace WingCommand
     {
         public bool Accepted;
         public string Reason;
+        /// <summary>What an accepted order did, in words (the toast/status line), and the element it went to (-1: none).</summary>
+        public string Ack;
+        public int Element;
 
-        public static OrderResult Ok => new OrderResult { Accepted = true };
-        public static OrderResult Refused(string reason) => new OrderResult { Reason = reason };
+        public static OrderResult Ok => new OrderResult { Accepted = true, Element = -1 };
+        public static OrderResult Refused(string reason) => new OrderResult { Reason = reason, Element = -1 };
+        public static OrderResult Acked(string ack, int element = -1) => new OrderResult { Accepted = true, Ack = ack, Element = element };
     }
 
     /// <summary>What the planner sees of the wing each tick (the engine or the FlightSim fills it).</summary>
