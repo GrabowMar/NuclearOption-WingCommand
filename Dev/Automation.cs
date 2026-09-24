@@ -384,6 +384,26 @@ namespace WingCommand
             return new Dictionary<string, object> { { "ok", true }, { "landing", n }, { "refusal", refusal ?? "" } };
         }
 
+        /// <summary>Spec M4 §7.2: Deliver Cargo as the radial entry does.</summary>
+        public static Dictionary<string, object> DeliverCargo(Dictionary<string, object> args)
+        {
+            WingService wing = WingService.Instance;
+            if (wing == null) return Fail("DeliverCargo", "the wing is not active");
+            int n = wing.DeliverCargo(out string refusal);
+            Plugin.Logger.LogInfo($"[Automation] DeliverCargo: {n} landing{(refusal != null ? " (" + refusal + ")" : "")}");
+            return new Dictionary<string, object> { { "ok", true }, { "landing", n }, { "refusal", refusal ?? "" } };
+        }
+
+        /// <summary>Spec M4 §7.1: Rescue as the radial entry does.</summary>
+        public static Dictionary<string, object> Rescue(Dictionary<string, object> args)
+        {
+            WingService wing = WingService.Instance;
+            if (wing == null) return Fail("Rescue", "the wing is not active");
+            WingMember sent = wing.Rescue(out string result);
+            Plugin.Logger.LogInfo($"[Automation] Rescue: {result}");
+            return new Dictionary<string, object> { { "ok", true }, { "sent", sent != null ? 1 : 0 }, { "result", result } };
+        }
+
         public static Dictionary<string, object> TakeOff(Dictionary<string, object> args)
         {
             WingService wing = WingService.Instance;
@@ -402,6 +422,7 @@ namespace WingCommand
                 { "down", wing.Settled(SettlePhase.Down) }, { "lifting", wing.Settled(SettlePhase.LiftOff) },
                 { "landed", wing.Events.CountOf(WingEventKind.Landed) }, { "airborne", wing.Events.CountOf(WingEventKind.Airborne) },
                 { "failed", wing.Events.CountOf(WingEventKind.LandingFailed) }, { "members", wing.Members.Count },
+                { "cargo_deployed", wing.CargoDeployed },
             };
         }
 

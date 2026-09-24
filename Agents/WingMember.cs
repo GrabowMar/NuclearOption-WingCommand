@@ -43,6 +43,10 @@ namespace WingCommand
         public readonly FireCadence Cadence = new FireCadence();
         /// <summary>A helicopter landing here or down (spec M4 §5); null when flying with the wing.</summary>
         public SettlePilot Settle;
+        /// <summary>What the settle is for once down (spec M4 §7); null: hold until Take Off.</summary>
+        public SettleJob Job;
+        /// <summary>The downed pilot a rescue settle waits for.</summary>
+        public Unit RescueTarget;
         public Unit StandingTarget;
         public MissileSeeker ThreatSeeker;
         /// <summary>A serial per new missile (a new one picks its own notch side), the last seeker type classified and the

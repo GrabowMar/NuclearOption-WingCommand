@@ -169,6 +169,22 @@ namespace WingCommand
         public static void HoldHere() =>
             Order(p => WingTask.Hold(Point(p, 0f, 0f), Vec3.HeadingDeg(p.transform.forward.ToVec3())), "holding here");
 
+        /// <summary>Spec M4 §7.1: a wing helicopter lands next to the nearest downed wing pilot for the pickup.</summary>
+        public static void Rescue()
+        {
+            if (!Ready(out WingService w)) return;
+            w.Rescue(out string result);
+            WingToast.Show("Rescue: " + result);
+        }
+
+        /// <summary>Spec M4 §7.2: helicopters carrying cargo land, deploy it and rejoin.</summary>
+        public static void DeliverCargo()
+        {
+            if (!Ready(out WingService w)) return;
+            int n = w.DeliverCargo(out string refusal);
+            WingToast.Show(n > 0 ? $"Deliver cargo: {n} landing" : "Deliver cargo: " + refusal);
+        }
+
         public static void MoveAhead() => Order(p => WingTask.Move(Point(p, MoveAheadMetres, 0f)), "moving ahead");
 
         /// <summary>Spec M7 §2.4: Move 20 km ahead, reporting ground contacts on the way and while orbiting there.</summary>

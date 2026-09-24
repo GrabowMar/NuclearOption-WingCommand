@@ -402,6 +402,7 @@ namespace WingCommand
             // sitting still on the ground.
             bool settledDown = m.Settle != null && m.Last.RadarAlt < 5f;
             m.Settle = null;
+            m.Job = null;
             EndDefence(m);
             ReleasePad(m);
             bool despawn = settledDown || (m.Ground != null && m.Ground.DespawnOnRelease(m.Last));

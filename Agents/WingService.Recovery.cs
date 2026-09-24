@@ -35,6 +35,7 @@ namespace WingCommand
                 // From a settle the recovery flies the same pipeline: it picks up from the controls last applied (review
                 // M4c I3), not from the moment it touched down.
                 m.Settle = null;
+                m.Job = null;
                 m.Brain.Track(m.Last, EngineSticks.ToPure(ControlWriter.Read(m.Aircraft.GetInputs())), m.Profile);
             }
             if (m.OnGround)

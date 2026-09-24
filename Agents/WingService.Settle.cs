@@ -1,3 +1,5 @@
+using System.Collections.Generic;
+
 namespace WingCommand
 {
     /// <summary>Helicopters land here and take off (spec M4 §5): each rotary member flying with the wing settles at its
@@ -6,7 +8,12 @@ namespace WingCommand
     {
         /// <summary>Settles every rotary member flying with the wing. Returns how many; <paramref name="refusal"/> says why
         /// none did.</summary>
-        public int LandHere(out string refusal)
+        public int LandHere(out string refusal) => LandHere(false, out refusal);
+
+        /// <summary>Spec M4 §7.2: every helicopter carrying cargo lands at its slot's ground point, deploys it and lifts off.</summary>
+        public int DeliverCargo(out string refusal) => LandHere(true, out refusal);
+
+        private int LandHere(bool cargoOnly, out string refusal)
         {
             refusal = null;
             if (Wing == null || Wing.Frame == null)
@@ -17,7 +24,7 @@ namespace WingCommand
             int rotary = 0, free = 0, n = 0;
             foreach (WingMember m in Members)
             {
-                if (m.Profile.Class == AirframeClass.FixedWing) continue;
+                if (m.Profile.Class == AirframeClass.FixedWing || (cargoOnly && CargoStation(m.Aircraft) == null)) continue;
                 rotary++;
                 if (m.Released || !m.Alive || m.Engaged || m.Recovery != null || m.OnGround || m.Settle != null) continue;
                 if (m.Brain.Slot < 0 || m.Brain.Slot >= Wing.Frame.Slots.Length) continue;
@@ -27,13 +34,117 @@ namespace WingCommand
                 if (!TerrainProbe.Landing(slot, out float groundY, out float normalY) || !SettlePilot.Landable(true, normalY)) continue;
                 EndDefence(m);   // review M4c I6: no countermeasure trigger held through the landing
                 m.Settle = new SettlePilot(new Vec3(slot.X, groundY, slot.Z), Vec3.HeadingDeg(m.Last.Fwd), missionTime);
+                m.Job = cargoOnly ? new SettleJob(SettleTask.Cargo) : null;
                 n++;
             }
-            if (rotary == 0) refusal = "no helicopters in the wing";
+            if (rotary == 0) refusal = cargoOnly ? "no helicopter carries cargo" : "no helicopters in the wing";
             else if (free == 0) refusal = "no helicopter free to land";
             else if (n == 0) refusal = "no dry, level ground here";
-            Plugin.Logger.LogInfo($"[Wing] land here: {n} of {rotary} helicopters{(refusal != null ? " (" + refusal + ")" : "")}");
+            Plugin.Logger.LogInfo($"[Wing] {(cargoOnly ? "deliver cargo" : "land here")}: {n} of {rotary} helicopters{(refusal != null ? " (" + refusal + ")" : "")}");
             return n;
+        }
+
+        public static float RescueStandoff = 60f, RescueMinFuel = 0.25f;
+        /// <summary>Cargo deployed this mission (automation reads it).</summary>
+        public int CargoDeployed { get; private set; }
+        private readonly List<Unit> downed = new List<Unit>();
+
+        /// <summary>Spec M4 §7.1: the nearest wing helicopter able to rescue lands next to the downed wing pilot nearest the
+        /// player and waits for the game to take them aboard. Returns the member sent, or null with the reason.</summary>
+        public WingMember Rescue(out string result)
+        {
+            downed.Clear();
+            WingSearchAndRescue.CollectDowned(downed);
+            Vec3 from = Player != null ? Player.GlobalPosition().ToVec3() : Vec3.Zero;
+            Unit survivor = null;
+            float best = float.MaxValue;
+            foreach (Unit u in downed)
+            {
+                if (!(u is PilotDismounted p) || p.disabled || p.IsSlung() || p.radarAlt > 3f || p.transform.position.GlobalY() < 0.5f) continue;
+                float d = (u.GlobalPosition().ToVec3() - from).SqrLength;
+                if (d >= best) continue;
+                best = d;
+                survivor = u;
+            }
+            if (survivor == null)
+            {
+                result = "no downed wing pilot on land";
+                return null;
+            }
+            Vec3 at = survivor.GlobalPosition().ToVec3();
+            WingMember heli = null;
+            best = float.MaxValue;
+            foreach (WingMember m in Members)
+            {
+                if (m.Profile.Class == AirframeClass.FixedWing || m.Released || !m.Alive || m.Engaged || m.Recovery != null ||
+                    m.OnGround || m.Settle != null || m.Aircraft.definition == null || m.Aircraft.definition.captureCapacity <= 0 ||
+                    m.Aircraft.GetFuelLevel() <= RescueMinFuel) continue;
+                float d = (m.Last.Pos - at).SqrLength;
+                if (d >= best) continue;
+                best = d;
+                heli = m;
+            }
+            if (heli == null)
+            {
+                result = "no helicopter able to rescue";
+                return null;
+            }
+            // 60 m short of the survivor on the helicopter's side, else the other three sides.
+            Vec3 toward = (heli.Last.Pos - at).Horizontal;
+            toward = toward.SqrLength > 1f ? toward.Normalized : Vec3.Forward;
+            for (int side = 0; side < 4; side++)
+            {
+                Vec3 dir = side == 0 ? toward : side == 1 ? new Vec3(toward.Z, 0f, -toward.X) : side == 2 ? -toward : new Vec3(-toward.Z, 0f, toward.X);
+                Vec3 point = at + dir * RescueStandoff;
+                if (!TerrainProbe.Landing(point, out float groundY, out float normalY) || !SettlePilot.Landable(true, normalY)) continue;
+                EndDefence(heli);
+                heli.Settle = new SettlePilot(new Vec3(point.X, groundY, point.Z), Vec3.HeadingDeg(at - point), missionTime);
+                heli.Job = new SettleJob(SettleTask.Rescue);
+                heli.RescueTarget = survivor;
+                WingPilot pilot = WingSearchAndRescue.PilotOf(survivor as PilotDismounted);
+                result = $"#{heli.Number} going for {(pilot != null ? pilot.Callsign : "the downed pilot")}";
+                Plugin.Logger.LogInfo($"[Wing] rescue: {result}");
+                return heli;
+            }
+            result = "no dry, level ground near them";
+            return null;
+        }
+
+        /// <summary>The station carrying cargo (troops, vehicles, supplies), or null.</summary>
+        private static WeaponStation CargoStation(Aircraft a)
+        {
+            if (a == null || a.weaponStations == null) return null;
+            foreach (WeaponStation w in a.weaponStations)
+                if (w.WeaponInfo != null && w.WeaponInfo.cargo && w.Ammo > 0) return w;
+            return null;
+        }
+
+        /// <summary>The job's actions for a settled member once down (spec M4 §7.3).</summary>
+        private void StepJob(WingMember m, SettlePilot s, float dt)
+        {
+            SettleJob job = m.Job;
+            if (job == null) return;
+            Unit t = m.RescueTarget;
+            bool rescued = job.Task == SettleTask.Rescue && (t == null || t.disabled);
+            SettleAction act = job.Step(s.Phase, dt, rescued);
+            if ((act & SettleAction.FireCargo) != 0)
+            {
+                // The game's own deploy (native transport state): the cargo station selected, then the pilot's fire.
+                WeaponStation cargo = CargoStation(m.Aircraft);
+                if (cargo != null && m.Pilot != null)
+                {
+                    m.Aircraft.weaponManager.currentWeaponStation = cargo;
+                    m.Pilot.Fire();
+                    CargoDeployed++;
+                    Plugin.Logger.LogInfo($"[Wing] #{m.Number} cargo deployed");
+                }
+            }
+            if ((act & SettleAction.TakeOff) != 0)
+            {
+                if (job.Task == SettleTask.Rescue)
+                    Plugin.Logger.LogInfo($"[Wing] #{m.Number} lifting off from the rescue ({(rescued ? "aboard" : "no pickup")})");
+                s.TakeOff();
+            }
         }
 
         /// <summary>Every settled member lifts off. Returns how many.</summary>
@@ -87,6 +198,7 @@ namespace WingCommand
             if (s.Phase == SettlePhase.Done)
             {
                 m.Settle = null;
+                m.Job = null;
                 m.NoFbwSeconds = 0f;
                 m.Brain.FormUp(missionTime, Events);
                 return false;
@@ -100,6 +212,7 @@ namespace WingCommand
                 Clearance = m.Brain.Clearance, Aggression = 0.3f, CollisionBias = frame.Bias[slot],
             };
             ControlWriter.Fly(m.Aircraft, s.Step(m.Last, m.Profile, m.Brain.Pipeline, missionTime, dt, Events, slot, approach), m.Profile.Class);
+            StepJob(m, s, dt);
             return true;
         }
     }
