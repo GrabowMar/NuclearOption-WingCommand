@@ -18,19 +18,25 @@ namespace WingCommand
             return allow == DoctrineAllow.None ? StandingMode.None : StandingMode.Opportunity;
         }
 
+        /// <summary>Enough on the target already (review M5d-2 I1): members committed to it this check plus missiles flying at
+        /// it reach the attacks it needs (at least one).</summary>
+        public static bool Saturated(int committed, int inFlight, float attacksNeeded) =>
+            committed + inFlight >= System.Math.Max(1f, attacksNeeded);
+
         public static bool Allows(DoctrineAllow allow, bool air) =>
             allow == DoctrineAllow.AirAndGround || (air ? allow == DoctrineAllow.AirOnly : allow == DoctrineAllow.GroundOnly);
 
-        /// <summary>The game's own envelope (as <c>CombatAI.AnalyzeTarget</c> and 0.9's shot check): a 0 max range or
-        /// off-boresight limit means none.</summary>
+        /// <summary>The game's own release gate (<c>AIPilotCombatModes.UseMissiles</c>, review M5d-2 I2): range, the
+        /// target's altitude band with the distance-scaled floor, the launcher at or above its minimum speed, and the
+        /// target strictly inside the off-boresight limit (0: never). A 0 max range means none.</summary>
         public static bool InEnvelope(float range, float minRange, float maxRange, float targetAlt, float minAlt, float maxAlt,
-            float offBoresightDeg, float maxOffBoresightDeg)
+            float offBoresightDeg, float maxOffBoresightDeg, float ownSpeed, float minOwnSpeed)
         {
             if (maxRange > 0f && range > maxRange) return false;
             if (range < minRange) return false;
             float floor = maxRange > 0f ? minAlt * range / maxRange : minAlt;
-            if (targetAlt < floor || targetAlt > maxAlt) return false;
-            return maxOffBoresightDeg <= 0f || offBoresightDeg <= maxOffBoresightDeg;
+            if (targetAlt < floor || targetAlt > maxAlt || ownSpeed < minOwnSpeed) return false;
+            return offBoresightDeg < maxOffBoresightDeg;
         }
     }
 

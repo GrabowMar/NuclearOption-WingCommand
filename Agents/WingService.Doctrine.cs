@@ -14,6 +14,9 @@ namespace WingCommand
 
         private readonly Unit[] standingOthers = new Unit[FormationCatalog.MaxSlots];
 
+        /// <summary>The game fires a missile only at a position this accurate (review M5d-2 I2).</summary>
+        public static float FireAccuracyMetres = 100f;
+
         private void LoadDoctrine()
         {
             string text = Plugin.Settings != null ? Plugin.Settings.Doctrine.Value : "";
@@ -57,8 +60,13 @@ namespace WingCommand
             AnchorSample anchor = Planner.Active ? Planner.Sample() : AnchorNow();
             Vec3 cover = anchor.Present ? anchor.Pos : a.GlobalPosition().ToVec3();
             int others = 0;
+            // Committed: the others' standing targets this check and the engaged members' own targets (review M5d-2 I1).
             foreach (WingMember o in Members)
-                if (!ReferenceEquals(o, m) && o.StandingTarget != null && others < standingOthers.Length) standingOthers[others++] = o.StandingTarget;
+            {
+                if (ReferenceEquals(o, m) || others >= standingOthers.Length) continue;
+                Unit taken = o.Engaged ? NativeTarget(o) : o.StandingTarget;
+                if (taken != null) standingOthers[others++] = taken;
+            }
 
             GlobalPosition at = a.GlobalPosition();
             Vector3 nose = a.transform.forward;
@@ -74,7 +82,7 @@ namespace WingCommand
                 if (mode == StandingMode.Cover ? !(u is Aircraft) || fromCover > range : !StandingFire.Allows(allow, air)) continue;
                 Vector3 to = t.GetPosition() - at;
                 float distance = to.magnitude;
-                if (distance > range || !hq.IsTargetPositionAccurate(u, TargetAccuracyMetres)) continue;
+                if (distance > range || !hq.IsTargetPositionAccurate(u, FireAccuracyMetres)) continue;
                 float off = Vector3.Angle(nose, to);
                 int committed = 0;
                 for (int i = 0; i < others; i++)
@@ -83,7 +91,8 @@ namespace WingCommand
                 {
                     if (!Usable(a, w) || !w.WeaponInfo.missile || w.WeaponInfo.gun || w.WeaponInfo.bomb) continue;
                     TargetRequirements req = w.WeaponInfo.targetRequirements;
-                    if (!StandingFire.InEnvelope(distance, req.minRange, req.maxRange, u.radarAlt, req.minAltitude, req.maxAltitude, off, req.minAlignment)) continue;
+                    if (!StandingFire.InEnvelope(distance, req.minRange, req.maxRange, u.radarAlt, req.minAltitude, req.maxAltitude, off, req.minAlignment, a.speed, req.minOwnerSpeed)) continue;
+                    if (StandingFire.Saturated(committed, t.missileAttacks, w.WeaponInfo.CalcAttacksNeeded(u))) continue;
                     OpportunityThreat ot = CombatAI.AnalyzeTarget(w, a, t, 0f, distance, 1f);
                     if (ot.opportunity <= 0f) continue;
                     int capacity = System.Math.Max(1, System.Math.Min(4, (int)System.Math.Ceiling(w.WeaponInfo.CalcAttacksNeeded(u))));
@@ -91,30 +100,41 @@ namespace WingCommand
                         ? 1f / System.Math.Max(fromCover, 1f) / (1f + committed)
                         : TargetSpread.Score(ot.opportunity, ot.threat, distance, req.maxRange, committed, false, capacity);
                     if (score <= bestScore) continue;
+                    // Line of sight last (a raycast), as the game's gate: a missile that cannot see its target is wasted.
+                    if (!w.WeaponInfo.overHorizon && !u.LineOfSight(a.transform.position - Vector3.up * a.definition.spawnOffset.y, 1000f)) continue;
                     bestScore = score;
                     best = u;
                     bestStation = w;
                 }
             }
             for (int i = 0; i < others; i++) standingOthers[i] = null;
-            if (best == null || !FireAt(m, bestStation, best)) return;
-            m.Cadence.Fired();
+            if (best == null) return;
+            bool launched = FireAt(m, bestStation, best, out bool attempted);
+            // Any attempt waits the full interval (a launch the ammo count has not shown yet must not be doubled).
+            if (attempted) m.Cadence.Fired();
+            if (!launched) return;
             StandingShots++;
             Plugin.Logger.LogInfo($"[Wing] #{m.Number} fox on {best.unitName} ({Doctrine.PatternName})");
         }
 
         /// <summary>The game's stock sequence, as 0.9 fired from the slot: the station, the target list (each change sends
         /// the station's targets), the pilot's primary target, then the pilot's fire.</summary>
-        private static bool FireAt(WingMember m, WeaponStation station, Unit target)
+        private static bool FireAt(WingMember m, WeaponStation station, Unit target, out bool attempted)
         {
+            attempted = false;
             WeaponManager wm = m.Aircraft.weaponManager;
-            if (m.Pilot == null || !station.Ready() || station.SalvoInProgress) return false;
+            // The game's fire returns silently with the safety on (gear not up on a gear-safety station): no shot then.
+            if (m.Pilot == null || !station.Ready() || station.SalvoInProgress || station.SafetyIsOn(m.Aircraft)) return false;
             if (wm.currentWeaponStation != null && wm.currentWeaponStation.SalvoInProgress) return false;
             wm.currentWeaponStation = station;
             wm.ClearTargetList();
             wm.AddTargetList(target);
             m.Pilot.SetPrimaryTarget(target);
+            int before = station.Ammo;
+            attempted = true;
             m.Pilot.Fire();
+            // Counted only when a missile left the rail (review M5d-2 I3).
+            if (station.Ammo >= before) return false;
             m.StandingTarget = target;
             return true;
         }
