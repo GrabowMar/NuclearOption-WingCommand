@@ -77,6 +77,45 @@ namespace WingCommand
 
         public void Report(int owner, Vec3 pos) => positions[owner] = pos;
 
+        /// <summary>The field's traffic in one line (the in-game ground trace and field dump): the departures, which member
+        /// holds which node, blocked edges, who waits for whom, foreign aircraft standing on the field, the deadlock victim.</summary>
+        public string Describe()
+        {
+            var sb = new System.Text.StringBuilder(Departures.Describe());
+            sb.Append(" claims=[");
+            bool first = true;
+            for (int n = 0; n < Graph.NodeCount; n++)
+            {
+                int o = Reservations.OwnerOfNode(n);
+                if (o < 0) continue;
+                sb.Append(first ? "" : ",").Append('n').Append(n).Append(':').Append(o);
+                first = false;
+            }
+            sb.Append("] blocked=[");
+            first = true;
+            for (int e = 0; e < Graph.EdgeCount; e++)
+            {
+                if (!Reservations.Blocked(e)) continue;
+                sb.Append(first ? "" : ",").Append('e').Append(e);
+                first = false;
+            }
+            sb.Append("] waits=[");
+            first = true;
+            foreach (KeyValuePair<int, int> w in waitsFor)
+            {
+                if (w.Value < 0) continue;
+                sb.Append(first ? "" : ",").Append(w.Key).Append('>').Append(w.Value);
+                first = false;
+            }
+            sb.Append("] obstacles=[");
+            for (int i = 0; i < Obstacles.Count; i++)
+                sb.Append(i == 0 ? "" : ",").Append('(').Append(Whole(Obstacles[i].X)).Append(',').Append(Whole(Obstacles[i].Z)).Append(')');
+            sb.Append("] victim=").Append(Victim);
+            return sb.ToString();
+        }
+
+        private static string Whole(float v) => ((int)Math.Round(v)).ToString(System.Globalization.CultureInfo.InvariantCulture);
+
         /// <summary>An arriving member still on a runway (it keeps the departure runway busy while on it).</summary>
         public void ReportArriving(int owner, bool onTheRunway)
         {

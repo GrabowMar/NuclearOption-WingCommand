@@ -216,6 +216,7 @@ namespace WingCommand
         {
             string path = Text(args, "path") ?? System.IO.Path.Combine(System.IO.Path.GetTempPath(), "wingcommand-fields.json");
             List<AirbaseSample> samples = FieldRegistry.Samples();
+            FieldRegistry.LogStates();
             System.IO.File.WriteAllText(path, AirbaseSample.ToDumpJson(MissionManager.CurrentMission?.Name, samples));
             Plugin.Logger.LogInfo($"[Automation] DumpFields: {samples.Count} fields to {path}");
             return Ok("path", path);

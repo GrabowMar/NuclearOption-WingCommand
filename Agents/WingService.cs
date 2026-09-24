@@ -123,6 +123,11 @@ namespace WingCommand
             TrackLeader();
             SuperviseLandings();
             Prune();
+            if (Plugin.Settings.DevTools.Value && (traceClock += dt) >= GroundTraceSeconds)
+            {
+                traceClock = 0f;
+                TraceGround();
+            }
             if (++probeTick >= ProbeTicks)
             {
                 probeTick = 0;
@@ -702,6 +707,26 @@ namespace WingCommand
             m.StopLogged = true;
             Plugin.Logger.LogInfo($"[Ground] #{m.Number} stopped {LongStopSeconds:0} s in {phase} at ({m.Last.Pos.X:0}, {m.Last.Pos.Z:0}): " +
                                   $"{m.Ground.Stop}{(m.Ground.StopWho >= 0 ? " (member " + NumberOf(m.Ground.StopWho) + ")" : "")}");
+        }
+
+        public static float GroundTraceSeconds = 10f;
+        private float traceClock;
+        private readonly HashSet<FieldTraffic> traced = new HashSet<FieldTraffic>();
+
+        /// <summary>Dev tools: every <see cref="GroundTraceSeconds"/>, each member on a field (phase, why it stands, where,
+        /// how fast) and each such field's traffic (<see cref="FieldTraffic.Describe"/>).</summary>
+        private void TraceGround()
+        {
+            traced.Clear();
+            foreach (WingMember m in Members)
+            {
+                if (m.Released || !m.OnGround) continue;
+                GroundPilot g = m.Ground;
+                Plugin.Logger.LogInfo($"[Ground] trace t={missionTime:0} #{m.Number} id {m.Id} {g.Phase} stop={g.Stop}" +
+                                      $"{(g.StopWho >= 0 ? " (" + NumberOf(g.StopWho) + ")" : "")} at ({m.Last.Pos.X:0}, {m.Last.Pos.Z:0}) " +
+                                      $"v {m.Last.Speed:0.0}");
+                if (traced.Add(g.Field)) Plugin.Logger.LogInfo($"[Ground] trace {g.Field.Field.Name}: {g.Field.Describe()}");
+            }
         }
 
         /// <summary>The wing number (#2…) of the member with <paramref name="id"/>, or its id when it has left.</summary>

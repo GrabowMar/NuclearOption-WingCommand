@@ -59,5 +59,44 @@ namespace WingCommand.FlightSim
             Assert.Equal(0, events.CountOf(WingEventKind.Relocated));
             Assert.Equal(0, events.CountOf(WingEventKind.DepartureAborted));
         }
+        /// <summary>The in-game boscali_north of 2026-09-24 (a dump from a run: 8 hangars, one service point, runway exits
+        /// on the centreline, no entry points), launching out of its first hangars as the game hands them out.</summary>
+        [Theory]
+        [InlineData(2)]
+        [InlineData(4)]
+        public void BoscaliNorthDepartsFromItsHangarsWithoutRelocationsOrAborts(int count)
+        {
+            AirbaseSample sample = AirbaseSample.FromDumpJson(File.ReadAllText(Path.Combine(AppContext.BaseDirectory, "Fixtures", "airbases",
+                "boscali-north-hangars.json"))).Single();
+            Assert.True(FieldTraffic.TryPickRunway(sample, out int runway, out bool reverse));
+            var field = new FieldTraffic(sample, runway, reverse);
+            AirframeProfile p = GroundScenarioTests.Jet();
+            var pilots = new List<GroundPilot>();
+            var plants = new List<DepartingPlant>();
+            var pipelines = new List<IFlightPipeline>();
+            for (int k = 0; k < count; k++)
+            {
+                Pose spawn = sample.Hangars[k].Spawn;
+                field.Departures.Expect(k, LineupPlanner.Abreast(field.Runway.Width, p.SpanM));
+                pilots.Add(new GroundPilot(k, field, AirframeClass.FixedWing, spawn, k));
+                plants.Add(new DepartingPlant(PlantParams.GenericFighter, spawn, p.TakeoffSpeed, p.WheelbaseM, p.SteerLockDeg));
+                pipelines.Add(FlightStack.NewPipeline(AirframeClass.FixedWing));
+            }
+            var events = new WingEventRing();
+            for (int i = 0; i < 400 * 30 && pilots.Exists(x => !x.Done && x.Phase != GroundPhase.Aborted); i++)
+            {
+                field.Step(Dt);
+                for (int k = 0; k < count; k++)
+                {
+                    if (pilots[k].Done || pilots[k].Phase == GroundPhase.Aborted) continue;
+                    plants[k].Step(pilots[k].Step(plants[k].Read(Dt), p, pipelines[k], i * Dt, Dt, events, k), Dt);
+                    if (pilots[k].TakeRelocation(out Pose to)) plants[k].Teleport(to);
+                }
+            }
+            for (int k = 0; k < count; k++)
+                Assert.True(pilots[k].Done, $"member {k} is {pilots[k].Phase} ({pilots[k].Stop}) at {plants[k].Position}");
+            Assert.Equal(0, events.CountOf(WingEventKind.Relocated));
+            Assert.Equal(0, events.CountOf(WingEventKind.DepartureAborted));
+        }
     }
 }

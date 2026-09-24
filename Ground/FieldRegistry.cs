@@ -106,6 +106,12 @@ namespace WingCommand
         }
 
         /// <summary>The samples of every field in use this mission (diagnostics: replayed in the FlightSim).</summary>
+        /// <summary>Every field's traffic state to the log (<see cref="FieldTraffic.Describe"/>).</summary>
+        public static void LogStates()
+        {
+            foreach (Entry e in fields) Plugin.Logger.LogInfo($"[Ground] state {e.Traffic.Field.Name}: {e.Traffic.Describe()}");
+        }
+
         public static List<AirbaseSample> Samples()
         {
             var samples = new List<AirbaseSample>();

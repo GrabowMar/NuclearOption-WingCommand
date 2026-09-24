@@ -65,6 +65,13 @@ namespace WingCommand
             }
         }
 
+        /// <summary>The sequencer's state in one line (the in-game ground trace).</summary>
+        public string Describe() =>
+            $"locked={RunwayLocked} busy={RunwayBusy} native={NativeLandingPending} expected={Ids(expected)} queue={Ids(queue)} " +
+            $"group={Ids(group)} order={Ids(order)} cleared={Ids(cleared)}";
+
+        private static string Ids(IEnumerable<int> ids) => "[" + string.Join(",", ids) + "]";
+
         /// <summary>A member will depart; <paramref name="abreast"/> is how many of its type fit the runway side by side.</summary>
         public void Expect(int owner, int abreast)
         {
