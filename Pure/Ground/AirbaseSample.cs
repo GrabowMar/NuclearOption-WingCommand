@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Globalization;
+using System.Text;
 
 namespace WingCommand
 {
@@ -117,6 +118,92 @@ namespace WingCommand
             ServicePoints = Map(a, "servicePoints", PoseOf),
             Pads = Map(a, "verticalPads", PoseOf),
         };
+
+        /// <summary>Samples written in the dump format <see cref="FromDumpJson"/> reads (a field as the mod saw it in
+        /// game, replayed in the FlightSim).</summary>
+        public static string ToDumpJson(string mission, IEnumerable<AirbaseSample> fields)
+        {
+            var sb = new StringBuilder();
+            sb.Append("{\"mission\": \"").Append(MiniJson.Escape(mission ?? "")).Append("\", \"airbases\": [");
+            bool first = true;
+            foreach (AirbaseSample a in fields)
+            {
+                sb.Append(first ? "\n  " : ",\n  ");
+                first = false;
+                sb.Append("{\"name\": \"").Append(MiniJson.Escape(a.Name ?? "")).Append("\", \"center\": ");
+                Write(sb, a.Center);
+                sb.Append(", \"radius\": ").Append(Num(a.Radius)).Append(", \"attached\": ").Append(a.Attached ? "true" : "false");
+                sb.Append(",\n   \"runways\": [");
+                for (int i = 0; i < a.Runways.Length; i++)
+                {
+                    RunwaySample r = a.Runways[i];
+                    sb.Append(i > 0 ? ", " : "").Append("{\"index\": ").Append(r.Index).Append(", \"start\": ");
+                    Write(sb, r.Start);
+                    sb.Append(", \"end\": ");
+                    Write(sb, r.End);
+                    sb.Append(", \"width\": ").Append(Num(r.Width)).Append(", \"length\": ").Append(Num(r.Length))
+                        .Append(", \"reversable\": ").Append(Bool(r.Reversable)).Append(", \"takeoff\": ").Append(Bool(r.Takeoff))
+                        .Append(", \"landing\": ").Append(Bool(r.Landing)).Append(", \"arrestor\": ").Append(Bool(r.Arrestor))
+                        .Append(", \"skiJump\": ").Append(Bool(r.SkiJump)).Append(", \"entryPoints\": ");
+                    Write(sb, r.Entries);
+                    sb.Append(", \"exitPoints\": ");
+                    Write(sb, r.Exits);
+                    sb.Append('}');
+                }
+                sb.Append("],\n   \"taxiRoads\": [");
+                for (int i = 0; i < a.Roads.Length; i++)
+                {
+                    sb.Append(i > 0 ? ", " : "").Append("{\"points\": [");
+                    for (int k = 0; k < a.Roads[i].Length; k++)
+                    {
+                        if (k > 0) sb.Append(", ");
+                        Write(sb, a.Roads[i][k]);
+                    }
+                    sb.Append("]}");
+                }
+                sb.Append("],\n   \"hangars\": [");
+                for (int i = 0; i < a.Hangars.Length; i++)
+                {
+                    HangarSample h = a.Hangars[i];
+                    sb.Append(i > 0 ? ", " : "").Append("{\"index\": ").Append(h.Index).Append(", \"position\": ");
+                    Write(sb, h.Spawn.Pos);
+                    sb.Append(", \"forward\": ");
+                    Write(sb, h.Spawn.Fwd);
+                    sb.Append(", \"available\": ").Append(Bool(h.Available)).Append(", \"carrierDoors\": ").Append(Bool(h.CarrierDoors))
+                        .Append(", \"types\": [");
+                    for (int k = 0; k < h.Types.Length; k++)
+                        sb.Append(k > 0 ? ", " : "").Append('"').Append(MiniJson.Escape(h.Types[k] ?? "")).Append('"');
+                    sb.Append("]}");
+                }
+                sb.Append("],\n   \"servicePoints\": ");
+                Write(sb, a.ServicePoints);
+                sb.Append(", \"verticalPads\": ");
+                Write(sb, a.Pads);
+                sb.Append('}');
+            }
+            return sb.Append("\n]}\n").ToString();
+        }
+
+        private static string Num(float v) => v.ToString("R", CultureInfo.InvariantCulture);
+
+        private static string Bool(bool b) => b ? "true" : "false";
+
+        private static void Write(StringBuilder sb, Vec3 v) =>
+            sb.Append('[').Append(Num(v.X)).Append(", ").Append(Num(v.Y)).Append(", ").Append(Num(v.Z)).Append(']');
+
+        private static void Write(StringBuilder sb, Pose[] poses)
+        {
+            sb.Append('[');
+            for (int i = 0; i < poses.Length; i++)
+            {
+                sb.Append(i > 0 ? ", " : "").Append("{\"position\": ");
+                Write(sb, poses[i].Pos);
+                sb.Append(", \"forward\": ");
+                Write(sb, poses[i].Fwd);
+                sb.Append('}');
+            }
+            sb.Append(']');
+        }
 
         private static Pose PoseOf(Dictionary<string, object> p) => new Pose(V(p, "position"), V(p, "forward"));
 

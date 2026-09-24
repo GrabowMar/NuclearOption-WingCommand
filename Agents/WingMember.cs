@@ -21,6 +21,9 @@ namespace WingCommand
         public bool HasPendingRecovery, ReserveNow;
         public readonly BingoMonitor Bingo = new BingoMonitor();
         public float BingoClock, BingoFieldAt;
+        /// <summary>Diagnostics: when the member last came to a stop on the ground, and whether that stop was logged.</summary>
+        public float StoppedSince = float.NaN;
+        public bool StopLogged;
         public Airbase BingoField;
         /// <summary>Stable for the member's life in the wing (slots renumber when a member ahead leaves).</summary>
         public int Id;

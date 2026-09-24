@@ -5,6 +5,9 @@ namespace WingCommand
 {
     internal enum GroundPhase : byte { Parked, TaxiOut, HoldShort, LineUp, Roll, ClimbOut, LiftOff, Done, Aborted, TaxiIn, Stand }
 
+    /// <summary>What holds a taxiing member where it stops (diagnostics).</summary>
+    internal enum GroundStop : byte { None, Claims, Member, Foreign, Blocked, Goal, Relocating, PulledAside }
+
     /// <summary>One member from its spawn on a field until it is airborne and the formation pilot takes over (spec M3 §3).
     /// <list type="bullet">
     /// <item>Parked: brakes for <see cref="ParkedSeconds"/>, then routes to the departure hold-short.</item>
@@ -61,6 +64,9 @@ namespace WingCommand
         public GroundPhase Phase { get; private set; } = GroundPhase.Parked;
         public bool Done => Phase == GroundPhase.Done;
         public FieldTraffic Field => field;
+        /// <summary>While taxiing: what its stop point is set by, and whose (a member or a claim holder, −1: none).</summary>
+        public GroundStop Stop { get; private set; }
+        public int StopWho { get; private set; } = -1;
         /// <summary>Set by the engine at spawn: a structure overhead (a helicopter must leave the hangar first).</summary>
         public bool RoofOverhead;
         public ControlOutput LastOutput;
@@ -309,6 +315,7 @@ namespace WingCommand
 
             float total = cum[cum.Length - 1];
             float stopAt = total;
+            GroundStop binding = GroundStop.None;
             bool reservationWait = false;
             float obstacle = ObstacleStop(along, s, p, out int member);
             if (edges.Count > 0)
@@ -334,6 +341,7 @@ namespace WingCommand
                     }
                     steps = Math.Min(steps, k - step);
                     stopAt = NodeAt(k);
+                    binding = GroundStop.Blocked;
                     break;
                 }
                 // The last step's far node only once it is within the claim window (a long edge's far end is not held
@@ -349,13 +357,19 @@ namespace WingCommand
                 {
                     int full = items / 2;
                     waitEdge = step + full;
+                    float claimed;
                     if (items % 2 == 1)
                     {
                         waitNode = nodes[step + full + 1];
-                        stopAt = Math.Min(stopAt, NodeAt(step + full + 1) - NodeClearRadius);
+                        claimed = NodeAt(step + full + 1) - NodeClearRadius;
                     }
-                    else if (items == 0 && along < NodeAt(0)) stopAt = Math.Min(stopAt, NodeAt(0) - NodeClearRadius);
-                    else stopAt = Math.Min(stopAt, NodeAt(step + full));
+                    else if (items == 0 && along < NodeAt(0)) claimed = NodeAt(0) - NodeClearRadius;
+                    else claimed = NodeAt(step + full);
+                    if (claimed < stopAt)
+                    {
+                        stopAt = claimed;
+                        binding = GroundStop.Claims;
+                    }
                     // Waiting for a holder that waits for us (a mixed cycle the deadlock check cannot see) is not
                     // legitimate: the watchdog acts.
                     reservationWait = stopAt - along < 3f && field.WaitsFor(field.Reservations.WaitingFor(Owner)) != Owner;
@@ -371,6 +385,7 @@ namespace WingCommand
                     waitNode = -1;
                 }
                 stopAt = obstacle;
+                binding = member >= 0 ? GroundStop.Member : GroundStop.Foreign;
                 // Queued behind another member is a legitimate wait (unless it waits for us too); stuck behind a foreign
                 // aircraft is not.
                 reservationWait |= member >= 0 && field.WaitsFor(member) != Owner && stopAt - along < 3f;
@@ -385,6 +400,8 @@ namespace WingCommand
             }
             float speed = Vec3.Dot(s.Vel, s.Fwd.Horizontal.Normalized);
             bool atGoal = total - along < LineupTolerance + 2f && speed < StoppedSpeed;
+            Stop = relocationWanted ? GroundStop.Relocating : atGoal ? GroundStop.Goal : binding;
+            StopWho = Stop == GroundStop.Member ? member : Stop == GroundStop.Claims ? field.Reservations.WaitingForAny(Owner) : -1;
             if (arriving && atGoal)
             {
                 // On the stand: only the stand node stays held.
@@ -468,6 +485,8 @@ namespace WingCommand
         /// route when the other member has passed the node (or after <see cref="PullAsideSeconds"/>).</summary>
         private ControlOutput Aside(in AircraftState s, AirframeProfile p, float time, float dt)
         {
+            Stop = GroundStop.PulledAside;
+            StopWho = asideFor;
             // Clear of the node on the refuge side: the node and the way back to it are the other's now.
             float fromNode = (s.Pos - field.Graph.NodePos(asideNode)).Horizontal.Length;
             if (progress >= path.Length - 2 && fromNode > NodeClearRadius + 5f)

@@ -209,6 +209,7 @@ namespace WingCommand
             m.NoFbwSeconds = 0f;
             ControlOutput o = m.Ground.Step(m.Last, m.Profile, m.Brain.Pipeline, missionTime, dt, Events, m.Brain.Slot);
             ControlWriter.Fly(m.Aircraft, o, m.Profile.Class);
+            LogLongStop(m);
             if (m.Ground.TakeRelocation(out Pose to)) SafeRelocate.Move(m.Aircraft, to);
             if (m.Ground.Phase == GroundPhase.Aborted)
             {
@@ -551,11 +552,52 @@ namespace WingCommand
                 Metrics.Left(m.Id);
                 Members.RemoveAt(i);
                 changed = true;
-                Plugin.Logger.LogInfo($"[Wing] #{m.Number} left the wing");
+                Plugin.Logger.LogInfo($"[Wing] #{m.Number} left the wing: {LeaveReason(m, ours)}");
             }
             if (!changed) return;
             for (int i = 0; i < Members.Count; i++) Members[i].Brain.Slot = i;
             RosterChanged?.Invoke();
+        }
+
+        /// <summary>Why a member left (diagnostics).</summary>
+        private static string LeaveReason(WingMember m, bool ours)
+        {
+            if (m.Released) return "released";
+            if (m.Aircraft == null) return "aircraft gone";
+            if (m.Aircraft.disabled) return $"aircraft disabled ({m.Aircraft.unitState})";
+            if (m.Pilot == null) return "no pilot";
+            if (m.Pilot.dead) return "pilot dead";
+            if (m.Pilot.ejected) return "pilot ejected";
+            return ours ? "unknown" : $"pilot state now {(m.Pilot.currentState != null ? m.Pilot.currentState.GetType().Name : "none")}";
+        }
+
+        public static float LongStopSeconds = 15f;
+
+        /// <summary>Diagnostics: a member taxiing that has stood still for <see cref="LongStopSeconds"/> is logged once
+        /// per stop with its phase, position and what holds it.</summary>
+        private void LogLongStop(WingMember m)
+        {
+            GroundPhase phase = m.Ground.Phase;
+            bool taxiing = phase == GroundPhase.TaxiOut || phase == GroundPhase.HoldShort || phase == GroundPhase.TaxiIn;
+            if (!taxiing || m.Last.Speed > 0.5f)
+            {
+                m.StoppedSince = float.NaN;
+                m.StopLogged = false;
+                return;
+            }
+            if (float.IsNaN(m.StoppedSince)) m.StoppedSince = missionTime;
+            if (m.StopLogged || missionTime - m.StoppedSince < LongStopSeconds) return;
+            m.StopLogged = true;
+            Plugin.Logger.LogInfo($"[Ground] #{m.Number} stopped {LongStopSeconds:0} s in {phase} at ({m.Last.Pos.X:0}, {m.Last.Pos.Z:0}): " +
+                                  $"{m.Ground.Stop}{(m.Ground.StopWho >= 0 ? " (member " + NumberOf(m.Ground.StopWho) + ")" : "")}");
+        }
+
+        /// <summary>The wing number (#2…) of the member with <paramref name="id"/>, or its id when it has left.</summary>
+        private string NumberOf(int id)
+        {
+            foreach (WingMember x in Members)
+                if (x.Id == id) return "#" + x.Number;
+            return "id " + id;
         }
 
         private void Probe(float dt)

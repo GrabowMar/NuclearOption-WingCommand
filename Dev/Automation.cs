@@ -101,6 +101,17 @@ namespace WingCommand
                 { "native_switches_redirected", SwitchStateGuard.Redirected },
                 { "ejections_blocked", EjectGuard.Blocked },
             };
+            var members = new List<object>();
+            foreach (WingMember m in wing.Members)
+                members.Add(new Dictionary<string, object>
+                {
+                    { "number", m.Number },
+                    { "phase", m.Ground != null ? m.Ground.Phase.ToString() : "air" },
+                    { "stop", m.Ground != null ? m.Ground.Stop.ToString() : "" },
+                    { "recovery", m.Recovery != null ? m.Recovery.Phase.ToString() : "" },
+                    { "x", m.Last.Pos.X }, { "z", m.Last.Pos.Z }, { "alt", m.Last.RadarAlt },
+                });
+            result["members"] = members;
             Plugin.Logger.LogInfo($"[Automation] Ground: {grounded} on the ground, {airborne} airborne, " +
                                   $"{result["relocated"]} relocated, {result["rerouted"]} rerouted, {EjectGuard.Blocked} ejections blocked");
             return result;
@@ -195,6 +206,17 @@ namespace WingCommand
             if (!(Arg(args, "idUnit") is Unit u) || u.disabled) return Fail("Escort", "'id' does not name a live unit");
             wing.SetEscort(u);
             return Ok("escort", u.unitName);
+        }
+
+        /// <summary>Writes every field in use as the mod reads it (the nomodkit dump format) to <c>path</c> (default:
+        /// <c>%TEMP%\wingcommand-fields.json</c>), for replay in the FlightSim.</summary>
+        public static Dictionary<string, object> DumpFields(Dictionary<string, object> args)
+        {
+            string path = Text(args, "path") ?? System.IO.Path.Combine(System.IO.Path.GetTempPath(), "wingcommand-fields.json");
+            List<AirbaseSample> samples = FieldRegistry.Samples();
+            System.IO.File.WriteAllText(path, AirbaseSample.ToDumpJson(MissionManager.CurrentMission?.Name, samples));
+            Plugin.Logger.LogInfo($"[Automation] DumpFields: {samples.Count} fields to {path}");
+            return Ok("path", path);
         }
 
         /// <summary>Sends every member home to the reserve (spec M3 §4).</summary>

@@ -41,7 +41,7 @@
       "store": "launch",
       "args": {
         "lead": "lead",
-        "field": "airbase_mountains",
+        "field": "nearest",
         "count": 4,
         "type": "CI-22 Cricket"
       }
@@ -55,7 +55,20 @@
     },
     {
       "op": "wait",
-      "seconds": 360
+      "seconds": 60
+    },
+    {
+      "op": "call",
+      "method": "WingCommand.Automation.Ground",
+      "store": "early"
+    },
+    {
+      "op": "call",
+      "method": "WingCommand.Automation.DumpFields"
+    },
+    {
+      "op": "wait",
+      "seconds": 300
     },
     {
       "op": "call",

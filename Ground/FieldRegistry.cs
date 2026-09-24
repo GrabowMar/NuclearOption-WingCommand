@@ -102,6 +102,14 @@ namespace WingCommand
             return false;
         }
 
+        /// <summary>The samples of every field in use this mission (diagnostics: replayed in the FlightSim).</summary>
+        public static List<AirbaseSample> Samples()
+        {
+            var samples = new List<AirbaseSample>();
+            foreach (Entry e in fields) samples.Add(e.Traffic.Field);
+            return samples;
+        }
+
         public static void Clear()
         {
             foreach (Entry e in fields)

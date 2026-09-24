@@ -55,7 +55,20 @@
     },
     {
       "op": "wait",
-      "seconds": 360
+      "seconds": 60
+    },
+    {
+      "op": "call",
+      "method": "WingCommand.Automation.Ground",
+      "store": "early"
+    },
+    {
+      "op": "call",
+      "method": "WingCommand.Automation.DumpFields"
+    },
+    {
+      "op": "wait",
+      "seconds": 300
     },
     {
       "op": "call",

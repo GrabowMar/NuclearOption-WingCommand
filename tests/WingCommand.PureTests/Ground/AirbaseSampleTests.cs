@@ -24,6 +24,26 @@ namespace WingCommand.PureTests
 }";
 
         [Fact]
+        public void ASampleWrittenAsADumpReadsBackTheSame()
+        {
+            AirbaseSample desert = AirbaseSample.FromDumpJson(Dump)[0];
+            desert.Runways[0].Exits = new[] { new Pose(new Vec3(0f, 20f, 900f), new Vec3(0f, 0f, 1f)) };
+            string json = AirbaseSample.ToDumpJson("Escalation", new[] { desert });
+            AirbaseSample back = AirbaseSample.FromDumpJson(json)[0];
+            Assert.Equal(desert.Name, back.Name);
+            Assert.Equal(desert.Center, back.Center);
+            Assert.Equal(desert.Radius, back.Radius);
+            Assert.Equal(desert.Runways[0].End, back.Runways[0].End);
+            Assert.Equal(desert.Runways[0].Width, back.Runways[0].Width);
+            Assert.Equal(desert.Runways[0].Reversable, back.Runways[0].Reversable);
+            Assert.Equal(desert.Runways[0].Exits[0].Pos, back.Runways[0].Exits[0].Pos);
+            Assert.Equal(desert.Roads[0], back.Roads[0]);
+            Assert.Equal(desert.Hangars[0].Spawn.Pos, back.Hangars[0].Spawn.Pos);
+            Assert.Equal(desert.Hangars[0].Types, back.Hangars[0].Types);
+            Assert.Equal(desert.ServicePoints[0].Fwd, back.ServicePoints[0].Fwd);
+        }
+
+        [Fact]
         public void TheDumpReadsIntoSamplesSkippingUnreadableAirbases()
         {
             var fields = AirbaseSample.FromDumpJson(Dump);
