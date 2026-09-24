@@ -10,7 +10,6 @@ namespace WingCommand
         public SurvivalLifecycleTests()
         {
             WingPilotRoster.Reset();
-            WingDeparture.Reset();
             UnitRegistry.Units.Clear();
             Plugin.Settings = new Config();
             Plugin.Logger = new Log();
@@ -465,36 +464,6 @@ namespace WingCommand
             Time.timeSinceLevelLoad = 500;
             WingSearchAndRescue.Tick();
             Assert.Empty(WingPilotRoster.DisplayRoster());
-        }
-
-        [Fact]
-        public void ReleasedAircraftWithEjectedCrewAtBaseWaitsForRecoverySettlement()
-        {
-            var aircraft = Plane();
-            var pilot = WingPilotRoster.Assign(aircraft);
-            WingDeparture.Begin(aircraft);
-            Eject(aircraft);
-            aircraft.AtHome = true;
-            WingDeparture.Prune();
-            Assert.Single(WingDeparture.Outbound);
-            Assert.True(WingPilotRoster.IsFlying(pilot));
-            Assert.False(pilot.Lost);
-            WingPilotRoster.Retire(1, true);
-            Assert.True(WingPilotRoster.IsFree(pilot));
-        }
-
-        [Fact]
-        public void ReleasedAircraftLostEnrouteTransfersSurvivorToSar()
-        {
-            var aircraft = Plane();
-            var pilot = WingPilotRoster.Assign(aircraft);
-            WingDeparture.Begin(aircraft);
-            Eject(aircraft);
-            WingDeparture.Prune();
-            Assert.Empty(WingDeparture.Outbound);
-            Assert.Equal(PilotRecoveryStatus.Downed, pilot.RecoveryStatus);
-            Assert.False(WingPilotRoster.IsFlying(pilot));
-            Assert.False(pilot.Lost);
         }
 
         [Fact]

@@ -30,6 +30,11 @@ namespace WingCommand
             typeof(WingSurvivorDeathPatch),
             typeof(WingSurvivorCapturePatch),
             typeof(WingTakeoverPatches),
+            typeof(Interop.WingSquad.SurvivorSpawnPatch),
+            typeof(Interop.WingSquad.SurvivorStatePatch),
+            typeof(Interop.WingSquad.SurvivorDisabledPatch),
+            typeof(Interop.WingSquad.SurvivorCapturePatch),
+            typeof(Interop.WingSquad.AceTargetPatch),
         };
 
         /// <summary>"DeclaringType.Method" names that must be patched after <see cref="Apply"/>.</summary>
@@ -57,6 +62,7 @@ namespace WingCommand
             "PilotDismounted.Capture",
             "Aircraft.UserCode_RpcJettisonCanopy_1196305304",
             "GameManager.FinishGame",
+            "CombatAI.ChooseHQTarget",
         };
 
         internal static void Apply(Harmony harmony, ManualLogSource log)

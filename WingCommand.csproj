@@ -52,39 +52,28 @@
   <!-- Files not yet ported to the 1.0 architecture. Each names the milestone that restores it.
        Release builds of a non-prerelease version must have an empty quarantine. -->
   <ItemGroup Label="Quarantine">
-    <Quarantine Include="Economy\WingLoadoutBook.cs" Milestone="M3" />
+    <Quarantine Include="Economy\WingLoadoutBook.cs" Milestone="M7" />
     <Quarantine Include="Economy\WingShop.cs" Milestone="M7" />
     <Quarantine Include="Economy\WingHangarStock.cs" Milestone="M7" />
     <Quarantine Include="Economy\EconomyFacade.cs" Milestone="M7" />
     <Quarantine Include="Combat\CombatFacade.cs" Milestone="M5" />
     <Quarantine Include="Combat\SplashSalvo.cs" Milestone="M5" />
-    <Quarantine Include="Economy\HangarDepartureLane.cs" Milestone="M3" />
-    <Quarantine Include="Economy\WingLoadout.cs" Milestone="M3" />
     <Quarantine Include="Combat\AiCombatTweak.cs" Milestone="M5" />
     <Quarantine Include="Combat\DoctrineLive.cs" Milestone="M5" />
     <Quarantine Include="Combat\TacticalCoordinator.cs" Milestone="M5" />
     <Quarantine Include="Combat\WingWeapons.cs" Milestone="M5" />
     <Quarantine Include="Comms\WingChatterHud.cs" Milestone="M4" />
     <Quarantine Include="Comms\WingRadioAudio.cs" Milestone="M4" />
-    <Quarantine Include="Economy\WingAirfield.cs" Milestone="M3" />
-    <Quarantine Include="Economy\WingLaunchFields.cs" Milestone="M3" />
-    <Quarantine Include="Economy\WingLoadoutTemplates.cs" Milestone="M3" />
-    <Quarantine Include="Interop\WingSquad.cs" Milestone="M3" />
     <Quarantine Include="Ui\CombatHUDHitAudioPatch.cs" Milestone="M7" />
     <Quarantine Include="Ui\WingMarkerBadge.cs" Milestone="M4" />
-    <Quarantine Include="Economy\HangarDeliveryCompletionPatch.cs" Milestone="M3" />
-    <Quarantine Include="Economy\WingShopDelivery.cs" Milestone="M3" />
-    <Quarantine Include="Ui\WmcScreen.CustomPilots.cs" Milestone="M3" />
-    <Quarantine Include="Ui\WmcScreen.Loadout.cs" Milestone="M3" />
+    <Quarantine Include="Ui\WmcScreen.CustomPilots.cs" Milestone="M7" />
+    <Quarantine Include="Ui\WmcScreen.Loadout.cs" Milestone="M7" />
     <Quarantine Include="Ui\WmcScreen.Shell.cs" Milestone="M7" />
-    <Quarantine Include="Ui\WmcScreen.Supply.cs" Milestone="M3" />
+    <Quarantine Include="Ui\WmcScreen.Supply.cs" Milestone="M7" />
     <Quarantine Include="Ui\WmcScreen.TacticalPreview.cs" Milestone="M4" />
     <Quarantine Include="Combat\SlotEngagement.cs" Milestone="M5" />
     <Quarantine Include="Comms\WingComms.cs" Milestone="M4" />
     <Quarantine Include="Core\WingCommandSelection.cs" Milestone="M4" />
-    <Quarantine Include="Personnel\WingDeparture.cs" Milestone="M3" />
-    <Quarantine Include="Personnel\WingDepartureChatter.cs" Milestone="M3" />
-    <Quarantine Include="Personnel\WingRecovery.cs" Milestone="M3" />
     <Quarantine Include="Ui\MapCommandLayer.cs" Milestone="M4" />
     <Quarantine Include="Ui\TacticalMapOverlay.cs" Milestone="M4" />
     <Quarantine Include="Ui\WingDebugActions.cs" Milestone="M7" />

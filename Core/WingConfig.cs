@@ -38,6 +38,7 @@ namespace WingCommand
         public ConfigEntry<bool> SandboxFreeCalls { get; }
         public ConfigEntry<bool> TakeoverOnDeath { get; }
         public ConfigEntry<float> RecruitmentCostRate { get; }
+        public ConfigEntry<string> LoadoutTemplates { get; }
         public ConfigEntry<bool> VerboseLogging { get; }
         public ConfigEntry<bool> DevTools { get; }
         public ConfigEntry<bool> Overlay { get; }
@@ -84,6 +85,9 @@ namespace WingCommand
             RecruitmentCostRate = c.Bind("Squadron", "RecruitmentCostRate", 0.25f, new ConfigDescription(
                 "Taking command of a faction aircraft already flying costs this share of its value, once per aircraft.",
                 new AcceptableValueRange<float>(0f, 1f), new ConfigurationManagerAttributes { Order = 81 }));
+            LoadoutTemplates = c.Bind("Loadout", "SavedTemplates", "", new ConfigDescription(
+                "Saved per-pylon loadout templates (airframe|id|name|store keys; records separated by semicolons). " +
+                "Clear it to delete every template.", null, new ConfigurationManagerAttributes { IsAdvanced = true, Order = 60 }));
 
             ShowHud = c.Bind("Hud", "Show", true, new ConfigDescription(
                 "Show the wing strip and autopilot annunciator.", null, new ConfigurationManagerAttributes { Order = 80 }));

@@ -221,15 +221,29 @@ namespace WingCommand
             return Ok("path", path);
         }
 
-        /// <summary>What calls have cost this mission: charged, refunded, and the player's allocation now.</summary>
+        /// <summary>What calls have cost this mission: charged, refunded, and the player's allocation now; the squadron's
+        /// pilots flying, free and lost; with args.type, the faction's stock of that airframe (−1: unknown).</summary>
         public static Dictionary<string, object> Economy(Dictionary<string, object> args)
         {
             GameManager.GetLocalPlayer(out NuclearOption.Networking.Player player);
             float allocation = player != null ? player.Allocation : -1f;
-            Plugin.Logger.LogInfo($"[Automation] Economy: charged {WingLedger.Charged:0}, refunded {WingLedger.Refunded:0}, allocation {allocation:0}");
+            int flying = 0, free = 0, lost = 0;
+            foreach (WingPilot p in WingPilotRoster.DisplayRoster())
+            {
+                if (p.Lost) lost++;
+                else if (WingPilotRoster.IsFlying(p)) flying++;
+                else if (WingPilotRoster.IsFree(p)) free++;
+            }
+            string typeName = Text(args, "type");
+            AircraftDefinition type = typeName != null ? FindType(typeName) : null;
+            FactionHQ hq = WingService.Instance?.Player != null ? WingService.Instance.Player.NetworkHQ : null;
+            int stock = type != null && hq != null ? hq.GetUnitSupply(type) : -1;
+            Plugin.Logger.LogInfo($"[Automation] Economy: charged {WingLedger.Charged:0}, refunded {WingLedger.Refunded:0}, " +
+                                  $"allocation {allocation:0}, pilots {flying} flying / {free} free / {lost} lost, stock {stock}");
             return new Dictionary<string, object>
             {
                 { "ok", true }, { "charged", WingLedger.Charged }, { "refunded", WingLedger.Refunded }, { "allocation", allocation },
+                { "flying", flying }, { "free", free }, { "lost", lost }, { "stock", stock },
             };
         }
 

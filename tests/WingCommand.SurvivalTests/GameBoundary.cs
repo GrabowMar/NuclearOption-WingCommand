@@ -156,7 +156,6 @@ namespace WingCommand
             public static float CurrentPriceOf(AircraftDefinition definition) => 0f;
         }
     }
-    internal static class WingRecovery { public static bool IsHome(Aircraft a) => a != null && !a.disabled && a.AtHome; }
     // The 0.9 order enum the quarantined Personnel sources still use; M3 moves them to the 1.0 task API.
     internal enum WingOrder { Formation, OrbitHere, LandHere, Attack, ReturnToBase }
 

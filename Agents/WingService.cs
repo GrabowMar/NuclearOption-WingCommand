@@ -96,6 +96,7 @@ namespace WingCommand
         public void Deactivate()
         {
             WingTakeover.Reset();
+            Interop.WingSquad.Reset();
             flyingPlayer = null;
             Members.Clear();
             FieldRegistry.Clear();

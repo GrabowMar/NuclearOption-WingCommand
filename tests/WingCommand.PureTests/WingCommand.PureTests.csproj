@@ -28,7 +28,6 @@
   <!-- Tests whose production subject is quarantined in WingCommand.csproj; restored with it. -->
   <ItemGroup Label="Quarantine">
     <Compile Remove="WingKillCreditTests.cs" /> <!-- M3 -->
-    <Compile Remove="HangarDepartureLaneTests.cs" /> <!-- M3 -->
     <Compile Remove="Ui\MapInputTests.cs" /> <!-- M4 -->
     <Compile Remove="Ui\WingMapPresentationTests.cs" /> <!-- M4 -->
   </ItemGroup>
