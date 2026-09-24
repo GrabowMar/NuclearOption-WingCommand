@@ -52,7 +52,8 @@ namespace WingCommand.FlightSim
         /// <summary>Ground height (NaN: none): the aircraft sits on it, its sink stopped and its slide damped.</summary>
         public float GroundY = float.NaN;
         public float GroundFriction = 3f;
-        /// <summary>The vertical speed at the last contact with the ground.</summary>
+        /// <summary>The hardest sink speed at contact with the ground so far (review M4c I1: the last-contact value was
+        /// overwritten every tick while down).</summary>
         public float ContactSpeed { get; private set; }
         public Vec3 Acceleration { get; private set; }
         public float Collective { get; private set; }
@@ -102,7 +103,7 @@ namespace WingCommand.FlightSim
             Position += Velocity * dt;
             if (!float.IsNaN(GroundY) && Position.Y <= GroundY)
             {
-                if (Velocity.Y < 0f) ContactSpeed = -Velocity.Y;
+                if (Velocity.Y < 0f) ContactSpeed = Math.Max(ContactSpeed, -Velocity.Y);
                 Position = new Vec3(Position.X, GroundY, Position.Z);
                 float slide = Math.Min(1f, GroundFriction * dt);
                 Velocity = new Vec3(Velocity.X * (1f - slide), Math.Max(0f, Velocity.Y), Velocity.Z * (1f - slide));

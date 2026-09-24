@@ -227,7 +227,7 @@ namespace WingCommand
                     StepGround(m, dt);
                     return;
                 }
-                if (StepSettle(m, dt)) return;
+                if (StepSettle(m, frame, dt)) return;
                 m.NoFbwSeconds = m.Last.FbwActive ? 0f : m.NoFbwSeconds + dt;
                 if (m.NoFbwSeconds >= NoFbwReleaseSeconds)
                 {
@@ -398,10 +398,13 @@ namespace WingCommand
         {
             if (m.Released) return;
             m.Released = true;
+            // A helicopter down in the field goes back to the reserve (review M4c I3): the game's combat AI ejects a pilot
+            // sitting still on the ground.
+            bool settledDown = m.Settle != null && m.Last.RadarAlt < 5f;
             m.Settle = null;
             EndDefence(m);
             ReleasePad(m);
-            bool despawn = m.Ground != null && m.Ground.DespawnOnRelease(m.Last);
+            bool despawn = settledDown || (m.Ground != null && m.Ground.DespawnOnRelease(m.Last));
             m.Ground?.Leave();
             if (despawn && m.Aircraft != null && !m.Aircraft.disabled)
             {

@@ -19,6 +19,21 @@ namespace WingCommand
             return 0f;
         }
 
+        /// <summary>Ground to land on under <paramref name="at"/> (review M4c I5): false over water or where nothing is hit;
+        /// the ground's height and its surface normal's up component (1 level, less on a slope).</summary>
+        public static bool Landing(Vec3 at, out float groundY, out float normalY)
+        {
+            Vector3 local = at.ToLocal();
+            var origin = new Vector3(local.x, local.y + CastHeight, local.z);
+            groundY = 0f;
+            normalY = 0f;
+            if (!Physics.Raycast(origin, Vector3.down, out RaycastHit hit, 2f * CastHeight + Math.Abs(at.Y), PhysicsLayers.StaticsMask))
+                return false;
+            groundY = hit.point.GlobalY();
+            normalY = hit.normal.y;
+            return groundY > 0.5f;
+        }
+
         /// <summary>Highest ground under the aircraft and 2, 5 and 10 s ahead on its horizontal path.</summary>
         public static float LookAhead(Vec3 pos, Vec3 vel)
         {

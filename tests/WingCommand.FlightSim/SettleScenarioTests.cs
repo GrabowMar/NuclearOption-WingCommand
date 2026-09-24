@@ -17,22 +17,26 @@ namespace WingCommand.FlightSim
             pipe.Track(plant.Read(Dt), new ControlOutput { Throttle = plant.Collective }, p);
             var settle = new SettlePilot(Vec3.Zero, 0f, 0f);
             var events = new WingEventRing();
+            var limits = new LimitContext { FloorY = float.NaN, Aggression = 0.3f };
             float t = 0f;
             for (; t < 60f && settle.Phase != SettlePhase.Down; t += Dt)
-                plant.Step(settle.Step(plant.Read(Dt), p, pipe, t, Dt, events, 0), Dt);
+                plant.Step(settle.Step(plant.Read(Dt), p, pipe, t, Dt, events, 0, limits), Dt);
             Assert.Equal(SettlePhase.Down, settle.Phase);
             Assert.True(t < 30f, $"down after {t:0.0} s");
             Assert.True(plant.Position.Horizontal.Length < 5f, $"{plant.Position.Horizontal.Length:0.0} m from the point");
             Assert.True(plant.ContactSpeed < 1.5f, $"touched down at {plant.ContactSpeed:0.00} m/s");
             for (float hold = 0f; hold < 5f; hold += Dt, t += Dt)
-                plant.Step(settle.Step(plant.Read(Dt), p, pipe, t, Dt, events, 0), Dt);
+                plant.Step(settle.Step(plant.Read(Dt), p, pipe, t, Dt, events, 0, limits), Dt);
             Assert.Equal(SettlePhase.Down, settle.Phase);
             Assert.True(plant.Position.Y < 0.5f, "stays down");
+            // After contact and the collective ramp: the hardest contact of the whole landing.
+            Assert.True(plant.ContactSpeed > 0f, "the plant touched the ground");
+            Assert.True(plant.ContactSpeed < 1.5f, $"hardest contact {plant.ContactSpeed:0.00} m/s");
 
             settle.TakeOff();
             float liftStart = t;
             for (; t - liftStart < 30f && settle.Phase != SettlePhase.Done; t += Dt)
-                plant.Step(settle.Step(plant.Read(Dt), p, pipe, t, Dt, events, 0), Dt);
+                plant.Step(settle.Step(plant.Read(Dt), p, pipe, t, Dt, events, 0, limits), Dt);
             Assert.Equal(SettlePhase.Done, settle.Phase);
             Assert.True(t - liftStart < 20f, $"lifted off in {t - liftStart:0.0} s");
         }
