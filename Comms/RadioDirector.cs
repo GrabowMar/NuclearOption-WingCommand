@@ -14,6 +14,9 @@ namespace WingCommand
         public string Name => "Radio";
         public RadioQueue Queue { get; private set; } = new RadioQueue();
 
+        /// <summary>The lines that went on air (spec M7b §3 LOG).</summary>
+        public RadioLog Log { get; } = new RadioLog();
+
         private EventCursor cursor;
         private WingEventRing ring;
         private int seed, asks;
@@ -48,6 +51,7 @@ namespace WingCommand
         public void Activate()
         {
             Queue = new RadioQueue();
+            Log.Clear();
             WingRadioAudio.Reset();
             VoicePacks.Activate();
             Contacts.Clear();
@@ -202,6 +206,7 @@ namespace WingCommand
 
         private void Transmit(in RadioLine line)
         {
+            Log.Push(WingService.Instance?.MissionTime ?? 0f, line.Text);
             // Spec M5 §9.3: the game's radio static on every line, a threat warble on an emergency.
             WingRadioAudio.Play(line.Class == RadioClass.Emergency ? WingRadioAudio.Earcon.ThreatAlarm : WingRadioAudio.Earcon.Transmission);
             WingToast.Show(line.Text);
