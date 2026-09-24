@@ -69,6 +69,50 @@ namespace WingCommand.PureTests
         }
 
         [Fact]
+        public void AQueuedEmergencyOutlivesALongEmergencyOnTheChannel()
+        {
+            // Review M7a I2: a 3.2 s DEFENDING line made a second one queued behind it stale (2 s) before it was heard.
+            var q = new RadioQueue();
+            const string first = "Viper: Defensive! Breaking into the threat!";
+            q.Enqueue(L(1, RadioClass.Emergency, "e1", first), 0f);
+            Assert.True(q.Next(0f, out _));
+            q.Enqueue(L(2, RadioClass.Emergency, "e2", "Ghost: Taking fire! Defending!"), 0.1f);
+            Assert.False(q.Next(1f, out _));
+            Assert.True(q.Next(RadioQueue.Airtime(first), out RadioLine e2));
+            Assert.Equal("e2", e2.Key);
+        }
+
+        [Fact]
+        public void ATacticalLineOutlivesALongLineOfItsClassButStillAgesAfterIt()
+        {
+            var q = new RadioQueue();
+            q.Enqueue(L(1, RadioClass.Tactical, "t1", new string('x', 200)), 0f);
+            Assert.True(q.Next(0f, out _));
+            q.Enqueue(L(2, RadioClass.Tactical, "t2"), 0.1f);
+            q.Enqueue(L(3, RadioClass.Tactical, "t3"), 0.1f);
+            Assert.True(q.Next(RadioQueue.AirMax, out RadioLine t2));                  // waited 5.9 s behind its own class
+            Assert.Equal("t2", t2.Key);
+            float free = RadioQueue.AirMax + RadioQueue.Airtime("Copy.");
+            Assert.False(q.Next(free + RadioQueue.TacticalAge + 0.1f, out _));        // unblocked, it ages as before
+            Assert.Equal(1, q.DroppedStale);
+        }
+
+        [Fact]
+        public void AHeldChannelHoldsEverythingButAnEmergency()
+        {
+            // Review M7a I3: while the voice still speaks, only an emergency may cut in.
+            var q = new RadioQueue();
+            q.Enqueue(L(1, RadioClass.Status, "s"), 0f);
+            Assert.False(q.Next(0f, out _, held: true));
+            q.Enqueue(L(2, RadioClass.Emergency, "e"), 1f);
+            Assert.True(q.Next(1f, out RadioLine e, held: true));
+            Assert.Equal("e", e.Key);
+            Assert.False(q.Next(RadioQueue.StatusAge + 5f, out _, held: true));      // held lines do not go stale
+            Assert.True(q.Next(RadioQueue.StatusAge + 5f, out RadioLine s));
+            Assert.Equal("s", s.Key);
+        }
+
+        [Fact]
         public void EmergenciesIgnoreTheSpeakerGap()
         {
             var q = new RadioQueue();

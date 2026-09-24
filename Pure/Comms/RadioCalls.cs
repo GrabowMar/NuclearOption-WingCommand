@@ -19,7 +19,8 @@ namespace WingCommand
                 case WingEventKind.BehaviourChanged:
                     switch (e.Reason)
                     {
-                        case TransitionReason.MissileInbound: return Make(RadioClass.Emergency, "DEFENDING", false, out call);
+                        // PANIC, not DEFENDING: some DEFENDING lines say "covering" or "all clear" (review M7a I1).
+                        case TransitionReason.MissileInbound: return Make(RadioClass.Emergency, "PANIC", false, out call);
                         case TransitionReason.MissileClear: return Make(RadioClass.Tactical, "DEFENSIVECLEAR", false, out call);
                         default: return false;
                     }
@@ -39,7 +40,8 @@ namespace WingCommand
                 case WingEventKind.FallingBehind: return Make(RadioClass.Status, "FALLINGBEHIND", false, out call);
                 case WingEventKind.GcasActivated: return Make(RadioClass.Emergency, "PULLUP", false, out call);
                 case WingEventKind.CollisionEmergency: return Make(RadioClass.Emergency, "BREAKOFF", false, out call);
-                case WingEventKind.AnchorLost: return Make(RadioClass.Tactical, "LEADLOST", true, out call);
+                // Pushed only when an escortee is gone; the wing then forms on the player (review M7a I1).
+                case WingEventKind.AnchorLost: return Make(RadioClass.Tactical, "ESCORTLOST", true, out call);
                 case WingEventKind.Airborne: return Make(RadioClass.Status, "AIRBORNEREJOINING", false, out call);
                 case WingEventKind.Landed: return Make(RadioClass.Chatter, "DOWN", false, out call);
                 case WingEventKind.LandingFailed: return Make(RadioClass.Status, "GOAROUND", false, out call);
@@ -48,6 +50,10 @@ namespace WingCommand
                 default: return false;
             }
         }
+
+        /// <summary>The Winchester line for what the member does next: WINCHESTER's lines go home, OUTOFAMMO's rejoin
+        /// (review M7a I1: the default follow-on rejoins).</summary>
+        public static string WinchesterLine(WinchesterAction after) => after == WinchesterAction.Rejoin ? "OUTOFAMMO" : "WINCHESTER";
 
         private static bool Make(RadioClass c, string name, bool wing, out RadioCall call)
         {

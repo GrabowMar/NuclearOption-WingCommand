@@ -8,7 +8,7 @@ namespace WingCommand.PureTests
             new WingEvent { Kind = k, Reason = r, To = to, Member = 1 };
 
         [Theory]
-        [InlineData(WingEventKind.BehaviourChanged, TransitionReason.MissileInbound, RadioClass.Emergency, "DEFENDING", false)]
+        [InlineData(WingEventKind.BehaviourChanged, TransitionReason.MissileInbound, RadioClass.Emergency, "PANIC", false)]   // review M7a I1: DEFENDING has "all clear" lines
         [InlineData(WingEventKind.BehaviourChanged, TransitionReason.MissileClear, RadioClass.Tactical, "DEFENSIVECLEAR", false)]
         [InlineData(WingEventKind.Disengaged, TransitionReason.Outnumbered, RadioClass.Tactical, "FALLINGBACK", true)]   // the fall back takes each member back with this reason
         [InlineData(WingEventKind.Engaged, TransitionReason.Commanded, RadioClass.Tactical, "ENGAGING", true)]
@@ -21,7 +21,7 @@ namespace WingCommand.PureTests
         [InlineData(WingEventKind.FallingBehind, TransitionReason.None, RadioClass.Status, "FALLINGBEHIND", false)]
         [InlineData(WingEventKind.GcasActivated, TransitionReason.None, RadioClass.Emergency, "PULLUP", false)]
         [InlineData(WingEventKind.CollisionEmergency, TransitionReason.None, RadioClass.Emergency, "BREAKOFF", false)]
-        [InlineData(WingEventKind.AnchorLost, TransitionReason.None, RadioClass.Tactical, "LEADLOST", true)]
+        [InlineData(WingEventKind.AnchorLost, TransitionReason.None, RadioClass.Tactical, "ESCORTLOST", true)]   // pushed only when an escortee is gone
         [InlineData(WingEventKind.Airborne, TransitionReason.None, RadioClass.Status, "AIRBORNEREJOINING", false)]
         [InlineData(WingEventKind.Landed, TransitionReason.None, RadioClass.Chatter, "DOWN", false)]
         [InlineData(WingEventKind.LandingFailed, TransitionReason.None, RadioClass.Status, "GOAROUND", false)]
@@ -45,7 +45,7 @@ namespace WingCommand.PureTests
 
         [Theory]
         [InlineData("JOKER")] [InlineData("FALLINGBEHIND")] [InlineData("PULLUP")] [InlineData("BREAKOFF")]
-        [InlineData("LEADLOST")] [InlineData("GOAROUND")] [InlineData("TASKDONE")]
+        [InlineData("ESCORTLOST")] [InlineData("GOAROUND")] [InlineData("TASKDONE")]
         public void NewLinesHaveTheirOwnWordsForEveryPersona(string name)
         {
             foreach (ChatterPersona p in new[] { ChatterPersona.Professional, ChatterPersona.Aggressive, ChatterPersona.Calm, ChatterPersona.Dry })
@@ -56,6 +56,13 @@ namespace WingCommand.PureTests
                     Assert.NotEqual(ChatterDialogue.Event(p, "NO-SUCH-CALL", null, seed), line);
                 }
         }
+
+        [Theory]
+        [InlineData(WinchesterAction.Rejoin, "OUTOFAMMO")]   // review M7a I1: the default rejoins; WINCHESTER lines say RTB
+        [InlineData(WinchesterAction.Rtb, "WINCHESTER")]
+        [InlineData(WinchesterAction.Refit, "WINCHESTER")]
+        public void WinchesterSaysWhatTheMemberDoesNext(object after, string name) =>
+            Assert.Equal(name, RadioCalls.WinchesterLine((WinchesterAction)after));
 
         [Fact]
         public void JokerSaysTheMinutesToBingo() =>

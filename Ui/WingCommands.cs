@@ -161,7 +161,7 @@ namespace WingCommand
                 : "Cannot recruit " + target.unitName + ": " + reason);
         }
 
-        public static float MoveAheadMetres = 10000f, PatrolHalfMetres = 10000f, OrderHeightMin = 50f;
+        public static float MoveAheadMetres = 10000f, PatrolHalfMetres = 10000f, OrderHeightMin = 50f, ScoutAheadMetres = 20000f;
 
         /// <summary>The wing orbits the point below the player (spec M4 §2.4).</summary>
         public static void OrbitHere() => Order(p => WingTask.Orbit(Point(p, 0f, 0f)), "orbiting here");
@@ -170,6 +170,14 @@ namespace WingCommand
             Order(p => WingTask.Hold(Point(p, 0f, 0f), Vec3.HeadingDeg(p.transform.forward.ToVec3())), "holding here");
 
         public static void MoveAhead() => Order(p => WingTask.Move(Point(p, MoveAheadMetres, 0f)), "moving ahead");
+
+        /// <summary>Spec M7 §2.4: Move 20 km ahead, reporting ground contacts on the way and while orbiting there.</summary>
+        public static void ScoutAhead() => Order(p =>
+        {
+            WingTask t = WingTask.Move(Point(p, ScoutAheadMetres, 0f));
+            t.Scout = true;
+            return t;
+        }, "scouting ahead");
 
         public static void PatrolHere() =>
             Order(p => WingTask.Patrol(false, Point(p, -PatrolHalfMetres, 0f), Point(p, PatrolHalfMetres, 0f)), "patrolling here");
@@ -236,6 +244,7 @@ namespace WingCommand
         public static void BogeyDope()
         {
             if (!Ready(out WingService w) || w.Player == null) return;
+            // The radio says it; when it will not (radio off, or the line dropped), the answer is a toast (review M7a I4).
             if (!BogeyDopeCall(w, out string answer)) WingToast.Show(answer);
         }
 
@@ -258,8 +267,7 @@ namespace WingCommand
             answer = w.NearestAirThreat(w.Player, out Vec3 pos, out Vec3 vel, out string type)
                 ? $"Bogey dope, {Bra.Format(w.Player.GlobalPosition().ToVec3(), pos, vel, PlayerSettings.unitSystem == PlayerSettings.UnitSystem.Imperial)}. {type}."
                 : "Picture clean.";
-            radio.SayText(speaker, RadioClass.Tactical, "BOGEYDOPE", answer, false);
-            return true;
+            return radio.Answer(speaker, "BOGEYDOPE", answer);
         }
 
         /// <summary>Reserve → Escort → Sweep: what members shoot at while holding formation (spec M5 §8).</summary>

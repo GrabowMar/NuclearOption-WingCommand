@@ -778,12 +778,12 @@ namespace WingCommand
                         new[] { "Watch it! Breaking off!", "Too close! Getting clear!" },
                         new[] { "Close aboard. Opening out.", "Traffic close. Breaking away." },
                         new[] { "Personal space, please. Breaking off.", "That was a bit intimate. Opening out." });
-                case "LEADLOST":
+                case "ESCORTLOST":
                     return Pick(persona, seed,
-                        new[] { "Lost Lead. Holding.", "No contact with Lead. Holding position." },
-                        new[] { "Lead's gone! Holding here!", "Where's Lead? Holding!" },
-                        new[] { "Lead lost. Holding overhead.", "No Lead. Holding steady." },
-                        new[] { "Lead has left the building. Holding.", "Misplaced our Lead. Holding." });
+                        new[] { "Escort's down. Forming on you.", "Lost the escort. Rejoining you, Lead." },
+                        new[] { "We lost them! Coming back to you!", "Escort's gone! Forming up on you!" },
+                        new[] { "Escort lost. Forming on you, Lead.", "No escort left. Rejoining." },
+                        new[] { "That escort went badly. Forming on you.", "Escort's no longer our problem. Rejoining." });
                 case "GOAROUND":
                     return Pick(persona, seed,
                         new[] { "Going around.", "Missed approach. Going around." },

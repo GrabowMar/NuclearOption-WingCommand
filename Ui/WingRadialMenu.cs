@@ -118,6 +118,7 @@ namespace WingCommand
                 Leaf("Orbit Here", WingCommands.OrbitHere, "move"),
                 Leaf("Hold Here", WingCommands.HoldHere, "move"),
                 Leaf("Move Ahead", WingCommands.MoveAhead, "move"),
+                Leaf("Scout Ahead", WingCommands.ScoutAhead, "move"),
                 Leaf("Patrol Here", WingCommands.PatrolHere, "move"),
                 Leaf("Land Here", WingCommands.LandHere, "rtb"),
                 Leaf("Take Off", WingCommands.TakeOff, "rejoin"),

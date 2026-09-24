@@ -15,6 +15,9 @@ namespace WingCommand
         public bool WingWide;
         public string Text;
         public float Queued;
+        /// <summary>Seconds it waited behind a line of its class or higher (not counted toward its age), and when that was
+        /// last measured.</summary>
+        public float Blocked, Seen;
     }
 
     /// <summary>Spec M7 §1.2: the wing's one radio channel.
@@ -23,8 +26,10 @@ namespace WingCommand
     /// <item>An Emergency goes on at once, cutting anything but another Emergency, and ignores the speaker gap.</item>
     /// <item>Outside Emergency a speaker waits <see cref="SpeakerGap"/> after their last line ended; while the highest
     /// class's lines wait on it, lower classes wait too (no starving it until it goes stale).</item>
-    /// <item>A line queued longer than its class's age is dropped; the same key queued is replaced in place; a key sent
-    /// within <see cref="RepeatSeconds"/> is dropped.</item>
+    /// <item>A line waiting longer than its class's age is dropped — time spent behind a line of its own class or higher
+    /// does not count (review M7a I2: a second emergency behind a 3 s one went stale before it was heard); the same key
+    /// queued is replaced in place; a key sent within <see cref="RepeatSeconds"/> is dropped.</item>
+    /// <item>A held channel (the voice still speaking: review M7a I3) is busy for everything but an Emergency.</item>
     /// <item>Full: a new line evicts the oldest line of the lowest class below its own, else it is dropped.</item>
     /// </list>
     /// Fixed arrays: enqueue and next allocate nothing.</summary>
@@ -47,8 +52,8 @@ namespace WingCommand
         private readonly Recent[] recent = new Recent[RecentCapacity];
         private readonly int[] sent = new int[4];
         private int count, recentNext;
-        private float busyUntil = float.NegativeInfinity;
-        private bool currentEmergency;
+        private float busyFrom = float.NegativeInfinity, busyUntil = float.NegativeInfinity;
+        private RadioClass currentClass;
 
         public RadioQueue()
         {
@@ -97,7 +102,7 @@ namespace WingCommand
             {
                 if (!SameScope(line.Key, line.Speaker, line.WingWide, lines[i].Key, lines[i].Speaker, lines[i].WingWide)) continue;
                 lines[i] = line;
-                lines[i].Queued = now;
+                Stamp(ref lines[i], now);
                 return true;
             }
             if (count == Capacity)
@@ -113,18 +118,32 @@ namespace WingCommand
                 RemoveAt(victim);
             }
             lines[count] = line;
-            lines[count].Queued = now;
+            Stamp(ref lines[count], now);
             count++;
             return true;
         }
 
-        /// <summary>True when <paramref name="line"/> goes on the channel now.</summary>
-        public bool Next(float now, out RadioLine line)
+        private static void Stamp(ref RadioLine l, float now)
+        {
+            l.Queued = l.Seen = now;
+            l.Blocked = 0f;
+        }
+
+        /// <summary>True when <paramref name="line"/> goes on the channel now. <paramref name="held"/>: the channel is still
+        /// in use (the voice has not finished the last line).</summary>
+        public bool Next(float now, out RadioLine line, bool held = false)
         {
             line = default;
+            float until = held ? Math.Max(busyUntil, now) : busyUntil;
             for (int i = count - 1; i >= 0; i--)
             {
-                if (now - lines[i].Queued <= Age(lines[i].Class)) continue;
+                if (currentClass >= lines[i].Class)
+                {
+                    float from = Math.Max(lines[i].Seen, busyFrom), to = Math.Min(now, until);
+                    if (to > from) lines[i].Blocked += to - from;
+                }
+                lines[i].Seen = now;
+                if (now - lines[i].Queued - lines[i].Blocked <= Age(lines[i].Class)) continue;
                 RemoveAt(i);
                 DroppedStale++;
             }
@@ -140,15 +159,16 @@ namespace WingCommand
             }
             if (pick < 0) return false;
             bool emergency = top == RadioClass.Emergency;
-            if (now < busyUntil && (!emergency || currentEmergency)) return false;
+            if ((now < busyUntil || held) && (!emergency || currentClass == RadioClass.Emergency)) return false;
             line = lines[pick];
             RemoveAt(pick);
             int slot = SpeakerSlot(line.Speaker);
             if (!emergency && !float.IsNegativeInfinity(lastEnd[slot]))
                 MinSpeakerGap = Math.Min(MinSpeakerGap, now - lastEnd[slot]);
             float air = Airtime(line.Text);
+            busyFrom = now;
             busyUntil = now + air;
-            currentEmergency = emergency;
+            currentClass = line.Class;
             lastEnd[slot] = now + air;
             recent[recentNext] = new Recent { Key = line.Key, Speaker = line.Speaker, WingWide = line.WingWide, At = now };
             recentNext = (recentNext + 1) % RecentCapacity;
