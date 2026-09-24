@@ -46,7 +46,7 @@ namespace WingCommand
         public bool FallingBehind => behind;
 
         public RejoinOutput Step(in AircraftState s, in SlotTarget slot, in LeaderEstimate leader, int lane,
-            float spacing, float availableSpeed, bool staggerClear, float dt)
+            float spacing, float availableSpeed, bool staggerClear, float dt, float stack = 0f)
         {
             RefState target = slot.Ref;
             var pre = new RefState(target.Pos - leader.Track * spacing - Vec3.Up * PreSlotLow, target.Vel, target.Acc);
@@ -64,13 +64,15 @@ namespace WingCommand
             // Lanes stack on the side the member comes from, so a member leaving the hold overhead never descends
             // through the leader's altitude on its way in. Latched: above once a lane step over the leader, below
             // again only a lane step under it.
-            if (!above && s.Pos.Y > leader.Pos.Y + LaneStepM) above = true;
-            else if (above && s.Pos.Y < leader.Pos.Y - LaneStepM) above = false;
+            // The lanes are about the slots' altitude: the leader's plus the wing's stack (review M5f I1).
+            float baseY = leader.Pos.Y + stack;
+            if (!above && s.Pos.Y > baseY + LaneStepM) above = true;
+            else if (above && s.Pos.Y < baseY - LaneStepM) above = false;
             float laneDepth = (above ? -1f : 1f) * LaneStepM * lane;
-            RefState rendezvous = behind ? target : Rendezvous(s, pre, leader, laneDepth, availableSpeed);
+            RefState rendezvous = behind ? target : Rendezvous(s, pre, leader, baseY - laneDepth, availableSpeed);
 
             float dSlot = (target.Pos - s.Pos).Length;
-            float d = Math.Min(LaneAwareDistance(s.Pos, pre.Pos, leader.Pos.Y - laneDepth), dSlot);
+            float d = Math.Min(LaneAwareDistance(s.Pos, pre.Pos, baseY - laneDepth), dSlot);
             float rawPre = behind ? 0f : 1f - Scalar.SmoothStep(SigmaNear, SigmaFar, d / Math.Max(1f, spacing));
             bool inSlot = dSlot < InSlotFraction * spacing;
             if (staggerClear) waited = 0f;
@@ -98,13 +100,13 @@ namespace WingCommand
             };
         }
 
-        private static RefState Rendezvous(in AircraftState s, in RefState pre, in LeaderEstimate leader, float laneDepth,
+        private static RefState Rendezvous(in AircraftState s, in RefState pre, in LeaderEstimate leader, float laneY,
             float availableSpeed)
         {
             FormationIntercept.Plan plan = FormationIntercept.Solve(Flat(pre.Pos - s.Pos), Flat(leader.Vel),
                 Flat(pre.Pos - leader.Pos), Flat(pre.Vel), s.Speed, availableSpeed, leader.TurnRate);
             var cutoff = new RefState(
-                new Vec3(s.Pos.X + plan.Gap.X, leader.Pos.Y - laneDepth, s.Pos.Z + plan.Gap.Y),
+                new Vec3(s.Pos.X + plan.Gap.X, laneY, s.Pos.Z + plan.Gap.Y),
                 new Vec3(plan.ArrivalVelocity.X, 0f, plan.ArrivalVelocity.Y), Vec3.Zero);
             // The lead point is used only across the track (the cutoff inside a turn): along the track the
             // reference stays at the pre-slot, so the stopping-distance law brakes for the real gap. It only

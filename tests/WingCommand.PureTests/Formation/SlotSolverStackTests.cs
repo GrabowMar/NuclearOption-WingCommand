@@ -46,6 +46,35 @@ namespace WingCommand.PureTests
         }
 
         [Fact]
+        public void GoLowReachesItsDepthInOpenAir()
+        {
+            var solver = new SlotSolver { StackOffset = -150f };
+            Assert.Equal(1850f, SlotY(solver, Def(FormationModifiers.TerrainFlatten), 30f, floorY: 1700f), 1);
+        }
+
+        [Fact]
+        public void AStackedSlotDoesNotSwingWhenTheLeaderRolls()
+        {
+            // Review M5f m1: the stack sat inside the rolled frame, so a close slot swung sideways with the leader's bank.
+            var def = new FormationDefinition
+            {
+                Id = "t", Slots = new[] { new SlotDef(0f, 0.5f, 0f) }, Element = new int[1], Modifiers = FormationModifiers.None,
+                SpacingMin = 40f, SpacingDefault = 40f, SpacingMax = 600f,
+            };
+            var output = new SlotTarget[FormationCatalog.MaxSlots];
+            var caps = new MemberCapability[FormationCatalog.MaxSlots];
+            for (int i = 0; i < caps.Length; i++) caps[i] = new MemberCapability { MaxSpeed = 255f, MinSpeed = 80f };
+            var solver = new SlotSolver { StackOffset = 300f };
+            LeaderEstimate level = Leader;
+            for (int i = 0; i < 60 * 30; i++) solver.Solve(def, 40f, level, caps, 1, float.NaN, 60f, Dt, output);
+            float x0 = output[0].Ref.Pos.X;
+            LeaderEstimate banked = Leader;
+            banked.BankDeg = 60f;
+            for (int i = 0; i < 60; i++) solver.Solve(def, 40f, banked, caps, 1, float.NaN, 60f, Dt, output);
+            Assert.True(Math.Abs(output[0].Ref.Pos.X - x0) < 5f, $"swung {output[0].Ref.Pos.X - x0:0.0} m");
+        }
+
+        [Fact]
         public void GoLowNeverUndercutsTheFloor()
         {
             var solver = new SlotSolver { StackOffset = -150f };

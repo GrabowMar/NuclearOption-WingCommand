@@ -31,6 +31,8 @@ namespace WingCommand
         public bool LeaderLost;
         public FormationDefinition Definition;
         public float Spacing, FloorY = float.NaN, Clearance;
+        /// <summary>The whole shape's current Go High / Go Low offset (the rejoin lanes follow it).</summary>
+        public float Stack;
         public int Count;
         public readonly SlotTarget[] Slots = new SlotTarget[FormationCatalog.MaxSlots];
         public readonly Vec3[] Bias = new Vec3[FormationCatalog.MaxSlots];
@@ -136,6 +138,7 @@ namespace WingCommand
                 Frame.HasNearFloor[i] = members[i].HasNearFloor;
             }
             Solver.Solve(Frame.Definition, Frame.Spacing, Frame.Leader, caps, count, floorY, clearance, dt, Frame.Slots, History);
+            Frame.Stack = Solver.StackNow;
             UpdateTrail(members, count, dt);
 
             for (int i = 0; i < count; i++)

@@ -375,6 +375,7 @@ namespace WingCommand
         public int Engage()
         {
             attackCount = 0;
+            attackElement = -1;
             return EngageAll();
         }
 
@@ -418,6 +419,8 @@ namespace WingCommand
         private float reallocateClock;
         private readonly bool[] canAttack = new bool[FormationCatalog.MaxSlots * TargetAllocator.MaxTargets];
         private readonly float[] keepScale = new float[FormationCatalog.MaxSlots];
+        /// <summary>The element an attack order is restricted to (Buddy Attack), -1 for the whole wing.</summary>
+        private int attackElement = -1;
         private readonly float[] targetDistance = new float[FormationCatalog.MaxSlots * TargetAllocator.MaxTargets];
         private readonly bool[] targetAlive = new bool[TargetAllocator.MaxTargets];
         private readonly int[] currentTarget = new int[FormationCatalog.MaxSlots], nextTarget = new int[FormationCatalog.MaxSlots];
@@ -442,6 +445,8 @@ namespace WingCommand
         public int Attack(IReadOnlyList<Unit> targets, int element = -1)
         {
             attackCount = 0;
+            // Buddy Attack's order is the one element's: members of the other stay out of it (review M5f I3).
+            attackElement = element;
             if (targets != null)
                 foreach (Unit u in targets)
                     if (u != null && !u.disabled && attackCount < attackTargets.Length) attackTargets[attackCount++] = u;
@@ -465,7 +470,8 @@ namespace WingCommand
             }
             int k = 0;
             foreach (WingMember m in Members)
-                if (m.Engaged && !m.Released && m.Alive && InNativeCombat(m) && k < engagedNow.Length) engagedNow[k++] = m;
+                if (m.Engaged && !m.Released && m.Alive && InNativeCombat(m) && k < engagedNow.Length &&
+                    (attackElement < 0 || ElementOf(m) == attackElement)) engagedNow[k++] = m;
             if (k == 0)
             {
                 // Everyone taken back: the order ends rather than capturing the next Engage (review M5b I1).
@@ -533,6 +539,7 @@ namespace WingCommand
         public int Disengage()
         {
             attackCount = 0;
+            attackElement = -1;
             judge.Reset();
             int n = 0;
             foreach (WingMember m in Members)

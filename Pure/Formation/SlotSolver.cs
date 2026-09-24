@@ -51,6 +51,9 @@ namespace WingCommand
         public float StackOffset;
         public float StackNow { get; private set; }
 
+        /// <summary>Level at once (a new wing).</summary>
+        public void ResetStack() => StackOffset = StackNow = 0f;
+
         private const int N = FormationCatalog.MaxSlots;
         private float compress = 1f, compressRate;
         private readonly float[] frameBank = new float[N];
@@ -63,8 +66,9 @@ namespace WingCommand
             int count, float floorY, float clearance, float dt, SlotTarget[] output, LeaderHistory history = null)
         {
             spacing = def.ClampSpacing(spacing);
-            float step = StackRate * dt;
+            float step = StackRate * dt, stackWas = StackNow;
             StackNow += Scalar.Clamp(StackOffset - StackNow, -step, step);
+            float stackRate = dt > 0f ? (StackNow - stackWas) / dt : 0f;
             count = Math.Min(count, N);
             TrackTurn(leader.TurnRate, dt);
             float sign = Crossover(def, spacing, count, dt, out float bump);
@@ -93,13 +97,17 @@ namespace WingCommand
                 // Aft slots hang off the leader as it was aft/V ago. Close behind (up to 0.5 s) that is its current
                 // turn carried back, so wingmen bank with the leader now; far behind (from 1.5 s) it is where the
                 // leader really was (history), so trail slots follow its actual path through reversals.
-                float aftM = (slot.Aft + extraAft) * spacing, upM = slot.Up * FormationCatalog.StackMetres + dip + StackNow;
+                float aftM = (slot.Aft + extraAft) * spacing, upM = slot.Up * FormationCatalog.StackMetres + dip;
                 float delay = TurnFrame.PathDelay(aftM, leader.Vel.Length, out float rigidAft);
                 float rigidRate = TurnFrame.RigidAftRate(aftM, leader.Vel.Length, TurnFrame.Along(leader));
                 LeaderEstimate at = TurnFrame.Delayed(leader, delay);
                 if (history != null && delay > HistoryBlendStart)
                     at = LeaderHistory.Blend(at, history.At(delay), Scalar.SmoothStep(HistoryBlendStart, HistoryBlendFull, delay));
                 RefState r = TurnFrame.Evaluate(at, frameBank[i], bankRate, right, 0f, upM, w, rigidAft, rigidRate);
+                // The stack is world-up, outside the rolled frame (review M5f: inside it a close slot swung with the bank),
+                // with its climb or descent as feed-forward.
+                if (StackNow != 0f || stackRate != 0f)
+                    r = new RefState(r.Pos + Vec3.Up * StackNow, r.Vel + Vec3.Up * stackRate, r.Acc);
                 if ((def.Modifiers & FormationModifiers.TerrainFlatten) != 0 && !float.IsNaN(floorY))
                     r = Flatten(r, floorY + clearance);
                 output[i] = new SlotTarget

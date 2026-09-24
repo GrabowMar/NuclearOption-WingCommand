@@ -43,6 +43,17 @@ namespace WingCommand.PureTests
         }
 
         [Fact]
+        public void LanesFollowTheStack()
+        {
+            // Review M5f I1: with Go High the lanes stayed at the leader's altitude; members dived to it and climbed back.
+            LeaderEstimate leader = Leader();
+            SlotTarget slot = Slot(leader);
+            AircraftState s = TestStates.Flying(new Vec3(-80f, 2000f, -3000f), leader.Vel);
+            RejoinOutput o = new RejoinPlanner().Step(s, slot, leader, 2, Spacing, 255f, true, Dt, stack: 300f);
+            Assert.Equal(2300f - 2f * RejoinPlanner.LaneStep, o.Ref.Pos.Y, 2);
+        }
+
+        [Fact]
         public void MemberAboveTheLeaderRejoinsOnALaneAboveIt()
         {
             // Leaving the hold overhead, a lane below the leader would make the member descend through the leader's

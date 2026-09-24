@@ -785,6 +785,8 @@ namespace WingCommand
                 Plugin.Logger.LogInfo($"[Wing] #{m.Number} left the wing: {LeaveReason(m, ours)}");
             }
             if (!changed) return;
+            // A wing that emptied starts level when it is next called (review M5f I2).
+            if (Members.Count == 0 && Wing != null) Wing.Solver.ResetStack();
             for (int i = 0; i < Members.Count; i++) Members[i].Brain.Slot = i;
             RosterChanged?.Invoke();
         }

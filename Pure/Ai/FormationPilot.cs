@@ -55,7 +55,7 @@ namespace WingCommand
             float usable = AfterburnerAllowed && p.HasAfterburner ? p.MaxSpeed : p.MilSpeed;
             Rejoin.LaneStepM = Math.Max(RejoinPlanner.LaneStep,
                 CollisionBias.RadiusFor(p.MaxRadius, frame.Spacing) + RejoinPlanner.LaneClearance);
-            LastRejoin = Rejoin.Step(s, slot, leader, Slot + 1, frame.Spacing, usable, frame.StaggerClear[Slot], dt);
+            LastRejoin = Rejoin.Step(s, slot, leader, Slot + 1, frame.Spacing, usable, frame.StaggerClear[Slot], dt, frame.Stack);
             if (LastRejoin.FallingBehindStarted) Log(events, time, WingEventKind.FallingBehind);
             if (LastRejoin.FallingBehindCleared) Log(events, time, WingEventKind.FallingBehindCleared);
 
