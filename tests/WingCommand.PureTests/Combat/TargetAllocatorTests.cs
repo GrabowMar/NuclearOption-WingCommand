@@ -86,6 +86,21 @@ namespace WingCommand.PureTests
         }
 
         [Fact]
+        public void TargetMasterHoldsLonger()
+        {
+            bool[] can = All(4, 2);
+            for (int m = 0; m < 4; m++) can[m * 2 + 0] = false;
+            float[] d = { 1f, 9f, 2f, 8f, 9f, 1f, 8f, 2f };
+            float[] lost = Lost(4);
+            float[] keep = { 1.5f, 1.5f, 1.5f, 1.5f };
+            var result = new int[4];
+            TargetAllocator.Assign(4, 2, can, d, new[] { true, true }, new[] { 0, 0, 1, 1 }, lost, 1f, result, keep);
+            for (int i = 0; i < 4; i++)
+                TargetAllocator.Assign(4, 2, can, d, new[] { true, true }, (int[])result.Clone(), lost, 1f, result, keep);
+            Assert.Equal(new[] { 0, 0, 1, 1 }, result);   // 5 s lost < 1.5 × 5 s
+        }
+
+        [Fact]
         public void APairKeepsItsTargetOverMembersThatJoinedItAsLeftovers()
         {
             // review M5b I2: after a dropout all four were on target 1; target 0 is back. The nearest keep target 1.

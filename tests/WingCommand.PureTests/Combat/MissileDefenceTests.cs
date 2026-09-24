@@ -35,6 +35,27 @@ namespace WingCommand.PureTests
         }
 
         [Fact]
+        public void EarlyWarningReactsSooner()
+        {
+            var d = new MissileDefence();
+            DefenceCommand c = default;
+            for (int i = 0; i < 26; i++) c = d.Step(From(8000f, 600f), Me, Home, 0f, Dt, reactionDelta: -1.5f);   // 2.6 s
+            Assert.True(c.Active);                                             // 4 s − 1.5 s
+            var never = new MissileDefence();
+            for (int i = 0; i < 5; i++) c = never.Step(From(8000f, 600f), Me, Home, 1f, Dt, reactionDelta: -5f);
+            Assert.True(c.Active);                                             // never below 0
+        }
+
+        [Fact]
+        public void BreakTurnReactsAtOnceInsideItsRange()
+        {
+            var inside = new MissileDefence();
+            Assert.True(inside.Step(From(2000f, 600f), Me, Home, 0f, Dt, breakRange: 2500f).Active);
+            var outside = new MissileDefence();
+            Assert.False(outside.Step(From(3000f, 600f), Me, Home, 0f, Dt, breakRange: 2500f).Active);
+        }
+
+        [Fact]
         public void AnInfraredMissileMeansIdleAndFlaresOnTheHomeReference()
         {
             DefenceCommand c = Run(new MissileDefence(), From(3000f, 500f, MissileSeeker.Infrared), 1.5f);

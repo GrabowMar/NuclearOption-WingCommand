@@ -46,14 +46,14 @@ namespace WingCommand
     {
         private float check, sinceShot = float.MaxValue;
 
-        /// <summary>True when a check is due and a shot is allowed.</summary>
-        public bool Due(float dt)
+        /// <summary>True when a check is due and a shot is allowed (<paramref name="intervalScale"/>: QuickDraw, spec M5 §11).</summary>
+        public bool Due(float dt, float intervalScale = 1f)
         {
             check += dt;
             if (sinceShot < float.MaxValue) sinceShot += dt;
             if (check < StandingFire.CheckSeconds - 1e-4f) return false;
             check = 0f;
-            return sinceShot >= StandingFire.FireSeconds - 1e-4f;
+            return sinceShot >= StandingFire.FireSeconds * intervalScale - 1e-4f;
         }
 
         public void Fired() => sinceShot = 0f;

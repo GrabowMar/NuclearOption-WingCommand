@@ -55,6 +55,16 @@ namespace WingCommand.PureTests
             Assert.Equal(saturated, StandingFire.Saturated(committed, inFlight, needed));
 
         [Fact]
+        public void QuickDrawShortensTheInterval()
+        {
+            var c = new FireCadence();
+            Assert.True(c.Due(0.5f, 0.6f));
+            c.Fired();
+            for (int i = 0; i < 4; i++) Assert.False(c.Due(0.5f, 0.6f));   // 2.0 s
+            Assert.True(c.Due(0.5f, 0.6f));                               // 2.5 s ≥ 0.6 × 4 s
+        }
+
+        [Fact]
         public void TheCadenceChecksTwiceASecondAndFiresAtMostEveryFourSeconds()
         {
             var c = new FireCadence();

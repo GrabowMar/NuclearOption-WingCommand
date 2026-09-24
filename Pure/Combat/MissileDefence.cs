@@ -66,7 +66,10 @@ namespace WingCommand
 
         public static float ReactionFor(float precision) => MaxReaction - (MaxReaction - MinReaction) * Scalar.Clamp01(precision);
 
-        public DefenceCommand Step(in MissileThreat t, in AircraftState s, in RefState home, float precision, float dt)
+        /// <param name="reactionDelta">EarlyWarning: seconds off the reaction (never below 0).</param>
+        /// <param name="breakRange">BreakTurn: a missile inside this range is reacted to at once (0: none).</param>
+        public DefenceCommand Step(in MissileThreat t, in AircraftState s, in RefState home, float precision, float dt,
+            float reactionDelta = 0f, float breakRange = 0f)
         {
             if (!t.Present)
             {
@@ -85,7 +88,9 @@ namespace WingCommand
             if (!Active)
             {
                 seen += dt;
-                if (seen < ReactionFor(precision) - 1e-4f) return default;
+                float reaction = System.Math.Max(0f, ReactionFor(precision) + reactionDelta);
+                if (breakRange > 0f && (s.Pos - t.Pos).Length < breakRange) reaction = 0f;
+                if (seen < reaction - 1e-4f) return default;
                 Active = true;
             }
             Vec3 los = s.Pos - t.Pos;

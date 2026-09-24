@@ -17,7 +17,9 @@ namespace WingCommand
         private static readonly int[] count = new int[MaxTargets];
 
         /// <param name="lost">Per member, how long it has been unable to attack its current target (kept here).</param>
-        public static void Assign(int members, int targets, bool[] canAttack, float[] distance, bool[] alive, int[] current, float[] lost, float dt, int[] result)
+        /// <param name="keepScale">Per member: TargetMaster holds its target longer (spec M5 §11); null: 1.</param>
+        public static void Assign(int members, int targets, bool[] canAttack, float[] distance, bool[] alive, int[] current, float[] lost, float dt, int[] result,
+            float[] keepScale = null)
         {
             // Rows keep the caller's stride; only the loops stop at MaxTargets (review M5b minor 6).
             int n = Math.Min(targets, MaxTargets);
@@ -36,7 +38,7 @@ namespace WingCommand
                     int best = -1;
                     for (int m = 0; m < members; m++)
                     {
-                        if (result[m] >= 0 || current[m] != t || lost[m] >= KeepSeconds) continue;
+                        if (result[m] >= 0 || current[m] != t || lost[m] >= KeepSeconds * (keepScale != null ? keepScale[m] : 1f)) continue;
                         if (best < 0 || distance[m * targets + t] < distance[best * targets + t]) best = m;
                     }
                     if (best < 0) break;
