@@ -220,5 +220,34 @@ namespace WingCommand.PureTests
             Assert.Equal(TransitionReason.Commanded, e.Reason);
             Assert.Equal(1, e.Member);
         }
+
+        [Fact]
+        public void AMissileTakesTheMemberIntoDefendAtOnceAndBackToRejoinAfter()
+        {
+            // Spec M5 §7.2: a Survive behaviour pre-empts the dwell and the leader-lost switch, and hands back to Rejoin.
+            var rig = new Rig();
+            for (int i = 0; i < 60; i++) rig.Step();
+            rig.Pilot.Threat = new MissileThreat
+            {
+                Present = true, Pos = rig.LeaderPos + new Vec3(0f, 0f, 4000f), Vel = new Vec3(0f, 0f, -600f), Seeker = MissileSeeker.Radar,
+            };
+            for (int i = 0; i < 90; i++) rig.Step();
+            Assert.Equal(BehaviourId.Defend, rig.Pilot.Mind.Current);
+            for (int i = 0; i < 60; i++) rig.Step(leaderPresent: false);
+            Assert.Equal(BehaviourId.Defend, rig.Pilot.Mind.Current);
+            rig.Pilot.FormUp(0f, rig.Events);
+            Assert.Equal(BehaviourId.Defend, rig.Pilot.Mind.Current);
+            rig.Pilot.Threat = default;
+            for (int i = 0; i < 90; i++) rig.Step();
+            Assert.Equal(BehaviourId.Rejoin, rig.Pilot.Mind.Current);
+            int inbound = 0, clear = 0;
+            for (int i = 0; i < rig.Events.Count; i++)
+            {
+                if (rig.Events[i].Reason == TransitionReason.MissileInbound) inbound++;
+                if (rig.Events[i].Reason == TransitionReason.MissileClear) clear++;
+            }
+            Assert.Equal(1, inbound);
+            Assert.Equal(1, clear);
+        }
     }
 }

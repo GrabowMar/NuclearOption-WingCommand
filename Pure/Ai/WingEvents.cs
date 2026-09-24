@@ -1,6 +1,6 @@
 namespace WingCommand
 {
-    internal enum BehaviourId : byte { Rejoin, StationKeep, HoldOverhead, Trail }
+    internal enum BehaviourId : byte { Rejoin, StationKeep, HoldOverhead, Trail, Defend }
 
     internal enum WingEventKind : byte
     {
@@ -14,7 +14,7 @@ namespace WingCommand
         Engaged, Disengaged, Joker,
     }
 
-    internal enum TransitionReason : byte { None, Captured, LostSlot, LeaderSlow, LeaderNotFlying, LeaderLost, LeaderRecovered, Commanded, LeaderFast, FollowOn, NoWing, NoTarget, Fuel, Leash, Winchester, Outnumbered }
+    internal enum TransitionReason : byte { None, Captured, LostSlot, LeaderSlow, LeaderNotFlying, LeaderLost, LeaderRecovered, Commanded, LeaderFast, FollowOn, NoWing, NoTarget, Fuel, Leash, Winchester, Outnumbered, MissileInbound, MissileClear }
 
     /// <summary>One entry of the wing log: a behaviour transition with its reason, or a notable event.</summary>
     internal struct WingEvent

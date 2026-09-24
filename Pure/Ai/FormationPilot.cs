@@ -17,6 +17,11 @@ namespace WingCommand
         public readonly RejoinPlanner Rejoin = new RejoinPlanner();
         public readonly PilotMind Mind = new PilotMind();
         public readonly RolePolicy Roles = new RolePolicy();
+        public readonly MissileDefence Defence = new MissileDefence();
+        /// <summary>The nearest missile guiding on this member, set by the caller before each <see cref="Step"/> (spec M5
+        /// §7.1); default: none.</summary>
+        public MissileThreat Threat;
+        public DefenceCommand LastDefence;
         /// <summary>Slot index; the engine reassigns it when a member ahead of it is lost.</summary>
         public int Slot;
         public float Precision = 1f, Aggression = 0.5f, Clearance = 60f;
@@ -49,6 +54,22 @@ namespace WingCommand
             LastRejoin = Rejoin.Step(s, slot, leader, Slot + 1, frame.Spacing, usable, frame.StaggerClear[Slot], dt);
             if (LastRejoin.FallingBehindStarted) Log(events, time, WingEventKind.FallingBehind);
             if (LastRejoin.FallingBehindCleared) Log(events, time, WingEventKind.FallingBehindCleared);
+
+            // Survive first (spec M5 §7.2): the missile defence enters and leaves Defend itself, past any dwell.
+            LastDefence = Defence.Step(Threat, s, LastRejoin.Ref, Precision, dt);
+            if (LastDefence.Active != (Mind.Current == BehaviourId.Defend))
+            {
+                BehaviourId was = Mind.Current;
+                BehaviourId to = LastDefence.Active ? BehaviourId.Defend : BehaviourId.Rejoin;
+                // Leaving: the loops pick up from the throttle the defence held (bumpless).
+                if (!LastDefence.Active) Pipeline.Track(s, LastOutput, p);
+                Mind.Force(to);
+                events?.Push(new WingEvent
+                {
+                    Time = time, Member = Slot, Kind = WingEventKind.BehaviourChanged, From = was, To = to,
+                    Reason = LastDefence.Active ? TransitionReason.MissileInbound : TransitionReason.MissileClear,
+                });
+            }
 
             Roles.Tick(new RoleInput
             {
@@ -87,6 +108,7 @@ namespace WingCommand
                 reference = orbit.Step(HoldCenter(leader), anchored ? leader.Vel : Vec3.Zero, dt);
                 spacing = 0f;
             }
+            else if (Mind.Current == BehaviourId.Defend) reference = LastDefence.Ref;
 
             LastIntent = new FlightIntent
             {
@@ -96,7 +118,7 @@ namespace WingCommand
                 Aggression = Aggression,
                 Spacing = spacing,
                 TerrainClearance = Clearance,
-                HasHeading = Mind.Current != BehaviourId.HoldOverhead,
+                HasHeading = Mind.Current != BehaviourId.HoldOverhead && Mind.Current != BehaviourId.Defend,
                 HeadingDeg = Vec3.HeadingDeg(leader.Track),
             };
             GuidanceCommand guidance = LastGuidance = Pipeline.Guide(LastIntent, s, p);
@@ -106,6 +128,11 @@ namespace WingCommand
                 Clearance = Clearance, Aggression = Aggression, CollisionBias = frame.Bias[Slot],
             };
             LastOutput = Pipeline.Step(guidance, s, ctx, p, dt);
+            if (Mind.Current == BehaviourId.Defend && (LastDefence.Idle || LastDefence.Full))
+            {
+                LastOutput.Throttle = LastDefence.Idle ? 0f : 1f;
+                LastOutput.Airbrake = false;
+            }
 
             if (Pipeline is TiltwingPipeline tilt && tilt.Conversions != conversions)
             {
@@ -140,7 +167,8 @@ namespace WingCommand
         public void FormUp(float time, WingEventRing events)
         {
             BehaviourId from = Mind.Current;
-            if (!Mind.Force(BehaviourId.Rejoin)) return;
+            // A member defending against a missile finishes first (spec M5 §7.2).
+            if (from == BehaviourId.Defend || !Mind.Force(BehaviourId.Rejoin)) return;
             events?.Push(new WingEvent
             {
                 Time = time, Member = Slot, Kind = WingEventKind.BehaviourChanged,

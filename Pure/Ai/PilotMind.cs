@@ -19,6 +19,7 @@ namespace WingCommand
     /// <item>Any → HoldOverhead: the leader is lost (immediate).</item>
     /// <item>HoldOverhead or Trail → Rejoin: the leader flies and the role is Slot again.</item>
     /// <item>HoldOverhead → Trail: the leader flies again and the role is still Trail.</item>
+    /// <item>Defend (spec M5 §7) is entered and left only by the member's missile defence (Survive pre-empts the rest).</item>
     /// </list>
     /// Persistence timers run every tick; decisions are taken every 0.2 s.</summary>
     internal sealed class PilotMind
@@ -42,6 +43,7 @@ namespace WingCommand
             bool isCaptured = captured.Update(m.Sigma >= CaptureSigma, CaptureSeconds, dt);
             bool isLost = lostSlot.Update(m.SlotError > LostSlotSpacings * m.Spacing, LostSlotSeconds, dt);
 
+            if (Current == BehaviourId.Defend) return false;
             if (m.LeaderLost)
                 return Current != BehaviourId.HoldOverhead && Switch(BehaviourId.HoldOverhead, TransitionReason.LeaderLost, out reason);
             if (sinceDecision < DecisionPeriod - 1e-6f) return false;
