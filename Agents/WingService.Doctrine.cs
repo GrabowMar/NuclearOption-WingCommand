@@ -29,13 +29,6 @@ namespace WingCommand
             Doctrine = d;
         }
 
-        /// <summary>Reserve → Escort → Sweep → Reserve (a custom doctrine goes to Reserve), saved to the config.</summary>
-        public WingDoctrine NextDoctrine()
-        {
-            SetDoctrine(Doctrine.NextPattern());
-            return Doctrine;
-        }
-
         /// <summary>Element <paramref name="element"/>'s own doctrine (A and below: the wing's).</summary>
         public void SetDoctrine(WingDoctrine d, int element)
         {
@@ -76,6 +69,25 @@ namespace WingCommand
                 else if (element == 0) Settings.SetDoctrine(e, Doctrine);
             }
             SetDoctrine(Doctrine.With(axis, value));
+        }
+
+        /// <summary>A profile for the whole wing (<paramref name="element"/> &lt; 0: every element, the detached ones with their
+        /// own doctrine too), element A (B-D pinned first so they keep flying theirs) or one element B-D — as
+        /// <see cref="SetAxis"/> (review R3a I3).</summary>
+        public void SetProfile(int element, WingDoctrine d)
+        {
+            if (element > 0)
+            {
+                SetDoctrine(d, element);
+                return;
+            }
+            for (int e = 1; e < ElementRoster.MaxElements; e++)
+            {
+                if (!Roster.InUse(e)) continue;
+                if (Settings.HasDoctrine(e)) { if (element < 0) Settings.SetDoctrine(e, d); }
+                else if (element == 0) Settings.SetDoctrine(e, Doctrine);
+            }
+            SetDoctrine(d);
         }
 
         /// <summary>A setting of member <paramref name="m"/>'s own (targets, reach, weapons, radar); false when it cannot.</summary>

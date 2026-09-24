@@ -290,14 +290,14 @@ namespace WingCommand
                             : OrderResult.Refused("Too many aircraft with their own doctrine");
                     }
                     int e = ElementFor(w, o.Scope);
-                    w.SetDoctrine(d, e);
+                    w.SetProfile(o.Scope.Kind == ScopeKind.Wing ? -1 : e, d);
                     return OrderResult.Acked((e > 0 ? w.Roster.Name(e) + ": doctrine " : "Doctrine ") + d.PatternName);
                 }
                 case OrderKind.NextDoctrine:
                 {
                     int e = ElementFor(w, o.Scope);
-                    WingDoctrine d = e > 0 ? w.DoctrineOf(e).NextPattern() : w.NextDoctrine();
-                    if (e > 0) w.SetDoctrine(d, e);
+                    WingDoctrine d = w.DoctrineOf(e).NextPattern();
+                    w.SetProfile(o.Scope.Kind == ScopeKind.Wing ? -1 : e, d);
                     string what = d.Targets == TargetPolicy.Hold ? "holding fire"
                         : d.Targets == TargetPolicy.Cover ? "covering you"
                         : "targets of opportunity";

@@ -432,7 +432,9 @@ namespace WingCommand
                 PilotDead = m.Pilot == null || m.Pilot.dead, Ejected = !lost && (a.HasEjected() || (m.Pilot != null && m.Pilot.ejected)),
                 Supervised = m.OnGround, Phase = m.Ground != null ? m.Ground.Phase : GroundPhase.Done, Landing = Landing(m),
                 SettledDown = m.Settle != null && m.Settle.Phase == SettlePhase.Down,
-                RadarAlt = lost ? 0f : a.radarAlt, Speed = m.Last.Speed,
+                // Review R3a I2: live values, as the game's own IsLanded and parking checks read them (m.Last freezes while
+                // every member flies the game's combat state).
+                RadarAlt = lost ? 0f : a.radarAlt, Speed = lost ? 0f : a.speed,
             };
             string why = EjectRules.Refusal(f);
             if (why != null) return why;

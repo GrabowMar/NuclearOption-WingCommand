@@ -49,7 +49,12 @@ namespace WingCommand
             WingDoctrine doctrine = wing.DoctrineFor(m);
             TrackingInfo tracking = a.NetworkHQ.GetTrackingData(target.persistentID);
             // The game only chooses a target whose position is accurate (review M5a I4): a stale track would be circled.
-            if (tracking == null || !a.NetworkHQ.IsTargetPositionAccurate(target, WingService.TargetAccuracyMetres)) return;
+            if (tracking == null || !a.NetworkHQ.IsTargetPositionAccurate(target, WingService.TargetAccuracyMetres))
+            {
+                // Review R3a I1: the game's own choice still answers to the member's WEAPONS.
+                wing.Veto(a, ref __result);
+                return;
+            }
             WeaponStation best = null;
             float opportunity = 0f;
             for (int i = 0; i < stationList.Count; i++)
