@@ -117,6 +117,20 @@ namespace WingCommand.PureTests
             Assert.Equal(315f, heading, 1);
         }
 
+        [Theory]
+        [InlineData(3f)]
+        [InlineData(-3f)]
+        public void ABeamNearTheNoseTakesTheNearerSideWhateverTheSlotError(float slotErrorEast)
+        {
+            // Review R3b I1: home is the member's own slot a few metres away; its direction must not pick the side
+            // (a bandit 30° right: 300° is a 60° turn, 120° would cross the threat's bearing).
+            AircraftState s = Flying();
+            var home = new RefState(s.Pos + new Vec3(slotErrorEast, 0f, 0f), s.Vel, Vec3.Zero);
+            var r = new ReactionManeuver();
+            r.Begin(new ReactionOrder { Kind = ReactionKind.Beam, HasThreat = true, Threat = s.Pos + Vec3.FromHeading(30f, 30000f) }, s, home);
+            Assert.Equal(300f, Vec3.HeadingDeg(r.Step(s, home, 0.02f, out _).Vel), 1);
+        }
+
         [Fact]
         public void PullUpClimbsToEntryPlusHeightThenEnds()
         {

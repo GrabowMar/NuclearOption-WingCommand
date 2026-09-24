@@ -22,8 +22,9 @@ namespace WingCommand
     /// <item>BRK L / BRK R: 90° off the track, level.</item>
     /// <item>SPLIT: 60° off to its side, level (ponytail: no vertical split — the floor makes one unreliable low down).</item>
     /// <item>PULL UP: straight on, climbing <see cref="PullUpHeight"/>.</item>
-    /// <item>BEAM: perpendicular to the threat's line of sight, on the side nearer the heading (biased toward home);
-    /// ponytail: the bearing is fixed at the start (no refresh) and comes from the faction's tracks only.</item>
+    /// <item>BEAM: perpendicular to the threat's line of sight, on the side nearer the heading (review R3b I1: no bias toward
+    /// home — for a member in its slot that is a few metres of slot error, which picked the side at random); ponytail: the
+    /// bearing is fixed at the start (no refresh) and comes from the faction's tracks only.</item>
     /// </list></summary>
     internal sealed class ReactionManeuver
     {
@@ -87,8 +88,8 @@ namespace WingCommand
                     break;
                 default:
                 {
-                    Vec3 source = s.Pos - o.Threat, toHome = home.Pos - s.Pos;
-                    (float x, float z, int _) = RadarDefenceGeometry.Notch(source.X, source.Z, h.X, h.Z, toHome.X, toHome.Z, true, 0);
+                    Vec3 source = s.Pos - o.Threat;
+                    (float x, float z, int _) = RadarDefenceGeometry.Notch(source.X, source.Z, h.X, h.Z, 0f, 0f, false, 0);
                     goal = new Vec3(x, 0f, z);
                     goal = goal.SqrLength > 1e-6f ? goal.Normalized : h;
                     duration = BeamSeconds;

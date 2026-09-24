@@ -9,21 +9,28 @@ namespace WingCommand
         /// <summary>BEAM turns across an air threat tracked within this range.</summary>
         public static float BeamRangeMetres = 60000f;
 
+        private readonly Vec3[] splitSum = new Vec3[ElementRoster.MaxElements];
+        private readonly int[] splitCount = new int[ElementRoster.MaxElements];
+
         /// <summary>Begins <paramref name="kind"/> for the members in <paramref name="who"/> (null: everyone). Returns how many
         /// began; <paramref name="refusal"/> names each member that could not and why (null when none).</summary>
         public int React(ReactionKind kind, Func<WingMember, bool> who, out string refusal)
         {
             refusal = null;
-            // First pass: the middle of those that can fly one (SPLIT turns a pair apart, across the lead's track).
-            Vec3 sum = Vec3.Zero;
-            int able = 0;
+            // First pass: the middle of those that can fly one, per element (SPLIT turns each element's pair apart across its
+            // own lead's track; review R3b: one centroid over a split wing turned both of a pair the same way).
+            for (int e = 0; e < splitSum.Length; e++)
+            {
+                splitSum[e] = Vec3.Zero;
+                splitCount[e] = 0;
+            }
             foreach (WingMember m in Members)
                 if (InScope(m, who) && CannotReact(m) == null)
                 {
-                    sum += m.Last.Pos;
-                    able++;
+                    int e = ElementOf(m);
+                    splitSum[e] += m.Last.Pos;
+                    splitCount[e]++;
                 }
-            Vec3 centroid = able > 0 ? sum * (1f / able) : Vec3.Zero;
             int started = 0;
             foreach (WingMember m in Members)
             {
@@ -34,8 +41,10 @@ namespace WingCommand
                     var o = new ReactionOrder { Kind = kind };
                     if (kind == ReactionKind.Split)
                     {
-                        LeaderEstimate lead = WingOf(ElementOf(m)).Frame.Leader;
-                        o.Side = ReactionManeuver.SplitSide(m.Last.Pos, centroid, able >= 2, lead.Pos, lead.Track, m.Seat);
+                        int e = ElementOf(m);
+                        LeaderEstimate lead = WingOf(e).Frame.Leader;
+                        Vec3 centroid = splitCount[e] > 0 ? splitSum[e] * (1f / splitCount[e]) : m.Last.Pos;
+                        o.Side = ReactionManeuver.SplitSide(m.Last.Pos, centroid, splitCount[e] >= 2, lead.Pos, lead.Track, m.Seat);
                     }
                     else if (kind == ReactionKind.Beam && NearestAirThreat(m.Aircraft, out Vec3 threat, out _, out _) &&
                              (threat - m.Last.Pos).Length <= BeamRangeMetres)
