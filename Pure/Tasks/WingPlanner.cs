@@ -9,11 +9,14 @@ namespace WingCommand
     /// then the next; a point is also reached once the lead has passed it along the leg; a patrol turns at its ends or loops), a task complete (the last point, an orbit's or hold's
     /// duration) → its declared follow-on, the wing gone (nobody left who is not recovering) → failed, back to Form.
     /// Speed: the task's, else <see cref="CruiseFraction"/> of the slowest cruise, never under
-    /// <see cref="MinSpeedFactor"/> × the highest loaded minimum for a wing with jets. Height: the point's, else the
+    /// (RolePolicy.RecoverFactor + <see cref="MinSpeedMargin"/>) × the highest loaded minimum for a wing with jets. Height: the point's, else the
     /// task's, else the lead's when the task started, never under the wing's floor + <see cref="LeadClearance"/>.</summary>
     internal sealed class WingPlanner
     {
-        public static float DecisionPeriod = 0.5f, ArriveRadius = 800f, CruiseFraction = 0.85f, MinSpeedFactor = 1.3f;
+        /// <summary>The lead's floor for a wing with jets is <see cref="RolePolicy.RecoverFactor"/> +
+        /// <see cref="MinSpeedMargin"/> times the highest loaded minimum, so jets can leave high cover behind it (review M4a
+        /// I3).</summary>
+        public static float DecisionPeriod = 0.5f, ArriveRadius = 800f, CruiseFraction = 0.85f, MinSpeedMargin = 0.1f;
         public static float LeadClearance = 150f, MaxAltitude = 15000f;
         public const int MaxPoints = 16;
 
@@ -52,20 +55,35 @@ namespace WingCommand
             string why = Validate(task, wing);
             if (why != null) return OrderResult.Refused(why);
             if (Current != null) Log(events, time, WingEventKind.TaskCancelled, reason, Current.Kind);
-            if (Lead == null) Lead = wing.AnchorPresent
-                ? new TaskLead(wing.AnchorPos, wing.AnchorVel, wing.AllRotary)
-                : new TaskLead(wing.Centroid, wing.MeanVel, wing.AllRotary);
-            else if (Lead.CanHover != wing.AllRotary) Lead = new TaskLead(Lead.Position, Lead.Velocity, wing.AllRotary);
+            if (Lead == null) Lead = NewLead(wing);
+            else if (Lead.CanHover != wing.AllRotary)
+                Lead = new TaskLead(Lead.Position, Lead.Velocity, wing.AllRotary, Vec3.FromHeading(Lead.HeadingDeg), Lead.BankDeg);
             Current = task;
             Leg = task.Kind == TaskKind.Move || task.Kind == TaskKind.Route || task.Kind == TaskKind.Patrol ? 0 : -1;
             direction = 1;
             legFrom = Lead.Position;
             since = sinceDecision = 0f;
             orbitingPoint = false;
-            startAltitude = Lead.Position.Y;
+            startAltitude = wing.WingAirborne ? wing.Centroid.Y : Lead.Position.Y;
             Log(events, time, WingEventKind.TaskStarted, reason, task.Kind);
             return OrderResult.Ok;
         }
+
+        /// <summary>A new lead takes over from a flying anchor (its velocity, nose and bank; review M4a I2), else from the
+        /// wing's members (a ship, a vehicle, an aircraft on the ground, or no anchor), at a speed the wing can fly.</summary>
+        private static TaskLead NewLead(in WingSnapshot wing)
+        {
+            bool fromAnchor = wing.AnchorPresent && wing.AnchorAirborne;
+            Vec3 pos = fromAnchor ? wing.AnchorPos : wing.Centroid, vel = fromAnchor ? wing.AnchorVel : wing.MeanVel;
+            Vec3 fwd = fromAnchor ? wing.AnchorFwd : wing.MeanVel.Horizontal;
+            float min = Floor(wing), cruise = wing.CruiseSpeed > 0f ? Math.Max(min, wing.CruiseSpeed) : Math.Max(min, vel.Length);
+            float speed = Scalar.Clamp(vel.Length, min, cruise);
+            Vec3 dir = vel.SqrLength > 1f ? vel.Normalized : fwd.Horizontal.SqrLength > 1e-4f ? fwd.Horizontal.Normalized : Vec3.Forward;
+            return new TaskLead(pos, dir * speed, wing.AllRotary, fwd, fromAnchor ? wing.AnchorBankDeg : 0f);
+        }
+
+        private static float Floor(in WingSnapshot wing) =>
+            wing.AllRotary ? 0f : (RolePolicy.RecoverFactor + MinSpeedMargin) * wing.MinSpeed;
 
         private static string Validate(WingTask t, in WingSnapshot w)
         {
@@ -212,7 +230,7 @@ namespace WingCommand
         private float TaskSpeed(in WingSnapshot wing, float pointSpeed)
         {
             float cruise = wing.CruiseSpeed > 0f ? wing.CruiseSpeed : Math.Max(Lead.Speed, 1f);
-            float min = wing.AllRotary ? 0f : MinSpeedFactor * wing.MinSpeed;
+            float min = Floor(wing);
             float wanted = !float.IsNaN(pointSpeed) ? pointSpeed : !float.IsNaN(Current.Speed) ? Current.Speed : CruiseFraction * cruise;
             return Scalar.Clamp(wanted, min, Math.Max(min, cruise));
         }

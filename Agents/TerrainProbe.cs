@@ -7,7 +7,7 @@ namespace WingCommand
     /// nothing is hit or the ground is below the sea.</summary>
     internal static class TerrainProbe
     {
-        public static readonly float[] LookAheadSeconds = { 0f, 2f, 5f, 10f };
+        public static readonly float[] LookAheadSeconds = { 0f, 2f, 5f, 10f }, FarSeconds = { 15f, 20f, 30f };
         private const float CastHeight = 5000f;
 
         public static float GroundY(Vec3 at)
@@ -25,6 +25,15 @@ namespace WingCommand
             Vec3 h = vel.Horizontal;
             float top = 0f;
             for (int i = 0; i < LookAheadSeconds.Length; i++) top = Math.Max(top, GroundY(pos + h * LookAheadSeconds[i]));
+            return top;
+        }
+
+        /// <summary>Highest ground 15, 20 and 30 s ahead on the horizontal path (a task's lead).</summary>
+        public static float LookAheadFar(Vec3 pos, Vec3 vel)
+        {
+            Vec3 h = vel.Horizontal;
+            float top = 0f;
+            for (int i = 0; i < FarSeconds.Length; i++) top = Math.Max(top, GroundY(pos + h * FarSeconds[i]));
             return top;
         }
 

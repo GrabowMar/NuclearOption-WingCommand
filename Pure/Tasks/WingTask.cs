@@ -68,6 +68,13 @@ namespace WingCommand
         /// <summary>The wing's anchor now (the player or an escortee): a new lead starts from it.</summary>
         public Vec3 AnchorPos, AnchorVel;
         public bool AnchorPresent;
+        /// <summary>The anchor's nose (unit, zero: unknown), bank, and whether it is flying (not a ship, a vehicle, or an
+        /// aircraft on the ground): a lead starts from a flying anchor only.</summary>
+        public Vec3 AnchorFwd;
+        public float AnchorBankDeg;
+        public bool AnchorAirborne;
+        /// <summary>Some member not recovering is in the air (its centroid gives the wing's altitude).</summary>
+        public bool WingAirborne;
         /// <summary>The members' mean position and velocity (a new lead starts there when the anchor is gone).</summary>
         public Vec3 Centroid, MeanVel;
         /// <summary>The slowest member's cruise speed and the highest loaded minimum speed, m/s.</summary>

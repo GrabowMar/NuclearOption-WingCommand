@@ -11,6 +11,7 @@ namespace WingCommand.PureTests
         private static WingSnapshot Wing(int members = 2) => new WingSnapshot
         {
             Members = members, AnchorPos = new Vec3(0f, 1000f, 0f), AnchorVel = new Vec3(0f, 0f, 150f), AnchorPresent = true,
+            AnchorAirborne = true, WingAirborne = true,
             Centroid = new Vec3(-50f, 1000f, -80f), MeanVel = new Vec3(0f, 0f, 150f), CruiseSpeed = 200f, MinSpeed = 80f,
             FloorY = float.NaN,
         };
@@ -174,11 +175,12 @@ namespace WingCommand.PureTests
             Assert.Equal(0, p.Leg);
             Assert.True(p.Apply(WingTask.Form(), Wing(), t + 20f, events).Accepted);
             Assert.False(p.Active);
-            p.Apply(WingTask.Route(Waypoint.At(0f, 90000f), Waypoint.At(0f, 95000f)), Wing(), t + 21f, events);
-            Run(p, Wing(), events, t + 21f, 30f);
-            Assert.Equal(0, p.Leg);
-            Assert.True(p.Lead.Speed > 100f, "the new route flies, it does not orbit");
-            Assert.True(Math.Abs(p.Lead.BankDeg) < 20f);
+            // Review M4a I6: a leftover waypoint orbit would keep the new route's first leg from advancing.
+            int reached = events.CountOf(WingEventKind.WaypointReached);
+            p.Apply(WingTask.Route(Waypoint.At(0f, 8000f), Waypoint.At(0f, 20000f)), Wing(), t + 21f, events);
+            Run(p, Wing(), events, t + 21f, 80f, () => p.Leg == 1);
+            Assert.Equal(1, p.Leg);
+            Assert.Equal(reached + 1, events.CountOf(WingEventKind.WaypointReached));
         }
 
         [Fact]
@@ -193,7 +195,7 @@ namespace WingCommand.PureTests
             slow.Speed = 50f;
             q.Apply(slow, Wing(), 0f, new WingEventRing());
             Run(q, Wing(), new WingEventRing(), 0f, 60f);
-            Assert.Equal(WingPlanner.MinSpeedFactor * 80f, q.Lead.Speed, 1);
+            Assert.Equal((RolePolicy.RecoverFactor + WingPlanner.MinSpeedMargin) * 80f, q.Lead.Speed, 1);
         }
 
         [Fact]
@@ -207,6 +209,83 @@ namespace WingCommand.PureTests
             hills.FloorY = 1500f;
             Run(p, hills, new WingEventRing(), 60f, 300f);
             Assert.True(p.Lead.Position.Y >= 1500f + WingPlanner.LeadClearance - 5f, $"lead at {p.Lead.Position.Y}");
+        }
+
+        [Fact]
+        public void ANewLeadTakesASlowAnchorsNoseItsBankAndTheWingsSpeedRange()
+        {
+            // Review M4a I2: a hovering helicopter player gave the lead heading north; bank and climb were dropped; the
+            // anchor's speed was kept whatever the wing could fly.
+            WingSnapshot w = Wing();
+            w.AnchorVel = new Vec3(0.2f, 0f, 0f);
+            w.AnchorFwd = new Vec3(1f, 0f, 0f);
+            w.AnchorBankDeg = 12f;
+            w.AnchorAirborne = true;
+            var p = new WingPlanner();
+            p.Apply(WingTask.Move(Waypoint.At(20000f, 0f)), w, 0f, new WingEventRing());
+            Assert.Equal(90f, p.Lead.HeadingDeg, 1);
+            Assert.Equal(12f, p.Lead.BankDeg, 1);
+            Assert.True(p.Lead.Speed >= RolePolicy.RecoverFactor * w.MinSpeed, $"speed {p.Lead.Speed:0}");
+            WingSnapshot fast = Wing();
+            fast.AnchorAirborne = true;
+            fast.AnchorVel = new Vec3(0f, 0f, 250f);
+            fast.AllRotary = true;
+            fast.CruiseSpeed = 60f;
+            fast.MinSpeed = 0f;
+            var q = new WingPlanner();
+            q.Apply(WingTask.Move(Waypoint.At(0f, 20000f)), fast, 0f, new WingEventRing());
+            Assert.True(q.Lead.Speed <= 60f, $"speed {q.Lead.Speed:0}");
+        }
+
+        [Fact]
+        public void ASurfaceAnchorStartsTheLeadFromTheAirborneWingAtItsAltitude()
+        {
+            // Review M4a I2d: a ship escortee or the player on the runway made the lead start at the surface.
+            WingSnapshot w = Wing();
+            w.AnchorPos = new Vec3(0f, 5f, 0f);
+            w.AnchorAirborne = false;
+            w.WingAirborne = true;
+            w.Centroid = new Vec3(500f, 2000f, 500f);
+            var p = new WingPlanner();
+            p.Apply(WingTask.Move(Waypoint.At(0f, 90000f)), w, 0f, new WingEventRing());
+            Assert.Equal(w.Centroid, p.Lead.Position);
+            Run(p, w, new WingEventRing(), 0f, 60f);
+            Assert.Equal(2000f, p.Lead.Position.Y, 0);
+        }
+
+        [Fact]
+        public void TheLeadFliesFastEnoughForJetsToLeaveHighCover()
+        {
+            // Review M4a I3: behind a helicopter-paced lead the jets' floor equalled the high-cover exit exactly.
+            WingSnapshot mixed = Wing();
+            mixed.CruiseSpeed = 60f;
+            mixed.MinSpeed = 80f;
+            var p = new WingPlanner();
+            p.Apply(WingTask.Move(Waypoint.At(0f, 90000f)), mixed, 0f, new WingEventRing());
+            Run(p, mixed, new WingEventRing(), 0f, 60f);
+            Assert.True(p.Lead.Speed > RolePolicy.RecoverFactor * mixed.MinSpeed + 1f, $"speed {p.Lead.Speed:0.0}");
+        }
+
+        [Fact]
+        public void TheLeadClimbsOverARidgeItSeesComing()
+        {
+            // Review M4a I4: at 5° the lead flew into rising terrain its 10 s look-ahead saw too late.
+            var p = new WingPlanner();
+            WingSnapshot w = Wing();
+            w.AnchorPos = new Vec3(0f, 300f, 0f);
+            w.AnchorVel = new Vec3(0f, 0f, 200f);
+            w.CruiseSpeed = 200f / WingPlanner.CruiseFraction;
+            p.Apply(WingTask.Move(Waypoint.At(0f, 90000f)), w, 0f, new WingEventRing());
+            float Ground(float z) => 0.15f * Math.Max(0f, z - 5000f);
+            float lowest = float.MaxValue;
+            for (int i = 0; i < 120 * 30; i++)
+            {
+                float z = p.Lead.Position.Z;
+                w.FloorY = Math.Max(Ground(z), Ground(z + 30f * 200f));   // the engine probes the lead's path 30 s ahead
+                p.Step(w, i * Dt, Dt, null);
+                lowest = Math.Min(lowest, p.Lead.Position.Y - Ground(p.Lead.Position.Z));
+            }
+            Assert.True(lowest > 50f, $"the lead came within {lowest:0} m of the ground");
         }
 
         [Fact]

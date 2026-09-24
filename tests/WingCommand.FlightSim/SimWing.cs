@@ -22,6 +22,8 @@ namespace WingCommand.FlightSim
         public Func<float, float, float> Terrain;
         /// <summary>What the wing forms on instead of <see cref="Leader"/> (a task lead); null: the leader.</summary>
         public Func<AnchorSample> Anchor;
+        /// <summary>The wing's collision body 0 instead of the anchor (the player while the wing flies a task); null: the anchor.</summary>
+        public Func<AnchorSample> Body0;
         public float Clearance = 60f;
         private readonly TerrainFloor floor = new TerrainFloor();
         private readonly WingMemberInput[] inputs;
@@ -88,7 +90,10 @@ namespace WingCommand.FlightSim
                     Id = i,
                 };
             }
-            WingFrame frame = Wing.Update(Anchor != null ? Anchor() : Leader.Sample(), inputs, Plants.Length, floor, Clearance, Profile.MaxRadius, Dt);
+            AnchorSample anchor = Anchor != null ? Anchor() : Leader.Sample();
+            WingFrame frame = Body0 != null
+                ? Wing.Update(anchor, Body0(), inputs, Plants.Length, floor, Clearance, Profile.MaxRadius, Dt)
+                : Wing.Update(anchor, inputs, Plants.Length, floor, Clearance, Profile.MaxRadius, Dt);
             for (int i = 0; i < Plants.Length; i++)
             {
                 ControlOutput o = Pilots[i].Step(frame, states[i], Profile, Time, Dt, Events);

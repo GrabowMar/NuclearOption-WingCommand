@@ -310,6 +310,8 @@ namespace WingCommand
         public bool TakenOver(WingMember m)
         {
             if (m == null || m.Released || !Members.Contains(m)) return false;
+            // The player flies again: the wing forms on the new aircraft, as a Form Up would (review M4a C2).
+            if (Planner.Active) Order(WingTask.Form());
             m.Released = true;
             m.Ground?.Leave();
             m.Recovery?.Leave();
@@ -567,6 +569,13 @@ namespace WingCommand
                 };
             }
             AnchorSample leader = SampleAnchor(dt);
+            if (Planner.Active)
+            {
+                AnchorSample player = PlayerBody();
+                SampleSeparation(player, n);
+                Wing.Update(leader, player, inputs, n, floor.Value, Clearance, AnchorRadius(leader.Kind), dt);
+                return Wing.Frame;
+            }
             SampleSeparation(leader, n);
             Wing.Update(leader, inputs, n, floor.Value, Clearance, AnchorRadius(leader.Kind), dt);
             return Wing.Frame;
@@ -614,7 +623,8 @@ namespace WingCommand
             if (!ReferenceEquals(before, LeaderUnit))
             {
                 // (object) casts: a destroyed anchor is Unity-null but still a different leader to reset from.
-                if ((object)before != null && (object)LeaderUnit != null) Wing?.ResetLeader();
+                // A task's lead does not change with the anchor unit (review M4a M1).
+                if ((object)before != null && (object)LeaderUnit != null && !Planner.Active) Wing?.ResetLeader();
                 leaderClass = LeaderUnit is Aircraft a ? ProfileReader.ClassOf(a) : AirframeClass.FixedWing;
             }
             UpdateUse();
@@ -787,10 +797,13 @@ namespace WingCommand
         {
             bool any = false;
             float raw = 0f;
-            if (Alive(LeaderUnit))
+            if (Planner.Active || Alive(LeaderUnit))
             {
                 AnchorSample l = SampleAnchor(0f);
                 raw = TerrainProbe.LookAhead(l.Pos, l.Vel);
+                // A task's lead is probed 15–30 s along its path too: it climbs at 5° and must see a ridge coming (review
+                // M4a I4).
+                if (Planner.Active) raw = Math.Max(raw, TerrainProbe.LookAheadFar(l.Pos, l.Vel));
                 any = true;
             }
             for (int i = 0; i < Members.Count; i++)

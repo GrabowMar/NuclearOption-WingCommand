@@ -102,7 +102,18 @@ namespace WingCommand
         }
 
         public WingFrame Update(in AnchorSample leader, WingMemberInput[] members, int count, float floorY,
-            float clearance, float leaderRadius, float dt)
+            float clearance, float leaderRadius, float dt) =>
+            Update(leader, false, default, members, count, floorY, clearance, leaderRadius, dt);
+
+        /// <summary>As <see cref="Update(in AnchorSample, WingMemberInput[], int, float, float, float, float)"/>, with
+        /// <paramref name="body"/> as the wing's collision body 0 instead of the anchor (the player's aircraft while the
+        /// wing forms on a task's virtual lead, review M4a C2; not present: no body 0).</summary>
+        public WingFrame Update(in AnchorSample leader, in AnchorSample body, WingMemberInput[] members, int count, float floorY,
+            float clearance, float leaderRadius, float dt) =>
+            Update(leader, true, body, members, count, floorY, clearance, leaderRadius, dt);
+
+        private WingFrame Update(in AnchorSample leader, bool separateBody, in AnchorSample body, WingMemberInput[] members,
+            int count, float floorY, float clearance, float leaderRadius, float dt)
         {
             count = Math.Min(count, N);
             Frame.Leader = Estimator.Update(leader, dt);
@@ -136,13 +147,15 @@ namespace WingCommand
                 Frame.StaggerClear[i] = i == 0 || Frame.Established[i - 1] || members[i - 1].Role != Role.Slot || members[i - 1].Grounded ||
                                         Side(Frame.Slots[i].Lateral) != Side(Frame.Slots[i - 1].Lateral);
 
-            bodies[0] = new CollisionBody
-            {
-                Pos = leader.Present ? leader.Pos : Frame.Leader.Pos,
-                Vel = leader.Present ? leader.Vel : Frame.Leader.Vel,
-                Radius = leaderRadius,
-                Rank = 0,
-            };
+            bodies[0] = !separateBody
+                ? new CollisionBody
+                {
+                    Pos = leader.Present ? leader.Pos : Frame.Leader.Pos,
+                    Vel = leader.Present ? leader.Vel : Frame.Leader.Vel,
+                    Radius = leaderRadius,
+                    Rank = 0,
+                }
+                : new CollisionBody { Pos = body.Pos, Vel = body.Vel, Radius = leaderRadius, Rank = 0, Ignored = !body.Present };
             for (int i = 0; i < count; i++)
                 bodies[i + 1] = new CollisionBody
                 {

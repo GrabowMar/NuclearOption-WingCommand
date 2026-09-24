@@ -146,7 +146,7 @@ namespace WingCommand
                 : "Cannot recruit " + target.unitName + ": " + reason);
         }
 
-        public static float MoveAheadMetres = 10000f, PatrolHalfMetres = 10000f;
+        public static float MoveAheadMetres = 10000f, PatrolHalfMetres = 10000f, OrderHeightMin = 50f;
 
         /// <summary>The wing orbits the point below the player (spec M4 §2.4).</summary>
         public static void OrbitHere() => Order(p => WingTask.Orbit(Point(p, 0f, 0f)), "orbiting here");
@@ -166,7 +166,8 @@ namespace WingCommand
             f = f.SqrLength > 1e-4f ? f.Normalized : Vec3.Forward;
             Vec3 there = at + f * forward + new Vec3(f.Z, 0f, -f.X) * right;
             Waypoint w = Waypoint.At(there.X, there.Z);
-            w.Altitude = at.Y;
+            // The player's height only when flying: from the runway the wing keeps its own (review M4a I2d).
+            w.Altitude = p.radarAlt > OrderHeightMin ? at.Y : float.NaN;
             return w;
         }
 

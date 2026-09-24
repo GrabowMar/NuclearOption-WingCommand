@@ -54,6 +54,30 @@ namespace WingCommand.PureTests
         }
 
         [Fact]
+        public void AHelicopterLeadStartingOnItsPointAtSpeedBrakesSmoothlyWithoutReversing()
+        {
+            // Review M4a C1: "Hold Here" puts the point under the moving player; the slide snapped the track toward the
+            // point every tick while the speed only slewed, reversing the lead's velocity every tick.
+            var lead = new TaskLead(new Vec3(0f, 300f, 0f), new Vec3(0f, 0f, 60f), true);
+            Vec3 point = new Vec3(0f, 300f, 0f);
+            Vec3 last = lead.Velocity.Horizontal;
+            float worstStep = 0f;
+            int reversals = 0;
+            for (int i = 0; i < 180 * 30; i++)
+            {
+                lead.FlyHover(point, 90f, 300f, 60f, Dt);
+                Vec3 v = lead.Velocity.Horizontal;
+                worstStep = Math.Max(worstStep, (v - last).Length);
+                if (v.Length > 1f && last.Length > 1f && Vec3.Dot(v, last) < 0f) reversals++;
+                last = v;
+            }
+            Assert.True(worstStep <= TaskLead.SpeedRate * Dt * 1.5f + 1e-3f, $"velocity jumped {worstStep:0.00} m/s in a tick");
+            Assert.Equal(0, reversals);
+            Assert.True((lead.Position - point).Horizontal.Length < 30f, $"at {lead.Position}");
+            Assert.True(lead.Speed < 1f, $"speed {lead.Speed:0.0}");
+        }
+
+        [Fact]
         public void TheSampleIsAPresentAirborneAnchorThatIsNotThePlayer()
         {
             var lead = new TaskLead(new Vec3(0f, 1000f, 0f), new Vec3(0f, 0f, 150f), false);

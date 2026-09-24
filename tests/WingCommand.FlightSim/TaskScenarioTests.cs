@@ -117,5 +117,52 @@ namespace WingCommand.FlightSim
             Vec3 c = Snapshot(sim, leader).Centroid;
             Assert.True((c - new Vec3(to.X, c.Y, to.Z)).Horizontal.Length < 1.5f * radius + 1000f, $"the wing is at {c}");
         }
+        [Fact]
+        public void DuringATaskTheWingKeepsClearOfThePlayerStandingWhereAMemberWas()
+        {
+            // Review M4a C2: a takeover mid-task spawns the player's aircraft where member #2 was (slot 0); the next member
+            // then flies slot 0 — straight into the player, who was outside the wing's collision check while the task's
+            // (empty) lead was its body 0.
+            var player = new VirtualLeader(new Vec3(0f, 2000f, 0f), 180f, 0f);
+            FormationDefinition def = SimFormations.Get("finger-four-right");
+            float spacing = def.ClampSpacing(FormationCatalog.Standard);
+            Vec3 SlotAt(int i)
+            {
+                SlotDef slot = SlotSolver.SlotFor(def, i);
+                float right = slot.Right * spacing;
+                return player.Position + TurnFrame.Offset(player.Velocity, Vec3.Forward, 0f, right, slot.Aft * spacing,
+                    slot.Up * FormationCatalog.StackMetres,
+                    TurnFrame.RollFollowWeight(TurnFrame.Reach(right, slot.Aft * spacing, slot.Up * FormationCatalog.StackMetres), slot.RollFollow));
+            }
+            // The task's lead flies where the player flew; the player (the takeover copy) now stands in slot 0's place and
+            // flies straight at the same speed; the one member left starts in slot 1 and is given slot 0.
+            Vec3 playerStart = SlotAt(0), memberStart = SlotAt(1);
+            var sim = new SimWing(player, def, spacing, new[] { memberStart }, 180f, 0f);
+            var copy = new VirtualLeader(playerStart, 180f, 0f);
+            var planner = new WingPlanner();
+            var snapshot = new WingSnapshot
+            {
+                Members = 1, AnchorPos = player.Position, AnchorVel = player.Velocity, AnchorPresent = true,
+                Centroid = memberStart, MeanVel = player.Velocity, CruiseSpeed = 180f / WingPlanner.CruiseFraction,
+                MinSpeed = 60f, FloorY = float.NaN,
+            };
+            WingTask move = WingTask.Move(Waypoint.At(0f, 200000f));
+            move.Speed = 180f;
+            Assert.True(planner.Apply(move, snapshot, 0f, sim.Events).Accepted);
+            sim.Anchor = () => planner.Sample();
+            sim.Body0 = () => copy.Sample();
+            float closest = float.MaxValue;
+            for (int i = 0; i < 90 * 60; i++)
+            {
+                planner.Step(snapshot, sim.Time, SimWing.Dt, sim.Events);
+                copy.Step(0f, SimWing.Dt);
+                sim.Step();
+                closest = Math.Min(closest, (sim.Plants[0].Position - copy.Position).Length);
+            }
+            // Its slot is exactly where the player stands, so the slot's pull and the bias balance just inside the safe
+            // radius: no contact (bounding spheres + 5 m); the engine also ends the task on a takeover, so the wing forms on
+            // the new aircraft instead.
+            Assert.True(closest > 2f * sim.Profile.MaxRadius + 5f, $"the member came within {closest:0} m of the player");
+        }
     }
 }
