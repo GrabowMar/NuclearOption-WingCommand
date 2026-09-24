@@ -175,6 +175,7 @@ namespace WingCommand
                 { "falling_behind", s.FallingBehind },
                 { "transitions", s.Transitions },
                 { "transitions_per_member_min", s.Transitions / memberMinutes },
+                { "ai_ms_mean", wing.AiMsMean }, { "ai_ms_max", wing.AiMsMax },
             };
             Plugin.Logger.LogInfo(string.Format(CultureInfo.InvariantCulture,
                 "[Automation] metrics over {0:0} s: {1}/{2} captured, slot RMS {3:0.0} m (max {4:0}), min separation {5:0.0} m, " +

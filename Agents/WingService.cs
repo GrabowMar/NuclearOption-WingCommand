@@ -43,6 +43,11 @@ namespace WingCommand
         public WingMetrics Metrics { get; } = new WingMetrics();
         public float MissionTime => missionTime;
         public double LastFrameAiMs { get; private set; }
+        /// <summary>This mission's AI time per frame (plan M8 budget: 0.3 ms for a 4-ship), over frames with members.</summary>
+        public double AiMsMean => aiFrames > 0 ? aiMsSum / aiFrames : 0.0;
+        public double AiMsMax { get; private set; }
+        private double aiMsSum;
+        private long aiFrames;
         public event Action RosterChanged;
 
         private readonly WingMemberInput[] inputs = new WingMemberInput[FormationCatalog.MaxSlots];
@@ -82,6 +87,9 @@ namespace WingCommand
             missionTime = 0f;
             eventsLogged = 0;
             Metrics.Reset(0f);
+            aiMsSum = 0.0;
+            aiFrames = 0;
+            AiMsMax = 0.0;
             if (WingData.Formations.Count == 0)
             {
                 Plugin.Logger.LogError("[Wing] no valid formations loaded; the wing is disabled this mission");
@@ -115,6 +123,12 @@ namespace WingCommand
         {
             LastFrameAiMs = aiTicks * 1000.0 / Stopwatch.Frequency;
             aiTicks = 0;
+            if (Members.Count > 0)
+            {
+                aiMsSum += LastFrameAiMs;
+                aiFrames++;
+                if (LastFrameAiMs > AiMsMax) AiMsMax = LastFrameAiMs;
+            }
             LogEvents();
             WingTakeover.Tick();
             WingSearchAndRescue.Tick();
