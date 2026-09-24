@@ -67,6 +67,7 @@ namespace WingCommand
             Planner.Reset();
             WingTakeover.Reset();
             WingRecruitment.Reset();
+            ResetCombat();
             flyingPlayer = null;
             Events = new WingEventRing();
             floor = new TerrainFloor();

@@ -40,6 +40,13 @@ namespace WingCommand
         public static bool Outnumbered(int hostiles, int members, float ratio) =>
             ratio > 0f && members > 0 && hostiles >= ratio * members;
 
+        public static float ThreatMinRadarAlt = 10f, ThreatMinAntiAir = 0.2f;
+
+        /// <summary>A hostile air threat (review M5d I2): an accurate track (not a last known position), off the ground,
+        /// and at or above the game's own anti-air cut-off (transports and bombers are not).</summary>
+        public static bool IsAirThreat(bool accurate, float radarAlt, float antiAir) =>
+            accurate && radarAlt > ThreatMinRadarAlt && antiAir >= ThreatMinAntiAir;
+
         /// <summary>True on the tick the wing has been outnumbered for the dwell (then the clock restarts).</summary>
         public bool Update(int hostiles, int members, float ratio, float dt)
         {
@@ -57,7 +64,8 @@ namespace WingCommand
         public bool AllowEngage(int hostiles, int members, float ratio, float now)
         {
             if (!Outnumbered(hostiles, members, ratio)) return true;
-            if (now - refusedAt <= ConfirmSeconds)
+            // A refusal from a later clock (the previous mission's) is no confirmation (review M5d I1).
+            if (now >= refusedAt && now - refusedAt <= ConfirmSeconds)
             {
                 Overridden = true;
                 return true;

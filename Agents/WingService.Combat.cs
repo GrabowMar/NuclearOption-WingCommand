@@ -28,6 +28,16 @@ namespace WingCommand
 
         private static float FallBackRatio => Plugin.Settings != null ? Plugin.Settings.FallBackRatio.Value : 0f;
 
+        /// <summary>A new mission: no attack order, no refusal or override carried over (review M5d I1).</summary>
+        private void ResetCombat()
+        {
+            attackCount = 0;
+            reallocateClock = 0f;
+            outnumberedClock = 0f;
+            judge.Reset();
+            LastHostiles = 0;
+        }
+
         /// <summary>The radial Engage asks first (spec M5 §6.3): false while outnumbered, unless this is the second press
         /// within the confirmation window.</summary>
         public bool MayEngage(out int hostiles, out int members)
@@ -59,8 +69,11 @@ namespace WingCommand
             foreach (KeyValuePair<PersistentID, TrackingInfo> pair in hq.trackingDatabase)
             {
                 TrackingInfo t = pair.Value;
-                if (t == null || !t.TryGetUnit(out Unit u) || !(u is Aircraft) || u.disabled || u.NetworkHQ == null || u.NetworkHQ == hq) continue;
-                if ((t.GetPosition().ToVec3() - centre).SqrLength <= r2) n++;
+                if (t == null || !t.TryGetUnit(out Unit u) || !(u is Aircraft enemy) || u.disabled || u.NetworkHQ == null || u.NetworkHQ == hq) continue;
+                if ((t.GetPosition().ToVec3() - centre).SqrLength > r2) continue;
+                // Parked, unarmed or stale tracks are no air threat (review M5d I2).
+                float antiAir = enemy.definition != null ? enemy.definition.roleIdentity.antiAir : 0f;
+                if (OutnumberedJudge.IsAirThreat(hq.IsTargetPositionAccurate(u, TargetAccuracyMetres), enemy.radarAlt, antiAir)) n++;
             }
             return n;
         }
@@ -104,8 +117,13 @@ namespace WingCommand
             WingConfig cfg = Plugin.Settings;
             if (cfg == null || !CombatDoctrine.FollowOn(reason, cfg.AfterWinchester.Value, cfg.AfterBingo.Value, out RecoveryIntent intent)) return;
             string why = reason == TransitionReason.Fuel ? "bingo fuel" : "Winchester";
-            WingToast.Show($"#{m.Number} {why}; {(intent == RecoveryIntent.Refit ? "going to refit" : "returning to base")}");
-            Recover(m, intent);
+            // Refit needs a land field; with none (a helicopter whose only field is a carrier) it goes home to the
+            // reserve instead of flying on (review M5d I3). The toast says what actually happens.
+            bool going = Recover(m, intent);
+            if (!going && intent == RecoveryIntent.Refit) going = Recover(m, intent = RecoveryIntent.Rtb);
+            WingToast.Show(going
+                ? $"#{m.Number} {why}; {(intent == RecoveryIntent.Refit ? "going to refit" : "returning to base")}"
+                : $"#{m.Number} {why}; no field to return to");
         }
 
         /// <summary>Spec M5 §6.4: an engaged member fighting on its own choice spreads off targets other members are already

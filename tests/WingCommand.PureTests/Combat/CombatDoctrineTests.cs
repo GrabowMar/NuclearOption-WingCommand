@@ -45,6 +45,25 @@ namespace WingCommand.PureTests
         }
 
         [Fact]
+        public void ARefusalFromALaterClockIsAFreshRefusal()
+        {
+            // review M5d I1: the service outlives a mission; the mission clock restarts at 0
+            var j = new OutnumberedJudge();
+            Assert.False(j.AllowEngage(6, 2, 2f, 1800f));
+            Assert.False(j.AllowEngage(6, 2, 2f, 5f));
+            Assert.False(j.Overridden);
+            Assert.True(j.AllowEngage(6, 2, 2f, 8f));
+        }
+
+        [Theory]
+        [InlineData(true, 800f, 0.5f, true)]
+        [InlineData(false, 800f, 0.5f, false)]   // a stale track at its last known position
+        [InlineData(true, 2f, 0.5f, false)]      // parked or taxiing
+        [InlineData(true, 800f, 0.1f, false)]    // a transport: under the game's own anti-air cut-off
+        public void OnlyAirborneArmedAccurateAircraftAreAirThreats(bool accurate, float radarAlt, float antiAir, bool threat) =>
+            Assert.Equal(threat, OutnumberedJudge.IsAirThreat(accurate, radarAlt, antiAir));
+
+        [Fact]
         public void SpreadPressureLowersSaturatedTargetsAndThePlayersTarget()
         {
             float free = TargetSpread.Score(1f, 0f, 1000f, 5000f, 0, false, 1);
