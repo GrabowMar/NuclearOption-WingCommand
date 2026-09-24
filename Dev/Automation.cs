@@ -311,6 +311,22 @@ namespace WingCommand
             };
         }
 
+        /// <summary>Test fixture for economy scenarios (Free Flight gives no allocation): adds <c>allocation</c> to the
+        /// player's allocation and <c>stock</c> airframes of <c>type</c> to the lead's faction.</summary>
+        public static Dictionary<string, object> Grant(Dictionary<string, object> args)
+        {
+            GameManager.GetLocalPlayer(out NuclearOption.Networking.Player player);
+            float add = args.TryGetValue("allocation", out object raw) ? Convert.ToSingle(raw, CultureInfo.InvariantCulture) : 0f;
+            if (player != null && add != 0f) player.AddAllocation(add);
+            Aircraft lead = Arg(args, "leadUnit") as Aircraft ?? WingService.Instance?.Player;
+            string typeName = Text(args, "type");
+            AircraftDefinition type = typeName != null ? FindType(typeName) : null;
+            int stock = Number(args, "stock", 0);
+            if (type != null && stock != 0 && lead != null && lead.NetworkHQ != null) lead.NetworkHQ.ModifyUnitSupply(type, stock);
+            Plugin.Logger.LogInfo($"[Automation] Grant: allocation +{add:0}, {stock} × {typeName ?? "-"}");
+            return Ok("allocation", player != null ? player.Allocation : -1f);
+        }
+
         /// <summary>What calls have cost this mission: charged, refunded, and the player's allocation now; the squadron's
         /// pilots flying, free and lost; with args.type, the faction's stock of that airframe (−1: unknown).</summary>
         public static Dictionary<string, object> Economy(Dictionary<string, object> args)
@@ -326,7 +342,8 @@ namespace WingCommand
             }
             string typeName = Text(args, "type");
             AircraftDefinition type = typeName != null ? FindType(typeName) : null;
-            FactionHQ hq = WingService.Instance?.Player != null ? WingService.Instance.Player.NetworkHQ : null;
+            Aircraft lead = Arg(args, "leadUnit") as Aircraft ?? WingService.Instance?.Player;
+            FactionHQ hq = lead != null ? lead.NetworkHQ : null;
             int stock = type != null && hq != null ? hq.GetUnitSupply(type) : -1;
             Plugin.Logger.LogInfo($"[Automation] Economy: charged {WingLedger.Charged:0}, refunded {WingLedger.Refunded:0}, " +
                                   $"allocation {allocation:0}, pilots {flying} flying / {free} free / {lost} lost, stock {stock}");

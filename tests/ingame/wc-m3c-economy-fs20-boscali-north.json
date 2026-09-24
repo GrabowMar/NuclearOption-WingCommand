@@ -37,10 +37,22 @@
     },
     {
       "op": "call",
+      "method": "WingCommand.Automation.Grant",
+      "store": "grant",
+      "args": {
+        "lead": "lead",
+        "allocation": 100000000,
+        "type": "FS-20 Vortex",
+        "stock": 4
+      }
+    },
+    {
+      "op": "call",
       "method": "WingCommand.Automation.Economy",
       "store": "before",
       "args": {
-        "type": "FS-20 Vortex"
+        "type": "FS-20 Vortex",
+        "lead": "lead"
       }
     },
     {
@@ -71,7 +83,8 @@
       "method": "WingCommand.Automation.Economy",
       "store": "charged",
       "args": {
-        "type": "FS-20 Vortex"
+        "type": "FS-20 Vortex",
+        "lead": "lead"
       }
     },
     {
@@ -102,7 +115,8 @@
       "method": "WingCommand.Automation.Economy",
       "store": "after",
       "args": {
-        "type": "FS-20 Vortex"
+        "type": "FS-20 Vortex",
+        "lead": "lead"
       }
     },
     {
