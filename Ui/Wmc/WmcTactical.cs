@@ -229,19 +229,7 @@ namespace WingCommand
             }
         }
 
-        private static bool InScope(WmcContext c, in SnapshotMember m)
-        {
-            switch (c.Scope.Kind)
-            {
-                case ScopeKind.Element: return m.Element == c.Scope.Element;
-                case ScopeKind.Members:
-                    if (c.Scope.Members == null) return false;
-                    foreach (uint id in c.Scope.Members)
-                        if (id == m.Id) return true;
-                    return false;
-                default: return true;
-            }
-        }
+        private static bool InScope(WmcContext c, in SnapshotMember m) => c.InScope(m);
 
         // ---------------------------------------------------------------- refresh
 

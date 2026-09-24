@@ -26,7 +26,7 @@ namespace WingCommand.PureTests
             Assert.Equal("no target", OrderValidator.Check(WingOrder.Of(OrderKind.EscortTarget)));
             Assert.Equal("nothing selected to recruit", OrderValidator.Check(WingOrder.Of(OrderKind.Recruit)));
             Assert.Equal("no name", OrderValidator.Check(WingOrder.Of(OrderKind.SetShape)));
-            Assert.Equal("name too long", OrderValidator.Check(new WingOrder { Kind = OrderKind.RenameElement, Text = new string('x', 49) }));
+            Assert.Equal("name too long", OrderValidator.Check(new WingOrder { Kind = OrderKind.RenameElement, Text = new string('x', 65) }));
             Assert.Equal("call 1 to 7 aircraft", OrderValidator.Check(new WingOrder { Kind = OrderKind.Call, Number = 0f }));
             Assert.Equal("stack out of range", OrderValidator.Check(new WingOrder { Kind = OrderKind.Stack, Number = float.NaN }));
             Assert.Equal("no such spacing", OrderValidator.Check(new WingOrder { Kind = OrderKind.SetSpacing, Number = 4f }));
@@ -49,6 +49,17 @@ namespace WingCommand.PureTests
         }
 
         [Fact]
+        public void AnOverrideNamesAKnownSettingAndOneOfItsValues()
+        {
+            Assert.Equal("no such doctrine setting", OrderValidator.Check(new WingOrder { Kind = OrderKind.SetOverride, Number = 99f, Text = "Auto" }));
+            Assert.Equal("no such doctrine setting", OrderValidator.Check(new WingOrder { Kind = OrderKind.SetOverride, Number = float.NaN, Text = "Auto" }));
+            Assert.Equal("no such doctrine setting", OrderValidator.Check(new WingOrder { Kind = OrderKind.SetOverride, Number = 6.5f, Text = "Auto" }));
+            Assert.Equal("no such value", OrderValidator.Check(new WingOrder
+                { Kind = OrderKind.SetOverride, Number = (float)DoctrineAxis.Weapons, Text = "Lasers" }));
+            Assert.Null(OrderValidator.Check(new WingOrder { Kind = OrderKind.SetOverride, Number = (float)DoctrineAxis.Radar, Text = "Silent" }));
+        }
+
+        [Fact]
         public void AnAcceptedResultCarriesItsAck()
         {
             OrderResult r = OrderResult.Acked("2 attacking", 1);
@@ -62,7 +73,8 @@ namespace WingCommand.PureTests
         public void TheLongestCustomDoctrineFitsAnOrder()
         {
             // Review P2 I6: a custom doctrine travels as its config text.
-            var d = new WingDoctrine(MissileGuard.Lead, MissileResponse.Press, FormationInterval.Standard, false, TargetPolicy.Ground, EngagementReach.Long);
+            var d = new WingDoctrine(MissileGuard.Lead, MissileResponse.Press, FormationInterval.Standard, false, TargetPolicy.Ground, EngagementReach.Long,
+                WeaponsPolicy.NoAirToGround, RadarPolicy.Silent);
             Assert.Null(OrderValidator.Check(new WingOrder { Kind = OrderKind.SetDoctrine, Text = d.ToString() }));
         }
     }

@@ -51,11 +51,47 @@ namespace WingCommand
         /// <summary>The doctrine element <paramref name="e"/> flies (spec WMC program §4).</summary>
         public WingDoctrine DoctrineOf(int e) => Settings.DoctrineOf(e, Doctrine);
 
+        /// <summary>The doctrine member <paramref name="m"/> flies: its element's, then its own (spec WMC rebuild R3).</summary>
+        public WingDoctrine DoctrineFor(WingMember m) =>
+            Settings.Members.Resolve((object)m.Aircraft != null ? m.Aircraft.persistentID.Id : 0u, DoctrineOf(ElementOf(m)));
+
+        /// <summary>Whether <paramref name="m"/> keeps its own value of <paramref name="axis"/> when its element's changes.</summary>
+        public bool KeepsOwn(WingMember m, DoctrineAxis axis) =>
+            (object)m.Aircraft != null && Settings.Members.Has(m.Aircraft.persistentID.Id, axis);
+
+        /// <summary>One setting for the whole wing (<paramref name="element"/> &lt; 0: every element, the detached ones with
+        /// their own doctrine too) or one element (A: the wing's doctrine, with B-D pinned first so they keep flying theirs).</summary>
+        public void SetAxis(int element, DoctrineAxis axis, byte value)
+        {
+            if (element > 0)
+            {
+                Settings.SetDoctrine(element, DoctrineOf(element).With(axis, value));
+                Plugin.Logger.LogInfo($"[Wing] element {ElementRoster.Letter(element)} {axis} {value}");
+                return;
+            }
+            for (int e = 1; e < ElementRoster.MaxElements; e++)
+            {
+                if (!Roster.InUse(e)) continue;
+                if (Settings.HasDoctrine(e)) { if (element < 0) Settings.SetDoctrine(e, DoctrineOf(e).With(axis, value)); }
+                else if (element == 0) Settings.SetDoctrine(e, Doctrine);
+            }
+            SetDoctrine(Doctrine.With(axis, value));
+        }
+
+        /// <summary>A setting of member <paramref name="m"/>'s own (targets, reach, weapons, radar); false when it cannot.</summary>
+        public bool SetMemberAxis(WingMember m, DoctrineAxis axis, byte value) =>
+            (object)m.Aircraft != null && Settings.Members.SetOverride(m.Aircraft.persistentID.Id, axis, value);
+
+        /// <summary>A profile of member <paramref name="m"/>'s own; its single settings go.</summary>
+        public bool SetMemberDoctrine(WingMember m, WingDoctrine d) =>
+            (object)m.Aircraft != null && Settings.Members.SetBase(m.Aircraft.persistentID.Id, d);
+
         public void SetDoctrine(WingDoctrine d)
         {
             Doctrine = d;
-            if (Plugin.Settings != null) Plugin.Settings.Doctrine.Value = d.PatternName == "CUSTOM" ? Plugin.Settings.Doctrine.Value : d.PatternName;
-            Plugin.Logger.LogInfo($"[Wing] doctrine {d.PatternName}");
+            // Every axis survives a restart (a preset saves its name, anything else its eight values).
+            if (Plugin.Settings != null) Plugin.Settings.Doctrine.Value = d.ToString();
+            Plugin.Logger.LogInfo($"[Wing] doctrine {d.PatternName} ({d})");
         }
 
         private static bool HoldsFormation(BehaviourId b) =>
@@ -67,7 +103,7 @@ namespace WingCommand
             if (!m.Cadence.Due(dt, m.Perks.IntervalScale)) return;
             m.StandingTarget = null;
             if (m.Engaged || m.Recovery != null || m.OnGround || m.Released || !HoldsFormation(m.Brain.Mind.Current)) return;
-            WingDoctrine doctrine = DoctrineOf(ElementOf(m));
+            WingDoctrine doctrine = DoctrineFor(m);
             StandingMode mode = StandingFire.Decide(doctrine.Targets, out DoctrineAllow allow);
             if (mode == StandingMode.None) return;
             Aircraft a = m.Aircraft;
@@ -132,7 +168,7 @@ namespace WingCommand
             if (attempted) m.Cadence.Fired();
             if (!launched) return;
             StandingShots++;
-            Plugin.Logger.LogInfo($"[Wing] #{m.Number} fox on {best.unitName} ({DoctrineOf(ElementOf(m)).PatternName})");
+            Plugin.Logger.LogInfo($"[Wing] #{m.Number} fox on {best.unitName} ({doctrine.PatternName})");
             CallFox(m, bestStation, best);
         }
 

@@ -973,7 +973,11 @@ namespace WingCommand
                     Time = missionTime, Member = m.Seat, Kind = WingEventKind.MemberLost, Reason = LossOf(m), Element = (byte)ElementOf(m),
                     Id = (object)m.Aircraft != null ? m.Aircraft.persistentID.Id : 0u,
                 });
-                if ((object)m.Aircraft != null) Roster.Remove(m.Aircraft.persistentID.Id);
+                if ((object)m.Aircraft != null)
+                {
+                    Roster.Remove(m.Aircraft.persistentID.Id);
+                    Settings.Members.Forget(m.Aircraft.persistentID.Id);
+                }
                 Members.RemoveAt(i);
                 changed = true;
                 Plugin.Logger.LogInfo($"[Wing] #{m.Number} left the wing: {LeaveReason(m, ours)}");

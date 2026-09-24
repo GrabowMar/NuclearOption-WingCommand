@@ -37,7 +37,8 @@ namespace WingCommand
             d.BingoSeconds = m.Bingo.SecondsToBingo;
             // The same hull the DAMAGED alert reads (GetDetachedRatio ignored hit-point damage).
             d.Damage = alive ? 1f - m.Damage.Hull : float.NaN;
-            d.Radar = alive && a.radar != null ? (a.radar.activated ? 1 : 0) : -1;
+            // A plain TargetDetector is visual search, not a radar (weapons-radar.md B).
+            d.Radar = alive && a.radar is Radar r ? (r.activated ? 1 : 0) : -1;
             Unit t = m.AssignedTarget != null ? m.AssignedTarget : m.StandingTarget;
             d.Target = t != null && !t.disabled ? (t.definition != null ? t.definition.unitName : t.unitName) : null;
             Stores(m, ref d);

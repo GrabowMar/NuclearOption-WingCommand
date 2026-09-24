@@ -385,11 +385,12 @@ namespace WingCommand
             if (Changed(1, context.Count * 1000 + pending * 10 + (context.Client ? 4 : 0) + (context.Stale ? 2 : 0)))
                 Chip(0, WmcHeader.Link(context.Count, pending, context.Client, context.Stale, out string s0), s0);
             // Behaviour profiles arrive in R12; until then the chip names the scope element's doctrine pattern.
-            string profile = context.Wing != null && !context.Client ? context.Wing.DoctrineOf(context.ScopeElement).PatternName : WmcText.Unknown;
+            bool same = context.ScopeDoctrine(out WingDoctrine scoped);
+            string profile = context.Wing == null || context.Client ? WmcText.Unknown : same ? scoped.PatternName : "MIXED";
             if (!ReferenceEquals(profile, profileShown) && profile != profileShown)
             {
                 profileShown = profile;
-                Chip(1, WmcHeader.Profile(profile, false, out string s1), s1);
+                Chip(1, WmcHeader.Profile(profile, !same, out string s1), s1);
             }
             bool offline = context.Client || !WingSupplyReserve.HasFaction;
             if (Changed(2, WingSupplyReserve.Count * 100 + WingSupplyReserve.Capacity * 2 + (offline ? 1 : 0)))

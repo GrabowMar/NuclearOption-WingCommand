@@ -26,6 +26,7 @@ namespace WingCommand
             public string IdText;
             public int Key = int.MinValue;
             public bool Selected, Styled, RtbAsking, EjAsking;
+            public string RdrText;
         }
 
         private sealed class HeaderView
@@ -114,9 +115,8 @@ namespace WingCommand
             v.State = WmcKit.Text(rt, new Rect(194f, -4f, 56f, 20f), "row-value");
             v.Rtb = RowButton(rt, 256f, 38f, "RTB", () => AskRtb(index), id + ".rtb",
                 "Send this wingman home to the reserve (press twice).");
-            v.Rdr = RowButton(rt, 297f, 44f, "RDR", null, id + ".rdr",
-                "Radar on/off for this aircraft. Arrives with the weapons & EMCON update.");
-            v.Rdr.SetEnabled(false);
+            v.Rdr = RowButton(rt, 297f, 44f, "RDR", () => ToggleRadar(index), id + ".rdr",
+                "This aircraft's radar: RDR on, EMCON silent or off. Press to switch it (the rest of the wing keeps its setting).");
             v.Ej = RowButton(rt, 344f, 32f, "EJ", () => AskEject(index), id + ".ej",
                 "Eject this pilot (press twice): the aircraft is lost, search and rescue picks the pilot up.");
             v.Inspect = RowButton(rt, 380f, width - 380f, "INSPECT ›", () => Inspect(index), id + ".inspect",
@@ -157,6 +157,18 @@ namespace WingCommand
                 }
                 WingOrders.Run(WingOrder.Of(OrderKind.Rtb, WingScope.OfMembers(v.Id)));
             });
+        }
+
+        private void ToggleRadar(int index)
+        {
+            RowView v = rowViews[index];
+            WingMember m = last?.MemberOf(v.Id);
+            if (m == null) return;
+            bool on = last.Wing.DoctrineFor(m).Radar == RadarPolicy.On;
+            WmcUi.Order(last, () => WingOrders.Run(new WingOrder
+            {
+                Kind = OrderKind.SetOverride, Number = (int)DoctrineAxis.Radar, Text = on ? "Off" : "On", Scope = WingScope.OfMembers(v.Id),
+            }));
         }
 
         private void AskEject(int index)
@@ -322,6 +334,15 @@ namespace WingCommand
                 v.Ej.SetText(asking ? "EJ?" : "EJ");
             }
             v.Ej.SetEnabled(c.CanOrder);
+            WingMember wm = c.CanOrder ? c.MemberOf(m.Id) : null;
+            bool hasRadar = wm != null && wm.Aircraft != null && wm.Aircraft.radar is Radar;
+            string rdr = wm == null ? "RDR" : !hasRadar ? "RDR —" : c.Wing.DoctrineFor(wm).Radar == RadarPolicy.On ? "RDR" : "EMCON";
+            if (!ReferenceEquals(rdr, v.RdrText))
+            {
+                v.RdrText = rdr;
+                v.Rdr.SetText(rdr);
+            }
+            v.Rdr.SetEnabled(hasRadar);
         }
     }
 }

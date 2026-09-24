@@ -44,6 +44,12 @@ namespace WingCommand
                     return !float.IsNaN(o.Number) && Math.Abs(o.Number) <= MaxStack ? null : "stack out of range";
                 case OrderKind.SetSpacing:
                     return o.Number >= 0f && o.Number <= 3f ? null : "no such spacing";
+                case OrderKind.SetOverride:
+                {
+                    float n = o.Number;
+                    if (!(n >= 0f && n <= (float)DoctrineAxis.Radar) || n != (int)n) return "no such doctrine setting";
+                    return WingDoctrine.TryAxisValue((DoctrineAxis)(int)n, o.Text, out _) ? null : "no such value";
+                }
                 case OrderKind.Eject:
                     if (o.Scope.Kind != ScopeKind.Members || o.Scope.Members.Length != 1) return "eject one wingman at a time";
                     if (o.Source != OrderSource.Player) return "only you can order an ejection";

@@ -9,6 +9,8 @@ namespace WingCommand
         Afterburner, SetDoctrine, NextDoctrine, SkipLeg, RenameElement,
         // WMC rebuild R3: one member, confirmed (Flag), ordered by the player.
         Eject,
+        // WMC rebuild R3: one doctrine setting at the scope's level (Number = DoctrineAxis, Text = the value's word).
+        SetOverride,
     }
 
     internal enum ScopeKind : byte { Wing, Element, Members }
@@ -37,8 +39,9 @@ namespace WingCommand
 #pragma warning disable CS0649
     internal sealed class WingOrder
     {
-        // MaxText fits a custom doctrine's config text (~40 characters, review P2 I6).
-        public const int MaxUnits = 8, MaxText = 48;
+        // MaxText fits a custom doctrine's eight-value config text (61 characters at most, review P2 I6; the wire's
+        // string limit is 64).
+        public const int MaxUnits = 8, MaxText = 64;
         public OrderKind Kind;
         public WingScope Scope;
         public WingTask Task;

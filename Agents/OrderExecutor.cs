@@ -264,9 +264,24 @@ namespace WingCommand
                 case OrderKind.Afterburner:
                     w.SetAfterburner(o.Flag);
                     return OrderResult.Acked(o.Flag ? "Gate: afterburner allowed" : "Buster: military power, no afterburner");
+                case OrderKind.SetOverride:
+                {
+                    var axis = (DoctrineAxis)(int)o.Number;
+                    WingDoctrine.TryAxisValue(axis, o.Text, out byte v);
+                    return SetOverride(w, o.Scope, axis, v, who);
+                }
                 case OrderKind.SetDoctrine:
                 {
                     if (!WingDoctrine.TryParse(o.Text, out WingDoctrine d)) return OrderResult.Refused("Unknown doctrine: " + o.Text);
+                    if (o.Scope.Kind == ScopeKind.Members)
+                    {
+                        // Spec WMC rebuild R3: the named aircraft only, not the first one's whole element.
+                        int set = 0;
+                        foreach (WingMember m in w.Members)
+                            if (!m.Released && who(m) && w.SetMemberDoctrine(m, d)) set++;
+                        return set > 0 ? OrderResult.Acked($"{Aircraft(set)}: doctrine {d.PatternName}")
+                            : OrderResult.Refused("Too many aircraft with their own doctrine");
+                    }
                     int e = ElementFor(w, o.Scope);
                     w.SetDoctrine(d, e);
                     return OrderResult.Acked((e > 0 ? w.Roster.Name(e) + ": doctrine " : "Doctrine ") + d.PatternName);
@@ -284,6 +299,82 @@ namespace WingCommand
                 default:
                     return OrderResult.Refused("Not supported yet");
             }
+        }
+
+        /// <summary>One doctrine setting at the scope's level (spec WMC rebuild R3): the wing, an element, or each named
+        /// aircraft. The answer names those in scope that keep their own value, and those without a radar.</summary>
+        private static OrderResult SetOverride(WingService w, in WingScope scope, DoctrineAxis axis, byte v, Func<WingMember, bool> who)
+        {
+            if (axis == DoctrineAxis.Weapons)
+            {
+                bool gun = false, missile = false;
+                foreach (WingMember m in w.Members)
+                    if (!m.Released && m.Alive && (who == null || who(m))) Carries(m.Aircraft, ref gun, ref missile);
+                string cannot = WeaponsFilter.Refusal((WeaponsPolicy)v, gun, missile);
+                if (cannot != null) return OrderResult.Refused("Wing cannot: " + cannot);
+            }
+            string level;
+            if (scope.Kind == ScopeKind.Members)
+            {
+                if (!MemberDoctrines.PerAircraft(axis)) return OrderResult.Refused("Only targets, reach, weapons and radar can differ per aircraft");
+                int set = 0;
+                foreach (WingMember m in w.Members)
+                    if (!m.Released && who(m) && w.SetMemberAxis(m, axis, v)) set++;
+                if (set == 0) return OrderResult.Refused("Too many aircraft with their own doctrine");
+                level = Aircraft(set);
+            }
+            else
+            {
+                int e = scope.Kind == ScopeKind.Element ? scope.Element : -1;
+                w.SetAxis(e, axis, v);
+                level = e < 0 ? "Wing" : w.Roster.Name(e);
+            }
+            string ack = $"{level}: {AxisWord(axis)} {ValueWord(axis, v)}";
+            foreach (WingMember m in w.Members)
+            {
+                if (m.Released || (who != null && !who(m))) continue;
+                if (scope.Kind != ScopeKind.Members && w.KeepsOwn(m, axis)) ack += $", #{m.Number} keeps its own";
+                else if (axis == DoctrineAxis.Radar && m.Aircraft != null && !(m.Aircraft.radar is Radar)) ack += $", #{m.Number} has no radar";
+            }
+            return OrderResult.Acked(ack);
+        }
+
+        private static void Carries(Aircraft a, ref bool gun, ref bool missile)
+        {
+            if (a == null || a.weaponStations == null) return;
+            foreach (WeaponStation s in a.weaponStations)
+            {
+                if (s == null || s.Cargo || s.WeaponInfo == null || s.Ammo <= 0) continue;
+                WeaponInfo i = s.WeaponInfo;
+                StoreClass c = StoreClasses.Of(i.gun, i.jammer, i.missile, i.bomb || i.glideBomb, i.effectiveness.antiAir, i.effectiveness.antiSurface);
+                gun |= c == StoreClass.Gun;
+                missile |= c == StoreClass.AirMissile || c == StoreClass.StrikeMissile;
+            }
+        }
+
+        private static string Aircraft(int n) => n == 1 ? "1 aircraft" : n + " aircraft";
+
+        private static string AxisWord(DoctrineAxis axis)
+        {
+            switch (axis)
+            {
+                case DoctrineAxis.Guard: return "missile guard";
+                case DoctrineAxis.Response: return "missile response";
+                case DoctrineAxis.Interval: return "interval";
+                case DoctrineAxis.Spread: return "spread";
+                case DoctrineAxis.Targets: return "targets";
+                case DoctrineAxis.Reach: return "reach";
+                case DoctrineAxis.Weapons: return "weapons";
+                default: return "radar";
+            }
+        }
+
+        private static string ValueWord(DoctrineAxis axis, byte v)
+        {
+            if (axis == DoctrineAxis.Targets && v == (byte)TargetPolicy.Hold) return "HOLD FIRE";
+            if (axis == DoctrineAxis.Weapons && v == (byte)WeaponsPolicy.NoAirToGround) return "NO A-G";
+            if (axis == DoctrineAxis.Spread) return v != 0 ? "SPREAD" : "NO SPREAD";
+            return (WingDoctrine.ValueName(axis, v) ?? "?").ToUpperInvariant();
         }
 
         private static OrderResult Recover(WingService w, RecoveryIntent intent, string what, Func<WingMember, bool> who)

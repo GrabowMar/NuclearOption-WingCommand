@@ -14,7 +14,6 @@ namespace WingCommand
     {
         private const float Banner = 24f, KeyWidth = 64f, ToggleH = 22f, TogglePitch = 24f, GridH = 26f, GridPitch = 29f;
         private const float BannerTop = BezelLayout.SubTabs + BezelLayout.SubGap, ScrollTop = BannerTop + Banner + 4f;
-        private const string Later = " Arrives with the weapons & EMCON update.";
 
         private static readonly string[] TargetLabels = { "HOLD FIRE", "AIR", "GROUND", "BOTH", "COVER" };
         private static readonly string[] TargetKeys = { "hold", "air", "ground", "both", "cover" };
@@ -76,12 +75,19 @@ namespace WingCommand
                 "tac.orders.targets.", TargetKeys, ids, PickTargets);
             y -= TogglePitch;
             weapons = SegmentRow.Build(s, new Rect(0f, y, w, ToggleH), KeyWidth, "WEAPONS", new[] { "AUTO", "MISSILES", "GUNS", "NO A-G" },
-                null, "tac.orders.weapons.", new[] { "auto", "missiles", "guns", "noag" }, ids, null);
-            weapons.SetEnabled(false, "Which weapons the scope may use." + Later);
+                new[]
+                {
+                    "Every weapon aboard.", "Missiles only: no guns, no bombs.", "Guns only.",
+                    "Every weapon, at air targets only.",
+                }, "tac.orders.weapons.", new[] { "auto", "missiles", "guns", "noag" }, ids, i => PickAxis(DoctrineAxis.Weapons, i));
             y -= TogglePitch;
             radar = SegmentRow.Build(s, new Rect(0f, y, w, ToggleH), KeyWidth, "RADAR", new[] { "ON", "SILENT", "OFF" },
-                null, "tac.orders.radar.", new[] { "on", "silent", "off" }, ids, null);
-            radar.SetEnabled(false, "Radar on, silent until engaged, or off." + Later);
+                new[]
+                {
+                    "Radar on: the wing sees and shares its picture.",
+                    "Silent: radar off until engaged, then on (enemy warners stay quiet).",
+                    "Off: no radar, no radar-guided (SARH) shots. The aircraft finds little on its own.",
+                }, "tac.orders.radar.", new[] { "on", "silent", "off" }, ids, i => PickAxis(DoctrineAxis.Radar, i));
             y -= TogglePitch;
             guard = SegmentRow.Build(s, new Rect(0f, y, w, ToggleH), KeyWidth, "MSL GUARD", new[] { "OFF", "SELF", "WING", "LEAD" },
                 null, "tac.orders.guard.", new[] { "off", "self", "wing", "lead" }, ids, null);
@@ -232,7 +238,7 @@ namespace WingCommand
         private void OpenProfiles()
         {
             if (last == null || last.Wing == null || last.Client) return;
-            string current = last.Wing.DoctrineOf(last.ScopeElement).PatternName;
+            string current = last.ScopeDoctrine(out WingDoctrine scoped) ? scoped.PatternName : null;
             popupEntries.Clear();
             foreach (WingDoctrine d in Profiles)
                 popupEntries.Add(new AvKit.PopupEntry(d.PatternName, null, d.PatternName == current));
@@ -240,11 +246,14 @@ namespace WingCommand
                 i => WmcUi.Order(last, () => SetDoctrine(Profiles[i])));
         }
 
-        private void PickTargets(int i)
+        private void PickTargets(int i) => PickAxis(DoctrineAxis.Targets, i);
+
+        /// <summary>One setting at the scope's level (spec WMC rebuild R3): the rest of each aircraft's doctrine stays.</summary>
+        private void PickAxis(DoctrineAxis axis, int i)
         {
             if (last == null || last.Wing == null || last.Client) return;
-            WingDoctrine d = last.Wing.DoctrineOf(last.ScopeElement);
-            WmcUi.Order(last, () => SetDoctrine(new WingDoctrine(d.Guard, d.Response, d.Interval, d.SpreadWhenThreatened, (TargetPolicy)i, d.Reach)));
+            string word = WingDoctrine.ValueName(axis, (byte)i);
+            WmcUi.Order(last, () => WingOrders.Run(new WingOrder { Kind = OrderKind.SetOverride, Number = (int)axis, Text = word, Scope = last.Scope }));
         }
 
         private void SetDoctrine(WingDoctrine d) =>
@@ -265,16 +274,21 @@ namespace WingCommand
         {
             RefreshBanner(c);
             bool host = c.Wing != null && !c.Client;
-            WingDoctrine d = host ? c.Wing.DoctrineOf(c.ScopeElement) : WingDoctrine.Reserve;
-            string pattern = host ? d.PatternName : WmcText.Unknown;
+            bool same = c.ScopeDoctrine(out WingDoctrine d);
+            string pattern = !host ? WmcText.Unknown : same ? d.PatternName : "MIXED";
             if (!ReferenceEquals(pattern, profileShown) && pattern != profileShown)
             {
                 profileShown = pattern;
                 profileButton.SetText(pattern + " ▾");
             }
             profileButton.SetEnabled(c.CanOrder);
-            targets.Set(host ? (int)d.Targets : -1);
-            targets.SetEnabled(c.CanOrder, c.Client ? "Orders are host only for now" : "Wing Command is not ready");
+            string cannot = c.Client ? "Orders are host only for now" : "Wing Command is not ready";
+            targets.Set(c.ScopeValue(DoctrineAxis.Targets));
+            targets.SetEnabled(c.CanOrder, cannot);
+            weapons.Set(c.ScopeValue(DoctrineAxis.Weapons));
+            weapons.SetEnabled(c.CanOrder, cannot);
+            radar.Set(c.ScopeValue(DoctrineAxis.Radar));
+            radar.SetEnabled(c.CanOrder, cannot);
 
             SetGrid(HelosInScope(c));
             bool scoped = c.Scope.Kind != ScopeKind.Wing;

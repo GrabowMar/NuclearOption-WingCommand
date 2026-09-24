@@ -45,6 +45,61 @@ namespace WingCommand
             }
         }
 
+        /// <summary>Whether row <paramref name="m"/> is in this refresh's scope.</summary>
+        public bool InScope(in SnapshotMember m)
+        {
+            switch (Scope.Kind)
+            {
+                case ScopeKind.Element: return m.Element == Scope.Element;
+                case ScopeKind.Members:
+                    if (Scope.Members == null) return false;
+                    foreach (uint id in Scope.Members)
+                        if (id == m.Id) return true;
+                    return false;
+                default: return true;
+            }
+        }
+
+        /// <summary>The value of <paramref name="axis"/> every aircraft in the scope flies (host), or -1 when they differ;
+        /// an empty scope reads its element's doctrine.</summary>
+        public int ScopeValue(DoctrineAxis axis)
+        {
+            if (Wing == null || Client) return -1;
+            int v = -2;
+            for (int i = 0; i < Count; i++)
+            {
+                if (!InScope(Rows[i])) continue;
+                WingMember m = MemberOf(Rows[i].Id);
+                if (m == null) continue;
+                int x = Wing.DoctrineFor(m).Get(axis);
+                if (v == -2) v = x;
+                else if (v != x) return -1;
+            }
+            return v == -2 ? Wing.DoctrineOf(ScopeElement).Get(axis) : v;
+        }
+
+        /// <summary>The doctrine the scope flies (host); false when its aircraft fly different ones (MIXED).</summary>
+        public bool ScopeDoctrine(out WingDoctrine d)
+        {
+            d = Wing != null && !Client ? Wing.DoctrineOf(ScopeElement) : WingDoctrine.Reserve;
+            if (Wing == null || Client) return true;
+            bool first = true;
+            for (int i = 0; i < Count; i++)
+            {
+                if (!InScope(Rows[i])) continue;
+                WingMember m = MemberOf(Rows[i].Id);
+                if (m == null) continue;
+                WingDoctrine x = Wing.DoctrineFor(m);
+                if (first)
+                {
+                    d = x;
+                    first = false;
+                }
+                else if (x != d) return false;
+            }
+            return true;
+        }
+
         /// <summary>Orders run on the host (client orders are M6c-2).</summary>
         public bool CanOrder => !Client && Wing != null && Wing.Selection != null;
 

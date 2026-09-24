@@ -4,12 +4,18 @@ namespace WingCommand
     /// follows the wing; a merge forgets the element's own settings.</summary>
     internal sealed class ElementSettings
     {
+        /// <summary>Each aircraft's own doctrine within its element (spec WMC rebuild R3).</summary>
+        public readonly MemberDoctrines Members = new MemberDoctrines();
+
         private readonly string[] shapes = new string[ElementRoster.MaxElements];
         private readonly WingDoctrine?[] doctrines = new WingDoctrine?[ElementRoster.MaxElements];
 
         public string ShapeOf(int e, string wingShape) => e > 0 && shapes[e] != null ? shapes[e] : wingShape;
 
         public WingDoctrine DoctrineOf(int e, WingDoctrine wing) => e > 0 && doctrines[e].HasValue ? doctrines[e].Value : wing;
+
+        /// <summary>Element <paramref name="e"/> (B-D) flies a doctrine of its own.</summary>
+        public bool HasDoctrine(int e) => e > 0 && e < doctrines.Length && doctrines[e].HasValue;
 
         public void SetShape(int e, string id)
         {
@@ -39,6 +45,7 @@ namespace WingCommand
         public void Clear()
         {
             for (int e = 1; e < ElementRoster.MaxElements; e++) Forget(e);
+            Members.Clear();
         }
     }
 }
