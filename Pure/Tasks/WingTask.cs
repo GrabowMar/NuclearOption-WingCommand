@@ -39,6 +39,8 @@ namespace WingCommand
         /// <summary>World Y and m/s for the whole task, NaN for the defaults.</summary>
         public float Altitude = float.NaN, Speed = float.NaN;
         public FollowOn Then;
+        /// <summary>Scouting: the radio reports ground contacts too (spec M7 §2.4); a follow-on orbit keeps it.</summary>
+        public bool Scout;
 
         public static WingTask Form() => new WingTask { Kind = TaskKind.Form };
         public static WingTask Move(Waypoint to) => new WingTask { Kind = TaskKind.Move, Points = new[] { to } };

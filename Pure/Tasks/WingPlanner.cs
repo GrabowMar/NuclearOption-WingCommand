@@ -194,6 +194,7 @@ namespace WingCommand
             if (then == FollowOn.Orbit)
             {
                 WingTask orbit = WingTask.Orbit(done.Points[done.Points.Length - 1]);
+                orbit.Scout = done.Scout;
                 orbit.Altitude = done.Altitude;
                 orbit.Speed = done.Speed;
                 Apply(orbit, wing, time, events, TransitionReason.FollowOn);

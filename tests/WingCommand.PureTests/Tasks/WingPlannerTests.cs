@@ -83,6 +83,19 @@ namespace WingCommand.PureTests
         }
 
         [Fact]
+        public void AScoutsFollowOnOrbitKeepsScouting()
+        {
+            var p = new WingPlanner();
+            var events = new WingEventRing();
+            WingTask scout = WingTask.Move(Waypoint.At(0f, 12000f));
+            scout.Scout = true;
+            p.Apply(scout, Wing(), 0f, events);
+            Run(p, Wing(), events, 0f, 300f, () => p.Current.Kind == TaskKind.Orbit);
+            Assert.Equal(TaskKind.Orbit, p.Current.Kind);
+            Assert.True(p.Current.Scout);
+        }
+
+        [Fact]
         public void ARouteVisitsEveryPointInOrderThenOrbitsTheLast()
         {
             var p = new WingPlanner();
