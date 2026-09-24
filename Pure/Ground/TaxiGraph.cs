@@ -20,6 +20,8 @@ namespace WingCommand
     internal sealed class TaxiGraph
     {
         public static float HangarExitDistance = 40f, HoldShortBack = 60f, HoldShortSide = 40f, EntrySearchRadius = 400f;
+        /// <summary>A hold-short on a taxi road is at least this far outside the runway.</summary>
+        public static float HoldShortClear = 30f;
         /// <summary>An entry point this close to the runway's edge (or on it: carriers) is not a place to hold short.</summary>
         public static float EntryClearance = 5f;
 
@@ -149,8 +151,9 @@ namespace WingCommand
         }
 
         /// <summary>The runway's entry point nearest the threshold (within <see cref="EntrySearchRadius"/>, off the runway by
-        /// <see cref="EntryClearance"/>), else a point <see cref="HoldShortBack"/> before the threshold and clear of the
-        /// runway edge on the side of the field centre.</summary>
+        /// <see cref="EntryClearance"/>), else the taxi road point nearest it that is <see cref="HoldShortClear"/> outside
+        /// the runway (where the taxiway comes in), else a point <see cref="HoldShortBack"/> before the threshold and clear
+        /// of the runway edge on the side of the field centre.</summary>
         private static Vec3 HoldShortPosition(AirbaseSample field, RunwaySample runway, bool reverse, Vec3 threshold)
         {
             float best = EntrySearchRadius;
@@ -167,6 +170,19 @@ namespace WingCommand
                     have = true;
                 }
             }
+            if (have) return found;
+            foreach (Vec3[] road in field.Roads)
+                foreach (Vec3 p in road)
+                {
+                    if (runway.Contains(p, HoldShortClear)) continue;
+                    float d = (p - threshold).Horizontal.Length;
+                    if (d < best)
+                    {
+                        best = d;
+                        found = p;
+                        have = true;
+                    }
+                }
             if (have) return found;
             Vec3 dir = runway.Direction(reverse);
             Vec3 side = Vec3.Cross(Vec3.Up, dir);

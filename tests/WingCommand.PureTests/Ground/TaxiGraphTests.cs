@@ -116,6 +116,26 @@ namespace WingCommand.PureTests
         }
 
         [Fact]
+        public void WithoutEntryPointsTheHoldShortIsOnTheTaxiwayIntoTheThresholdClearOfTheRunway()
+        {
+            // In game (boscali_north, 2026-09-24): the runway has no entry points and the field centre lies almost on its
+            // line, so the side toward the centre put the hold-short 70 m north of the centreline, off the pavement and
+            // away from the taxiway (which runs into the threshold from behind): members stuck on the grass, lineups
+            // timed out, and one was destroyed on being relocated there.
+            string json = System.IO.File.ReadAllText(System.IO.Path.Combine(AppContext.BaseDirectory, "Fixtures", "airbases", "boscali-north-hangars.json"));
+            AirbaseSample field = AirbaseSample.FromDumpJson(json)[0];
+            TaxiGraph g = TaxiGraph.Build(field);
+            RunwaySample r = field.Runways[0];
+            Vec3 hold = g.NodePos(g.HoldShort(0, false));
+            Assert.False(r.Contains(hold, TaxiGraph.HoldShortClear - 1f), $"hold-short {hold} is on the runway");
+            float nearestRoad = float.MaxValue;
+            foreach (Vec3[] road in field.Roads)
+                foreach (Vec3 p in road) nearestRoad = Math.Min(nearestRoad, (p - hold).Horizontal.Length);
+            Assert.True(nearestRoad < 1f, $"hold-short {hold} is {nearestRoad:0} m from any taxi road");
+            Assert.True((hold - r.Start).Horizontal.Length < 150f, $"hold-short {hold} is far from the threshold");
+        }
+
+        [Fact]
         public void NoRouteWhenTheTargetIsUnreachable()
         {
             var split = new AirbaseSample
