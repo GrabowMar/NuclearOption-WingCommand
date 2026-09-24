@@ -38,6 +38,7 @@ namespace WingCommand
             typeof(Interop.WingSquad.SurvivorDisabledPatch),
             typeof(Interop.WingSquad.SurvivorCapturePatch),
             typeof(Interop.WingSquad.AceTargetPatch),
+            typeof(WmcMapControlsPatch),
         };
 
         /// <summary>"DeclaringType.Method" names that must be patched after <see cref="Apply"/>.</summary>
@@ -67,6 +68,7 @@ namespace WingCommand
             "Aircraft.UserCode_RpcJettisonCanopy_1196305304",
             "GameManager.FinishGame",
             "CombatAI.ChooseHQTarget",
+            "DynamicMap.MapControls",
         };
 
         internal static void Apply(Harmony harmony, ManualLogSource log)

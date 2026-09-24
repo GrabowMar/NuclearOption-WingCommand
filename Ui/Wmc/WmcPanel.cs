@@ -50,6 +50,7 @@ namespace WingCommand
             if (!enabled)
             {
                 if (screen != null && screen.isActive) screen.CloseScreen(screen.transform.localPosition);
+                context.Map.Update(context, false);
                 return;
             }
             if (screen == null)
@@ -60,6 +61,8 @@ namespace WingCommand
                 return;
             }
             MfdPresentation.Tick();
+            // Every frame: the right button is followed per frame (spec WMC program §5).
+            context.Map.Update(context, Visible);
             if (!Visible || Time.unscaledTime < nextRefresh) return;
             nextRefresh = Time.unscaledTime + WingFidelity.Interval(0.2f);
             Refresh();
@@ -105,6 +108,8 @@ namespace WingCommand
             tabs = null;
             controls.Clear();
             context.Selection.Clear();
+            context.Map.Disarm();
+            context.Draft.Clear();
             nextAttempt = nextRefresh = 0f;
             gaveUp = false;
         }

@@ -25,6 +25,9 @@ namespace WingCommand
         public int ScopeElement;
         /// <summary>The scope in words ("WING", "ELEMENT B", "#3 #4").</summary>
         public string ScopeLabel = "WING";
+        /// <summary>The route editor's draft and the map's right-click orders (spec WMC program §4-§5).</summary>
+        public readonly RouteDraft Draft = new RouteDraft();
+        public readonly WmcMapInput Map = new WmcMapInput();
 
         /// <summary>Scope, label and element from the selection over this refresh's rows. The panel calls it on refresh, and
         /// every selection handler calls it at once (review P3 I3), so an order pressed right after a click goes to what
