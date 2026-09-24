@@ -225,6 +225,13 @@ namespace WingCommand
             WingToast.Show(n > 0 ? $"{n} attacking {targets.Count} target{plural}" : "Nobody can attack");
         }
 
+        public static void ClearMySix()
+        {
+            if (!Ready(out WingService w) || w.Player == null) return;
+            int found = w.ClearMySix(out int engaged);
+            WingToast.Show(found == 0 ? "Your six is clear" : engaged > 0 ? $"{engaged} clearing your six ({found} bandits)" : "Nobody can engage");
+        }
+
         /// <summary>Reserve → Escort → Sweep: what members shoot at while holding formation (spec M5 §8).</summary>
         public static void NextDoctrine()
         {

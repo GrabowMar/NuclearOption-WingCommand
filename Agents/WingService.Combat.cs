@@ -181,6 +181,29 @@ namespace WingCommand
             a.Countermeasures(on, a.countermeasureManager.activeIndex);
         }
 
+        private readonly List<Unit> onSix = new List<Unit>();
+
+        /// <summary>"Clear my six": an attack order on the enemy aircraft in the player's rear quarter that the faction tracks
+        /// accurately (<see cref="ClearSix"/>). Returns how many were found; the wing splits them (M5b).</summary>
+        public int ClearMySix(out int engaged)
+        {
+            engaged = 0;
+            onSix.Clear();
+            Aircraft p = Player;
+            FactionHQ hq = p != null ? p.NetworkHQ : null;
+            if (hq == null || hq.trackingDatabase == null) return 0;
+            Vec3 at = p.GlobalPosition().ToVec3(), fwd = p.transform.forward.ToVec3();
+            foreach (KeyValuePair<PersistentID, TrackingInfo> pair in hq.trackingDatabase)
+            {
+                TrackingInfo t = pair.Value;
+                if (t == null || !t.TryGetUnit(out Unit u) || !(u is Aircraft) || u.disabled || u.NetworkHQ == null || u.NetworkHQ == hq) continue;
+                if (!hq.IsTargetPositionAccurate(u, TargetAccuracyMetres)) continue;
+                if (ClearSix.OnSix(t.GetPosition().ToVec3() - at, fwd, ClearSix.RangeMetres) && onSix.Count < TargetAllocator.MaxTargets) onSix.Add(u);
+            }
+            if (onSix.Count > 0) engaged = Attack(onSix);
+            return onSix.Count;
+        }
+
         /// <summary>After a take-back or bingo, the doctrine's follow-on (spec M5 §6.1).</summary>
         private void FollowOn(WingMember m, TransitionReason reason)
         {
