@@ -50,6 +50,23 @@ namespace WingCommand.PureTests
             Assert.Equal(0f, free.Charge);
         }
 
+        [Theory]
+        // Review M3c I5. spawned, destroyed, via hangar, stock taken by hand → allocation back, stock by hand, return it
+        [InlineData(false, false, true, false, true, 1, false)]   // a hangar never produced it: the game drew the airframe
+        [InlineData(false, false, false, true, true, 1, false)]   // a service point never produced it: we drew it
+        [InlineData(false, false, false, false, true, 0, false)]  // sandbox service point: nothing was drawn
+        [InlineData(true, false, true, false, true, 0, true)]     // spawned, not adopted: back to the reserve (the game restocks)
+        [InlineData(true, false, false, true, true, 0, true)]
+        [InlineData(true, true, true, false, true, 0, false)]     // destroyed before it joined: the airframe is gone
+        public void AFailedLaunchRefundsTheAllocationAndSettlesTheAirframeOnce(bool spawned, bool destroyed, bool viaHangar,
+            bool tookStock, bool allocation, int stock, bool returnIt)
+        {
+            RefundPlan plan = CallCost.Refund(spawned, destroyed, viaHangar, tookStock);
+            Assert.Equal(allocation, plan.Allocation);
+            Assert.Equal(stock, plan.StockByHand);
+            Assert.Equal(returnIt, plan.ReturnAircraft);
+        }
+
         [Fact]
         public void TheSandboxCallsForFree()
         {

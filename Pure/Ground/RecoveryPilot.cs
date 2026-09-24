@@ -16,8 +16,8 @@ namespace WingCommand
     /// helicopter <see cref="HeloApproachDistance"/> from the field centre on its side at
     /// <see cref="HeloApproachHeight"/>; each member of the wing one <see cref="StackStep"/> above the one before. Within
     /// <see cref="ApproachReached"/> of it the engine hands it to the game's landing state — a jet only when the field's
-    /// runway is its turn (<see cref="FieldTraffic.TryClaimLanding"/>); a jet waiting for its turn orbits the point, a
-    /// helicopter hovers there.</item>
+    /// runway is its turn (<see cref="FieldTraffic.TryClaimLanding"/>); a jet waiting for its turn orbits the point
+    /// (latched while within the orbit's reach, and handed over from anywhere on it), a helicopter hovers there.</item>
     /// <item>Landing: owned by the game. A failed landing (abort, no runway, overdue after
     /// <see cref="LandingSeconds"/>) goes back to the approach and waits <see cref="RetrySeconds"/> before it tries
     /// again; the <see cref="MaxLandingTries"/>th releases it.</item>
@@ -83,7 +83,10 @@ namespace WingCommand
         {
             Vec3 point = ApproachPoint(s);
             Vec3 to = (point - s.Pos).Horizontal;
-            bool reached = to.Length < ApproachReached;
+            // Holding is latched: the orbit is wider than the reach, so it holds while it stays within the orbit's reach
+            // (review M3c I1), and it may be handed over from anywhere on it.
+            float reach = holding ? 2f * HoldOrbit.RadiusFor(FormationPilot.OrbitSpeed(p)) + ApproachReached : ApproachReached;
+            bool reached = to.Length < reach;
             handOver = reached && time >= retryAt && (Vertical || Field.TryClaimLanding(owner, time));
             Vec3 dir = to.SqrLength > 1e-4f ? to.Normalized : s.Fwd.Horizontal.Normalized;
             Vec3 heading = Vertical ? dir : Field.Runway.Direction(Field.Reverse);

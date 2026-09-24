@@ -28,6 +28,8 @@ namespace WingCommand
         public float ListedUntil;
         /// <summary>The eject guard blocked the game's landing state ejecting it: take it back.</summary>
         public bool EjectBlocked;
+        /// <summary>A helicopter down on a pad keeps its place in the pad's landing queue.</summary>
+        public bool PadHeld;
         /// <summary>The ground pilot's last output (the ground trace).</summary>
         public ControlOutput GroundOutput;
         public bool StopLogged;

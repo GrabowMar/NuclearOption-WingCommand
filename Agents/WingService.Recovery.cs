@@ -117,6 +117,7 @@ namespace WingCommand
         /// <summary>Airborne again from the field: a refit is over, and a recovery asked for on the runway starts now.</summary>
         private void AirborneAfterGround(WingMember m)
         {
+            ReleasePad(m);
             m.Recovery = null;
             if (!m.HasPendingRecovery) return;
             m.HasPendingRecovery = false;
@@ -136,10 +137,10 @@ namespace WingCommand
             {
                 bool down = m.Aircraft.radarAlt < 2f;
                 bool touchdown = (next != null && ReferenceEquals(next, pilot.AITaxiState)) || (down && ReferenceEquals(next, pilot.parkedState));
-                NativeLandingBridge.LeavePad(pilot, m.Aircraft);
                 if (touchdown) Touchdown(m);
                 else
                 {
+                    NativeLandingBridge.LeavePad(pilot, m.Aircraft);
                     m.Recovery.LandingFailed(missionTime, Events, m.Brain.Slot);
                     Plugin.Logger.LogInfo($"[Wing] #{m.Number} landing failed ({(next == null ? "no runway" : next.GetType().Name)}); approaching again");
                 }
@@ -158,6 +159,9 @@ namespace WingCommand
         /// to the reserve.</summary>
         private void Touchdown(WingMember m)
         {
+            // A helicopter keeps its place at the head of the pad's queue while it sits on the pad (review M3c I2: the game
+            // only asks the queue whether a pad is free); it leaves the queue when it lifts off or leaves the wing.
+            m.PadHeld = m.Profile.Class != AirframeClass.FixedWing;
             Aircraft a = m.Aircraft;
             Airbase airbase = NativeLandingBridge.Field(m.Pilot) ?? NearestAirbase(a.transform.position);
             FieldTraffic field = airbase != null && !airbase.AttachedAirbase ? FieldRegistry.For(airbase) : null;
@@ -193,7 +197,6 @@ namespace WingCommand
                 m.EjectBlocked = false;
                 if (m.Released || r == null || r.Phase != RecoveryPhase.Landing || !NativeLandingBridge.Landing(m.Pilot)) continue;
                 if (!blocked && !r.LandingOverdue(missionTime)) continue;
-                NativeLandingBridge.LeavePad(m.Pilot, m.Aircraft);
                 string why = blocked ? "the game's landing gave up" : "landing overdue";
                 if (m.Aircraft.radarAlt < 2f)
                 {
@@ -202,11 +205,20 @@ namespace WingCommand
                 }
                 else
                 {
+                    NativeLandingBridge.LeavePad(m.Pilot, m.Aircraft);
                     r.LandingFailed(missionTime, Events, m.Brain.Slot);
                     Plugin.Logger.LogInfo($"[Wing] #{m.Number} {why}; approaching again");
                 }
                 NativeLandingBridge.TakeBack(m);
             }
+        }
+
+        /// <summary>Out of the pad's queue it kept after a helicopter touchdown.</summary>
+        private static void ReleasePad(WingMember m)
+        {
+            if (!m.PadHeld) return;
+            m.PadHeld = false;
+            NativeLandingBridge.LeavePad(m.Pilot, m.Aircraft);
         }
 
         /// <summary>Off the landing list it was kept on after touchdown.</summary>
@@ -244,6 +256,7 @@ namespace WingCommand
             m.Recovery = null;
             m.Ground?.Leave();
             Unlist(m);
+            ReleasePad(m);
             if (m.Aircraft != null && !m.Aircraft.disabled) m.Aircraft.ReturnToInventory();
             Plugin.Logger.LogInfo($"[Wing] #{m.Number} returned to the reserve: {why}");
         }

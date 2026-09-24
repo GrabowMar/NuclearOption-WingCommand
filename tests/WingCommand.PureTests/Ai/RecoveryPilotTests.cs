@@ -99,6 +99,31 @@ namespace WingCommand.PureTests
         }
 
         [Fact]
+        public void AJetHoldingStaysOnItsOrbitAsItFliesRoundIt()
+        {
+            // Review M3c I1: holding started inside 800 m but the orbit (≈2.9 km) is outside it, so the jet swerved in and
+            // out: it dropped the hold the moment it flew onto it.
+            var field = new FieldTraffic(TestFields.WithServicePointAndExit(), 0, false);
+            var a = new RecoveryPilot(1, field, AirframeClass.FixedWing, RecoveryIntent.Rtb, 0);
+            var b = new RecoveryPilot(2, field, AirframeClass.FixedWing, RecoveryIntent.Rtb, 1);
+            a.ApproachIntent(AtApproach(a), Jet(), 10f, Dt, out _);
+            a.LandingBegun(10f);
+            AircraftState s = AtApproach(b);
+            Vec3 point = b.ApproachPoint(s);
+            float radius = HoldOrbit.RadiusFor(FormationPilot.OrbitSpeed(Jet()));
+            float nearest = float.MaxValue;
+            for (int i = 0; i < 40 * 30; i++)
+            {
+                FlightIntent intent = b.ApproachIntent(s, Jet(), 11f + i * Dt, Dt, out bool go);
+                Assert.False(go);
+                nearest = Math.Min(nearest, (intent.Ref.Pos - point).Horizontal.Length);
+                Vec3 v = intent.Ref.Vel.Horizontal.SqrLength > 1f ? intent.Ref.Vel.Horizontal.Normalized : Vec3.Forward;
+                s = Flying(intent.Ref.Pos, v);   // it flies where it is told
+            }
+            Assert.True(nearest > 0.8f * radius, $"the hold snapped back to the point ({nearest:0} m of {radius:0} m)");
+        }
+
+        [Fact]
         public void AfterAFailedLandingItWaitsBeforeTryingAgain()
         {
             // Review M3b I1: a landing failing at the approach point was retried on the next tick (three tries in ~80 ms).

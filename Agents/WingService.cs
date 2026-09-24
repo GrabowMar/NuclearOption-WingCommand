@@ -178,13 +178,15 @@ namespace WingCommand
         /// the pilot died; an ejection is settled by search and rescue.</summary>
         private static void RetirePilot(WingMember m)
         {
-            if (m.Aircraft == null) return;
-            bool home = m.Aircraft.unitState == Unit.UnitState.Returned;
-            bool down = m.Pilot == null || m.Pilot.dead || m.Pilot.ejected;
+            // (object): an aircraft destroyed outside the game's own flow is Unity-null but still has its id.
+            if ((object)m.Aircraft == null) return;
+            bool home = m.Aircraft != null && m.Aircraft.unitState == Unit.UnitState.Returned;
+            PilotFate fate = PilotFates.Of(home, m.Aircraft == null || m.Aircraft.disabled, m.Pilot == null,
+                m.Pilot != null && m.Pilot.dead, m.Pilot != null && m.Pilot.ejected);
             if (home) WingPilotRoster.NoteSortie(m.Aircraft);
             if (home) WingLedger.Returned(m.Aircraft);
             else WingLedger.Forget(m.Aircraft);
-            WingPilotRoster.Retire(m.Aircraft.persistentID, home || !down);
+            WingPilotRoster.Retire(m.Aircraft.persistentID, fate != PilotFate.Down);
         }
 
         /// <summary>Gear comes up this high on the climb-out.</summary>
@@ -326,7 +328,8 @@ namespace WingCommand
             reason = null;
             if (Wing == null) reason = "Wing Command is not ready";
             else if (!Flying(Player)) reason = "Not flying";
-            else if (Members.Count >= MaxMembers) reason = "the wing is full";
+            else if (Members.Count + (SpawnService.Instance != null ? SpawnService.Instance.PendingTotal : 0) >= MaxMembers)
+                reason = "the wing is full";
             else if (a == null || a.disabled) reason = "it is no longer available";
             else if (ReferenceEquals(a, Player) || a.Player != null) reason = "a player flies it";
             else if (Player.NetworkHQ == null || a.NetworkHQ != Player.NetworkHQ) reason = "it is not in your faction";
@@ -339,8 +342,19 @@ namespace WingCommand
 
         public static float RecruitMinHeight = 10f;
 
-        /// <summary>A faction aircraft already flying joins the wing (checked by <see cref="CanRecruit"/>).</summary>
-        public WingMember Recruit(Aircraft a) => AdoptMember(a, null);
+        /// <summary>A faction aircraft already flying joins the wing (checked by <see cref="CanRecruit"/>). One the game
+        /// was landing leaves the runway's landing list and the pad's queue first (review M3c I3: either would close the
+        /// field to takeoffs for as long as it lived).</summary>
+        public WingMember Recruit(Aircraft a)
+        {
+            Pilot p = a != null && a.pilots != null && a.pilots.Length > 0 ? a.pilots[0] : null;
+            if (NativeLandingBridge.Landing(p))
+            {
+                NativeLandingBridge.Deregister(NativeLandingBridge.Field(p), a);
+                NativeLandingBridge.LeavePad(p, a);
+            }
+            return AdoptMember(a, null);
+        }
 
         public bool ProtectsFromEjection(Aircraft a)
         {
@@ -357,6 +371,7 @@ namespace WingCommand
         {
             if (m.Released) return;
             m.Released = true;
+            ReleasePad(m);
             bool despawn = m.Ground != null && m.Ground.DespawnOnRelease(m.Last);
             m.Ground?.Leave();
             if (despawn && m.Aircraft != null && !m.Aircraft.disabled)
@@ -610,8 +625,9 @@ namespace WingCommand
             Aircraft lost = flyingPlayer;
             flyingPlayer = null;
             if (lost != null && lost.unitState == Unit.UnitState.Returned) return;
-            if (!WingTakeover.Active && WingTakeover.Begin(this, lost, flyingPlayerAt))
-                Plugin.Logger.LogInfo("[Wing] player aircraft lost; offering the wing's aircraft");
+            if (WingTakeover.Active) return;
+            if (WingTakeover.Begin(this, lost, flyingPlayerAt)) Plugin.Logger.LogInfo("[Wing] player aircraft lost; offering the wing's aircraft");
+            else WingTakeover.FinishSuppressedDefeat();
         }
 
         /// <summary>Behind a helicopter the wing flies rotary shapes, escorting it flies escort shapes, otherwise jet
@@ -672,6 +688,7 @@ namespace WingCommand
                 m.Ground?.Leave();
                 m.Recovery?.Leave();
                 Unlist(m);
+                ReleasePad(m);
                 RetirePilot(m);
                 Metrics.Left(m.Id);
                 Members.RemoveAt(i);

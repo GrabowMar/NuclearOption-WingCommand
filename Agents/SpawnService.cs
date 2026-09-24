@@ -22,6 +22,9 @@ namespace WingCommand
         public string Name => "Spawn";
         public int Pending => pending.Count;
 
+        /// <summary>Launches not yet in the wing: air starts and field launches.</summary>
+        public int PendingTotal => pending.Count + groundPending.Count;
+
         private readonly List<Aircraft> pending = new List<Aircraft>();
         private readonly HashSet<Aircraft> settling = new HashSet<Aircraft>();
         private readonly Dictionary<Aircraft, float> pendingSince = new Dictionary<Aircraft, float>();
@@ -273,7 +276,7 @@ namespace WingCommand
                         launch = FromServicePoint(definition, traffic, hq, player);
                     }
                     if (launch == null) break;
-                    launch.Charge = WingLedger.Take(quote, hq, definition);
+                    launch.Charge = WingLedger.Take(quote, hq, definition, launch.Hangar != null);
                     launch.Since = Time.time;
                     groundPending.Add(launch);
                     launched++;
@@ -348,7 +351,7 @@ namespace WingCommand
                         if (Time.time - g.Since > HangarSpawnTimeoutSeconds)
                         {
                             Plugin.Logger.LogWarning("[Spawn] a hangar never produced its aircraft; launch dropped");
-                            WingLedger.Refund(g.Charge);
+                            WingLedger.Refund(g.Charge, null);
                             groundPending.RemoveAt(i);
                         }
                         continue;
@@ -357,7 +360,7 @@ namespace WingCommand
                 }
                 if (g.Aircraft == null || g.Aircraft.disabled)
                 {
-                    WingLedger.Refund(g.Charge);
+                    WingLedger.Refund(g.Charge, g.Aircraft);
                     groundPending.RemoveAt(i);
                     continue;
                 }
@@ -366,8 +369,8 @@ namespace WingCommand
                 {
                     if (Time.time - g.Since > AdoptTimeoutSeconds)
                     {
-                        Plugin.Logger.LogWarning("[Spawn] " + g.Aircraft.definition.unitName + " never initialised its AI; not adopted");
-                        WingLedger.Refund(g.Charge);
+                        Plugin.Logger.LogWarning("[Spawn] " + g.Aircraft.definition.unitName + " never initialised its AI; back to the reserve");
+                        WingLedger.Refund(g.Charge, g.Aircraft);
                         groundPending.RemoveAt(i);
                     }
                     continue;
@@ -382,8 +385,8 @@ namespace WingCommand
                     WingLedger.Joined(g.Aircraft, g.Charge);
                 else
                 {
-                    WingLedger.Refund(g.Charge);
-                    Plugin.Logger.LogWarning("[Spawn] " + g.Aircraft.definition.unitName + " could not join the wing and keeps the game's AI");
+                    Plugin.Logger.LogWarning("[Spawn] " + g.Aircraft.definition.unitName + " could not join the wing; back to the reserve");
+                    WingLedger.Refund(g.Charge, g.Aircraft);
                 }
             }
         }

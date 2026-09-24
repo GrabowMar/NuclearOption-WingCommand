@@ -77,6 +77,15 @@ namespace WingCommand
             return CanOffer(WingService.Instance);
         }
 
+        /// <summary>The loss was held back for a takeover that could not be offered after all (review M3c I4): the defeat
+        /// goes through now.</summary>
+        public static void FinishSuppressedDefeat()
+        {
+            if (!defeatSuppressed || active) return;
+            defeatSuppressed = false;
+            if (GameManager.gameResolution == GameResolution.Ongoing) GameManager.FinishGame(GameResolution.Defeat);
+        }
+
         public static void MarkDefeatSuppressed()
         {
             defeatSuppressed = true;
