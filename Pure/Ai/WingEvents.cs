@@ -12,9 +12,13 @@ namespace WingCommand
         TaskStarted, TaskCompleted, TaskCancelled, TaskFailed, WaypointReached,
         // Combat (M5).
         Engaged, Disengaged, Joker,
+        // WMC rebuild R3: the TACTICAL alerts (a loss's reason is the event's Reason).
+        MemberLost, Damaged, TargetDestroyed, Winchester,
     }
 
-    internal enum TransitionReason : byte { None, Captured, LostSlot, LeaderSlow, LeaderNotFlying, LeaderLost, LeaderRecovered, Commanded, LeaderFast, FollowOn, NoWing, NoTarget, Fuel, Leash, Winchester, Outnumbered, MissileInbound, MissileClear }
+    internal enum TransitionReason : byte { None, Captured, LostSlot, LeaderSlow, LeaderNotFlying, LeaderLost, LeaderRecovered, Commanded, LeaderFast, FollowOn, NoWing, NoTarget, Fuel, Leash, Winchester, Outnumbered, MissileInbound, MissileClear,
+        // WMC rebuild R3: who issued an order (plans, rules) and why a member left.
+        Plan, Rule, Killed, Ejected, Released, Gone }
 
     /// <summary>One entry of the wing log: a behaviour transition with its reason, or a notable event.</summary>
     internal struct WingEvent

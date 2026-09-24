@@ -27,6 +27,10 @@ namespace WingCommand.PureTests
         [InlineData(WingEventKind.LandingFailed, TransitionReason.None, RadioClass.Status, "GOAROUND", false)]
         [InlineData(WingEventKind.TaskCompleted, TransitionReason.None, RadioClass.Status, "TASKDONE", true)]
         [InlineData(WingEventKind.TaskFailed, TransitionReason.None, RadioClass.Status, "UNABLEORDER", true)]
+        [InlineData(WingEventKind.MemberLost, TransitionReason.Killed, RadioClass.Tactical, "AIRFRAMELOST", false)]
+        [InlineData(WingEventKind.MemberLost, TransitionReason.Ejected, RadioClass.Tactical, "EJECTED", false)]
+        [InlineData(WingEventKind.Damaged, TransitionReason.None, RadioClass.Status, "DAMAGED", false)]
+        [InlineData(WingEventKind.Winchester, TransitionReason.None, RadioClass.Status, "OUTOFAMMO", false)]   // in formation: no RTB to claim
         public void EventsMapToTheirCalls(object kind, object reason, object cls, string name, bool wing)
         {
             Assert.True(RadioCalls.For(E((WingEventKind)kind, (TransitionReason)reason), out RadioCall call));
@@ -40,6 +44,9 @@ namespace WingCommand.PureTests
         [InlineData(WingEventKind.Disengaged, TransitionReason.Fuel)]
         [InlineData(WingEventKind.Taxiing, TransitionReason.None)]
         [InlineData(WingEventKind.Reserved, TransitionReason.None)]
+        [InlineData(WingEventKind.MemberLost, TransitionReason.Released)]
+        [InlineData(WingEventKind.MemberLost, TransitionReason.Gone)]
+        [InlineData(WingEventKind.TargetDestroyed, TransitionReason.None)]   // the kill call already speaks
         public void OtherEventsSayNothing(object kind, object reason) =>
             Assert.False(RadioCalls.For(E((WingEventKind)kind, (TransitionReason)reason), out _));
 

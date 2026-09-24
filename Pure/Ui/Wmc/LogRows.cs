@@ -36,7 +36,8 @@ namespace WingCommand
             if (e.Member < 0) return e.Element == Element;
             for (int i = 0; i < Count && Rows != null; i++)
                 if (e.Id != 0u && Rows[i].Id == e.Id) return Rows[i].Element == Element;
-            return false;
+            // A lost member is in no row any more: its loss names the element it flew in.
+            return e.Kind == WingEventKind.MemberLost && e.Element == Element;
         }
     }
 
@@ -85,6 +86,10 @@ namespace WingCommand
                 case WingEventKind.WaypointReached: return "waypoint reached";
                 case WingEventKind.Engaged: return "engaged";
                 case WingEventKind.Disengaged: return "disengaged" + Because(e.Reason);
+                case WingEventKind.MemberLost: return AlertList.LossWords(e.Reason);
+                case WingEventKind.Damaged: return "damaged";
+                case WingEventKind.TargetDestroyed: return "target destroyed";
+                case WingEventKind.Winchester: return "winchester";
                 default: return e.Kind.ToString();
             }
         }

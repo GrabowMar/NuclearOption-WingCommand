@@ -6,7 +6,7 @@ namespace WingCommand
     internal enum MemberDuty : byte { Formation, Engaged, Recovering, Defending, Grounded, Settled }
 
     [Flags]
-    internal enum SnapshotFlags : byte { None = 0, FallingBehind = 1, Bingo = 2, Joker = 4, Winchester = 8 }
+    internal enum SnapshotFlags : byte { None = 0, FallingBehind = 1, Bingo = 2, Joker = 4, Winchester = 8, Damaged = 16 }
 
     /// <summary>Spec M6 §8: a member as its snapshot entry.</summary>
     internal static class SnapshotBuilder
@@ -15,10 +15,10 @@ namespace WingCommand
         public static byte Fraction(float f) => f >= 1f ? (byte)255 : f > 0f ? (byte)(f * 255f + 0.5f) : (byte)0;
 
         public static SnapshotMember Member(uint id, int slot, byte behaviour, MemberDuty duty, float fuel, float ammo,
-            bool fallingBehind, bool bingo, bool joker, bool winchester, int element = 0)
+            bool fallingBehind, bool bingo, bool joker, bool winchester, int element = 0, bool damaged = false)
         {
             SnapshotFlags flags = (fallingBehind ? SnapshotFlags.FallingBehind : 0) | (bingo ? SnapshotFlags.Bingo : 0)
-                | (joker ? SnapshotFlags.Joker : 0) | (winchester ? SnapshotFlags.Winchester : 0);
+                | (joker ? SnapshotFlags.Joker : 0) | (winchester ? SnapshotFlags.Winchester : 0) | (damaged ? SnapshotFlags.Damaged : 0);
             return new SnapshotMember
             {
                 Id = id, Slot = (byte)Math.Max(0, Math.Min(255, slot)), Behaviour = behaviour, Duty = (byte)duty,

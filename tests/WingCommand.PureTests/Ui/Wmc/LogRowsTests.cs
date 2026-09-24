@@ -20,6 +20,28 @@ namespace WingCommand.PureTests
         }
 
         [Fact]
+        public void LossesDamageKillsAndWinchesterHaveWords()
+        {
+            Assert.Equal("shot down", LogRows.Describe(new WingEvent { Kind = WingEventKind.MemberLost, Reason = TransitionReason.Killed }));
+            Assert.Equal("ejected", LogRows.Describe(new WingEvent { Kind = WingEventKind.MemberLost, Reason = TransitionReason.Ejected }));
+            Assert.Equal("left the wing", LogRows.Describe(new WingEvent { Kind = WingEventKind.MemberLost, Reason = TransitionReason.Released }));
+            Assert.Equal("lost", LogRows.Describe(new WingEvent { Kind = WingEventKind.MemberLost, Reason = TransitionReason.Gone }));
+            Assert.Equal("damaged", LogRows.Describe(new WingEvent { Kind = WingEventKind.Damaged }));
+            Assert.Equal("target destroyed", LogRows.Describe(new WingEvent { Kind = WingEventKind.TargetDestroyed }));
+            Assert.Equal("winchester", LogRows.Describe(new WingEvent { Kind = WingEventKind.Winchester }));
+        }
+
+        [Fact]
+        public void AnElementFilterKeepsItsLossesAfterTheAircraftIsGone()
+        {
+            var events = new WingEventRing();
+            events.Push(new WingEvent { Time = 3f, Member = 1, Kind = WingEventKind.MemberLost, Reason = TransitionReason.Killed, Element = 1, Id = 7u });
+            var into = new List<LogRow>();
+            Assert.Equal(1, LogRows.Fill(events, null, into, LogRows.MaxRows, new LogFilter { Element = 1, Rows = new SnapshotMember[0], Count = 0 }));
+            Assert.Equal(0, LogRows.Fill(events, null, into, LogRows.MaxRows, new LogFilter { Element = 0, Rows = new SnapshotMember[0], Count = 0 }));
+        }
+
+        [Fact]
         public void EveryEventKindHasAnAnswer()
         {
             foreach (WingEventKind k in System.Enum.GetValues(typeof(WingEventKind)))

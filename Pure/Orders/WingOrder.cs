@@ -11,6 +11,10 @@ namespace WingCommand
 
     internal enum ScopeKind : byte { Wing, Element, Members }
 
+    /// <summary>Who issued an order (spec WMC rebuild §PLAN, §BEHAVIOUR): the player (and a client), a running plan, or a
+    /// behaviour rule. The executor logs the task change with the matching reason.</summary>
+    internal enum OrderSource : byte { Player, Plan, Rule }
+
     /// <summary>Who an order is for: the whole wing, one element (0 = A), or members by aircraft persistent id.</summary>
     internal struct WingScope
     {
@@ -40,6 +44,11 @@ namespace WingCommand
         public float Number;
         public string Text;
         public bool Flag;
+        public OrderSource Source;
+
+        /// <summary>The reason a task change this order makes is logged with.</summary>
+        public TransitionReason Reason =>
+            Source == OrderSource.Plan ? TransitionReason.Plan : Source == OrderSource.Rule ? TransitionReason.Rule : TransitionReason.Commanded;
 
         public static WingOrder Of(OrderKind kind, WingScope scope = default) => new WingOrder { Kind = kind, Scope = scope };
 

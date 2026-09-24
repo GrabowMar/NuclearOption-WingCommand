@@ -47,6 +47,16 @@ namespace WingCommand
                 case WingEventKind.LandingFailed: return Make(RadioClass.Status, "GOAROUND", false, out call);
                 case WingEventKind.TaskCompleted: return Make(RadioClass.Status, "TASKDONE", true, out call);
                 case WingEventKind.TaskFailed: return Make(RadioClass.Status, "UNABLEORDER", true, out call);
+                case WingEventKind.MemberLost:
+                    switch (e.Reason)
+                    {
+                        case TransitionReason.Killed: return Make(RadioClass.Tactical, "AIRFRAMELOST", false, out call);
+                        case TransitionReason.Ejected: return Make(RadioClass.Tactical, "EJECTED", false, out call);
+                        default: return false;
+                    }
+                case WingEventKind.Damaged: return Make(RadioClass.Status, "DAMAGED", false, out call);
+                // In formation nothing sends the member home: OUTOFAMMO, never WINCHESTER's RTB lines.
+                case WingEventKind.Winchester: return Make(RadioClass.Status, "OUTOFAMMO", false, out call);
                 default: return false;
             }
         }
