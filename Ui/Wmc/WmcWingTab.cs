@@ -107,7 +107,7 @@ namespace WingCommand
                 {
                     armedId = last.SelectedId;
                     armedAt = Time.unscaledTime;
-                    WingToast.Show($"Release {WingRows.Number(m.Brain.Slot)}? Press RELEASE again");
+                    WingToast.Show($"Release {WingRows.Number(m.Seat)}? Press RELEASE again");
                     return;
                 }
                 armedId = 0u;

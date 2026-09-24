@@ -79,7 +79,10 @@ namespace WingCommand
             Profile = profile;
         }
 
-        public int Number => Brain.Slot + 2;
+        /// <summary>The member's place in the wing (#n = seat + 2), stable across element moves; seats compact when a member
+        /// leaves (spec WMC program §3.3). <see cref="FormationPilot.Slot"/> is its place in its element's shape.</summary>
+        public int Seat;
+        public int Number => Seat + 2;
 
         public bool OnGround => Ground != null && !Ground.Done;
 

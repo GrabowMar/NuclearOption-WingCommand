@@ -267,10 +267,10 @@ namespace WingCommand
 
         /// <summary>"Clear my six": an attack order on the enemy aircraft in the player's rear quarter that the faction tracks
         /// accurately (<see cref="ClearSix"/>). Returns how many were found; the wing splits them (M5b).</summary>
-        /// <summary>The element of the member's slot in the current shape (0 when unknown).</summary>
-        private int ElementOf(WingMember m)
+        /// <summary>The pair of the member's slot in its element's shape (0 when unknown).</summary>
+        private int PairOf(WingMember m)
         {
-            WingFrame f = Wing?.Frame;
+            WingFrame f = FrameOf(m);
             int slot = m.Brain.Slot;
             return f == null || slot < 0 || slot >= f.Slots.Length ? 0 : f.Slots[slot].Element;
         }
@@ -280,7 +280,7 @@ namespace WingCommand
         {
             int n = 0;
             foreach (WingMember m in Members)
-                if (!m.Released && m.Alive && !m.OnGround && m.Recovery == null && m.Settle == null && ElementOf(m) == 1) n++;
+                if (!m.Released && m.Alive && !m.OnGround && m.Recovery == null && m.Settle == null && PairOf(m) == 1) n++;
             return n;
         }
 
@@ -386,7 +386,7 @@ namespace WingCommand
             foreach (WingMember m in Members)
             {
                 if (m.Released || m.OnGround || m.Recovery != null || m.Settle != null || !m.Alive) continue;
-                if (element >= 0 && ElementOf(m) != element) continue;
+                if (element >= 0 && PairOf(m) != element) continue;
                 m.AssignedTarget = null;
                 m.Pilot.SetPrimaryTarget(null);
                 if (m.Engaged)
@@ -407,7 +407,7 @@ namespace WingCommand
                     m.Engaged = false;
                     continue;
                 }
-                Events.Push(new WingEvent { Time = missionTime, Member = m.Brain.Slot, Kind = WingEventKind.Engaged, Reason = TransitionReason.Commanded });
+                Events.Push(new WingEvent { Time = missionTime, Member = m.Seat, Kind = WingEventKind.Engaged, Reason = TransitionReason.Commanded });
                 n++;
             }
             return n;
@@ -471,7 +471,7 @@ namespace WingCommand
             int k = 0;
             foreach (WingMember m in Members)
                 if (m.Engaged && !m.Released && m.Alive && InNativeCombat(m) && k < engagedNow.Length &&
-                    (attackElement < 0 || ElementOf(m) == attackElement)) engagedNow[k++] = m;
+                    (attackElement < 0 || PairOf(m) == attackElement)) engagedNow[k++] = m;
             if (k == 0)
             {
                 // Everyone taken back: the order ends rather than capturing the next Engage (review M5b I1).
@@ -664,7 +664,7 @@ namespace WingCommand
             m.AssignedTarget = null;
             m.Pilot?.SetPrimaryTarget(null);
             m.Brain.FormUp(missionTime, Events);
-            Events.Push(new WingEvent { Time = missionTime, Member = m.Brain.Slot, Kind = WingEventKind.Disengaged, Reason = reason });
+            Events.Push(new WingEvent { Time = missionTime, Member = m.Seat, Kind = WingEventKind.Disengaged, Reason = reason });
         }
     }
 }

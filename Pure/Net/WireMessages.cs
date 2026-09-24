@@ -156,11 +156,12 @@ namespace WingCommand
         }
     }
 
-    /// <summary>One member in a snapshot (10 bytes): no kinematics — the game syncs the aircraft.</summary>
+    /// <summary>One member in a snapshot (11 bytes): no kinematics — the game syncs the aircraft. Slot is the member's seat
+    /// (its #n is seat + 2); Element is the element it flies in (0 = A, spec WMC program §3.3).</summary>
     internal struct SnapshotMember
     {
         public uint Id;
-        public byte Slot, Behaviour, Duty, Fuel, Ammo, Flags;
+        public byte Slot, Behaviour, Duty, Fuel, Ammo, Flags, Element;
     }
 
     /// <summary>Host → client, twice a second: the sender's wing as its HUD and menus show it.</summary>
@@ -188,6 +189,7 @@ namespace WingCommand
                 w.U8(s.Fuel);
                 w.U8(s.Ammo);
                 w.U8(s.Flags);
+                w.U8(s.Element);
             }
         }
 
@@ -203,6 +205,7 @@ namespace WingCommand
                 m.Members[i] = new SnapshotMember
                 {
                     Id = r.U32(), Slot = r.U8(), Behaviour = r.U8(), Duty = r.U8(), Fuel = r.U8(), Ammo = r.U8(), Flags = r.U8(),
+                    Element = r.U8(),
                 };
             return WireCodec.Done(r);
         }

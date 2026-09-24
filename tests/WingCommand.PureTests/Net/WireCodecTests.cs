@@ -48,7 +48,7 @@ namespace WingCommand.PureTests
         {
             var members = new SnapshotMember[WcSnapshot.MaxMembers];
             for (int i = 0; i < members.Length; i++)
-                members[i] = new SnapshotMember { Id = (uint)(500 + i), Slot = (byte)i, Behaviour = 1, Duty = 2, Fuel = 200, Ammo = 100, Flags = 5 };
+                members[i] = new SnapshotMember { Id = (uint)(500 + i), Slot = (byte)i, Behaviour = 1, Duty = 2, Fuel = 200, Ammo = 100, Flags = 5, Element = (byte)(i % 4) };
             return new WcSnapshot { Tick = 99, Owner = 7, Members = members };
         }
 
@@ -97,6 +97,7 @@ namespace WingCommand.PureTests
             Assert.Equal((99u, 7u, 8), (sb.Tick, sb.Owner, sb.Members.Length));
             Assert.Equal(s.Members[7].Id, sb.Members[7].Id);
             Assert.Equal(s.Members[3].Fuel, sb.Members[3].Fuel);
+            Assert.Equal(3, sb.Members[7].Element);   // spec WMC program §3.3: each member's element travels
 
             var e = new WcEvent { Time = 12.5f, Member = 2, Kind = 30, From = 1, To = 4, Reason = 16, Task = 3 };
             b = Encode(e.Encode);

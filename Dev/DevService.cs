@@ -61,8 +61,9 @@ namespace WingCommand
                     continue;
                 }
                 WingMember m = wing.Members[i];
-                float error = (wing.Wing.Frame.Slots[m.Brain.Slot].Ref.Pos - m.Last.Pos).Length;
-                b.Members[i] = WingHudText.Member(m.Brain.Slot, WingHudText.Phase(m.Brain.Mind.Current, m.Brain.LastRejoin.FallingBehind),
+                WingFrame f = wing.FrameOf(m);
+                float error = f != null && m.Brain.Slot < f.Count ? (f.Slots[m.Brain.Slot].Ref.Pos - m.Last.Pos).Length : 0f;
+                b.Members[i] = WingHudText.Member(m.Seat, WingHudText.Phase(m.Brain.Mind.Current, m.Brain.LastRejoin.FallingBehind),
                     error, m.Brain.Pipeline.Report.Describe()) +
                     " σ" + m.Brain.LastRejoin.Sigma.ToString("0.00", CultureInfo.InvariantCulture);
             }

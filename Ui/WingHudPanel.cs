@@ -104,8 +104,9 @@ namespace WingCommand
                                ?? (m.Settle != null ? WingHudText.Settle(m.Settle.Phase) : null)
                                ?? WingHudText.Phase(m.Brain.Mind.Current, behind);
                 string binding = WingHudText.Binding(m.Brain.Pipeline.Report);
-                float error = (wing.Wing.Frame.Slots[m.Brain.Slot].Ref.Pos - m.Last.Pos).Length;
-                rows[i].text = WingHudText.Member(m.Brain.Slot, phase, error, binding, WingHudText.BingoTime(m.Bingo.SecondsToBingo));
+                WingFrame f = wing.FrameOf(m);
+                float error = f != null && m.Brain.Slot < f.Count ? (f.Slots[m.Brain.Slot].Ref.Pos - m.Last.Pos).Length : 0f;
+                rows[i].text = WingHudText.Member(m.Seat, phase, error, binding, WingHudText.BingoTime(m.Bingo.SecondsToBingo));
                 rows[i].color = behind || binding == "GCAS" || binding == "COLL" ? AvTheme.Warning : WingUi.TextPrimary;
             }
             float lines = 2 + n;

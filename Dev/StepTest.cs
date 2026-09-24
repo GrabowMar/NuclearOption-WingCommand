@@ -117,7 +117,7 @@ namespace WingCommand
             float speed = m.Last.Vel.Length;
             ring.Push(new TelemetryRow
             {
-                Time = t, Member = m.Brain.Slot, Pos = m.Last.Pos, Vel = m.Last.Vel, BankDeg = m.Last.BankDeg, Nz = m.Last.Nz,
+                Time = t, Member = m.Seat, Pos = m.Last.Pos, Vel = m.Last.Vel, BankDeg = m.Last.BankDeg, Nz = m.Last.Nz,
                 Tas = m.Last.Tas, RollRate = m.Last.P, AccelAlong = speed > 1f ? Vec3.Dot(m.Last.Acc, m.Last.Vel / speed) : 0f,
                 Throttle = o.Throttle, Pitch = o.Pitch, Roll = o.Roll, Airbrake = o.Airbrake, Behaviour = (byte)current.Phase,
             });

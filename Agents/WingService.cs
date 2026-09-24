@@ -51,6 +51,13 @@ namespace WingCommand
         public event Action RosterChanged;
 
         private readonly WingMemberInput[] inputs = new WingMemberInput[FormationCatalog.MaxSlots];
+        private readonly CollisionBody[] others = new CollisionBody[FormationCatalog.MaxSlots];
+        private readonly FormationWing[] wings = new FormationWing[ElementRoster.MaxElements];
+        private readonly WingPlanner[] planners = new WingPlanner[ElementRoster.MaxElements];
+        private readonly bool[] mergePending = new bool[ElementRoster.MaxElements];
+
+        /// <summary>Which element each member flies in (spec WMC program §3.3).</summary>
+        public ElementRoster Roster { get; private set; } = new ElementRoster();
         private readonly AircraftSensor leaderSensor = new AircraftSensor();
         private TerrainFloor floor = new TerrainFloor();
         private float frameTime = float.NaN, missionTime;
@@ -65,6 +72,7 @@ namespace WingCommand
         public void Activate()
         {
             Members.Clear();
+            ResetElements();
             FieldRegistry.Clear();
             WingPilotRoster.Reset();
             WingKillCredit.Reset();
@@ -111,6 +119,7 @@ namespace WingCommand
             Interop.WingSquad.Reset();
             flyingPlayer = null;
             Members.Clear();
+            ResetElements();
             FieldRegistry.Clear();
             LeaderUnit = null;
             Player = null;
@@ -168,13 +177,15 @@ namespace WingCommand
                 WingToast.Show("VTOL aircraft cannot fly formation (the game gives them no AI to take over)");
                 return null;
             }
-            var m = new WingMember(a, Members.Count, WingProfiles.For(a)) { Id = nextMemberId++ };
+            var m = new WingMember(a, Members.Count, WingProfiles.For(a)) { Id = nextMemberId++, Seat = Members.Count };
+            Roster.Add(a.persistentID.Id);
             FlyAs(m, WingPilotRoster.Assign(a));
             m.State = new WingFlightState(m);
             if (ground != null) m.Ground = ground(m);
             m.Brain.AfterburnerAllowed = afterburner;
             m.Voice = nextVoice++;
             Members.Add(m);
+            AssignSlots();
             m.Pilot.SwitchState(m.State);
             Plugin.Logger.LogInfo($"[Wing] #{m.Number} {a.definition.unitName} joined");
             RosterChanged?.Invoke();
@@ -227,7 +238,10 @@ namespace WingCommand
             float dt = Time.fixedDeltaTime;
             try
             {
-                WingFrame frame = FrameFor(Time.fixedTime, dt);
+                FrameFor(Time.fixedTime, dt);
+                WingFrame frame = FrameOf(m);
+                // ponytail: a member whose element grew after this tick's frames coasts one tick on its last inputs.
+                if (frame == null || m.Brain.Slot >= frame.Count) return;
                 if ((m.Recovery != null || m.ReserveNow) && StepRecovery(m, frame, dt)) return;
                 if (m.OnGround)
                 {
@@ -287,7 +301,7 @@ namespace WingCommand
         private void StepGround(WingMember m, float dt)
         {
             m.NoFbwSeconds = 0f;
-            ControlOutput o = m.Ground.Step(m.Last, m.Profile, m.Brain.Pipeline, missionTime, dt, Events, m.Brain.Slot);
+            ControlOutput o = m.Ground.Step(m.Last, m.Profile, m.Brain.Pipeline, missionTime, dt, Events, m.Seat);
             m.GroundOutput = o;
             ControlWriter.Fly(m.Aircraft, o, m.Profile.Class);
             LogLongStop(m);
@@ -322,7 +336,7 @@ namespace WingCommand
                 field.Departures.Expect(m.Id, LineupPlanner.Abreast(field.Runway.Width, m.Profile.SpanM));
             }
             else m.Ground.RoofOverhead = Physics.Raycast(a.transform.position + Vector3.up * 3f, Vector3.up, 30f);
-            Events.Push(new WingEvent { Time = missionTime, Member = m.Brain.Slot, Kind = WingEventKind.GroundSpawned });
+            Events.Push(new WingEvent { Time = missionTime, Member = m.Seat, Kind = WingEventKind.GroundSpawned });
             return true;
         }
 
@@ -605,12 +619,17 @@ namespace WingCommand
         private void ApplySelection()
         {
             Wing.SetFormation(Selection.Current, Selection.SpacingMetres);
+            for (int e = 1; e < ElementRoster.MaxElements; e++) wings[e]?.SetFormation(Selection.Current, Selection.SpacingMetres);
             WingToast.Show($"Formation: {Selection.Current.Name} · {Selection.Spacing} ({Selection.SpacingMetres:0} m)");
         }
 
-        private WingFrame FrameFor(float time, float dt)
+        /// <summary>Every element's frame, once per physics tick (spec WMC program §3.3): element A forms on the player, the
+        /// anchor or A's task lead; every other element on its own planner's lead, with the player as its collision body 0.
+        /// Each element's members also keep clear of the other elements' members (ranks by seat). Members read
+        /// <see cref="FrameOf"/>.</summary>
+        private void FrameFor(float time, float dt)
         {
-            if (time == frameTime) return Wing.Frame;
+            if (time == frameTime) return;
             // After a gap (every member in a native state), every sensor starts afresh (review M5a C1).
             if (!float.IsNaN(frameTime) && time - frameTime > SensorGapSeconds)
             {
@@ -619,40 +638,120 @@ namespace WingCommand
             }
             frameTime = time;
             frameIndex++;
-            FieldRegistry.Step(dt, this);
-            int n = Members.Count;
-            for (int i = 0; i < n; i++)
-            {
-                WingMember m = Members[i];
-                m.Last = m.Sensor.Read(m.Aircraft, dt);
-                inputs[i] = new WingMemberInput
+            // Elements whose task ended merge here, before any frame is built this tick (review focus 1).
+            for (int e = 1; e < ElementRoster.MaxElements; e++)
+                if (mergePending[e])
                 {
-                    State = m.Last,
-                    Capability = new MemberCapability
-                    {
-                        MaxSpeed = m.Profile.Class == AirframeClass.Rotary ? m.Profile.CruiseSpeed
-                            : m.Brain.AfterburnerAllowed && m.Profile.HasAfterburner ? m.Profile.MaxSpeed : m.Profile.MilSpeed,
-                        MinSpeed = m.Profile.MinimumSpeed(1f),
-                    },
-                    Radius = m.Profile.MaxRadius,
-                    NearFloorY = m.NearFloorY,
-                    HasNearFloor = !float.IsNaN(m.NearFloorY),
-                    Role = m.Brain.Roles.Current,
-                    Id = m.Id,
-                    Grounded = m.OnGround,
-                };
-            }
+                    mergePending[e] = false;
+                    MergeElement(e);
+                }
+            FieldRegistry.Step(dt, this);
+            foreach (WingMember m in Members) m.Last = m.Sensor.Read(m.Aircraft, dt);
             AnchorSample leader = SampleAnchor(dt);
-            if (Planner.Active)
+            for (int e = 0; e < ElementRoster.MaxElements; e++)
             {
-                AnchorSample player = PlayerBody();
-                SampleSeparation(player, n);
-                Wing.Update(leader, player, inputs, n, floor.Value, Clearance, AnchorRadius(leader.Kind), dt);
-                return Wing.Frame;
+                if (!Roster.InUse(e)) continue;
+                FormationWing wing = WingOf(e);
+                if (wing == null) continue;
+                int n = 0, o = 0;
+                foreach (WingMember m in Members)
+                {
+                    if (ElementOf(m) == e) inputs[n++] = Input(m);
+                    else if (o < others.Length)
+                        others[o++] = new CollisionBody
+                        {
+                            Pos = m.Last.Pos, Vel = m.Last.Vel, Radius = m.Profile.MaxRadius, Rank = m.Seat + 1, Ignored = m.OnGround,
+                        };
+                }
+                // ponytail: one terrain floor for the wing (the highest under any member); per element if detached elements
+                // fly needlessly high over low ground.
+                if (e > 0)
+                    wing.Update(PlannerOf(e).Sample(), true, PlayerBody(), inputs, n, others, o, floor.Value, Clearance,
+                        AnchorRadius(AnchorKind.Aircraft), dt);
+                else if (Planner.Active)
+                {
+                    AnchorSample player = PlayerBody();
+                    SampleSeparation(player, n);
+                    wing.Update(leader, true, player, inputs, n, others, o, floor.Value, Clearance, AnchorRadius(leader.Kind), dt);
+                }
+                else
+                {
+                    SampleSeparation(leader, n);
+                    wing.Update(leader, false, default, inputs, n, others, o, floor.Value, Clearance, AnchorRadius(leader.Kind), dt);
+                }
             }
-            SampleSeparation(leader, n);
-            Wing.Update(leader, inputs, n, floor.Value, Clearance, AnchorRadius(leader.Kind), dt);
-            return Wing.Frame;
+        }
+
+        private WingMemberInput Input(WingMember m) => new WingMemberInput
+        {
+            State = m.Last,
+            Capability = new MemberCapability
+            {
+                MaxSpeed = m.Profile.Class == AirframeClass.Rotary ? m.Profile.CruiseSpeed
+                    : m.Brain.AfterburnerAllowed && m.Profile.HasAfterburner ? m.Profile.MaxSpeed : m.Profile.MilSpeed,
+                MinSpeed = m.Profile.MinimumSpeed(1f),
+            },
+            Radius = m.Profile.MaxRadius,
+            NearFloorY = m.NearFloorY,
+            HasNearFloor = !float.IsNaN(m.NearFloorY),
+            Role = m.Brain.Roles.Current,
+            Id = m.Id,
+            Grounded = m.OnGround,
+            Rank = m.Seat + 1,
+        };
+
+        /// <summary>The frame of the member's element (null before the wing exists).</summary>
+        public WingFrame FrameOf(WingMember m) => WingOf(ElementOf(m))?.Frame ?? Wing?.Frame;
+
+        public int ElementOf(WingMember m) => (object)m.Aircraft != null ? Roster.ElementOf(m.Aircraft.persistentID.Id) : 0;
+
+        public WingPlanner PlannerOf(int e) => e == 0 ? Planner : planners[e] ?? (planners[e] = new WingPlanner(e));
+
+        private FormationWing WingOf(int e)
+        {
+            if (e == 0) return Wing;
+            if (wings[e] == null && Selection != null)
+            {
+                wings[e] = new FormationWing(Selection.Current, Selection.SpacingMetres);
+                wings[e].Solver.StackOffset = Wing != null ? Wing.Solver.StackOffset : 0f;
+            }
+            return wings[e];
+        }
+
+        /// <summary>Each element's members, in seat order, fly its slots 0..k-1; the pilot's events carry the seat.</summary>
+        private void AssignSlots()
+        {
+            for (int e = 0; e < ElementRoster.MaxElements; e++)
+            {
+                int k = 0;
+                foreach (WingMember m in Members)
+                {
+                    if (ElementOf(m) != e) continue;
+                    m.Brain.Slot = k++;
+                    m.Brain.Seat = m.Seat;
+                }
+            }
+        }
+
+        /// <summary>Element <paramref name="e"/> returns to A: its planner stops and its members rejoin A's shape.</summary>
+        public void MergeElement(int e)
+        {
+            if (e <= 0) return;
+            Roster.Merge(e);
+            PlannerOf(e).Reset();
+            AssignSlots();
+            Plugin.Logger.LogInfo($"[Wing] element {ElementRoster.Letter(e)} rejoined A");
+        }
+
+        private void ResetElements()
+        {
+            Roster = new ElementRoster();
+            for (int e = 1; e < ElementRoster.MaxElements; e++)
+            {
+                wings[e] = null;
+                planners[e] = null;
+                mergePending[e] = false;
+            }
         }
 
         /// <summary>The closest pair this tick, the leader included, for <see cref="Metrics"/>.</summary>
@@ -795,6 +894,7 @@ namespace WingCommand
                 ReleasePad(m);
                 RetirePilot(m);
                 Metrics.Left(m.Id);
+                if ((object)m.Aircraft != null) Roster.Remove(m.Aircraft.persistentID.Id);
                 Members.RemoveAt(i);
                 changed = true;
                 Plugin.Logger.LogInfo($"[Wing] #{m.Number} left the wing: {LeaveReason(m, ours)}");
@@ -802,7 +902,8 @@ namespace WingCommand
             if (!changed) return;
             // A wing that emptied starts level when it is next called (review M5f I2).
             if (Members.Count == 0 && Wing != null) Wing.Solver.ResetStack();
-            for (int i = 0; i < Members.Count; i++) Members[i].Brain.Slot = i;
+            for (int i = 0; i < Members.Count; i++) Members[i].Seat = i;
+            AssignSlots();
             RosterChanged?.Invoke();
         }
 

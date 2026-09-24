@@ -27,9 +27,10 @@ namespace WingCommand
                 if (m.Profile.Class == AirframeClass.FixedWing || (cargoOnly && CargoStation(m.Aircraft) == null)) continue;
                 rotary++;
                 if (m.Released || !m.Alive || m.Engaged || m.Recovery != null || m.OnGround || m.Settle != null) continue;
-                if (m.Brain.Slot < 0 || m.Brain.Slot >= Wing.Frame.Slots.Length) continue;
+                WingFrame f = FrameOf(m);
+                if (f == null || m.Brain.Slot < 0 || m.Brain.Slot >= f.Count) continue;
                 free++;
-                Vec3 slot = Wing.Frame.Slots[m.Brain.Slot].Ref.Pos;
+                Vec3 slot = f.Slots[m.Brain.Slot].Ref.Pos;
                 // Dry, level ground only (review M4c I5): no settle onto water or a slope.
                 if (!TerrainProbe.Landing(slot, out float groundY, out float normalY) || !SettlePilot.Landable(true, normalY)) continue;
                 EndDefence(m);   // review M4c I6: no countermeasure trigger held through the landing
@@ -215,8 +216,8 @@ namespace WingCommand
                     : m.OnGround ? MemberDuty.Grounded
                     : MemberDuty.Formation;
                 float ammo = AmmoFraction(m.Aircraft);
-                into[n++] = SnapshotBuilder.Member(m.Aircraft.persistentID.Id, m.Brain.Slot, (byte)m.Brain.Mind.Current, duty,
-                    m.Aircraft.GetFuelLevel(), ammo, m.Brain.LastRejoin.FallingBehind, m.Bingo.Bingo, m.Bingo.Joker, ammo <= 0f);
+                into[n++] = SnapshotBuilder.Member(m.Aircraft.persistentID.Id, m.Seat, (byte)m.Brain.Mind.Current, duty,
+                    m.Aircraft.GetFuelLevel(), ammo, m.Brain.LastRejoin.FallingBehind, m.Bingo.Bingo, m.Bingo.Joker, ammo <= 0f, ElementOf(m));
             }
             return n;
         }
@@ -252,7 +253,7 @@ namespace WingCommand
                 FloorY = near ? frame.NearFloorY[slot] : frame.FloorY, NearFloorY = frame.NearFloorY[slot], HasNearFloor = near,
                 Clearance = m.Brain.Clearance, Aggression = 0.3f, CollisionBias = frame.Bias[slot],
             };
-            ControlWriter.Fly(m.Aircraft, s.Step(m.Last, m.Profile, m.Brain.Pipeline, missionTime, dt, Events, slot, approach), m.Profile.Class);
+            ControlWriter.Fly(m.Aircraft, s.Step(m.Last, m.Profile, m.Brain.Pipeline, missionTime, dt, Events, m.Seat, approach), m.Profile.Class);
             StepJob(m, s, dt);
             return true;
         }

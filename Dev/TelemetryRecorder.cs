@@ -17,9 +17,10 @@ namespace WingCommand
 
         public static void Sample(WingMember m, WingFrame frame, float time)
         {
-            int slot = m.Brain.Slot;
-            TelemetryRing ring = rings[slot] ?? (rings[slot] = new TelemetryRing());
-            ring.Push(TelemetryRows.From(time, slot, m.Last, m.Brain, frame.Slots[slot].Ref.Pos));
+            int slot = m.Brain.Slot, seat = m.Seat;
+            if (seat < 0 || seat >= rings.Length || slot >= frame.Count) return;
+            TelemetryRing ring = rings[seat] ?? (rings[seat] = new TelemetryRing());
+            ring.Push(TelemetryRows.From(time, seat, m.Last, m.Brain, frame.Slots[slot].Ref.Pos));
         }
 
         public static void AutoDump(string reason, float time)

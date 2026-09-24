@@ -24,10 +24,11 @@ namespace WingCommand
             int used = 0;
             if (wing?.Wing != null)
             {
-                WingFrame frame = wing.Wing.Frame;
                 for (int i = 0; i < wing.Members.Count; i++)
                 {
                     WingMember m = wing.Members[i];
+                    WingFrame frame = wing.FrameOf(m);
+                    if (frame == null || m.Brain.Slot >= frame.Count) continue;
                     Vec3 p = m.Last.Pos;
                     int slot = m.Brain.Slot;
                     Line(used++, p, frame.Slots[slot].Ref.Pos, Color.green);

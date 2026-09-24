@@ -185,7 +185,7 @@ namespace WingCommand
             string who = pilot != null && !string.IsNullOrEmpty(pilot.Callsign) ? pilot.Callsign : "#" + speaker.Number;
             return Queue.Enqueue(new RadioLine
             {
-                Speaker = speaker.Brain.Slot, Class = cls, Key = key, WingWide = wingWide, Text = who + ": " + text, Answer = answer,
+                Speaker = speaker.Seat, Class = cls, Key = key, WingWide = wingWide, Text = who + ": " + text, Answer = answer,
                 Voice = speaker.Voice,
             }, now);
         }
@@ -198,7 +198,7 @@ namespace WingCommand
             foreach (WingMember m in wing.Members)
             {
                 if (m.Released) continue;
-                if (m.Brain.Slot == slot) return m;
+                if (m.Seat == slot) return m;
                 if (first == null) first = m;
             }
             return first;

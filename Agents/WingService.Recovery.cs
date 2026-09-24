@@ -40,7 +40,7 @@ namespace WingCommand
             }
             if (m.OnGround)
             {
-                if (m.Ground.TaxiIn(m.Last, missionTime, Events, m.Brain.Slot))
+                if (m.Ground.TaxiIn(m.Last, missionTime, Events, m.Seat))
                 {
                     m.Recovery = RecoveryPilot.FromGround(m.Id, m.Ground, intent, m.Profile.Class);
                     return true;
@@ -52,7 +52,7 @@ namespace WingCommand
             Airbase airbase = RecoveryField(m, intent);
             FieldTraffic field = airbase != null ? FieldRegistry.For(airbase) : null;
             if (field == null) return false;
-            m.Recovery = new RecoveryPilot(m.Id, field, m.Profile.Class, intent, m.Brain.Slot);
+            m.Recovery = new RecoveryPilot(m.Id, field, m.Profile.Class, intent, m.Seat);
             Plugin.Logger.LogInfo($"[Wing] #{m.Number} {(intent == RecoveryIntent.Rtb ? "returning to base" : "going to refit")} at {airbase.name}");
             return true;
         }
@@ -98,7 +98,7 @@ namespace WingCommand
                     // at once).
                     r.LandingBegun(missionTime);
                     Plugin.Logger.LogInfo($"[Wing] #{m.Number} handed to the game's landing");
-                    if (!NativeLandingBridge.Begin(m) && r.Phase == RecoveryPhase.Landing) r.LandingFailed(missionTime, Events, m.Brain.Slot);
+                    if (!NativeLandingBridge.Begin(m) && r.Phase == RecoveryPhase.Landing) r.LandingFailed(missionTime, Events, m.Seat);
                     return true;
                 case RecoveryPhase.Released:
                     WingToast.Show($"#{m.Number} could not land; back to the reserve");
@@ -115,7 +115,7 @@ namespace WingCommand
         {
             Aircraft a = m.Aircraft;
             if (m.ListedAt != null && (!m.Recovery.Ground.ArrivingOnRunway || missionTime > m.ListedUntil)) Unlist(m);
-            RecoveryAction action = m.Recovery.Update(missionTime, a.GetFuelLevel(), AmmoFraction(a), Events, m.Brain.Slot);
+            RecoveryAction action = m.Recovery.Update(missionTime, a.GetFuelLevel(), AmmoFraction(a), Events, m.Seat);
             if (action == RecoveryAction.Reserve)
             {
                 Release(m, "back in the reserve");
@@ -124,7 +124,7 @@ namespace WingCommand
             if (action != RecoveryAction.Service) return;
             Service(a);
             FieldTraffic field = m.Recovery.Ground.Field;
-            m.Recovery.Serviced(missionTime, LineupPlanner.Abreast(field.Runway.Width, m.Profile.SpanM), Events, m.Brain.Slot);
+            m.Recovery.Serviced(missionTime, LineupPlanner.Abreast(field.Runway.Width, m.Profile.SpanM), Events, m.Seat);
             Plugin.Logger.LogInfo($"[Wing] #{m.Number} refuelled and rearmed; departing again");
         }
 
@@ -155,7 +155,7 @@ namespace WingCommand
                 else
                 {
                     NativeLandingBridge.LeavePad(pilot, m.Aircraft);
-                    m.Recovery.LandingFailed(missionTime, Events, m.Brain.Slot);
+                    m.Recovery.LandingFailed(missionTime, Events, m.Seat);
                     Plugin.Logger.LogInfo($"[Wing] #{m.Number} landing failed ({(next == null ? "no runway" : next.GetType().Name)}); approaching again");
                 }
             }
@@ -194,7 +194,7 @@ namespace WingCommand
                 Pos = a.GlobalPosition().ToVec3(), Fwd = t.forward.ToVec3(), Up = t.up.ToVec3(), Right = t.right.ToVec3(),
                 Vel = rb != null ? rb.velocity.ToVec3() : Vec3.Zero, RadarAlt = a.radarAlt,
             };
-            m.Recovery.Landed(field, s, missionTime, Events, m.Brain.Slot);
+            m.Recovery.Landed(field, s, missionTime, Events, m.Seat);
             m.Ground = m.Recovery.Ground;
             Plugin.Logger.LogInfo($"[Wing] #{m.Number} down at {airbase.name}; taxiing in");
         }
@@ -221,7 +221,7 @@ namespace WingCommand
                 else
                 {
                     NativeLandingBridge.LeavePad(m.Pilot, m.Aircraft);
-                    r.LandingFailed(missionTime, Events, m.Brain.Slot);
+                    r.LandingFailed(missionTime, Events, m.Seat);
                     Plugin.Logger.LogInfo($"[Wing] #{m.Number} {why}; approaching again");
                 }
                 NativeLandingBridge.TakeBack(m);
@@ -292,9 +292,9 @@ namespace WingCommand
             bool afterburner = m.Profile.Class == AirframeClass.FixedWing && m.Last.Throttle >= m.Profile.AfterburnerThrottle;
             bool bingo = m.Bingo.Update(m.Aircraft.GetFuelLevel(), distance, m.Profile.CruiseSpeed, step, afterburner);
             // The radio says it (spec M7 §1.3).
-            if (m.Bingo.JokerNow) Events.Push(new WingEvent { Time = missionTime, Member = m.Brain.Slot, Kind = WingEventKind.Joker });
+            if (m.Bingo.JokerNow) Events.Push(new WingEvent { Time = missionTime, Member = m.Seat, Kind = WingEventKind.Joker });
             if (!bingo) return false;
-            Events.Push(new WingEvent { Time = missionTime, Member = m.Brain.Slot, Kind = WingEventKind.Bingo });
+            Events.Push(new WingEvent { Time = missionTime, Member = m.Seat, Kind = WingEventKind.Bingo });
             return true;
         }
 
