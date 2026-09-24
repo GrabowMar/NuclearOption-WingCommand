@@ -77,6 +77,22 @@ namespace WingCommand
 
         public FormationDefinition NextFamily() => Step(sameFamily: false);
 
+        /// <summary>The shapes that suit the wing's use, in catalog order (spec M7b §3 FORM).</summary>
+        public void Suitable(List<FormationDefinition> into)
+        {
+            into.Clear();
+            foreach (FormationDefinition d in all)
+                if (Suits(d)) into.Add(d);
+        }
+
+        /// <summary>The families of <paramref name="shapes"/>, each once, in first-seen order.</summary>
+        public static void Families(List<FormationDefinition> shapes, List<string> into)
+        {
+            into.Clear();
+            foreach (FormationDefinition d in shapes)
+                if (!into.Contains(d.Family)) into.Add(d.Family);
+        }
+
         private FormationDefinition Step(bool sameFamily)
         {
             int i = all.IndexOf(Current);

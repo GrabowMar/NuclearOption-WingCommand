@@ -100,5 +100,31 @@ namespace WingCommand.PureTests
             sel.Spacing = SpacingPreset.Close;
             Assert.Equal(160f, sel.SpacingMetres);
         }
+
+        [Fact]
+        public void SuitableListsOnlyShapesForTheCurrentUseInCatalogOrder()
+        {
+            var sel = new FormationSelection(Catalog(), "finger-four-right");
+            var shapes = new List<FormationDefinition>();
+            sel.Suitable(shapes);
+            Assert.NotEmpty(shapes);
+            Assert.All(shapes, d => Assert.True((d.Use & FormationUse.Jet) != 0));
+            Assert.Contains(shapes, d => d.Id == "trail");
+            sel.SetUse(FormationUse.Rotary, "staggered-trail");
+            sel.Suitable(shapes);
+            Assert.All(shapes, d => Assert.True((d.Use & FormationUse.Rotary) != 0));
+        }
+
+        [Fact]
+        public void FamiliesAreDistinctInFirstSeenOrder()
+        {
+            var sel = new FormationSelection(Catalog(), "finger-four-right");
+            var shapes = new List<FormationDefinition>();
+            sel.Suitable(shapes);
+            var families = new List<string>();
+            FormationSelection.Families(shapes, families);
+            Assert.Equal("classic", families[0]);
+            Assert.Equal(families.Count, new HashSet<string>(families).Count);
+        }
     }
 }

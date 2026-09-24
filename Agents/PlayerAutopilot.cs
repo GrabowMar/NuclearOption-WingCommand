@@ -70,6 +70,9 @@ namespace WingCommand
             Announce();
         }
 
+        /// <summary>Spec M7b §3 AP: step a held value (the WMC ± buttons); the hold keeps flying to the new value.</summary>
+        public void Adjust(ApField field, int direction) => ApSteps.Adjust(ref Session.Spec, field, direction);
+
         public void Off()
         {
             Session.Off();
