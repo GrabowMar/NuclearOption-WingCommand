@@ -26,7 +26,7 @@ namespace WingCommand
         private TMP_Text empty;
         private AvButton center, release;
         private WmcContext last;
-        private int armedSlot = -1;
+        private uint armedId;
         private float armedAt;
 
         public WmcWingTab(Dictionary<string, AvButton> controls) => ids = controls;
@@ -81,32 +81,32 @@ namespace WingCommand
         private void Pick(int index)
         {
             if (last == null || index >= last.Count) return;
-            last.Selected = last.Rows[index].Slot;
-            armedSlot = -1;
+            last.SelectedId = last.Rows[index].Id;
+            armedId = 0u;
         }
 
         private void Center()
         {
-            if (last == null || last.Selected < 0) return;
-            WmcMap.Center(last.UnitAt(last.Selected));
+            if (last == null) return;
+            WmcMap.Center(WmcContext.UnitOf(last.SelectedId));
         }
 
         private void Release()
         {
             WmcUi.Order(last, () =>
             {
-                WingMember m = last.MemberAt(last.Selected);
+                WingMember m = last.MemberOf(last.SelectedId);
                 if (m == null) return;
-                if (armedSlot != last.Selected || Time.unscaledTime - armedAt > 3f)
+                if (armedId != last.SelectedId || Time.unscaledTime - armedAt > 3f)
                 {
-                    armedSlot = last.Selected;
+                    armedId = last.SelectedId;
                     armedAt = Time.unscaledTime;
                     WingToast.Show($"Release {WingRows.Number(m.Brain.Slot)}? Press RELEASE again");
                     return;
                 }
-                armedSlot = -1;
+                armedId = 0u;
                 last.Wing.Release(m, "released from WMC");
-                last.Selected = -1;
+                last.SelectedId = 0u;
                 WingToast.Show("Wingman released");
             });
         }
@@ -114,7 +114,8 @@ namespace WingCommand
         public void Refresh(WmcContext c)
         {
             last = c;
-            bool selectedAlive = false;
+            // Review focus 3 / M7b-1 I2: a selected aircraft that died or left drops the selection; renumbering keeps it.
+            if (WingRows.IndexOf(c.Rows, c.Count, c.SelectedId) < 0) c.SelectedId = 0u;
             for (int i = 0; i < rows.Length; i++)
             {
                 RowView v = rows[i];
@@ -122,7 +123,7 @@ namespace WingCommand
                 if (v.Root.activeSelf != on) v.Root.SetActive(on);
                 if (!on) continue;
                 SnapshotMember m = c.Rows[i];
-                Unit u = c.UnitAt(m.Slot);
+                Unit u = WmcContext.UnitOf(m.Id);
                 string callsign = u is Aircraft a && !c.Client ? WingPilotRoster.Of(a)?.Callsign : null;
                 v.Name.text = WingRows.Number(m.Slot) + "  " + (callsign ?? "");
                 v.Sub.text = u != null && u.definition != null ? u.definition.unitName : WmcText.Unknown;
@@ -132,16 +133,12 @@ namespace WingCommand
                                WmcText.Percent(WingRows.Fraction(m.Ammo)) + (flags.Length > 0 ? "  " + flags : "");
                 WmcUi.SetBar(v.Fuel, v.BarWidth, WingRows.Fraction(m.Fuel), WmcUi.Level(WingRows.Fraction(m.Fuel)));
                 WmcUi.SetBar(v.Ammo, v.BarWidth, WingRows.Fraction(m.Ammo), WmcUi.Level(WingRows.Fraction(m.Ammo)));
-                bool selected = m.Slot == c.Selected;
-                if (selected) selectedAlive = true;
-                v.Select.color = selected ? AvTheme.SurfaceRaised : AvTheme.SurfaceInert;
+                v.Select.color = m.Id == c.SelectedId ? AvTheme.SurfaceRaised : AvTheme.SurfaceInert;
             }
-            // Review focus 3: a selected member that died or left drops the selection.
-            if (!selectedAlive) c.Selected = -1;
             empty.gameObject.SetActive(c.Count == 0);
             empty.text = c.Client && c.Stale ? "Waiting for the host's wing." : "No wingmen yet.";
-            center.SetEnabled(c.Selected >= 0);
-            release.SetEnabled(c.Selected >= 0 && c.CanOrder);
+            center.SetEnabled(c.SelectedId != 0u);
+            release.SetEnabled(c.SelectedId != 0u && c.CanOrder);
         }
     }
 }

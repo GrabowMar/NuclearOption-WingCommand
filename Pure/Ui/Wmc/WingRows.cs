@@ -36,6 +36,19 @@ namespace WingCommand
 
         public static float Fraction(byte b) => b / 255f;
 
+        /// <summary>A fill fraction: NaN (nobody) → 0, clamped to 0–1 (review M7b-1 I1).</summary>
+        public static float Bar(float fraction) => float.IsNaN(fraction) ? 0f : fraction < 0f ? 0f : fraction > 1f ? 1f : fraction;
+
+        /// <summary>The row of the aircraft with persistent id <paramref name="id"/>, or -1 (0 is no aircraft). Slots
+        /// renumber when a member leaves; the id does not (review M7b-1 I2).</summary>
+        public static int IndexOf(SnapshotMember[] rows, int count, uint id)
+        {
+            if (id == 0u) return -1;
+            for (int i = 0; i < count; i++)
+                if (rows[i].Id == id) return i;
+            return -1;
+        }
+
         /// <summary>The metric row: the lowest fuel and ammo (NaN for nobody) and whether anyone is at bingo.</summary>
         public static WingSummary Summary(SnapshotMember[] rows, int count)
         {

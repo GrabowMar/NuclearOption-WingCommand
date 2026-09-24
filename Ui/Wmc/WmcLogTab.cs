@@ -44,7 +44,7 @@ namespace WingCommand
         {
             // Review focus 4: the slot may have renumbered or gone; UnitAt returns null and Center does nothing.
             if (last == null || members == null || i >= members.Length || members[i] < 0) return;
-            WmcMap.Center(last.UnitAt(members[i]));
+            WmcMap.Center(last.UnitAtSlot(members[i]));
         }
 
         public void Refresh(WmcContext c)

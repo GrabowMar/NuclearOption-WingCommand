@@ -16,25 +16,29 @@ namespace WingCommand
         public int Count;
         public bool Client, Stale;
         public float MissionTime;
-        /// <summary>The selected member's slot on the WING tab, -1 for none.</summary>
-        public int Selected = -1;
+        /// <summary>The selected aircraft's persistent id on the WING tab, 0 for none (slots renumber; review M7b-1 I2).</summary>
+        public uint SelectedId;
 
         /// <summary>Orders run on the host (client orders are M6c-2).</summary>
         public bool CanOrder => !Client && Wing != null && Wing.Selection != null;
 
-        public WingMember MemberAt(int slot)
+        /// <summary>The live member flying the aircraft with this persistent id (host only), or null.</summary>
+        public WingMember MemberOf(uint id)
         {
-            if (Wing == null || slot < 0) return null;
+            if (Wing == null || id == 0u) return null;
             foreach (WingMember m in Wing.Members)
-                if (!m.Released && m.Brain.Slot == slot) return m;
+                if (!m.Released && m.Aircraft != null && m.Aircraft.persistentID.Id == id) return m;
             return null;
         }
 
-        /// <summary>The aircraft of the row at a slot (host or client), or null.</summary>
-        public Unit UnitAt(int slot)
+        /// <summary>The aircraft with this persistent id, or null.</summary>
+        public static Unit UnitOf(uint id) => id != 0u && new PersistentID { Id = id }.TryGetUnit(out Unit u) ? u : null;
+
+        /// <summary>The aircraft of the row flying a slot now (host or client), or null.</summary>
+        public Unit UnitAtSlot(int slot)
         {
             for (int i = 0; i < Count; i++)
-                if (Rows[i].Slot == slot && new PersistentID { Id = Rows[i].Id }.TryGetUnit(out Unit u)) return u;
+                if (Rows[i].Slot == slot) return UnitOf(Rows[i].Id);
             return null;
         }
     }

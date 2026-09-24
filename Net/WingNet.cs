@@ -49,6 +49,10 @@ namespace WingCommand
         /// <summary>This client's copy of its wing (null until the first snapshot).</summary>
         public static WingMirror Mirror { get; private set; }
 
+        /// <summary>This game is a client of someone else's server (review M7b-1 I3); false until the manager is found.</summary>
+        public static bool ClientOnly => manager != null &&
+            NetRole.ClientOnly(manager.Server != null && manager.Server.Active, manager.Client != null && manager.Client.Active);
+
         private static bool hooked;
         private static NetworkManagerNuclearOption manager;
         private static float helloClock, snapshotClock, findClock = float.MaxValue;

@@ -65,6 +65,30 @@ namespace WingCommand.PureTests
         }
 
         [Fact]
+        public void BarIsZeroForUnknownAndClamped()
+        {
+            // Review M7b-1 I1: an empty wing's NaN summary must not reach a fill's geometry.
+            Assert.Equal(0f, WingRows.Bar(float.NaN));
+            Assert.Equal(1f, WingRows.Bar(1.5f));
+            Assert.Equal(0f, WingRows.Bar(-1f));
+            Assert.Equal(0.4f, WingRows.Bar(0.4f), 3);
+        }
+
+        [Fact]
+        public void IndexOfFollowsTheAircraftWhenSlotsRenumber()
+        {
+            // Review M7b-1 I2: the selection is an aircraft, not a slot.
+            var rows = new[] { M(0, MemberDuty.Formation), M(1, MemberDuty.Formation), M(2, MemberDuty.Formation) };
+            uint third = rows[2].Id;
+            Assert.Equal(2, WingRows.IndexOf(rows, 3, third));
+            rows[0] = rows[2];
+            rows[0].Slot = 0;   // #2 died: the old #4 now flies slot 0
+            Assert.Equal(0, WingRows.IndexOf(rows, 1, third));
+            Assert.Equal(-1, WingRows.IndexOf(rows, 1, rows[1].Id + 99u));
+            Assert.Equal(-1, WingRows.IndexOf(rows, 3, 0u));
+        }
+
+        [Fact]
         public void TextHelpersUseInvariantUnitsAndADashForUnknown()
         {
             Assert.Equal("1:05", WmcText.Clock(65.4f));

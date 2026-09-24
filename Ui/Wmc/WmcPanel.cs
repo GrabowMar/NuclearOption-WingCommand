@@ -103,7 +103,7 @@ namespace WingCommand
             shell = null;
             tabs = null;
             controls.Clear();
-            context.Selected = -1;
+            context.SelectedId = 0u;
             nextAttempt = nextRefresh = 0f;
             gaveUp = false;
         }
@@ -237,10 +237,10 @@ namespace WingCommand
         private void Fill()
         {
             WingService wing = WingService.Instance;
-            Aircraft player = wing?.Player;
             context.Wing = wing;
-            // A client flies an aircraft the host simulates; its wing arrives as the host's snapshot (spec M6 §8).
-            context.Client = player != null && !player.IsServer;
+            // A client's wing is the host's: its rows arrive as the host's snapshot (spec M6 §8). The role decides, not the
+            // aircraft: a client that has not spawned has none (review M7b-1 I3).
+            context.Client = WingNet.ClientOnly;
             context.MissionTime = wing?.MissionTime ?? 0f;
             if (!context.Client)
             {
@@ -260,9 +260,9 @@ namespace WingCommand
             if (shell == null || tabs == null) return;
             Fill();
             WingSummary s = WingRows.Summary(context.Rows, context.Count);
-            shell.Metrics[0].Set(WmcText.Percent(s.MinFuel).TrimEnd('%'), s.Bingo ? "BINGO" : "", s.MinFuel,
+            shell.Metrics[0].Set(WmcText.Percent(s.MinFuel).TrimEnd('%'), s.Bingo ? "BINGO" : "", WingRows.Bar(s.MinFuel),
                 WmcUi.Level(float.IsNaN(s.MinFuel) ? 1f : s.MinFuel));
-            shell.Metrics[1].Set(WmcText.Percent(s.MinAmmo).TrimEnd('%'), "", s.MinAmmo,
+            shell.Metrics[1].Set(WmcText.Percent(s.MinAmmo).TrimEnd('%'), "", WingRows.Bar(s.MinAmmo),
                 WmcUi.Level(float.IsNaN(s.MinAmmo) ? 1f : s.MinAmmo));
             shell.Metrics[2].Set(s.Count + "/" + WingService.MaxMembers, "", s.Count / (float)WingService.MaxMembers, AvTheme.Friendly);
 
