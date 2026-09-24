@@ -12,7 +12,7 @@ namespace WingCommand
     internal static class SnapshotBuilder
     {
         /// <summary>A 0–1 fraction as 0–255 (NaN and anything below 0 → 0, above 1 → 255).</summary>
-        public static byte Fraction(float f) => f > 0f ? (byte)Math.Min(255, (int)(f * 255f + 0.5f)) : (byte)0;
+        public static byte Fraction(float f) => f >= 1f ? (byte)255 : f > 0f ? (byte)(f * 255f + 0.5f) : (byte)0;
 
         public static SnapshotMember Member(uint id, int slot, byte behaviour, MemberDuty duty, float fuel, float ammo,
             bool fallingBehind, bool bingo, bool joker, bool winchester)

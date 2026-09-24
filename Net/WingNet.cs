@@ -50,7 +50,8 @@ namespace WingCommand
         public static WingMirror Mirror { get; private set; }
 
         private static bool hooked;
-        private static float helloClock, snapshotClock;
+        private static NetworkManagerNuclearOption manager;
+        private static float helloClock, snapshotClock, findClock = float.MaxValue;
         private static uint snapshotTick;
         private static readonly SnapshotMember[] snapshotMembers = new SnapshotMember[WcSnapshot.MaxMembers];
         private static readonly byte[] buffer = new byte[Protocol.MaxMessage];
@@ -95,12 +96,14 @@ namespace WingCommand
         public static void Tick(float dt)
         {
             if (Disabled) return;
-            NetworkManagerNuclearOption nm = NetworkManagerNuclearOption.i;
+            NetworkManagerNuclearOption nm = Manager(dt);
             if (nm == null || nm.Server == null || nm.Client == null) return;
             if (!hooked)
             {
                 hooked = true;
                 nm.Server.Started.AddListener(OnServerStarted);
+                nm.Server.Stopped.AddListener(ClearPlayers);
+                nm.Server.Disconnected.AddListener(Forget);
                 nm.Client.Started.AddListener(OnClientStarted);
                 if (nm.Server.Active) OnServerStarted();
                 if (nm.Client.Active) OnClientStarted();
@@ -116,11 +119,41 @@ namespace WingCommand
             Greet(nm.Server, Time.unscaledTime);
         }
 
-        private static void OnServerStarted()
+        /// <summary>The game's manager, looked up once a second until found (review M6c I1: its <c>i</c> getter logs an
+        /// error on every call before the main menu preloads it).</summary>
+        private static NetworkManagerNuclearOption Manager(float dt)
+        {
+            if (manager != null) return manager;
+            if ((findClock += dt) < 1f) return null;
+            findClock = 0f;
+            return manager = UnityEngine.Object.FindObjectOfType<NetworkManagerNuclearOption>();
+        }
+
+        /// <summary>A fault in the transport turns Wing Command networking off (review M6c I2): the AI keeps ticking.</summary>
+        public static void Fail(Exception e)
+        {
+            Disabled = true;
+            Plugin.Logger.LogError($"[Net] Wing Command networking failed and is off until restart: {e}");
+        }
+
+        /// <summary>A player gone from the server is forgotten (review M6c I4: the tables grew for the whole session).</summary>
+        private static void Forget(INetworkPlayer p)
+        {
+            hellos.Remove(p);
+            answered.Remove(p);
+            silent.Remove(p);
+        }
+
+        private static void ClearPlayers()
         {
             hellos.Clear();
             answered.Clear();
             silent.Clear();
+        }
+
+        private static void OnServerStarted()
+        {
+            ClearPlayers();
             NetworkManagerNuclearOption.i.Server.MessageHandler.RegisterHandler<WcToHost>(FromClient, false);
             Plugin.Logger.LogInfo("[Net] host handlers registered");
         }

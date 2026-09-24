@@ -18,6 +18,8 @@ namespace WingCommand.PureTests
         [InlineData(-1f, 0)]
         [InlineData(2f, 255)]
         [InlineData(float.NaN, 0)]
+        [InlineData(float.PositiveInfinity, 255)]   // review M6c I3: (int) of a huge float wraps to int.MinValue
+        [InlineData(1e10f, 255)]
         public void FractionsMapIntoAByteWithoutWrapping(float fraction, int expected) =>
             Assert.Equal((byte)expected, SnapshotBuilder.Fraction(fraction));
 

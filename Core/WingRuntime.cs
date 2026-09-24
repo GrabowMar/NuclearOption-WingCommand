@@ -49,7 +49,14 @@ namespace WingCommand
         private void Update()
         {
             // The network is up before a mission is (the lobby): its hooks and hellos run regardless.
-            WingNet.Tick(Time.unscaledDeltaTime);
+            try
+            {
+                WingNet.Tick(Time.unscaledDeltaTime);
+            }
+            catch (Exception e)
+            {
+                WingNet.Fail(e);   // review M6c I2: a transport fault must not stop the AI's tick
+            }
             bool playable = InPlayableState;
             if (playable != active)
             {
