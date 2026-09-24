@@ -68,6 +68,7 @@ namespace WingCommand
             runtime.Register(new PlayerAutopilot());
             runtime.Register(new WingHotkeys());
             runtime.Register(new WingHudPanel());
+            runtime.Register(new WmcPanel());
             runtime.Register(new DevService());
             go.AddComponent<BridgeState>();
 

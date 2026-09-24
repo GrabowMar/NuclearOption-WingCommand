@@ -24,6 +24,7 @@ namespace WingCommand
         public ConfigEntry<int> MaxWingmen { get; }
         public ConfigEntry<string> CallAirframe { get; }
         public ConfigEntry<bool> ShowHud { get; }
+        public ConfigEntry<bool> ShowWmc { get; }
         public ConfigEntry<float> HudX { get; }
         public ConfigEntry<float> HudY { get; }
         public ConfigEntry<KeyboardShortcut> KeyCallWingman { get; }
@@ -149,6 +150,8 @@ namespace WingCommand
             HudY = c.Bind("Hud", "OffsetY", 0f, new ConfigDescription(
                 "Move the wing strip up (+) or down (-), in HUD pixels.", new AcceptableValueRange<float>(-1000f, 1000f),
                 new ConfigurationManagerAttributes { Order = 78 }));
+            ShowWmc = c.Bind("Wmc", "Show", true, new ConfigDescription(
+                "Show the WMC panel on a map bezel button (maximized map).", null, new ConfigurationManagerAttributes { Order = 70 }));
 
             KeyCallWingman = Key(c, "CallWingman", "Call one wingman (Wing/CallAirframe, or your type).", 50);
             KeyFormUp = Key(c, "FormUp", "Every wingman rejoins now.", 49);
