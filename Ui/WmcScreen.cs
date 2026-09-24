@@ -585,6 +585,8 @@ namespace WingCommand
             float stripY = -(panelHeight - Pad - StatusStripHeight);
             for (int i = 0; i < PageCount; i++)
                 PinStatusStrip(pageRoots[i], stripY, (Page)i);
+
+            AvDisplayGlass.Attach(contentRt);
         }
 
         /// <summary>Tallest laid-out ancestor of the template, capped at the shared Boscali ceiling.</summary>

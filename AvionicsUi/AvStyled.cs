@@ -32,8 +32,11 @@ namespace NOAvionics.Ui
                                    AvStyleHost.ResolveSprite(style.Sprite));
             }
 
+            // Styled boxes never need four independently movable edges. One cached
+            // sliced frame keeps the same border cue with fewer Canvas objects.
             if (style.Border.HasValue && style.BorderWidth > 0f)
-                AvKit.Outline(parent, area, AvStyleHost.Resolve(style.Border, AvTheme.Hairline));
+                AvKit.Panel(parent, area, AvStyleHost.Resolve(style.Border, AvTheme.Hairline),
+                            AvSprites.ControlFrame);
 
             if (style.HasTicks && style.Ticks)
                 AvKit.CornerTicks(parent, area, AvStyleHost.Resolve(style.Border, AvTheme.Hairline));
@@ -192,11 +195,15 @@ namespace NOAvionics.Ui
         {
             Box(parent, area, "databar");
 
-            bool twoRows = area.height >= 48f;
+            bool twoRows = area.height >= AvTokens.ScreenHeaderHeight;
             float titleHeight = twoRows ? 26f : area.height;
+            if (twoRows)
+                AvKit.Rule(parent, new Rect(area.x, area.y - titleHeight - 1f, area.width, 1f),
+                           AvTheme.Frame.WithAlpha(0.72f));
             float tagWidth = 20f + id.Length * 9f;
-            AvKit.Rule(parent, new Rect(area.x, area.y - 4f, 2f, titleHeight - 8f), AvTheme.Accent);
-            Label(parent, new Rect(area.x + 6f, area.y, tagWidth - 6f, titleHeight), id, "id-tag",
+            Box(parent, new Rect(area.x, area.y, tagWidth, titleHeight), "id-plate");
+            AvKit.Rule(parent, new Rect(area.x, area.y, 3f, titleHeight), AvTheme.RailInfo);
+            Label(parent, new Rect(area.x + 5f, area.y, tagWidth - 5f, titleHeight), id, "id-tag",
                   align: TextAlignmentOptions.Center);
 
             var bar = new DataBar
@@ -205,6 +212,10 @@ namespace NOAvionics.Ui
                 ChipBoxes = new Image[chipCount],
                 ChipRails = new Image[chipCount],
             };
+            if (twoRows)
+                bar.PageIndex = Label(parent,
+                    new Rect(area.x + area.width - 48f, area.y, 48f, titleHeight),
+                    "", "databar-state-key", align: TextAlignmentOptions.MidlineRight);
 
             const float preferredChipWidth = 82f;
             const float chipGap = AvTokens.Space1;
@@ -216,7 +227,8 @@ namespace NOAvionics.Ui
             float chipsWidth = chipCount * chipWidth + gapsWidth;
             float chipsX = twoRows ? area.x : area.x + area.width - chipsWidth;
             float stateX = area.x + tagWidth + stateGap;
-            float stateRight = twoRows || chipCount == 0 ? area.x + area.width : chipsX - stateGap;
+            float stateRight = twoRows ? area.x + area.width - 54f
+                : chipCount == 0 ? area.x + area.width : chipsX - stateGap;
             bar.State = Label(parent,
                               new Rect(stateX, area.y, Mathf.Max(0f, stateRight - stateX), titleHeight),
                               "", "databar-state");
@@ -251,9 +263,16 @@ namespace NOAvionics.Ui
         public sealed class DataBar
         {
             public TMP_Text State;
+            public TMP_Text PageIndex;
             public TMP_Text[] Chips;
             public Image[] ChipBoxes;
             public Image[] ChipRails;
+
+            public void SetPageIndex(int index, int count)
+            {
+                if (PageIndex != null)
+                    PageIndex.text = (index + 1).ToString("00") + "/" + count.ToString("00");
+            }
 
             /// <summary>Set a chip's text and whether it reads as live.</summary>
             public void SetChip(int index, string text, bool live)
@@ -365,6 +384,7 @@ namespace NOAvionics.Ui
             AvStyle style = AvStyleHost.Style("status");
             float padL = style.HasPad ? style.PadLeft : 14f;
             float padT = style.HasPad ? style.PadTop : 9f;
+            AvKit.Rule(parent, new Rect(area.x, area.y, area.width, 1f), AvTheme.Frame.WithAlpha(0.72f));
             rail = AvKit.Rule(parent, new Rect(area.x, area.y, 3f, area.height), AvTheme.RailInert);
 
             return Label(parent,

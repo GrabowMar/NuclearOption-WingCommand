@@ -19,18 +19,18 @@
 
 :root {
   /* Neutral surfaces; only operational state wears the live game palette. */
-  ground:             #06090A fb;
-  surface-sunken:     #080B0D f8;
-  surface:            #0C1113 fa;
-  surface-raised:     #131A1C fa;
-  surface-inert:      #080B0D f0;
-  band:               #FFFFFF 04;
-  surface-track:      #FFFFFF 14;
+  ground:             #050A0F fb;
+  surface-sunken:     #070E14 f8;
+  surface:            #0A141C fa;
+  surface-raised:     #12222C fa;
+  surface-inert:      #081218 f5;
+  band:               #8ED6E8 08;
+  surface-track:      #679AAC 2A;
 
   /* --- Structural Edges & Bezel Framing --- */
-  border-subtle:      #2E3B40 80;
-  hairline:           #2E3B40 a6;
-  frame:              #475C63 d9;
+  border-subtle:      #2B4F5B a6;
+  hairline:           #36606D c7;
+  frame:              #5A9EAF e6;
   border-active:      accent;
 
   /* State follows the player's vanilla theme. Info remains a quiet blue-grey. */
@@ -38,7 +38,7 @@
   rail-caution:       warning;
   rail-danger:        alert;
   rail-info:          #80C2D9;
-  rail-inert:         #40545C a6;
+  rail-inert:         #3D5660 a6;
 
   /* --- Calibrated Phosphor Bloom & Washes --- */
   rail-ready-glow:    accent 14;
@@ -51,9 +51,9 @@
   rail-info-edge:     #80C2D9 80;
 
   /* --- Photopic Typography & Ink --- */
-  text-primary:       #EBF2F5;
-  text-dim:           #ADBFC7;
-  text-muted:         #788F99;
+  text-primary:       #EDF8FA;
+  text-dim:           #BCD8DE;
+  text-muted:         #7796A1;
   ink:                #010C06;
 
   /* --- Panel Geometry --- */
@@ -66,38 +66,39 @@
 
 /* Fill fades from ground-dark to see-through over the panel's own bottom
    stretch (baked into the "panel" sprite, not tunable from here). */
-.panel        { sprite: panel; border: 1 frame; ticks: off; }
+.panel        { sprite: panel; border: 1 frame; ticks: on; }
 
 /* The spine: refined into an elegant structural rail rather than a glaring laser bar,
    with crisp accent ticks at section heads. */
-.spine        { width: 1; background: hairline; }
-.spine-tick   { width: 5; height: 1; background: frame; }
+.spine        { width: 1; background: frame; }
+.spine-tick   { width: 7; height: 2; background: rail-info; }
 
 /* ------------------------------------------------------------ 2. sections */
 
-.section      { pad: 10 12; gap: 8; }
+.section      { pad: 11 12; gap: 9; }
 .section.band { background: band; }
 
 /* Section headers sit one step above body copy: 11px bold, no more tracking than the
    data under them so they read as headings instead of faint decoration. */
-.section-title      { font: 11 bold; color: text-primary; tracking: 1; }
+.section-title      { font: 11 bold; color: rail-info; tracking: 1; }
 .section-title-note  { font: 11; color: text-dim; tracking: 0; }
 
 /* ------------------------------------------------------- 2b. page heading */
 
 /* The panel's own headline: large enough to name the page at a glance, with a
    tracked subtitle under it. Sits above the scroll area and never moves. */
-.page-title    { font: 18 bold; color: text-primary; tracking: 1; }
+.page-title    { font: 18 bold; color: text-primary; tracking: 0; }
 .page-subtitle { font: 11; color: text-dim; tracking: 0; }
 
 /* ------------------------------------------------------------ 4. data bar */
 
 .databar           { height: 54; }
-.id-tag            { color: text-primary; font: 14 bold; tracking: 2; align: center; }
-.databar-state     { font: 13; color: text-dim; tracking: 1; }
+.id-plate          { background: surface-raised; border: 1 frame; }
+.id-tag            { color: text-primary; font: 14 bold; tracking: 1; align: center; }
+.databar-state     { font: 13; color: text-primary; tracking: 0; }
 .databar-state-key { font: 13 bold; color: text-primary; tracking: 1; }
 
-.chip        { font: 11; color: text-dim; tracking: 0; background: surface-raised; }
+.chip        { font: 11; color: text-dim; tracking: 0; background: surface-inert; }
 .chip.live   { color: text-primary; }
 .chip.warn   { color: warning; }
 .chip.danger { color: alert; }
@@ -106,9 +107,9 @@
 
 /* -------------------------------------------------------------- 5. metrics */
 
-.metrics       { height: 64; background: surface; }
-.metric        { pad: 4 10; background: surface; }
-.metric-key    { font: 10.5; color: text-dim; tracking: 0; }
+.metrics       { height: 64; background: surface-sunken; }
+.metric        { pad: 4 10; background: surface-inert; }
+.metric-key    { font: 10.5; color: rail-info; tracking: 0; }
 .metric-value  { font: 21 bold; color: text-primary; tabular: on; tracking: 0; }
 .metric-unit   { font: 10.5; color: text-dim; tracking: 0; }
 .metric-cap    { font: 10.5; color: text-dim; tracking: 0; align: right; }
@@ -122,16 +123,16 @@
 /* ----------------------------------------------------------------- 6. tabs */
 
 .tabbar      { height: 30; border: 1 hairline; background: surface-sunken; }
-.tab         { font: 11 bold; color: text-dim; tracking: 1; background: surface-sunken; border: 1 hairline; align: center; }
-.tab:hover   { color: text-primary; background: #0E1E2C c0; border: 1 accent 80; }
-.tab:latched { color: text-primary; background: accent 28; border: 1 accent; rail: 2 accent; }
+.tab         { font: 11 bold; color: text-dim; tracking: 0; background: surface-sunken; border: 1 hairline; align: center; }
+.tab:hover   { color: text-primary; background: surface; border: 1 frame; }
+.tab:latched { color: text-primary; background: surface-raised; border: 1 frame; rail: 2 accent; }
 
 /* ------------------------------------------------------------ 7. list rows */
 
 /* Rows size to their own copy. This is what ends the ellipsis: a description
    that needs two lines gets two lines instead of being cut. */
-.row          { pad: 8 12; gap: 8; background: surface; }
-.row:hover    { background: surface-raised; border: 1 hairline; }
+.row          { pad: 8 12; gap: 8; background: surface-inert; }
+.row:hover    { background: surface-raised; border: 1 frame; }
 .row:armed    { background: rail-ready-glow; border: 1 rail-ready-edge; }
 .row:disabled { color: text-muted; border: 1 border-subtle 40; background: surface-inert; }
 
@@ -187,8 +188,8 @@
 /* ------------------------------------------------------------- 8. controls */
 
 .btn, .button, .toggle { font: 11 bold; color: text-primary; tracking: 0; border: 1 frame;
-                         background: surface-raised; sprite: control; align: center; }
-.btn:hover             { color: text-primary; border: 1 accent; background: #132435 f0; }
+                         background: surface-inert; sprite: control; align: center; }
+.btn:hover             { color: text-primary; border: 1 rail-info; background: surface-raised; }
 .btn:latched           { color: text-primary; background: accent 40; border: 1 accent; }
 .btn:disabled          { color: text-muted; border: 1 hairline 40; background: surface-inert; }
 .btn.confirm           { color: ink; background: rail-ready; border: 1 #FFFFFF 99; font: 11 bold; }
@@ -200,7 +201,7 @@
 
 /* -------------------------------------------------------- 9. status strip */
 
-.status       { height: 56; background: surface; pad: 8 12; }
+.status       { height: 56; background: ground; pad: 8 12; }
 .status-text  { font: 12; color: text-dim; wrap: on; tracking: 0; }
 .status.armed { border: 1 rail-caution-edge; background: #140E04 f0; }
 .status.alert { border: 1 rail-danger-edge; background: #140505 f0; }
@@ -209,8 +210,8 @@
 
 /* Kept for the surfaces that genuinely are objects — a pilot dossier, a
    now-playing card. Ordinary groups use .section instead. */
-.card         { background: surface-raised; border: 1 hairline; pad: 12; gap: 8; }
-.card:hover   { background: #0C1A28 f8; border: 1 frame; }
+.card         { background: surface; border: 1 frame; pad: 12; gap: 8; }
+.card:hover   { background: surface-raised; border: 1 frame; }
 .card.inert   { background: surface-inert; border: 1 hairline 40; }
 .card.focused { border: 1 accent; background: surface-raised; }
 
@@ -250,3 +251,40 @@
    tunable from here) plus a hairline edge, so the rows read as an instrument
    instead of as green text floating over the terrain. */
 .stock-panel   { background: surface-sunken; border: 1 hairline; }
+
+/* ------------------------------------------------ 13. OPS rooms (additive) */
+
+/* Each room owns its surface and ink. Existing classes above are untouched.
+   Body ink is at least 4.5:1 on its surface; rules and accents at least 3:1. */
+
+.room-space-surface { background: #07141F; color: #EAF2F5; }
+.room-space-line    { color: #7FB4D6; border: 1 #7FB4D6; }
+.room-space-ink     { color: #EAF2F5; font: 12; tracking: 8; }
+.room-space-display { color: #EAF2F5; font: 28; tracking: 12; }
+.room-space-limb    { color: #6EBEDE; background: #123044; }
+.room-space-dim     { color: #9DB7C7; font: 11; tracking: 6; }
+.room-space-console { background: #0B1C2A; color: #EAF2F5; border: 1 #23415A; }
+
+.room-cyber-surface { background: #07090C; color: #D7F5E4; }
+.room-cyber-lattice { color: #3D5A52; border: 1 #3D5A52; }
+.room-cyber-ink     { color: #D7F5E4; font: 12; tracking: 0; }
+.room-cyber-title   { color: #9EE7C2; font: 11 bold; tracking: 4; }
+.room-cyber-accent  { color: #C4B5FD; border: 1 #C4B5FD; }
+.room-cyber-block   { color: #E8FFF2; font: 32 bold; tracking: 0; }
+.room-cyber-pane    { background: #0A0E12; color: #D7F5E4; border: 1 #1F3A33; }
+.room-cyber-bar     { background: #0F1A18; color: #9EE7C2; }
+.room-cyber-dim     { color: #86A89A; font: 11; tracking: 0; }
+
+.room-specops-map { background: #071319; color: #B9D9DE; }
+.room-specops-paper { background: #0D1A22; color: #EDF6F5; border: 1 #55717A; }
+.room-specops-ink { color: #EDF6F5; font: 12; tracking: 0; }
+.room-specops-title { color: #EDF6F5; font: 16 bold; tracking: 2; }
+.room-specops-stamp { color: #FFC36A; font: 11 bold; tracking: 2; border: 1 #FFC36A; }
+.room-specops-khaki { color: #B2C8C9; border: 1 #55717A; }
+.room-specops-banner { background: #14242C; color: #EDF6F5; font: 11 bold; tracking: 3; }
+.room-specops-tape { background: #315562; }
+
+.room-imager-ink  { color: #E8FF8A; font: 12; tracking: 6; }
+.room-imager-halo { color: #07110C; background: #07110C c0; }
+.room-imager-pod  { background: #07110C; color: #E8FF8A; border: 1 #E8FF8A; }
+.room-imager-dim  { color: #B9CC6E; font: 11; tracking: 4; }
