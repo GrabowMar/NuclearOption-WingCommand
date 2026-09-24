@@ -18,16 +18,24 @@ namespace WingCommand
     /// the need plus <see cref="ClearMargin"/>) clears it.</summary>
     internal sealed class BingoMonitor
     {
-        public static float RateTau = 60f, ReserveFraction = 0.1f, ClearMargin = 0.05f, MinSpeed = 50f;
+        public static float RateTau = 60f, ReserveFraction = 0.1f, ClearMargin = 0.05f, MinSpeed = 50f, JokerMargin = 0.15f;
 
-        private float lastFuel = float.NaN, rate = float.NaN;
+        private float lastFuel = float.NaN, rate = float.NaN, need;
 
         public bool Bingo { get; private set; }
         public float BurnRate => rate;
+        /// <summary>Fuel within <see cref="JokerMargin"/> of bingo (spec M5 §6.2); cleared by a refuel as bingo is.</summary>
+        public bool Joker { get; private set; }
+        /// <summary>True on the check Joker is first reached (not when the fuel went straight past bingo).</summary>
+        public bool JokerNow { get; private set; }
+
+        /// <summary>Seconds until bingo at the learned burn rate (+inf before a rate is learned).</summary>
+        public float SecondsToBingo => float.IsNaN(rate) || rate <= 0f ? float.PositiveInfinity : (lastFuel - need) / rate;
 
         /// <summary>True on the tick bingo is first reached.</summary>
         public bool Update(float fuel, float distanceToField, float speed, float dt)
         {
+            JokerNow = false;
             if (!float.IsNaN(lastFuel) && dt > 0f)
             {
                 float instant = Math.Max(0f, (lastFuel - fuel) / dt);
@@ -36,6 +44,13 @@ namespace WingCommand
             lastFuel = fuel;
             if (float.IsNaN(rate) || rate <= 0f) return false;
             float needed = rate * distanceToField / Math.Max(speed, MinSpeed) + ReserveFraction;
+            need = needed;
+            if (Joker && fuel > needed + JokerMargin + ClearMargin) Joker = false;
+            if (!Joker && fuel < needed + JokerMargin)
+            {
+                Joker = true;
+                JokerNow = fuel >= needed;
+            }
             if (Bingo && fuel > needed + ClearMargin) Bingo = false;
             if (Bingo || fuel >= needed) return false;
             Bingo = true;

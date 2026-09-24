@@ -72,5 +72,24 @@ namespace WingCommand.PureTests
 
         [Fact]
         public void NothingEngagedShowsNothing() => Assert.Equal("", WingHudText.Autopilot(default, false, false));
+
+        [Fact]
+        public void DutyShowsFightAndRecovery()
+        {
+            Assert.Equal("FIGHT", WingHudText.Duty(true, false, RecoveryIntent.Rtb));
+            Assert.Equal("RTB", WingHudText.Duty(false, true, RecoveryIntent.Rtb));
+            Assert.Equal("REFIT", WingHudText.Duty(false, true, RecoveryIntent.Refit));
+            Assert.Null(WingHudText.Duty(false, false, RecoveryIntent.Rtb));
+        }
+
+        [Fact]
+        public void BingoTimeShowsUnderTenMinutes()
+        {
+            Assert.Equal("B 4:05", WingHudText.BingoTime(245f));
+            Assert.Equal("", WingHudText.BingoTime(600f));
+            Assert.Equal("", WingHudText.BingoTime(float.PositiveInfinity));
+            Assert.Equal("B 0:00", WingHudText.BingoTime(-3f));
+            Assert.Equal("2  FIGHT   812m  B 4:05", WingHudText.Member(0, "FIGHT", 812f, "", "B 4:05"));
+        }
     }
 }

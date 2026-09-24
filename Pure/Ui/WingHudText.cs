@@ -33,6 +33,23 @@ namespace WingCommand
             return "";
         }
 
+        public static float BingoShowSeconds = 600f;
+
+        /// <summary>FIGHT while engaged, RTB/REFIT while recovering (spec M5 §6.2), else null (the formation phase).</summary>
+        public static string Duty(bool engaged, bool recovering, RecoveryIntent intent) =>
+            engaged ? "FIGHT" : recovering ? (intent == RecoveryIntent.Refit ? "REFIT" : "RTB") : null;
+
+        /// <summary>"B m:ss" to bingo under <see cref="BingoShowSeconds"/>, else empty.</summary>
+        public static string BingoTime(float seconds)
+        {
+            if (!(seconds < BingoShowSeconds)) return "";
+            int s = Math.Max(0, (int)seconds);
+            return string.Format(CultureInfo.InvariantCulture, "B {0}:{1:00}", s / 60, s % 60);
+        }
+
+        public static string Member(int slot, string phase, float slotErrorM, string binding, string bingo) =>
+            Member(slot, phase, slotErrorM, string.IsNullOrEmpty(bingo) ? binding : string.IsNullOrEmpty(binding) ? bingo : bingo + " " + binding);
+
         public static string Member(int slot, string phase, float slotErrorM, string binding) =>
             string.Format(CultureInfo.InvariantCulture, "{0}  {1,-6}{2,5:0}m  {3}", slot + 2, phase, slotErrorM, binding)
                 .TrimEnd();

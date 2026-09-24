@@ -52,5 +52,49 @@ namespace WingCommand.PureTests
             bingo.Update(1f, 50000f, 200f, 1f);   // refitted
             Assert.False(bingo.Bingo);
         }
+
+        [Fact]
+        public void JokerTripsOnceBeforeBingoWithTheTimeLeft()
+        {
+            // burn 0.001/s; 30 km at 200 m/s = 150 s -> need 0.15 + 0.1 reserve = 0.25; Joker below 0.40
+            var b = new BingoMonitor();
+            b.Update(0.500f, 30000f, 200f, 1f);
+            b.Update(0.499f, 30000f, 200f, 1f);
+            Assert.Equal(249f, b.SecondsToBingo, 0);
+            int jokers = 0;
+            float jokerAt = 0f;
+            for (float fuel = 0.498f; fuel > 0.2505f; fuel -= 0.001f)
+            {
+                Assert.False(b.Update(fuel, 30000f, 200f, 1f));
+                if (b.JokerNow) { jokers++; jokerAt = fuel; }
+            }
+            Assert.Equal(1, jokers);
+            Assert.InRange(jokerAt, 0.395f, 0.400f);
+            Assert.True(b.Update(0.2495f, 30000f, 200f, 1f));
+            Assert.False(b.JokerNow);
+        }
+
+        [Fact]
+        public void FuelFallingPastJokerAndBingoAtOnceCallsBingoOnly()
+        {
+            var b = new BingoMonitor();
+            b.Update(0.500f, 30000f, 200f, 1f);
+            b.Update(0.499f, 30000f, 200f, 1f);
+            Assert.True(b.Update(0.2f, 30000f, 200f, 1f));
+            Assert.True(b.Joker);
+            Assert.False(b.JokerNow);
+        }
+
+        [Fact]
+        public void ARefuelClearsJoker()
+        {
+            var b = new BingoMonitor();
+            b.Update(0.40f, 30000f, 200f, 1f);
+            b.Update(0.39f, 30000f, 200f, 1f);   // rate 0.01 -> need 1.6: bingo at once
+            Assert.True(b.Joker);
+            b.Update(1f, 3000f, 200f, 1f);       // refuelled near the field
+            Assert.False(b.Joker);
+            Assert.False(b.Bingo);
+        }
     }
 }
