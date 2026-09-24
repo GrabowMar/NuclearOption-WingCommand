@@ -182,6 +182,43 @@ namespace WingCommand
             WingToast.Show(r.Accepted ? "Wing " + what : "Wing cannot: " + r.Reason);
         }
 
+        public static void Engage()
+        {
+            if (!Ready(out WingService w)) return;
+            int n = w.Engage(null);
+            WingToast.Show(n > 0 ? $"{n} engaging" : "Nobody can engage");
+        }
+
+        /// <summary>The player's selected enemy target for every engaged member.</summary>
+        public static void AttackTarget()
+        {
+            if (!Ready(out WingService w) || w.Player == null) return;
+            Unit target = SelectedEnemy(w.Player);
+            if (target == null)
+            {
+                WingToast.Show("No enemy target selected");
+                return;
+            }
+            int n = w.Engage(target);
+            WingToast.Show(n > 0 ? $"{n} attacking {target.unitName}" : "Nobody can attack");
+        }
+
+        public static void Disengage()
+        {
+            if (!Ready(out WingService w)) return;
+            int n = w.Disengage();
+            WingToast.Show(n > 0 ? $"{n} disengaging" : "Nobody engaged");
+        }
+
+        private static Unit SelectedEnemy(Aircraft player)
+        {
+            List<Unit> targets = player.weaponManager != null ? player.weaponManager.GetTargetList() : null;
+            if (targets == null) return null;
+            foreach (Unit u in targets)
+                if (u != null && !u.disabled && u.NetworkHQ != null && u.NetworkHQ != player.NetworkHQ) return u;
+            return null;
+        }
+
         public static void EscortMe()
         {
             if (!Ready(out WingService w)) return;

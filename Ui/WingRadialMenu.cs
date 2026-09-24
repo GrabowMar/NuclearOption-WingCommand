@@ -13,7 +13,8 @@ namespace WingCommand
     /// <list type="bullet">
     /// <item>Pages are shown by swapping <c>actionsMain</c> and rebuilding the native wheel.</item>
     /// <item>The stock wheel comes back after a leaf action, or 6 s after the wheel closes.</item>
-    /// <item>Pages: Call Wingmen, Form Up, Formation, Spacing, Autopilot, Escort, Recover, Orders (with Dismiss).</item>
+    /// <item>Pages: Call Wingmen, Form Up, Formation, Spacing, Autopilot, Combat, Recover, Orders (with Escort and
+    /// Dismiss).</item>
     /// </list></summary>
     internal static class WingRadialMenu
     {
@@ -21,7 +22,7 @@ namespace WingCommand
         private const float RestoreAfterSeconds = 6f;
 
         private static WingMenuAction rootEntry;
-        private static WingMenuAction[] mainMenu, callMenu, formationMenu, spacingMenu, autopilotMenu, escortMenu, recoverMenu, ordersMenu;
+        private static WingMenuAction[] mainMenu, callMenu, formationMenu, spacingMenu, autopilotMenu, combatMenu, recoverMenu, ordersMenu;
         private static RadialMenuAction[] stockActions;
         private static RadialMenuAction[] baselineWheel;
         private static bool inSubmenu;
@@ -108,7 +109,7 @@ namespace WingCommand
                 Icon(WingMenuAction.Create("Formation", _ => ShowFormation()), "formation"),
                 Icon(WingMenuAction.Create("Spacing", _ => ShowSpacing()), "posture"),
                 Icon(WingMenuAction.Create("Autopilot", _ => ShowAutopilot()), "move"),
-                Icon(WingMenuAction.Create("Escort", _ => Swap(escortMenu, submenu: true)), "selection"),
+                Icon(WingMenuAction.Create("Combat", _ => Swap(combatMenu, submenu: true)), "selection"),
                 Icon(WingMenuAction.Create("Recover", _ => Swap(recoverMenu, submenu: true)), "rtb"),
                 Icon(WingMenuAction.Create("Orders", _ => Swap(ordersMenu, submenu: true)), "move"),
             };
@@ -118,6 +119,8 @@ namespace WingCommand
                 Leaf("Hold Here", WingCommands.HoldHere, "move"),
                 Leaf("Move Ahead", WingCommands.MoveAhead, "move"),
                 Leaf("Patrol Here", WingCommands.PatrolHere, "move"),
+                Leaf("Escort Target", WingCommands.EscortTarget, "selection"),
+                Leaf("Escort Me", WingCommands.EscortMe, "rejoin"),
                 Leaf("Dismiss", WingCommands.Dismiss, "rtb"),
                 Back(),
             };
@@ -127,10 +130,11 @@ namespace WingCommand
                 Leaf("Refit", WingCommands.Refit, "rtb"),
                 Back(),
             };
-            escortMenu = new[]
+            combatMenu = new[]
             {
-                Leaf("Escort Target", WingCommands.EscortTarget, "selection"),
-                Leaf("Escort Me", WingCommands.EscortMe, "rejoin"),
+                Leaf("Engage", WingCommands.Engage, "selection"),
+                Leaf("Attack Target", WingCommands.AttackTarget, "selection"),
+                Leaf("Disengage", WingCommands.Disengage, "rejoin"),
                 Back(),
             };
             callMenu = new[]
@@ -173,7 +177,7 @@ namespace WingCommand
             ApplyAll(formationMenu, template);
             ApplyAll(spacingMenu, template);
             ApplyAll(autopilotMenu, template);
-            ApplyAll(escortMenu, template);
+            ApplyAll(combatMenu, template);
             ApplyAll(recoverMenu, template);
             ApplyAll(ordersMenu, template);
         }

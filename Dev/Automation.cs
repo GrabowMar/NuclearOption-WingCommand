@@ -327,6 +327,38 @@ namespace WingCommand
             return Ok("allocation", player != null ? player.Allocation : -1f);
         }
 
+        /// <summary>Every member flying with the wing engages (args.target: a registered unit id to attack).</summary>
+        public static Dictionary<string, object> Engage(Dictionary<string, object> args)
+        {
+            WingService wing = WingService.Instance;
+            if (wing == null) return Fail("Engage", "the wing is not active");
+            Unit target = Arg(args, "targetUnit") as Unit;
+            int n = wing.Engage(target);
+            Plugin.Logger.LogInfo($"[Automation] Engage: {n} engaged{(target != null ? " on " + target.unitName : "")}");
+            return n > 0 ? Ok("engaged", n) : Fail("Engage", "nobody could engage");
+        }
+
+        public static Dictionary<string, object> Disengage(Dictionary<string, object> args)
+        {
+            WingService wing = WingService.Instance;
+            if (wing == null) return Fail("Disengage", "the wing is not active");
+            return Ok("disengaged", wing.Disengage());
+        }
+
+        /// <summary>Engaged members now, engage/disengage events so far, and native switches the guard redirected.</summary>
+        public static Dictionary<string, object> CombatState(Dictionary<string, object> args)
+        {
+            WingService wing = WingService.Instance;
+            if (wing == null) return Fail("CombatState", "the wing is not active");
+            return new Dictionary<string, object>
+            {
+                { "ok", true }, { "engaged", wing.EngagedCount }, { "members", wing.Members.Count },
+                { "engage_events", wing.Events.CountOf(WingEventKind.Engaged) },
+                { "disengage_events", wing.Events.CountOf(WingEventKind.Disengaged) },
+                { "redirected", SwitchStateGuard.Redirected },
+            };
+        }
+
         /// <summary>What calls have cost this mission: charged, refunded, and the player's allocation now; the squadron's
         /// pilots flying, free and lost; with args.type, the faction's stock of that airframe (−1: unknown).</summary>
         public static Dictionary<string, object> Economy(Dictionary<string, object> args)
