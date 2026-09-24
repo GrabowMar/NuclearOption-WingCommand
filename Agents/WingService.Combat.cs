@@ -80,10 +80,17 @@ namespace WingCommand
 
         /// <summary>The nearest air threat the player's side knows of (spec M7 §1.5 Bogey Dope): the same tracks and threat
         /// test as the outnumbered judge. False when there is none.</summary>
-        public bool NearestAirThreat(Aircraft listener, out Vec3 pos, out Vec3 vel, out string type)
+        public bool NearestAirThreat(Aircraft listener, out Vec3 pos, out Vec3 vel, out string type) =>
+            NearestAirThreat(listener, out pos, out vel, out type, out _);
+
+        /// <summary>The nearest known air threat itself (automation's Splash).</summary>
+        public bool NearestAirThreatUnit(Aircraft listener, out Unit unit) => NearestAirThreat(listener, out _, out _, out _, out unit);
+
+        private bool NearestAirThreat(Aircraft listener, out Vec3 pos, out Vec3 vel, out string type, out Unit unit)
         {
             pos = vel = default;
             type = null;
+            unit = null;
             FactionHQ hq = listener != null ? listener.NetworkHQ : null;
             if (hq == null || hq.trackingDatabase == null) return false;
             Vec3 from = listener.GlobalPosition().ToVec3();
@@ -101,6 +108,7 @@ namespace WingCommand
                 pos = at;
                 vel = enemy.rb != null ? enemy.rb.velocity.ToVec3() : Vec3.Zero;
                 type = enemy.unitName;
+                unit = enemy;
             }
             return type != null;
         }

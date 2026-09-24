@@ -441,6 +441,25 @@ namespace WingCommand
             };
         }
 
+        /// <summary>Splash at the nearest known enemy aircraft to the wing's player or anchor (spec M5 §9.2).</summary>
+        public static Dictionary<string, object> Splash(Dictionary<string, object> args)
+        {
+            WingService wing = WingService.Instance;
+            if (wing == null) return Fail("Splash", "the wing is not active");
+            Aircraft from = wing.Player;
+            if (from == null)
+                foreach (WingMember m in wing.Members)
+                    if (!m.Released && m.Alive)
+                    {
+                        from = m.Aircraft;
+                        break;
+                    }
+            if (from == null || !wing.NearestAirThreatUnit(from, out Unit target)) return Fail("Splash", "no target");
+            int fired = wing.Splash(target, out int capable);
+            Plugin.Logger.LogInfo($"[Automation] Splash on {target.unitName}: {fired} fired, {capable} in envelope");
+            return new Dictionary<string, object> { { "ok", true }, { "fired", fired }, { "capable", capable }, { "shots", wing.SplashShots } };
+        }
+
         /// <summary>Asks for Bogey Dope as the radial entry does.</summary>
         public static Dictionary<string, object> BogeyDope(Dictionary<string, object> args)
         {

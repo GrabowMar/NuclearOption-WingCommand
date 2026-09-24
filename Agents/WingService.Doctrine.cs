@@ -117,6 +117,43 @@ namespace WingCommand
             Plugin.Logger.LogInfo($"[Wing] #{m.Number} fox on {best.unitName} ({Doctrine.PatternName})");
         }
 
+        /// <summary>Spec M5 §9.2 Splash: one guided missile at <paramref name="target"/> from every member flying with the wing
+        /// that has it in a missile's envelope from its slot (engaged members are the combat AI's). Returns how many fired;
+        /// <paramref name="capable"/> is how many had it in envelope.</summary>
+        public int Splash(Unit target, out int capable)
+        {
+            capable = 0;
+            if (target == null || target.disabled) return 0;
+            int fired = 0;
+            foreach (WingMember m in Members)
+            {
+                if (m.Released || !m.Alive || m.Engaged || m.OnGround || m.Recovery != null || m.Settle != null) continue;
+                Aircraft a = m.Aircraft;
+                if (a.weaponStations == null || a.weaponManager == null) continue;
+                Vector3 to = target.GlobalPosition() - a.GlobalPosition();
+                float distance = to.magnitude, off = Vector3.Angle(a.transform.forward, to);
+                foreach (WeaponStation w in a.weaponStations)
+                {
+                    if (!Usable(a, w) || !w.WeaponInfo.missile || w.WeaponInfo.gun || w.WeaponInfo.bomb) continue;
+                    TargetRequirements req = w.WeaponInfo.targetRequirements;
+                    if (!StandingFire.InEnvelope(distance, req.minRange, req.maxRange, target.radarAlt, req.minAltitude, req.maxAltitude, off, req.minAlignment, a.speed, req.minOwnerSpeed)) continue;
+                    if (!w.WeaponInfo.overHorizon && !target.LineOfSight(a.transform.position - Vector3.up * a.definition.spawnOffset.y, 1000f)) continue;
+                    capable++;
+                    if (FireAt(m, w, target, out _))
+                    {
+                        fired++;
+                        Plugin.Logger.LogInfo($"[Wing] #{m.Number} splash on {target.unitName}");
+                    }
+                    break;
+                }
+            }
+            SplashShots += fired;
+            return fired;
+        }
+
+        /// <summary>Missiles fired by Splash this mission (automation reads it).</summary>
+        public int SplashShots { get; private set; }
+
         /// <summary>The game's stock sequence, as 0.9 fired from the slot: the station, the target list (each change sends
         /// the station's targets), the pilot's primary target, then the pilot's fire.</summary>
         private static bool FireAt(WingMember m, WeaponStation station, Unit target, out bool attempted)

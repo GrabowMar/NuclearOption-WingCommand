@@ -233,6 +233,21 @@ namespace WingCommand
             WingToast.Show(n > 0 ? $"{n} attacking {targets.Count} target{plural}" : "Nobody can attack");
         }
 
+        /// <summary>Spec M5 §9.2: one missile from every wingman with your target in envelope.</summary>
+        public static void Splash()
+        {
+            if (!Ready(out WingService w) || w.Player == null) return;
+            List<Unit> targets = SelectedEnemies(w.Player);
+            if (targets.Count == 0)
+            {
+                WingToast.Show("Splash: select a target first");
+                return;
+            }
+            int fired = w.Splash(targets[0], out int capable);
+            WingToast.Show(fired > 0 ? $"Splash: {fired} firing on {targets[0].unitName}"
+                : capable > 0 ? "Splash: launchers not ready" : "Splash: nobody in range");
+        }
+
         public static void ClearMySix()
         {
             if (!Ready(out WingService w) || w.Player == null) return;
