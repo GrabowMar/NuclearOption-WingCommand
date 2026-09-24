@@ -10,6 +10,7 @@ namespace WingCommand
     {
         public string Name;
         public int Ammo, Full;
+        public StoreClass Class;
     }
 
     /// <summary>What the deep card knows about one member (spec WMC program §4); NaN, -1 and null are unknown.</summary>
