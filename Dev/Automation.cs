@@ -552,6 +552,69 @@ namespace WingCommand
             };
         }
 
+        /// <summary>Spec WMC program §5: the map layer as a player drives it — arm a <c>mode</c> (move, route, orbit, hold,
+        /// attack, cargo, off); right-click <c>ahead_km</c>/<c>right_km</c> from the player (or <c>x</c>/<c>z</c>, or the nearest
+        /// known enemy with <c>enemy</c>, <c>shift</c> to queue); press route controls (<c>loop</c>, <c>send</c>, <c>skip</c>,
+        /// <c>save</c>, <c>clear</c>, <c>undo</c>) on ORDERS — then report the mode, the draft, the overlay and the scope's
+        /// task.</summary>
+        public static Dictionary<string, object> WmcMap(Dictionary<string, object> args)
+        {
+            WmcPanel panel = WmcPanel.Instance;
+            WingService wing = WingService.Instance;
+            if (panel == null || wing == null) return Fail("WmcMap", "no WMC panel or wing");
+            WmcContext c = panel.Context;
+            panel.Refresh();
+            string mode = Text(args, "mode");
+            if (!string.IsNullOrEmpty(mode))
+            {
+                if (!Enum.TryParse(mode, true, out MapMode m)) return Fail("WmcMap", "unknown mode " + mode);
+                c.Map.Arm(c, m);
+            }
+            bool shift = Arg(args, "shift") is bool sh && sh;
+            Aircraft player = wing.Player;
+            if (Arg(args, "enemy") is bool enemy && enemy)
+            {
+                if (player == null || !wing.NearestAirThreatUnit(player, out Unit target)) return Fail("WmcMap", "no enemy known");
+                c.Map.Place(c, target.GlobalPosition(), target, shift);
+            }
+            else if (Arg(args, "ahead_km") != null || Arg(args, "right_km") != null)
+            {
+                if (player == null) return Fail("WmcMap", "not flying");
+                float ahead = Kilometres(args, "ahead_km"), right = Kilometres(args, "right_km");
+                GlobalPosition at = player.GlobalPosition();
+                UnityEngine.Vector3 f = player.transform.forward, r = player.transform.right;
+                f.y = r.y = 0f;
+                f.Normalize();
+                r.Normalize();
+                c.Map.Place(c, new GlobalPosition(at.x + f.x * ahead + r.x * right, 0f, at.z + f.z * ahead + r.z * right), null, shift);
+            }
+            else if (Arg(args, "x") != null && Arg(args, "z") != null)
+                c.Map.Place(c, new GlobalPosition(Number(args, "x", 0), 0f, Number(args, "z", 0)), null, shift);
+            int pressed = 0;
+            foreach (string control in new[] { "loop", "send", "skip", "save", "clear", "undo" })
+            {
+                if (!(Arg(args, control) is bool on) || !on) continue;
+                panel.Show(WmcPanel.TabOrders);
+                panel.Refresh();
+                if (panel.Press("orders.route." + control)) pressed++;
+            }
+            panel.Refresh();
+            WingPlanner p = wing.Roster.InUse(c.ScopeElement) ? wing.PlannerOf(c.ScopeElement) : null;
+            return new Dictionary<string, object>
+            {
+                { "ok", true }, { "mode", c.Map.Mode.ToString() }, { "armed", c.Map.Mode != MapMode.Off ? 1 : 0 },
+                { "draft", c.Draft.Count }, { "loop", (int)c.Draft.Loop }, { "pressed", pressed },
+                { "legs", panel.Overlay.LegCount }, { "rings", panel.Overlay.RingCount }, { "routes", WmcRoutes.Store.Routes.Count },
+                { "scope", c.ScopeLabel }, { "scope_element", c.ScopeElement },
+                { "patrolling", p != null && p.Active && p.Current.Kind == TaskKind.Patrol ? 1 : 0 },
+                { "moving", p != null && p.Active && p.Current.Kind == TaskKind.Move ? 1 : 0 },
+                { "last", WingToast.Last ?? "" },
+            };
+        }
+
+        private static float Kilometres(Dictionary<string, object> args, string key) =>
+            Arg(args, key) is object v ? (float)Convert.ToDouble(v, CultureInfo.InvariantCulture) * 1000f : 0f;
+
         public static Dictionary<string, object> Disengage(Dictionary<string, object> args)
         {
             WingService wing = WingService.Instance;

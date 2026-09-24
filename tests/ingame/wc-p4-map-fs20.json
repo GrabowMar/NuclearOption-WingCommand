@@ -1,0 +1,231 @@
+{
+  "name": "wc-p4-map-fs20",
+  "mods": [
+    "wingcommand"
+  ],
+  "timeout_s": 180,
+  "ops": [
+    {
+      "op": "spawn",
+      "id": "lead",
+      "type": "FS-20 Vortex",
+      "at": {
+        "map": [
+          0,
+          0
+        ]
+      },
+      "altitude": 3000,
+      "speed": 200,
+      "heading": 0
+    },
+    {
+      "op": "fly",
+      "id": "lead",
+      "program": [
+        {
+          "level": 280
+        }
+      ]
+    },
+    {
+      "op": "wait",
+      "seconds": 2
+    },
+    {
+      "op": "call",
+      "method": "WingCommand.Automation.FormOn",
+      "store": "form",
+      "args": {
+        "lead": "lead",
+        "count": 4,
+        "shape": "finger-four-right",
+        "spacing": "Standard"
+      }
+    },
+    {
+      "op": "wait",
+      "seconds": 45
+    },
+    {
+      "op": "call",
+      "method": "WingCommand.Automation.Wmc",
+      "store": "open",
+      "args": {
+        "open": true,
+        "tab": 1
+      }
+    },
+    {
+      "op": "wait",
+      "seconds": 2
+    },
+    {
+      "op": "call",
+      "method": "WingCommand.Automation.Wmc",
+      "store": "sel",
+      "args": {
+        "select": [
+          4,
+          5
+        ]
+      }
+    },
+    {
+      "op": "call",
+      "method": "WingCommand.Automation.WmcMap",
+      "store": "move",
+      "args": {
+        "mode": "move",
+        "ahead_km": 8
+      }
+    },
+    {
+      "op": "wait",
+      "seconds": 3
+    },
+    {
+      "op": "call",
+      "method": "WingCommand.Automation.Elements",
+      "store": "elements_move"
+    },
+    {
+      "op": "call",
+      "method": "WingCommand.Automation.WmcMap",
+      "store": "after_move"
+    },
+    {
+      "op": "call",
+      "method": "WingCommand.Automation.WmcMap",
+      "store": "r1",
+      "args": {
+        "mode": "route",
+        "ahead_km": 10
+      }
+    },
+    {
+      "op": "call",
+      "method": "WingCommand.Automation.WmcMap",
+      "store": "r2",
+      "args": {
+        "ahead_km": 15,
+        "right_km": 5
+      }
+    },
+    {
+      "op": "call",
+      "method": "WingCommand.Automation.WmcMap",
+      "store": "r3",
+      "args": {
+        "ahead_km": 10,
+        "right_km": 10
+      }
+    },
+    {
+      "op": "call",
+      "method": "WingCommand.Automation.WmcMap",
+      "store": "loop",
+      "args": {
+        "loop": true
+      }
+    },
+    {
+      "op": "call",
+      "method": "WingCommand.Automation.WmcMap",
+      "store": "send",
+      "args": {
+        "send": true
+      }
+    },
+    {
+      "op": "wait",
+      "seconds": 3
+    },
+    {
+      "op": "call",
+      "method": "WingCommand.Automation.WmcMap",
+      "store": "patrol"
+    },
+    {
+      "op": "call",
+      "method": "WingCommand.Automation.WmcMap",
+      "store": "skip",
+      "args": {
+        "skip": true
+      }
+    },
+    {
+      "op": "call",
+      "method": "WingCommand.Automation.WmcMap",
+      "store": "off",
+      "args": {
+        "mode": "off"
+      }
+    },
+    {
+      "op": "call",
+      "method": "WingCommand.Automation.Wmc",
+      "store": "form_up",
+      "args": {
+        "press": "orders.form"
+      }
+    },
+    {
+      "op": "wait",
+      "seconds": 20
+    },
+    {
+      "op": "call",
+      "method": "WingCommand.Automation.Elements",
+      "store": "elements_end"
+    },
+    {
+      "op": "end"
+    }
+  ],
+  "checks": [
+    {
+      "check": "status_ok"
+    },
+    {
+      "check": "result_above",
+      "path": "form.spawned",
+      "min": 3
+    },
+    {
+      "check": "result_above",
+      "path": "elements_move.b",
+      "min": 1
+    },
+    {
+      "check": "result_above",
+      "path": "after_move.legs",
+      "min": 1
+    },
+    {
+      "check": "result_above",
+      "path": "r3.draft",
+      "min": 3
+    },
+    {
+      "check": "result_above",
+      "path": "send.pressed",
+      "min": 1
+    },
+    {
+      "check": "result_above",
+      "path": "patrol.patrolling",
+      "min": 1
+    },
+    {
+      "check": "result_above",
+      "path": "patrol.legs",
+      "min": 3
+    },
+    {
+      "check": "result_above",
+      "path": "skip.pressed",
+      "min": 1
+    }
+  ]
+}
