@@ -90,5 +90,16 @@ namespace WingCommand.PureTests
             Assert.Equal(new uint[] { 13, 14 }, scope.Members);
             Assert.Equal("#4 #5", s.Label(rows, 4));
         }
+
+        [Fact]
+        public void SelectOnlyReplacesTheSelection()
+        {
+            var s = new WmcSelection();
+            s.SelectElement(1, new List<uint> { 13, 14 });
+            s.SelectOnly(12);
+            WingScope scope = s.Scope(Rows(), 4);
+            Assert.Equal(ScopeKind.Members, scope.Kind);
+            Assert.Equal(new uint[] { 12 }, scope.Members);
+        }
     }
 }

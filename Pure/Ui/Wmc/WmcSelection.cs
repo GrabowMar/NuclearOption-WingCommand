@@ -20,6 +20,14 @@ namespace WingCommand
             if (!ids.Remove(id)) ids.Add(id);
         }
 
+        /// <summary>Just this aircraft (a plain click on its map icon).</summary>
+        public void SelectOnly(uint id)
+        {
+            ids.Clear();
+            ids.Add(id);
+            element = -1;
+        }
+
         public void SelectElement(int e, IReadOnlyList<uint> members)
         {
             ids.Clear();
