@@ -64,20 +64,6 @@ namespace WingCommand
         public static Unit UnitOf(uint id) => id != 0u && new PersistentID { Id = id }.TryGetUnit(out Unit u) ? u : null;
     }
 
-    internal interface IWmcTab
-    {
-        /// <summary>Once per panel build; <paramref name="body"/> is the page area (top-left origin, y grows negative).</summary>
-        void Build(RectTransform page, Rect body);
-
-        void Refresh(WmcContext c);
-
-        /// <summary>The status strip's ambient line while the tab shows.</summary>
-        string Hint { get; }
-
-        /// <summary>The page's content height; the panel wraps a taller page in a scroll viewport.</summary>
-        float ContentHeight { get; }
-    }
-
     /// <summary>Layout helpers the WMC tabs share.</summary>
     internal static class WmcUi
     {

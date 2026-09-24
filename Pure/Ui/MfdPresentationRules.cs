@@ -2,44 +2,6 @@ using System;
 
 namespace WingCommand
 {
-    /// <summary>Owns temporary panel time scale until close or an external change.</summary>
-    internal struct TacticalPauseState
-    {
-        private bool requested;
-        private bool ownsScale;
-        private float previousScale;
-        private float appliedScale;
-
-        public float Update(bool shouldPause, float currentScale, float configuredScale)
-        {
-            bool opening = shouldPause && !requested;
-            requested = shouldPause;
-
-            // Relinquish time scale after native or external changes until next opening; closing must
-            // not undo another owner's pause.
-            if (ownsScale && currentScale != appliedScale) ownsScale = false;
-            if (!shouldPause)
-            {
-                if (!ownsScale) return currentScale;
-                ownsScale = false;
-                return previousScale;
-            }
-
-            if (!ownsScale)
-            {
-                if (!opening || currentScale <= 0.5f ||
-                    float.IsNaN(currentScale) || float.IsInfinity(currentScale))
-                    return currentScale;
-                previousScale = currentScale;
-                ownsScale = true;
-            }
-
-            appliedScale = float.IsNaN(configuredScale)
-                ? 0.25f : Math.Max(0f, Math.Min(0.5f, configuredScale));
-            return appliedScale;
-        }
-    }
-
     internal static class MfdPresentationRules
     {
         internal readonly struct Placement

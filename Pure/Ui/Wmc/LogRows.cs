@@ -20,10 +20,13 @@ namespace WingCommand
     internal struct LogFilter
     {
         public int Element;
+        // Set by the room's LOG drawer (R2) and the tests; the bezel's LOG tab that set them is gone (R1).
+#pragma warning disable CS0649
         public bool ById;
         public uint Id;
         public SnapshotMember[] Rows;
         public int Count;
+#pragma warning restore CS0649
 
         public static LogFilter None => new LogFilter { Element = -1 };
 
