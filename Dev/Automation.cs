@@ -436,6 +436,24 @@ namespace WingCommand
             return Ok("doctrine", d.PatternName);
         }
 
+        /// <summary>Spec M7b §8: open the panel (<c>open</c>: maximize the map and select WMC), latch a tab (<c>tab</c> 0–5)
+        /// and/or press a control by id (<c>press</c>), then report the panel's state.</summary>
+        public static Dictionary<string, object> Wmc(Dictionary<string, object> args)
+        {
+            WmcPanel panel = WmcPanel.Instance;
+            if (panel == null) return Fail("Wmc", "no WMC panel");
+            if (args != null && args.TryGetValue("open", out object open) && open is bool o && o) panel.Open();
+            if (args != null && args.TryGetValue("tab", out object tab) && tab != null)
+                panel.Show(Convert.ToInt32(tab, CultureInfo.InvariantCulture));
+            string press = Text(args, "press");
+            bool pressed = !string.IsNullOrEmpty(press) && panel.Press(press);
+            return new Dictionary<string, object>
+            {
+                { "ok", string.IsNullOrEmpty(press) || pressed }, { "visible", panel.Visible }, { "tab", panel.Page },
+                { "pressed", pressed }, { "members", panel.Context.Count }, { "controls", panel.Controls.Count },
+            };
+        }
+
         public static Dictionary<string, object> Disengage(Dictionary<string, object> args)
         {
             WingService wing = WingService.Instance;

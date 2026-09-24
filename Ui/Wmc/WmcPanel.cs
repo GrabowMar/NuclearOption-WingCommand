@@ -22,6 +22,7 @@ namespace WingCommand
         private readonly WmcContext context = new WmcContext();
         private IWmcTab[] tabs;
         private MFDScreen screen;
+        private Button bezelButton;
         private GameObject root;
         private AvScreen shell;
         private float nextAttempt, nextRefresh;
@@ -63,6 +64,15 @@ namespace WingCommand
             Refresh();
         }
 
+        /// <summary>Maximize the map and select the WMC screen, as the player's bezel press would (automation).</summary>
+        public void Open()
+        {
+            DynamicMap map = SceneSingleton<DynamicMap>.i;
+            if (map != null && !DynamicMap.mapMaximized) map.Maximize();
+            if (screen != null && !screen.isActive && bezelButton != null) bezelButton.onClick.Invoke();
+            nextRefresh = 0f;
+        }
+
         /// <summary>Latch a tab (automation; the tab bar calls <see cref="AvScreen.SetPage"/> itself).</summary>
         public void Show(int tab)
         {
@@ -89,6 +99,7 @@ namespace WingCommand
             if (root != null) UnityEngine.Object.Destroy(root);
             root = null;
             screen = null;
+            bezelButton = null;
             shell = null;
             tabs = null;
             controls.Clear();
@@ -129,6 +140,7 @@ namespace WingCommand
                     Reset();
                     return;
                 }
+                bezelButton = buttons[slot];
                 MfdPresentation.Register(screen, screen.displayPanel.transform as RectTransform,
                     new Vector2(AvTokens.PanelWidth, height), buttons[slot], left);
                 Plugin.LogVerbose("[WMC] installed on " + (left ? "left" : "right") + " bezel slot " + (slot + 1));
