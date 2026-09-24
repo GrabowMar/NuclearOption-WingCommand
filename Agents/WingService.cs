@@ -887,7 +887,6 @@ namespace WingCommand
                 }
                 Plugin.Logger.LogInfo(string.Format(CultureInfo.InvariantCulture, "[Wing] t={0:0.0} #{1} {2} {3}->{4} ({5})",
                     e.Time, e.Member + 2, e.Kind, e.From, e.To, e.Reason));
-                if (e.Kind == WingEventKind.FallingBehind) WingToast.Show($"#{e.Member + 2} falling behind");
                 if (Plugin.Settings.DevTools.Value &&
                     (e.Kind == WingEventKind.GcasActivated || e.Kind == WingEventKind.CollisionEmergency))
                     TelemetryRecorder.AutoDump(e.Kind.ToString(), e.Time);

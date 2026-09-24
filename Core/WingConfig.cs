@@ -4,6 +4,10 @@ using BepInEx.Configuration;
 
 namespace WingCommand
 {
+    internal enum RadioLevel { Off, Essential, Full }
+
+    internal enum RadioVoice { Off, FollowGame, On }
+
     /// <summary>Wing Command 1.0 settings. The first 1.0 launch archives the 0.9 file beside itself so every
     /// key starts from its 1.0 default (BepInEx only applies defaults to keys it has not seen). Data files
     /// (formations, profiles, roster) live under <see cref="DataRoot"/>.</summary>
@@ -43,6 +47,8 @@ namespace WingCommand
         public ConfigEntry<BingoAction> AfterBingo { get; }
         public ConfigEntry<float> FallBackRatio { get; }
         public ConfigEntry<string> Doctrine { get; }
+        public ConfigEntry<RadioLevel> Radio { get; }
+        public ConfigEntry<RadioVoice> RadioVoiceMode { get; }
         public ConfigEntry<bool> VerboseLogging { get; }
         public ConfigEntry<bool> DevTools { get; }
         public ConfigEntry<bool> Overlay { get; }
@@ -103,6 +109,12 @@ namespace WingCommand
                 "What wingmen shoot at while holding formation: Reserve (hold fire), Escort (aircraft threatening you), Sweep " +
                 "(targets of opportunity, long range), or a custom line guard,response,interval,spread,targets,reach. Cycle it " +
                 "from the radial Combat page.", null, new ConfigurationManagerAttributes { Order = 87 }));
+            Radio = c.Bind("Radio", "Level", RadioLevel.Full, new ConfigDescription(
+                "Wingman radio calls: Off, Essential (emergencies, tactical and status calls) or Full (also chatter such as " +
+                "touchdowns).", null, new ConfigurationManagerAttributes { Order = 80 }));
+            RadioVoiceMode = c.Bind("Radio", "Voice", RadioVoice.FollowGame, new ConfigDescription(
+                "Speak wingman calls with the game's text-to-speech: Off, On, or FollowGame (on when the game's chat " +
+                "text-to-speech is on; its speed and volume are used either way).", null, new ConfigurationManagerAttributes { Order = 79 }));
             LoadoutTemplates = c.Bind("Loadout", "SavedTemplates", "", new ConfigDescription(
                 "Saved per-pylon loadout templates (airframe|id|name|store keys; records separated by semicolons). " +
                 "Clear it to delete every template.", null, new ConfigurationManagerAttributes { IsAdvanced = true, Order = 60 }));

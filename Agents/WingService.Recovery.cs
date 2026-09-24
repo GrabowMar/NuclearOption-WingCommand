@@ -290,11 +290,8 @@ namespace WingCommand
             float distance = (m.BingoField.transform.position - m.Aircraft.transform.position).magnitude;
             bool afterburner = m.Profile.Class == AirframeClass.FixedWing && m.Last.Throttle >= m.Profile.AfterburnerThrottle;
             bool bingo = m.Bingo.Update(m.Aircraft.GetFuelLevel(), distance, m.Profile.CruiseSpeed, step, afterburner);
-            if (m.Bingo.JokerNow)
-            {
-                Events.Push(new WingEvent { Time = missionTime, Member = m.Brain.Slot, Kind = WingEventKind.Joker });
-                WingToast.Show($"#{m.Number} joker fuel, {System.Math.Ceiling(m.Bingo.SecondsToBingo / 60f):0} min to bingo");
-            }
+            // The radio says it (spec M7 §1.3).
+            if (m.Bingo.JokerNow) Events.Push(new WingEvent { Time = missionTime, Member = m.Brain.Slot, Kind = WingEventKind.Joker });
             if (!bingo) return false;
             Events.Push(new WingEvent { Time = missionTime, Member = m.Brain.Slot, Kind = WingEventKind.Bingo });
             return true;

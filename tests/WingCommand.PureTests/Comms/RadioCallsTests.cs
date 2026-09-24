@@ -10,7 +10,7 @@ namespace WingCommand.PureTests
         [Theory]
         [InlineData(WingEventKind.BehaviourChanged, TransitionReason.MissileInbound, RadioClass.Emergency, "DEFENDING", false)]
         [InlineData(WingEventKind.BehaviourChanged, TransitionReason.MissileClear, RadioClass.Tactical, "DEFENSIVECLEAR", false)]
-        [InlineData(WingEventKind.BehaviourChanged, TransitionReason.Outnumbered, RadioClass.Tactical, "FALLINGBACK", true)]
+        [InlineData(WingEventKind.Disengaged, TransitionReason.Outnumbered, RadioClass.Tactical, "FALLINGBACK", true)]   // the fall back takes each member back with this reason
         [InlineData(WingEventKind.Engaged, TransitionReason.Commanded, RadioClass.Tactical, "ENGAGING", true)]
         [InlineData(WingEventKind.Disengaged, TransitionReason.Leash, RadioClass.Status, "REJOINING", true)]
         [InlineData(WingEventKind.Disengaged, TransitionReason.NoTarget, RadioClass.Status, "REJOINING", true)]

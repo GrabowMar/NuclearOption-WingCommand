@@ -21,7 +21,6 @@ namespace WingCommand
                     {
                         case TransitionReason.MissileInbound: return Make(RadioClass.Emergency, "DEFENDING", false, out call);
                         case TransitionReason.MissileClear: return Make(RadioClass.Tactical, "DEFENSIVECLEAR", false, out call);
-                        case TransitionReason.Outnumbered: return Make(RadioClass.Tactical, "FALLINGBACK", true, out call);
                         default: return false;
                     }
                 case WingEventKind.Engaged: return Make(RadioClass.Tactical, "ENGAGING", true, out call);
@@ -29,6 +28,7 @@ namespace WingCommand
                     switch (e.Reason)
                     {
                         case TransitionReason.Winchester: return Make(RadioClass.Status, "WINCHESTER", false, out call);
+                        case TransitionReason.Outnumbered: return Make(RadioClass.Tactical, "FALLINGBACK", true, out call);
                         case TransitionReason.Leash:
                         case TransitionReason.NoTarget:
                         case TransitionReason.Commanded: return Make(RadioClass.Status, "REJOINING", true, out call);

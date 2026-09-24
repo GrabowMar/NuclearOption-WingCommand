@@ -78,6 +78,33 @@ namespace WingCommand
             return n;
         }
 
+        /// <summary>The nearest air threat the player's side knows of (spec M7 §1.5 Bogey Dope): the same tracks and threat
+        /// test as the outnumbered judge. False when there is none.</summary>
+        public bool NearestAirThreat(Aircraft listener, out Vec3 pos, out Vec3 vel, out string type)
+        {
+            pos = vel = default;
+            type = null;
+            FactionHQ hq = listener != null ? listener.NetworkHQ : null;
+            if (hq == null || hq.trackingDatabase == null) return false;
+            Vec3 from = listener.GlobalPosition().ToVec3();
+            float best = float.MaxValue;
+            foreach (KeyValuePair<PersistentID, TrackingInfo> pair in hq.trackingDatabase)
+            {
+                TrackingInfo t = pair.Value;
+                if (t == null || !t.TryGetUnit(out Unit u) || !(u is Aircraft enemy) || u.disabled || u.NetworkHQ == null || u.NetworkHQ == hq) continue;
+                float antiAir = enemy.definition != null ? enemy.definition.roleIdentity.antiAir : 0f;
+                if (!OutnumberedJudge.IsAirThreat(hq.IsTargetPositionAccurate(u, TargetAccuracyMetres), enemy.radarAlt, antiAir)) continue;
+                Vec3 at = t.GetPosition().ToVec3();
+                float d = (at - from).SqrLength;
+                if (d >= best) continue;
+                best = d;
+                pos = at;
+                vel = enemy.rb != null ? enemy.rb.velocity.ToVec3() : Vec3.Zero;
+                type = enemy.unitName;
+            }
+            return type != null;
+        }
+
         /// <summary>Once a second while members fight on their own choices: outnumbered for the dwell → every engaged
         /// member back into formation (spec M5 §6.3).</summary>
         private void JudgeOdds(float dt)
@@ -214,6 +241,8 @@ namespace WingCommand
             // reserve instead of flying on (review M5d I3). The toast says what actually happens.
             bool going = Recover(m, intent);
             if (!going && intent == RecoveryIntent.Refit) going = Recover(m, intent = RecoveryIntent.Rtb);
+            // Bingo home is the radio's BINGO call (spec M7 §1.4); a refit or no field is said here.
+            if (going && intent == RecoveryIntent.Rtb && reason == TransitionReason.Fuel) return;
             WingToast.Show(going
                 ? $"#{m.Number} {why}; {(intent == RecoveryIntent.Refit ? "going to refit" : "returning to base")}"
                 : $"#{m.Number} {why}; no field to return to");

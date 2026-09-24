@@ -17,10 +17,12 @@
     {"op": "spawn", "id": "b6", "type": "FS-12 Revoker", "faction": "Primeva", "at": {"map": [2000, 12500]}, "altitude": 3300, "speed": 200, "heading": 180},
     {"op": "wait", "seconds": 10},
     {"op": "call", "method": "WingCommand.Automation.EngageCommand", "store": "first"},
+    {"op": "call", "method": "WingCommand.Automation.BogeyDope", "store": "dope"},
     {"op": "wait", "seconds": 2},
     {"op": "call", "method": "WingCommand.Automation.EngageCommand", "store": "second"},
     {"op": "wait", "seconds": 45},
     {"op": "call", "method": "WingCommand.Automation.CombatState", "store": "fight"},
+    {"op": "call", "method": "WingCommand.Automation.RadioState", "store": "radio"},
     {"op": "call", "method": "WingCommand.Automation.Disengage", "store": "disengage"},
     {"op": "wait", "seconds": 3},
     {"op": "call", "method": "WingCommand.Automation.EngageCommand", "store": "third"},
@@ -34,6 +36,9 @@
     {"check": "result_above", "path": "first.refused", "min": 1},
     {"check": "result_above", "path": "second.engaged", "min": 1},
     {"check": "result_below", "path": "fight.fallbacks", "max": 0},
+    {"check": "result_below", "path": "dope.clean", "max": 0},
+    {"check": "result_above", "path": "radio.radio_sent", "min": 2},
+    {"check": "result_above", "path": "radio.radio_min_gap", "min": 1.5},
     {"check": "result_above", "path": "third.refused", "min": 1}
   ]
 }

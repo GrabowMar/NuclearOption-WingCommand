@@ -423,6 +423,33 @@ namespace WingCommand
         }
 
         /// <summary>Engaged members now, engage/disengage events so far, and native switches the guard redirected.</summary>
+        /// <summary>Spec M7 §1.6: the radio's counters.</summary>
+        public static Dictionary<string, object> RadioState(Dictionary<string, object> args)
+        {
+            RadioQueue q = RadioDirector.Instance?.Queue;
+            if (q == null) return Fail("RadioState", "no radio");
+            int sent = q.SentOf(RadioClass.Chatter) + q.SentOf(RadioClass.Status) + q.SentOf(RadioClass.Tactical) + q.SentOf(RadioClass.Emergency);
+            return new Dictionary<string, object>
+            {
+                { "ok", true }, { "radio_sent", sent }, { "radio_emergency", q.SentOf(RadioClass.Emergency) },
+                { "radio_tactical", q.SentOf(RadioClass.Tactical) }, { "radio_status", q.SentOf(RadioClass.Status) },
+                { "radio_chatter", q.SentOf(RadioClass.Chatter) }, { "radio_stale", q.DroppedStale },
+                { "radio_repeat", q.DroppedRepeat }, { "radio_full", q.DroppedFull },
+                // +inf (no speaker spoke twice) is reported as a large number so JSON stays valid.
+                { "radio_min_gap", float.IsInfinity(q.MinSpeakerGap) ? 999f : q.MinSpeakerGap },
+            };
+        }
+
+        /// <summary>Asks for Bogey Dope as the radial entry does.</summary>
+        public static Dictionary<string, object> BogeyDope(Dictionary<string, object> args)
+        {
+            WingService wing = WingService.Instance;
+            if (wing == null || wing.Player == null) return Fail("BogeyDope", "no wing or player");
+            bool asked = WingCommands.BogeyDopeCall(wing, out string answer);
+            Plugin.Logger.LogInfo($"[Automation] BogeyDope: {answer}");
+            return new Dictionary<string, object> { { "ok", asked }, { "clean", answer == "Picture clean." ? 1 : 0 } };
+        }
+
         public static Dictionary<string, object> CombatState(Dictionary<string, object> args)
         {
             WingService wing = WingService.Instance;

@@ -232,6 +232,36 @@ namespace WingCommand
             WingToast.Show(found == 0 ? "Your six is clear" : engaged > 0 ? $"{engaged} clearing your six ({found} bandits)" : "Nobody can engage");
         }
 
+        /// <summary>Spec M7 §1.5: the first wingman flying with the wing calls the nearest air threat's BRA from you.</summary>
+        public static void BogeyDope()
+        {
+            if (!Ready(out WingService w) || w.Player == null) return;
+            if (!BogeyDopeCall(w, out string answer)) WingToast.Show(answer);
+        }
+
+        /// <summary>The Bogey Dope answer on the radio (false with the reason when nobody can answer).</summary>
+        public static bool BogeyDopeCall(WingService w, out string answer)
+        {
+            WingMember speaker = null;
+            foreach (WingMember m in w.Members)
+                if (!m.Released && m.Alive && !m.OnGround)
+                {
+                    speaker = m;
+                    break;
+                }
+            RadioDirector radio = RadioDirector.Instance;
+            if (speaker == null || radio == null)
+            {
+                answer = "No wingmen to ask";
+                return false;
+            }
+            answer = w.NearestAirThreat(w.Player, out Vec3 pos, out Vec3 vel, out string type)
+                ? $"Bogey dope, {Bra.Format(w.Player.GlobalPosition().ToVec3(), pos, vel, PlayerSettings.unitSystem == PlayerSettings.UnitSystem.Imperial)}. {type}."
+                : "Picture clean.";
+            radio.SayText(speaker, RadioClass.Tactical, "BOGEYDOPE", answer, false);
+            return true;
+        }
+
         /// <summary>Reserve → Escort → Sweep: what members shoot at while holding formation (spec M5 §8).</summary>
         public static void NextDoctrine()
         {
