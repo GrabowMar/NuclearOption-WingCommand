@@ -172,6 +172,7 @@ namespace WingCommand
             FlyAs(m, WingPilotRoster.Assign(a));
             m.State = new WingFlightState(m);
             if (ground != null) m.Ground = ground(m);
+            m.Brain.AfterburnerAllowed = afterburner;
             Members.Add(m);
             m.Pilot.SwitchState(m.State);
             Plugin.Logger.LogInfo($"[Wing] #{m.Number} {a.definition.unitName} joined");
@@ -557,6 +558,18 @@ namespace WingCommand
                 if (!m.Released && m.OnGround && m.Ground.Field == field && m.Aircraft != null && !m.Aircraft.disabled) return m.Aircraft;
             return null;
         }
+
+        private bool afterburner = true;
+
+        /// <summary>Spec M5 §10.4: Gate (afterburner allowed for catch-up and rejoin) or Buster (military power only, fuel
+        /// kept), for every member and those who join later.</summary>
+        public void SetAfterburner(bool allowed)
+        {
+            afterburner = allowed;
+            foreach (WingMember m in Members) m.Brain.AfterburnerAllowed = allowed;
+        }
+
+        public bool AfterburnerAllowed => afterburner;
 
         /// <summary>Spec M5 §10.1: Go High / Go Low / Level for the whole shape (the wing's own solver; a new wing starts
         /// level).</summary>

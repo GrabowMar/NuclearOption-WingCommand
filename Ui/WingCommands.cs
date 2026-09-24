@@ -244,6 +244,14 @@ namespace WingCommand
             WingToast.Show(what);
         }
 
+        /// <summary>Spec M5 §10.4: Buster (no afterburner) or Gate (afterburner allowed).</summary>
+        public static void Afterburner(bool allowed)
+        {
+            if (!Ready(out WingService w)) return;
+            w.SetAfterburner(allowed);
+            WingToast.Show(allowed ? "Gate: afterburner allowed" : "Buster: military power, no afterburner");
+        }
+
         /// <summary>Spec M5 §10.2: the second element attacks your targets; the first stays with you.</summary>
         public static void BuddyAttack()
         {

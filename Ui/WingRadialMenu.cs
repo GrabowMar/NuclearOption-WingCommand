@@ -164,6 +164,8 @@ namespace WingCommand
                 Leaf("Go High", () => WingCommands.Stack(WingCommands.GoHighMetres, "Going high"), "formation"),
                 Leaf("Go Low", () => WingCommands.Stack(WingCommands.GoLowMetres, "Going low"), "formation"),
                 Leaf("Level", () => WingCommands.Stack(0f, "Level with you"), "formation"),
+                Leaf("Buster", () => WingCommands.Afterburner(false), "formation"),
+                Leaf("Gate", () => WingCommands.Afterburner(true), "formation"),
                 Back(),
             };
             spacingMenu = new[]
