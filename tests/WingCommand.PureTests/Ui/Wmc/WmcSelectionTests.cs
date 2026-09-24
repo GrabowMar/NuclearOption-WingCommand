@@ -92,6 +92,48 @@ namespace WingCommand.PureTests
         }
 
         [Fact]
+        public void InspectingNeverChangesWhoOrdersGoTo()
+        {
+            var s = new WmcSelection();
+            s.SelectOnly(12);
+            s.Inspect(13);
+            Assert.Equal(13u, s.Inspected);
+            Assert.Equal(new uint[] { 12 }, s.Scope(Rows(), 4).Members);
+        }
+
+        [Fact]
+        public void AnyNewSelectionEndsTheInspection()
+        {
+            // Review R1 I1: the room's card stayed on the INSPECTed aircraft after the player picked another one, and its
+            // one-press RTB went to the wrong wingman.
+            var s = new WmcSelection();
+            s.Inspect(13);
+            s.SelectOnly(14);
+            Assert.Equal(0u, s.Inspected);
+            s.Inspect(13);
+            s.Toggle(12);
+            Assert.Equal(0u, s.Inspected);
+            s.Inspect(13);
+            s.SelectElement(1, new List<uint> { 13, 14 });
+            Assert.Equal(0u, s.Inspected);
+            s.Inspect(13);
+            s.Clear();
+            Assert.Equal(0u, s.Inspected);
+        }
+
+        [Fact]
+        public void AnInspectedAircraftThatLeftIsForgotten()
+        {
+            var s = new WmcSelection();
+            s.Inspect(99);
+            s.Prune(Rows(), 4);
+            Assert.Equal(0u, s.Inspected);
+            s.Inspect(12);
+            s.Prune(Rows(), 4);
+            Assert.Equal(12u, s.Inspected);
+        }
+
+        [Fact]
         public void SelectOnlyReplacesTheSelection()
         {
             var s = new WmcSelection();

@@ -14,9 +14,16 @@ namespace WingCommand
         public bool Contains(uint id) => ids.Contains(id);
         public uint Single => ids.Count == 1 ? ids[0] : 0u;
 
+        /// <summary>The aircraft INSPECT › (or a LOG line) asked the room to show; 0 for none. It never changes who orders go
+        /// to, and any new pick ends it (review R1 I1: the room's card stuck on it and its RTB went to the wrong wingman).</summary>
+        public uint Inspected { get; private set; }
+
+        public void Inspect(uint id) => Inspected = id;
+
         public void Toggle(uint id)
         {
             element = -1;
+            Inspected = 0u;
             if (!ids.Remove(id)) ids.Add(id);
         }
 
@@ -26,6 +33,7 @@ namespace WingCommand
             ids.Clear();
             ids.Add(id);
             element = -1;
+            Inspected = 0u;
         }
 
         public void SelectElement(int e, IReadOnlyList<uint> members)
@@ -33,12 +41,14 @@ namespace WingCommand
             ids.Clear();
             foreach (uint id in members) ids.Add(id);
             element = e;
+            Inspected = 0u;
         }
 
         public void Clear()
         {
             ids.Clear();
             element = -1;
+            Inspected = 0u;
         }
 
         /// <summary>Drops aircraft no longer in the wing; an element choice whose aircraft moved to another element (a merge,
@@ -52,6 +62,7 @@ namespace WingCommand
                 else if (element >= 0 && rows[k].Element != element) element = -1;
             }
             if (ids.Count == 0) element = -1;
+            if (Inspected != 0u && WingRows.IndexOf(rows, count, Inspected) < 0) Inspected = 0u;
         }
 
         public WingScope Scope(SnapshotMember[] rows, int count)

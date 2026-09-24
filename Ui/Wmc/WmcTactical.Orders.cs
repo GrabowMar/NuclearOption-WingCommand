@@ -183,6 +183,7 @@ namespace WingCommand
         {
             if (last == null) return;
             MapMode mode = last.Map.Mode;
+            if (mode != MapMode.Orbit && mode != MapMode.Hold) return;
             WmcUi.Order(last, () =>
             {
                 if (!Centroid(out Vec3 c, out Vec3 v)) return;

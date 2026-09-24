@@ -161,7 +161,7 @@ namespace WingCommand
         private void Inspect(int index)
         {
             if (last == null || rowViews[index].Id == 0u) return;
-            last.Inspected = rowViews[index].Id;
+            last.Selection.Inspect(rowViews[index].Id);
             WmcRoom.Instance?.Open(RoomNotches.Plan);
         }
 

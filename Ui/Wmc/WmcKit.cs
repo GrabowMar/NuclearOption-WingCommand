@@ -36,7 +36,8 @@ namespace WingCommand
             if (root == null) return;
             foreach (TMP_Text t in root.GetComponentsInChildren<TMP_Text>(true))
             {
-                if (t.overflowMode == TextOverflowModes.Ellipsis) t.overflowMode = TextOverflowModes.Overflow;
+                if (t.overflowMode == TextOverflowModes.Ellipsis || (!t.enableWordWrapping && t.overflowMode == TextOverflowModes.Truncate))
+                    t.overflowMode = TextOverflowModes.Overflow;
                 if (t.enableAutoSizing) continue;
                 t.fontSizeMax = t.fontSize;
                 t.fontSizeMin = Mathf.Min(AvTokens.FontMicro, t.fontSize);
@@ -82,7 +83,10 @@ namespace WingCommand
         public static TMP_Text Text(RectTransform parent, Rect r, string classes, TextAlignmentOptions? align = null)
         {
             TMP_Text t = AvStyled.Label(parent, r, "", classes, align: align);
+            // A wrapped style (row-sub, hint) comes top-aligned and truncating: one line, on the midline, never cut.
             t.enableWordWrapping = false;
+            t.overflowMode = TextOverflowModes.Overflow;
+            if (align == null) t.alignment = TextAlignmentOptions.MidlineLeft;
             return t;
         }
 
@@ -164,8 +168,12 @@ namespace WingCommand
             }
         }
 
+        /// <summary>Bumps on every <see cref="SetKeys"/> (a tab switch blanks the tiles; a page that caches its values repaints).</summary>
+        public int Generation { get; private set; }
+
         public void SetKeys(string[][] pairs)
         {
+            Generation++;
             for (int i = 0; i < keys.Length && i < pairs.Length; i++)
             {
                 WmcKit.Set(keys[i], pairs[i][0]);

@@ -68,6 +68,31 @@
     {
       "op": "call",
       "method": "WingCommand.Automation.Wmc",
+      "store": "one",
+      "args": {
+        "clear": true,
+        "select": [
+          2
+        ]
+      }
+    },
+    {
+      "op": "call",
+      "method": "WingCommand.Automation.WmcRoom",
+      "store": "card_one",
+      "args": {}
+    },
+    {
+      "op": "call",
+      "method": "WingCommand.Automation.Wmc",
+      "store": "unselect",
+      "args": {
+        "clear": true
+      }
+    },
+    {
+      "op": "call",
+      "method": "WingCommand.Automation.Wmc",
       "store": "sel",
       "args": {
         "select": [
@@ -268,6 +293,16 @@
     {
       "check": "result_above",
       "path": "log.log_open",
+      "min": 1
+    },
+    {
+      "check": "result_above",
+      "path": "card_one.card_member",
+      "min": 1
+    },
+    {
+      "check": "result_above",
+      "path": "card_one.open",
       "min": 1
     }
   ]

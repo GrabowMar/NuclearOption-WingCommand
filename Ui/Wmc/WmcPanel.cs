@@ -160,7 +160,6 @@ namespace WingCommand
             for (int i = 0; i < headerKeys.Length; i++) headerKeys[i] = -1;
             controls.Clear();
             context.Selection.Clear();
-            context.Inspected = 0u;
             context.Map.Disarm();
             context.Draft.Clear();
             overlay.Destroy();
@@ -350,7 +349,6 @@ namespace WingCommand
             }
             // Review focus 1: a selected aircraft that left drops out; the scope follows the selection.
             context.Selection.Prune(context.Rows, context.Count);
-            if (context.Inspected != 0u && WingRows.IndexOf(context.Rows, context.Count, context.Inspected) < 0) context.Inspected = 0u;
             context.Rescope();
         }
 

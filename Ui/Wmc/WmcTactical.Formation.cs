@@ -205,7 +205,7 @@ namespace WingCommand
             {
                 if (d.Family != current.Family || n >= MaxShapes) continue;
                 shapeIds[n] = d.Id;
-                shapeButtons[n].SetText(d.Name.ToUpperInvariant());
+                shapeButtons[n].SetText(WmcWords.Shape(d.Id, d.Name));
                 shapeButtons[n].SetLatched(d.Id == current.Id);
                 shapeButtons[n].WithTooltip(d.Name + ": this element's shape.");
                 shapeButtons[n++].gameObject.SetActive(true);

@@ -268,15 +268,16 @@ namespace WingCommand
             float fuel = a != null && !a.disabled ? a.GetFuelLevel() : float.NaN;
             float bingo = m != null ? m.Bingo.SecondsToBingo : float.NaN;
             float hull = a != null && a.partDamageTracker != null ? 1f - a.partDamageTracker.GetDetachedRatio() : float.NaN;
-            string shape = c.Wing != null && !c.Client ? c.Wing.ShapeOf(c.ScopeElement)?.Name : null;
+            FormationDefinition def = c.Wing != null && !c.Client ? c.Wing.ShapeOf(c.ScopeElement) : null;
+            string shape = def != null ? WmcWords.Shape(def.Id, def.Name) : null;
             int key = R(alt / 10f) * 31 + R(spd * 3.6f) * 131 + R(fuel * 100f) * 7 + R(bingo) * 1009 + R(hull * 100f) * 17
                 + (shape?.GetHashCode() ?? 0) + (lead ? 1 : 0);
             if (key == teleKey) return;
             teleKey = key;
-            string pre = lead ? "LEAD " : "";
-            tele[0].text = pre + "ALT " + WmcWords.Altitude(alt);
+            // A group shows its lead's values: the key says so instead of ALT (review R1 I3: "LEAD ALT …" did not fit).
+            tele[0].text = (lead ? "LEAD " : "ALT ") + WmcWords.Altitude(alt);
             tele[1].text = "SPD " + WmcWords.Speed(spd);
-            tele[2].text = "FORM " + (string.IsNullOrEmpty(shape) ? WmcText.Unknown : shape.ToUpperInvariant());
+            tele[2].text = "FORM " + (string.IsNullOrEmpty(shape) ? WmcText.Unknown : shape);
             string b = WingHudText.BingoTime(bingo);
             tele[3].text = "FUEL " + WmcText.Percent(fuel) + (b.Length > 0 ? " · " + b : "");
             tele[4].text = "HULL " + WmcText.Percent(hull);

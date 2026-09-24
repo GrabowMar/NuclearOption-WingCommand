@@ -11,6 +11,8 @@ namespace WingCommand
         {
             Aircraft a = m.Aircraft;
             d.StoreCount = 0;
+            // Review R1 C1: a caller's detail without a stores array got a NullReferenceException that faulted the room.
+            if (d.Stores == null) d.Stores = new StoreLine[DetailLines.MaxStores];
             if (a == null || a.disabled || a.weaponStations == null) return;
             foreach (WeaponStation s in a.weaponStations)
             {

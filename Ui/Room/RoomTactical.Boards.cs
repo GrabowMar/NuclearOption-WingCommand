@@ -29,7 +29,7 @@ namespace WingCommand
         private readonly List<uint> elementIds = new List<uint>();
         private readonly List<string> detailLines = new List<string>();
         private readonly TMP_Text[] memberLines = new TMP_Text[CardLines];
-        private MemberDetail detail;
+        private MemberDetail detail = new MemberDetail { Stores = new StoreLine[DetailLines.MaxStores] };
         private TMP_Text memberHint;
         private AvButton center, rtb, refit;
         private int cardsShown;
@@ -141,7 +141,7 @@ namespace WingCommand
         {
             // The deep card follows the one selected wingman; gone, it drops (review focus 5).
             // INSPECT › on the bezel names the aircraft to show; else the one selected.
-            WingMember m = c.Client ? null : c.MemberOf(c.Inspected != 0u ? c.Inspected : c.Selection.Single);
+            WingMember m = c.Client ? null : c.MemberOf(c.Selection.Inspected != 0u ? c.Selection.Inspected : c.Selection.Single);
             CardMember = m != null && (object)m.Aircraft != null ? m.Aircraft.persistentID.Id : 0u;
             bool show = CardMember != 0u;
             memberHint.gameObject.SetActive(!show);

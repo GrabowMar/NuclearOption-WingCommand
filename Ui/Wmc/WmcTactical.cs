@@ -273,8 +273,9 @@ namespace WingCommand
             int hostiles = c.Wing != null && !c.Client ? c.Wing.HostilesNear() : -1;
             int key = Pack(s.MinFuel) * 7 + Pack(s.MinAmmo) * 131 + (float.IsNaN(bingo) ? -1 : (int)bingo) * 1009 + winchester * 17
                 + defending * 29 + fighting * 37 + hostiles * 41 + (s.Bingo ? 3 : 0);
-            if (key == metricKey) return;
+            if (key == metricKey && m.Generation == metricGeneration) return;
             metricKey = key;
+            metricGeneration = m.Generation;
             m.Set(0, WmcText.Percent(s.MinFuel).TrimEnd('%'),
                 s.Bingo ? "BINGO" : float.IsNaN(bingo) ? "" : "BINGO IN " + WmcText.Clock(bingo),
                 WingRows.Bar(s.MinFuel), WmcUi.LevelColor(WmcStyle.Level(s.MinFuel)));
@@ -285,7 +286,7 @@ namespace WingCommand
             m.Set(2, threat, caption, hostiles > 0 ? 1f : 0f, hostiles > 0 ? AvTheme.Alert : AvTheme.Friendly);
         }
 
-        private int metricKey = int.MinValue;
+        private int metricKey = int.MinValue, metricGeneration = -1;
 
         private static int Pack(float fraction) => float.IsNaN(fraction) ? -1 : (int)(fraction * 1000f);
     }

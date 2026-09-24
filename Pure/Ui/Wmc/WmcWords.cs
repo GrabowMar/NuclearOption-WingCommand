@@ -64,6 +64,28 @@ namespace WingCommand
         /// <summary>The ORDERS cue banner while a map order is armed; null when none is.</summary>
         public static string Banner(MapMode mode) => mode == MapMode.Off ? null : "ARMED " + MapOrders.Label(mode) + " · " + Cue(mode);
 
+        private static readonly System.Collections.Generic.Dictionary<string, string> shapeCodes =
+            new System.Collections.Generic.Dictionary<string, string>
+            {
+                { "echelon-right", "ECH R" }, { "echelon-left", "ECH L" }, { "line-abreast", "ABREAST" }, { "trail", "TRAIL" },
+                { "vic", "VIC" }, { "finger-four-right", "FNGR R" }, { "finger-four-left", "FNGR L" }, { "diamond", "DIAMOND" },
+                { "box", "BOX" }, { "ladder", "LADDER" }, { "combat-spread", "SPREAD" }, { "fluid-four", "FLUID 4" },
+                { "wall", "WALL" }, { "offset-box", "OFF BOX" }, { "card", "CARD" }, { "staggered-trail", "STG TRL" },
+                { "echelon-staggered", "ECH STG" }, { "heavy-stream", "STREAM" }, { "high-cover", "HI COVER" },
+                { "low-cover", "LO COVER" }, { "sweep-ahead", "SWEEP" }, { "close-escort", "CLOSE" },
+            };
+
+        /// <summary>A shape in eight characters (review R1 I3): the shipped shapes by code, anything else by its name without
+        /// the bracketed part, upper-cased and cut to eight (the full name is in the tooltip).</summary>
+        public static string Shape(string id, string name)
+        {
+            if (id != null && shapeCodes.TryGetValue(id, out string code)) return code;
+            if (string.IsNullOrEmpty(name)) return WmcText.Unknown;
+            int bracket = name.IndexOf('(');
+            string plain = (bracket > 0 ? name.Substring(0, bracket) : name).Trim().ToUpperInvariant();
+            return plain.Length <= 8 ? plain : plain.Substring(0, 8).TrimEnd();
+        }
+
         public static string Altitude(float metres) =>
             float.IsNaN(metres) || float.IsInfinity(metres) ? WmcText.Unknown
                 : System.Math.Round(metres).ToString("#,##0", CultureInfo.InvariantCulture) + " m";

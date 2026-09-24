@@ -103,7 +103,7 @@ namespace WingCommand
         {
             // Review P3 I5: by aircraft, never by seat; a gone aircraft centres nothing.
             if (last == null || logIds == null || logIds[i] == 0u || WmcContext.UnitOf(logIds[i]) == null) return;
-            last.Inspected = logIds[i];
+            last.Selection.Inspect(logIds[i]);
             RefreshBoards(last);
             CenterMember();
         }

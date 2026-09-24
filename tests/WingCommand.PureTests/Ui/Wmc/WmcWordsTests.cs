@@ -36,6 +36,25 @@ namespace WingCommand.PureTests
         }
 
         [Fact]
+        public void ShapeNamesFitEightCharacters()
+        {
+            // Review R1 I3: "FORM FINGER FOUR (STRONG RIGHT)" was cut in the telemetry strip and the shape buttons.
+            Assert.Equal("FNGR R", WmcWords.Shape("finger-four-right", "Finger Four (strong right)"));
+            Assert.Equal("ECH R", WmcWords.Shape("echelon-right", "Echelon Right"));
+            Assert.Equal("SPREAD", WmcWords.Shape("combat-spread", "Combat Spread"));
+            Assert.Equal("ARROWHEA", WmcWords.Shape("user-arrow", "Arrowhead (wide)"));
+            Assert.Equal(WmcText.Unknown, WmcWords.Shape(null, null));
+            string[] shipped =
+            {
+                "echelon-right", "echelon-left", "line-abreast", "trail", "vic", "finger-four-right", "finger-four-left", "diamond",
+                "box", "ladder", "combat-spread", "fluid-four", "wall", "offset-box", "card", "staggered-trail", "echelon-staggered",
+                "heavy-stream", "high-cover", "low-cover", "sweep-ahead", "close-escort",
+            };
+            foreach (string id in shipped) Assert.InRange(WmcWords.Shape(id, "A Very Long Unmapped Name").Length, 1, 8);
+            Assert.NotEqual(WmcWords.Shape("echelon-staggered", "x"), WmcWords.Shape("staggered-trail", "x"));
+        }
+
+        [Fact]
         public void TelemetryFieldsAreInvariantAndDashWhenUnknown()
         {
             Assert.Equal("2,425 m", WmcWords.Altitude(2425.4f));
