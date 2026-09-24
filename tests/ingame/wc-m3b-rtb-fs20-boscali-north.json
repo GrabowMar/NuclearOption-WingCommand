@@ -3,7 +3,7 @@
   "mods": [
     "wingcommand"
   ],
-  "timeout_s": 840,
+  "timeout_s": 1020,
   "ops": [
     {
       "op": "spawn",
@@ -26,7 +26,7 @@
         {
           "orbit": {
             "bank": 15,
-            "seconds": 780
+            "seconds": 960
           }
         }
       ]
@@ -82,7 +82,7 @@
     },
     {
       "op": "wait",
-      "seconds": 240
+      "seconds": 420
     },
     {
       "op": "call",
