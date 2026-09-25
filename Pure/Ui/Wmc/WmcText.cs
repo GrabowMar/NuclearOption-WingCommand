@@ -21,5 +21,15 @@ namespace WingCommand
 
         public static string Percent(float fraction) =>
             float.IsNaN(fraction) ? Unknown : ((int)Math.Round(fraction * 100f)).ToString(CultureInfo.InvariantCulture) + "%";
+
+        /// <summary>At most <paramref name="max"/> characters: cut where a word ends inside, else hard, never with "…"; a
+        /// dangling separator is dropped.</summary>
+        public static string Cut(string s, int max)
+        {
+            if (string.IsNullOrEmpty(s) || max <= 0) return "";
+            if (s.Length <= max) return s;
+            int cut = s.LastIndexOf(' ', max);
+            return (cut > 0 ? s.Substring(0, cut) : s.Substring(0, max)).TrimEnd(' ', '·');
+        }
     }
 }

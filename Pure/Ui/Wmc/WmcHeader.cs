@@ -12,7 +12,7 @@ namespace WingCommand
         private static readonly string[][][] keys =
         {
             new[] { new[] { "FUEL MIN", "%" }, new[] { "AMMO MIN", "%" }, new[] { "THREAT", "" } },
-            new[] { new[] { "FUNDS", "CR" }, new[] { "RESERVE", "" }, new[] { "STOCK", "" } },
+            new[] { new[] { "FUNDS", "CR" }, new[] { "HANGAR", "" }, new[] { "STOCK", "" } },
             new[] { new[] { "STATIONS", "" }, new[] { "MASS", "kg" }, new[] { "ROLE", "" } },
             new[] { new[] { "PILOTS", "" }, new[] { "READY", "" }, new[] { "LOST", "" } },
         };
@@ -42,15 +42,11 @@ namespace WingCommand
             return "PROFILE " + (mixed ? "MIXED" : name ?? WmcText.Unknown);
         }
 
-        public static string Reserve(int held, int capacity, bool offline, out string state)
+        /// <summary>The wing's airframe store (user decision 2026-09-25: the HANGAR).</summary>
+        public static string Hangar(int held, int capacity, bool offline, out string state)
         {
-            if (offline)
-            {
-                state = "inert";
-                return "RESV " + WmcText.Unknown;
-            }
-            state = held > 0 ? "info" : "inert";
-            return "RESV " + N(held) + "/" + N(capacity);
+            state = !offline && held > 0 ? "info" : "inert";
+            return HangarWords.Label(held, capacity, offline);
         }
 
         /// <summary>The armed map order, else who runs the wing here.</summary>

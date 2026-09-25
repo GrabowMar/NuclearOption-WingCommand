@@ -394,7 +394,7 @@ namespace WingCommand
             }
             bool offline = context.Client || !WingSupplyReserve.HasFaction;
             if (Changed(2, WingSupplyReserve.Count * 100 + WingSupplyReserve.Capacity * 2 + (offline ? 1 : 0)))
-                Chip(2, WmcHeader.Reserve(WingSupplyReserve.Count, WingSupplyReserve.Capacity, offline, out string s2), s2);
+                Chip(2, WmcHeader.Hangar(WingSupplyReserve.Count, WingSupplyReserve.Capacity, offline, out string s2), s2);
             if (Changed(3, (int)context.Map.Mode * 2 + (context.Client ? 1 : 0)))
                 Chip(3, WmcHeader.Mode(context.Map.Mode, context.Client, out string s3), s3);
         }
