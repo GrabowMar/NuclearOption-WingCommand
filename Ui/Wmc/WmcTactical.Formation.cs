@@ -43,8 +43,9 @@ namespace WingCommand
             AvKit.Panel(planRect, new Rect(0f, 0f, PlanSize, PlanSize), AvTheme.SurfaceInert).raycastTarget = false;
             AvKit.Rule(planRect, new Rect(PlanSize * 0.5f, 0f, 1f, PlanSize), AvTheme.Hairline);
             AvKit.Rule(planRect, new Rect(0f, -PlanSize / 3f, PlanSize, 1f), AvTheme.Hairline);
-            AvStyled.Label(planRect, new Rect(PlanSize * 0.5f - 20f, -PlanSize / 3f + 14f, 40f, 12f), "▲ LDR", "row-sub",
-                align: TextAlignmentOptions.Center);
+            // The leader's mark and label are drawn (the MFD font has no ▲ ○ ●: they showed as boxes at stop 1).
+            AvKit.Panel(planRect, new Rect(PlanSize * 0.5f - 3f, -PlanSize / 3f + 3f, 6f, 6f), AvTheme.TextPrimary).raycastTarget = false;
+            AvStyled.Label(planRect, new Rect(PlanSize * 0.5f + 5f, -PlanSize / 3f + 14f, 30f, 12f), "LDR", "row-sub");
             for (int i = 0; i < MaxDots; i++)
             {
                 slotDots[i] = AvKit.Panel(planRect, new Rect(0f, 0f, 8f, 8f), AvTheme.Hairline);
@@ -55,6 +56,12 @@ namespace WingCommand
             float tx = PlanSize + 16f, tw = w - tx - 8f;
             for (int i = 0; i < formLines.Length; i++)
                 formLines[i] = WmcKit.Text(s, new Rect(tx, y - 8f - i * 22f, tw, 18f), i == 0 ? "row-name" : "row-sub");
+            // The legend: the plan view's own marks, drawn.
+            float ly = y - 8f - formLines.Length * 22f;
+            AvKit.Panel(s, new Rect(tx, ly - 5f, 8f, 8f), AvTheme.Hairline).raycastTarget = false;
+            WmcKit.Text(s, new Rect(tx + 12f, ly, 40f, 18f), "row-sub").text = "SLOT";
+            AvKit.Panel(s, new Rect(tx + 58f, ly - 6f, 5f, 5f), AvTheme.Friendly).raycastTarget = false;
+            WmcKit.Text(s, new Rect(tx + 68f, ly, 40f, 18f), "row-sub").text = "LIVE";
             AvButton edit = AvStyled.Button(s, new Rect(w - 126f, y - PreviewH + 30f, 120f, 22f), "EDIT SHAPES ›", "btn", null);
             edit.SetEnabled(false);
             edit.WithTooltip("The shape editor lives in the planning room's WORKSHOP. Arrives in a later update.");
@@ -179,7 +186,7 @@ namespace WingCommand
                 formLines[2].text = "STACK " + (stackWord == 0 ? "HIGH" : stackWord == 2 ? "LOW" : "LEVEL") + " · "
                     + (w.AfterburnerAllowed ? "GATE" : "BUSTER");
                 formLines[3].text = "ELEMENT " + ElementRoster.Letter(e) + (elementName != ElementRoster.Letter(e) ? " " + elementName : "")
-                    + " · " + members.ToString(CultureInfo.InvariantCulture) + " AC · ○ SLOT ● LIVE";
+                    + " · " + members.ToString(CultureInfo.InvariantCulture) + " AC";
                 shapeHead.text = "SHAPE · ELEMENT " + ElementRoster.Letter(e);
             }
             RefreshShapes(sel, current);

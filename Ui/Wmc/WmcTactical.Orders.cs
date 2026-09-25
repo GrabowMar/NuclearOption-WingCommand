@@ -62,7 +62,7 @@ namespace WingCommand
             float w = ordersScroll.Width, y = 0f;
 
             AvStyled.Label(s, new Rect(0f, y, KeyWidth, 24f), "PROFILE", "metric-key");
-            profileButton = AvStyled.Button(s, new Rect(KeyWidth, y, 186f, 24f), "RESERVE ▾", "btn", OpenProfiles);
+            profileButton = AvStyled.Button(s, new Rect(KeyWidth, y, 186f, 24f), "RESERVE ›", "btn", OpenProfiles);
             profileButton.WithTooltip("The behaviour the scope flies with: RESERVE holds fire in close formation, ESCORT covers you, SWEEP hunts wide.");
             ids["tac.orders.profile"] = profileButton;
             AvButton tune = AvStyled.Button(s, new Rect(KeyWidth + 190f, y, w - KeyWidth - 190f, 24f), "FINE-TUNE › BEHAVIOUR", "btn", null);
@@ -279,7 +279,7 @@ namespace WingCommand
             if (!ReferenceEquals(pattern, profileShown) && pattern != profileShown)
             {
                 profileShown = pattern;
-                profileButton.SetText(pattern + " ▾");
+                profileButton.SetText(pattern + " ›");
             }
             profileButton.SetEnabled(c.CanOrder);
             string cannot = c.Client ? "Orders are host only for now" : "Wing Command is not ready";

@@ -92,7 +92,7 @@ namespace WingCommand
             y -= TogglePitch + 2f;
 
             AvStyled.Label(s, new Rect(0f, y, KeyWidth, ToggleH), "SAVED", "metric-key");
-            savedPicker = AvStyled.Button(s, new Rect(KeyWidth, y, w - KeyWidth - 92f, ToggleH), "PICK A SAVED ROUTE ▾", "btn", OpenSaved);
+            savedPicker = AvStyled.Button(s, new Rect(KeyWidth, y, w - KeyWidth - 92f, ToggleH), "PICK A SAVED ROUTE ›", "btn", OpenSaved);
             savedPicker.WithTooltip("Load a saved route into the draft; SEND flies it.");
             ids["tac.route.saved"] = savedPicker;
             savedDelete = AvStyled.Button(s, new Rect(w - 88f, y, 88f, ToggleH), "DELETE", "btn", DeleteSaved);
@@ -209,7 +209,7 @@ namespace WingCommand
             if (i < 0 || i >= routes.Count) return;
             savedSelected = i;
             WmcRoutes.Store.Load(i, last.Draft);
-            savedPicker.SetText(routes[i].Name + " ▾");
+            savedPicker.SetText(routes[i].Name + " ›");
             WingToast.Show("Loaded " + routes[i].Name + ": SEND to fly it");
         }
 
@@ -226,7 +226,7 @@ namespace WingCommand
             WmcRoutes.Store.Remove(savedSelected);
             WmcRoutes.Save();
             savedSelected = -1;
-            savedPicker.SetText("PICK A SAVED ROUTE ▾");
+            savedPicker.SetText("PICK A SAVED ROUTE ›");
             WingToast.Show(name + " deleted");
         }
 
