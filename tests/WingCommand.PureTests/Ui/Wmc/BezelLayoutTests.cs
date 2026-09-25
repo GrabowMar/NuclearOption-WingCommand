@@ -66,6 +66,92 @@ namespace WingCommand.PureTests
             Assert.Equal(0, BezelLayout.InboundRows(0));
         }
 
+        // ---- LOADOUT
+
+        [Fact]
+        public void TheLiveryPinSitsOnTheBodyFloorAtBothDocks()
+        {
+            Assert.Equal(600f, BezelLayout.LoadoutView(636f));
+            Assert.Equal(300f, BezelLayout.LoadoutView(336f));
+            Assert.Equal(6f + 30f, BezelLayout.LiveryPin);
+        }
+
+        [Fact]
+        public void ATallDockShowsSixHardpointRowsAndThePagerWithoutScrolling()
+        {
+            Assert.Equal(6, BezelLayout.HardpointRows(636f));
+            Assert.True(BezelLayout.LoadoutContent(6, true) <= BezelLayout.LoadoutView(636f));
+        }
+
+        [Fact]
+        public void AShortDockShowsFourRowsAndScrolls()
+        {
+            Assert.Equal(4, BezelLayout.HardpointRows(336f));
+            Assert.True(BezelLayout.LoadoutContent(4, false) > BezelLayout.LoadoutView(336f));
+        }
+
+        [Fact]
+        public void TheHardpointsStartBelowTheCardTilesAndTemplateBar() =>
+            Assert.Equal(84f + 10f + 22f + 4f + 94f + 10f + 26f + 10f, BezelLayout.HardpointsTop);
+
+        [Fact]
+        public void TheHardpointColumnsTileTheContentWidthWithoutOverlap()
+        {
+            Assert.True(BezelLayout.ColStation + BezelLayout.ColStationW <= BezelLayout.ColStore);
+            Assert.True(BezelLayout.ColStore + BezelLayout.ColStoreW <= BezelLayout.ColMass);
+            Assert.True(BezelLayout.ColMass + BezelLayout.ColMassW <= BezelLayout.ColVerb);
+            Assert.Equal(BezelLayout.Content, BezelLayout.ColVerb + BezelLayout.ColVerbW);
+        }
+
+        [Fact]
+        public void TheTemplateBarFillsTheContentWidthWithDeleteSetApart() =>
+            Assert.Equal(BezelLayout.Content, BezelLayout.TemplatePick + 4f + BezelLayout.TemplateBtn + 4f + BezelLayout.TemplateBtn
+                + BezelLayout.DeleteGap + BezelLayout.TemplateBtn);
+
+        [Fact]
+        public void APopupIsSevenRowsAtMostAsTheToolkitDrawsIt()
+        {
+            Assert.Equal(3 * 32f + 8f, BezelLayout.PopupHeight(3));
+            Assert.Equal(7 * 32f + 8f, BezelLayout.PopupHeight(12));
+            Assert.Equal(32f + 8f, BezelLayout.PopupHeight(0));
+        }
+
+        [Fact]
+        public void AStorePopupOpensBelowItsRowWhenThereIsRoom()
+        {
+            Assert.Equal(142f, BezelLayout.PopupPlace(100f, 42f, 136f, 636f, 0f, out float scroll));
+            Assert.Equal(0f, scroll);
+        }
+
+        [Fact]
+        public void AStorePopupOpensAboveItsRowNearTheFloor()
+        {
+            Assert.Equal(168f, BezelLayout.PopupPlace(400f, 42f, 232f, 636f, 0f, out float scroll));
+            Assert.Equal(0f, scroll);
+        }
+
+        [Fact]
+        public void AMiddleRowOnAShortDockScrollsIntoRoomFirst()
+        {
+            float top = BezelLayout.PopupPlace(130f, 42f, 232f, 336f, 200f, out float scroll);
+            Assert.Equal(68f, scroll);
+            Assert.Equal(104f, top);
+            Assert.True(top + 232f <= 336f);
+        }
+
+        [Fact]
+        public void APopupNeverCoversItsRowAtEitherDock()
+        {
+            foreach (float body in new[] { 336f, 636f })
+                for (float row = 0f; row + 42f <= body; row += 10f)
+                {
+                    float top = BezelLayout.PopupPlace(row, 42f, 232f, body, 1000f, out float scroll);
+                    float r = row - scroll;
+                    Assert.True(top >= r + 42f || top + 232f <= r, $"body {body} row {row}");
+                    Assert.True(top >= 0f && top + 232f <= body, $"body {body} row {row} top {top}");
+                }
+        }
+
         [Fact]
         public void ThreeTilesAndTheirGapsFillTheContentWidth()
         {

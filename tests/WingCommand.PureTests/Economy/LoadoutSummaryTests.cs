@@ -62,6 +62,19 @@ namespace WingCommand.PureTests
         }
 
         [Fact]
+        public void AStoreTheMissionRefusesIsCountedApartAndWeighsNothing()
+        {
+            var facts = new StoreFacts[6];
+            facts[2] = Store(StoreKind.Bomb, 100f, 1);
+            facts[2].Refused = true;
+            FitSummary s = LoadoutSummary.Of(StationLayoutTests.Vt7(), facts);
+            Assert.Equal(1, s.Refused);
+            Assert.Equal(0, s.Fitted);
+            Assert.Equal(0, s.Unknown);
+            Assert.Equal(0f, s.Mass);
+        }
+
+        [Fact]
         public void CargoAndMissileDefenceAreCounted()
         {
             var facts = new StoreFacts[6];

@@ -7,6 +7,8 @@ namespace WingCommand
     internal struct StoreFacts
     {
         public bool HasKey, Known;
+        /// <summary>A known store this mission refuses (restricted, nuclear not yet, …): it launches empty here.</summary>
+        public bool Refused;
         public StoreKind Kind;
         /// <summary>Per pylon (WeaponMount.mass is per hardpoint).</summary>
         public float Mass;
@@ -17,7 +19,7 @@ namespace WingCommand
     /// (blocked) or this build does not know, the mass of what flies (every pylon) and its rounds by kind.</summary>
     internal struct FitSummary
     {
-        public int Stations, Fitted, Blocked, Unknown;
+        public int Stations, Fitted, Blocked, Unknown, Refused;
         public float Mass;
         public int Aam, Agm, Bombs, Ecm, Cargo, MslDef;
     }
@@ -30,17 +32,22 @@ namespace WingCommand
             int sets = layout.Sets;
             var fitted = new bool[sets];
             var cleared = new bool[sets];
-            for (int s = 0; s < sets && s < facts.Length; s++) fitted[s] = facts[s].Known;
+            for (int s = 0; s < sets && s < facts.Length; s++) fitted[s] = facts[s].Known && !facts[s].Refused;
             layout.WillClear(fitted, cleared);
             var sum = new FitSummary { Stations = layout.Stations };
             for (int st = 0; st < layout.Stations; st++)
             {
-                bool flies = false, blocked = false, unknown = false;
+                bool flies = false, blocked = false, unknown = false, refused = false;
                 for (int s = layout.First(st); s < layout.End(st) && s < facts.Length; s++)
                 {
                     StoreFacts f = facts[s];
                     if (f.HasKey && !f.Known) unknown = true;
                     if (!f.Known) continue;
+                    if (f.Refused)
+                    {
+                        refused = true;
+                        continue;
+                    }
                     if (cleared[s])
                     {
                         blocked = true;
@@ -53,6 +60,7 @@ namespace WingCommand
                 }
                 if (flies) sum.Fitted++;
                 else if (blocked) sum.Blocked++;
+                else if (refused) sum.Refused++;
                 if (unknown) sum.Unknown++;
             }
             return sum;

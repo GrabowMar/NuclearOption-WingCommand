@@ -56,8 +56,10 @@ namespace WingCommand.PureTests
             Assert.True(SupplyWords.Fit("t1", "A very long template name here").Length <= SupplyWords.FitChars);
             Assert.Equal("FIT · AUTO ›", SupplyWords.FitButton("AUTO"));
             Assert.Contains("the game", SupplyWords.FitDetail(null, false));
-            Assert.Contains("LOADOUT", SupplyWords.FitDetail(null, false));
-            Assert.DoesNotContain("arrive", SupplyWords.FitDetail(null, true));
+            // R5: templates are made on LOADOUT now; the detail points there until one exists.
+            Assert.Contains("made on LOADOUT", SupplyWords.FitDetail(null, false));
+            Assert.DoesNotContain("made on", SupplyWords.FitDetail(null, true));
+            Assert.DoesNotContain("arrive", SupplyWords.FitDetail(null, false));
         }
 
         [Fact]

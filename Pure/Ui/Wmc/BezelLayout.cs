@@ -1,3 +1,5 @@
+using System;
+
 namespace WingCommand
 {
     /// <summary>The bezel's fixed geometry (spec WMC rebuild §bezel shell): the synced <c>AvScreen</c> chrome (data bar 62,
@@ -28,7 +30,53 @@ namespace WingCommand
         public const float BaseStep = StepHead + HeadGap + BaseMode + HeadGap + BaseRows * BasePitch + HeadGap;
         public const float SupplySteps = PilotStep + AirframeStep + FitStep + BaseStep;
 
+        // LOADOUT (spec WMC rebuild §LOADOUT; research loadout-ui §2): a scroll viewport over the build card, airframe tiles, the
+        // template bar and the HARDPOINTS table, and a LIVERY row pinned on the body's floor.
+        public const float LiveryRow = 30f, LiveryPin = 6f + LiveryRow, CardH = 84f, BlockGap = 10f, SectionHead = 22f, LoadoutTileH = 44f;
+        public const float LoadoutTiles = 2f * LoadoutTileH + TileGap, TemplateBar = 26f, TemplatePick = 242f, TemplateBtn = 64f, DeleteGap = 16f;
+        public const float HardpointsTop = CardH + BlockGap + SectionHead + HeadGap + LoadoutTiles + BlockGap + TemplateBar + BlockGap;
+        public const float ColumnHead = 16f, HardpointHead = SectionHead + HeadGap + ColumnHead, HpRowH = 42f, HpPitch = 44f, HpPager = 26f;
+        public const int HpRowsMin = 4, HpRowsMax = 6;
+        public const float ColStation = 8f, ColStationW = 164f, ColStore = 176f, ColStoreW = 172f, ColMass = 352f, ColMassW = 48f;
+        public const float ColVerb = 404f, ColVerbW = 54f;
+        public const float PopupRowPitch = 32f, PopupPad = 8f;
+        public const int PopupMaxRows = 7;
+
         public static float Body(float panelHeight) => panelHeight - Chrome;
+
+        /// <summary>LOADOUT's scroll viewport: the body less the pinned LIVERY row.</summary>
+        public static float LoadoutView(float body) => body - LiveryPin;
+
+        /// <summary>Hardpoint rows per page: as many as the tall dock shows without scrolling (6), at least 4.</summary>
+        public static int HardpointRows(float body)
+        {
+            int n = (int)Math.Floor((LoadoutView(body) - HardpointsTop - HardpointHead - (HpPager + HeadGap)) / HpPitch);
+            return n < HpRowsMin ? HpRowsMin : n > HpRowsMax ? HpRowsMax : n;
+        }
+
+        public static float LoadoutContent(int rows, bool paged) => HardpointsTop + HardpointHead + rows * HpPitch + (paged ? HpPager + HeadGap : 0f);
+
+        /// <summary>The toolkit popup's height for <paramref name="entries"/> rows (seven at most: it pages beyond).</summary>
+        public static float PopupHeight(int entries) =>
+            PopupRowPitch * (entries <= 0 ? 1 : entries > PopupMaxRows ? PopupMaxRows : entries) + PopupPad;
+
+        /// <summary>Where a popup for a row goes, as a depth from the body's top: below the row when it fits, else above, else after
+        /// scrolling the row up (<paramref name="scroll"/>, at most <paramref name="maxScroll"/>) so it fits below — never over its row
+        /// and never past the body (the page layer sits under the chrome). A last resort, when nothing fits, keeps it in the body.</summary>
+        public static float PopupPlace(float rowDepth, float rowH, float popupH, float bodyH, float maxScroll, out float scroll)
+        {
+            scroll = 0f;
+            if (rowDepth + rowH + popupH <= bodyH) return rowDepth + rowH;
+            if (rowDepth - popupH >= 0f) return rowDepth - popupH;
+            float need = rowDepth + rowH + popupH - bodyH;
+            if (need <= maxScroll && rowH + popupH <= bodyH)
+            {
+                scroll = need;
+                return rowDepth - need + rowH;
+            }
+            float room = bodyH - (rowDepth + rowH) >= rowDepth ? rowDepth + rowH : rowDepth - popupH;
+            return Math.Max(0f, Math.Min(room, bodyH - popupH));
+        }
 
         /// <summary>SUPPLY's scroll viewport: the body less the DISPATCH pin.</summary>
         public static float SupplyView(float body) => body - SupplyPin;

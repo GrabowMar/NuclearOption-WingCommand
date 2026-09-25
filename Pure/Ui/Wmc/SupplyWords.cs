@@ -65,7 +65,7 @@ namespace WingCommand
         {
             if (fit == CallSpec.YourLoadout) return "YOUR LOADOUT: the loadout you set for this airframe, as you would fly it.";
             if (fit != null) return "A template saved on LOADOUT for this airframe.";
-            return "AUTO: the game arms it for the mission, as it arms its own AI." + (templates ? "" : " Saved templates arrive with LOADOUT.");
+            return "AUTO: the game arms it for the mission, as it arms its own AI." + (templates ? "" : " Templates are made on LOADOUT.");
         }
 
         public static string Requisition(float price) => "REQUISITION · " + Credits.Price(price);
