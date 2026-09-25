@@ -98,6 +98,11 @@ namespace WingCommand
         public static string HardpointsNote(int stations, int blocked) =>
             Count(stations, "STATION", "STATIONS") + (blocked > 0 ? " · " + N(blocked) + " BLOCKED" : "");
 
+        /// <summary>The status strip's alert when stations hold stores this mission refuses; null when none.</summary>
+        public static string EmptyHereAlert(int n) =>
+            n <= 0 ? null : n == 1 ? "1 STATION LAUNCHES EMPTY HERE · clear it or fit another store"
+            : N(n) + " STATIONS LAUNCH EMPTY HERE · clear them or fit other stores";
+
         public static string DeleteLabel(bool asking) => asking ? "DELETE?" : "DELETE";
 
         public static string DeleteAsk(string name) => "Press DELETE again to delete " + name + " · aircraft in the air keep their fit";

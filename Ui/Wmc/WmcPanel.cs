@@ -20,7 +20,7 @@ namespace WingCommand
         {
             null,
             null,
-            "LOADOUT: templates, hardpoints and livery. Arrives in a later update.",
+            null,
             "WING: the squadron roster and the pilot dossier. Arrives in a later update.",
         };
 
@@ -35,6 +35,7 @@ namespace WingCommand
         private IWmcPage[] pages;
         private WmcTactical tactical;
         private WmcSupply supply;
+        private WmcLoadout loadout;
         private WmcMetricRow metrics;
         private MFDScreen screen;
         private Button bezelButton;
@@ -61,6 +62,7 @@ namespace WingCommand
         public WmcMapOverlay Overlay => overlay;
         public WmcTactical Tactical => tactical;
         public WmcSupply Supply => supply;
+        public WmcLoadout Loadout => loadout;
         /// <summary>Labels that would still spill out of their box (the automation's text-fit audit).</summary>
         public int Overflow => content != null ? WmcKit.Overflow(content) : 0;
 
@@ -177,6 +179,7 @@ namespace WingCommand
             pages = null;
             tactical = null;
             supply = null;
+            loadout = null;
             metrics = null;
             profileShown = null;
             for (int i = 0; i < headerKeys.Length; i++) headerKeys[i] = -1;
@@ -285,7 +288,8 @@ namespace WingCommand
 
             tactical = new WmcTactical(controls);
             supply = new WmcSupply(controls);
-            pages = new IWmcPage[] { tactical, supply, null, null };
+            loadout = new WmcLoadout(controls);
+            pages = new IWmcPage[] { tactical, supply, loadout, null };
             for (int i = 0; i < pages.Length; i++)
             {
                 if (pages[i] == null)

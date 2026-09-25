@@ -130,6 +130,14 @@ namespace WingCommand.PureTests
         }
 
         [Fact]
+        public void TheAlertCountsStationsThatLaunchEmptyHere()
+        {
+            Assert.Null(LoadoutWords.EmptyHereAlert(0));
+            Assert.Equal("1 STATION LAUNCHES EMPTY HERE · clear it or fit another store", LoadoutWords.EmptyHereAlert(1));
+            Assert.StartsWith("2 STATIONS LAUNCH EMPTY HERE", LoadoutWords.EmptyHereAlert(2));
+        }
+
+        [Fact]
         public void AClientIsToldTemplatesAreSavedOnThisPc() =>
             Assert.Contains("THIS PC", LoadoutWords.Hint(true, true, true, "VT-7"));
 
