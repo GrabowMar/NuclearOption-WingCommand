@@ -100,7 +100,8 @@ namespace WingCommand
             FactionHQ hq = caller != null ? caller.NetworkHQ : null;
             var w = new ShopWing
             {
-                Host = caller != null && caller.IsServer,
+                // No aircraft yet: the host still runs SUPPLY (NotFlying says why), only a client is a client.
+                Host = caller != null ? caller.IsServer : !WingNet.ClientOnly,
                 Flying = caller != null && !caller.disabled,
                 HasFaction = hq != null,
                 Sandbox = Plugin.Settings.SandboxFreeCalls.Value,

@@ -19,7 +19,7 @@ namespace WingCommand
         private static readonly string[] PendingTabs =
         {
             null,
-            "SUPPLY: the 0.9 shop on the 1.0 ledger (pilot, airframe, fit, base, requisition). Arrives in a later update.",
+            null,
             "LOADOUT: templates, hardpoints and livery. Arrives in a later update.",
             "WING: the squadron roster and the pilot dossier. Arrives in a later update.",
         };
@@ -34,6 +34,7 @@ namespace WingCommand
         private string profileShown;
         private IWmcPage[] pages;
         private WmcTactical tactical;
+        private WmcSupply supply;
         private WmcMetricRow metrics;
         private MFDScreen screen;
         private Button bezelButton;
@@ -58,6 +59,7 @@ namespace WingCommand
         public WmcContext Context => context;
         public WmcMapOverlay Overlay => overlay;
         public WmcTactical Tactical => tactical;
+        public WmcSupply Supply => supply;
         /// <summary>Labels that would still spill out of their box (the automation's text-fit audit).</summary>
         public int Overflow => content != null ? WmcKit.Overflow(content) : 0;
 
@@ -167,6 +169,7 @@ namespace WingCommand
             shell = null;
             pages = null;
             tactical = null;
+            supply = null;
             metrics = null;
             profileShown = null;
             for (int i = 0; i < headerKeys.Length; i++) headerKeys[i] = -1;
@@ -274,7 +277,8 @@ namespace WingCommand
             BuildRoomButton();
 
             tactical = new WmcTactical(controls);
-            pages = new IWmcPage[] { tactical, null, null, null };
+            supply = new WmcSupply(controls);
+            pages = new IWmcPage[] { tactical, supply, null, null };
             for (int i = 0; i < pages.Length; i++)
             {
                 if (pages[i] == null)

@@ -39,7 +39,7 @@ namespace WingCommand
         public int Sub => sub;
 
         public string Hint => last != null && last.Count == 0 && !last.Client
-            ? "No wingmen yet. Call aircraft from the radial menu."
+            ? "No wingmen yet: requisition them on SUPPLY, or call them from the radial menu."
             : "Click wingmen to choose who orders go to; an element's header takes it whole.";
 
         public string Alert => alertText;

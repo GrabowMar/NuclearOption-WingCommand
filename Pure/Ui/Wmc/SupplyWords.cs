@@ -8,10 +8,22 @@ namespace WingCommand
     /// line and tile foot are <see cref="ShopRules"/>' words.</summary>
     internal static class SupplyWords
     {
-        public const int ChipChars = 15, CaptionChars = 22, CodeChars = 12, NameChars = 20, FitChars = 16, DispatchChars = 79;
+        public const int ChipChars = 15, CaptionChars = 22, CodeChars = 12, NameChars = 20, FitChars = 16, DispatchChars = 79, RowChars = 70;
 
         public const string PilotTitle = "PILOT & CREW", AirframeTitle = "AIRFRAME", FitTitle = "FIT & FUEL", BaseTitle = "LAUNCH BASE",
             InboundTitle = "INBOUND";
+
+        /// <summary>The STOCK tile's caption in the sandbox, where stock is not counted.</summary>
+        public const string SandboxStock = "SANDBOX · NOT COUNTED";
+
+        /// <summary>Step 2 with nothing listed (one inert card, never a blank grid).</summary>
+        public const string NotFlyingTiles = "NOT FLYING · take off to see what your faction offers.";
+        public const string NoneOffered =
+            "NO AIRFRAME OFFERED · your faction's supply lists none here (Squadron/SandboxFreeCalls lists every one).";
+
+        /// <summary>Step 4 with no field in reach.</summary>
+        public const string NotFlyingBases = "Not flying: take off to see the fields in reach.";
+        public const string NoField = "No friendly or unowned field in reach to launch from.";
 
         /// <summary>The tile's code line: the game's code, else the name's first word.</summary>
         public static string Code(string code, string unitName)

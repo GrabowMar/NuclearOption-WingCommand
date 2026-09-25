@@ -83,6 +83,17 @@ namespace WingCommand.PureTests
         }
 
         [Fact]
+        public void EmptyStatesSayWhyInWordsThatFit()
+        {
+            Assert.True(SupplyWords.SandboxStock.Length <= SupplyWords.CaptionChars);
+            Assert.Contains("SANDBOX", SupplyWords.SandboxStock);
+            Assert.Contains("SandboxFreeCalls", SupplyWords.NoneOffered);
+            Assert.StartsWith("NOT FLYING", SupplyWords.NotFlyingTiles);
+            foreach (string line in new[] { SupplyWords.NoField, SupplyWords.NotFlyingBases })
+                Assert.True(line.Length <= SupplyWords.RowChars, line);
+        }
+
+        [Fact]
         public void TheHintTellsTheHostWhatToDoAndAClientWhoDoesIt()
         {
             Assert.Contains("REQUISITION", SupplyWords.Hint(false, 0));

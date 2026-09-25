@@ -69,10 +69,11 @@ namespace WingCommand
             emptyRoot = empty.gameObject;
             AvStyled.Box(empty, new Rect(0f, 0f, width, EmptyH), "card", "inert");
             emptyText = WmcKit.Text(empty, new Rect(12f, -6f, width - 150f, 18f), "row-name");
-            AvStyled.Label(empty, new Rect(12f, -26f, width - 150f, 16f), "Call wingmen from the radial menu.", "row-sub");
-            AvButton supply = AvStyled.Button(empty, new Rect(width - 128f, -12f, 120f, 24f), "OPEN SUPPLY", "btn", null);
-            supply.SetEnabled(false);
-            supply.WithTooltip("SUPPLY arrives in a later update; call wingmen from the radial menu.");
+            AvStyled.Label(empty, new Rect(12f, -26f, width - 150f, 16f), "Requisition wingmen on SUPPLY, or call them from the radial menu.",
+                "row-sub");
+            AvButton supply = AvStyled.Button(empty, new Rect(width - 128f, -12f, 120f, 24f), "OPEN SUPPLY", "btn",
+                () => WmcPanel.Instance?.Show(WmcPanel.TabSupply));
+            supply.WithTooltip("Requisition a wingman: pilot, airframe, fit and base.");
             ids["tac.list.supply"] = supply;
             emptyRoot.SetActive(false);
         }
