@@ -46,37 +46,13 @@ namespace WingCommand
             public static bool HasPerk(WingPilot pilot, PilotPerk perk) => WingPilotRoster.HasPerk(pilot, perk);
         }
 
-        internal static class Recruitment
-        {
-            public static void Reset() => WingRecruitment.Reset();
-            public static float PriceOf(Aircraft aircraft) => WingRecruitment.PriceOf(aircraft);
-            public static bool TryRecruit(WingRegistry wing, Aircraft aircraft,
-                                          out WingMember member, out string reason) =>
-                WingRecruitment.TryRecruit(wing, aircraft, out member, out reason);
-        }
 
-        internal static class Takeover
-        {
-            public static void Reset() => WingTakeover.Reset();
-            public static void Tick() => WingTakeover.Tick();
-            public static bool Begin(WingRegistry registry, Aircraft previousLeader) =>
-                WingTakeover.Begin(registry, previousLeader);
-            public static void LeaderRestored(Aircraft leader) => WingTakeover.LeaderRestored(leader);
-        }
 
-        internal static class Recovery
-        {
-            public static void Reset() => WingRecovery.Reset();
-            public static void Tick(WingRegistry wing) => WingRecovery.Tick(wing);
-            public static bool HoldsDeath(WingMember member) => WingRecovery.HoldsDeath(member);
-        }
 
         internal static class SearchAndRescue
         {
             public const float LocalRecoveryCost = WingSearchAndRescue.LocalRecoveryCost;
             public static void Tick() => WingSearchAndRescue.Tick();
-            public static void Dispatch(WingPilot pilot, WingRegistry wing) =>
-                WingSearchAndRescue.Dispatch(pilot, wing);
             public static bool OrganizeLocalRecovery(WingPilot pilot) =>
                 WingSearchAndRescue.OrganizeLocalRecovery(pilot);
             public static float LocalRecoveryRemaining(WingPilot pilot) =>
@@ -120,22 +96,6 @@ namespace WingCommand
             public static void NoteShot(Aircraft shooter, Unit target) => WingKillCredit.NoteShot(shooter, target);
         }
 
-        internal static class Departure
-        {
-            public static void Reset() => WingDeparture.Reset();
-            public static void Begin(WingMember member) => WingDeparture.Begin(member);
-            public static void Begin(Aircraft aircraft, string name = null, bool owned = false) =>
-                WingDeparture.Begin(aircraft, name, owned);
-            public static bool Contains(Aircraft aircraft) => WingDeparture.Contains(aircraft);
-        }
 
-        internal static class DepartureChatter
-        {
-            public static void Activated(WingMember member) => WingDepartureChatter.Activated(member);
-            public static bool ReportingLiftoff(WingMember member) => WingDepartureChatter.ReportingLiftoff(member);
-            public static void Tick(WingRegistry wing, bool speechAllowed) =>
-                WingDepartureChatter.Tick(wing, speechAllowed);
-            public static void Reset() => WingDepartureChatter.Reset();
-        }
     }
 }

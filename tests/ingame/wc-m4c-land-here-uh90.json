@@ -1,0 +1,30 @@
+{
+  "name": "wc-m4c-land-here-uh90",
+  "mods": ["wingcommand"],
+  "timeout_s": 420,
+  "ops": [
+    {"op": "spawn", "id": "lead", "type": "UH-90 Ibis", "at": {"map": [-18900, 31700]}, "altitude": 260, "speed": 30, "heading": 90},
+    {"op": "fly", "id": "lead", "program": [{"level": 20}, {"speed": {"to": 0}}, {"level": 360}]},
+    {"op": "wait", "seconds": 2},
+    {"op": "call", "method": "WingCommand.Automation.FormOn", "store": "form",
+     "args": {"lead": "lead", "count": 2, "type": "UH-90 Ibis", "shape": "staggered-trail", "spacing": "Standard"}},
+    {"op": "wait", "seconds": 60},
+    {"op": "call", "method": "WingCommand.Automation.LandHere", "store": "land"},
+    {"op": "wait", "seconds": 150},
+    {"op": "call", "method": "WingCommand.Automation.Settled", "store": "down"},
+    {"op": "call", "method": "WingCommand.Automation.TakeOff", "store": "takeoff"},
+    {"op": "wait", "seconds": 45},
+    {"op": "call", "method": "WingCommand.Automation.Settled", "store": "after"},
+    {"op": "call", "method": "WingCommand.Automation.Metrics", "store": "wing"},
+    {"op": "end"}
+  ],
+  "checks": [
+    {"check": "status_ok"},
+    {"check": "result_above", "path": "form.spawned", "min": 2},
+    {"check": "result_above", "path": "land.landing", "min": 2},
+    {"check": "result_above", "path": "down.down", "min": 2},
+    {"check": "result_below", "path": "down.failed", "max": 0},
+    {"check": "result_above", "path": "after.airborne", "min": 2},
+    {"check": "result_above", "path": "after.members", "min": 2}
+  ]
+}

@@ -52,7 +52,7 @@ namespace WingCommand
                 pending.Native = native;
                 pending.PendingAircraft = null;
                 pending.Pilot.RecoveryStatus = PilotRecoveryStatus.Downed;
-                WingCommandManager.Instance?.Toast(pending.Pilot.Callsign + " ejected alive — SAR needed");
+                WingToast.Show(pending.Pilot.Callsign + " ejected alive — SAR needed");
                 return;
             }
             WingPilot pilot = WingPilotRoster.Of(native.parentUnit);
@@ -68,20 +68,20 @@ namespace WingCommand
                 // Hold an unresolved record briefly instead of declaring that crew KIA immediately.
                 if (!UnitRegistry.TryGetUnit(id, out Unit unit) || !(unit is Aircraft aircraft) ||
                     !aircraft.IsServer) return false;
-                Pilot seated = WingRegistry.PrimaryPilot(aircraft);
+                Pilot seated = PrimaryPilot(aircraft);
                 if (seated == null || seated.dead) return false;
                 survivors.Add(id, new Survivor {
                     Pilot = pilot, PendingAircraft = aircraft,
                     PendingUntil = Time.timeSinceLevelLoad + 30f
                 });
                 pilot.RecoveryStatus = PilotRecoveryStatus.Missing;
-                WingCommandManager.Instance?.Toast(pilot.Callsign + " — checking ejection, pilot unavailable");
+                WingToast.Show(pilot.Callsign + " — checking ejection, pilot unavailable");
                 return true;
             }
             if (survivor.Pilot != pilot ||
                 survivor.Native == null || survivor.Native.animationState == PilotDismounted.PilotState.dead) return false;
             pilot.RecoveryStatus = PilotRecoveryStatus.Downed;
-            WingCommandManager.Instance?.Toast(pilot.Callsign + " ejected alive — SAR needed");
+            WingToast.Show(pilot.Callsign + " ejected alive — SAR needed");
             return true;
         }
 
@@ -93,11 +93,13 @@ namespace WingCommand
             WingPilotRoster.SettleRescue(id, survivor.Pilot, status, killed, message);
         }
 
+        private static Pilot PrimaryPilot(Aircraft aircraft) =>
+            aircraft != null && aircraft.pilots != null && aircraft.pilots.Length > 0 ? aircraft.pilots[0] : null;
+
         private static void AwardRescueBounty(PersistentID id, WingPilot pilot)
         {
-            float value = EconomyFacade.Shop.PaidFor(id);
-            if (value <= 0f && UnitRegistry.TryGetUnit(id, out Unit u) && u is Aircraft a && a.definition != null)
-                value = EconomyFacade.Shop.CurrentPriceOf(a.definition);
+            // The airframe's list value (what a purchase would have cost).
+            float value = UnitRegistry.TryGetUnit(id, out Unit u) && u is Aircraft a && a.definition != null ? a.definition.value : 0f;
             if (value <= 0f) value = 500f;
 
             float bounty = Mathf.Round(value * 0.5f);
@@ -105,7 +107,7 @@ namespace WingCommand
             {
                 player.AddAllocation(bounty);
                 string call = pilot != null && !string.IsNullOrWhiteSpace(pilot.Callsign) ? pilot.Callsign : "Pilot";
-                WingCommandManager.Instance?.Toast($"CSAR: {call} rescued! +${bounty:F0} bounty awarded");
+                WingToast.Show($"CSAR: {call} rescued! +${bounty:F0} bounty awarded");
             }
         }
 
@@ -153,7 +155,7 @@ namespace WingCommand
                 {
                     if (survivor.PendingAircraft != null)
                     {
-                        Pilot seated = WingRegistry.PrimaryPilot(survivor.PendingAircraft);
+                        Pilot seated = PrimaryPilot(survivor.PendingAircraft);
                         if (seated != null && seated.dead)
                         {
                             Settle(id, PilotRecoveryStatus.None, true, "KIA before ejection");
@@ -261,58 +263,19 @@ namespace WingCommand
 
             if (!GameManager.GetLocalPlayer(out Player player) || player == null)
             {
-                WingCommandManager.Instance?.Toast("LOCAL SAR: no player funds available");
+                WingToast.Show("LOCAL SAR: no player funds available");
                 return false;
             }
             if (player.Allocation < LocalRecoveryCost)
             {
-                WingCommandManager.Instance?.Toast("LOCAL SAR requires 10,000,000 funds");
+                WingToast.Show("LOCAL SAR requires 10,000,000 funds");
                 return false;
             }
 
             player.AddAllocation(-LocalRecoveryCost);
             survivor.LocalRecoveryAt = Time.timeSinceLevelLoad + LocalRecoveryDuration;
-            WingCommandManager.Instance?.Toast("LOCAL SAR organized for " + pilot.Callsign + " — ETA 05:00");
+            WingToast.Show("LOCAL SAR organized for " + pilot.Callsign + " — ETA 05:00");
             return true;
-        }
-
-        /// <summary>Explicit player dispatch only. Use native capture after a safe land-in-place approach.</summary>
-        public static void Dispatch(WingPilot pilot, WingRegistry wing)
-        {
-            Survivor survivor = null;
-            foreach (Survivor candidate in survivors.Values)
-                if (candidate.Pilot == pilot) { survivor = candidate; break; }
-            PilotDismounted native = survivor?.Native;
-            if (native == null || native.disabled || !native.IsServer || wing == null ||
-                pilot.RecoveryStatus != PilotRecoveryStatus.Downed) return;
-            if (native.animationState != PilotDismounted.PilotState.landing || native.IsSlung() ||
-                native.transform.position.y <= Datum.LocalSeaY + 2f)
-            {
-                WingCommandManager.Instance?.Toast("SAR: wait for a land touchdown; use the native helicopter hoist for water rescue");
-                return;
-            }
-            WingMember best = null;
-            float distance = float.PositiveInfinity;
-            foreach (WingMember member in wing.Members)
-            {
-                Aircraft aircraft = member.Aircraft;
-                if (!member.IsCommandable || member.IsPanicking || aircraft == null ||
-                    !aircraft.IsServer || !aircraft.LocalSim || aircraft.NetworkHQ != native.NetworkHQ ||
-                    !WingRegistry.IsRotary(aircraft) || aircraft.definition == null ||
-                    aircraft.definition.captureCapacity <= 0 || member.Fuel <= 0.25f ||
-                    (member.Order != WingOrder.Formation && member.Order != WingOrder.OrbitHere)) continue;
-                float candidateDistance = (aircraft.GlobalPosition() - native.GlobalPosition()).sqrMagnitude;
-                if (candidateDistance >= distance) continue;
-                distance = candidateDistance;
-                best = member;
-            }
-            if (best == null)
-            {
-                WingCommandManager.Instance?.Toast("SAR needs a friendly idle helicopter with capture capacity and over 25% fuel");
-                return;
-            }
-            best.Apply(WingDirective.AtPoint(WingOrder.LandHere, native.GlobalPosition()));
-            WingCommandManager.Instance?.Toast(best.Name + " dispatched to " + pilot.Callsign + " — native rescue after landing");
         }
     }
 

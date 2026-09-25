@@ -76,18 +76,5 @@ namespace WingCommand.PureTests
             route.Suspend("surviving");
             Assert.Equal("formation", route.Restore(_ => false, "formation"));
         }
-
-        [Fact]
-        public void PatrolUsesRoeOnlyWhileItsTaskOwnsFlight()
-        {
-            Assert.Equal(OrderEngagementAuthority.StandingRoe,
-                OrderRoePolicy.AuthorityFor(WingBehaviours.Task, WingOrder.MoveToPoint, patrol: true));
-            Assert.Equal(OrderEngagementAuthority.DefensiveOnly,
-                OrderRoePolicy.AuthorityFor(WingBehaviours.Task, WingOrder.MoveToPoint));
-            Assert.Equal(OrderEngagementAuthority.DefensiveOnly,
-                OrderRoePolicy.AuthorityFor(WingBehaviours.MissileBreak, WingOrder.MoveToPoint, patrol: true));
-            Assert.Equal(StationFireMode.None,
-                OrderRoePolicy.StationFire(OrderEngagementAuthority.StandingRoe, WingDoctrine.Reserve, false, true));
-        }
     }
 }

@@ -44,16 +44,8 @@ namespace WingCommand
                         output.Add("Build=" + typeof(Plugin).Assembly.ManifestModule.ModuleVersionId);
                         var settings = Plugin.Settings;
                         // Explicit numeric/boolean/enum fields only. Never dump the config file.
-                        output.Add($"AI: configuredMode={settings.Mode.Value}, activeMode={WingFidelity.Mode}, " +
-                            $"sharpTurns={settings.AiSharpTurns.Value}, targetSpreading={settings.AiTargetSpreading.Value}, " +
-                            $"missileWarningRepair={settings.AiMissileWarningRepair.Value}");
-                        output.Add(FormattableString.Invariant($"Formation: shape={WingFormation.Shape}, spacing={WingFormation.SlotSpacing}, geometryStride={WingFidelity.GeometryStride}"));
-                        output.Add($"Features: autoReturnOnEmpty={settings.AutoReturnOnEmpty.Value}, " +
-                            $"returnToReserve={settings.RtbReturnsToReserve.Value}, takeover={settings.TakeoverOnDeath.Value}, " +
-                            $"shop={settings.ShopEnabled.Value}, pilotProgression={settings.PilotProgression.Value}, " +
-                            $"mapCommands={settings.MapCommandEnabled.Value}, mfd={settings.UseMfdPanel.Value}");
-                        output.Add($"Debug: verbose={settings.VerboseLogging.Value}, freePurchases={settings.CheatFreePurchases}, " +
-                            $"noWingLimit={settings.CheatNoWingLimit}, bypassRank={settings.CheatBypassRank}");
+                        output.Add($"AI: configuredMode={settings.Mode.Value}, activeMode={WingFidelity.Mode}");
+                        output.Add($"Debug: verbose={settings.VerboseLogging.Value}, devTools={settings.DevTools.Value}");
                         output.AddRange(lines);
                         File.WriteAllLines(Path.Combine(directory, FileName), output);
                         status = "Saved " + FileName + " beside WingCommand.dll (replaces previous export).";

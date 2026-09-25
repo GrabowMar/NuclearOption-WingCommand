@@ -335,6 +335,33 @@ namespace WingCommand
 
         // Loadout construction.
 
+        /// <summary>A chosen fit (YOUR LOADOUT or a template) passes the game's own mount checks before it spawns (review R4a:
+        /// the player's selection menu vets a fit, a requisition must too): event content and mission-restricted stores,
+        /// ship-rearm stores off a carrier, stores the pylon does not take or a neighbour blocks, and nuclear stores against the
+        /// mission's permission, the player's rank and the field's warheads. A failing pylon launches empty; returns how many.</summary>
+        public static int Vet(Loadout loadout, AircraftDefinition definition, Airbase field, FactionHQ hq)
+        {
+            Aircraft template = definition != null && definition.unitPrefab != null ? definition.unitPrefab.GetComponent<Aircraft>() : null;
+            WeaponManager manager = template != null ? template.weaponManager : null;
+            if (loadout?.weapons == null || manager == null || manager.hardpointSets == null) return 0;
+            GameManager.GetLocalPlayer(out NuclearOption.Networking.Player player);
+            int stripped = 0;
+            for (int i = 0; i < loadout.weapons.Count && i < manager.hardpointSets.Length; i++)
+            {
+                WeaponMount mount = loadout.weapons[i];
+                HardpointSet set = manager.hardpointSets[i];
+                if (mount == null || set == null) continue;
+                if (WeaponChecker.MountAllowedHQ(mount, hq) && WeaponChecker.MountAllowedAirbase(mount, field)
+                    && WeaponChecker.MountAllowedHardpoint(mount, set) && WeaponChecker.MountAllowedConflict(set, loadout)
+                    && WeaponChecker.MountAllowedNuclear(mount, set, field, player, hq)) continue;
+                loadout.weapons[i] = null;
+                stripped++;
+            }
+            if (stripped > 0)
+                Plugin.LogVerbose("[Loadout] " + SafeName(definition) + ": " + stripped + " pylon(s) launch empty (not allowed here)");
+            return stripped;
+        }
+
         /// <summary>Build a choice using the live player default, then game-start preset for Standard.
         /// Return null for unavailable presets or deleted templates so native spawning chooses a usable
         /// fallback fit.</summary>

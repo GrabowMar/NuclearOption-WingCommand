@@ -1,0 +1,19 @@
+name: tests
+
+# Engine-free test projects only: the plugin itself needs the game's Managed assemblies to build.
+on:
+  push:
+    branches: [main, ai-v2]
+  pull_request:
+
+jobs:
+  test:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 8.0.x
+      - name: Run tests
+        shell: pwsh
+        run: ./tests/Run.ps1

@@ -8,41 +8,43 @@ namespace WingCommand.PureTests
         public void OldTaskCompletionCannotEraseANewOrderOrItsTargetPayload()
         {
             var standing = NewOrder();
-            standing.Set((WingOrder.MoveToPoint, "waypoint A"));
+            standing.Set((TestOrder.MoveToPoint, "waypoint A"));
             int oldLeg = standing.Revision;
-            standing.Set((WingOrder.Attack, "target B"));
-            Assert.False(standing.TryComplete(oldLeg, (WingOrder.Formation, ""), out bool changed));
+            standing.Set((TestOrder.Attack, "target B"));
+            Assert.False(standing.TryComplete(oldLeg, (TestOrder.Formation, ""), out bool changed));
             Assert.False(changed);
-            Assert.Equal((WingOrder.Attack, "target B"), standing.Current);
+            Assert.Equal((TestOrder.Attack, "target B"), standing.Current);
         }
 
         [Fact]
         public void AChangedPayloadStartsANewRevisionButAnIdenticalOrderDoesNot()
         {
             var standing = NewOrder();
-            standing.Set((WingOrder.Maneuver, "loop"));
+            standing.Set((TestOrder.Maneuver, "loop"));
             int started = standing.Revision;
-            Assert.False(standing.Set((WingOrder.Maneuver, "loop")));
+            Assert.False(standing.Set((TestOrder.Maneuver, "loop")));
             Assert.Equal(started, standing.Revision);
-            standing.Set((WingOrder.Maneuver, "roll"));
-            Assert.False(standing.TryComplete(started, (WingOrder.Formation, ""), out _));
-            Assert.Equal((WingOrder.Maneuver, "roll"), standing.Current);
-            Assert.True(standing.TryComplete(standing.Revision, (WingOrder.Formation, ""), out _));
-            Assert.Equal(WingOrder.Formation, standing.Current.order);
+            standing.Set((TestOrder.Maneuver, "roll"));
+            Assert.False(standing.TryComplete(started, (TestOrder.Formation, ""), out _));
+            Assert.Equal((TestOrder.Maneuver, "roll"), standing.Current);
+            Assert.True(standing.TryComplete(standing.Revision, (TestOrder.Formation, ""), out _));
+            Assert.Equal(TestOrder.Formation, standing.Current.order);
         }
 
         [Fact]
         public void CompletedLegAdvancesOnceAndCannotCompleteTheFollowingLeg()
         {
             var standing = NewOrder();
-            standing.Set((WingOrder.MoveToPoint, "A"));
+            standing.Set((TestOrder.MoveToPoint, "A"));
             int a = standing.Revision;
-            Assert.True(standing.TryComplete(a, (WingOrder.MoveToPoint, "B"), out _));
-            Assert.False(standing.TryComplete(a, (WingOrder.Formation, ""), out _));
-            Assert.Equal((WingOrder.MoveToPoint, "B"), standing.Current);
+            Assert.True(standing.TryComplete(a, (TestOrder.MoveToPoint, "B"), out _));
+            Assert.False(standing.TryComplete(a, (TestOrder.Formation, ""), out _));
+            Assert.Equal((TestOrder.MoveToPoint, "B"), standing.Current);
         }
 
-        private static StandingOrder<(WingOrder order, string payload)> NewOrder() =>
-            new StandingOrder<(WingOrder, string)>((WingOrder.Formation, ""), (a, b) => a == b);
+        private static StandingOrder<(TestOrder order, string payload)> NewOrder() =>
+            new StandingOrder<(TestOrder, string)>((TestOrder.Formation, ""), (a, b) => a == b);
+
+        private enum TestOrder { Formation, MoveToPoint, Attack, Maneuver }
     }
 }

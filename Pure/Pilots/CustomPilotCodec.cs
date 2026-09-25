@@ -98,21 +98,11 @@ namespace WingCommand
             var payload = new CustomPilotPayload();
             if (string.IsNullOrWhiteSpace(json)) return payload;
 
-            object root;
-            try
-            {
-                var scanner = new JsonScanner(json);
-                root = ParseJsonValue(scanner);
-                if (scanner.Peek() != '\0') throw new FormatException("Unexpected trailing input.");
-            }
-            catch
-            {
-                return payload;
-            }
+            if (!MiniJson.TryParse(json, out object root)) return payload;
 
             if (root is Dictionary<string, object> dict)
             {
-                if (TryGetList(dict, "pilots", out List<object> pilotList))
+                if (MiniJson.TryGetList(dict, "pilots", out List<object> pilotList))
                 {
                     foreach (object item in pilotList)
                     {
@@ -129,7 +119,7 @@ namespace WingCommand
                     if (record != null) payload.Pilots.Add(record);
                 }
 
-                if (TryGetList(dict, "chatters", out List<object> chatterList))
+                if (MiniJson.TryGetList(dict, "chatters", out List<object> chatterList))
                 {
                     foreach (object item in chatterList)
                     {
@@ -246,16 +236,16 @@ namespace WingCommand
 
         private static CustomPilotRecord ParsePilot(Dictionary<string, object> dict)
         {
-            string callsign = GetString(dict, "callsign");
+            string callsign = MiniJson.GetString(dict, "callsign");
             if (string.IsNullOrWhiteSpace(callsign)) return null;
 
-            string name = GetString(dict, "name");
+            string name = MiniJson.GetString(dict, "name");
             if (string.IsNullOrWhiteSpace(name)) name = callsign;
 
-            string tag = GetString(dict, "dialoguetag");
+            string tag = MiniJson.GetString(dict, "dialoguetag");
             if (string.IsNullOrWhiteSpace(tag)) tag = callsign.ToUpperInvariant();
 
-            string personaStr = GetString(dict, "persona");
+            string personaStr = MiniJson.GetString(dict, "persona");
             ChatterPersona persona = ChatterPersona.Professional;
             if (!string.IsNullOrWhiteSpace(personaStr))
             {
@@ -263,18 +253,18 @@ namespace WingCommand
                     persona = parsed;
             }
 
-            string background = GetString(dict, "background") ?? "";
-            int xp = GetInt(dict, "xp", 0);
-            int kills = GetInt(dict, "kills", 0);
-            int sorties = GetInt(dict, "sorties", 0);
+            string background = MiniJson.GetString(dict, "background") ?? "";
+            int xp = MiniJson.GetInt(dict, "xp", 0);
+            int kills = MiniJson.GetInt(dict, "kills", 0);
+            int sorties = MiniJson.GetInt(dict, "sorties", 0);
 
-            int face = GetInt(dict, "face", -1);
-            int hair = GetInt(dict, "hair", -1);
-            int uniform = GetInt(dict, "uniform", -1);
-            int accessory = GetInt(dict, "accessory", 0);
-            int backdrop = GetInt(dict, "backdrop", -1);
-            int portraitVersion = GetInt(dict, "portraitVersion", 0);
-            PortraitBody body = string.Equals(GetString(dict, "body"), "female", StringComparison.OrdinalIgnoreCase)
+            int face = MiniJson.GetInt(dict, "face", -1);
+            int hair = MiniJson.GetInt(dict, "hair", -1);
+            int uniform = MiniJson.GetInt(dict, "uniform", -1);
+            int accessory = MiniJson.GetInt(dict, "accessory", 0);
+            int backdrop = MiniJson.GetInt(dict, "backdrop", -1);
+            int portraitVersion = MiniJson.GetInt(dict, "portraitVersion", 0);
+            PortraitBody body = string.Equals(MiniJson.GetString(dict, "body"), "female", StringComparison.OrdinalIgnoreCase)
                 ? PortraitBody.Female
                 : PortraitBody.Male;
 
@@ -316,11 +306,11 @@ namespace WingCommand
                     firstPilot = false;
 
                     sb.AppendLine("    {");
-                    sb.AppendLine($"      \"name\": \"{EscapeJson(p.Name)}\",");
-                    sb.AppendLine($"      \"callsign\": \"{EscapeJson(p.Callsign)}\",");
-                    sb.AppendLine($"      \"dialogueTag\": \"{EscapeJson(p.ResolvedDialogueTag)}\",");
+                    sb.AppendLine($"      \"name\": \"{MiniJson.Escape(p.Name)}\",");
+                    sb.AppendLine($"      \"callsign\": \"{MiniJson.Escape(p.Callsign)}\",");
+                    sb.AppendLine($"      \"dialogueTag\": \"{MiniJson.Escape(p.ResolvedDialogueTag)}\",");
                     sb.AppendLine($"      \"persona\": \"{p.Persona}\",");
-                    sb.AppendLine($"      \"background\": \"{EscapeJson(p.Background)}\",");
+                    sb.AppendLine($"      \"background\": \"{MiniJson.Escape(p.Background)}\",");
                     sb.AppendLine($"      \"xp\": {p.Xp},");
                     sb.AppendLine($"      \"kills\": {p.Kills},");
                     sb.Append($"      \"sorties\": {p.Sorties}");
@@ -356,16 +346,16 @@ namespace WingCommand
                     chatterSb.AppendLine("    {");
                     if (c.IsAmbientExchange)
                     {
-                        chatterSb.AppendLine($"      \"speakerTag\": \"{EscapeJson(c.SpeakerTag)}\",");
-                        chatterSb.AppendLine($"      \"opening\": \"{EscapeJson(c.Opening)}\",");
-                        chatterSb.AppendLine($"      \"reply\": \"{EscapeJson(c.Reply)}\",");
-                        chatterSb.Append($"      \"replyTag\": \"{EscapeJson(c.ReplyTag)}\"");
+                        chatterSb.AppendLine($"      \"speakerTag\": \"{MiniJson.Escape(c.SpeakerTag)}\",");
+                        chatterSb.AppendLine($"      \"opening\": \"{MiniJson.Escape(c.Opening)}\",");
+                        chatterSb.AppendLine($"      \"reply\": \"{MiniJson.Escape(c.Reply)}\",");
+                        chatterSb.Append($"      \"replyTag\": \"{MiniJson.Escape(c.ReplyTag)}\"");
                     }
                     else if (c.IsEventLine)
                     {
-                        chatterSb.AppendLine($"      \"event\": \"{EscapeJson(c.Event)}\",");
-                        chatterSb.AppendLine($"      \"speakerTag\": \"{EscapeJson(c.SpeakerTag)}\",");
-                        chatterSb.Append($"      \"text\": \"{EscapeJson(c.Text)}\"");
+                        chatterSb.AppendLine($"      \"event\": \"{MiniJson.Escape(c.Event)}\",");
+                        chatterSb.AppendLine($"      \"speakerTag\": \"{MiniJson.Escape(c.SpeakerTag)}\",");
+                        chatterSb.Append($"      \"text\": \"{MiniJson.Escape(c.Text)}\"");
                     }
                     chatterSb.AppendLine();
                     chatterSb.Append("    }");
@@ -400,24 +390,14 @@ namespace WingCommand
             return removed ? Encode(payload.Pilots, payload.Chatters) : json;
         }
 
-        private static string EscapeJson(string str)
-        {
-            if (string.IsNullOrEmpty(str)) return "";
-            return str.Replace("\\", "\\\\")
-                      .Replace("\"", "\\\"")
-                      .Replace("\n", "\\n")
-                      .Replace("\r", "\\r")
-                      .Replace("\t", "\\t");
-        }
-
         private static CustomChatterRecord ParseChatter(Dictionary<string, object> dict)
         {
-            string opening = GetString(dict, "opening");
-            string reply = GetString(dict, "reply");
-            string speakerTag = GetString(dict, "speakertag");
-            string replyTag = GetString(dict, "replytag");
-            string eventName = GetString(dict, "event");
-            string text = GetString(dict, "text");
+            string opening = MiniJson.GetString(dict, "opening");
+            string reply = MiniJson.GetString(dict, "reply");
+            string speakerTag = MiniJson.GetString(dict, "speakertag");
+            string replyTag = MiniJson.GetString(dict, "replytag");
+            string eventName = MiniJson.GetString(dict, "event");
+            string text = MiniJson.GetString(dict, "text");
 
             if (string.IsNullOrWhiteSpace(opening) && (string.IsNullOrWhiteSpace(eventName) || string.IsNullOrWhiteSpace(text)))
                 return null;
@@ -431,253 +411,6 @@ namespace WingCommand
                 Event = eventName?.Trim(),
                 Text = text?.Trim(),
             };
-        }
-
-        private static bool TryGetList(Dictionary<string, object> dict, string key, out List<object> list)
-        {
-            foreach (KeyValuePair<string, object> pair in dict)
-            {
-                if (string.Equals(pair.Key, key, StringComparison.OrdinalIgnoreCase))
-                {
-                    if (pair.Value is List<object> found)
-                    {
-                        list = found;
-                        return true;
-                    }
-                }
-            }
-            list = null;
-            return false;
-        }
-
-        private static string GetString(Dictionary<string, object> dict, string key)
-        {
-            foreach (KeyValuePair<string, object> pair in dict)
-            {
-                if (string.Equals(pair.Key, key, StringComparison.OrdinalIgnoreCase))
-                    return pair.Value?.ToString();
-            }
-            return null;
-        }
-
-        private static int GetInt(Dictionary<string, object> dict, string key, int defaultValue)
-        {
-            foreach (KeyValuePair<string, object> pair in dict)
-            {
-                if (string.Equals(pair.Key, key, StringComparison.OrdinalIgnoreCase))
-                {
-                    if (pair.Value is long l)
-                        return l >= int.MinValue && l <= int.MaxValue ? (int)l : defaultValue;
-                    if (pair.Value is int i) return i;
-                    if (pair.Value is double d)
-                        return d >= int.MinValue && d <= int.MaxValue ? (int)d : defaultValue;
-                    if (int.TryParse(pair.Value?.ToString(), NumberStyles.Integer, CultureInfo.InvariantCulture, out int parsed))
-                        return parsed;
-                }
-            }
-            return defaultValue;
-        }
-
-        // JSON scanning and parsing.
-
-        private sealed class JsonScanner
-        {
-            private readonly string source;
-            private int pos;
-
-            public JsonScanner(string source)
-            {
-                this.source = source ?? "";
-                pos = 0;
-            }
-
-            public bool IsEnd => pos >= source.Length;
-
-            public char Peek()
-            {
-                SkipWhitespaceAndComments();
-                return pos < source.Length ? source[pos] : '\0';
-            }
-
-            public char Next()
-            {
-                SkipWhitespaceAndComments();
-                return pos < source.Length ? source[pos++] : '\0';
-            }
-
-            private void SkipWhitespaceAndComments()
-            {
-                while (pos < source.Length)
-                {
-                    char c = source[pos];
-                    if (char.IsWhiteSpace(c))
-                    {
-                        pos++;
-                        continue;
-                    }
-
-                    // Consume a line comment.
-                    if (c == '/' && pos + 1 < source.Length && source[pos + 1] == '/')
-                    {
-                        pos += 2;
-                        while (pos < source.Length && source[pos] != '\n' && source[pos] != '\r')
-                            pos++;
-                        continue;
-                    }
-
-                    // Consume a block comment.
-                    if (c == '/' && pos + 1 < source.Length && source[pos + 1] == '*')
-                    {
-                        pos += 2;
-                        while (pos + 1 < source.Length && !(source[pos] == '*' && source[pos + 1] == '/'))
-                            pos++;
-                        if (pos + 1 >= source.Length) throw new FormatException("Unterminated comment.");
-                        pos += 2;
-                        continue;
-                    }
-
-                    break;
-                }
-            }
-
-            public string ReadString()
-            {
-                SkipWhitespaceAndComments();
-                if (pos >= source.Length || source[pos] != '"')
-                    throw new FormatException("Expected a quoted string.");
-                pos++; // Consume the opening string quote.
-
-                var sb = new StringBuilder();
-                while (pos < source.Length)
-                {
-                    char c = source[pos++];
-                    if (c == '"') return sb.ToString();
-                    if (c == '\\' && pos < source.Length)
-                    {
-                        char esc = source[pos++];
-                        switch (esc)
-                        {
-                            case '"': sb.Append('"'); break;
-                            case '\\': sb.Append('\\'); break;
-                            case '/': sb.Append('/'); break;
-                            case 'b': sb.Append('\b'); break;
-                            case 'f': sb.Append('\f'); break;
-                            case 'n': sb.Append('\n'); break;
-                            case 'r': sb.Append('\r'); break;
-                            case 't': sb.Append('\t'); break;
-                            case 'u':
-                                if (pos + 4 <= source.Length &&
-                                    int.TryParse(source.Substring(pos, 4), NumberStyles.HexNumber, CultureInfo.InvariantCulture, out int code))
-                                {
-                                    sb.Append((char)code);
-                                    pos += 4;
-                                }
-                                break;
-                            default:
-                                sb.Append(esc);
-                                break;
-                        }
-                    }
-                    else
-                    {
-                        sb.Append(c);
-                    }
-                }
-                throw new FormatException("Unterminated string.");
-            }
-
-            public object ReadNumberOrKeyword()
-            {
-                SkipWhitespaceAndComments();
-                int start = pos;
-                while (pos < source.Length && !char.IsWhiteSpace(source[pos]) &&
-                       source[pos] != ',' && source[pos] != ']' && source[pos] != '}' && source[pos] != '/')
-                {
-                    pos++;
-                }
-
-                if (pos == start) throw new FormatException("Expected a value.");
-                string token = source.Substring(start, pos - start).Trim();
-                if (string.Equals(token, "true", StringComparison.OrdinalIgnoreCase)) return true;
-                if (string.Equals(token, "false", StringComparison.OrdinalIgnoreCase)) return false;
-                if (string.Equals(token, "null", StringComparison.OrdinalIgnoreCase)) return null;
-
-                if (long.TryParse(token, NumberStyles.Integer, CultureInfo.InvariantCulture, out long l))
-                    return l;
-                if (double.TryParse(token, NumberStyles.Float, CultureInfo.InvariantCulture, out double d))
-                    return d;
-
-                return token;
-            }
-        }
-
-        private static object ParseJsonValue(JsonScanner s, int depth = 0)
-        {
-            if (depth >= 64) throw new FormatException("JSON nesting is too deep.");
-            char c = s.Peek();
-            if (c == '{') return ParseJsonObject(s, depth + 1);
-            if (c == '[') return ParseJsonArray(s, depth + 1);
-            if (c == '"') return s.ReadString();
-            if (c == '\0') throw new FormatException("Unexpected end of input.");
-            return s.ReadNumberOrKeyword();
-        }
-
-        private static Dictionary<string, object> ParseJsonObject(JsonScanner s, int depth)
-        {
-            var dict = new Dictionary<string, object>(StringComparer.OrdinalIgnoreCase);
-            s.Next(); // Consume the object opener.
-
-            while (!s.IsEnd)
-            {
-                char c = s.Peek();
-                if (c == '}')
-                {
-                    s.Next();
-                    return dict;
-                }
-                if (c == ',')
-                {
-                    s.Next();
-                    continue;
-                }
-
-                string key = s.ReadString();
-                if (s.Next() != ':') throw new FormatException("Expected a colon.");
-
-                object val = ParseJsonValue(s, depth);
-                if (!string.IsNullOrEmpty(key))
-                {
-                    dict[key] = val;
-                }
-            }
-
-            throw new FormatException("Unterminated object.");
-        }
-
-        private static List<object> ParseJsonArray(JsonScanner s, int depth)
-        {
-            var list = new List<object>();
-            s.Next(); // Consume the array opener.
-
-            while (!s.IsEnd)
-            {
-                char c = s.Peek();
-                if (c == ']')
-                {
-                    s.Next();
-                    return list;
-                }
-                if (c == ',')
-                {
-                    s.Next();
-                    continue;
-                }
-
-                object val = ParseJsonValue(s, depth);
-                list.Add(val);
-            }
-
-            throw new FormatException("Unterminated array.");
         }
     }
 }

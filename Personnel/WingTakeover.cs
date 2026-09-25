@@ -12,7 +12,8 @@ using NOAvionics.Ui;
 namespace WingCommand
 {
     /// <summary>Offers surviving wing aircraft after player loss, spawning a fresh player copy through the
-    /// native ownership/cockpit/HUD path. Uses WingUi cards on a dedicated canvas.</summary>
+    /// native ownership/cockpit/HUD path. Uses WingUi cards on a dedicated canvas. Declining keeps the wing: it holds
+    /// overhead and forms on the player's next aircraft.</summary>
     internal static class WingTakeover
     {
         private const float PanelWidth = 720f;
@@ -27,7 +28,10 @@ namespace WingCommand
         /// open.</summary>
         private const int MaxCards = 8;
 
-        private static WingRegistry wing;
+        /// <summary>Fuel at or under this fraction shows amber on a card.</summary>
+        private const float LowFuel = 0.2f;
+
+        private static WingService wing;
         private static Aircraft lostLeader;
         private static GlobalPosition lossPosition;
         private static bool active;
@@ -44,14 +48,14 @@ namespace WingCommand
 
         public static bool Active => active;
 
-        /// <summary>Open recovery when the leader becomes unflyable.</summary>
-        public static bool Begin(WingRegistry registry, Aircraft previousLeader)
+        /// <summary>Open recovery when the player's aircraft is lost at <paramref name="lostAt"/>.</summary>
+        public static bool Begin(WingService registry, Aircraft previousLeader, GlobalPosition lostAt)
         {
             if (!CanOffer(registry)) return false;
 
             wing = registry;
             lostLeader = previousLeader;
-            lossPosition = previousLeader.GlobalPosition();
+            lossPosition = lostAt;
             active = true;
 
             // Open the tactical map for the native post-loss context and immediate cursor access.
@@ -70,8 +74,16 @@ namespace WingCommand
         /// <summary>Whether the guarded player-death/ejection call can suppress defeat.</summary>
         public static bool CanSuppressPlayerLoss()
         {
-            WingCommandManager manager = WingCommandManager.Instance;
-            return manager != null && CanOffer(manager.Wing);
+            return CanOffer(WingService.Instance);
+        }
+
+        /// <summary>The loss was held back for a takeover that could not be offered after all (review M3c I4): the defeat
+        /// goes through now.</summary>
+        public static void FinishSuppressedDefeat()
+        {
+            if (!defeatSuppressed || active) return;
+            defeatSuppressed = false;
+            if (GameManager.gameResolution == GameResolution.Ongoing) GameManager.FinishGame(GameResolution.Defeat);
         }
 
         public static void MarkDefeatSuppressed()
@@ -224,8 +236,7 @@ namespace WingCommand
                 rt.SetParent(content, worldPositionStays: false);
                 WingUi.Place(rt, rect);
 
-                WingUi.Panel(rt, new Rect(0f, 0f, cardWidth, CardHeight),
-                             WingMarkers.MemberColor.WithAlpha(0.58f));
+                WingUi.Panel(rt, new Rect(0f, 0f, cardWidth, CardHeight), Fade(WingUi.Friendly, 0.58f));
 
                 var card = new Card { Root = go };
 
@@ -241,7 +252,7 @@ namespace WingCommand
                 WingUi.Outline(rt, new Rect(10f, -6f, 30f, 26f), WingUi.FrameColor);
 
                 card.Callsign = WingUi.Label(rt, "", new Rect(50f, -7f, 90f, 22f),
-                                             WingMarkers.MemberColor, 15f, FontStyles.Normal,
+                                             WingUi.Friendly, 15f, FontStyles.Normal,
                                              TextAlignmentOptions.Left);
                 card.Type = WingUi.Label(rt, "", new Rect(144f, -8f, cardWidth - 156f, 20f),
                                          WingUi.Friendly, 13f, FontStyles.Normal,
@@ -250,8 +261,7 @@ namespace WingCommand
                                          WingUi.Dim, 10f, FontStyles.Normal,
                                          TextAlignmentOptions.Left);
 
-                card.FuelTrack = WingUi.Rule(rt, new Rect(50f, -58f, cardWidth - 62f, 2f),
-                                             WingUi.Grey.WithAlpha(0.35f));
+                card.FuelTrack = WingUi.Rule(rt, new Rect(50f, -58f, cardWidth - 62f, 2f), Fade(WingUi.Grey, 0.35f));
                 card.FuelFill = WingUi.Rule(rt, new Rect(50f, -58f, cardWidth - 62f, 2f),
                                             WingUi.Friendly);
 
@@ -322,17 +332,18 @@ namespace WingCommand
                 card.Callsign.text = Callsign(member);
                 card.Type.text = AvTheme.Truncate(TypeName(member), 22);
 
-                int fuel = Mathf.RoundToInt(member.Fuel * 100f);
+                float fuelLevel = aircraft != null ? aircraft.GetFuelLevel() : 0f;
+                int stores = aircraft != null ? Mathf.RoundToInt(WingService.AmmoFraction(aircraft) * 100f) : 0;
                 float range = aircraft != null
                     ? Mathf.Sqrt(FastMath.SquareDistance(aircraft.GlobalPosition(), lossPosition))
                     : 0f;
-                card.Meta.text = "FUEL " + fuel + "%     STORES " + member.Ammo +
-                                 "     RANGE " + UnitConverter.DistanceReading(range);
+                card.Meta.text = "FUEL " + Mathf.RoundToInt(fuelLevel * 100f) + "%     STORES " + stores +
+                                 "%     RANGE " + UnitConverter.DistanceReading(range);
 
-                bool low = member.Fuel <= (Plugin.Settings != null ? Plugin.Settings.BingoFuel : WingTuning.BingoFuel);
+                bool low = fuelLevel <= LowFuel;
                 RectTransform fill = card.FuelFill.rectTransform;
                 float trackWidth = card.FuelTrack.rectTransform.sizeDelta.x;
-                fill.sizeDelta = new Vector2(trackWidth * Mathf.Clamp01(member.Fuel),
+                fill.sizeDelta = new Vector2(trackWidth * Mathf.Clamp01(fuelLevel),
                                              fill.sizeDelta.y);
                 card.FuelFill.color = low ? WingUi.Warning : WingUi.Friendly;
             }
@@ -341,7 +352,7 @@ namespace WingCommand
         private static string TypeName(WingMember member)
         {
             Aircraft aircraft = member.Aircraft;
-            if (aircraft == null || aircraft.definition == null) return member.Name;
+            if (aircraft == null || aircraft.definition == null) return "?";
 
             return !string.IsNullOrEmpty(aircraft.definition.code)
                 ? aircraft.definition.code
@@ -382,7 +393,7 @@ namespace WingCommand
             if (!GameManager.GetLocalPlayer<NuclearOption.Networking.Player>(out var player) ||
                 player == null || !player.IsServer)
             {
-                WingCommandManager.Instance?.Toast("Aircraft takeover is host/single-player only");
+                WingToast.Show("Aircraft takeover is host/single-player only");
                 return;
             }
 
@@ -390,7 +401,7 @@ namespace WingCommand
             Spawner spawner = NetworkSceneSingleton<Spawner>.i;
             if (spawner == null)
             {
-                WingCommandManager.Instance?.Toast("Unable to access the aircraft spawner");
+                WingToast.Show("Unable to access the aircraft spawner");
                 return;
             }
 
@@ -422,7 +433,7 @@ namespace WingCommand
                 if (replacement.rb != null)
                     replacement.rb.angularVelocity = angularVelocity;
 
-                if (!wing.ReplaceWithLeader(member, replacement))
+                if (!wing.TakenOver(member))
                     throw new InvalidOperationException("selected aircraft left the wing during replacement");
 
                 // Destroy the replaced AI object without DisableUnit to avoid false kill and supply
@@ -431,27 +442,27 @@ namespace WingCommand
                     target.Identity, !target.Identity.IsSceneObject);
 
                 Close();
-                WingCommandManager.Instance?.Toast("Replacement aircraft ready: " + replacement.unitName);
+                WingToast.Show("Replacement aircraft ready: " + replacement.unitName);
                 Plugin.LogVerbose("[Takeover] spawned player copy of " + target.unitName +
                                       " and removed the AI source");
             }
             catch (Exception ex)
             {
                 Plugin.Logger.LogError("[Takeover] aircraft replacement failed: " + ex);
-                WingCommandManager.Instance?.Toast("Aircraft replacement failed; see LogOutput.log");
+                WingToast.Show("Aircraft replacement failed; see LogOutput.log");
 
                 // Player ownership commits in the spawn callback. After later cleanup failure, retain
                 // the valid replacement and remove old AI commandability.
                 if (wing != null && replacement != null &&
                     GameManager.GetLocalAircraft(out Aircraft current) && current == replacement)
                 {
-                    wing.ReplaceWithLeader(member, replacement);
+                    wing.TakenOver(member);
                     Close();
                 }
             }
         }
 
-        private static bool CanOffer(WingRegistry registry)
+        private static bool CanOffer(WingService registry)
         {
             if (!Plugin.Settings.TakeoverOnDeath.Value || registry == null ||
                 NetworkSceneSingleton<Spawner>.i == null)
@@ -482,9 +493,10 @@ namespace WingCommand
             };
         }
 
+        /// <summary>A member flying with the wing (not on a field, not on its way home).</summary>
         private static bool IsCandidate(WingMember member)
         {
-            return member != null && member.Alive && member.Aircraft != null &&
+            return member != null && member.Alive && !member.Released && !member.OnGround && member.Recovery == null &&
                    member.Aircraft.LocalSim && member.Aircraft.Player == null;
         }
 
@@ -501,13 +513,11 @@ namespace WingCommand
 
         private static void ContinueWithoutTakeover(string reason)
         {
-            WingRegistry oldWing = wing;
             bool finishDefeat = defeatSuppressed && GameManager.gameResolution == GameResolution.Ongoing;
 
             Close();
 
-            oldWing?.DisbandAll(reason);
-            WingCommandManager.Instance?.Toast(reason);
+            WingToast.Show(reason);
             Plugin.LogVerbose("[Takeover] " + reason);
 
             if (finishDefeat) GameManager.FinishGame(GameResolution.Defeat);
@@ -528,14 +538,16 @@ namespace WingCommand
 
         private static string Callsign(WingMember member)
         {
-            switch (member.Slot)
+            switch (member.Number)
             {
-                case 1: return "TWO";
-                case 2: return "THREE";
-                case 3: return "FOUR";
-                default: return "WING " + (member.Slot + 1);
+                case 2: return "TWO";
+                case 3: return "THREE";
+                case 4: return "FOUR";
+                default: return "#" + member.Number;
             }
         }
+
+        private static Color Fade(Color c, float alpha) => new Color(c.r, c.g, c.b, alpha);
     }
 
     /// <summary>Suppress defeat only inside the native local-player death/ejection calls. Objective and

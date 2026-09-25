@@ -4,8 +4,11 @@
     <TargetFramework>netstandard2.1</TargetFramework>
     <AssemblyName>WingCommand</AssemblyName>
     <RootNamespace>WingCommand</RootNamespace>
-    <Version>0.9.2.6</Version>
-    <LangVersion>latest</LangVersion>
+    <Version>1.0.0</Version>
+    <!-- Milestone prerelease tag; keep in step with Plugin.PluginPrerelease. -->
+    <VersionPrerelease>alpha.5</VersionPrerelease>
+    <InformationalVersion>$(Version)-$(VersionPrerelease)</InformationalVersion>
+    <LangVersion>12</LangVersion>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
     <DebugType>portable</DebugType>
     <!-- Suppress reference-assembly warnings from Unity runtime assemblies. -->
@@ -39,6 +42,33 @@
            Text="Could not find Plugin.PluginVersion in Core/Plugin.cs. If it moved, update this check." />
     <Error Condition="'$(_DeclaredVersion)' != '$(Version)'"
            Text="Version mismatch: csproj &lt;Version&gt; is '$(Version)' but Plugin.PluginVersion is '$(_DeclaredVersion)'. Bump both." />
+    <PropertyGroup>
+      <_DeclaredPrerelease>$([System.Text.RegularExpressions.Regex]::Match($(_PluginSource), 'PluginPrerelease\s*=\s*"([^"]*)"').Groups[1].Value)</_DeclaredPrerelease>
+    </PropertyGroup>
+    <Error Condition="'$(_DeclaredPrerelease)' != '$(VersionPrerelease)'"
+           Text="Prerelease mismatch: csproj &lt;VersionPrerelease&gt; is '$(VersionPrerelease)' but Plugin.PluginPrerelease is '$(_DeclaredPrerelease)'. Bump both." />
+  </Target>
+
+  <!-- Files not yet ported to the 1.0 architecture. Each names the milestone that restores it.
+       Release builds of a non-prerelease version must have an empty quarantine. -->
+  <ItemGroup Label="Quarantine">
+    <Quarantine Include="Economy\WingLoadoutBook.cs" Milestone="M7" />
+    <Quarantine Include="Comms\WingChatterHud.cs" Milestone="M4" />
+    <Quarantine Include="Ui\CombatHUDHitAudioPatch.cs" Milestone="M7" />
+    <Quarantine Include="Ui\WmcScreen.CustomPilots.cs" Milestone="M7" />
+    <Quarantine Include="Ui\WmcScreen.Loadout.cs" Milestone="M7" />
+    <Quarantine Include="Ui\WingHud.cs" Milestone="M7" />
+    <Quarantine Include="Ui\WingRadialOverlay.cs" Milestone="M7" />
+    <Quarantine Include="Ui\WmcScreen.Groups.cs" Milestone="P10" />
+    <Quarantine Include="Ui\WmcScreen.Wing.cs" Milestone="M7" />
+  </ItemGroup>
+  <ItemGroup>
+    <Compile Remove="@(Quarantine)" />
+  </ItemGroup>
+  <Target Name="CheckQuarantine" BeforeTargets="CoreCompile">
+    <Error Condition="'$(Configuration)' == 'Release' And '$(VersionPrerelease)' == '' And '@(Quarantine)' != ''"
+           Text="Quarantine is not empty; a final release cannot ship with unported files: @(Quarantine)" />
+    <Message Importance="high" Condition="'@(Quarantine)' != ''" Text="Quarantined (not compiled): @(Quarantine->Count()) file(s)" />
   </Target>
 
   <ItemGroup Label="BepInEx / Harmony">
@@ -51,6 +81,7 @@
     <Reference Include="Assembly-CSharp"><HintPath>$(ManagedDir)\Assembly-CSharp.dll</HintPath><Private>false</Private></Reference>
     <Reference Include="Assembly-CSharp-firstpass"><HintPath>$(ManagedDir)\Assembly-CSharp-firstpass.dll</HintPath><Private>false</Private></Reference>
     <Reference Include="Mirage"><HintPath>$(ManagedDir)\Mirage.dll</HintPath><Private>false</Private></Reference>
+    <Reference Include="Mirage.SocketLayer"><HintPath>$(ManagedDir)\Mirage.SocketLayer.dll</HintPath><Private>false</Private></Reference>
     <Reference Include="UniTask"><HintPath>$(ManagedDir)\UniTask.dll</HintPath><Private>false</Private></Reference>
     <Reference Include="Rewired_Core"><HintPath>$(ManagedDir)\Rewired_Core.dll</HintPath><Private>false</Private></Reference>
   </ItemGroup>
@@ -66,6 +97,8 @@
     <EmbeddedResource Include="Assets\Icons\*.png" LogicalName="WingCommand.Icons.%(Filename)%(Extension)" />
     <EmbeddedResource Include="Assets\Pilots\layers.png" LogicalName="WingCommand.PilotLayers.png" />
     <EmbeddedResource Include="Assets\maneuvers.json" LogicalName="WingCommand.maneuvers.json" />
+    <EmbeddedResource Include="Assets\Data\formations.json" LogicalName="WingCommand.formations.json" />
+    <EmbeddedResource Include="Assets\Data\airframes.json" LogicalName="WingCommand.airframes.json" />
 
     <!-- Vendored engine-free avionics widget kit + design tokens (namespace NOAvionics / NOAvionics.Ui),
          picked up by the default compile glob from Avionics/ and AvionicsUi/. Boscali Summer carries its
@@ -83,6 +116,8 @@
     <Reference Include="UnityEngine.PhysicsModule"><HintPath>$(ManagedDir)\UnityEngine.PhysicsModule.dll</HintPath><Private>false</Private></Reference>
     <!-- Provide AudioClip for the click preceding squadron transmissions. -->
     <Reference Include="UnityEngine.AudioModule"><HintPath>$(ManagedDir)\UnityEngine.AudioModule.dll</HintPath><Private>false</Private></Reference>
+    <Reference Include="UnityEngine.UnityWebRequestModule"><HintPath>$(ManagedDir)\UnityEngine.UnityWebRequestModule.dll</HintPath><Private>false</Private></Reference>
+    <Reference Include="UnityEngine.UnityWebRequestAudioModule"><HintPath>$(ManagedDir)\UnityEngine.UnityWebRequestAudioModule.dll</HintPath><Private>false</Private></Reference>
     <Reference Include="UnityEngine.IMGUIModule"><HintPath>$(ManagedDir)\UnityEngine.IMGUIModule.dll</HintPath><Private>false</Private></Reference>
     <Reference Include="UnityEngine.InputLegacyModule"><HintPath>$(ManagedDir)\UnityEngine.InputLegacyModule.dll</HintPath><Private>false</Private></Reference>
     <Reference Include="UnityEngine.ImageConversionModule"><HintPath>$(ManagedDir)\UnityEngine.ImageConversionModule.dll</HintPath><Private>false</Private></Reference>

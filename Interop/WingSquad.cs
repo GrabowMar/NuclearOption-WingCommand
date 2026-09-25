@@ -13,7 +13,8 @@ namespace WingCommand.Interop
     /// Campaign rules, rewards and replication belong to the requesting companion.</summary>
     public static class WingSquad
     {
-        public static int ApiVersion => 1;
+        /// <summary>2: the 1.0 wing (fresh roster and config; same method names as 1).</summary>
+        public static int ApiVersion => 2;
         public const int MaxAircraft = 24;
         public const int MaxWingSize = 4;
         private static readonly Dictionary<Aircraft, Aircraft> owned = new Dictionary<Aircraft, Aircraft>();
@@ -341,7 +342,7 @@ namespace WingCommand.Interop
                 if (owned[aircraft] != target) WakeCombat(aircraft, target);
                 owned[aircraft] = target;
                 RefreshHuntTrack(aircraft, target);
-                WingRegistry.PrimaryPilot(aircraft)?.SetPrimaryTarget(target);
+                PrimaryPilot(aircraft)?.SetPrimaryTarget(target);
                 changed = true;
             }
             return changed;
@@ -374,9 +375,9 @@ namespace WingCommand.Interop
         /// Reads the same authority/settings gate as the actual perk hooks.</summary>
         public static int AbilityMask(Aircraft aircraft) => WingSurvivalPerks.AceAbilityMask(aircraft);
 
+        // ponytail: a toast until the radio returns with comms (M4); context is unused meanwhile.
         public static void Chatter(string callsign, string context, string message) =>
-            WingChatterHud.Enqueue(Limit(callsign, 32), Limit(context, 64), Limit(message, 240),
-                                   null, urgent: true, key: "squad:" + Limit(callsign, 32) + ":" + Limit(message, 80));
+            WingToast.Show(Limit(callsign, 32) + ": " + Limit(message, 240));
 
         /// <summary>Enroll while still seated, then read native evidence after ejection.
         /// 0 unknown, 1 living dismounted pilot, 2 returned, 3 dead, 4 captured.</summary>
@@ -451,7 +452,7 @@ namespace WingCommand.Interop
             if (!(searcher is Aircraft aircraft) || !aircraft.IsServer || aircraft.Player != null ||
                 aircraft.disabled || !owned.TryGetValue(aircraft, out Aircraft target) || target == null)
                 return false;
-            Pilot targetPilot = WingRegistry.PrimaryPilot(target);
+            Pilot targetPilot = PrimaryPilot(target);
             if (target.disabled || target.Player == null || targetPilot == null || targetPilot.dead ||
                 targetPilot.ejected || target.NetworkHQ == null || target.NetworkHQ == aircraft.NetworkHQ)
             {
@@ -496,7 +497,7 @@ namespace WingCommand.Interop
 
         private static void WakeCombat(Aircraft aircraft, Aircraft target)
         {
-            Pilot pilot = WingRegistry.PrimaryPilot(aircraft);
+            Pilot pilot = PrimaryPilot(aircraft);
             if (pilot == null || pilot.dead || pilot.ejected) return;
             if (target != null) RefreshHuntTrack(aircraft, target);
             pilot.SetPrimaryTarget(target);
@@ -566,7 +567,7 @@ namespace WingCommand.Interop
 
         private static Loadout InterceptLoadout(AircraftDefinition definition)
         {
-            int pylons = EconomyFacade.LoadoutCatalog.PylonCount(definition);
+            int pylons = WingLoadoutCatalog.PylonCount(definition);
             if (pylons <= 0 || pylons > 32) return null;
             var keys = new List<string>(pylons);
             var options = new List<WingLoadoutCatalog.StoreOption>();
@@ -574,7 +575,7 @@ namespace WingCommand.Interop
             for (int i = 0; i < pylons; i++)
             {
                 options.Clear();
-                EconomyFacade.LoadoutCatalog.OptionsFor(definition, i, options);
+                WingLoadoutCatalog.OptionsFor(definition, i, options);
                 string key = null;
                 float value = 0f;
                 for (int j = 0; j < Math.Min(options.Count, 128); j++)
@@ -587,7 +588,7 @@ namespace WingCommand.Interop
                 armed |= key != null;
                 keys.Add(key);
             }
-            return armed ? EconomyFacade.LoadoutCatalog.FillScratch(definition, keys) : null;
+            return armed ? WingLoadoutCatalog.FillScratch(definition, keys) : null;
         }
 
         private static void Prune()
@@ -598,6 +599,18 @@ namespace WingCommand.Interop
             foreach (Aircraft aircraft in stale)
             { WingSurvivalPerks.RemoveAce(aircraft); owned.Remove(aircraft); }
             stale.Clear();
+        }
+
+        private static Pilot PrimaryPilot(Aircraft aircraft) =>
+            aircraft != null && aircraft.pilots != null && aircraft.pilots.Length > 0 ? aircraft.pilots[0] : null;
+
+        /// <summary>Aces spawned here hunt the aircraft they were sent after (the game's own target choice otherwise).</summary>
+        [HarmonyPatch(typeof(CombatAI), nameof(CombatAI.ChooseHQTarget))]
+        internal static class AceTargetPatch
+        {
+            [HarmonyPostfix]
+            private static void Postfix(Unit searcher, List<WeaponStation> stationList, ref CombatAI.TargetSearchResults __result) =>
+                TrySelectTarget(searcher, stationList, ref __result);
         }
 
         private static string Limit(string value, int length) => string.IsNullOrEmpty(value)

@@ -1,0 +1,276 @@
+using System;
+
+namespace WingCommand
+{
+    /// <summary>One wingman's brain and flight stack.
+    /// <list type="bullet">
+    /// <item>PilotMind picks the behaviour.</item>
+    /// <item>The behaviour fills the FlightIntent: rejoin references, the slot, or a hold-orbit rabbit.</item>
+    /// <item>The shared pipeline flies it with the wing's collision bias and floor.</item>
+    /// </list>
+    /// It logs transitions (with reasons), falling behind, GCAS activations and collision emergencies. The
+    /// engine's PilotAgent (M1c) and the FlightSim both drive this class. It lives as long as the aircraft,
+    /// and nothing resets on a behaviour change.</summary>
+    internal sealed class FormationPilot
+    {
+        public readonly IFlightPipeline Pipeline;
+        public readonly RejoinPlanner Rejoin = new RejoinPlanner();
+        public readonly PilotMind Mind = new PilotMind();
+        public readonly RolePolicy Roles = new RolePolicy();
+        public readonly MissileDefence Defence = new MissileDefence();
+        /// <summary>An ordered reaction maneuver (spec WMC rebuild R3): flown like Defend, through this member's pipeline.</summary>
+        public readonly ReactionManeuver Reaction = new ReactionManeuver();
+        /// <summary>The nearest missile guiding on this member, set by the caller before each <see cref="Step"/> (spec M5
+        /// §7.1); default: none.</summary>
+        public MissileThreat Threat;
+        public DefenceCommand LastDefence;
+        /// <summary>Slot index; the engine reassigns it when a member ahead of it is lost.</summary>
+        public int Slot;
+        /// <summary>The member's seat in the wing (its `#n` is seat + 2): events and calls name it; the slot is its place in
+        /// its element's shape (spec WMC program §3.3). Equal to the slot until the wing splits.</summary>
+        public int Seat;
+        public float Precision = 1f, Aggression = 0.5f, Clearance = 60f;
+        /// <summary>Spec M5 §11: EarlyWarning (seconds off the missile reaction) and BreakTurn (instant inside this range).</summary>
+        public float ReactionDelta, BreakRange;
+        public bool AfterburnerAllowed = true;
+        public FlightIntent LastIntent;
+        public GuidanceCommand LastGuidance;
+        public RejoinOutput LastRejoin;
+        public ControlOutput LastOutput;
+        private HoldOrbit orbit;
+        private BehaviourId beforeDefend;
+        private bool overrideWas, trackPending;
+        private bool gcasWas, emergencyWas;
+        private int conversions;
+
+        public FormationPilot(int slot, AirframeClass cls)
+        {
+            Slot = slot;
+            Seat = slot;
+            Pipeline = FlightStack.NewPipeline(cls);
+        }
+
+        /// <summary>Seed every loop from the aircraft (spawn, handover from native flight).</summary>
+        public void Track(in AircraftState s, in ControlOutput applied, AirframeProfile p) => Pipeline.Track(s, applied, p);
+
+        public ControlOutput Step(WingFrame frame, in AircraftState s, AirframeProfile p, float time, float dt,
+            WingEventRing events)
+        {
+            SlotTarget slot = frame.Slots[Slot];
+            LeaderEstimate leader = frame.Leader;
+            float usable = AfterburnerAllowed && p.HasAfterburner ? p.MaxSpeed : p.MilSpeed;
+            Rejoin.LaneStepM = Math.Max(RejoinPlanner.LaneStep,
+                CollisionBias.RadiusFor(p.MaxRadius, frame.Spacing) + RejoinPlanner.LaneClearance);
+            LastRejoin = Rejoin.Step(s, slot, leader, Slot + 1, frame.Spacing, usable, frame.StaggerClear[Slot], dt, frame.Stack);
+            if (LastRejoin.FallingBehindStarted) Log(events, time, WingEventKind.FallingBehind);
+            if (LastRejoin.FallingBehindCleared) Log(events, time, WingEventKind.FallingBehindCleared);
+
+            // Survive first (spec M5 §7.2): the missile defence enters and leaves Defend itself, past any dwell. Home is
+            // what the member was flying (review M5c I5): its slot, its trail, its hold, else the rejoin path.
+            BehaviourId basis = Mind.Current == BehaviourId.Defend ? beforeDefend : Mind.Current;
+            RefState home = basis == BehaviourId.StationKeep ? slot.Ref
+                : basis == BehaviourId.Trail && frame.TrailValid[Slot] ? frame.TrailRef[Slot]
+                : basis == BehaviourId.HoldOverhead ? new RefState(HoldCenter(leader), leader.Vel, Vec3.Zero)
+                : LastRejoin.Ref;
+            LastDefence = Defence.Step(Threat, s, home, Precision, dt, ReactionDelta, BreakRange);
+            if (LastDefence.Active != (Mind.Current == BehaviourId.Defend))
+            {
+                BehaviourId was = Mind.Current;
+                BehaviourId to = LastDefence.Active ? BehaviourId.Defend : BehaviourId.Rejoin;
+                if (LastDefence.Active) beforeDefend = was;
+                // A missile pre-empts a maneuver for good: it is never resumed (its end is this logged transition).
+                if (was == BehaviourId.React) Reaction.End();
+                Mind.Force(to);
+                events?.Push(new WingEvent
+                {
+                    Time = time, Member = Seat, Kind = WingEventKind.BehaviourChanged, From = was, To = to,
+                    Reason = LastDefence.Active ? TransitionReason.MissileInbound : TransitionReason.MissileClear,
+                });
+            }
+
+            RefState reaction = default;
+            if (Mind.Current == BehaviourId.React)
+            {
+                reaction = Reaction.Step(s, LastRejoin.Ref, dt, out bool done);
+                if (done)
+                {
+                    Reaction.End();
+                    Mind.Force(BehaviourId.Rejoin);
+                    events?.Push(new WingEvent
+                    {
+                        Time = time, Member = Seat, Kind = WingEventKind.BehaviourChanged,
+                        From = BehaviourId.React, To = BehaviourId.Rejoin, Reason = TransitionReason.ManeuverDone,
+                    });
+                }
+            }
+
+            Roles.Tick(new RoleInput
+            {
+                AnchorSpeed = leader.Speed,
+                MinSpeed = p.MinimumSpeed(1f),
+                // Only helicopters trail; a jet that cannot keep up flies cutoff and calls "falling behind" (A1).
+                TopSpeed = p.Class == AirframeClass.Rotary ? p.CruiseSpeed : 0f,
+            }, dt, out _);
+            var mind = new MindInput
+            {
+                Sigma = LastRejoin.Sigma,
+                SlotError = (slot.Ref.Pos - s.Pos).Length,
+                Spacing = frame.Spacing,
+                Role = Roles.Current,
+                LeaderFlying = leader.Flying,
+                LeaderLost = frame.LeaderLost,
+            };
+            if (Mind.Tick(mind, dt, out BehaviourId from, out TransitionReason reason))
+            {
+                events?.Push(new WingEvent
+                {
+                    Time = time, Member = Seat, Kind = WingEventKind.BehaviourChanged,
+                    From = from, To = Mind.Current, Reason = reason,
+                });
+                if (Mind.Current == BehaviourId.HoldOverhead) orbit.Begin(HoldCenter(leader), OrbitSpeed(p), s.Pos);
+            }
+
+            RefState reference = LastRejoin.Ref;
+            float spacing = frame.Spacing;
+            if (Mind.Current == BehaviourId.StationKeep) reference = slot.Ref;
+            // The frame computes trail references from last tick's roles: the tick the mind enters Trail it may have none.
+            else if (Mind.Current == BehaviourId.Trail) reference = frame.TrailValid[Slot] ? frame.TrailRef[Slot] : LastRejoin.Ref;
+            else if (Mind.Current == BehaviourId.HoldOverhead)
+            {
+                bool anchored = !frame.LeaderLost && leader.Flying;
+                reference = orbit.Step(HoldCenter(leader), anchored ? leader.Vel : Vec3.Zero, dt);
+                spacing = 0f;
+            }
+            else if (Mind.Current == BehaviourId.Defend) reference = LastDefence.Ref;
+            else if (Mind.Current == BehaviourId.React) reference = reaction;
+            // Evading at full effort, as the game's evasion does (aimEffort 1); a maneuver too.
+            float aggression = Mind.Current == BehaviourId.Defend ? MissileDefence.DefendAggression
+                : Mind.Current == BehaviourId.React ? ReactionManeuver.Aggression : Aggression;
+            // The throttle override is a fixed wing's (a helicopter's throttle is its collective: review M5c C1); idle only
+            // when safe. The tick it stops, the loops pick up from the throttle it held (review M5c I4).
+            bool fixedWing = Pipeline is FixedWingPipeline || (Pipeline is TiltwingPipeline tw && tw.Mode == TiltwingMode.Plane);
+            bool idle = LastDefence.Idle && s.Tas >= MissileDefence.IdleMinSpeedFactor * p.MinimumSpeed(1f) && !Pipeline.GcasActive;
+            bool overriding = fixedWing && Mind.Current == BehaviourId.Defend && (idle || LastDefence.Full);
+            if ((overrideWas && !overriding) || trackPending) Pipeline.Track(s, LastOutput, p);
+            overrideWas = overriding;
+            trackPending = false;
+
+            LastIntent = new FlightIntent
+            {
+                Ref = reference,
+                Limits = new SpeedLimits(p.MinimumSpeed(1f), p.MaxSpeed, AfterburnerAllowed, true),
+                Precision = Precision,
+                Aggression = aggression,
+                Spacing = spacing,
+                TerrainClearance = Clearance,
+                HasHeading = Mind.Current != BehaviourId.HoldOverhead && Mind.Current != BehaviourId.Defend && Mind.Current != BehaviourId.React,
+                HeadingDeg = Vec3.HeadingDeg(leader.Track),
+            };
+            GuidanceCommand guidance = LastGuidance = Pipeline.Guide(LastIntent, s, p);
+            var ctx = new LimitContext
+            {
+                FloorY = frame.FloorY, NearFloorY = frame.NearFloorY[Slot], HasNearFloor = frame.HasNearFloor[Slot],
+                Clearance = Clearance, Aggression = aggression, CollisionBias = frame.Bias[Slot],
+            };
+            LastOutput = Pipeline.Step(guidance, s, ctx, p, dt);
+            if (overriding)
+            {
+                LastOutput.Throttle = idle ? 0f : 1f;
+                LastOutput.Airbrake = false;
+            }
+
+            if (Pipeline is TiltwingPipeline tilt && tilt.Conversions != conversions)
+            {
+                conversions = tilt.Conversions;
+                Log(events, time, WingEventKind.Converted);
+            }
+            bool gcas = Pipeline.GcasActive;
+            if (gcas && !gcasWas) Log(events, time, WingEventKind.GcasActivated);
+            gcasWas = gcas;
+            bool emergency = frame.Emergency[Slot];
+            if (emergency && !emergencyWas) Log(events, time, WingEventKind.CollisionEmergency);
+            emergencyWas = emergency;
+            return LastOutput;
+        }
+
+        /// <summary>Flies an intent of its own (the recovery approach) through this member's pipeline, with its own terrain
+        /// floor and the wing's collision bias.</summary>
+        public ControlOutput FlyIntent(in FlightIntent intent, WingFrame frame, in AircraftState s, AirframeProfile p, float dt)
+        {
+            if (trackPending) Pipeline.Track(s, LastOutput, p);
+            trackPending = false;
+            LastIntent = intent;
+            GuidanceCommand guidance = LastGuidance = Pipeline.Guide(intent, s, p);
+            bool near = frame.HasNearFloor[Slot];
+            var ctx = new LimitContext
+            {
+                FloorY = near ? frame.NearFloorY[Slot] : float.NaN, NearFloorY = frame.NearFloorY[Slot], HasNearFloor = near,
+                Clearance = Clearance, Aggression = intent.Aggression, CollisionBias = frame.Bias[Slot],
+            };
+            return LastOutput = Pipeline.Step(guidance, s, ctx, p, dt);
+        }
+
+        /// <summary>The member leaves formation flight (recovery, combat, release, settle) mid-defence or mid-maneuver: both
+        /// are forgotten and the mind rejoins, logged (review M5c I3); the next flight picks up from the held throttle.</summary>
+        public void EndDefence(float time, WingEventRing events)
+        {
+            Defence.End();
+            Threat = default;
+            if (overrideWas) trackPending = true;
+            overrideWas = false;
+            Reaction.End();
+            BehaviourId from = Mind.Current;
+            if (from != BehaviourId.Defend && from != BehaviourId.React) return;
+            Mind.Force(BehaviourId.Rejoin);
+            events?.Push(new WingEvent
+            {
+                Time = time, Member = Seat, Kind = WingEventKind.BehaviourChanged,
+                From = from, To = BehaviourId.Rejoin, Reason = TransitionReason.Commanded,
+            });
+        }
+
+        /// <summary>A reaction maneuver ordered for this member (spec WMC rebuild R3): null when it begins, else why not
+        /// (defending, still inside the last one's dwell, or its gate). A new one replaces the last after
+        /// <see cref="ReactionManeuver.MinDwell"/>.</summary>
+        public string React(in ReactionOrder o, in AircraftState s, float agl, AirframeProfile p, float time, WingEventRing events)
+        {
+            BehaviourId from = Mind.Current;
+            if (from == BehaviourId.Defend) return "defending";
+            if (from == BehaviourId.React && Reaction.Elapsed < ReactionManeuver.MinDwell) return "still maneuvering";
+            string why = ReactionManeuver.Refusal(o.Kind, s, agl, p, o.HasThreat);
+            if (why != null) return why;
+            Reaction.Begin(o, s, LastRejoin.Ref);
+            Mind.Force(BehaviourId.React);
+            events?.Push(new WingEvent
+            {
+                Time = time, Member = Seat, Kind = WingEventKind.BehaviourChanged,
+                From = from, To = BehaviourId.React, Reason = TransitionReason.Commanded,
+            });
+            return null;
+        }
+
+        /// <summary>"Form up": every member rejoins now, logged as a commanded transition (a maneuver ends).</summary>
+        public void FormUp(float time, WingEventRing events)
+        {
+            BehaviourId from = Mind.Current;
+            // A member defending against a missile finishes first (spec M5 §7.2).
+            if (from == BehaviourId.Defend) return;
+            Reaction.End();
+            if (!Mind.Force(BehaviourId.Rejoin)) return;
+            events?.Push(new WingEvent
+            {
+                Time = time, Member = Seat, Kind = WingEventKind.BehaviourChanged,
+                From = from, To = BehaviourId.Rejoin, Reason = TransitionReason.Commanded,
+            });
+        }
+
+        private Vec3 HoldCenter(in LeaderEstimate leader) =>
+            new Vec3(leader.Pos.X, leader.Pos.Y + HoldOrbit.BaseHeight + HoldOrbit.SlotHeight * (Slot + 1), leader.Pos.Z);
+
+        /// <summary>Hold orbit speed: three quarters of cruise, never under 1.5 × the loaded minimum.</summary>
+        internal static float OrbitSpeed(AirframeProfile p) => Math.Max(1.5f * p.MinimumSpeed(1f), 0.75f * p.CruiseSpeed);
+
+        internal void Log(WingEventRing events, float time, WingEventKind kind) =>
+            events?.Push(new WingEvent { Time = time, Member = Seat, Kind = kind });
+    }
+}

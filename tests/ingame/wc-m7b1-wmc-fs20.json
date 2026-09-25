@@ -1,0 +1,203 @@
+{
+  "name": "wc-m7b1-wmc-fs20",
+  "mods": [
+    "wingcommand"
+  ],
+  "timeout_s": 180,
+  "ops": [
+    {
+      "op": "spawn",
+      "id": "lead",
+      "type": "FS-20 Vortex",
+      "at": {
+        "map": [
+          0,
+          0
+        ]
+      },
+      "altitude": 3000,
+      "speed": 200,
+      "heading": 0
+    },
+    {
+      "op": "fly",
+      "id": "lead",
+      "program": [
+        {
+          "level": 280
+        }
+      ]
+    },
+    {
+      "op": "wait",
+      "seconds": 2
+    },
+    {
+      "op": "call",
+      "method": "WingCommand.Automation.FormOn",
+      "store": "form",
+      "args": {
+        "lead": "lead",
+        "count": 2,
+        "shape": "finger-four-right",
+        "spacing": "Standard"
+      }
+    },
+    {
+      "op": "wait",
+      "seconds": 45
+    },
+    {
+      "op": "call",
+      "method": "WingCommand.Automation.Wmc",
+      "store": "open",
+      "args": {
+        "open": true,
+        "tab": 0
+      }
+    },
+    {
+      "op": "wait",
+      "seconds": 2
+    },
+    {
+      "op": "call",
+      "method": "WingCommand.Automation.Wmc",
+      "store": "wing",
+      "args": {
+        "tab": 0
+      }
+    },
+    {
+      "op": "call",
+      "method": "WingCommand.Automation.Wmc",
+      "store": "orders",
+      "args": {
+        "tab": 0,
+        "sub": 0
+      }
+    },
+    {
+      "op": "wait",
+      "seconds": 1
+    },
+    {
+      "op": "call",
+      "method": "WingCommand.Automation.Wmc",
+      "store": "orbit_sel",
+      "args": {
+        "select": [
+          3
+        ]
+      }
+    },
+    {
+      "op": "call",
+      "method": "WingCommand.Automation.WmcMap",
+      "store": "orbit",
+      "args": {
+        "mode": "orbit",
+        "ahead_km": 6
+      }
+    },
+    {
+      "op": "call",
+      "method": "WingCommand.Automation.WmcMap",
+      "store": "orbit_off",
+      "args": {
+        "mode": "off"
+      }
+    },
+    {
+      "op": "wait",
+      "seconds": 3
+    },
+    {
+      "op": "call",
+      "method": "WingCommand.Automation.Elements",
+      "store": "elements"
+    },
+    {
+      "op": "call",
+      "method": "WingCommand.Automation.TaskState",
+      "store": "task"
+    },
+    {
+      "op": "call",
+      "method": "WingCommand.Automation.Wmc",
+      "store": "form_up",
+      "args": {
+        "press": "tac.orders.formup"
+      }
+    },
+    {
+      "op": "wait",
+      "seconds": 1
+    },
+    {
+      "op": "call",
+      "method": "WingCommand.Automation.Wmc",
+      "store": "targets",
+      "args": {
+        "press": "tac.orders.targets.both"
+      }
+    },
+    {
+      "op": "call",
+      "method": "WingCommand.Automation.Wmc",
+      "store": "fit",
+      "args": {
+        "tab": 0,
+        "sub": 0
+      }
+    },
+    {
+      "op": "end"
+    }
+  ],
+  "checks": [
+    {
+      "check": "status_ok"
+    },
+    {
+      "check": "result_above",
+      "path": "form.spawned",
+      "min": 2
+    },
+    {
+      "check": "result_above",
+      "path": "wing.members",
+      "min": 2
+    },
+    {
+      "check": "result_above",
+      "path": "wing.controls",
+      "min": 40
+    },
+    {
+      "check": "result_above",
+      "path": "orbit.armed",
+      "min": 1
+    },
+    {
+      "check": "result_above",
+      "path": "targets.pressed",
+      "min": 1
+    },
+    {
+      "check": "result_above",
+      "path": "elements.b",
+      "min": 1
+    },
+    {
+      "check": "result_below",
+      "path": "fit.overflow",
+      "max": 0
+    },
+    {
+      "check": "result_below",
+      "path": "fit.tab",
+      "max": 0
+    }
+  ]
+}

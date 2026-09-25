@@ -1,0 +1,33 @@
+{
+  "name": "wc-m5c-defend-fs20",
+  "mods": ["wingcommand"],
+  "timeout_s": 360,
+  "ops": [
+    {"op": "spawn", "id": "lead", "type": "FS-20 Vortex", "at": {"map": [0, 0]}, "altitude": 3000, "speed": 200, "heading": 0},
+    {"op": "fly", "id": "lead", "program": [{"level": 320}]},
+    {"op": "wait", "seconds": 2},
+    {"op": "call", "method": "WingCommand.Automation.FormOn", "store": "form",
+     "args": {"lead": "lead", "count": 2, "shape": "finger-four-right", "spacing": "Standard"}},
+    {"op": "wait", "seconds": 60},
+    {"op": "spawn", "id": "b1", "type": "FS-12 Revoker", "faction": "Primeva", "at": {"map": [-1500, 26000]}, "altitude": 3000, "speed": 220, "heading": 180},
+    {"op": "spawn", "id": "b2", "type": "FS-12 Revoker", "faction": "Primeva", "at": {"map": [1500, 26000]}, "altitude": 3000, "speed": 220, "heading": 180},
+    {"op": "spawn", "id": "b3", "type": "FS-12 Revoker", "faction": "Primeva", "at": {"map": [-1500, 27500]}, "altitude": 3200, "speed": 220, "heading": 180},
+    {"op": "spawn", "id": "b4", "type": "FS-12 Revoker", "faction": "Primeva", "at": {"map": [1500, 27500]}, "altitude": 3200, "speed": 220, "heading": 180},
+    {"op": "record", "ids": ["lead"], "hz": 2},
+    {"op": "wait", "seconds": 45},
+    {"op": "call", "method": "WingCommand.Automation.CombatState", "store": "early"},
+    {"op": "call", "method": "WingCommand.Automation.RadioState", "store": "radio"},
+    {"op": "wait", "seconds": 105},
+    {"op": "call", "method": "WingCommand.Automation.CombatState", "store": "fight"},
+    {"op": "call", "method": "WingCommand.Automation.Metrics", "store": "wing"},
+    {"op": "end"}
+  ],
+  "checks": [
+    {"check": "status_ok"},
+    {"check": "result_above", "path": "form.spawned", "min": 2},
+    {"check": "result_above", "path": "early.defends", "min": 1},
+    {"check": "result_below", "path": "early.jokers", "max": 0},
+    {"check": "result_above", "path": "radio.radio_emergency", "min": 1},
+    {"check": "result_above", "path": "radio.radio_min_gap", "min": 1.5}
+  ]
+}

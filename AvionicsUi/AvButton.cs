@@ -108,6 +108,7 @@ namespace NOAvionics.Ui
         public void SetEnabled(bool on)
         {
             if (interactable == on) return;
+            if (!on && hovered) PublishTooltip(entering: false);
             interactable = on;
             if (!interactable) { hovered = false; pressed = false; }
             Apply();
@@ -115,19 +116,39 @@ namespace NOAvionics.Ui
 
         public void SetAction(Action action) => onClick = action;
 
+        /// <summary>Top-level tabs form one edge-to-edge segmented strip.</summary>
+        public void UseStripSurface()
+        {
+            if (fill != null)
+            {
+                fill.sprite = null;
+                fill.type = Image.Type.Simple;
+            }
+            if (frame != null)
+                foreach (Image edge in frame)
+                    if (edge != null) edge.enabled = false;
+        }
+
         public void SetText(string text)
         {
             if (label != null) label.text = text;
         }
 
-        private AvPaletteInputs PaletteInputs => new AvPaletteInputs
+        private AvPaletteInputs PaletteInputs
         {
-            Accent = AvTheme.Accent.ToRgba(),
-            Alert = AvTheme.Alert.ToRgba(),
-            Frame = AvTokens.Frame,
-            Dim = AvTokens.TextDim,
-            Disabled = AvTokens.TextMuted,
-        };
+            get
+            {
+                AvStyleSheet sheet = AvStyleHost.Sheet;
+                return new AvPaletteInputs
+                {
+                    Accent = AvTheme.Accent.ToRgba(),
+                    Alert = AvTheme.Alert.ToRgba(),
+                    Frame = AvStyleHost.Resolve(sheet.Paint("frame", AvTokens.Frame), AvTheme.Frame).ToRgba(),
+                    Dim = AvStyleHost.Resolve(sheet.Paint("text-dim", AvTokens.TextDim), AvTheme.Dim).ToRgba(),
+                    Disabled = AvStyleHost.Resolve(sheet.Paint("text-muted", AvTokens.TextMuted), AvTheme.Disabled).ToRgba(),
+                };
+            }
+        }
 
         private bool hasCustomColors;
         private Color customFill;
@@ -186,7 +207,7 @@ namespace NOAvionics.Ui
 
             if (underline != null)
             {
-                underline.color = latched && interactable ? AvTheme.Unity(paint.Frame) : Color.clear;
+                underline.color = latched && interactable ? AvTheme.Accent : Color.clear;
             }
         }
 
@@ -196,9 +217,19 @@ namespace NOAvionics.Ui
             if (!interactable) return;
 
             AvInput.Deselect(gameObject);
-
-            try { onClick?.Invoke(); }
-            catch (Exception e) { Debug.LogError("Avionics button click failed: " + e); }
+            try
+            {
+                onClick?.Invoke();
+                AvUiSound.Play(style == AvButtonStyle.Tab ? AvUiCue.Navigate
+                    : style == AvButtonStyle.Toggle ? (latched ? AvUiCue.Engage : AvUiCue.Release)
+                    : style == AvButtonStyle.Primary ? AvUiCue.Confirm
+                    : style == AvButtonStyle.Danger ? AvUiCue.Caution : AvUiCue.Press);
+            }
+            catch (Exception e)
+            {
+                AvUiSound.Play(AvUiCue.Caution);
+                Debug.LogError("Avionics button click failed: " + e);
+            }
         }
 
         public void OnPointerEnter(PointerEventData eventData)
@@ -206,6 +237,7 @@ namespace NOAvionics.Ui
             hovered = true;
             PublishTooltip(entering: true);
             Apply();
+            if (interactable) AvUiSound.Play(AvUiCue.Hover);
         }
 
         public void OnPointerExit(PointerEventData eventData)
@@ -261,7 +293,16 @@ namespace NOAvionics.Ui
         public void Initialise(string text) => tooltip = text;
 
         /// <summary>Help text can change with availability; refresh it without re-hovering.</summary>
-        public void SetText(string text) => tooltip = text;
+        public void SetText(string text)
+        {
+            string previous = tooltip;
+            tooltip = text;
+            if (hovered && AvButton.HoveredTooltip == previous)
+            {
+                AvButton.PublishExternal(previous, entering: false);
+                AvButton.PublishExternal(tooltip, entering: true);
+            }
+        }
 
         /// <summary>Optional background that lights on hover, so the whole row reads as one control.</summary>
         public void SetTint(Graphic target, Color rest, Color hover)

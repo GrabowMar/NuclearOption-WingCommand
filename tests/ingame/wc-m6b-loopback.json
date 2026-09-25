@@ -1,0 +1,26 @@
+{
+  "name": "wc-m6b-loopback",
+  "mods": ["wingcommand"],
+  "timeout_s": 150,
+  "ops": [
+    {"op": "spawn", "id": "lead", "type": "FS-20 Vortex", "at": {"map": [0, 0]}, "altitude": 3000, "speed": 200, "heading": 0},
+    {"op": "fly", "id": "lead", "program": [{"level": 120}]},
+    {"op": "wait", "seconds": 2},
+    {"op": "call", "method": "WingCommand.Automation.FormOn", "store": "form",
+     "args": {"lead": "lead", "count": 2, "shape": "finger-four-right", "spacing": "Standard"}},
+    {"op": "wait", "seconds": 15},
+    {"op": "call", "method": "WingCommand.Automation.NetState", "store": "net"},
+    {"op": "end"}
+  ],
+  "checks": [
+    {"check": "status_ok"},
+    {"check": "result_below", "path": "net.disabled", "max": 0},
+    {"check": "result_above", "path": "net.greeted", "min": 1},
+    {"check": "result_above", "path": "net.replies", "min": 1},
+    {"check": "result_above", "path": "net.host_greeted", "min": 1},
+    {"check": "result_below", "path": "net.decode_failures", "max": 0},
+    {"check": "result_above", "path": "net.snapshots_in", "min": 10},
+    {"check": "result_above", "path": "net.mirror_members", "min": 2},
+    {"check": "result_below", "path": "net.mirror_stale", "max": 0}
+  ]
+}

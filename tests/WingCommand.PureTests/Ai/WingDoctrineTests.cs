@@ -49,7 +49,7 @@ namespace WingCommand.PureTests
         public void TurningSpreadOffMakesReserveCustom()
         {
             var custom = new WingDoctrine(MissileGuard.Wing, MissileResponse.Press,
-                FormationInterval.Close, false, TargetPolicy.Hold, EngagementReach.Slot);
+                FormationInterval.Close, false, TargetPolicy.Hold, EngagementReach.Slot, WeaponsPolicy.Auto, RadarPolicy.On);
             Assert.Equal("CUSTOM", custom.PatternName);
         }
 
@@ -57,7 +57,7 @@ namespace WingCommand.PureTests
         public void OffForcesBreakSoAStoredPressCannotNoseHold()
         {
             var doctrine = new WingDoctrine(MissileGuard.Off, MissileResponse.Press,
-                FormationInterval.Close, true, TargetPolicy.Hold, EngagementReach.Slot);
+                FormationInterval.Close, true, TargetPolicy.Hold, EngagementReach.Slot, WeaponsPolicy.Auto, RadarPolicy.On);
             Assert.Equal(MissileResponse.Break, doctrine.Response);
         }
 
@@ -84,6 +84,96 @@ namespace WingCommand.PureTests
         }
 
         [Fact]
+        public void PresetsFlyWithEveryWeaponAndTheRadarOn()
+        {
+            foreach (WingDoctrine d in new[] { WingDoctrine.Reserve, WingDoctrine.Escort, WingDoctrine.Sweep })
+            {
+                Assert.Equal(WeaponsPolicy.Auto, d.Weapons);
+                Assert.Equal(RadarPolicy.On, d.Radar);
+            }
+        }
+
+        [Fact]
+        public void ASixValueLineReadsWithTheNewAxesDefaulted()
+        {
+            WingDoctrine d = Parse("Self,Break,Open,NoSpread,Air,Long");
+            Assert.Equal(TargetPolicy.Air, d.Targets);
+            Assert.Equal(WeaponsPolicy.Auto, d.Weapons);
+            Assert.Equal(RadarPolicy.On, d.Radar);
+        }
+
+        [Fact]
+        public void EveryWeaponsAndRadarValueRoundTripsInTheEightValueLine()
+        {
+            foreach (WeaponsPolicy w in System.Enum.GetValues(typeof(WeaponsPolicy)))
+                foreach (RadarPolicy r in System.Enum.GetValues(typeof(RadarPolicy)))
+                {
+                    WingDoctrine d = WingDoctrine.Sweep.With(DoctrineAxis.Weapons, (byte)w).With(DoctrineAxis.Radar, (byte)r);
+                    Assert.Equal(d, Parse(d.ToString()));
+                }
+            Assert.Equal("Wing,Break,Open,Spread,Both,Long,Guns,Silent",
+                WingDoctrine.Sweep.With(DoctrineAxis.Weapons, (byte)WeaponsPolicy.Guns).With(DoctrineAxis.Radar, (byte)RadarPolicy.Silent).ToString());
+            Assert.False(WingDoctrine.TryParse("Wing,Break,Open,Spread,Both,Long,Guns", out _));
+        }
+
+        [Fact]
+        public void TheProfileNameIgnoresWeaponsAndRadarAndPickingOneClearsThem()
+        {
+            WingDoctrine silent = WingDoctrine.Sweep.With(DoctrineAxis.Radar, (byte)RadarPolicy.Silent);
+            Assert.Equal("SWEEP", silent.PatternName);
+            Assert.NotEqual(WingDoctrine.Sweep, silent);
+            Assert.Equal(WingDoctrine.Reserve, silent.NextPattern());
+            Assert.Equal(WingDoctrine.Escort, WingDoctrine.Reserve.With(DoctrineAxis.Weapons, (byte)WeaponsPolicy.Guns).NextPattern());
+        }
+
+        [Fact]
+        public void WithChangesOnlyItsOwnAxis()
+        {
+            WingDoctrine d = WingDoctrine.Escort;
+            for (int a = 0; a <= (int)DoctrineAxis.Radar; a++)
+            {
+                var axis = (DoctrineAxis)a;
+                byte v = (byte)(d.Get(axis) == 0 ? 1 : 0);
+                WingDoctrine e = d.With(axis, v);
+                Assert.Equal(v, e.Get(axis));
+                for (int b = 0; b <= (int)DoctrineAxis.Radar; b++)
+                    if (b != a && !(axis == DoctrineAxis.Guard && b == (int)DoctrineAxis.Response))
+                        Assert.Equal(d.Get((DoctrineAxis)b), e.Get((DoctrineAxis)b));
+            }
+        }
+
+        [Fact]
+        public void EveryValuesNameReadsBackAsThatValue()
+        {
+            // An order carries the value as its word (SetOverride.Text); a preset's name must never stand in for it.
+            for (int a = 0; a <= (int)DoctrineAxis.Radar; a++)
+            {
+                var axis = (DoctrineAxis)a;
+                for (byte v = 0; v < 5; v++)
+                {
+                    string name = WingDoctrine.ValueName(axis, v);
+                    if (name == null) continue;
+                    Assert.True(WingDoctrine.TryAxisValue(axis, name, out byte back), $"{axis} {name}");
+                    Assert.Equal(v, back);
+                }
+            }
+            Assert.Equal("On", WingDoctrine.ValueName(DoctrineAxis.Radar, (byte)RadarPolicy.On));
+            Assert.Equal("Hold", WingDoctrine.ValueName(DoctrineAxis.Targets, (byte)TargetPolicy.Hold));
+            Assert.Null(WingDoctrine.ValueName(DoctrineAxis.Radar, 3));
+        }
+
+        [Fact]
+        public void AnAxisReadsItsOwnWordsOnly()
+        {
+            Assert.True(WingDoctrine.TryAxisValue(DoctrineAxis.Weapons, "NoAirToGround", out byte w));
+            Assert.Equal((byte)WeaponsPolicy.NoAirToGround, w);
+            Assert.True(WingDoctrine.TryAxisValue(DoctrineAxis.Spread, "NoSpread", out byte s));
+            Assert.Equal(0, s);
+            Assert.False(WingDoctrine.TryAxisValue(DoctrineAxis.Radar, "Guns", out _));
+            Assert.False(WingDoctrine.TryAxisValue(DoctrineAxis.Radar, "7", out _));
+        }
+
+        [Fact]
         public void DoctrineLineWinsOverDefaultRoe()
         {
             const string text = "[Engagement]\nDefaultRoe = Free\nDoctrine = Escort\n";
@@ -105,7 +195,7 @@ namespace WingCommand.PureTests
             Assert.Equal(WingDoctrine.Sweep, WingDoctrine.Escort.NextPattern());
             Assert.Equal(WingDoctrine.Reserve, WingDoctrine.Sweep.NextPattern());
             var custom = new WingDoctrine(MissileGuard.Self, MissileResponse.Break,
-                FormationInterval.Open, false, TargetPolicy.Air, EngagementReach.Long);
+                FormationInterval.Open, false, TargetPolicy.Air, EngagementReach.Long, WeaponsPolicy.Guns, RadarPolicy.Off);
             Assert.Equal(WingDoctrine.Reserve, custom.NextPattern());
         }
 
@@ -152,29 +242,6 @@ namespace WingCommand.PureTests
             Assert.Equal(ProtecteeRank.Leader, ranks[0]);
             Assert.Equal(ProtecteeRank.Self, ranks[1]);
             Assert.Equal(ProtecteeRank.Wingman, ranks[2]);
-        }
-
-        [Fact]
-        public void StationFireKeepsMissileDefenceAheadOfPerformanceAndHold()
-        {
-            Assert.Equal(StationFireMode.MissileDefence, OrderRoePolicy.StationFire(
-                OrderEngagementAuthority.StandingRoe, WingDoctrine.Reserve, true, false));
-            Assert.Equal(StationFireMode.None, OrderRoePolicy.StationFire(
-                OrderEngagementAuthority.StandingRoe, WingDoctrine.Escort, false, false));
-            Assert.Equal(StationFireMode.None, OrderRoePolicy.StationFire(
-                OrderEngagementAuthority.StandingRoe, WingDoctrine.Sweep, false, false));
-            Assert.Equal(StationFireMode.DesignatedTarget, OrderRoePolicy.StationFire(
-                OrderEngagementAuthority.ExplicitTarget, WingDoctrine.Reserve, false, true));
-            Assert.Equal(StationFireMode.Opportunity, OrderRoePolicy.StationFire(
-                OrderEngagementAuthority.AutonomousCombat, WingDoctrine.Reserve, false, false));
-            Assert.Equal(StationFireMode.ProtectWing, OrderRoePolicy.StationFire(
-                OrderEngagementAuthority.StandingRoe, WingDoctrine.Escort, false, true));
-            Assert.Equal(StationFireMode.Opportunity, OrderRoePolicy.StationFire(
-                OrderEngagementAuthority.StandingRoe, WingDoctrine.Sweep, false, true));
-            var air = new WingDoctrine(MissileGuard.Wing, MissileResponse.Break,
-                FormationInterval.Standard, true, TargetPolicy.Air, EngagementReach.Slot);
-            Assert.Equal(StationFireMode.Opportunity, OrderRoePolicy.StationFire(
-                OrderEngagementAuthority.StandingRoe, air, false, true));
         }
 
         private static void AssertDoctrine(WingDoctrine doctrine, MissileGuard guard, MissileResponse response,

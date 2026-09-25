@@ -1,0 +1,30 @@
+{
+  "name": "wc-m2-mixed-ci22",
+  "mods": ["wingcommand"],
+  "timeout_s": 420,
+  "ops": [
+    {"op": "spawn", "id": "lead", "type": "CI-22 Cricket", "at": {"map": [0, 0]}, "altitude": 1200, "speed": 60, "heading": 0},
+    {"op": "fly", "id": "lead", "program": [{"level": 5}, {"orbit": {"bank": 15, "seconds": 400}}]},
+    {"op": "wait", "seconds": 2},
+    {"op": "call", "method": "WingCommand.Automation.FormOn", "store": "jet",
+     "args": {"lead": "lead", "count": 1, "type": "FS-20 Vortex", "shape": "finger-four-right", "spacing": "Standard"}},
+    {"op": "call", "method": "WingCommand.Automation.FormOn", "store": "helo",
+     "args": {"lead": "lead", "count": 1, "type": "UH-90 Ibis"}},
+    {"op": "wait", "seconds": 5},
+    {"op": "call", "method": "WingCommand.Automation.Members"},
+    {"op": "record", "ids": ["*"], "hz": 5},
+    {"op": "wait", "seconds": 240},
+    {"op": "call", "method": "WingCommand.Automation.Metrics", "store": "mixed"},
+    {"op": "end"}
+  ],
+  "checks": [
+    {"check": "status_ok"},
+    {"check": "alive", "ids": ["*"]},
+    {"check": "result_above", "path": "mixed.members", "min": 2},
+    {"check": "result_below", "path": "mixed.left", "max": 0},
+    {"check": "result_above", "path": "mixed.captured", "min": 1},
+    {"check": "result_below", "path": "mixed.collision", "max": 0},
+    {"check": "result_below", "path": "mixed.gcas", "max": 0},
+    {"check": "result_above", "path": "mixed.min_separation_m", "min": 20}
+  ]
+}

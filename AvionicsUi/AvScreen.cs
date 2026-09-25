@@ -15,19 +15,20 @@ namespace NOAvionics.Ui
     /// made three. The shape is not the interesting part of any of them, so it lives here
     /// and each screen spends its code on what it actually shows.</para>
     ///
-    /// <para>Nothing here runs per frame. The whole tree is measured and arranged once, at
-    /// build time, and what survives is the rectangles plus the handful of labels a refresh
-    /// pass writes into.</para>
+    /// <para>The tree is measured and arranged once at build time. Refresh updates labels;
+    /// the independent glass layer only samples scene light at a slow interval.</para>
     /// </summary>
     public sealed class AvScreen
     {
         /// <summary>How far a page spine sits inside the panel padding.</summary>
         public const float SpineInset = 14f;
 
-        private const float MetricRowHeight = 64f;
+        private const float MetricRowHeight = 76f;
 
         private readonly GameObject[] pages;
         private readonly Action<int> onTab;
+        private RectTransform pageLayer;
+        private Image displayGlass;
 
         /// <summary>The stretched child every page and widget is parented to.</summary>
         public RectTransform Content { get; private set; }
@@ -74,7 +75,7 @@ namespace NOAvionics.Ui
             int metricCount = metrics == null ? 0 : metrics.Length;
 
             var screen = new AvScreen(Math.Max(1, labels.Length), onTab);
-            AvNode shell = AvBox.Column("screen").Pad(AvTokens.Pad).Gaps(AvTokens.Space2)
+            AvNode shell = AvBox.Column("screen").Gaps(AvTokens.Space2)
                 .Add(AvBox.Row("databar").Height(chipCount > 0 ? AvTokens.ScreenHeaderHeight : AvTokens.TitleBarHeight));
 
             if (metricCount > 0)
@@ -86,7 +87,7 @@ namespace NOAvionics.Ui
 
             if (labels.Length > 0)
             {
-                AvNode tabs = AvBox.Row("tabs").Height(AvTokens.TabBarHeight).Gaps(AvTokens.Space1);
+                AvNode tabs = AvBox.Row("tabs").Height(AvTokens.TabBarHeight).Gaps(0f);
                 for (int i = 0; i < labels.Length; i++) tabs.Add(AvBox.Cell("t" + i).Grow());
                 shell.Add(tabs);
             }
@@ -97,6 +98,12 @@ namespace NOAvionics.Ui
             shell.Arrange(new Rect(0f, 0f, width, height));
 
             screen.Content = content;
+            // Backdrops already in Content stay behind pages; chrome added below
+            // stays in front. This prevents a long page from painting over tabs.
+            var layerObject = new GameObject("Pages", typeof(RectTransform));
+            screen.pageLayer = layerObject.GetComponent<RectTransform>();
+            screen.pageLayer.SetParent(content, false);
+            AvKit.Stretch(screen.pageLayer);
             screen.DataBar = AvStyled.TopBar(content, shell.At("databar"), id, chipCount);
 
             screen.Metrics = new AvStyled.Metric[metricCount];
@@ -121,17 +128,37 @@ namespace NOAvionics.Ui
             }
 
             screen.Tabs = new AvButton[labels.Length];
+            if (labels.Length > 0)
+                AvStyled.Box(content, shell.At("tabs"), "tabbar");
             for (int i = 0; i < labels.Length; i++)
             {
                 int index = i;
                 screen.Tabs[i] = AvStyled.Button(
                     content, shell.At("tabs.t" + i), labels[i], "tab",
                     () => screen.SetPage(index), AvButtonStyle.Tab);
+                screen.Tabs[i].UseStripSurface();
+                if (i > 0)
+                {
+                    Rect tab = shell.At("tabs.t" + i);
+                    AvKit.Rule(content, new Rect(tab.x, tab.y - 5f, 1f,
+                        tab.height - 10f), AvTheme.Frame);
+                }
+            }
+            if (labels.Length > 0)
+            {
+                Rect tabs = shell.At("tabs");
+                AvKit.Rule(content, new Rect(tabs.x, tabs.y, tabs.width, 1f), AvTheme.Frame);
             }
 
             screen.Body = shell.At("body");
             screen.Status = AvStyled.StatusStrip(content, shell.At("status"), out Image statusRail);
             screen.StatusRail = statusRail;
+            screen.displayGlass = AvDisplayGlass.Attach(content);
+            // Glass is kept as the front sibling when native adapters add content later.
+            // Its children therefore give the panel a frame that always paints last.
+            if (screen.displayGlass != null)
+                AvKit.Outline(screen.displayGlass.rectTransform,
+                    new Rect(-6f, 6f, width, height), AvTheme.Frame);
             return screen;
         }
 
@@ -168,7 +195,7 @@ namespace NOAvionics.Ui
         {
             var page = new GameObject(name, typeof(RectTransform));
             var rect = page.GetComponent<RectTransform>();
-            rect.SetParent(Content, false);
+            rect.SetParent(pageLayer, false);
             AvKit.Stretch(rect);
             page.SetActive(false);
 
@@ -179,6 +206,8 @@ namespace NOAvionics.Ui
         public void SetPage(int index)
         {
             Page = index;
+            KeepGlassFront();
+            DataBar?.SetPageIndex(index, pages.Length);
             AvButton.ClearTooltip();
             for (int i = 0; i < pages.Length; i++)
             {
@@ -257,6 +286,7 @@ namespace NOAvionics.Ui
         /// </summary>
         public void WriteStatus(string alert, string prompt, string ambient)
         {
+            KeepGlassFront();
             if (Status == null) return;
 
             string hovered = AvButton.HoveredTooltip;
@@ -279,6 +309,14 @@ namespace NOAvionics.Ui
             }
 
             SetStatus("STATUS", ambient ?? "", AvTheme.Dim, AvTheme.RailInert);
+        }
+
+        private void KeepGlassFront()
+        {
+            // A native adapter can add a state card directly to Content after Build.
+            // Refresh only repairs that exceptional ordering; ordinary frames do no work.
+            if (displayGlass != null && displayGlass.transform.GetSiblingIndex() != Content.childCount - 1)
+                displayGlass.transform.SetAsLastSibling();
         }
 
         private void SetStatus(string kind, string text, Color textColor, Color railColor)

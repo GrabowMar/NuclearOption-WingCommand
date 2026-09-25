@@ -1,0 +1,101 @@
+{
+  "name": "wc-m3d-s6-carrier",
+  "mods": [
+    "wingcommand"
+  ],
+  "timeout_s": 420,
+  "ops": [
+    {
+      "op": "spawn",
+      "id": "lead",
+      "type": "FS-20 Vortex",
+      "at": {
+        "map": [
+          -18632,
+          32049
+        ]
+      },
+      "altitude": 1200,
+      "speed": 150,
+      "heading": 0
+    },
+    {
+      "op": "fly",
+      "id": "lead",
+      "program": [
+        {
+          "orbit": {
+            "bank": 15,
+            "seconds": 400
+          }
+        }
+      ]
+    },
+    {
+      "op": "wait",
+      "seconds": 3
+    },
+    {
+      "op": "call",
+      "method": "WingCommand.Automation.DumpAirbase",
+      "store": "carrier",
+      "args": {
+        "field": "AssaultCarrier1"
+      }
+    },
+    {
+      "op": "call",
+      "method": "WingCommand.Automation.Launch",
+      "store": "launch",
+      "args": {
+        "lead": "lead",
+        "field": "AssaultCarrier1",
+        "count": 1,
+        "type": "FS-12 Revoker"
+      }
+    },
+    {
+      "op": "wait",
+      "seconds": 30
+    },
+    {
+      "op": "call",
+      "method": "WingCommand.Automation.Ground",
+      "store": "early"
+    },
+    {
+      "op": "call",
+      "method": "WingCommand.Automation.DumpFields"
+    },
+    {
+      "op": "wait",
+      "seconds": 150
+    },
+    {
+      "op": "call",
+      "method": "WingCommand.Automation.Ground",
+      "store": "ground"
+    },
+    {
+      "op": "call",
+      "method": "WingCommand.Automation.DumpAirbase",
+      "store": "carrier_later",
+      "args": {
+        "field": "AssaultCarrier1"
+      }
+    },
+    {
+      "op": "end"
+    }
+  ],
+  "checks": [
+    {
+      "check": "status_ok"
+    },
+    {
+      "check": "result_above",
+      "path": "carrier.hangars",
+      "min": 1
+    }
+  ]
+}

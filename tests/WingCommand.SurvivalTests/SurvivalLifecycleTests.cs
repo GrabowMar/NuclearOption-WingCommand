@@ -5,12 +5,13 @@ using Random = UnityEngine.Random;
 
 namespace WingCommand
 {
+    // The roster is static: classes that reset it must not run in parallel.
+    [Collection("static roster")]
     public class SurvivalLifecycleTests
     {
         public SurvivalLifecycleTests()
         {
             WingPilotRoster.Reset();
-            WingDeparture.Reset();
             UnitRegistry.Units.Clear();
             Plugin.Settings = new Config();
             Plugin.Logger = new Log();
@@ -410,28 +411,6 @@ namespace WingCommand
         }
 
         [Fact]
-        public void SarDispatchUsesOnlyIdleEligibleHelicoptersOnLand()
-        {
-            var aircraft = Plane();
-            var pilot = WingPilotRoster.Assign(aircraft);
-            var native = Eject(aircraft);
-            WingPilotRoster.Retire(1, false);
-            var busy = new WingMember { Aircraft = Plane(2), Order = WingOrder.Attack };
-            var idle = new WingMember { Aircraft = Plane(3) };
-            busy.Aircraft.NetworkHQ = idle.Aircraft.NetworkHQ = aircraft.NetworkHQ;
-            var wing = new WingRegistry();
-            wing.Members.Add(busy);
-            wing.Members.Add(idle);
-            native.transform.position = Vector3.zero;
-            WingSearchAndRescue.Dispatch(pilot, wing);
-            Assert.Equal(WingOrder.Formation, idle.Order);
-            native.transform.position = new Vector3(0, 100, 0);
-            WingSearchAndRescue.Dispatch(pilot, wing);
-            Assert.Equal(WingOrder.LandHere, idle.Order);
-            Assert.Equal(WingOrder.Attack, busy.Order);
-        }
-
-        [Fact]
         public void LocalRecoveryChargesTenMillionAndReturnsPilotAfterFiveMinutes()
         {
             var aircraft = Plane();
@@ -487,36 +466,6 @@ namespace WingCommand
             Time.timeSinceLevelLoad = 500;
             WingSearchAndRescue.Tick();
             Assert.Empty(WingPilotRoster.DisplayRoster());
-        }
-
-        [Fact]
-        public void ReleasedAircraftWithEjectedCrewAtBaseWaitsForRecoverySettlement()
-        {
-            var aircraft = Plane();
-            var pilot = WingPilotRoster.Assign(aircraft);
-            WingDeparture.Begin(aircraft);
-            Eject(aircraft);
-            aircraft.AtHome = true;
-            WingDeparture.Prune();
-            Assert.Single(WingDeparture.Outbound);
-            Assert.True(WingPilotRoster.IsFlying(pilot));
-            Assert.False(pilot.Lost);
-            WingPilotRoster.Retire(1, true);
-            Assert.True(WingPilotRoster.IsFree(pilot));
-        }
-
-        [Fact]
-        public void ReleasedAircraftLostEnrouteTransfersSurvivorToSar()
-        {
-            var aircraft = Plane();
-            var pilot = WingPilotRoster.Assign(aircraft);
-            WingDeparture.Begin(aircraft);
-            Eject(aircraft);
-            WingDeparture.Prune();
-            Assert.Empty(WingDeparture.Outbound);
-            Assert.Equal(PilotRecoveryStatus.Downed, pilot.RecoveryStatus);
-            Assert.False(WingPilotRoster.IsFlying(pilot));
-            Assert.False(pilot.Lost);
         }
 
         [Fact]

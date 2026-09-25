@@ -1,0 +1,58 @@
+using System;
+using UnityEngine;
+
+namespace WingCommand
+{
+    /// <summary>Ground height (terrain and statics) under global points, by a downward ray. Sea level (0) where
+    /// nothing is hit or the ground is below the sea.</summary>
+    internal static class TerrainProbe
+    {
+        public static readonly float[] LookAheadSeconds = { 0f, 2f, 5f, 10f }, FarSeconds = { 15f, 20f, 30f };
+        private const float CastHeight = 5000f;
+
+        public static float GroundY(Vec3 at)
+        {
+            Vector3 local = at.ToLocal();
+            var origin = new Vector3(local.x, local.y + CastHeight, local.z);
+            if (Physics.Raycast(origin, Vector3.down, out RaycastHit hit, 2f * CastHeight + Math.Abs(at.Y), PhysicsLayers.StaticsMask))
+                return Math.Max(0f, hit.point.GlobalY());
+            return 0f;
+        }
+
+        /// <summary>Ground to land on under <paramref name="at"/> (review M4c I5): false over water or where nothing is hit;
+        /// the ground's height and its surface normal's up component (1 level, less on a slope).</summary>
+        public static bool Landing(Vec3 at, out float groundY, out float normalY)
+        {
+            Vector3 local = at.ToLocal();
+            var origin = new Vector3(local.x, local.y + CastHeight, local.z);
+            groundY = 0f;
+            normalY = 0f;
+            if (!Physics.Raycast(origin, Vector3.down, out RaycastHit hit, 2f * CastHeight + Math.Abs(at.Y), PhysicsLayers.StaticsMask))
+                return false;
+            groundY = hit.point.GlobalY();
+            normalY = hit.normal.y;
+            return groundY > 0.5f;
+        }
+
+        /// <summary>Highest ground under the aircraft and 2, 5 and 10 s ahead on its horizontal path.</summary>
+        public static float LookAhead(Vec3 pos, Vec3 vel)
+        {
+            Vec3 h = vel.Horizontal;
+            float top = 0f;
+            for (int i = 0; i < LookAheadSeconds.Length; i++) top = Math.Max(top, GroundY(pos + h * LookAheadSeconds[i]));
+            return top;
+        }
+
+        /// <summary>Highest ground 15, 20 and 30 s ahead on the horizontal path (a task's lead).</summary>
+        public static float LookAheadFar(Vec3 pos, Vec3 vel)
+        {
+            Vec3 h = vel.Horizontal;
+            float top = 0f;
+            for (int i = 0; i < FarSeconds.Length; i++) top = Math.Max(top, GroundY(pos + h * FarSeconds[i]));
+            return top;
+        }
+
+        /// <summary>Highest ground under the aircraft and 2 s ahead (the GCAS near floor).</summary>
+        public static float Near(Vec3 pos, Vec3 vel) => Math.Max(GroundY(pos), GroundY(pos + vel.Horizontal * 2f));
+    }
+}
