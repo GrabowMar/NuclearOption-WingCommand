@@ -46,11 +46,13 @@ namespace WingCommand
 
         /// <summary>A launch that never joined the wing: the allocation always comes back. An aircraft that never appeared
         /// gives back the airframe drawn for it (the game draws it for a hangar, the call for a service point); one that
-        /// appeared intact goes back to the reserve, where the game restocks it; one destroyed first is gone.</summary>
-        public static RefundPlan Refund(bool spawned, bool destroyed, bool viaHangar, bool tookStock) => new RefundPlan
+        /// appeared intact goes back to the reserve, where the game restocks it; one destroyed first is gone. A
+        /// <paramref name="sandbox"/> launch never moves the faction's stock: it gave the hangar's draw back when it launched,
+        /// so nothing comes back for it, and the game's restock of a returned one is cancelled.</summary>
+        public static RefundPlan Refund(bool spawned, bool destroyed, bool viaHangar, bool tookStock, bool sandbox = false) => new RefundPlan
         {
             Allocation = true,
-            StockByHand = !spawned && (viaHangar || tookStock) ? 1 : 0,
+            StockByHand = sandbox ? (spawned && !destroyed ? -1 : 0) : !spawned && (viaHangar || tookStock) ? 1 : 0,
             ReturnAircraft = spawned && !destroyed,
         };
 

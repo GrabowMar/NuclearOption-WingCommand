@@ -23,6 +23,8 @@ namespace WingCommand
             public AircraftDefinition Definition;
             /// <summary>Launched through a hangar (the game draws the airframe from the faction's stock itself).</summary>
             public bool ViaHangar;
+            /// <summary>A sandbox launch: it never moves the faction's stock (<see cref="CallCost.Refund"/>).</summary>
+            public bool Sandbox;
         }
 
         public static void Reset()
@@ -31,14 +33,19 @@ namespace WingCommand
             Charged = Refunded = 0f;
         }
 
-        public static CallQuote Quote(AircraftDefinition definition, FactionHQ hq, bool viaHangar, bool sandbox)
+        /// <param name="price">What it costs (SUPPLY's quote, the surcharge included); negative: the list value.</param>
+        /// <param name="held">Airframes of the type in the HANGAR store: they count as stock and one is used first (never
+        /// drawn from the faction by hand).</param>
+        public static CallQuote Quote(AircraftDefinition definition, FactionHQ hq, bool viaHangar, bool sandbox, float price = -1f, int held = 0)
         {
             GameManager.GetLocalPlayer(out Player player);
-            return CallCost.Quote(definition != null ? definition.value : 0f, player != null ? player.Allocation : 0f,
-                hq != null && definition != null ? hq.GetUnitSupply(definition) : 0, sandbox, viaHangar);
+            CallQuote q = CallCost.Quote(price >= 0f ? price : definition != null ? definition.value : 0f, player != null ? player.Allocation : 0f,
+                (hq != null && definition != null ? hq.GetUnitSupply(definition) : 0) + held, sandbox, viaHangar);
+            if (held > 0) q.TakeStock = false;
+            return q;
         }
 
-        public static Charge Take(CallQuote quote, FactionHQ hq, AircraftDefinition definition, bool viaHangar)
+        public static Charge Take(CallQuote quote, FactionHQ hq, AircraftDefinition definition, bool viaHangar, bool sandbox = false)
         {
             if (quote.Charge > 0f && GameManager.GetLocalPlayer(out Player player) && player != null)
             {
@@ -46,7 +53,7 @@ namespace WingCommand
                 Charged += quote.Charge;
             }
             if (quote.TakeStock && hq != null) hq.ModifyUnitSupply(definition, -1);
-            return new Charge { Quote = quote, Hq = hq, Definition = definition, ViaHangar = viaHangar };
+            return new Charge { Quote = quote, Hq = hq, Definition = definition, ViaHangar = viaHangar, Sandbox = sandbox };
         }
 
         /// <summary>The launch never became a wingman (<see cref="CallCost.Refund"/>): the allocation back; the airframe
@@ -55,7 +62,8 @@ namespace WingCommand
         public static void Refund(Charge charge, Aircraft aircraft)
         {
             bool spawned = (object)aircraft != null;
-            RefundPlan plan = CallCost.Refund(spawned, spawned && (aircraft == null || aircraft.disabled), charge.ViaHangar, charge.Quote.TakeStock);
+            RefundPlan plan = CallCost.Refund(spawned, spawned && (aircraft == null || aircraft.disabled), charge.ViaHangar, charge.Quote.TakeStock,
+                charge.Sandbox);
             if (plan.Allocation && charge.Quote.Charge > 0f && GameManager.GetLocalPlayer(out Player player) && player != null)
             {
                 player.AddAllocation(charge.Quote.Charge);

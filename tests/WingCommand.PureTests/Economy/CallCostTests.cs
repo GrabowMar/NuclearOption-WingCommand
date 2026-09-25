@@ -75,5 +75,18 @@ namespace WingCommand.PureTests
             Assert.Equal(0f, free.Charge);
             Assert.False(free.TakeStock);
         }
+
+        [Fact]
+        public void ASandboxLaunchNeverMovesTheFactionsStock()
+        {
+            // The launch gave the hangar's own draw back at once: one that never appeared returns nothing, one that appeared
+            // and goes back to the reserve cancels the game's restock.
+            RefundPlan never = CallCost.Refund(spawned: false, destroyed: false, viaHangar: true, tookStock: false, sandbox: true);
+            Assert.Equal(0, never.StockByHand);
+            RefundPlan returned = CallCost.Refund(spawned: true, destroyed: false, viaHangar: true, tookStock: false, sandbox: true);
+            Assert.True(returned.ReturnAircraft);
+            Assert.Equal(-1, returned.StockByHand);
+            Assert.Equal(1, CallCost.Refund(false, false, true, false).StockByHand);
+        }
     }
 }

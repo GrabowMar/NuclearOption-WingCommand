@@ -3,8 +3,11 @@ using NuclearOption.Networking;
 
 namespace WingCommand
 {
-    /// <summary>Concrete reserve airframes with definition, ownership, and fit stored together, preventing
-    /// per-type counters from mismatching owned equipment.</summary>
+    /// <summary>SUPPLY's HANGAR store (user decision 2026-09-25: HANGAR with STORE / RETURN): up to <see cref="Capacity"/>
+    /// airframes taken out of the faction's stock for the wing, used first by a requisition, given back to the faction on
+    /// RETURN, a faction change or a new mission. Ticked by SpawnService with the local player's faction (never switched to
+    /// none mid-mission); stock always moves through ModifyUnitSupply (AddSupplyUnit can hand an airframe to a player's
+    /// pending request instead).</summary>
     internal static class WingSupplyReserve
     {
         public const int Capacity = 3;
@@ -94,9 +97,11 @@ namespace WingCommand
             FactionHQ current = GameManager.GetLocalPlayer(out Player player) && player != null
                 ? player.HQ
                 : null;
+            // Without a player faction (a harness, a respawn gap) the wing's own stands in; never none mid-mission.
+            if (current == null) current = WingService.Instance?.Leader != null ? WingService.Instance.Leader.NetworkHQ : null;
 
-            isHost = player != null && player.IsServer;
-            if (current == hq) return;
+            isHost = player != null ? player.IsServer : WingService.Instance?.Leader != null && WingService.Instance.Leader.IsServer;
+            if (current == null || current == hq) return;
 
             ReturnAllToFaction();
             hq = current;
@@ -107,18 +112,10 @@ namespace WingCommand
         {
             reason = null;
             if (!CanWrite(definition, out reason)) return false;
-            if (Count >= Capacity)
-            {
-                reason = "Wing reserve is full (" + Count + " / " + Capacity + ")";
-                return false;
-            }
-            if (hq.GetUnitSupply(definition) <= 0)
-            {
-                reason = definition.unitName + ": no faction stock left to hold";
-                return false;
-            }
+            reason = ShopRules.StoreBlock(isHost, hq != null, Count, Capacity, hq.GetUnitSupply(definition));
+            if (reason != null) return false;
 
-            hq.AddSupplyUnit(definition, -1);
+            hq.ModifyUnitSupply(definition, -1);
             slots.Add(new Slot(definition, Source.Held, false, WingLoadoutChoice.Standard));
             Plugin.LogVerbose(
                 "[Reserve] held " + definition.unitName + " for the wing (" +
@@ -143,14 +140,14 @@ namespace WingCommand
                 i => slots[i].ReservedForPurchase);
             if (index < 0)
             {
-                reason = definition.unitName + " is not available in the wing reserve";
+                reason = ShopRules.ReturnBlock(isHost, hq != null, 0);
                 return false;
             }
 
             Slot slot = slots[index];
             slots.RemoveAt(index);
             wasOwned = slot.Source == Source.Owned;
-            hq.AddSupplyUnit(definition, 1);
+            hq.ModifyUnitSupply(definition, 1);
 
             Plugin.LogVerbose(
                 "[Reserve] returned " + definition.unitName + " to faction stock (" +
@@ -177,6 +174,20 @@ namespace WingCommand
             Plugin.LogVerbose(
                 "[Reserve] recovered " + definition.unitName +
                 (owned ? " (owned)" : "") + " into reserve (" + Count + " held)");
+            return true;
+        }
+
+        /// <summary>A requisition's aircraft spawned from a stored airframe: its slot is used up (a refund then goes to the
+        /// faction's stock, never back into the store).</summary>
+        public static bool TakeForLaunch(AircraftDefinition definition)
+        {
+            int index = ReserveSlotPolicy.SelectForPurchase(
+                slots.Count,
+                i => slots[i].Definition == definition,
+                i => slots[i].Source == Source.Owned,
+                i => slots[i].ReservedForPurchase);
+            if (index < 0) return false;
+            slots.RemoveAt(index);
             return true;
         }
 
@@ -245,20 +256,11 @@ namespace WingCommand
             reason = null;
             if (definition == null)
             {
-                reason = "Select an airframe first";
+                reason = "Pick an airframe first";
                 return false;
             }
-            if (hq == null)
-            {
-                reason = "No faction";
-                return false;
-            }
-            if (!isHost)
-            {
-                reason = "Wing reserve is managed by the host";
-                return false;
-            }
-            return true;
+            reason = hq == null || !isHost ? ShopRules.StoreBlock(isHost, hq != null, 0, Capacity, 1) : null;
+            return reason == null;
         }
 
         private static void ReturnAllToFaction()
@@ -268,7 +270,7 @@ namespace WingCommand
                 for (int i = 0; i < slots.Count; i++)
                 {
                     Slot slot = slots[i];
-                    if (slot.Definition != null) hq.AddSupplyUnit(slot.Definition, 1);
+                    if (slot.Definition != null) hq.ModifyUnitSupply(slot.Definition, 1);
                 }
             }
             slots.Clear();
