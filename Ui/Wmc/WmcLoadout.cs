@@ -19,7 +19,6 @@ namespace WingCommand
         private Rect body;
         private float width;
         private WmcScroll scroll;
-        private WmcContext last;
         private bool client;
 
         // What is being edited.
@@ -92,7 +91,6 @@ namespace WingCommand
 
         public void Metrics(WmcContext c, WmcMetricRow m)
         {
-            last = c;
             client = c.Client;
             bool shown = m.Generation != metricGeneration;
             // Escalation and rank move mid-mission: the rules are read every refresh (a struct, nothing allocated).
@@ -191,7 +189,6 @@ namespace WingCommand
 
         public void Refresh(WmcContext c)
         {
-            last = c;
             client = c.Client;
             Resolve();
             bool asking = current != null && deleteGate.IsArmed(current.Id, Time.unscaledTime);
