@@ -128,7 +128,7 @@ namespace WingCommand
                 if (recruits.Count >= room || recruits.Count >= WingOrder.MaxUnits) why = "the wing is full";
                 else if (w.CanRecruit(a, out why))
                 {
-                    CallQuote q = WingRecruitment.Quote(a);
+                    CallQuote q = WingAdoption.Quote(a);
                     if (q.Allowed)
                     {
                         recruits.Add(a);

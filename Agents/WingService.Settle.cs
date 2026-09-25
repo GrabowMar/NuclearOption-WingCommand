@@ -68,53 +68,12 @@ namespace WingCommand
         private readonly List<Unit> downed = new List<Unit>();
 
         /// <summary>Spec M4 §7.1: the nearest wing helicopter able to rescue lands next to the downed wing pilot nearest the
-        /// player and waits for the game to take them aboard. Returns the member sent, or null with the reason.</summary>
-        public WingMember Rescue(out string result)
+        /// player (or <paramref name="only"/>, WING's dossier pilot) and waits for the game to take them aboard. Returns the member
+        /// sent, or null with the reason.</summary>
+        public WingMember Rescue(out string result, Unit only = null)
         {
-            downed.Clear();
-            WingSearchAndRescue.CollectDowned(downed);
-            Vec3 from = Player != null ? Player.GlobalPosition().ToVec3() : Vec3.Zero;
-            Unit survivor = null;
-            WingMember already = null;
-            float best = float.MaxValue;
-            foreach (Unit u in downed)
-            {
-                if (!(u is PilotDismounted p) || p.disabled || p.IsSlung() || p.radarAlt > 3f || p.transform.position.GlobalY() < 0.5f) continue;
-                // One helicopter per survivor (review M4c-2 C1).
-                WingMember going = RescuerOf(u);
-                if (going != null)
-                {
-                    already = going;
-                    continue;
-                }
-                float d = (u.GlobalPosition().ToVec3() - from).SqrLength;
-                if (d >= best) continue;
-                best = d;
-                survivor = u;
-            }
-            if (survivor == null)
-            {
-                result = already != null ? $"#{already.Number} is already on the way" : "no downed wing pilot on land";
-                return null;
-            }
+            if (!Pick(only, out Unit survivor, out WingMember heli, out result)) return null;
             Vec3 at = survivor.GlobalPosition().ToVec3();
-            WingMember heli = null;
-            best = float.MaxValue;
-            foreach (WingMember m in Members)
-            {
-                if (m.Profile.Class == AirframeClass.FixedWing || m.Released || !m.Alive || m.Engaged || m.Recovery != null ||
-                    m.OnGround || m.Settle != null || m.Aircraft.definition == null || m.Aircraft.definition.captureCapacity <= 0 ||
-                    m.Aircraft.GetFuelLevel() <= RescueMinFuel) continue;
-                float d = (m.Last.Pos - at).SqrLength;
-                if (d >= best) continue;
-                best = d;
-                heli = m;
-            }
-            if (heli == null)
-            {
-                result = "no helicopter able to rescue";
-                return null;
-            }
             // 60 m short of the survivor on the helicopter's side, else the other three sides.
             Vec3 toward = (heli.Last.Pos - at).Horizontal;
             toward = toward.SqrLength > 1f ? toward.Normalized : Vec3.Forward;
@@ -136,11 +95,86 @@ namespace WingCommand
                 WingPilot pilot = WingSearchAndRescue.PilotOf(survivor as PilotDismounted);
                 result = $"#{heli.Number} going for {(pilot != null ? pilot.Callsign : "the downed pilot")}";
                 Plugin.Logger.LogInfo($"[Wing] rescue: {result}");
+                WingPilotRoster.Touch();
                 return heli;
             }
             result = "no dry, level ground near them";
             return null;
         }
+
+        /// <summary>Whether a wing helicopter can go for this survivor now (WING's AIR SAR: disabled with the reason, never a press
+        /// that fails), else why not. The landing ground is checked only when it goes.</summary>
+        public bool CanRescue(Unit only, out string why) => Pick(only, out _, out _, out why);
+
+        /// <summary>The number of the member on a rescue of this pilot, or 0.</summary>
+        public int RescuerNumber(WingPilot pilot)
+        {
+            Unit survivor = WingSearchAndRescue.SurvivorOf(pilot);
+            WingMember m = survivor != null ? RescuerOf(survivor) : null;
+            return m != null ? m.Number : 0;
+        }
+
+        /// <summary>The survivor to go for (nearest the player, or <paramref name="only"/>) and the nearest helicopter able to.</summary>
+        private bool Pick(Unit only, out Unit survivor, out WingMember heli, out string why)
+        {
+            downed.Clear();
+            WingSearchAndRescue.CollectDowned(downed);
+            Vec3 from = Player != null ? Player.GlobalPosition().ToVec3() : Vec3.Zero;
+            survivor = null;
+            heli = null;
+            why = null;
+            WingMember already = null;
+            string unreachable = null;
+            float best = float.MaxValue;
+            foreach (Unit u in downed)
+            {
+                if (only != null && !ReferenceEquals(u, only)) continue;
+                if (!(u is PilotDismounted p) || p.disabled) continue;
+                string block = PickUpBlock(p);
+                if (block != null)
+                {
+                    unreachable = block;
+                    continue;
+                }
+                // One helicopter per survivor (review M4c-2 C1).
+                WingMember going = RescuerOf(u);
+                if (going != null)
+                {
+                    already = going;
+                    continue;
+                }
+                float d = (u.GlobalPosition().ToVec3() - from).SqrLength;
+                if (d >= best) continue;
+                best = d;
+                survivor = u;
+            }
+            if (survivor == null)
+            {
+                why = already != null ? $"#{already.Number} is already on the way" : unreachable ?? "no downed wing pilot on land";
+                return false;
+            }
+            Vec3 at = survivor.GlobalPosition().ToVec3();
+            best = float.MaxValue;
+            foreach (WingMember m in Members)
+            {
+                if (m.Profile.Class == AirframeClass.FixedWing || m.Released || !m.Alive || m.Engaged || m.Recovery != null ||
+                    m.OnGround || m.Settle != null || m.Aircraft.definition == null || m.Aircraft.definition.captureCapacity <= 0 ||
+                    m.Aircraft.GetFuelLevel() <= RescueMinFuel) continue;
+                float d = (m.Last.Pos - at).SqrLength;
+                if (d >= best) continue;
+                best = d;
+                heli = m;
+            }
+            if (heli != null) return true;
+            why = "no helicopter able to rescue";
+            return false;
+        }
+
+        /// <summary>Why a helicopter cannot pick this survivor up yet, or null.</summary>
+        private static string PickUpBlock(PilotDismounted p) =>
+            p.IsSlung() ? "on another helicopter's sling"
+            : p.transform.position.GlobalY() < 0.5f ? "down at sea"
+            : p.radarAlt > 3f ? "still under the canopy" : null;
 
         /// <summary>The member on a rescue of this survivor, or null.</summary>
         private WingMember RescuerOf(Unit survivor)
@@ -201,7 +235,10 @@ namespace WingCommand
             if ((act & SettleAction.TakeOff) != 0)
             {
                 if (job.Task == SettleTask.Rescue)
+                {
                     Plugin.Logger.LogInfo($"[Wing] #{m.Number} lifting off from the rescue ({(rescued ? "aboard" : "no pickup")})");
+                    WingPilotRoster.Touch();
+                }
                 s.TakeOff();
             }
         }
@@ -257,6 +294,7 @@ namespace WingCommand
             if (s == null) return false;
             if (s.Phase == SettlePhase.Done)
             {
+                if (m.Job != null && m.Job.Task == SettleTask.Rescue) WingPilotRoster.Touch();
                 m.Settle = null;
                 m.Job = null;
                 m.NoFbwSeconds = 0f;

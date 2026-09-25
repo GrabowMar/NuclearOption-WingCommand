@@ -3,11 +3,11 @@ using NuclearOption.Networking;
 
 namespace WingCommand
 {
-    /// <summary>Takes command of a faction aircraft already flying (spec M3 §5): the wing adopts it, and the player pays
+    /// <summary>Takes command of a faction aircraft already flying (spec M3 §5; SUPPLY's ADOPT, OrderKind.Recruit): the wing adopts it, and the player pays
     /// Squadron/RecruitmentCostRate of its value from the allocation once per aircraft (<see cref="CallCost.Recruit"/>;
     /// free with Squadron/SandboxFreeCalls). Nothing is refunded when it goes home: the command was bought, not the
     /// airframe.</summary>
-    internal static class WingRecruitment
+    internal static class WingAdoption
     {
         private static readonly HashSet<PersistentID> paidAircraft = new HashSet<PersistentID>();
 
@@ -19,7 +19,7 @@ namespace WingCommand
                 Plugin.Settings.SandboxFreeCalls.Value, aircraft != null && paidAircraft.Contains(aircraft.persistentID));
         }
 
-        public static bool TryRecruit(WingService wing, Aircraft aircraft, out WingMember member, out string reason)
+        public static bool TryAdopt(WingService wing, Aircraft aircraft, out WingMember member, out string reason)
         {
             member = null;
             if (wing == null)
@@ -47,7 +47,7 @@ namespace WingCommand
             }
             if (quote.Charge > 0f) player.AddAllocation(-quote.Charge);
             paidAircraft.Add(aircraft.persistentID);
-            Plugin.Logger.LogInfo($"[Recruit] {aircraft.unitName} joined the wing for {CallCost.Money(quote.Charge)}");
+            Plugin.Logger.LogInfo($"[Adopt] {aircraft.unitName} joined the wing for {CallCost.Money(quote.Charge)}");
             return true;
         }
 

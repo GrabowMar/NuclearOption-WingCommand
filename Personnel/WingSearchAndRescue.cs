@@ -250,7 +250,10 @@ namespace WingCommand
             return (total / 60).ToString("00") + ":" + (total % 60).ToString("00");
         }
 
-        private static Survivor SurvivorOf(WingPilot pilot)
+        /// <summary>This pilot's survivor on the ground (WING's AIR SAR targets it), or null.</summary>
+        internal static PilotDismounted SurvivorOf(WingPilot pilot) => RecordOf(pilot)?.Native;
+
+        private static Survivor RecordOf(WingPilot pilot)
         {
             if (pilot == null) return null;
             foreach (Survivor candidate in survivors.Values)
@@ -262,14 +265,14 @@ namespace WingCommand
         /// when there is nobody to search for.</summary>
         public static float LocalCost(WingPilot pilot)
         {
-            Survivor survivor = SurvivorOf(pilot);
+            Survivor survivor = RecordOf(pilot);
             return survivor != null ? SarRules.LocalCost(survivor.Value, Plugin.Settings.SandboxFreeCalls.Value) : -1f;
         }
 
         /// <summary>Whether a local search can start for this pilot now, else why not (WING's LOCAL SAR and the action share it).</summary>
         public static bool CanOrganizeLocalRecovery(WingPilot pilot, out string why)
         {
-            Survivor survivor = SurvivorOf(pilot);
+            Survivor survivor = RecordOf(pilot);
             PilotDismounted native = survivor?.Native;
             why = null;
             if (pilot == null || pilot.Lost || survivor == null ||
@@ -298,7 +301,7 @@ namespace WingCommand
                 if (pilot != null) WingToast.Show("LOCAL SAR · " + why);
                 return false;
             }
-            Survivor survivor = SurvivorOf(pilot);
+            Survivor survivor = RecordOf(pilot);
             float cost = SarRules.LocalCost(survivor.Value, Plugin.Settings.SandboxFreeCalls.Value);
             if (cost > 0f && GameManager.GetLocalPlayer(out Player player) && player != null) player.AddAllocation(-cost);
             survivor.LocalRecoveryAt = Time.timeSinceLevelLoad + LocalRecoveryDuration;

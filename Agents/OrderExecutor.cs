@@ -202,8 +202,11 @@ namespace WingCommand
                 }
                 case OrderKind.Rescue:
                 {
-                    // ponytail: the rescue picks the best-placed helicopter of the wing whatever the scope.
-                    WingMember m = w.Rescue(out string result);
+                    // ponytail: the rescue picks the best-placed helicopter of the wing whatever the scope. The order's first unit
+                    // names the survivor (WING's AIR SAR); none: the downed pilot nearest the player.
+                    Units(o.Units);
+                    if (o.Units != null && o.Units.Length > 0 && units.Count == 0) return OrderResult.Refused("Rescue: the survivor is gone");
+                    WingMember m = w.Rescue(out string result, units.Count > 0 ? units[0] : null);
                     return m != null ? OrderResult.Acked("Rescue: " + result) : OrderResult.Refused("Rescue: " + result);
                 }
                 case OrderKind.EscortMe:
@@ -243,7 +246,7 @@ namespace WingCommand
                     {
                         if (!(u is Aircraft target)) continue;
                         asked++;
-                        if (WingRecruitment.TryRecruit(w, target, out _, out string reason))
+                        if (WingAdoption.TryAdopt(w, target, out _, out string reason))
                         {
                             if (joined++ == 0) first = target.unitName;
                         }

@@ -84,7 +84,7 @@ namespace WingCommand
             WingLoadoutCatalog.Reset();
             Planner.Reset();
             WingTakeover.Reset();
-            WingRecruitment.Reset();
+            WingAdoption.Reset();
             ResetCombat();
             LoadDoctrine();
             StandingShots = 0;
@@ -377,7 +377,7 @@ namespace WingCommand
             return true;
         }
 
-        /// <summary>Whether a faction aircraft already flying can join the wing (<see cref="WingRecruitment"/>), with the
+        /// <summary>Whether a faction aircraft already flying can join the wing (<see cref="WingAdoption"/>), with the
         /// reason when it cannot.</summary>
         public bool CanRecruit(Aircraft a, out string reason)
         {
