@@ -19,6 +19,9 @@ namespace WingCommand
         /// <summary>The page item <paramref name="index"/> sits on.</summary>
         public static int Of(int index, int perPage) => index <= 0 || perPage <= 0 ? 0 : index / perPage;
 
+        /// <summary>One page on, clamped: turning past either end stays on the end page.</summary>
+        public static int Turn(int page, int dir, int items, int perPage) => Clamp(page + dir, items, perPage);
+
         public static string Label(int page, int pages) =>
             (page + 1).ToString(CultureInfo.InvariantCulture) + " / " + pages.ToString(CultureInfo.InvariantCulture);
     }

@@ -485,17 +485,7 @@ namespace WingCommand
 
         public static WingRank RankFor(int xp) => PilotPerks.RankFor(xp);
 
-        public static string RankName(WingRank rank)
-        {
-            switch (rank)
-            {
-                case WingRank.Wingman: return "WINGMAN";
-                case WingRank.Veteran: return "VETERAN";
-                case WingRank.Ace:     return "ACE";
-                case WingRank.Legend:  return "LEGEND";
-                default:               return "ROOKIE";
-            }
-        }
+        public static string RankName(WingRank rank) => PilotPerks.RankName(rank);
 
         /// <summary>Rank bonus above Rookie, scaled by Pilot/RankEffect; disabling effects preserves pilot
         /// records.</summary>

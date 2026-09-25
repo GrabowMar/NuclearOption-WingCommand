@@ -29,6 +29,14 @@ namespace WingCommand.PureTests
         }
 
         [Fact]
+        public void TurningPastEitherEndStaysOnTheEndPage()
+        {
+            Assert.Equal(0, Pages.Turn(0, -1, 9, 8));
+            Assert.Equal(1, Pages.Turn(1, 1, 9, 8));
+            Assert.Equal(1, Pages.Turn(0, 1, 9, 8));
+        }
+
+        [Fact]
         public void SixAirframesFillOnePageAndASeventhOpensTheSecond()
         {
             Assert.Equal(1, Pages.Count(6, 6));

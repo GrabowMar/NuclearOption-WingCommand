@@ -58,6 +58,19 @@ namespace WingCommand
             }
         }
 
+        /// <summary>The rank's word (moved from WingPilotRoster for WING's Pure words).</summary>
+        public static string RankName(WingRank rank)
+        {
+            switch (rank)
+            {
+                case WingRank.Wingman: return "WINGMAN";
+                case WingRank.Veteran: return "VETERAN";
+                case WingRank.Ace: return "ACE";
+                case WingRank.Legend: return "LEGEND";
+                default: return "ROOKIE";
+            }
+        }
+
         public static string Name(PilotPerk perk)
         {
             switch (perk)

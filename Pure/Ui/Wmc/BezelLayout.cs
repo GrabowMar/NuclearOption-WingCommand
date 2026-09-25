@@ -42,7 +42,27 @@ namespace WingCommand
         public const float PopupRowPitch = 32f, PopupPad = 8f;
         public const int PopupMaxRows = 7;
 
+        // WING (spec WMC rebuild §WING; research squadron-wing-tab §2): the roster, its footer, the dossier and PERKS in a scroll viewport,
+        // the AIRFRAME ASSIGNMENT bar pinned on the floor.
+        public const float WingPinGap = 6f, AssignBar = 56f, WingPin = WingPinGap + AssignBar, SquadHead = 18f, PilotRowH = 30f, PilotPitch = 32f;
+        public const float RosterFoot = 26f, DossierH = 120f, PerkCardH = 48f, PerkGap = 6f, PerksBlock = 18f + 4f + 48f + 6f + 48f, DossierGap = 8f;
+        public const float WingFixed = SquadHead + HeadGap + HeadGap + RosterFoot + DossierGap + DossierH + DossierGap + PerksBlock;
+        public const int MinPilotRows = 4, MaxPilotRows = 8;
+
         public static float Body(float panelHeight) => panelHeight - Chrome;
+
+        public static float WingView(float body) => body - WingPin;
+
+        /// <summary>Roster rows per page: as many as a tall dock shows with the dossier and PERKS (8), at least 4.</summary>
+        public static int PilotRows(float body)
+        {
+            int n = (int)Math.Floor((WingView(body) - WingFixed) / PilotPitch);
+            return n < MinPilotRows ? MinPilotRows : n > MaxPilotRows ? MaxPilotRows : n;
+        }
+
+        public static float WingContent(int rows) => WingFixed + rows * PilotPitch;
+
+        public static float PerkCardW(float content) => (content - PerkGap) / 2f;
 
         /// <summary>LOADOUT's scroll viewport: the body less the pinned LIVERY row.</summary>
         public static float LoadoutView(float body) => body - LiveryPin;

@@ -152,6 +152,38 @@ namespace WingCommand.PureTests
                 }
         }
 
+        // ---- WING
+
+        [Fact]
+        public void TheAssignmentBarSitsOnTheBodyFloorAtBothDocks()
+        {
+            Assert.Equal(574f, BezelLayout.WingView(636f));
+            Assert.Equal(274f, BezelLayout.WingView(336f));
+            Assert.Equal(6f + 56f, BezelLayout.WingPin);
+        }
+
+        [Fact]
+        public void ATallDockShowsEightPilotsAndTheWholePageWithoutScrolling()
+        {
+            Assert.Equal(8, BezelLayout.PilotRows(636f));
+            Assert.True(BezelLayout.WingContent(8) <= BezelLayout.WingView(636f));
+        }
+
+        [Fact]
+        public void PilotRowsStayBetweenFourAndEight()
+        {
+            for (float body = 336f; body <= 636f; body += 10f)
+            {
+                int rows = BezelLayout.PilotRows(body);
+                Assert.InRange(rows, 4, 8);
+            }
+            Assert.Equal(4, BezelLayout.PilotRows(336f));
+        }
+
+        [Fact]
+        public void TwoPerkCardsAndTheirGapFillTheContentWidth() =>
+            Assert.Equal(BezelLayout.Content, 2f * BezelLayout.PerkCardW(BezelLayout.Content) + BezelLayout.PerkGap, 3);
+
         [Fact]
         public void ThreeTilesAndTheirGapsFillTheContentWidth()
         {
