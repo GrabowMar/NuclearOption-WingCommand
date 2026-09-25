@@ -242,7 +242,7 @@ namespace WingCommand
             popupEntries.Clear();
             foreach (WingDoctrine d in Profiles)
                 popupEntries.Add(new AvKit.PopupEntry(d.PatternName, null, d.PatternName == current));
-            profilePopup.Show(RectIn(page, (RectTransform)profileButton.transform), popupEntries,
+            profilePopup.Show(WmcKit.RectIn(page, (RectTransform)profileButton.transform), popupEntries,
                 i => WmcUi.Order(last, () => SetDoctrine(Profiles[i])));
         }
 
@@ -261,15 +261,6 @@ namespace WingCommand
 
         /// <summary><paramref name="target"/>'s rectangle in <paramref name="root"/>'s top-left coordinates (y down negative),
         /// for a popup parented to the page while its button sits in a scroll view.</summary>
-        private static Rect RectIn(RectTransform root, RectTransform target)
-        {
-            var corners = new Vector3[4];
-            target.GetWorldCorners(corners);
-            Vector3 tl = root.InverseTransformPoint(corners[1]);
-            Rect r = root.rect;
-            return new Rect(tl.x - r.xMin, tl.y - r.yMax, target.rect.width, target.rect.height);
-        }
-
         private void RefreshOrders(WmcContext c)
         {
             RefreshBanner(c);

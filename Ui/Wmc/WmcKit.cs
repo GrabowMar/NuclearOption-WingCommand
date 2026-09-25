@@ -95,6 +95,116 @@ namespace WingCommand
         {
             if (t != null && t.text != text) t.text = text;
         }
+
+        /// <summary>A numbered step's head (the 0.9 SUPPLY steps): a boxed digit (never a U+24xx circled one), the title, and a
+        /// state chip on the right with its rail; returns the chip's label (<see cref="SetStep"/> writes it).</summary>
+        public static TMP_Text StepHeader(RectTransform p, Rect r, int n, string title, out Image rail)
+        {
+            const float box = 16f, chip = 96f;
+            var digit = new Rect(r.x, r.y - 1f, box, box);
+            AvStyled.Box(p, digit, "chip");
+            AvKit.Outline(p, digit, AvTheme.Frame);
+            AvStyled.Label(p, digit, n.ToString(System.Globalization.CultureInfo.InvariantCulture), "section-title",
+                align: TextAlignmentOptions.Center);
+            AvStyled.Label(p, new Rect(r.x + box + 8f, r.y, r.width - box - 8f - chip - 4f, r.height), title, "section-title");
+            var state = new Rect(r.x + r.width - chip, r.y, chip, r.height);
+            AvStyled.Box(p, state, "chip");
+            rail = AvStyled.Rail(p, new Rect(state.x, state.y, 3f, state.height), "inert");
+            return Text(p, new Rect(state.x + 8f, state.y, chip - 10f, state.height), "row-sub");
+        }
+
+        /// <summary>A step chip's words and rail class ("live", "info", "warn", "inert").</summary>
+        public static void SetStep(TMP_Text state, Image rail, string text, string railClass)
+        {
+            Set(state, text);
+            WmcUi.SetRail(rail, railClass);
+        }
+
+        /// <summary>Where <paramref name="target"/> sits inside <paramref name="root"/> (a popup opens beside its button, parented
+        /// to the page root and never inside a scroll viewport).</summary>
+        public static Rect RectIn(RectTransform root, RectTransform target)
+        {
+            var corners = new Vector3[4];
+            target.GetWorldCorners(corners);
+            Vector3 tl = root.InverseTransformPoint(corners[1]);
+            Rect r = root.rect;
+            return new Rect(tl.x - r.xMin, tl.y - r.yMax, target.rect.width, target.rect.height);
+        }
+    }
+
+    /// <summary>A pilot's portrait in a frame (SUPPLY's pilot card; WING's dossier reuses it): the sprite is looked up only when
+    /// the pilot changes. ponytail: keyed on the pilot object; a portrait edited in the studio (R7) calls <see cref="Invalidate"/>.</summary>
+    internal sealed class WmcPortrait
+    {
+        private Image image;
+        private WingPilot shown;
+        private bool set;
+
+        public static WmcPortrait Build(RectTransform p, Rect r)
+        {
+            AvKit.Panel(p, r, AvTheme.SurfaceInert).raycastTarget = false;
+            AvKit.Outline(p, r, AvTheme.Frame);
+            var w = new WmcPortrait { image = AvKit.Panel(p, new Rect(r.x + 1f, r.y - 1f, r.width - 2f, r.height - 2f), Color.white) };
+            w.image.preserveAspect = true;
+            w.image.raycastTarget = false;
+            return w;
+        }
+
+        /// <summary>The pilot's face; with nobody, the generic one faded (a pilot drafted at launch).</summary>
+        public void Set(WingPilot pilot)
+        {
+            if (set && ReferenceEquals(pilot, shown)) return;
+            set = true;
+            shown = pilot;
+            image.sprite = PilotPortrait.For(pilot);
+            image.enabled = image.sprite != null;
+            image.color = pilot != null ? Color.white : new Color(1f, 1f, 1f, 0.3f);
+        }
+
+        public void Invalidate() => set = false;
+    }
+
+    /// <summary>A body-relative pager ("‹ 1 / 2 ›"): always shown, the arrows enabled by bounds, the label built on change.</summary>
+    internal sealed class WmcPager
+    {
+        private AvButton prev, next;
+        private TMP_Text label;
+        private int page = -1, pages = -1;
+
+        public static WmcPager Build(RectTransform p, Rect r, string idPrefix, Dictionary<string, AvButton> ids, Action<int> turn)
+        {
+            const float arrow = 28f;
+            var pager = new WmcPager
+            {
+                prev = AvStyled.Button(p, new Rect(r.x, r.y, arrow, r.height), "‹", "btn", () => turn(-1), AvButtonStyle.Quiet),
+                next = AvStyled.Button(p, new Rect(r.x + r.width - arrow, r.y, arrow, r.height), "›", "btn", () => turn(1), AvButtonStyle.Quiet),
+                label = WmcKit.Text(p, new Rect(r.x + arrow + 2f, r.y, r.width - 2f * arrow - 4f, r.height), "row-sub", TextAlignmentOptions.Center),
+            };
+            pager.prev.WithTooltip("Previous page");
+            pager.next.WithTooltip("Next page");
+            ids[idPrefix + "prev"] = pager.prev;
+            ids[idPrefix + "next"] = pager.next;
+            pager.Set(0, 1);
+            return pager;
+        }
+
+        public void Set(int page, int pages)
+        {
+            if (page == this.page && pages == this.pages) return;
+            this.page = page;
+            this.pages = pages;
+            WmcKit.Set(label, Pages.Label(page, pages));
+            prev.SetEnabled(page > 0);
+            next.SetEnabled(page < pages - 1);
+        }
+
+        public void SetEnabled(bool on, string reason)
+        {
+            prev.SetEnabled(on && page > 0);
+            next.SetEnabled(on && page < pages - 1);
+            prev.WithTooltip(on ? "Previous page" : reason);
+            next.WithTooltip(on ? "Next page" : reason);
+        }
     }
 
     /// <summary>A key and a row of toggle segments (the 0.9 doctrine rows): one latched, none for MIXED, disabled with a

@@ -199,7 +199,7 @@ namespace WingCommand
             for (int i = 0; i < routes.Count; i++)
                 routeEntries.Add(new AvKit.PopupEntry(routes[i].Name, routes[i].Points.Length + " PTS · " + RouteDraft.LoopText(routes[i].Loop),
                     i == savedSelected));
-            profilePopup.Show(RectIn(page, (RectTransform)savedPicker.transform), routeEntries, PickSaved);
+            profilePopup.Show(WmcKit.RectIn(page, (RectTransform)savedPicker.transform), routeEntries, PickSaved);
         }
 
         private void PickSaved(int i)

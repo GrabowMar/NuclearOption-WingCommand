@@ -126,14 +126,18 @@ namespace WingCommand
             nextRefresh = 0f;
         }
 
-        /// <summary>Press a control by id as a click would (automation). A TACTICAL control shows TACTICAL and its sub-page
-        /// first. False when there is none or it is hidden; a disabled button ignores the click itself.</summary>
+        /// <summary>Id prefixes of each tab's controls, in tab order.</summary>
+        private static readonly string[] TabPrefixes = { "tac.", "sup.", "lo.", "wing." };
+
+        /// <summary>Press a control by id as a click would (automation). A page's control shows its page first (and a TACTICAL
+        /// control its sub-page). False when there is none or it is hidden; a disabled button ignores the click itself.</summary>
         public bool Press(string id)
         {
-            if (id != null && id.StartsWith("tac.", StringComparison.Ordinal) && tactical != null)
+            int tab = TabOf(id);
+            if (tab >= 0 && pages != null && pages[tab] != null)
             {
-                Show(TabTactical);
-                tactical.ShowSubFor(id);
+                Show(tab);
+                if (tab == TabTactical) tactical.ShowSubFor(id);
                 Refresh();
             }
             if (!controls.TryGetValue(id ?? "", out AvButton b) || b == null || !b.gameObject.activeInHierarchy) return false;
@@ -141,6 +145,14 @@ namespace WingCommand
                 { button = UnityEngine.EventSystems.PointerEventData.InputButton.Left });
             nextRefresh = 0f;
             return true;
+        }
+
+        private static int TabOf(string id)
+        {
+            if (id == null) return -1;
+            for (int i = 0; i < TabPrefixes.Length; i++)
+                if (id.StartsWith(TabPrefixes[i], StringComparison.Ordinal)) return i;
+            return -1;
         }
 
         private void Reset()
