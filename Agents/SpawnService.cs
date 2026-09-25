@@ -56,6 +56,27 @@ namespace WingCommand
         /// <summary>Launches not yet in the wing: air starts and field launches.</summary>
         public int PendingTotal => pending.Count + groundPending.Count;
 
+        /// <summary>Field launches whose aircraft has not appeared yet (the faction's AI count misses them).</summary>
+        public int Unspawned
+        {
+            get
+            {
+                int n = 0;
+                foreach (GroundLaunch g in groundPending)
+                    if ((object)g.Aircraft == null) n++;
+                return n;
+            }
+        }
+
+        /// <summary>An aircraft of ours on its way into the wing.</summary>
+        public bool IsPending(Aircraft a)
+        {
+            if (pending.Contains(a)) return true;
+            foreach (GroundLaunch g in groundPending)
+                if (ReferenceEquals(g.Aircraft, a)) return true;
+            return false;
+        }
+
         private readonly List<Aircraft> pending = new List<Aircraft>();
         private readonly HashSet<Aircraft> settling = new HashSet<Aircraft>();
         private readonly Dictionary<Aircraft, float> pendingSince = new Dictionary<Aircraft, float>();

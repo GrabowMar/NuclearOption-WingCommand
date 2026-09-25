@@ -56,6 +56,7 @@ namespace WingCommand
         public ConfigEntry<bool> PilotProgression { get; }
         public ConfigEntry<float> RankEffect { get; }
         public ConfigEntry<bool> SandboxFreeCalls { get; }
+        public ConfigEntry<OverLimitMode> OverLimit { get; }
         public ConfigEntry<bool> TakeoverOnDeath { get; }
         public ConfigEntry<float> RecruitmentCostRate { get; }
         public ConfigEntry<string> LoadoutTemplates { get; }
@@ -108,6 +109,11 @@ namespace WingCommand
                 "Calls cost nothing: no allocation is charged and no stock is checked (hangar spawns still draw the " +
                 "faction's own supply, as the game does).", null, new ConfigurationManagerAttributes { Order = 83 }));
 
+            OverLimit = c.Bind("Supply", "OverLimit", OverLimitMode.Surcharge, new ConfigDescription(
+                "A requisition over the faction's AI aircraft limit (the game's own; your wingmen count toward it): Surcharge costs " +
+                "three times the airframe's value; MatchEnemy keeps the price but lets every enemy faction field one more AI " +
+                "aircraft; RtbOne keeps the price and sends one of the faction's own AI (never a wingman) to land to make room.",
+                null, new ConfigurationManagerAttributes { Order = 80 }));
             TakeoverOnDeath = c.Bind("Squadron", "TakeoverOnDeath", true, new ConfigDescription(
                 "When you are shot down or eject, offer to fly on in one of your wingmen's aircraft (host or single player).",
                 null, new ConfigurationManagerAttributes { Order = 82 }));

@@ -253,7 +253,7 @@ namespace WingCommand
                     return joined == 0 ? OrderResult.Refused(RecruitWords.Refusal(refusal))
                         : OrderResult.Acked(RecruitWords.Ack(joined, asked, first, refusal));
                 }
-                case OrderKind.Call: return Call(w, (int)o.Number);
+                case OrderKind.Call: return Call(w, o);
                 case OrderKind.SetShape:
                     return w.SetShape(o.Text, ElementFor(w, o.Scope)) ? OrderResult.Acked("") : OrderResult.Refused("No such shape: " + o.Text);
                 case OrderKind.NextShape:
@@ -400,17 +400,48 @@ namespace WingCommand
                 : OrderResult.Refused("No wingman can go: no friendly field, or already going");
         }
 
-        /// <summary>Wingmen always launch from a field (the picked one, else the nearest friendly one).</summary>
-        private static OrderResult Call(WingService w, int n)
+        /// <summary>Wingmen always launch from a field (spec M3 §3). A requisition (spec WMC rebuild §SUPPLY) names its airframe,
+        /// field, pilot, fit and fuel, each resolved or refused by name; a radial call keeps its own choices (the configured
+        /// airframe or your type, the picked or nearest field, the next pilot, the game's loadout, a full tank). Both pass the
+        /// same <see cref="ShopRules"/> as SUPPLY's card, on a fresh snapshot, and answer from what really launched.</summary>
+        private static OrderResult Call(WingService w, WingOrder o)
         {
             if (SpawnService.Instance == null) return OrderResult.Refused("Wing Command is not ready");
-            Aircraft caller = w.Player;
+            // The player calls; under automation (no player aircraft) the anchor stands in, as the launch itself does.
+            Aircraft caller = w.Player != null ? w.Player : w.Leader;
             if (caller == null) return OrderResult.Refused("Not flying");
-            AircraftDefinition type = WingCommands.CallAirframe() ?? caller.definition;
-            Airbase field = w.FieldFor(caller, type);
-            if (field == null) return OrderResult.Refused("No friendly field to launch from");
-            SpawnService.Instance.LaunchFromField(field, type, n);
-            return OrderResult.Acked("");
+            CallSpec c = o.Call;
+            AircraftDefinition type = c.Airframe != null ? WingRequisition.FindAirframe(c.Airframe) : WingCommands.CallAirframe() ?? caller.definition;
+            if (type == null) return OrderResult.Refused("No such airframe: " + c.Airframe);
+            WingRequisition.RefreshLists(caller, force: true);
+            Airbase field = c.Field != null ? WingRequisition.FindField(c.Field) : w.FieldFor(caller, type);
+            if (field == null) return OrderResult.Refused(c.Field != null ? "No such friendly field: " + c.Field : "No friendly field to launch from");
+            WingPilot pilot = null;
+            if (c.Pilot != null && (pilot = WingPilotRoster.FindByCallsign(c.Pilot)) == null)
+                return OrderResult.Refused("No pilot " + c.Pilot + " on the roster");
+            bool own = c.Fit == CallSpec.YourLoadout;
+            string template = null;
+            if (c.Fit != null && !own)
+            {
+                LoadoutTemplateRecord fit = WingLoadoutTemplates.ById(c.Fit);
+                if (fit == null) return OrderResult.Refused("That fit no longer exists");
+                if (fit.AirframeKey != type.jsonKey) return OrderResult.Refused("That fit is for another airframe");
+                template = c.Fit;
+            }
+            ShopWing sw = WingRequisition.Wing(caller);
+            ShopAirframe sa = WingRequisition.For(type, caller.NetworkHQ);
+            ShopQuote q = ShopRules.Quote(sw, sa);
+            if (!q.Allowed)
+                return OrderResult.Refused("Cannot call " + type.unitName + ": " + ShopRules.Blocker(q, sw, sa).Substring("BLOCKED · ".Length));
+            int n = SpawnService.Instance.LaunchFromField(new LaunchRequest
+            {
+                Field = field, Type = type, Count = (int)o.Number, Pilot = pilot, Template = template, OwnLoadout = own, Fuel = c.Fuel,
+                Price = q.Price,
+            }, out string answer);
+            if (n <= 0) return OrderResult.Refused(answer);
+            // ponytail: a radial call of several quotes one aircraft; each launched over the limit gets the mode's effect.
+            if (q.OverLimit) answer += " · " + WingRequisition.ApplyOverLimit(sw.Mode, caller.NetworkHQ, n);
+            return OrderResult.Acked(answer);
         }
 
         /// <summary>Who an immediate order is for: everyone (null), an element's members, or the named aircraft.</summary>
