@@ -339,7 +339,7 @@ namespace WingCommand
                 Call = new CallSpec
                 {
                     Airframe = Text(args, "airframe"), Field = Text(args, "field"), Pilot = Text(args, "pilot"),
-                    Fit = Text(args, "fit"), Fuel = Number(args, "fuel", 0),
+                    Fit = Text(args, "fit"), Fuel = Float(args, "fuel", 0f),
                 },
             };
             string letter = Text(args, "element");
@@ -415,8 +415,49 @@ namespace WingCommand
             AircraftDefinition type = typeName != null ? FindType(typeName) : null;
             int stock = Number(args, "stock", 0);
             if (type != null && stock != 0 && lead != null && lead.NetworkHQ != null) lead.NetworkHQ.ModifyUnitSupply(type, stock);
+            // R4 SUPPLY: the faction's AI limit (to put the wing over it) and the player's rank (the airframes' rank gate).
+            if (Arg(args, "aiLimit") != null && lead != null && lead.NetworkHQ != null) lead.NetworkHQ.AIAircraftLimit = Number(args, "aiLimit", 6);
+            if (Arg(args, "rank") != null && player != null && player.IsServer) player.SetRank(Number(args, "rank", 0), false);
             Plugin.Logger.LogInfo($"[Automation] Grant: allocation +{add:0}, {stock} × {typeName ?? "-"}");
             return Ok("allocation", player != null ? player.Allocation : -1f);
+        }
+
+        /// <summary>R4 SUPPLY: launches on their way to the wing, as the INBOUND list shows them (count, then each row's
+        /// type, pilot, field, phase and ETA).</summary>
+        public static Dictionary<string, object> Inbound(Dictionary<string, object> args)
+        {
+            var rows = new InboundRow[8];
+            int total = SpawnService.Instance != null ? SpawnService.Instance.Inbound(rows) : 0;
+            var list = new List<object>();
+            for (int i = 0; i < Math.Min(total, rows.Length); i++)
+                list.Add(new Dictionary<string, object>
+                {
+                    { "type", rows[i].Type != null ? rows[i].Type.unitName : "" }, { "pilot", rows[i].Pilot != null ? rows[i].Pilot.Callsign : "" },
+                    { "field", rows[i].Field != null ? WingRequisition.NameOf(rows[i].Field) : "" }, { "phase", rows[i].Phase.ToString() },
+                    { "eta", float.IsNaN(rows[i].Eta) ? -1f : rows[i].Eta },
+                });
+            return new Dictionary<string, object> { { "ok", true }, { "count", total }, { "rows", list } };
+        }
+
+        /// <summary>R4 SUPPLY: hires <c>hire</c> pilots onto the roster (pilot RECRUIT arrives with WING in R6) and reports the
+        /// roster: free, flying, reserved and the upcoming pilot's callsign.</summary>
+        public static Dictionary<string, object> Pilots(Dictionary<string, object> args)
+        {
+            for (int i = 0; i < Number(args, "hire", 0); i++) WingPilotRoster.RecruitManual();
+            var free = new List<WingPilot>();
+            WingPilotRoster.FreePilots(free);
+            int flying = 0, reserved = 0;
+            foreach (WingPilot p in WingPilotRoster.DisplayRoster())
+            {
+                if (WingPilotRoster.IsFlying(p)) flying++;
+                if (WingPilotRoster.IsReserved(p)) reserved++;
+            }
+            WingPilot next = WingPilotRoster.Upcoming;
+            return new Dictionary<string, object>
+            {
+                { "ok", true }, { "free", free.Count }, { "flying", flying }, { "reserved", reserved },
+                { "upcoming", next != null ? next.Callsign : "" }, { "firstFree", free.Count > 0 ? free[0].Callsign : "" },
+            };
         }
 
         /// <summary>Every member flying with the wing engages (args.target: a registered unit id to attack).</summary>
@@ -808,10 +849,17 @@ namespace WingCommand
             int stock = type != null && hq != null ? hq.GetUnitSupply(type) : -1;
             Plugin.Logger.LogInfo($"[Automation] Economy: charged {WingLedger.Charged:0}, refunded {WingLedger.Refunded:0}, " +
                                   $"allocation {allocation:0}, pilots {flying} flying / {free} free / {lost} lost, stock {stock}");
+            int reserved = 0;
+            foreach (WingPilot p in WingPilotRoster.DisplayRoster())
+                if (WingPilotRoster.IsReserved(p)) reserved++;
             return new Dictionary<string, object>
             {
                 { "ok", true }, { "charged", WingLedger.Charged }, { "refunded", WingLedger.Refunded }, { "allocation", allocation },
                 { "flying", flying }, { "free", free }, { "lost", lost }, { "stock", stock },
+                // R4 SUPPLY: the HANGAR store, pilots held for launches, and the faction's AI against its limit.
+                { "held", WingSupplyReserve.Count }, { "heldType", type != null ? WingSupplyReserve.CountOf(type) : 0 },
+                { "hangarFaction", WingSupplyReserve.HasFaction ? 1 : 0 }, { "reserved", reserved },
+                { "factionAi", hq != null ? WingRequisition.FactionAi(hq) : -1 }, { "aiLimit", hq != null ? WingRequisition.Limit(hq) : -1f },
             };
         }
 
@@ -871,6 +919,9 @@ namespace WingCommand
 
         private static int Number(Dictionary<string, object> args, string key, int fallback) =>
             Arg(args, key) is object v ? (int)Math.Round(Convert.ToDouble(v, CultureInfo.InvariantCulture)) : fallback;
+
+        private static float Float(Dictionary<string, object> args, string key, float fallback) =>
+            Arg(args, key) is object v ? Convert.ToSingle(v, CultureInfo.InvariantCulture) : fallback;
 
         private static Dictionary<string, object> Ok(string key, object value) =>
             new Dictionary<string, object> { { "ok", true }, { key, value } };
