@@ -12,6 +12,7 @@ namespace WingCommand
         }
 
         public static string Refusal(string reason) =>
-            string.IsNullOrEmpty(reason) ? "No friendly aircraft to recruit" : "Cannot recruit: " + reason;
+            // WMC rebuild C4: taking command of a flying faction aircraft is ADOPT (RECRUIT means pilots, on WING).
+            string.IsNullOrEmpty(reason) ? "No friendly aircraft to adopt" : "Cannot adopt: " + reason;
     }
 }

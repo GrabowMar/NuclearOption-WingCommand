@@ -22,8 +22,9 @@ namespace WingCommand.PureTests
         public void NobodyJoinedIsARefusalWithTheReason()
         {
             Assert.Null(RecruitWords.Ack(0, 2, null, "the wing is full"));
-            Assert.Equal("Cannot recruit: the wing is full", RecruitWords.Refusal("the wing is full"));
-            Assert.Equal("No friendly aircraft to recruit", RecruitWords.Refusal(null));
+            // WMC rebuild C4: taking command of a flying faction aircraft is ADOPT; RECRUIT means pilots.
+            Assert.Equal("Cannot adopt: the wing is full", RecruitWords.Refusal("the wing is full"));
+            Assert.Equal("No friendly aircraft to adopt", RecruitWords.Refusal(null));
         }
     }
 }

@@ -24,7 +24,7 @@ namespace WingCommand.PureTests
             Assert.Equal("no task", OrderValidator.Check(WingOrder.Of(OrderKind.Task)));
             Assert.Equal("no target", OrderValidator.Check(WingOrder.Of(OrderKind.Attack)));
             Assert.Equal("no target", OrderValidator.Check(WingOrder.Of(OrderKind.EscortTarget)));
-            Assert.Equal("nothing selected to recruit", OrderValidator.Check(WingOrder.Of(OrderKind.Recruit)));
+            Assert.Equal("nothing selected to adopt", OrderValidator.Check(WingOrder.Of(OrderKind.Recruit)));
             Assert.Equal("no name", OrderValidator.Check(WingOrder.Of(OrderKind.SetShape)));
             Assert.Equal("name too long", OrderValidator.Check(new WingOrder { Kind = OrderKind.RenameElement, Text = new string('x', 65) }));
             Assert.Equal("call 1 to 7 aircraft", OrderValidator.Check(new WingOrder { Kind = OrderKind.Call, Number = 0f }));
@@ -66,6 +66,21 @@ namespace WingCommand.PureTests
             Assert.Null(OrderValidator.Check(new WingOrder { Kind = OrderKind.Maneuver, Number = 4f }));
             foreach (float n in new[] { -1f, 5f, 1.5f, float.NaN })
                 Assert.Equal("no such maneuver", OrderValidator.Check(new WingOrder { Kind = OrderKind.Maneuver, Number = n }));
+        }
+
+        [Fact]
+        public void ACallWithoutASpecIsValidAndARequisitionIsCheckedField()
+        {
+            Assert.Null(OrderValidator.Check(new WingOrder { Kind = OrderKind.Call, Number = 1f }));
+            Assert.False(new CallSpec().IsSet);
+            var spec = new CallSpec { Airframe = "FS-20", Field = "North Boscali Airbase", Pilot = "HATCH", Fuel = 0.5f };
+            Assert.True(spec.IsSet);
+            Assert.Null(OrderValidator.Check(new WingOrder { Kind = OrderKind.Call, Number = 1f, Call = spec }));
+            foreach (float fuel in new[] { -0.1f, 1.5f, float.NaN })
+                Assert.Equal("no such fuel level", OrderValidator.Check(new WingOrder
+                    { Kind = OrderKind.Call, Number = 1f, Call = new CallSpec { Airframe = "FS-20", Fuel = fuel } }));
+            Assert.Equal("name too long", OrderValidator.Check(new WingOrder
+                { Kind = OrderKind.Call, Number = 1f, Call = new CallSpec { Pilot = new string('x', WingOrder.MaxText + 1) } }));
         }
 
         [Fact]

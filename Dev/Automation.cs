@@ -334,6 +334,13 @@ namespace WingCommand
             {
                 Kind = kind, Text = Text(args, "text"), Number = Number(args, "number", 0),
                 Flag = Arg(args, "flag") is bool flag && flag,
+                // A requisition's choices (spec WMC rebuild §SUPPLY): airframe jsonKey, field unique name, pilot callsign,
+                // fit (AUTO when absent, YOURS, or a template id), fuel 0-1 (0 full).
+                Call = new CallSpec
+                {
+                    Airframe = Text(args, "airframe"), Field = Text(args, "field"), Pilot = Text(args, "pilot"),
+                    Fit = Text(args, "fit"), Fuel = Number(args, "fuel", 0),
+                },
             };
             string letter = Text(args, "element");
             if (!string.IsNullOrEmpty(letter)) o.Scope = WingScope.OfElement(char.ToUpperInvariant(letter[0]) - 'A');

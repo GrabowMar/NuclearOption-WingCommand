@@ -9,6 +9,8 @@ namespace WingCommand
     {
         public static float MaxStack = 1000f;
 
+        private static bool Long(string s) => s != null && s.Length > WingOrder.MaxText;
+
         public static string Check(WingOrder o)
         {
             if (o == null) return "no order";
@@ -31,7 +33,7 @@ namespace WingCommand
                     if (o.Units == null || o.Units.Length == 0) return "no target";
                     return o.Units.Length > WingOrder.MaxUnits ? "too many targets" : null;
                 case OrderKind.Recruit:
-                    if (o.Units == null || o.Units.Length == 0) return "nothing selected to recruit";
+                    if (o.Units == null || o.Units.Length == 0) return "nothing selected to adopt";
                     return o.Units.Length > WingOrder.MaxUnits ? "too many selected" : null;
                 case OrderKind.SetShape:
                 case OrderKind.SetDoctrine:
@@ -39,7 +41,12 @@ namespace WingCommand
                     if (string.IsNullOrEmpty(o.Text)) return "no name";
                     return o.Text.Length > WingOrder.MaxText ? "name too long" : null;
                 case OrderKind.Call:
-                    return o.Number >= 1f && o.Number <= 7f ? null : "call 1 to 7 aircraft";
+                {
+                    if (!(o.Number >= 1f && o.Number <= 7f)) return "call 1 to 7 aircraft";
+                    CallSpec c = o.Call;
+                    if (!(c.Fuel >= 0f && c.Fuel <= 1f)) return "no such fuel level";
+                    return Long(c.Airframe) || Long(c.Field) || Long(c.Pilot) || Long(c.Fit) ? "name too long" : null;
+                }
                 case OrderKind.Stack:
                     return !float.IsNaN(o.Number) && Math.Abs(o.Number) <= MaxStack ? null : "stack out of range";
                 case OrderKind.SetSpacing:

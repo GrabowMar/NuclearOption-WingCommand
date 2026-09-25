@@ -51,6 +51,8 @@ namespace WingCommand
         public float Number;
         public string Text;
         public bool Flag;
+        /// <summary>A requisition's choices (Call; spec WMC rebuild §SUPPLY): unset keeps the radial call's.</summary>
+        public CallSpec Call;
         public OrderSource Source;
 
         /// <summary>The reason a task change this order makes is logged with.</summary>

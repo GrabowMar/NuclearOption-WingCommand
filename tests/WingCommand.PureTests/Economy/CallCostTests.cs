@@ -23,7 +23,7 @@ namespace WingCommand.PureTests
             Assert.Contains("stock", empty.Reason);
             CallQuote poor = CallCost.Quote(3_000_000f, 1_000_000f, 4, false, true);
             Assert.False(poor.Allowed);
-            Assert.Contains("3,0M", poor.Reason.Replace('.', ','));
+            Assert.Contains("3,000,000 CR", poor.Reason);
             Assert.Equal(0f, poor.Charge);
         }
 
@@ -44,7 +44,7 @@ namespace WingCommand.PureTests
         {
             CallQuote poor = CallCost.Recruit(4_000_000f, 0.25f, 500_000f, false, false);
             Assert.False(poor.Allowed);
-            Assert.Contains("1,0M", poor.Reason.Replace('.', ','));
+            Assert.Contains("1,000,000 CR", poor.Reason);
             CallQuote free = CallCost.Recruit(4_000_000f, 0.25f, 0f, sandbox: true, paid: false);
             Assert.True(free.Allowed);
             Assert.Equal(0f, free.Charge);

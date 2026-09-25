@@ -107,7 +107,7 @@ namespace WingCommand
             Aircraft target = SelectedFriendly(player, w) as Aircraft ?? NearestFriendlyAhead(player, w) as Aircraft;
             if (target == null)
             {
-                WingToast.Show("No friendly aircraft to recruit");
+                WingToast.Show("No friendly aircraft to adopt");
                 return;
             }
             WingOrders.Run(new WingOrder { Kind = OrderKind.Recruit, Units = new[] { target.persistentID.Id } });

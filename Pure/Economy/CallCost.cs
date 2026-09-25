@@ -54,8 +54,7 @@ namespace WingCommand
             ReturnAircraft = spawned && !destroyed,
         };
 
-        public static string Money(float value) =>
-            value >= 1_000_000f ? "$" + (value / 1_000_000f).ToString("0.0", CultureInfo.InvariantCulture) + "M"
-            : "$" + value.ToString("0", CultureInfo.InvariantCulture);
+        /// <summary>Credits, as the panel reads them (values are the game's millions).</summary>
+        public static string Money(float value) => Credits.Text(value);
     }
 }
