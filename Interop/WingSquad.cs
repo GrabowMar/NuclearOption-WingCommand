@@ -224,17 +224,8 @@ namespace WingCommand.Interop
             };
         }
 
-        private static void UpdateLivePilot(CustomPilotRecord record)
-        {
-            WingPilot live = WingPilotRoster.FindByCallsign(record.Callsign);
-            if (live == null) return;
-            live.Name = record.Name;
-            live.Persona = record.Persona;
-            live.DialogueTag = record.DialogueTag;
-            live.Background = record.Background;
-            live.Xp = record.Xp;
-            if (record.HasCustomPortrait) live.PortraitSelection = record.Selection;
-        }
+        private static void UpdateLivePilot(CustomPilotRecord record) =>
+            WingPilotRoster.ApplyIdentity(WingPilotRoster.FindByCallsign(record.Callsign), record);
 
         private static int Clamp(int value, int min, int max) =>
             value < min ? min : value > max ? max : value;

@@ -154,6 +154,12 @@ namespace WingCommand
             return "Only a missing or downed pilot can be searched for";
         }
 
+        public const string LocalPending = "Checking for an ejection: wait for the survivor's signal";
+        public const string LocalGone = "The survivor can no longer be reached";
+        public const string NoFunds = "No funds to draw on";
+
+        public static string LocalNeeds(string cost, string funds) => "Needs " + cost + " (funds " + funds + ")";
+
         public static string LocalAsk(string callsign, string cost, string duration) =>
             "Local search for " + callsign + ": " + cost + ", back in " + duration + ". Press LOCAL SAR again";
 

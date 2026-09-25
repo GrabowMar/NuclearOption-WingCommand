@@ -51,8 +51,10 @@ namespace WingCommand
 
         internal static class SearchAndRescue
         {
-            public const float LocalRecoveryCost = WingSearchAndRescue.LocalRecoveryCost;
             public static void Tick() => WingSearchAndRescue.Tick();
+            public static float LocalCost(WingPilot pilot) => WingSearchAndRescue.LocalCost(pilot);
+            public static bool CanOrganizeLocalRecovery(WingPilot pilot, out string why) =>
+                WingSearchAndRescue.CanOrganizeLocalRecovery(pilot, out why);
             public static bool OrganizeLocalRecovery(WingPilot pilot) =>
                 WingSearchAndRescue.OrganizeLocalRecovery(pilot);
             public static float LocalRecoveryRemaining(WingPilot pilot) =>

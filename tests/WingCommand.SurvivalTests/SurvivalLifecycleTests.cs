@@ -234,7 +234,7 @@ namespace WingCommand
             WingPilotRoster.Retire(1, false);
             Time.timeSinceLevelLoad = 31;
             WingSearchAndRescue.Tick();
-            GameManager.LocalPlayer.Allocation = 20_000_000f;
+            GameManager.LocalPlayer.Allocation = 100f;
             Assert.True(WingSearchAndRescue.OrganizeLocalRecovery(pilot));
             Assert.False(WingSearchAndRescue.OrganizeLocalRecovery(pilot));
             Assert.Contains("05:00", WingSearchAndRescue.Status(pilot));
@@ -244,7 +244,7 @@ namespace WingCommand
             Time.timeSinceLevelLoad = 331;
             WingSearchAndRescue.Tick();
             Assert.True(WingPilotRoster.IsFree(pilot));
-            Assert.Equal(10_000_000f, GameManager.LocalPlayer.Allocation);
+            Assert.Equal(95f, GameManager.LocalPlayer.Allocation);
         }
 
         [Fact]
@@ -411,16 +411,17 @@ namespace WingCommand
         }
 
         [Fact]
-        public void LocalRecoveryChargesTenMillionAndReturnsPilotAfterFiveMinutes()
+        public void LocalRecoveryChargesHalfTheAirframeAndReturnsPilotAfterFiveMinutes()
         {
             var aircraft = Plane();
+            aircraft.definition.value = 40f;
             var pilot = WingPilotRoster.Assign(aircraft);
             var native = Eject(aircraft);
             WingPilotRoster.Retire(1, false);
-            GameManager.LocalPlayer.Allocation = 20_000_000f;
+            GameManager.LocalPlayer.Allocation = 100f;
 
             Assert.True(WingSearchAndRescue.OrganizeLocalRecovery(pilot));
-            Assert.Equal(10_000_000f, GameManager.LocalPlayer.Allocation);
+            Assert.Equal(80f, GameManager.LocalPlayer.Allocation);
             Assert.Contains("05:00", WingSearchAndRescue.Status(pilot));
 
             Time.timeSinceLevelLoad = 299.9f;
@@ -432,7 +433,7 @@ namespace WingCommand
             Assert.True(WingPilotRoster.IsFree(pilot));
             Assert.Equal(Unit.UnitState.Returned, native.unitState);
             Assert.True(native.disabled);
-            Assert.Equal(10_000_000f, GameManager.LocalPlayer.Allocation);
+            Assert.Equal(80f, GameManager.LocalPlayer.Allocation);
         }
 
         [Fact]
@@ -440,15 +441,16 @@ namespace WingCommand
         {
             var aircraft = Plane();
             var pilot = WingPilotRoster.Assign(aircraft);
+            aircraft.definition.value = 40f;
             Eject(aircraft);
             WingPilotRoster.Retire(1, false);
-            GameManager.LocalPlayer.Allocation = 9_999_999f;
+            GameManager.LocalPlayer.Allocation = 19.5f;
 
             Assert.False(WingSearchAndRescue.OrganizeLocalRecovery(pilot));
             Time.timeSinceLevelLoad = 300f;
             WingSearchAndRescue.Tick();
             Assert.False(WingPilotRoster.IsFree(pilot));
-            Assert.Equal(9_999_999f, GameManager.LocalPlayer.Allocation);
+            Assert.Equal(19.5f, GameManager.LocalPlayer.Allocation);
         }
 
         [Fact]

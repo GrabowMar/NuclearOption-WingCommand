@@ -44,9 +44,9 @@ namespace UnityEngine
     public static class Random
     {
         public static float Next;
-        public static int Rolls;
+        public static int Rolls, RangeBias;
         public static float value { get { Rolls++; return Next; } }
-        public static int Range(int min, int max) => min;
+        public static int Range(int min, int max) => Math.Max(min, Math.Min(max - 1, min + RangeBias));
     }
 }
 namespace HarmonyLib
@@ -175,7 +175,8 @@ namespace WingCommand
     internal class Setting<T> { public T Value; public Setting(T value) { Value = value; } }
     internal class Config
     {
-        public Setting<bool> PilotProgression = new Setting<bool>(true), VerboseLogging = new Setting<bool>(false);
+        public Setting<bool> PilotProgression = new Setting<bool>(true), VerboseLogging = new Setting<bool>(false),
+            SandboxFreeCalls = new Setting<bool>(false);
         public Setting<float> RankEffect = new Setting<float>(1f);
     }
     internal class Log

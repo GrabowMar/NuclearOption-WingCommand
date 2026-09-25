@@ -42,7 +42,7 @@ namespace WingCommand
         public WingRank Rank => WingPilotRoster.RankFor(Xp);
     }
 
-    /// <summary>Persistent squadron pilots and XP. Recovery returns pilots to the pool without losing
+    /// <summary>Squadron pilots and XP. Recovery returns pilots to the free pilots without losing
     /// records within the current mission. Each rank awards a unique survival perk; Pilot/RankEffect
     /// disables effects without discarding earned records.</summary>
     internal static class WingPilotRoster
@@ -50,15 +50,14 @@ namespace WingCommand
         /// <summary>Maximum attainable pilot rank.</summary>
         public static readonly WingRank TopRank = WingRank.Legend;
 
-        private static readonly List<WingPilot> pool = new List<WingPilot>();
         private static readonly HashSet<WingPilot> reserved = new HashSet<WingPilot>();
         private static readonly Dictionary<PersistentID, WingPilot> assigned =
             new Dictionary<PersistentID, WingPilot>();
         private static readonly Dictionary<PersistentID, WingPilot> losses =
             new Dictionary<PersistentID, WingPilot>();
 
-        /// <summary>All squadron pilots, including losses. The free pool is separate; lost records remain
-        /// visible but unavailable for assignment.</summary>
+        /// <summary>All squadron pilots in join order, including losses; lost records stay visible but unavailable for
+        /// assignment.</summary>
         private static readonly List<WingPilot> roster = new List<WingPilot>();
 
         /// <summary>Pilot selected for the next aircraft. Assignment advances to an available successor;
@@ -68,9 +67,19 @@ namespace WingCommand
         /// <summary>Current pilot choice for the next aircraft.</summary>
         public static WingPilot Selected => selectedPilot;
 
-        /// <summary>Bumped on every roster change (a pick, a seat, a reservation, XP): SUPPLY rebuilds its pilot card only
-        /// when it moved.</summary>
+        /// <summary>Bumped on every roster change (a pick, a seat, a reservation, XP, a kill or sortie, a loss, a search): SUPPLY
+        /// and WING rebuild only when it moved.</summary>
         public static int Version { get; private set; }
+
+        /// <summary>A change made outside the roster that WING shows (a survivor seen, a search organized).</summary>
+        internal static void Touch() => Version++;
+
+        /// <summary>The squadron in join order (WING's rows: stable, KIA in place), into a reused list.</summary>
+        public static void Roster(List<WingPilot> into)
+        {
+            into.Clear();
+            into.AddRange(roster);
+        }
 
         /// <summary>The pilot the next launch seats (spec WMC rebuild §SUPPLY step 1): the selection while it is free, else the
         /// most senior free pilot (ties by roster order); null: a new pilot is drafted.</summary>
@@ -118,9 +127,9 @@ namespace WingCommand
             return null;
         }
 
-        /// <summary>Whether the pilot is alive and eligible for selection.</summary>
+        /// <summary>Whether the pilot is on the roster, alive and eligible for selection.</summary>
         public static bool IsSelectable(WingPilot pilot) =>
-            pilot != null && !pilot.Lost && pilot.RecoveryStatus == PilotRecoveryStatus.None;
+            pilot != null && !pilot.Lost && pilot.RecoveryStatus == PilotRecoveryStatus.None && roster.Contains(pilot);
 
         /// <summary>Whether the pilot currently occupies an aircraft.</summary>
         public static bool IsFlying(WingPilot pilot) =>
@@ -150,6 +159,7 @@ namespace WingCommand
             if (selectable.Count == 0)
             {
                 selectedPilot = null;
+                Version++;
                 return;
             }
 
@@ -179,10 +189,6 @@ namespace WingCommand
         {
             if (pilot == null) return;
             reserved.Remove(pilot);
-            if (!IsFlying(pilot) && IsSelectable(pilot) && !pool.Contains(pilot))
-            {
-                pool.Add(pilot);
-            }
             if (restoreSelection && !IsFlying(pilot) && IsSelectable(pilot))
             {
                 selectedPilot = pilot;
@@ -199,7 +205,6 @@ namespace WingCommand
             WingSearchAndRescue.Reset();
             WingSurvivalPerks.Reset();
             PilotPortrait.Reset();
-            pool.Clear();
             reserved.Clear();
             assigned.Clear();
             losses.Clear();
@@ -246,7 +251,6 @@ namespace WingCommand
             pilot.LastAircraft = aircraft.definition != null ? aircraft.definition.unitName : aircraft.unitName;
             pilot.LossCause = null;
             pilot.KilledBy = null;
-            pool.Remove(pilot);
 
             if (selectedPilot == pilot || !IsFree(selectedPilot))
             {
@@ -256,7 +260,7 @@ namespace WingCommand
             return pilot;
         }
 
-        /// <summary>Release the seat, returning survivors to the pool with their records and marking
+        /// <summary>Release the seat, returning survivors to the free pilots with their records and marking
         /// losses unavailable.</summary>
         public static void Retire(WingMember member, bool survived)
         {
@@ -275,13 +279,11 @@ namespace WingCommand
             if (survived)
             {
                 WingSearchAndRescue.Forget(id);
-                if (!pool.Contains(pilot)) pool.Add(pilot);
                 return;
             }
 
             if (WingSearchAndRescue.MarkDowned(id, pilot))
             {
-                pool.Remove(pilot);
                 reserved.Remove(pilot);
                 if (selectedPilot == pilot) AdvanceSelected(pilot);
                 return;
@@ -307,8 +309,9 @@ namespace WingCommand
         {
             if (!assigned.TryGetValue(killedID, out WingPilot pilot) &&
                 !losses.TryGetValue(killedID, out pilot)) return;
-            if (UnitRegistry.TryGetPersistentUnit(killerID, out var killer))
-                pilot.KilledBy = killer.definition != null ? killer.definition.unitName : killer.unitName;
+            if (!UnitRegistry.TryGetPersistentUnit(killerID, out var killer)) return;
+            pilot.KilledBy = killer.definition != null ? killer.definition.unitName : killer.unitName;
+            Version++;
         }
 
 
@@ -316,11 +319,7 @@ namespace WingCommand
         public static WingPilot RecruitManual()
         {
             WingPilot pilot = Create();
-            if (pilot != null)
-            {
-                if (!pool.Contains(pilot)) pool.Add(pilot);
-                if (selectedPilot == null) selectedPilot = pilot;
-            }
+            if (pilot != null && selectedPilot == null) selectedPilot = pilot;
             return pilot;
         }
 
@@ -350,17 +349,29 @@ namespace WingCommand
             roster.Add(pilot);
             Version++;
             GrantPerks(pilot);
-            pool.Add(pilot);
             if (selectedPilot == null) selectedPilot = pilot;
             created++;
             return pilot;
         }
 
-        /// <summary>Remove an unassigned pilot from the squadron roster.</summary>
+        /// <summary>The studio's identity on a live pilot (name, radio, dialogue, background, portrait); never the mission record
+        /// (XP, kills, sorties), which the mission earns (R6 ruling: XP starts at 0 each mission).</summary>
+        public static void ApplyIdentity(WingPilot live, CustomPilotRecord record)
+        {
+            if (live == null || record == null) return;
+            live.Name = record.Name;
+            live.Persona = record.Persona;
+            live.DialogueTag = record.ResolvedDialogueTag;
+            live.Background = record.Background;
+            if (record.HasCustomPortrait) live.PortraitSelection = record.Selection;
+            Version++;
+        }
+
+        /// <summary>Discharge a free pilot (R6 ruling: never one flying, reserved, downed, missing or searched for, who could come back
+        /// as a ghost).</summary>
         public static bool RemoveFromSquadron(WingPilot pilot)
         {
-            if (pilot == null || IsFlying(pilot) || IsReserved(pilot)) return false;
-            pool.Remove(pilot);
+            if (!IsFree(pilot)) return false;
             bool removed = roster.Remove(pilot);
             if (selectedPilot == pilot) AdvanceSelected(null);
             Version++;
@@ -429,14 +440,12 @@ namespace WingCommand
             if (pilot == null || pilot.Lost) return;
             assigned.Remove(id);
             reserved.Remove(pilot);
-            pool.Remove(pilot);
             pilot.RecoveryStatus = status;
             pilot.Lost = killed;
             if (IsSelectable(pilot))
             {
                 pilot.LossCause = null;
                 pilot.KilledBy = null;
-                pool.Add(pilot);
                 if (selectedPilot == null) selectedPilot = pilot;
             }
             else if (selectedPilot == pilot) AdvanceSelected(pilot);
@@ -457,6 +466,7 @@ namespace WingCommand
             if (award)
             {
                 pilot.Kills++;
+                Version++;
                 Award(aircraft, WingTuning.XpPerKill, "kill");
             }
             Plugin.LogVerbose($"[Pilot] {pilot.Callsign}: splash {victimType}");
@@ -470,6 +480,7 @@ namespace WingCommand
             if (pilot == null) return;
 
             pilot.Sorties++;
+            Version++;
             Award(aircraft, WingTuning.XpPerSortie, "sortie");
         }
 
@@ -561,7 +572,6 @@ namespace WingCommand
                 DialogueTag = callsign,
                 Persona = persona,
                 Background = PilotIdentity.Background(n => Random.Range(0, n), persona),
-                Xp = Random.Range(0, XpForRank(WingRank.Wingman)),
             };
         }
     }
