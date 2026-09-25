@@ -5,6 +5,8 @@ using Random = UnityEngine.Random;
 
 namespace WingCommand
 {
+    // The roster is static: classes that reset it must not run in parallel.
+    [Collection("static roster")]
     public class SurvivalLifecycleTests
     {
         public SurvivalLifecycleTests()
