@@ -10,6 +10,8 @@ namespace WingCommand
     internal static class WingLedger
     {
         private static readonly Dictionary<PersistentID, float> paid = new Dictionary<PersistentID, float>();
+        /// <summary>Sandbox wingmen until they come home (review R4a): the game's restock of one is taken back.</summary>
+        private static readonly HashSet<PersistentID> sandboxed = new HashSet<PersistentID>();
 
         /// <summary>This mission's totals (automation reads them).</summary>
         public static float Charged { get; private set; }
@@ -30,6 +32,7 @@ namespace WingCommand
         public static void Reset()
         {
             paid.Clear();
+            sandboxed.Clear();
             Charged = Refunded = 0f;
         }
 
@@ -77,12 +80,18 @@ namespace WingCommand
         public static void Joined(Aircraft aircraft, Charge charge)
         {
             if (aircraft != null && charge.Quote.Charge > 0f) paid[aircraft.persistentID] = charge.Quote.Charge;
+            if (aircraft != null && charge.Sandbox) sandboxed.Add(aircraft.persistentID);
         }
 
-        /// <summary>Home in the reserve: the allocation it cost comes back (the game restocks the airframe).</summary>
+        /// <summary>Home in the reserve: the allocation it cost comes back (the game restocks the airframe); a sandbox one's
+        /// restock is taken back, as the sandbox never moves the faction's stock. ponytail: if a player waits on the type, the
+        /// game hands the restock to them and this takes one from stock instead (multiplayer only).</summary>
         public static void Returned(Aircraft aircraft)
         {
-            if (aircraft == null || !paid.TryGetValue(aircraft.persistentID, out float cost)) return;
+            if (aircraft == null) return;
+            if (sandboxed.Remove(aircraft.persistentID) && aircraft.NetworkHQ != null && aircraft.definition != null)
+                aircraft.NetworkHQ.ModifyUnitSupply(aircraft.definition, CallCost.HomeStock(sandbox: true));
+            if (!paid.TryGetValue(aircraft.persistentID, out float cost)) return;
             paid.Remove(aircraft.persistentID);
             if (GameManager.GetLocalPlayer(out Player player) && player != null)
             {
@@ -95,7 +104,9 @@ namespace WingCommand
         /// <summary>Lost or handed to the game's AI: nothing comes back.</summary>
         public static void Forget(Aircraft aircraft)
         {
-            if (aircraft != null) paid.Remove(aircraft.persistentID);
+            if (aircraft == null) return;
+            paid.Remove(aircraft.persistentID);
+            sandboxed.Remove(aircraft.persistentID);
         }
     }
 }

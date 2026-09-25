@@ -28,6 +28,9 @@ namespace WingCommand
         public static readonly List<Airbase> Fields = new List<Airbase>();
         private static float listedAt = float.NegativeInfinity;
         private static ShopBase[] bases = new ShopBase[8];
+        /// <summary>MATCH ENEMY's enemy AI slots handed out this mission (review R4a: never more than the faction is over).</summary>
+        private static int enemyBonus;
+        private static readonly List<Airbase> ownFields = new List<Airbase>();
 
         public static void Reset()
         {
@@ -39,6 +42,7 @@ namespace WingCommand
             Catalogue.Clear();
             Fields.Clear();
             listedAt = float.NegativeInfinity;
+            enemyBonus = 0;
         }
 
         // ---- the draft
@@ -177,7 +181,8 @@ namespace WingCommand
 
         public static bool HangarReady(Airbase f, AircraftDefinition d)
         {
-            if (f.hangars == null) return false;
+            // Review R4a: only an owned field's hangars spawn (SpawnService); an unowned one launches from its service points.
+            if (f.hangars == null || f.CurrentHQ == null) return false;
             foreach (Hangar h in f.hangars)
                 if (h != null && !h.Disabled && h.Available && h.CanSpawnAircraft(d)) return true;
             return false;
@@ -228,7 +233,9 @@ namespace WingCommand
         /// leader, a player, a launch of ours, a dead or ejected pilot, one on the ground or one already landing.</summary>
         public static Aircraft RtbCandidate(FactionHQ hq)
         {
-            List<Airbase> own = new List<Airbase>();
+            // A reused list: SUPPLY snapshots at 5 Hz, and RTB ONE over the limit asks every time.
+            List<Airbase> own = ownFields;
+            own.Clear();
             foreach (Airbase f in Fields)
                 if (f != null && f.CurrentHQ == hq) own.Add(f);
             WingService wing = WingService.Instance;
@@ -258,17 +265,23 @@ namespace WingCommand
             return best;
         }
 
-        /// <summary>What <paramref name="n"/> launches over the limit did, in words (the executor's answer): MATCH ENEMY lets every
-        /// enemy faction field <paramref name="n"/> more AI aircraft; RTB ONE sends that many of the faction's own AI to land.</summary>
-        public static string ApplyOverLimit(OverLimitMode mode, FactionHQ hq, int n)
+        /// <summary>What <paramref name="n"/> launches over the limit did, in words (the executor's answer), from the wing as it
+        /// stood before them: MATCH ENEMY lets every enemy faction field as many more AI aircraft as the faction is now over (none
+        /// for a lost one's replacement); RTB ONE sends that many of the faction's own AI to land.</summary>
+        public static string ApplyOverLimit(OverLimitMode mode, FactionHQ hq, int n, in ShopWing w)
         {
             switch (mode)
             {
                 case OverLimitMode.MatchEnemy:
+                {
+                    int add = ShopRules.EnemyBonus(w, n, enemyBonus);
+                    if (add <= 0) return "enemy already matched";
+                    enemyBonus += add;
                     foreach (FactionHQ other in FactionRegistry.GetAllHQs())
-                        if (other != null && other != hq) other.AIAircraftLimit += n;
-                    Plugin.Logger.LogInfo($"[Supply] over the AI limit: every enemy faction may field {n} more");
-                    return "enemy +" + n;
+                        if (other != null && other != hq) other.AIAircraftLimit += add;
+                    Plugin.Logger.LogInfo($"[Supply] over the AI limit: every enemy faction may field {add} more");
+                    return "enemy +" + add;
+                }
                 case OverLimitMode.RtbOne:
                 {
                     int sent = 0;
@@ -287,7 +300,8 @@ namespace WingCommand
                     return sent > 0 ? last + " sent to base" : "no AI could go home";
                 }
                 default:
-                    return "×" + ShopRules.SurchargeMultiplier.ToString("0.#", System.Globalization.CultureInfo.InvariantCulture) + " cost";
+                    return w.Sandbox ? "no surcharge in the sandbox"
+                        : "×" + ShopRules.SurchargeMultiplier.ToString("0.#", System.Globalization.CultureInfo.InvariantCulture) + " cost";
             }
         }
     }

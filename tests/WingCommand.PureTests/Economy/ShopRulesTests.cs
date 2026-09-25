@@ -28,7 +28,7 @@ namespace WingCommand.PureTests
             Assert.Equal(TileBlock.None, q.Tile);
             Assert.Equal("Wing is full (2/3 · 1 inbound)", ShopRules.WingReason(q.Wing, w));
             Assert.Equal("BLOCKED · Wing is full (2/3 · 1 inbound)", ShopRules.Blocker(q, w, Jet()));
-            Assert.DoesNotContain("full", ShopRules.TileFoot(q, Jet()));
+            Assert.DoesNotContain("full", ShopRules.TileFoot(q, Jet(), false));
         }
 
         [Fact]
@@ -75,7 +75,7 @@ namespace WingCommand.PureTests
             Assert.Equal(WingBlock.WingFull, q.Wing);
             Assert.Equal(TileBlock.Rank, q.Tile);
             Assert.StartsWith("BLOCKED · Wing is full", ShopRules.Blocker(q, w, a));
-            Assert.Equal("RANK 5", ShopRules.TileFoot(q, a));
+            Assert.Equal("RANK 5", ShopRules.TileFoot(q, a, false));
         }
 
         [Fact]
@@ -133,7 +133,7 @@ namespace WingCommand.PureTests
             a.FactionStock = 0;
             ShopQuote q = ShopRules.Quote(Wing(), a);
             Assert.Equal(TileBlock.NoStock, q.Tile);
-            Assert.Equal("NO STOCK", ShopRules.TileFoot(q, a));
+            Assert.Equal("NO STOCK", ShopRules.TileFoot(q, a, false));
         }
 
         [Fact]
@@ -156,7 +156,7 @@ namespace WingCommand.PureTests
             ShopQuote q = ShopRules.Quote(w, Jet());
             Assert.Equal(TileBlock.Funds, q.Tile);
             Assert.Equal("BLOCKED · needs 87 CR, you have 20 CR", ShopRules.Blocker(q, w, Jet()));
-            Assert.Equal("NEED 87 CR", ShopRules.TileFoot(q, Jet()));
+            Assert.Equal("NEED 87 CR", ShopRules.TileFoot(q, Jet(), false));
             w.Funds = 87f;
             Assert.True(ShopRules.Quote(w, Jet()).Allowed);
         }
@@ -168,7 +168,7 @@ namespace WingCommand.PureTests
             a.BasesForClass = 0;
             ShopQuote q = ShopRules.Quote(Wing(), a);
             Assert.Equal(TileBlock.NoBase, q.Tile);
-            Assert.Equal("NO BASE", ShopRules.TileFoot(q, a));
+            Assert.Equal("NO BASE", ShopRules.TileFoot(q, a, false));
         }
 
         // ---- over the faction's AI limit (user decision 2026-09-25)
@@ -245,6 +245,78 @@ namespace WingCommand.PureTests
             Assert.Equal(WingBlock.None, ShopRules.WingBlocker(w));
         }
 
+        // ---- review R4a (fix pass)
+
+        [Fact]
+        public void EachAircraftOfACallIsQuotedWithTheOnesBeforeIt()
+        {
+            ShopWing w = Wing();
+            w.Members = 0;
+            w.MaxMembers = 7;
+            w.FactionAi = 5;
+            ShopAirframe a = Jet();
+            ShopQuote first = ShopRules.Quote(ShopRules.After(w, 0, 0f), a);
+            Assert.False(first.OverLimit);
+            Assert.Equal(87f, first.Price);
+            ShopWing second = ShopRules.After(w, 1, 87f);
+            Assert.Equal(6, second.FactionAi);
+            Assert.Equal(1, second.Pending);
+            Assert.Equal(913f, second.Funds);
+            ShopQuote q2 = ShopRules.Quote(second, a);
+            Assert.True(q2.OverLimit);
+            Assert.Equal(261f, q2.Price);
+        }
+
+        [Fact]
+        public void MatchEnemyGivesTheEnemyOnlyWhatTheFactionIsOverByNow()
+        {
+            ShopWing w = Wing();
+            w.Mode = OverLimitMode.MatchEnemy;
+            w.FactionAi = 6;
+            Assert.Equal(1, ShopRules.EnemyBonus(w, 1, 0));
+            // A lost wingman's replacement: the faction is no further over than before.
+            Assert.Equal(0, ShopRules.EnemyBonus(w, 1, 1));
+            w.FactionAi = 7;
+            Assert.Equal(1, ShopRules.EnemyBonus(w, 1, 1));
+            w.FactionAi = 3;
+            Assert.Equal(0, ShopRules.EnemyBonus(w, 1, 0));
+            w.FactionAiLimit = 5.5f;
+            w.FactionAi = 6;
+            Assert.Equal(1, ShopRules.EnemyBonus(w, 1, 0));
+        }
+
+        [Fact]
+        public void ASandboxTileSaysFreeNotItsStock()
+        {
+            ShopWing w = Wing();
+            w.Sandbox = true;
+            ShopAirframe a = Jet();
+            a.FactionStock = 0;
+            Assert.Equal("FREE · SANDBOX", ShopRules.TileFoot(ShopRules.Quote(w, a), a, true));
+            Assert.Equal("87 CR · 4 LEFT", ShopRules.TileFoot(ShopRules.Quote(Wing(), Jet()), Jet(), false));
+        }
+
+        [Fact]
+        public void TheSandboxNeverUsesTheHangarStore()
+        {
+            ShopWing w = Wing();
+            w.Sandbox = true;
+            ShopAirframe a = Jet();
+            a.Held = 1;
+            Assert.False(ShopRules.Quote(w, a).FromHeld);
+        }
+
+        [Fact]
+        public void OverTheLimitInTheSandboxCostsNothingExtra()
+        {
+            ShopWing w = Wing();
+            w.Sandbox = true;
+            w.FactionAi = 6;
+            Assert.Equal("OVER LIMIT (6/6) · SANDBOX, NO ×3", ShopRules.OverLimitNote(w));
+            w.Mode = OverLimitMode.MatchEnemy;
+            Assert.Equal("OVER LIMIT (6/6) · ENEMY +1", ShopRules.OverLimitNote(w));
+        }
+
         [Fact]
         public void UnderTheLimitTheNoteCountsTheFactionsAi() => Assert.Equal("AI 3/6", ShopRules.OverLimitNote(Wing()));
 
@@ -261,7 +333,7 @@ namespace WingCommand.PureTests
             ShopQuote q = ShopRules.Quote(w, a);
             Assert.True(q.Allowed);
             Assert.Equal(0f, q.Price);
-            Assert.Equal("FREE · 0 LEFT", ShopRules.TileFoot(q, a));
+            Assert.Equal("FREE · SANDBOX", ShopRules.TileFoot(q, a, true));
             a.RankRequired = 9;
             Assert.Equal(TileBlock.Rank, ShopRules.Quote(w, a).Tile);
             w.Members = 3;
@@ -350,11 +422,11 @@ namespace WingCommand.PureTests
             ShopAirframe a = Jet();
             a.Value = 1250f;
             a.FactionStock = 99;
-            Assert.True(ShopRules.TileFoot(ShopRules.Quote(rich, a), a).Length <= 18);
+            Assert.True(ShopRules.TileFoot(ShopRules.Quote(rich, a), a, false).Length <= 18);
             ShopWing poor = Wing();
             poor.Funds = 9620f;
             a.Value = 999_999f;
-            Assert.True(ShopRules.TileFoot(ShopRules.Quote(poor, a), a).Length <= 18);
+            Assert.True(ShopRules.TileFoot(ShopRules.Quote(poor, a), a, false).Length <= 18);
             Assert.True(ShopRules.Blocker(ShopRules.Quote(poor, a), poor, a).Length <= 79);
             foreach (WingBlock b in System.Enum.GetValues(typeof(WingBlock)))
                 Assert.True(ShopRules.WingReason(b, rich).Length <= 68, b.ToString());

@@ -428,20 +428,42 @@ namespace WingCommand
                 if (fit.AirframeKey != type.jsonKey) return OrderResult.Refused("That fit is for another airframe");
                 template = c.Fit;
             }
-            ShopWing sw = WingRequisition.Wing(caller);
-            ShopAirframe sa = WingRequisition.For(type, caller.NetworkHQ);
-            ShopQuote q = ShopRules.Quote(sw, sa);
-            if (!q.Allowed)
-                return OrderResult.Refused("Cannot call " + type.unitName + ": " + ShopRules.Blocker(q, sw, sa).Substring("BLOCKED · ".Length));
-            int n = SpawnService.Instance.LaunchFromField(new LaunchRequest
+            // Review R4a: each aircraft is quoted with the ones this call already launched, so the one that crosses the faction's
+            // AI limit pays and acts as over it (the snapshot advances by arithmetic; the game's own count lags a spawn by a tick).
+            FactionHQ hq = caller.NetworkHQ;
+            ShopWing before = WingRequisition.Wing(caller);
+            string fieldName = WingRequisition.NameOf(field), firstPilot = null, cutShort = null, effect = null;
+            int launched = 0;
+            float spent = 0f;
+            for (int k = 0; k < (int)o.Number; k++)
             {
-                Field = field, Type = type, Count = (int)o.Number, Pilot = pilot, Template = template, OwnLoadout = own, Fuel = c.Fuel,
-                Price = q.Price,
-            }, out string answer);
-            if (n <= 0) return OrderResult.Refused(answer);
-            // ponytail: a radial call of several quotes one aircraft; each launched over the limit gets the mode's effect.
-            if (q.OverLimit) answer += " · " + WingRequisition.ApplyOverLimit(sw.Mode, caller.NetworkHQ, n);
-            return OrderResult.Acked(answer);
+                ShopWing sw = ShopRules.After(before, launched, spent);
+                if (sw.Mode == OverLimitMode.RtbOne && ShopRules.OverCap(sw)) sw.RtbCandidate = WingRequisition.RtbCandidate(hq) != null;
+                ShopAirframe sa = WingRequisition.For(type, hq);
+                ShopQuote q = ShopRules.Quote(sw, sa);
+                if (!q.Allowed)
+                {
+                    cutShort = ShopRules.Blocker(q, sw, sa).Substring("BLOCKED · ".Length);
+                    break;
+                }
+                int got = SpawnService.Instance.LaunchFromField(new LaunchRequest
+                {
+                    Field = field, Type = type, Count = 1, Pilot = k == 0 ? pilot : null, Template = template, OwnLoadout = own,
+                    Fuel = c.Fuel, Price = q.Price,
+                }, out _, out string refusal, out string seated);
+                if (got <= 0)
+                {
+                    cutShort = refusal ?? (launched == 0 ? null : fieldName + " has no room for another");
+                    break;
+                }
+                if (launched == 0) firstPilot = seated;
+                launched += got;
+                spent += q.Price;
+                if (q.OverLimit) effect = WingRequisition.ApplyOverLimit(sw.Mode, hq, got, sw);
+            }
+            if (launched <= 0) return OrderResult.Refused(CallWords.Refused(type.unitName, cutShort, fieldName));
+            string answer = CallWords.Launched(launched, type.unitName, fieldName, firstPilot, cutShort);
+            return OrderResult.Acked(effect != null ? answer + " · " + effect : answer);
         }
 
         /// <summary>Who an immediate order is for: everyone (null), an element's members, or the named aircraft.</summary>

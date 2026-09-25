@@ -286,16 +286,18 @@ namespace WingCommand
         public int LaunchFromField(Airbase airbase, AircraftDefinition definition, int n, bool sandbox = false)
         {
             int launched = LaunchFromField(new LaunchRequest { Field = airbase, Type = definition, Count = n, Price = -1f, Sandbox = sandbox },
-                out string answer);
+                out string answer, out _, out _);
             WingToast.Show(answer);
             return launched;
         }
 
         /// <summary>Launch <see cref="LaunchRequest.Count"/> wingmen as <paramref name="r"/> asks (spec M3 §3, WMC rebuild
         /// §SUPPLY): the fit and fuel go to the spawn, each launch reserves its pilot and is paid for when it spawns (a stored
-        /// airframe first), and <paramref name="answer"/> says what happened, in the executor's words. Returns how many.</summary>
-        public int LaunchFromField(in LaunchRequest r, out string answer)
+        /// airframe first), and <paramref name="answer"/> says what happened, in the executor's words (<paramref name="refusal"/>:
+        /// why the rest did not go; <paramref name="seated"/>: the first seated). Returns how many.</summary>
+        public int LaunchFromField(in LaunchRequest r, out string answer, out string refusal, out string seated)
         {
+            refusal = seated = null;
             bool sandbox = r.Sandbox || Plugin.Settings.SandboxFreeCalls.Value;
             AircraftDefinition definition = r.Type;
             Airbase airbase = r.Field;
@@ -376,7 +378,11 @@ namespace WingCommand
                     // A fresh loadout per aircraft (never a shared scratch); null lets the game arm it (AUTO).
                     Loadout loadout = r.Template != null ? WingLoadoutCatalog.Build(definition, new WingLoadoutChoice(r.Template))
                         : r.OwnLoadout ? WingLoadoutCatalog.Build(definition, WingLoadoutChoice.Standard) : null;
-                    GroundLaunch launch = FromHangar(airbase, definition, traffic, used, loadout, fuel);
+                    // Review R4a: a chosen fit passes the game's own mount checks here, per aircraft (the field's warheads).
+                    if (loadout != null) WingLoadoutCatalog.Vet(loadout, definition, airbase, hq);
+                    // Review R4a: a hangar at a field nobody owns has no faction to spawn for (the game throws); an unowned field
+                    // launches from its service points.
+                    GroundLaunch launch = airbase.CurrentHQ != null ? FromHangar(airbase, definition, traffic, used, loadout, fuel) : null;
                     if (launch == null)
                     {
                         quote = WingLedger.Quote(definition, hq, false, sandbox, r.Price, held);
@@ -408,6 +414,8 @@ namespace WingCommand
             }
             answer = launched > 0 ? CallWords.Launched(launched, definition.unitName, field, firstPilot, refused)
                 : CallWords.Refused(definition.unitName, refused, field);
+            refusal = refused;
+            seated = firstPilot;
             return launched;
         }
 

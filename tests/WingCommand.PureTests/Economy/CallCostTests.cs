@@ -88,5 +88,13 @@ namespace WingCommand.PureTests
             Assert.Equal(-1, returned.StockByHand);
             Assert.Equal(1, CallCost.Refund(false, false, true, false).StockByHand);
         }
+
+        [Fact]
+        public void ASandboxWingmanComingHomeCancelsTheGamesRestock()
+        {
+            // Review R4a: the game restocks a wingman that lands in the reserve; a sandbox one was never drawn.
+            Assert.Equal(-1, CallCost.HomeStock(sandbox: true));
+            Assert.Equal(0, CallCost.HomeStock(sandbox: false));
+        }
     }
 }

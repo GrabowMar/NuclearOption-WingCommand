@@ -106,8 +106,9 @@ namespace WingCommand
                 "How much rank changes how a pilot flies and fights (0 off, 1 normal, 2 double).",
                 new AcceptableValueRange<float>(0f, 2f), new ConfigurationManagerAttributes { Order = 84 }));
             SandboxFreeCalls = c.Bind("Squadron", "SandboxFreeCalls", false, new ConfigDescription(
-                "Calls cost nothing: no allocation is charged and no stock is checked (hangar spawns still draw the " +
-                "faction's own supply, as the game does).", null, new ConfigurationManagerAttributes { Order = 83 }));
+                "Calls cost nothing: no allocation is charged, no stock is checked, and the faction's stock never moves (a " +
+                "hangar's draw is given back, and so is the game's restock when the wingman comes home).", null,
+                new ConfigurationManagerAttributes { Order = 83 }));
 
             OverLimit = c.Bind("Supply", "OverLimit", OverLimitMode.Surcharge, new ConfigDescription(
                 "A requisition over the faction's AI aircraft limit (the game's own; your wingmen count toward it): Surcharge costs " +

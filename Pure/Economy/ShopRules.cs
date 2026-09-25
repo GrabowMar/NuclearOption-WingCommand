@@ -96,7 +96,8 @@ namespace WingCommand
 
         public static ShopQuote Quote(in ShopWing w, in ShopAirframe a)
         {
-            var q = new ShopQuote { Wing = WingBlocker(w), OverLimit = OverCap(w), FromHeld = a.Held > 0 };
+            // Review R4a: the sandbox never takes a stored airframe (SpawnService launches it from the faction as ever).
+            var q = new ShopQuote { Wing = WingBlocker(w), OverLimit = OverCap(w), FromHeld = !w.Sandbox && a.Held > 0 };
             if (q.Wing == WingBlock.None && !Listed(a, w.Sandbox)) q.Wing = WingBlock.NotOffered;
             q.Price = w.Sandbox ? 0f : a.Value * (q.OverLimit && w.Mode == OverLimitMode.Surcharge ? SurchargeMultiplier : 1f);
             if (a.RankRequired > w.PlayerRank) q.Tile = TileBlock.Rank;
@@ -104,6 +105,27 @@ namespace WingCommand
             else if (a.BasesForClass <= 0) q.Tile = TileBlock.NoBase;
             else if (w.Funds < q.Price) q.Tile = TileBlock.Funds;
             return q;
+        }
+
+        /// <summary>The wing once this call has launched <paramref name="launched"/> aircraft for <paramref name="spent"/> (review
+        /// R4a: each aircraft of a call is quoted with the ones before it, so the one that crosses the faction's AI limit pays and
+        /// acts as over it; arithmetic, since the game's own count lags a spawn by a tick).</summary>
+        public static ShopWing After(in ShopWing w, int launched, float spent)
+        {
+            ShopWing next = w;
+            next.FactionAi += launched;
+            next.Pending += launched;
+            next.Funds -= spent;
+            return next;
+        }
+
+        /// <summary>MATCH ENEMY: the enemy AI slots <paramref name="n"/> more aircraft call for, beyond the <paramref name="given"/>
+        /// already handed out this mission (review R4a: only what the faction is over by now, so a lost wingman's replacement
+        /// never stacks another).</summary>
+        public static int EnemyBonus(in ShopWing w, int n, int given)
+        {
+            int over = w.FactionAi + n - Limit(w);
+            return over > given ? over - given : 0;
         }
 
         public static int PickBase(LaunchMode mode, bool jet, ShopBase[] bases, int count)
@@ -141,8 +163,9 @@ namespace WingCommand
             }
         }
 
-        /// <summary>The tile's foot: its own reason, else its price and how many are left (≤ 18 characters).</summary>
-        public static string TileFoot(in ShopQuote q, in ShopAirframe a)
+        /// <summary>The tile's foot: its own reason, else its price and how many are left (≤ 18 characters); in the sandbox,
+        /// where stock is not counted, FREE · SANDBOX (review R4a).</summary>
+        public static string TileFoot(in ShopQuote q, in ShopAirframe a, bool sandbox)
         {
             switch (q.Tile)
             {
@@ -150,7 +173,7 @@ namespace WingCommand
                 case TileBlock.NoStock: return "NO STOCK";
                 case TileBlock.NoBase: return "NO BASE";
                 case TileBlock.Funds: return "NEED " + Credits.Text(q.Price);
-                default: return Credits.Price(q.Price) + " · " + N(a.FactionStock + a.Held) + " LEFT";
+                default: return sandbox ? "FREE · SANDBOX" : Credits.Price(q.Price) + " · " + N(a.FactionStock + a.Held) + " LEFT";
             }
         }
 
@@ -203,7 +226,10 @@ namespace WingCommand
             {
                 case OverLimitMode.MatchEnemy: return "OVER LIMIT (" + Cap(w) + ") · ENEMY +1";
                 case OverLimitMode.RtbOne: return "OVER LIMIT (" + Cap(w) + ") · 1 AI TO BASE";
-                default: return "OVER LIMIT (" + Cap(w) + ") · ×" + SurchargeMultiplier.ToString("0.#", CultureInfo.InvariantCulture) + " COST";
+                default:
+                    // Review R4a: the sandbox charges nothing, the surcharge included.
+                    return "OVER LIMIT (" + Cap(w) + ") · " + (w.Sandbox ? "SANDBOX, NO ×" : "×")
+                        + SurchargeMultiplier.ToString("0.#", CultureInfo.InvariantCulture) + (w.Sandbox ? "" : " COST");
             }
         }
 

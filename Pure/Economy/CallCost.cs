@@ -56,6 +56,10 @@ namespace WingCommand
             ReturnAircraft = spawned && !destroyed,
         };
 
+        /// <summary>The airframe by hand when a wingman comes home to the reserve (the game restocks it): a sandbox one was never
+        /// drawn from the faction, so its restock is taken back (review R4a).</summary>
+        public static int HomeStock(bool sandbox) => sandbox ? -1 : 0;
+
         /// <summary>Credits, as the panel reads them (values are the game's millions).</summary>
         public static string Money(float value) => Credits.Text(value);
     }
