@@ -1,0 +1,79 @@
+{
+  "name": "wc-r4-supply-fs20-boscali-north",
+  "mods": [
+    "wingcommand"
+  ],
+  "timeout_s": 420,
+  "ops": [
+    {"op": "spawn", "id": "lead", "type": "FS-20 Vortex", "at": {"map": [-18632, 32049]}, "altitude": 900, "speed": 150, "heading": 0},
+    {"op": "fly", "id": "lead", "program": [{"orbit": {"bank": 15, "seconds": 400}}]},
+    {"op": "wait", "seconds": 3},
+    {"op": "call", "method": "WingCommand.Automation.Anchor", "store": "anchor", "args": {"id": "lead"}},
+    {"op": "call", "method": "WingCommand.Automation.Grant", "store": "grant",
+     "args": {"lead": "lead", "allocation": 100000000, "type": "FS-20 Vortex", "stock": 4, "rank": 10}},
+    {"op": "call", "method": "WingCommand.Automation.Pilots", "store": "hired", "args": {"hire": 3}},
+    {"op": "record", "ids": ["lead"], "hz": 2},
+
+    {"op": "call", "method": "WingCommand.Automation.Wmc", "store": "page", "args": {"open": true, "tab": 1}},
+    {"op": "call", "method": "WingCommand.Automation.Wmc", "store": "picked",
+     "args": {"airframe": "FS-20 Vortex", "fit": "auto", "base": "airbase_boscali_north"}},
+    {"op": "call", "method": "WingCommand.Automation.Wmc", "store": "stepped", "args": {"press": "sup.pilot.next"}},
+
+    {"op": "call", "method": "WingCommand.Automation.Wmc", "store": "stored", "args": {"press": "sup.store"}},
+    {"op": "call", "method": "WingCommand.Automation.Wmc", "store": "ask", "args": {"press": "sup.return"}},
+    {"op": "call", "method": "WingCommand.Automation.Wmc", "store": "returned", "args": {"press": "sup.return"}},
+
+    {"op": "call", "method": "WingCommand.Automation.Wmc", "store": "fuel25", "args": {"press": "sup.fuel"}},
+    {"op": "call", "method": "WingCommand.Automation.Wmc", "store": "fuel50", "args": {"press": "sup.fuel"}},
+    {"op": "call", "method": "WingCommand.Automation.Wmc", "store": "fuel75", "args": {"press": "sup.fuel"}},
+    {"op": "call", "method": "WingCommand.Automation.Wmc", "store": "fuel100", "args": {"press": "sup.fuel"}},
+
+    {"op": "call", "method": "WingCommand.Automation.Economy", "store": "before", "args": {"type": "FS-20 Vortex", "lead": "lead"}},
+    {"op": "call", "method": "WingCommand.Automation.Wmc", "store": "req", "args": {"press": "sup.requisition"}},
+    {"op": "call", "method": "WingCommand.Automation.Wmc", "store": "double", "args": {"press": "sup.requisition"}},
+    {"op": "wait", "seconds": 10},
+    {"op": "call", "method": "WingCommand.Automation.Inbound", "store": "inbound"},
+    {"op": "call", "method": "WingCommand.Automation.Economy", "store": "charged", "args": {"type": "FS-20 Vortex", "lead": "lead"}},
+    {"op": "call", "method": "WingCommand.Automation.Pilots", "store": "seated"},
+
+    {"op": "call", "method": "WingCommand.Automation.Order", "store": "order",
+     "args": {"kind": "Call", "number": 1, "airframe": "FS-20 Vortex", "fit": "yours", "fuel": 0.75}},
+    {"op": "wait", "seconds": 5},
+
+    {"op": "call", "method": "WingCommand.Automation.Grant", "store": "limit", "args": {"lead": "lead", "aiLimit": 0}},
+    {"op": "call", "method": "WingCommand.Automation.Wmc", "store": "over", "args": {"tab": 1}},
+
+    {"op": "call", "method": "WingCommand.Automation.Wmc", "store": "full", "args": {"tab": 1}},
+    {"op": "end"}
+  ],
+  "checks": [
+    {"check": "status_ok"},
+    {"check": "result_above", "path": "hired.free", "min": 3},
+    {"check": "result_above", "path": "page.tab", "min": 1},
+    {"check": "result_below", "path": "page.overflow", "max": 0},
+    {"check": "result_above", "path": "page.sup_tiles", "min": 1},
+    {"check": "result_above", "path": "picked.sup_selected", "min": 1},
+    {"check": "result_below", "path": "picked.sup_blocked", "max": 0},
+    {"check": "result_above", "path": "picked.sup_ready", "min": 1},
+    {"check": "result_above", "path": "picked.sup_bases_on", "min": 1},
+    {"check": "result_below", "path": "picked.sup_bases_on", "max": 1},
+    {"check": "result_above", "path": "stepped.pressed", "min": 1},
+    {"check": "result_above", "path": "stepped.sup_free", "min": 3},
+    {"check": "result_above", "path": "stored.sup_hangar", "min": 1},
+    {"check": "result_above", "path": "ask.sup_return_armed", "min": 1},
+    {"check": "result_above", "path": "ask.sup_hangar", "min": 1},
+    {"check": "result_below", "path": "returned.sup_hangar", "max": 0},
+    {"check": "result_below", "path": "fuel25.sup_fuel", "max": 25},
+    {"check": "result_above", "path": "fuel100.sup_fuel", "min": 100},
+    {"check": "result_above", "path": "req.pressed", "min": 1},
+    {"check": "result_above", "path": "req.sup_inbound", "min": 1},
+    {"check": "result_below", "path": "double.sup_inbound", "max": 1},
+    {"check": "result_above", "path": "inbound.count", "min": 1},
+    {"check": "result_above", "path": "charged.charged", "min": 1},
+    {"check": "result_above", "path": "seated.reserved", "min": 1},
+    {"check": "result_above", "path": "order.accepted", "min": 1},
+    {"check": "result_above", "path": "over.sup_overlimit", "min": 1},
+    {"check": "result_below", "path": "over.sup_blocked", "max": 0},
+    {"check": "result_below", "path": "full.overflow", "max": 0}
+  ]
+}

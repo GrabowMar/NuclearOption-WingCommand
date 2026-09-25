@@ -162,7 +162,7 @@ namespace WingCommand
             m.Set(0, Credits.Short(funds), SupplyWords.FundsCaption(client, wing.Sandbox, selected != null, price),
                 afford ? 1f : Mathf.Clamp01(funds / price), afford ? AvTheme.Friendly : AvTheme.Warning);
             hangarCodes.Clear();
-            foreach (AircraftDefinition d in WingSupplyReserve.Definitions)
+            foreach (AircraftDefinition d in WingSupplyReserve.Stored)
                 if (d != null) hangarCodes.Add(SupplyWords.Code(d.code, d.unitName));
             m.Set(1, HangarWords.Value(held, cap, offline), HangarWords.Caption(hangarCodes, WingSupplyReserve.IsHost && !client,
                 WingSupplyReserve.HasFaction), HangarWords.Level(held, cap), HangarWords.Full(held, cap) ? AvTheme.Warning : AvTheme.Friendly);

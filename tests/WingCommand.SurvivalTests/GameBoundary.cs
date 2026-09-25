@@ -147,15 +147,6 @@ public static class UnitRegistry
 }
 namespace WingCommand
 {
-    internal static class EconomyFacade
-    {
-        internal static class Shop
-        {
-            public static bool IsPurchased(Aircraft a) => false;
-            public static float PaidFor(PersistentID id) => 0f;
-            public static float CurrentPriceOf(AircraftDefinition definition) => 0f;
-        }
-    }
     internal class WingMember
     {
         public Aircraft Aircraft;

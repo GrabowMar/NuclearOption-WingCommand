@@ -593,11 +593,25 @@ namespace WingCommand
                     foreach (WingMember m in WingService.Instance.Members)
                         if (m.Number == number && (object)m.Aircraft != null) selection.Toggle(m.Aircraft.persistentID.Id);
                 }
+            // R4 SUPPLY: picks with no id of their own (F14) — an airframe (jsonKey, name or code), its fit ("auto", "yours" or a
+            // template's name) and the only field left ON. SUPPLY shows first so its lists are filled.
+            WmcSupply supply = panel.Supply;
+            string airframe = Text(args, "airframe"), fit = Text(args, "fit"), field = Text(args, "base");
+            if (supply != null && (airframe != null || fit != null || field != null))
+            {
+                panel.Show(WmcPanel.TabSupply);
+                panel.Refresh();
+                if (airframe != null && !supply.Pick(airframe)) return Fail("Wmc", "no listed airframe " + airframe);
+                if (fit != null && !supply.Fit(fit)) return Fail("Wmc", "no fit " + fit + " for the selected airframe");
+                if (field != null && !supply.OnlyBase(field)) return Fail("Wmc", "no field " + field + " in SUPPLY's list");
+            }
             // Refresh now so a press in the same call acts on this scope.
             panel.Refresh();
             string press = Text(args, "press");
             bool pressed = !string.IsNullOrEmpty(press) && panel.Press(press);
-            return new Dictionary<string, object>
+            // A press changes the page: report what it shows now.
+            if (pressed) panel.Refresh();
+            var result = new Dictionary<string, object>
             {
                 { "ok", string.IsNullOrEmpty(press) || pressed }, { "visible", panel.Visible }, { "tab", panel.Page },
                 { "sub", panel.Sub }, { "pressed", pressed }, { "members", panel.Context.Count }, { "controls", panel.Controls.Count },
@@ -606,6 +620,8 @@ namespace WingCommand
                 { "armed", panel.Context.Map.Mode != MapMode.Off ? 1 : 0 },
                 { "disabled", panel.Tactical != null ? string.Join(",", panel.Tactical.DisabledOrders()) : "" },
             };
+            if (supply != null && panel.Page == WmcPanel.TabSupply) supply.Report(result);
+            return result;
         }
 
         /// <summary>Spec WMC program §5: the map layer as a player drives it — arm a <c>mode</c> (move, route, orbit, hold,

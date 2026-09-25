@@ -146,7 +146,7 @@ namespace WingCommand
             if (!returnGate.Press(d.jsonKey, Time.unscaledTime))
                 WingToast.Show(HangarWords.Ask(d.unitName));
             else
-                WingToast.Show(WingSupplyReserve.Release(d, out _, out string why)
+                WingToast.Show(WingSupplyReserve.Release(d, out string why)
                     ? HangarWords.Returned(d.unitName, WingSupplyReserve.Count, WingSupplyReserve.Capacity) : why);
             WmcPanel.Instance?.Refresh();
         }
