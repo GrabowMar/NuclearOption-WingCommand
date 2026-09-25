@@ -28,6 +28,12 @@ namespace WingCommand
         {
             WingRadialMenu.Tick();
             WingConfig s = Plugin.Settings;
+            // R5: keys typed into a WMC text field are text, never commands (HOTAS buttons still act).
+            if (WmcNameField.Typing)
+            {
+                TickHotas(s);
+                return;
+            }
             if (Down(s.KeyCallWingman)) WingCommands.Call(1);
             if (Down(s.KeyFormUp)) WingCommands.FormUp();
             if (Down(s.KeyNextShape)) WingCommands.NextShape();

@@ -88,7 +88,7 @@ namespace WingCommand
                 pressed = false;
                 return;
             }
-            if (Mode != MapMode.Off && Input.GetKeyDown(KeyCode.Escape))
+            if (Mode != MapMode.Off && Input.GetKeyDown(KeyCode.Escape) && !WmcNameField.Typing)
             {
                 Disarm();
                 WingToast.Show("Map order cancelled");

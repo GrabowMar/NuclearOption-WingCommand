@@ -42,6 +42,7 @@ namespace WingCommand
         private RectTransform content;
         private AvScreen shell;
         private float nextAttempt, nextRefresh;
+        private bool wasVisible;
         private bool gaveUp;
 
         public WmcPanel()
@@ -84,6 +85,11 @@ namespace WingCommand
         {
             // Map and HUD marks do not need the panel (spec WMC program §5); they ride on its tick.
             WingMarkers.Tick(WingService.Instance);
+            // R5: a text field lets go after Enter, and never keeps the keyboard once the panel is out of sight.
+            WmcNameField.TickAll();
+            bool visible = Visible;
+            if (wasVisible && !visible) WmcNameField.BlurAny();
+            wasVisible = visible;
             bool enabled = !gaveUp && Plugin.Settings.ShowWmc.Value && GameAccess.MfdAvailable;
             if (!enabled)
             {
@@ -159,6 +165,7 @@ namespace WingCommand
 
         private void Reset()
         {
+            WmcNameField.BlurAny();
             MfdPresentation.Reset();
             BezelRegistry.Release(BezelRegistry.Wmc);
             if (root != null) UnityEngine.Object.Destroy(root);
@@ -326,6 +333,7 @@ namespace WingCommand
 
         private void OnTab(int tab)
         {
+            WmcNameField.BlurAny();
             metrics?.SetKeys(WmcHeader.Keys(tab));
             AvKit.Popup.CloseAny();
             nextRefresh = 0f;

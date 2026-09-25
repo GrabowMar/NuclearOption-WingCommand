@@ -210,7 +210,7 @@ namespace WingCommand
             AddFit("AUTO", "the game's pick for the mission", null, current);
             AddFit("YOUR LOADOUT", "as you would fly it", CallSpec.YourLoadout, current);
             foreach (LoadoutTemplateRecord t in WingLoadoutTemplates.For(d)) AddFit(SupplyWords.Fit(t.Id, t.Name), "saved on LOADOUT", t.Id, current);
-            fitPopup.Show(WmcKit.RectIn(page, (RectTransform)fitButton.transform), fitEntries, PickFit);
+            fitPopup.Show(WmcKit.PopupArea(page, body, (RectTransform)fitButton.transform, fitEntries.Count, scroll), fitEntries, PickFit);
             // The popup builds its rows on the first show: no "…" there either.
             WmcKit.FitAll(page);
         }

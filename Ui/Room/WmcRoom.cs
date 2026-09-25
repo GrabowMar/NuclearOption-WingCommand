@@ -129,6 +129,8 @@ namespace WingCommand
             open = true;
             canvas.enabled = true;
             Layout();
+            // R5: the bezel's text field lets go first, so the room records the keyboard as the player had it.
+            WmcNameField.BlurAny();
             if (!held && WingKeyboardGuard.Available)
             {
                 WingKeyboardGuard.Capture();

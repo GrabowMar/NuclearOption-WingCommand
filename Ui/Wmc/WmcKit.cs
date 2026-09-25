@@ -36,6 +36,7 @@ namespace WingCommand
             if (root == null) return;
             foreach (TMP_Text t in root.GetComponentsInChildren<TMP_Text>(true))
             {
+                if (t.GetComponentInParent<TMP_InputField>(true) != null) continue;
                 if (t.overflowMode == TextOverflowModes.Ellipsis || (!t.enableWordWrapping && t.overflowMode == TextOverflowModes.Truncate))
                     t.overflowMode = TextOverflowModes.Overflow;
                 if (t.enableAutoSizing) continue;
@@ -120,6 +121,19 @@ namespace WingCommand
             WmcUi.SetRail(rail, railClass);
         }
 
+        /// <summary>The area for a popup of <paramref name="entries"/> rows opened from <paramref name="row"/>: below it when it fits,
+        /// else above, else after scrolling <paramref name="scroll"/> so it fits below (BezelLayout.PopupPlace) — never over its row and
+        /// never past the body, where the chrome would hide it. <paramref name="width"/> 0 keeps the row's width.</summary>
+        public static Rect PopupArea(RectTransform page, Rect body, RectTransform row, int entries, WmcScroll scroll, float width = 0f)
+        {
+            Rect r = RectIn(page, row);
+            float popupH = BezelLayout.PopupHeight(entries);
+            float max = scroll != null ? scroll.MaxOffset - scroll.Offset : 0f;
+            float top = BezelLayout.PopupPlace(body.y - r.y, r.height, popupH, body.height, max, out float moved);
+            if (moved > 0f && scroll != null) scroll.ScrollBy(moved);
+            return new Rect(width > 0f ? body.x : r.x, body.y - top, width > 0f ? width : r.width, popupH);
+        }
+
         /// <summary>Where <paramref name="target"/> sits inside <paramref name="root"/> (a popup opens beside its button, parented
         /// to the page root and never inside a scroll viewport).</summary>
         public static Rect RectIn(RectTransform root, RectTransform target)
@@ -170,6 +184,8 @@ namespace WingCommand
         private AvButton prev, next;
         private TMP_Text label;
         private int page = -1, pages = -1;
+        private bool enabled = true;
+        private string why;
 
         public static WmcPager Build(RectTransform p, Rect r, string idPrefix, Dictionary<string, AvButton> ids, Action<int> turn)
         {
@@ -194,16 +210,24 @@ namespace WingCommand
             this.page = page;
             this.pages = pages;
             WmcKit.Set(label, Pages.Label(page, pages));
-            prev.SetEnabled(page > 0);
-            next.SetEnabled(page < pages - 1);
+            Apply();
         }
 
+        /// <summary>Disables both arrows with <paramref name="reason"/> until enabled again (page changes keep it).</summary>
         public void SetEnabled(bool on, string reason)
         {
-            prev.SetEnabled(on && page > 0);
-            next.SetEnabled(on && page < pages - 1);
-            prev.WithTooltip(on ? "Previous page" : reason);
-            next.WithTooltip(on ? "Next page" : reason);
+            if (on == enabled && reason == why) return;
+            enabled = on;
+            why = reason;
+            Apply();
+        }
+
+        private void Apply()
+        {
+            prev.SetEnabled(enabled && page > 0);
+            next.SetEnabled(enabled && page < pages - 1);
+            prev.WithTooltip(enabled ? "Previous page" : why);
+            next.WithTooltip(enabled ? "Next page" : why);
         }
     }
 
@@ -353,6 +377,19 @@ namespace WingCommand
             s.scroll.verticalScrollbarVisibility = ScrollRect.ScrollbarVisibility.AutoHide;
             s.SetContentHeight(viewport.height);
             return s;
+        }
+
+        /// <summary>How far the content is scrolled down, and how far it can go.</summary>
+        public float Offset => Content.anchoredPosition.y;
+        public float MaxOffset => Mathf.Max(0f, height - view.rect.height);
+
+        /// <summary>Scrolls by <paramref name="dy"/> (positive: the content moves up), clamped; returns how far it moved.</summary>
+        public float ScrollBy(float dy)
+        {
+            Vector2 at = Content.anchoredPosition;
+            float to = Mathf.Clamp(at.y + dy, 0f, MaxOffset);
+            Content.anchoredPosition = new Vector2(at.x, to);
+            return to - at.y;
         }
 
         /// <summary>The content's height; the offset stays where the reader left it, clamped into the new range.</summary>
