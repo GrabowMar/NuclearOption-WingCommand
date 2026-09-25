@@ -24,6 +24,19 @@ namespace WingCommand
             }
         }
 
+        /// <summary>A chip state (live, warn, info, danger, inert) as the rail class the stylesheet has (.rail.ready / armed /
+        /// info / danger / locked); a rail class passes through.</summary>
+        public static string RailOf(string state)
+        {
+            switch (state)
+            {
+                case "live": return "ready";
+                case "warn": return "armed";
+                case "inert": return "locked";
+                default: return state;
+            }
+        }
+
         public static string Level(float fraction) =>
             float.IsNaN(fraction) ? "" : fraction < Critical ? "bad" : fraction < Low ? "warn" : "ok";
 

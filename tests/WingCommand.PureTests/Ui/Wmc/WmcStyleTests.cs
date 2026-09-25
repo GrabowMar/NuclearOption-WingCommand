@@ -41,5 +41,16 @@ namespace WingCommand.PureTests
             Assert.Equal("", WmcStyle.SelectedMark(false));
             Assert.NotEqual("", WmcStyle.SelectedMark(true));
         }
+
+        [Theory]
+        [InlineData("live", "ready")]
+        [InlineData("warn", "armed")]
+        [InlineData("info", "info")]
+        [InlineData("danger", "danger")]
+        [InlineData("armed", "armed")]
+        [InlineData("inert", "locked")]
+        public void ChipStatesPaintRailsTheStylesheetHas(string state, string rail) =>
+            // Review of R4b: .rail has ready / armed / danger / info / locked; a chip's live or warn painted grey.
+            Assert.Equal(rail, WmcStyle.RailOf(state));
     }
 }

@@ -202,6 +202,8 @@ namespace WingCommand
         public static void SetRail(Image rail, string railClass)
         {
             if (rail == null) return;
+            // Pages speak in chip states (live, warn); the sheet's rails are ready / armed / locked (review of R4b).
+            railClass = WmcStyle.RailOf(railClass);
             if (!railColors.TryGetValue(railClass, out Color c))
             {
                 AvStyle style = AvStyleHost.Style("rail " + railClass);
