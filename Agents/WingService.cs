@@ -81,6 +81,7 @@ namespace WingCommand
             WingLedger.Reset();
             WingSupplyReserve.Reset();
             WingRequisition.Reset();
+            WingLoadoutCatalog.Reset();
             Planner.Reset();
             WingTakeover.Reset();
             WingRecruitment.Reset();

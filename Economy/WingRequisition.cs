@@ -58,6 +58,27 @@ namespace WingCommand
             else fits[definition] = fit;
         }
 
+        /// <summary>Every airframe's fit that names template <paramref name="id"/> goes back to AUTO; true when one did.</summary>
+        public static bool DropFit(string id)
+        {
+            dropScratch.Clear();
+            foreach (KeyValuePair<AircraftDefinition, string> kv in fits)
+                if (kv.Value == id) dropScratch.Add(kv.Key);
+            foreach (AircraftDefinition d in dropScratch) fits.Remove(d);
+            return dropScratch.Count > 0;
+        }
+
+        /// <summary>Fits naming templates that no longer exist go back to AUTO (SUPPLY coming into view; review of R4b).</summary>
+        public static void PurgeDeadFits()
+        {
+            dropScratch.Clear();
+            foreach (KeyValuePair<AircraftDefinition, string> kv in fits)
+                if (kv.Value != CallSpec.YourLoadout && !WingLoadoutTemplates.Exists(kv.Value)) dropScratch.Add(kv.Key);
+            foreach (AircraftDefinition d in dropScratch) fits.Remove(d);
+        }
+
+        private static readonly List<AircraftDefinition> dropScratch = new List<AircraftDefinition>();
+
         public static string KeyOf(Airbase a) => a.SavedAirbase != null && !string.IsNullOrEmpty(a.SavedAirbase.UniqueName) ? a.SavedAirbase.UniqueName : a.name;
 
         public static string NameOf(Airbase a) => BaseName.Of(a.SavedAirbase != null ? a.SavedAirbase.DisplayName : null,

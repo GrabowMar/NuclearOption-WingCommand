@@ -60,6 +60,7 @@ namespace WingCommand
         public ConfigEntry<bool> TakeoverOnDeath { get; }
         public ConfigEntry<float> RecruitmentCostRate { get; }
         public ConfigEntry<string> LoadoutTemplates { get; }
+        public ConfigEntry<string> LoadoutLiveries { get; }
         public ConfigEntry<WinchesterAction> AfterWinchester { get; }
         public ConfigEntry<BingoAction> AfterBingo { get; }
         public ConfigEntry<float> FallBackRatio { get; }
@@ -153,6 +154,9 @@ namespace WingCommand
             LoadoutTemplates = c.Bind("Loadout", "SavedTemplates", "", new ConfigDescription(
                 "Saved per-pylon loadout templates (airframe|id|name|store keys; records separated by semicolons). " +
                 "Clear it to delete every template.", null, new ConfigurationManagerAttributes { IsAdvanced = true, Order = 60 }));
+            LoadoutLiveries = c.Bind("Loadout", "Liveries", "", new ConfigDescription(
+                "The livery each airframe's wingmen wear (airframe|token; B = built in, A = app-data skin, W = workshop item). " +
+                "Clear it for every faction's standard livery.", null, new ConfigurationManagerAttributes { IsAdvanced = true, Order = 59 }));
 
             ShowHud = c.Bind("Hud", "Show", true, new ConfigDescription(
                 "Show the wing strip and autopilot annunciator.", null, new ConfigurationManagerAttributes { Order = 80 }));

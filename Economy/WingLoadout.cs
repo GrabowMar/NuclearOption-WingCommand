@@ -3,7 +3,6 @@ using System.Collections.Generic;
 using System.Reflection;
 using NuclearOption.SavedMission;
 using UnityEngine;
-using NOAvionics.Ui;
 
 namespace WingCommand
 {
@@ -27,8 +26,13 @@ namespace WingCommand
             /// <summary>Mount ammunition count; zero when not countable.</summary>
             public int Ammo;
 
-            /// <summary>Loaded store mass for fitted-weight display.</summary>
+            /// <summary>Loaded store mass for fitted-weight display (per pylon).</summary>
             public float Mass;
+
+            /// <summary>The game's rules (R5): event-only, nuclear, strategic, not from a ship (mount.info, as WeaponChecker reads);
+            /// what it is for the summary; the asset name mission restrictions use.</summary>
+            public bool Disabled, EventContent, Nuclear, Strategic, ShipRearm, Jammer, Bomb;
+            public string AssetName;
 
             public bool Armed => AntiAir > 0f || AntiSurface > 0f || AntiMissile > 0f;
         }
@@ -43,9 +47,15 @@ namespace WingCommand
             public readonly float AntiAir;
             public readonly float AntiSurface;
             public readonly bool Cargo;
+            /// <summary>This build has the store (false: a saved key it cannot resolve).</summary>
+            public readonly bool Known;
+            public readonly bool Disabled, EventContent, Nuclear, Strategic, ShipRearm;
+            public readonly StoreKind Kind;
+            public readonly string AssetName;
 
-            public StoreOption(string key, string label, int ammo, float mass,
-                               float antiAir, float antiSurface, bool cargo)
+            public StoreOption(string key, string label, int ammo, float mass, float antiAir, float antiSurface, bool cargo,
+                bool known = true, bool eventContent = false, bool nuclear = false, bool strategic = false, bool shipRearm = false,
+                StoreKind kind = StoreKind.None, string assetName = null, bool disabled = false)
             {
                 Key = key;
                 Label = label;
@@ -54,9 +64,20 @@ namespace WingCommand
                 AntiAir = antiAir;
                 AntiSurface = antiSurface;
                 Cargo = cargo;
+                Known = known;
+                EventContent = eventContent;
+                Nuclear = nuclear;
+                Strategic = strategic;
+                ShipRearm = shipRearm;
+                Kind = kind;
+                AssetName = assetName;
+                Disabled = disabled;
             }
 
             public bool IsEmpty => string.IsNullOrEmpty(Key);
+
+            /// <summary>The set's store for the fit summary.</summary>
+            public StoreFacts Facts => new StoreFacts { HasKey = !IsEmpty, Known = Known && !IsEmpty, Kind = Kind, Mass = Mass, Ammo = Ammo };
 
             /// <summary>Two-letter role label for the store table.</summary>
             public string RoleTag =>
@@ -71,6 +92,8 @@ namespace WingCommand
         private sealed class Profile
         {
             public HardpointSet[] Sets;
+            /// <summary>The stations as LOADOUT shows them (R5).</summary>
+            public StationLayout Layout;
             public List<MountInfo>[] Options;
             public bool HasRoleData;
 
@@ -82,10 +105,6 @@ namespace WingCommand
         private static readonly Dictionary<AircraftDefinition, Profile> profiles =
             new Dictionary<AircraftDefinition, Profile>();
 
-        /// <summary>Unavailable only after probing fails without any successful role data. Individual
-        /// unreadable airframes fall back to their standard fit.</summary>
-        public static bool Available => roleDataSeen || !probeFailed;
-
         /// <summary>Clear prefab caches at mission end because assets may reload.</summary>
         public static void Reset()
         {
@@ -93,63 +112,11 @@ namespace WingCommand
             blindProfilesLogged = false;
         }
 
-        // Loadout queries.
-
-        /// <summary>Template name or STANDARD for compact UI labels.</summary>
-        public static string Label(WingLoadoutChoice choice)
-        {
-            // Centralise fit labels across shop, roster, and reserve displays.
-            if (!choice.IsTemplate) return "STANDARD";
-
-            return AvTheme.Truncate(WingLoadoutTemplates.NameOf(choice.TemplateId), 20)
-                          .ToUpperInvariant();
-        }
-
-        // Pylon editing.
-
         /// <summary>Declared hardpoint count, or zero if unreadable.</summary>
         public static int PylonCount(AircraftDefinition definition)
         {
             Profile profile = ProfileOf(definition);
             return profile?.Sets?.Length ?? 0;
-        }
-
-        /// <summary>Use native hardpoint names; label symmetric pairs once with SymmetryName.</summary>
-        public static string PylonName(AircraftDefinition definition, int index)
-        {
-            Profile profile = ProfileOf(definition);
-            if (profile?.Sets == null || index < 0 || index >= profile.Sets.Length)
-                return "PYLON " + (index + 1);
-
-            HardpointSet set = profile.Sets[index];
-            if (set == null) return "PYLON " + (index + 1);
-
-            string name = IsSymmetric(profile, index) && !string.IsNullOrEmpty(set.SymmetryName)
-                ? set.SymmetryName
-                : set.name;
-
-            return string.IsNullOrEmpty(name) ? "PYLON " + (index + 1) : name;
-        }
-
-        /// <summary>Whether the pylon mirrors its predecessor and should be edited through that partner's
-        /// row.</summary>
-        public static bool MirrorsPrevious(AircraftDefinition definition, int index)
-        {
-            Profile profile = ProfileOf(definition);
-            if (profile?.Sets == null || index <= 0 || index >= profile.Sets.Length) return false;
-            return profile.Sets[index] != null && profile.Sets[index].SymmetryWithPrev;
-        }
-
-        private static bool IsSymmetric(Profile profile, int index)
-        {
-            if (profile?.Sets == null) return false;
-            if (index >= 0 && index < profile.Sets.Length &&
-                profile.Sets[index] != null && profile.Sets[index].SymmetryWithPrev)
-                return true;
-
-            int next = index + 1;
-            return next < profile.Sets.Length && profile.Sets[next] != null &&
-                   profile.Sets[next].SymmetryWithPrev;
         }
 
         /// <summary>List valid stores with the empty pylon first, allowing deliberate clean
@@ -167,7 +134,50 @@ namespace WingCommand
             List<MountInfo> options = profile.Options[index];
             if (options == null) return;
 
-            for (int i = 0; i < options.Count; i++) into.Add(Project(options[i]));
+            // Switched-off stores and event content stay out of this list (WingSquad's picker; R5's LOADOUT asks StoreRules).
+            for (int i = 0; i < options.Count; i++)
+                if (!options[i].Disabled && !options[i].EventContent) into.Add(Project(options[i]));
+        }
+
+        /// <summary>Every store the set can carry (event content included; the page asks StoreRules), without an empty entry: on
+        /// LOADOUT only CLEAR empties a station.</summary>
+        public static void StoresFor(AircraftDefinition definition, int set, List<StoreOption> into)
+        {
+            into.Clear();
+            Profile profile = ProfileOf(definition);
+            if (profile?.Options == null || set < 0 || set >= profile.Options.Length || profile.Options[set] == null) return;
+            foreach (MountInfo info in profile.Options[set]) into.Add(Project(info));
+        }
+
+        /// <summary>The airframe's stations, or null when its hardpoints cannot be read.</summary>
+        public static StationLayout Layout(AircraftDefinition definition) => ProfileOf(definition)?.Layout;
+
+        /// <summary>What the mission allows now for <paramref name="rank"/> (all replicated to clients).</summary>
+        public static MissionFacts Mission(int rank)
+        {
+            MissionManager m = NetworkSceneSingleton<MissionManager>.i;
+            return new MissionFacts
+            {
+                EventContent = MissionManager.AllowEventContent, TacticalOpen = MissionManager.AllowTactical(),
+                StrategicOpen = MissionManager.AllowStrategic(), TacticalMinRank = m != null ? m.tacticalMinRank : 0f,
+                StrategicMinRank = m != null ? m.strategicMinRank : 0f, Rank = rank,
+            };
+        }
+
+        /// <summary>A store option as StoreRules reads it (restricted by the faction's list of asset names; blocked is the station's).</summary>
+        public static MountFacts FactsOf(in StoreOption o, int pylons, FactionHQ hq) => new MountFacts
+        {
+            Known = o.Known && !o.IsEmpty, OnStation = o.Known, Disabled = o.Disabled, EventContent = o.EventContent,
+            Restricted = hq != null && hq.restrictedWeapons != null && o.AssetName != null && hq.restrictedWeapons.Contains(o.AssetName),
+            Nuclear = o.Nuclear, Strategic = o.Strategic, ShipRearm = o.ShipRearm, Pylons = pylons, Ammo = o.Ammo,
+        };
+
+        /// <summary>The store keys an aircraft carries (Members' template check).</summary>
+        public static void KeysOf(Loadout loadout, List<string> into)
+        {
+            into.Clear();
+            if (loadout?.weapons == null) return;
+            foreach (WeaponMount m in loadout.weapons) into.Add(StoreKey(m));
         }
 
         /// <summary>Resolve a pylon's store key, falling back to the empty option.</summary>
@@ -177,13 +187,24 @@ namespace WingCommand
             if (string.IsNullOrEmpty(key)) return empty;
 
             MountInfo info = Lookup(ProfileOf(definition), index, key);
-            return info != null ? Project(info) : new StoreOption(key, "UNKNOWN STORE", 0, 0f,
-                                                                  0f, 0f, false);
+            return info != null ? Project(info) : new StoreOption(key, "UNKNOWN STORE", 0, 0f, 0f, 0f, false, known: false);
         }
 
         private static StoreOption Project(MountInfo info) =>
-            new StoreOption(info.Key, info.Label, info.Ammo, info.Mass,
-                            info.AntiAir, info.AntiSurface, info.Cargo);
+            new StoreOption(info.Key, info.Label, info.Ammo, info.Mass, info.AntiAir, info.AntiSurface, info.Cargo, true, info.EventContent,
+                info.Nuclear, info.Strategic, info.ShipRearm, KindOf(info), info.AssetName, info.Disabled);
+
+        /// <summary>What a store is for the summary and the role (cargo, ECM, missile defence, bombs, then its better role).</summary>
+        private static StoreKind KindOf(MountInfo i)
+        {
+            if (i.Cargo) return StoreKind.Cargo;
+            if (i.Jammer) return StoreKind.Ecm;
+            if (i.AntiMissile > Mathf.Max(i.AntiAir, i.AntiSurface)) return StoreKind.MissileDefence;
+            if (i.Bomb) return StoreKind.Bomb;
+            if (i.AntiAir > 0f && i.AntiAir >= i.AntiSurface) return StoreKind.AirToAir;
+            if (i.AntiSurface > 0f) return StoreKind.AirToGround;
+            return StoreKind.Other;
+        }
 
         private static MountInfo Lookup(Profile profile, int index, string key)
         {
@@ -198,31 +219,6 @@ namespace WingCommand
                 if (options[i].Key == key) return options[i];
             }
             return null;
-        }
-
-        /// <summary>Ask native hardpoint-exclusion rules whether this pylon is blocked by the current
-        /// fit.</summary>
-        public static bool IsPylonBlocked(AircraftDefinition definition, int index,
-                                          Loadout inProgress)
-        {
-            Profile profile = ProfileOf(definition);
-            if (profile?.Sets == null || index < 0 || index >= profile.Sets.Length) return false;
-
-            HardpointSet set = profile.Sets[index];
-            if (set == null || inProgress == null) return false;
-
-            try
-            {
-                return set.BlockedByOtherHardpoint(inProgress);
-            }
-            catch (Exception e)
-            {
-                // Fail closed on malformed exclusion rules; do not offer a station whose fit cannot be
-                // validated.
-                Fail("checking whether " + SafeName(definition) + " pylon " + (index + 1) +
-                     " is blocked failed: " + e.Message);
-                return true;
-            }
         }
 
         /// <summary>Build a spawnable template from store keys. Unknown keys leave their pylons empty;
@@ -345,15 +341,23 @@ namespace WingCommand
             WeaponManager manager = template != null ? template.weaponManager : null;
             if (loadout?.weapons == null || manager == null || manager.hardpointSets == null) return 0;
             GameManager.GetLocalPlayer(out NuclearOption.Networking.Player player);
+            // R5: warheads counted over the whole fit in station order, as the game's own menu counts them (its per-store check
+            // lets two stores each pass against the same warheads, and RemoveWarheads runs past zero).
+            int warheads = field != null ? field.GetWarheads() : int.MaxValue;
             int stripped = 0;
             for (int i = 0; i < loadout.weapons.Count && i < manager.hardpointSets.Length; i++)
             {
                 WeaponMount mount = loadout.weapons[i];
                 HardpointSet set = manager.hardpointSets[i];
                 if (mount == null || set == null) continue;
+                int need = mount.info != null && mount.info.nuclear ? (set.hardpoints != null ? set.hardpoints.Count : 0) * mount.ammo : 0;
                 if (WeaponChecker.MountAllowedHQ(mount, hq) && WeaponChecker.MountAllowedAirbase(mount, field)
                     && WeaponChecker.MountAllowedHardpoint(mount, set) && WeaponChecker.MountAllowedConflict(set, loadout)
-                    && WeaponChecker.MountAllowedNuclear(mount, set, field, player, hq)) continue;
+                    && WeaponChecker.MountAllowedNuclear(mount, set, field, player, hq) && need <= warheads)
+                {
+                    warheads -= need;
+                    continue;
+                }
                 loadout.weapons[i] = null;
                 stripped++;
             }
@@ -362,18 +366,14 @@ namespace WingCommand
             return stripped;
         }
 
-        /// <summary>Build a choice using the live player default, then game-start preset for Standard.
-        /// Return null for unavailable presets or deleted templates so native spawning chooses a usable
-        /// fallback fit.</summary>
-        public static Loadout Build(AircraftDefinition definition, WingLoadoutChoice choice)
+        /// <summary>A fresh loadout for a CallSpec fit: AUTO (null) is null — the game arms it; YOUR LOADOUT is a copy of the player's
+        /// own; a template is built from its keys (null when it no longer exists, so the game arms it instead).</summary>
+        public static Loadout Build(AircraftDefinition definition, string fit)
         {
-            if (choice.HasSnapshot) return GuardNativeFallback(definition, BuildFromKeys(definition, choice.FittedKeys));
-            if (!choice.IsTemplate) return ClonePlayerDefault(definition);
-
-            LoadoutTemplateRecord template = WingLoadoutTemplates.ById(choice.TemplateId);
-            return template != null
-                ? GuardNativeFallback(definition, BuildFromKeys(definition, template.MountKeys))
-                : null;
+            if (fit == null) return null;
+            if (fit == CallSpec.YourLoadout) return ClonePlayerDefault(definition);
+            LoadoutTemplateRecord template = WingLoadoutTemplates.ById(fit);
+            return template != null ? GuardNativeFallback(definition, BuildFromKeys(definition, template.MountKeys)) : null;
         }
 
         /// <summary>Copy the live player default, falling back to the airframe's game-start
@@ -405,18 +405,6 @@ namespace WingCommand
             var weapons = new List<WeaponMount>(count);
             for (int i = 0; i < count; i++) weapons.Add(null);
             return new Loadout { weapons = weapons };
-        }
-
-        /// <summary>Snapshot the actual fitted stores, including native Standard.</summary>
-        internal static WingLoadoutChoice SnapshotFit(Aircraft aircraft, WingLoadoutChoice choice)
-        {
-            List<WeaponMount> weapons = aircraft?.Networkloadout?.weapons;
-            // Hangar registration may precede loadout installation; retry the snapshot on the book's
-            // next read.
-            if (weapons == null) return choice;
-            var keys = new List<string>(weapons.Count);
-            for (int i = 0; i < weapons.Count; i++) keys.Add(StoreKey(weapons[i]));
-            return choice.Snapshot(keys);
         }
 
         /// <summary>Read the native player-start preset at index 1, not index 0.</summary>
@@ -470,6 +458,7 @@ namespace WingCommand
             {
                 Sets = sets,
                 Options = new List<MountInfo>[sets.Length],
+                Layout = LayoutOf(sets),
             };
 
             for (int i = 0; i < sets.Length; i++)
@@ -485,8 +474,9 @@ namespace WingCommand
                 {
                     WeaponMount mount = available[j];
 
-                    // Null means an empty station; reject locked or event-only stores.
-                    if (mount == null || mount.NotAllowed(includeEventContent: false)) continue;
+                    // Null means an empty station. Switched-off stores and event content are kept and marked (R5: a template holding one
+                    // reads SWITCHED OFF or EVENT ONLY, not NOT INSTALLED; the launch's Vet strips them; OptionsFor leaves them out).
+                    if (mount == null) continue;
 
                     MountInfo info;
                     try
@@ -503,6 +493,8 @@ namespace WingCommand
                         continue;
                     }
 
+                    info.Disabled = !mount.IsAllowed(true);
+                    info.EventContent = !info.Disabled && !mount.IsAllowed(false);
                     if (string.IsNullOrEmpty(info.Key))
                     {
                         Plugin.Logger.LogWarning(
@@ -525,6 +517,29 @@ namespace WingCommand
                 NoteBlindProfile(definition);
 
             return profile;
+        }
+
+        /// <summary>The stations from the sets' names, pair names, mirroring, pylons and precludes (R5).</summary>
+        private static StationLayout LayoutOf(HardpointSet[] sets)
+        {
+            int n = sets.Length;
+            var names = new string[n];
+            var pairs = new string[n];
+            var withPrev = new bool[n];
+            var pylons = new int[n];
+            var precludes = new int[n][];
+            for (int i = 0; i < n; i++)
+            {
+                HardpointSet set = sets[i];
+                names[i] = set?.name;
+                pairs[i] = set?.SymmetryName;
+                withPrev[i] = set != null && set.SymmetryWithPrev;
+                pylons[i] = set?.hardpoints != null ? set.hardpoints.Count : 0;
+                List<byte> p = set?.precludingHardpointSets;
+                precludes[i] = new int[p != null ? p.Count : 0];
+                for (int j = 0; j < precludes[i].Length; j++) precludes[i][j] = p[j];
+            }
+            return new StationLayout(names, pairs, withPrev, pylons, precludes);
         }
 
         /// <summary>Log unreadable role data once per airframe and offer its standard fit.</summary>
@@ -584,7 +599,15 @@ namespace WingCommand
                 Ammo = mount.ammo,
                 Mass = mount.mass,
                 Cargo = mount.Cargo || mount.Troops,
+                AssetName = mount.name,
             };
+            // The game's nuclear and carrier rules read mount.info only (WeaponChecker); so do these flags.
+            if (mount.info != null)
+            {
+                info.Nuclear = mount.info.nuclear;
+                info.Strategic = mount.info.strategic;
+                info.ShipRearm = mount.info.rearmShip;
+            }
 
             // Read ordinary weapon data directly; inspect stations for multi-weapon mounts and fallback
             // metadata.
@@ -621,6 +644,8 @@ namespace WingCommand
             info.AntiMissile = Mathf.Max(info.AntiMissile, role.antiMissile);
             info.MaxRange = Mathf.Max(info.MaxRange, weapon.targetRequirements.maxRange);
             if (weapon.cargo || weapon.troops) info.Cargo = true;
+            if (weapon.jammer) info.Jammer = true;
+            if (weapon.bomb || weapon.glideBomb) info.Bomb = true;
         }
 
         /// <summary>Find child station components, then reflect fields for mounts that reference stations

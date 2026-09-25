@@ -175,8 +175,7 @@ namespace WingCommand
         /// <summary>SUPPLY came into view: the lists refill now, and a fit deleted on LOADOUT meanwhile goes back to AUTO.</summary>
         private void OnShown()
         {
-            string fit = WingRequisition.FitOf(selected);
-            if (fit != null && fit != CallSpec.YourLoadout && !WingLoadoutTemplates.Exists(fit)) WingRequisition.SetFit(selected, null);
+            WingRequisition.PurgeDeadFits();
             fitSet = false;
         }
 

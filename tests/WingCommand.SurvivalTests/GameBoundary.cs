@@ -153,8 +153,6 @@ namespace WingCommand
         public string Name = "Rescuer";
         public bool IsCommandable = true, IsPanicking;
         public float Fuel = 1f;
-        public bool LoadoutKnown;
-        public WingLoadoutChoice Loadout;
     }
     internal class WingRegistry
     {

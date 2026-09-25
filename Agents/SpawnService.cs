@@ -376,17 +376,18 @@ namespace WingCommand
                     }
                     pilot = WingPilotRoster.ReserveForRequisition();
                     // A fresh loadout per aircraft (never a shared scratch); null lets the game arm it (AUTO).
-                    Loadout loadout = r.Template != null ? WingLoadoutCatalog.Build(definition, new WingLoadoutChoice(r.Template))
-                        : r.OwnLoadout ? WingLoadoutCatalog.Build(definition, WingLoadoutChoice.Standard) : null;
+                    Loadout loadout = WingLoadoutCatalog.Build(definition, r.Template ?? (r.OwnLoadout ? CallSpec.YourLoadout : null));
+                    // R5: the airframe's LOADOUT livery while the faction still offers it, else its own random one (never builtin 0).
+                    LiveryKey livery = WingLoadoutTemplates.LiveryFor(definition, hq);
                     // Review R4a: a chosen fit passes the game's own mount checks here, per aircraft (the field's warheads).
                     if (loadout != null) WingLoadoutCatalog.Vet(loadout, definition, airbase, hq);
                     // Review R4a: a hangar at a field nobody owns has no faction to spawn for (the game throws); an unowned field
                     // launches from its service points.
-                    GroundLaunch launch = airbase.CurrentHQ != null ? FromHangar(airbase, definition, traffic, used, loadout, fuel) : null;
+                    GroundLaunch launch = airbase.CurrentHQ != null ? FromHangar(airbase, definition, traffic, used, loadout, fuel, livery) : null;
                     if (launch == null)
                     {
                         quote = WingLedger.Quote(definition, hq, false, sandbox, r.Price, held);
-                        launch = FromServicePoint(definition, traffic, hq, player, loadout, fuel);
+                        launch = FromServicePoint(airbase, definition, traffic, hq, player, loadout, fuel, livery);
                     }
                     if (launch == null)
                     {
@@ -486,7 +487,7 @@ namespace WingCommand
         }
 
         private static GroundLaunch FromHangar(Airbase airbase, AircraftDefinition definition, FieldTraffic traffic, HashSet<Hangar> used,
-            Loadout loadout, float fuel)
+            Loadout loadout, float fuel, LiveryKey livery)
         {
             if (airbase.hangars == null || !GameAccess.HangarSpawnAvailable) return null;
             for (int i = 0; i < airbase.hangars.Count; i++)
@@ -494,7 +495,7 @@ namespace WingCommand
                 Hangar h = airbase.hangars[i];
                 if (h == null || used.Contains(h) || h.Disabled || !h.Available || !h.CanSpawnAircraft(definition)) continue;
                 GameObject before = GameAccess.GetHangarSpawnedObject(h);
-                if (!h.TrySpawnAircraft(null, definition, default, loadout, fuel).Allowed) continue;
+                if (!h.TrySpawnAircraft(null, definition, livery, loadout, fuel).Allowed) continue;
                 used.Add(h);
                 Transform t = h.GetSpawnTransform();
                 return new GroundLaunch
@@ -508,16 +509,19 @@ namespace WingCommand
 
         /// <summary>A field without a usable hangar: the aircraft appears at rest on the first free service-point spot
         /// (clear of members, pending launches and other aircraft on the field).</summary>
-        private GroundLaunch FromServicePoint(AircraftDefinition definition, FieldTraffic traffic, FactionHQ hq, Aircraft player, Loadout loadout,
-            float fuel)
+        private GroundLaunch FromServicePoint(Airbase airbase, AircraftDefinition definition, FieldTraffic traffic, FactionHQ hq, Aircraft player,
+            Loadout loadout, float fuel, LiveryKey livery)
         {
             if (!ServiceSpots.Pick(traffic, SpotTaken(traffic), out ServiceSpot spot)) return null;
             Vec3 pos = spot.Pose.Pos + Vec3.Up * definition.spawnOffset.y;
             Quaternion rotation = Quaternion.LookRotation(spot.Pose.Fwd.Horizontal.Normalized.ToUnity()) * Quaternion.Euler(definition.restRotation);
-            Aircraft a = NetworkSceneSingleton<Spawner>.i.SpawnAircraft(null, definition.unitPrefab, loadout, fuel, default, pos.ToGlobal(),
+            Aircraft a = NetworkSceneSingleton<Spawner>.i.SpawnAircraft(null, definition.unitPrefab, loadout, fuel, livery, pos.ToGlobal(),
                 rotation, Vector3.zero, null, hq, "WingCommand_" + Guid.NewGuid().ToString("N").Substring(0, 8),
                 player.skill, player.bravery);
-            return a == null ? null : new GroundLaunch { Aircraft = a, Traffic = traffic, Spawn = spot.Pose, StartNode = spot.StartNode };
+            if (a == null) return null;
+            // R5: AUTO from a service point gets the game's own AI pick, as a hangar spawn does (else the aircraft flies loadouts[1]).
+            if (loadout == null && a.weaponManager != null) a.Networkloadout = a.weaponManager.SelectAIAircraftWeapons(airbase);
+            return new GroundLaunch { Aircraft = a, Traffic = traffic, Spawn = spot.Pose, StartNode = spot.StartNode };
         }
 
         private Func<Vec3, bool> SpotTaken(FieldTraffic traffic) => at =>

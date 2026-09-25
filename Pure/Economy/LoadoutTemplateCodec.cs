@@ -4,33 +4,6 @@ using System.Text;
 namespace WingCommand
 {
     /// <summary>Purchase fit choice or immutable snapshot of fitted stores.</summary>
-    internal readonly struct WingLoadoutChoice
-    {
-        public readonly string TemplateId;
-        public readonly IReadOnlyList<string> FittedKeys;
-
-        public WingLoadoutChoice(string templateId = null)
-        {
-            TemplateId = templateId;
-            FittedKeys = null;
-        }
-
-        private WingLoadoutChoice(string templateId, IEnumerable<string> fittedKeys)
-        {
-            TemplateId = templateId;
-            FittedKeys = new List<string>(fittedKeys).AsReadOnly();
-        }
-
-        public static WingLoadoutChoice Standard => new WingLoadoutChoice(null);
-        public bool IsTemplate => !string.IsNullOrEmpty(TemplateId);
-        public bool HasSnapshot => FittedKeys != null;
-
-        public WingLoadoutChoice WithTemplate(string templateId) => new WingLoadoutChoice(templateId);
-
-        public WingLoadoutChoice Snapshot(IEnumerable<string> fittedKeys) =>
-            fittedKeys == null ? this : new WingLoadoutChoice(TemplateId, fittedKeys);
-    }
-
     /// <summary>Serializable template identity, airframe key, name, and ordered store keys. Empty keys
     /// mean bare pylons. Resolve keys only when building; unavailable stores become empty stations. Prefer
     /// jsonKey, with namespaced asset-name fallback for older mods.</summary>
@@ -81,27 +54,6 @@ namespace WingCommand
 
         /// <summary>Record fields: airframe key, stable ID, name, and pylon keys.</summary>
         private const int FieldCount = 4;
-
-        public static string EncodeInitializedAirframes(IEnumerable<string> keys)
-        {
-            var encoded = new StringBuilder();
-            foreach (string key in keys)
-            {
-                if (string.IsNullOrEmpty(key)) continue;
-                if (encoded.Length > 0) encoded.Append(RecordSeparator);
-                encoded.Append(Escape(key));
-            }
-            return encoded.ToString();
-        }
-
-        public static HashSet<string> DecodeInitializedAirframes(string encoded)
-        {
-            var keys = new HashSet<string>();
-            if (string.IsNullOrEmpty(encoded)) return keys;
-            foreach (string chunk in encoded.Split(RecordSeparator))
-                if (!string.IsNullOrEmpty(chunk)) keys.Add(Unescape(chunk));
-            return keys;
-        }
 
         public static string Encode(IEnumerable<LoadoutTemplateRecord> records)
         {

@@ -1,110 +1,114 @@
 using System;
 using System.Collections.Generic;
-using NuclearOption.SavedMission;
 
 namespace WingCommand
 {
-    /// <summary>Persists per-airframe pylon templates in BepInEx config across missions and restarts. Use
-    /// stable definition/store keys, never prefab references. Mission-specific fitted and planned loadouts
-    /// belong in WingLoadoutBook.</summary>
+    /// <summary>LOADOUT's saved templates and liveries (spec WMC rebuild §LOADOUT), kept in the BepInEx config across missions: templates
+    /// per airframe by stable id (names through <see cref="TemplateNames"/>, five per airframe), and one livery per airframe saved as a
+    /// token (<see cref="LiveryChoice"/>) and resolved per faction at each spawn — the saved one while the faction still offers it, else
+    /// the faction's own random livery, as the game's AI wears. <see cref="Revision"/> moves on every change.</summary>
     internal static class WingLoadoutTemplates
     {
-        /// <summary>All templates in creation order, stored as a small flat list for
-        /// serialization.</summary>
-        private static readonly List<LoadoutTemplateRecord> records =
-            new List<LoadoutTemplateRecord>();
-
-        private static readonly List<LoadoutTemplateRecord> scratch =
-            new List<LoadoutTemplateRecord>();
-
+        private static readonly List<LoadoutTemplateRecord> records = new List<LoadoutTemplateRecord>();
+        private static readonly List<LoadoutTemplateRecord> scratch = new List<LoadoutTemplateRecord>();
+        private static readonly List<string> names = new List<string>();
+        private static readonly List<(LiveryKey key, string label)> nativeScratch = new List<(LiveryKey, string)>();
+        private static readonly List<LiveryOption> spawnScratch = new List<LiveryOption>();
+        private static Dictionary<string, string> liveries = new Dictionary<string, string>();
         private static bool loaded;
 
-        /// <summary>Template-name length limit for selector display.</summary>
-        public const int MaxNameLength = 28;
+        public static int MaxPerAirframe => TemplateNames.PerAirframe;
 
-        /// <summary>Per-airframe template limit to avoid popup pagination.</summary>
-        public const int MaxPerAirframe = 8;
+        /// <summary>Moves on every saved change (templates and liveries): pages rebuild only when it does.</summary>
+        public static int Revision { get; private set; }
 
-        private static readonly Dictionary<string, int> airframeLiveryIndices =
-            new Dictionary<string, int>();
-
-        public sealed class LiveryOption
+        /// <summary>One livery the faction may wear: STANDARD (no token) first.</summary>
+        public struct LiveryOption
         {
-            public readonly LiveryKey? Key;
-            public readonly string Name;
-
-            public LiveryOption(LiveryKey? key, string name)
-            {
-                Key = key;
-                Name = name;
-            }
+            public LiveryKey Key;
+            public string Label, Token;
         }
 
-        public static int GetLiveryIndex(AircraftDefinition definition)
+        // ---- liveries
+
+        /// <summary>STANDARD, then the liveries <paramref name="faction"/> may wear (the game's own list). Without a faction only STANDARD:
+        /// the game would list every faction's paint. The first call scans the skin folders; callers cache per airframe.</summary>
+        public static void Liveries(AircraftDefinition definition, Faction faction, List<LiveryOption> into)
         {
-            if (definition == null) return 0;
-            string key = KeyOf(definition);
-            if (key != null && airframeLiveryIndices.TryGetValue(key, out int idx)) return idx;
-            return 0;
-        }
-
-        public static void SetLiveryIndex(AircraftDefinition definition, int index)
-        {
-            if (definition == null) return;
-            string key = KeyOf(definition);
-            if (key != null) airframeLiveryIndices[key] = Math.Max(0, index);
-        }
-
-        public static List<LiveryOption> GetLiveries(AircraftDefinition definition, Faction faction = null)
-        {
-            var list = new List<LiveryOption>();
-            list.Add(new LiveryOption(null, "STANDARD (FACTION)"));
-
-            if (definition == null || definition.aircraftParameters == null) return list;
-
+            into.Clear();
+            into.Add(new LiveryOption { Label = LoadoutWords.Standard });
+            if (definition == null || definition.aircraftParameters == null || faction == null) return;
             try
             {
-                var nativeList = new List<(LiveryKey key, string label)>();
-                LoadoutSelector.GetLiveryOptions(nativeList, definition, faction != null ? faction.factionName : null, true);
-                if (nativeList != null && nativeList.Count > 0)
-                {
-                    for (int i = 0; i < nativeList.Count; i++)
+                nativeScratch.Clear();
+                LoadoutSelector.GetLiveryOptions(nativeScratch, definition, faction.factionName, true);
+                foreach ((LiveryKey key, string label) in nativeScratch)
+                    into.Add(new LiveryOption
                     {
-                        var item = nativeList[i];
-                        string label = !string.IsNullOrEmpty(item.label) ? item.label : ("LIVERY " + (i + 1));
-                        list.Add(new LiveryOption(item.key, label));
-                    }
-                    return list;
-                }
+                        Key = key, Token = TokenOf(key), Label = LoadoutWords.Livery(string.IsNullOrEmpty(label) ? "LIVERY " + into.Count : label),
+                    });
             }
-            catch
+            catch (Exception e)
             {
-                // Try aircraftParameters.liveries next.
+                Plugin.LogVerbose("[Loadout] liveries for " + definition.unitName + " could not be listed: " + e.Message);
             }
-
-            AircraftParameters p = definition.aircraftParameters;
-            if (p.liveries != null)
-            {
-                for (int i = 0; i < p.liveries.Count; i++)
-                {
-                    AircraftParameters.Livery l = p.liveries[i];
-                    string name = l != null && !string.IsNullOrEmpty(l.name) ? l.name : ("LIVERY " + (i + 1));
-                    list.Add(new LiveryOption(new LiveryKey(i), name));
-                }
-            }
-
-            return list;
         }
 
-        // Template lifecycle.
+        public static string TokenOf(LiveryKey key)
+        {
+            key.Save(out LiveryKey.KeyType type, out int index, out string name);
+            return LiveryChoice.Token((LiveryKind)(byte)type, index, name);
+        }
 
-        /// <summary>Load config once, outside mission Reset, so mission changes cannot discard unsaved
-        /// template edits.</summary>
+        public static string LiveryTokenOf(AircraftDefinition definition)
+        {
+            EnsureLoaded();
+            string key = KeyOf(definition);
+            return key != null && liveries.TryGetValue(key, out string token) ? token : null;
+        }
+
+        /// <summary>Saves the airframe's livery; null is STANDARD.</summary>
+        public static void SetLivery(AircraftDefinition definition, string token)
+        {
+            EnsureLoaded();
+            string key = KeyOf(definition);
+            if (key == null || LiveryTokenOf(definition) == token) return;
+            if (token == null) liveries.Remove(key);
+            else liveries[key] = token;
+            try
+            {
+                Plugin.Settings.LoadoutLiveries.Value = LiveryChoice.Encode(liveries);
+            }
+            catch (Exception e)
+            {
+                Plugin.Logger.LogWarning("[Loadout] liveries could not be saved: " + e.Message);
+            }
+            Revision++;
+        }
+
+        /// <summary>What a launch of <paramref name="definition"/> for <paramref name="hq"/> wears: the saved livery while the faction still
+        /// offers it, else the faction's random one (a fresh pick per aircraft, as the game's AI).</summary>
+        public static LiveryKey LiveryFor(AircraftDefinition definition, FactionHQ hq)
+        {
+            Faction faction = hq != null ? hq.faction : null;
+            string token = LiveryTokenOf(definition);
+            if (token != null && faction != null)
+            {
+                Liveries(definition, faction, spawnScratch);
+                foreach (LiveryOption o in spawnScratch)
+                    if (o.Token == token) return o.Key;
+            }
+            AircraftParameters p = definition != null ? definition.aircraftParameters : null;
+            return p != null && faction != null ? new LiveryKey(p.GetRandomLiveryForFaction(faction)) : default;
+        }
+
+        // ---- lifecycle
+
+        /// <summary>Loads the config once (outside the mission reset, so a mission change never loses an edit).</summary>
         private static void EnsureLoaded()
         {
             if (loaded) return;
             loaded = true;
-
             try
             {
                 records.Clear();
@@ -112,12 +116,17 @@ namespace WingCommand
             }
             catch (Exception e)
             {
-                // On a wholly unreadable value, log once and clear the list; the codec handles
-                // individual invalid records.
                 records.Clear();
-                Plugin.Logger.LogWarning(
-                    "[Loadout] saved templates could not be read and have been ignored: " +
-                    e.Message);
+                Plugin.Logger.LogWarning("[Loadout] saved templates could not be read and have been ignored: " + e.Message);
+            }
+            try
+            {
+                liveries = LiveryChoice.Decode(Plugin.Settings.LoadoutLiveries.Value);
+            }
+            catch (Exception e)
+            {
+                liveries = new Dictionary<string, string>();
+                Plugin.Logger.LogWarning("[Loadout] saved liveries could not be read and have been ignored: " + e.Message);
             }
         }
 
@@ -131,38 +140,31 @@ namespace WingCommand
             {
                 Plugin.Logger.LogWarning("[Loadout] templates could not be saved: " + e.Message);
             }
+            Revision++;
         }
 
-        // Template queries.
+        // ---- queries
 
-        /// <summary>This airframe's templates in creation order.</summary>
+        /// <summary>This airframe's templates in creation order (a shared list: read it at once, never keep it).</summary>
         public static IReadOnlyList<LoadoutTemplateRecord> For(AircraftDefinition definition)
         {
             EnsureLoaded();
             scratch.Clear();
-
             string key = KeyOf(definition);
             if (key == null) return scratch;
-
-            for (int i = 0; i < records.Count; i++)
-            {
-                if (records[i].AirframeKey == key) scratch.Add(records[i]);
-            }
+            foreach (LoadoutTemplateRecord r in records)
+                if (r.AirframeKey == key) scratch.Add(r);
             return scratch;
         }
 
         public static int CountFor(AircraftDefinition definition)
         {
             EnsureLoaded();
-
             string key = KeyOf(definition);
-            if (key == null) return 0;
-
             int count = 0;
-            for (int i = 0; i < records.Count; i++)
-            {
-                if (records[i].AirframeKey == key) count++;
-            }
+            if (key == null) return 0;
+            foreach (LoadoutTemplateRecord r in records)
+                if (r.AirframeKey == key) count++;
             return count;
         }
 
@@ -170,58 +172,45 @@ namespace WingCommand
         {
             EnsureLoaded();
             if (string.IsNullOrEmpty(id)) return null;
-
-            for (int i = 0; i < records.Count; i++)
-            {
-                if (records[i].Id == id) return records[i];
-            }
+            foreach (LoadoutTemplateRecord r in records)
+                if (r.Id == id) return r;
             return null;
         }
 
-        /// <summary>Resolve a template name with a fallback for deleted or unavailable IDs; purchases and
-        /// recovered fits may outlive templates.</summary>
+        /// <summary>A template's name, or "DELETED TEMPLATE" for an id that outlived it.</summary>
         public static string NameOf(string id)
         {
             LoadoutTemplateRecord record = ById(id);
-            return record != null && !string.IsNullOrEmpty(record.Name)
-                ? record.Name
-                : "DELETED TEMPLATE";
+            return record != null && !string.IsNullOrEmpty(record.Name) ? record.Name : "DELETED TEMPLATE";
         }
 
         public static bool Exists(string id) => ById(id) != null;
 
-        // Template editing.
+        // ---- editing
 
-        /// <summary>Create a template from store keys; return null when the airframe lacks a key or has
-        /// reached its template limit.</summary>
-        public static LoadoutTemplateRecord Create(AircraftDefinition definition, string name,
-                                                   IEnumerable<string> mountKeys)
+        /// <summary>A new template (null at the limit or for an airframe without a key); a blank name takes the first free
+        /// TEMPLATE n, a taken one the next free number.</summary>
+        public static LoadoutTemplateRecord Create(AircraftDefinition definition, string name, IEnumerable<string> mountKeys)
         {
             EnsureLoaded();
-
             string key = KeyOf(definition);
-            if (key == null) return null;
-            if (CountFor(definition) >= MaxPerAirframe) return null;
-
-            var record = new LoadoutTemplateRecord(NewId(), key, Clean(name), mountKeys);
+            if (key == null || CountFor(definition) >= MaxPerAirframe) return null;
+            NamesOf(key, null);
+            string clean = TemplateNames.Clean(name) ?? TemplateNames.NextDefault(names);
+            var record = new LoadoutTemplateRecord(NewId(), key, TemplateNames.Unique(clean, names), mountKeys);
             records.Add(record);
             Save();
             return record;
         }
 
+        /// <summary>A copy under a new id and the next free "NAME n" (null at the limit).</summary>
         public static LoadoutTemplateRecord Duplicate(LoadoutTemplateRecord source)
         {
             EnsureLoaded();
             if (source == null) return null;
-
-            int count = 0;
-            for (int i = 0; i < records.Count; i++)
-            {
-                if (records[i].AirframeKey == source.AirframeKey) count++;
-            }
-            if (count >= MaxPerAirframe) return null;
-
-            LoadoutTemplateRecord copy = source.Copy(NewId(), Clean(source.Name + " COPY"));
+            NamesOf(source.AirframeKey, null);
+            if (names.Count >= MaxPerAirframe) return null;
+            LoadoutTemplateRecord copy = source.Copy(NewId(), TemplateNames.Unique(source.Name ?? "TEMPLATE", names));
             records.Add(copy);
             Save();
             return copy;
@@ -230,78 +219,47 @@ namespace WingCommand
         public static void Delete(LoadoutTemplateRecord record)
         {
             EnsureLoaded();
-            if (record == null) return;
-            if (records.Remove(record)) Save();
+            if (record != null && records.Remove(record)) Save();
         }
 
-        public static void Rename(LoadoutTemplateRecord record, string name)
+        /// <summary>Renames by what was typed (cleaned; a blank keeps the name; a taken one is numbered); false when nothing changed.</summary>
+        public static bool Rename(LoadoutTemplateRecord record, string typed)
         {
             EnsureLoaded();
-            if (record == null) return;
+            string clean = TemplateNames.Clean(typed);
+            if (record == null || clean == null) return false;
+            NamesOf(record.AirframeKey, record);
+            string name = TemplateNames.Unique(clean, names);
+            if (name == record.Name) return false;
+            record.Name = name;
+            Save();
+            return true;
+        }
 
-            string cleaned = Clean(name);
-            if (record.Name == cleaned) return;
-
-            record.Name = cleaned;
+        /// <summary>Writes every set's store at once (a station pick writes its pair and empties the stations it blocks).</summary>
+        public static void SetMounts(LoadoutTemplateRecord record, IReadOnlyList<string> keys)
+        {
+            EnsureLoaded();
+            if (record == null || keys == null) return;
+            bool changed = record.MountKeys.Count != keys.Count;
+            for (int i = 0; i < keys.Count && !changed; i++) changed = record.KeyAt(i) != keys[i];
+            if (!changed) return;
+            record.MountKeys.Clear();
+            record.MountKeys.AddRange(keys);
             Save();
         }
 
-        /// <summary>Set the pylon's store key; null clears it.</summary>
-        public static void SetMount(LoadoutTemplateRecord record, int pylon, string key)
+        private static void NamesOf(string airframe, LoadoutTemplateRecord except)
         {
-            EnsureLoaded();
-            if (record == null || pylon < 0) return;
-
-            if (record.KeyAt(pylon) == key) return;
-            record.SetKeyAt(pylon, key);
-            Save();
+            names.Clear();
+            foreach (LoadoutTemplateRecord r in records)
+                if (r.AirframeKey == airframe && !ReferenceEquals(r, except) && r.Name != null) names.Add(r.Name);
         }
 
-        // Template naming.
+        private static string KeyOf(AircraftDefinition definition) =>
+            definition != null && !string.IsNullOrEmpty(definition.jsonKey) ? definition.jsonKey : null;
 
-        /// <summary>Generate the next default template name within this airframe's list.</summary>
-        public static string NextDefaultName(AircraftDefinition definition)
-        {
-            EnsureLoaded();
-
-            for (int n = 1; n <= MaxPerAirframe + 1; n++)
-            {
-                string candidate = "TEMPLATE " + n;
-                if (!NameTaken(definition, candidate)) return candidate;
-            }
-            return "TEMPLATE";
-        }
-
-        private static bool NameTaken(AircraftDefinition definition, string name)
-        {
-            string key = KeyOf(definition);
-            for (int i = 0; i < records.Count; i++)
-            {
-                if (records[i].AirframeKey == key && records[i].Name == name) return true;
-            }
-            return false;
-        }
-
-        /// <summary>Trim names to display/storage limits. Leave delimiter escaping to the codec so
-        /// characters are not silently substituted.</summary>
-        private static string Clean(string name)
-        {
-            if (string.IsNullOrEmpty(name)) return "TEMPLATE";
-
-            string trimmed = name.Trim();
-            if (trimmed.Length == 0) return "TEMPLATE";
-            return trimmed.Length > MaxNameLength ? trimmed.Substring(0, MaxNameLength) : trimmed;
-        }
-
-        private static string KeyOf(AircraftDefinition definition)
-        {
-            if (definition == null) return null;
-            string key = definition.jsonKey;
-            return string.IsNullOrEmpty(key) ? null : key;
-        }
-
-        /// <summary>Generate a stable unique ID independent of editable names, preserving purchase and
-        /// recovered-fit references across renames.</summary>
+        /// <summary>A stable id independent of the editable name, so SUPPLY's fit survives a rename.</summary>
         private static string NewId()
         {
             for (int attempt = 0; attempt < 64; attempt++)
