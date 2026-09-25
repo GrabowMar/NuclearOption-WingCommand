@@ -182,7 +182,9 @@ namespace WingCommand
                 return;
             }
             popupStation = st;
-            popup.Show(WmcKit.PopupArea(page, body, rows[row].Rect, storeEntries.Count, scroll, width), storeEntries, PickStore);
+            Rect area = WmcKit.PopupArea(page, body, rows[row].Rect, storeEntries.Count, scroll, width);
+            NotePopup(area, rows[row].Rect);
+            popup.Show(area, storeEntries, PickStore);
             WmcKit.FitAll(page);
         }
 

@@ -132,9 +132,62 @@ namespace WingCommand
             var ids = new Dictionary<string, object>();
             foreach (WingMember m in wing.Members) ids["w" + m.Number] = m.Aircraft;
             Plugin.Logger.LogInfo($"[Automation] Members: {ids.Count} ({string.Join(", ", ids.Keys)})");
+            // R5: how many members carry a LOADOUT template's stores as it would launch, and wear its airframe's saved livery.
+            int matching = 0, liveryMatch = 0;
+            string templateName = Text(args, "template");
+            var carried = new List<string>();
+            foreach (WingMember m in wing.Members)
+            {
+                if (m.Released || m.Aircraft == null) continue;
+                AircraftDefinition def = m.Aircraft.definition;
+                string token = WingLoadoutTemplates.LiveryTokenOf(def);
+                if (token != null && WingLoadoutTemplates.TokenOf(m.Aircraft.NetworkLiveryKey) == token) liveryMatch++;
+                if (templateName == null) continue;
+                LoadoutTemplateRecord template = null;
+                foreach (LoadoutTemplateRecord t in WingLoadoutTemplates.For(def))
+                    if (string.Equals(t.Name, templateName, StringComparison.OrdinalIgnoreCase)) template = t;
+                if (template == null) continue;
+                WingLoadoutCatalog.KeysOf(m.Aircraft.Networkloadout, carried);
+                bool same = true;
+                for (int i = 0; i < carried.Count && same; i++)
+                    if (carried[i] != null && carried[i] != template.KeyAt(i)) same = false;
+                if (same && carried.Exists(k => k != null)) matching++;
+            }
             return new Dictionary<string, object>
             {
                 { "ok", true }, { "count", ids.Count }, { "pending", SpawnService.Instance?.Pending ?? 0 }, { "ids", ids },
+                { "matching", matching }, { "livery_match", liveryMatch },
+            };
+        }
+
+        /// <summary>R5 dev dump: an airframe's hardpoint sets as the game declares them (name, pair name, mirroring, pylons, precludes,
+        /// store count) and the stations LOADOUT makes of them — real fixtures instead of guessed ones.</summary>
+        public static Dictionary<string, object> LoadoutProfile(Dictionary<string, object> args)
+        {
+            string name = Text(args, "airframe");
+            AircraftDefinition def = name != null ? WingRequisition.FindAirframe(name) : null;
+            if (def == null) return Fail("LoadoutProfile", "no airframe " + name);
+            HardpointSet[] sets = WingLoadoutCatalog.SetsOf(def);
+            StationLayout layout = WingLoadoutCatalog.Layout(def);
+            if (sets == null || layout == null) return Fail("LoadoutProfile", def.unitName + "'s hardpoints cannot be read");
+            var rows = new List<object>();
+            var options = new List<WingLoadoutCatalog.StoreOption>();
+            for (int i = 0; i < sets.Length; i++)
+            {
+                HardpointSet s = sets[i];
+                WingLoadoutCatalog.StoresFor(def, i, options);
+                rows.Add(new Dictionary<string, object>
+                {
+                    { "name", s?.name ?? "" }, { "pair", s?.SymmetryName ?? "" }, { "withPrev", s != null && s.SymmetryWithPrev },
+                    { "pylons", s?.hardpoints != null ? s.hardpoints.Count : 0 },
+                    { "precludes", s?.precludingHardpointSets != null ? string.Join(",", s.precludingHardpointSets) : "" },
+                    { "stores", options.Count }, { "station", layout.StationOf(i) },
+                });
+            }
+            Plugin.Logger.LogInfo($"[Automation] LoadoutProfile {def.unitName}: {sets.Length} sets, {layout.Stations} stations, {layout.Pylons} pylons");
+            return new Dictionary<string, object>
+            {
+                { "ok", true }, { "sets", sets.Length }, { "stations", layout.Stations }, { "pylons", layout.Pylons }, { "rows", rows },
             };
         }
 
@@ -610,6 +663,29 @@ namespace WingCommand
                 if (fit != null && !supply.Fit(fit)) return Fail("Wmc", "no fit " + fit + " for the selected airframe");
                 if (field != null && !supply.OnlyBase(field)) return Fail("Wmc", "no field " + field + " in SUPPLY's list");
             }
+            // R5 LOADOUT: its own lo_* arguments (never routed by tab, so a forgotten tab never moves SUPPLY's pick).
+            WmcLoadout loadout = panel.Loadout;
+            if (loadout != null && args != null && (Arg(args, "lo_airframe") != null || Arg(args, "lo_template") != null || Arg(args, "lo_name") != null
+                    || Arg(args, "lo_station") != null || Arg(args, "lo_livery") != null || Arg(args, "lo_focus") != null
+                    || Arg(args, "lo_submit") != null || Arg(args, "lo_reset") != null))
+            {
+                panel.Show(WmcPanel.TabLoadout);
+                panel.Refresh();
+                string lo = Text(args, "lo_airframe");
+                if (lo != null && !loadout.PickAirframe(lo)) return Fail("Wmc", "no editable airframe " + lo);
+                if (Arg(args, "lo_reset") is bool reset && reset) loadout.ResetAirframe();
+                lo = Text(args, "lo_template");
+                if (lo != null && !loadout.UseTemplate(lo)) return Fail("Wmc", "no template " + lo);
+                lo = Text(args, "lo_name");
+                if (lo != null && !loadout.RenameTo(lo)) return Fail("Wmc", "could not rename to " + lo);
+                if (Arg(args, "lo_station") != null && !loadout.Mount(Number(args, "lo_station", 0), Text(args, "lo_store")))
+                    return Fail("Wmc", "could not fit " + Text(args, "lo_store") + " on station " + Number(args, "lo_station", 0));
+                lo = Text(args, "lo_livery");
+                if (lo != null && !loadout.Livery(lo)) return Fail("Wmc", "no livery " + lo);
+                if (Arg(args, "lo_focus") is bool focus && focus) loadout.FocusName();
+                lo = Text(args, "lo_submit");
+                if (lo != null) loadout.SubmitName(lo);
+            }
             // Refresh now so a press in the same call acts on this scope.
             panel.Refresh();
             string press = Text(args, "press");
@@ -626,6 +702,7 @@ namespace WingCommand
                 { "disabled", panel.Tactical != null ? string.Join(",", panel.Tactical.DisabledOrders()) : "" },
             };
             if (supply != null && panel.Page == WmcPanel.TabSupply) supply.Report(result);
+            if (loadout != null && panel.Page == WmcPanel.TabLoadout) loadout.Report(result);
             return result;
         }
 
