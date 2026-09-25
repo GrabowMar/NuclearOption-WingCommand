@@ -179,7 +179,7 @@ namespace WingCommand
 
         /// <summary>Escape percent before delimiters so literal percent signs cannot become escape
         /// sequences.</summary>
-        private static string Escape(string value)
+        internal static string Escape(string value)
         {
             if (string.IsNullOrEmpty(value)) return "";
 
@@ -197,7 +197,7 @@ namespace WingCommand
         }
 
         /// <summary>Decode delimiters before percent to preserve literal escape-like text.</summary>
-        private static string Unescape(string value)
+        internal static string Unescape(string value)
         {
             if (string.IsNullOrEmpty(value)) return "";
             if (value.IndexOf('%') < 0) return value;
