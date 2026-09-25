@@ -307,6 +307,14 @@ namespace WingCommand.PureTests
         }
 
         [Fact]
+        public void TheSandboxStoresNothingInTheHangar()
+        {
+            // Review R4b: a sandbox requisition never takes a stored airframe, so STORE would only take one from the faction.
+            Assert.Equal("The sandbox never uses the HANGAR", ShopRules.StoreBlock(true, true, true, 0, 3, 5));
+            Assert.Equal("Host only", ShopRules.StoreBlock(false, true, true, 0, 3, 5));
+        }
+
+        [Fact]
         public void OverTheLimitInTheSandboxCostsNothingExtra()
         {
             ShopWing w = Wing();
@@ -437,11 +445,11 @@ namespace WingCommand.PureTests
         [Fact]
         public void StoreNeedsHostFactionRoomAndFactionStock()
         {
-            Assert.Null(ShopRules.StoreBlock(host: true, faction: true, count: 1, capacity: 3, factionStock: 2));
-            Assert.Equal("Host only", ShopRules.StoreBlock(false, true, 1, 3, 2));
-            Assert.Equal("No faction", ShopRules.StoreBlock(true, false, 1, 3, 2));
-            Assert.Equal("The hangar is full (3/3) · return one first", ShopRules.StoreBlock(true, true, 3, 3, 2));
-            Assert.Equal("None left in the faction's stock", ShopRules.StoreBlock(true, true, 1, 3, 0));
+            Assert.Null(ShopRules.StoreBlock(host: true, faction: true, sandbox: false, count: 1, capacity: 3, factionStock: 2));
+            Assert.Equal("Host only", ShopRules.StoreBlock(false, true, false, 1, 3, 2));
+            Assert.Equal("No faction", ShopRules.StoreBlock(true, false, false, 1, 3, 2));
+            Assert.Equal("The hangar is full (3/3) · return one first", ShopRules.StoreBlock(true, true, false, 3, 3, 2));
+            Assert.Equal("None left in the faction's stock", ShopRules.StoreBlock(true, true, false, 1, 3, 0));
         }
 
         [Fact]

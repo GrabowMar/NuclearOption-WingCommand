@@ -339,7 +339,7 @@ namespace WingCommand
                 Call = new CallSpec
                 {
                     Airframe = Text(args, "airframe"), Field = Text(args, "field"), Pilot = Text(args, "pilot"),
-                    Fit = Text(args, "fit"), Fuel = Float(args, "fuel", 0f),
+                    Fit = FitArg(Text(args, "fit")), Fuel = Float(args, "fuel", 0f),
                 },
             };
             string letter = Text(args, "element");
@@ -421,6 +421,11 @@ namespace WingCommand
             Plugin.Logger.LogInfo($"[Automation] Grant: allocation +{add:0}, {stock} × {typeName ?? "-"}");
             return Ok("allocation", player != null ? player.Allocation : -1f);
         }
+
+        /// <summary>A fit as scenarios write it (review R4b): "auto" is AUTO, "yours" YOUR LOADOUT, anything else a template id.</summary>
+        private static string FitArg(string fit) =>
+            fit == null || string.Equals(fit, "auto", StringComparison.OrdinalIgnoreCase) ? null
+            : string.Equals(fit, CallSpec.YourLoadout, StringComparison.OrdinalIgnoreCase) ? CallSpec.YourLoadout : fit;
 
         /// <summary>R4 SUPPLY: launches on their way to the wing, as the INBOUND list shows them (count, then each row's
         /// type, pilot, field, phase and ETA).</summary>

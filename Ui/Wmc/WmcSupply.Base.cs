@@ -27,7 +27,7 @@ namespace WingCommand
         private TMP_Text baseState, baseEmpty;
         private Image baseRail;
         private int basePage, baseChipKey = -1;
-        private bool modeClient = true;
+        private int modeKey = -1;
 
         private void BuildBase(RectTransform r, float y)
         {
@@ -70,9 +70,9 @@ namespace WingCommand
             List<Airbase> fields = WingRequisition.Fields;
             nearest.SetLatched(WingRequisition.Mode == LaunchMode.Nearest);
             anyField.SetLatched(WingRequisition.Mode == LaunchMode.Any);
-            if (client != modeClient)
+            if ((client ? 1 : 0) != modeKey)
             {
-                modeClient = client;
+                modeKey = client ? 1 : 0;
                 nearest.SetEnabled(!client);
                 anyField.SetEnabled(!client);
                 nearest.WithTooltip(client ? ClientWhy : "Launch from the field picked on the radial when it is ON, else the nearest ON field.");

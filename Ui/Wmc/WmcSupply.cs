@@ -35,7 +35,6 @@ namespace WingCommand
         private ShopQuote quote;
         private AircraftDefinition selected;
         private Airbase field;
-        private int snapFrame = -1;
 
         private string alert, hint;
         private int hintKey = int.MinValue, metricKey = int.MinValue, metricGeneration = -1;
@@ -96,12 +95,11 @@ namespace WingCommand
             scroll.SetContentHeight(BezelLayout.SupplyContent(inbound, adopt));
         }
 
-        /// <summary>The wing, the selected airframe's quote and its launch field, once a refresh (the lists refill at most once
-        /// a second, or at once when the page is shown).</summary>
+        /// <summary>The wing, the selected airframe's quote and its launch field, once a panel refresh: Metrics takes it and
+        /// Refresh reuses it, so a pick, a toggle or an order made since the last refresh is always seen (review R4b: a per-frame
+        /// reuse hid same-frame changes). The lists refill at most once a second, or at once when the page is shown.</summary>
         private void Snapshot(WmcContext c, bool force)
         {
-            if (!force && snapFrame == Time.frameCount && ReferenceEquals(last, c)) return;
-            snapFrame = Time.frameCount;
             last = c;
             client = c.Client;
             WingService w = c.Wing;
@@ -124,7 +122,8 @@ namespace WingCommand
 
         public void Refresh(WmcContext c)
         {
-            Snapshot(c, false);
+            // WmcPanel.Refresh always runs Metrics first; the snapshot it took is this refresh's.
+            if (!ReferenceEquals(last, c)) Snapshot(c, false);
             RefreshInbound();
             RefreshAdopt(c);
             Layout(inboundCount, adoptVisible);

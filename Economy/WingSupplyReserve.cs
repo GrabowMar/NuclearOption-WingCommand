@@ -55,7 +55,7 @@ namespace WingCommand
         public static bool Hold(AircraftDefinition definition, out string reason)
         {
             if (!CanWrite(definition, out reason)) return false;
-            reason = ShopRules.StoreBlock(isHost, hq != null, Count, Capacity, hq.GetUnitSupply(definition));
+            reason = ShopRules.StoreBlock(isHost, hq != null, Plugin.Settings.SandboxFreeCalls.Value, Count, Capacity, hq.GetUnitSupply(definition));
             if (reason != null) return false;
 
             hq.ModifyUnitSupply(definition, -1);
@@ -104,7 +104,7 @@ namespace WingCommand
                 reason = "Pick an airframe first";
                 return false;
             }
-            reason = hq == null || !isHost ? ShopRules.StoreBlock(isHost, hq != null, 0, Capacity, 1) : null;
+            reason = hq == null || !isHost ? ShopRules.StoreBlock(isHost, hq != null, false, 0, Capacity, 1) : null;
             return reason == null;
         }
 

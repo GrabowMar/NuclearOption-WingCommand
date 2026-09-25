@@ -112,14 +112,14 @@ namespace WingCommand
             int key;
             unchecked
             {
-                key = count * 7 + cap * 31 + (offline ? 3 : 0) + stock * 101 + stored * 1009 + (asking ? 5 : 0) + (host ? 11 : 0)
+                key = count * 7 + cap * 31 + (offline ? 3 : 0) + stock * 101 + stored * 1009 + (asking ? 5 : 0) + (host ? 11 : 0) + (wing.Sandbox ? 13 : 0)
                     + (selected != null ? selected.GetHashCode() : 0);
             }
             if (key == hangarKey) return;
             hangarKey = key;
             WmcKit.Set(hangarLabel, HangarWords.Label(count, cap, offline));
             WmcUi.SetBar(hangarFill, HangarMeter, HangarWords.Level(count, cap), HangarWords.Full(count, cap) ? AvTheme.Warning : AvTheme.Friendly);
-            string why = client ? ClientWhy : selected == null ? "Pick an airframe first." : ShopRules.StoreBlock(host, faction, count, cap, stock);
+            string why = client ? ClientWhy : selected == null ? "Pick an airframe first." : ShopRules.StoreBlock(host, faction, wing.Sandbox, count, cap, stock);
             store.SetEnabled(why == null);
             store.WithTooltip(why ?? "Store one " + selected.unitName + " in the HANGAR: the faction's AI cannot take it, and your next " +
                 "requisition of it launches from there.");

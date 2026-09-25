@@ -9,6 +9,7 @@
     {"op": "fly", "id": "lead", "program": [{"orbit": {"bank": 15, "seconds": 400}}]},
     {"op": "wait", "seconds": 3},
     {"op": "call", "method": "WingCommand.Automation.Anchor", "store": "anchor", "args": {"id": "lead"}},
+    {"op": "wait", "seconds": 1},
     {"op": "call", "method": "WingCommand.Automation.Grant", "store": "grant",
      "args": {"lead": "lead", "allocation": 100000000, "type": "FS-20 Vortex", "stock": 4, "rank": 10}},
     {"op": "call", "method": "WingCommand.Automation.Pilots", "store": "hired", "args": {"hire": 3}},
@@ -37,7 +38,7 @@
     {"op": "call", "method": "WingCommand.Automation.Pilots", "store": "seated"},
 
     {"op": "call", "method": "WingCommand.Automation.Order", "store": "order",
-     "args": {"kind": "Call", "number": 1, "airframe": "FS-20 Vortex", "fit": "yours", "fuel": 0.75}},
+     "args": {"kind": "Call", "number": 1, "airframe": "FS-20 Vortex", "fit": "YOURS", "fuel": 0.75}},
     {"op": "wait", "seconds": 5},
 
     {"op": "call", "method": "WingCommand.Automation.Grant", "store": "limit", "args": {"lead": "lead", "aiLimit": 0}},
@@ -70,7 +71,7 @@
     {"check": "result_below", "path": "double.sup_inbound", "max": 1},
     {"check": "result_above", "path": "inbound.count", "min": 1},
     {"check": "result_above", "path": "charged.charged", "min": 1},
-    {"check": "result_above", "path": "seated.reserved", "min": 1},
+    {"check": "result_above", "path": "seated.flying", "min": 1},
     {"check": "result_above", "path": "order.accepted", "min": 1},
     {"check": "result_above", "path": "over.sup_overlimit", "min": 1},
     {"check": "result_below", "path": "over.sup_blocked", "max": 0},

@@ -235,10 +235,12 @@ namespace WingCommand
 
         // ---- the HANGAR store (user decision 2026-09-25)
 
-        public static string StoreBlock(bool host, bool faction, int count, int capacity, int factionStock)
+        /// <summary>Why STORE cannot take one now; the sandbox never launches from the HANGAR, so it stores nothing (review R4b).</summary>
+        public static string StoreBlock(bool host, bool faction, bool sandbox, int count, int capacity, int factionStock)
         {
             if (!host) return "Host only";
             if (!faction) return "No faction";
+            if (sandbox) return "The sandbox never uses the HANGAR";
             if (count >= capacity) return "The hangar is full (" + N(count) + "/" + N(capacity) + ") · return one first";
             return factionStock <= 0 ? "None left in the faction's stock" : null;
         }
