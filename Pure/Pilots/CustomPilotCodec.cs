@@ -16,6 +16,8 @@ namespace WingCommand
         public int Xp { get; set; }
         public int Kills { get; set; }
         public int Sorties { get; set; }
+        /// <summary>Missions flown by a saved pilot (R7's service record; xp is then the best XP of one mission).</summary>
+        public int Missions { get; set; }
         public int PortraitVersion { get; set; } = 2;
         public PortraitBody Body { get; set; } = PortraitBody.Male;
         public int Face { get; set; } = -1;
@@ -57,6 +59,7 @@ namespace WingCommand
                 Xp = Xp,
                 Kills = Kills,
                 Sorties = Sorties,
+                Missions = Missions,
                 PortraitVersion = PortraitVersion,
                 Body = Body,
                 Face = Face,
@@ -257,6 +260,7 @@ namespace WingCommand
             int xp = MiniJson.GetInt(dict, "xp", 0);
             int kills = MiniJson.GetInt(dict, "kills", 0);
             int sorties = MiniJson.GetInt(dict, "sorties", 0);
+            int missions = MiniJson.GetInt(dict, "missions", 0);
 
             int face = MiniJson.GetInt(dict, "face", -1);
             int hair = MiniJson.GetInt(dict, "hair", -1);
@@ -278,6 +282,7 @@ namespace WingCommand
                 Xp = Math.Max(0, xp),
                 Kills = Math.Max(0, kills),
                 Sorties = Math.Max(0, sorties),
+                Missions = Math.Max(0, missions),
             };
 
             if (face >= 0)
@@ -313,7 +318,8 @@ namespace WingCommand
                     sb.AppendLine($"      \"background\": \"{MiniJson.Escape(p.Background)}\",");
                     sb.AppendLine($"      \"xp\": {p.Xp},");
                     sb.AppendLine($"      \"kills\": {p.Kills},");
-                    sb.Append($"      \"sorties\": {p.Sorties}");
+                    sb.AppendLine($"      \"sorties\": {p.Sorties},");
+                    sb.Append($"      \"missions\": {p.Missions}");
 
                     if (p.HasCustomPortrait)
                     {
