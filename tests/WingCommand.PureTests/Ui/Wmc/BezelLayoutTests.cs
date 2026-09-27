@@ -152,6 +152,37 @@ namespace WingCommand.PureTests
                 }
         }
 
+        [Theory]
+        [InlineData(336f)]
+        [InlineData(390f)]
+        [InlineData(440f)]
+        [InlineData(506f)]
+        public void AHardpointPopupNeverCoversItsRowWithThePagesRealScroll(float body)
+        {
+            // Review R5: the page can scroll only as far as its content allows, forward (MaxOffset - Offset) and back (Offset).
+            float view = BezelLayout.LoadoutView(body);
+            int rows = BezelLayout.HardpointRows(body);
+            foreach (bool paged in new[] { false, true })
+            {
+                float max = System.Math.Max(0f, BezelLayout.LoadoutContent(rows, paged) - view);
+                for (int entries = 5; entries <= 7; entries++)
+                {
+                    float popupH = BezelLayout.PopupHeight(entries);
+                    for (float offset = 0f; offset <= max; offset += 1f)
+                        for (int i = 0; i < rows; i++)
+                        {
+                            float row = BezelLayout.HardpointsTop + BezelLayout.HardpointHead + i * BezelLayout.HpPitch - offset;
+                            if (row < 0f || row + BezelLayout.HpRowH > view) continue;
+                            float top = BezelLayout.PopupPlace(row, BezelLayout.HpRowH, popupH, body, max - offset, out float scroll, offset);
+                            Assert.InRange(offset + scroll, 0f, max);
+                            float r = row - scroll;
+                            Assert.True(top >= r + BezelLayout.HpRowH || top + popupH <= r, $"body {body} paged {paged} n {entries} off {offset} row {i}");
+                            Assert.True(top >= 0f && top + popupH <= body, $"body {body} off {offset} row {i} top {top}");
+                        }
+                }
+            }
+        }
+
         // ---- WING
 
         [Fact]

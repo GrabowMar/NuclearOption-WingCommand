@@ -122,15 +122,15 @@ namespace WingCommand
         }
 
         /// <summary>The area for a popup of <paramref name="entries"/> rows opened from <paramref name="row"/>: below it when it fits,
-        /// else above, else after scrolling <paramref name="scroll"/> so it fits below (BezelLayout.PopupPlace) — never over its row and
+        /// else above, else after scrolling <paramref name="scroll"/> up so it fits below or down so it fits above (BezelLayout.PopupPlace) — never over its row and
         /// never past the body, where the chrome would hide it. <paramref name="width"/> 0 keeps the row's width.</summary>
         public static Rect PopupArea(RectTransform page, Rect body, RectTransform row, int entries, WmcScroll scroll, float width = 0f)
         {
             Rect r = RectIn(page, row);
             float popupH = BezelLayout.PopupHeight(entries);
-            float max = scroll != null ? scroll.MaxOffset - scroll.Offset : 0f;
-            float top = BezelLayout.PopupPlace(body.y - r.y, r.height, popupH, body.height, max, out float moved);
-            if (moved > 0f && scroll != null) scroll.ScrollBy(moved);
+            float max = scroll != null ? scroll.MaxOffset - scroll.Offset : 0f, back = scroll != null ? scroll.Offset : 0f;
+            float top = BezelLayout.PopupPlace(body.y - r.y, r.height, popupH, body.height, max, out float moved, back);
+            if (moved != 0f && scroll != null) scroll.ScrollBy(moved);
             return new Rect(width > 0f ? body.x : r.x, body.y - top, width > 0f ? width : r.width, popupH);
         }
 

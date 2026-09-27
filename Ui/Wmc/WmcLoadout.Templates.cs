@@ -100,7 +100,7 @@ namespace WingCommand
             picker.WithTooltip(count > 0 ? "Pick the template to edit." : airframe == null ? "Pick an airframe first." : "NEW starts a template.");
             string why = airframe == null ? "Pick an airframe first." : LoadoutWords.NewWhy(layout != null, count);
             create.SetEnabled(why == null);
-            create.WithTooltip(why ?? "Start an empty template for this airframe.");
+            create.WithTooltip(why ?? "Start a template from this airframe's standard stores (its gun, radar and hook included).");
             why = LoadoutWords.CopyWhy(current != null, count);
             copy.SetEnabled(why == null);
             copy.WithTooltip(why ?? "Copy this template under the next free name.");
@@ -139,9 +139,11 @@ namespace WingCommand
         private void New()
         {
             if (airframe == null || layout == null) return;
-            var empty = new List<string>(layout.Sets);
-            for (int s = 0; s < layout.Sets; s++) empty.Add(null);
-            LoadoutTemplateRecord t = WingLoadoutTemplates.Create(airframe, null, empty);
+            // Review R5: a new template starts from the airframe's standard stores (an empty one dropped internal guns and radomes).
+            var seed = new List<string>(layout.Sets);
+            WingLoadoutCatalog.StandardKeys(airframe, seed);
+            layout.Normalize(seed);
+            LoadoutTemplateRecord t = WingLoadoutTemplates.Create(airframe, null, seed);
             if (t == null)
             {
                 WingToast.Show(LoadoutWords.NewWhy(true, WingLoadoutTemplates.CountFor(airframe)) ?? "No template was made");

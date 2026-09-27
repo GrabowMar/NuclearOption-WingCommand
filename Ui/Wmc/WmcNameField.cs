@@ -78,6 +78,8 @@ namespace WingCommand
 
         private void OnFocus()
         {
+            // Review R5: a blur pending from an edit that ended some other way (a click away, a tab switch) must not end this one.
+            blurPending = false;
             focused = true;
             idAtFocus = EditingId;
             focusedField = this;
@@ -95,6 +97,7 @@ namespace WingCommand
 
         private void OnBlur()
         {
+            blurPending = false;
             focused = false;
             if (ReferenceEquals(focusedField, this)) focusedField = null;
             typingUntilFrame = Time.frameCount + 1;
@@ -116,10 +119,12 @@ namespace WingCommand
             ReleasePause();
         }
 
+        /// <summary>Lets any field go now, the pause key included (review R5: the room opening records the pause key as the player had
+        /// it, so a release a frame later must not turn it on under the room and leave it off after).</summary>
         public static void BlurAny()
         {
             focusedField?.Blur();
-            if (focusedField == null && pauseHeld && pauseReleaseFrame < 0) ReleasePause();
+            if (focusedField == null && pauseHeld) ReleasePause();
         }
 
         /// <summary>Every frame (WmcPanel.Tick): a pending blur after Enter, and the pause key back one frame after the edit ended.</summary>

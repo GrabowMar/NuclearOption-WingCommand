@@ -31,7 +31,7 @@ namespace WingCommand
 
             /// <summary>The game's rules (R5): event-only, nuclear, strategic, not from a ship (mount.info, as WeaponChecker reads);
             /// what it is for the summary; the asset name mission restrictions use.</summary>
-            public bool Disabled, EventContent, Nuclear, Strategic, ShipRearm, Jammer, Bomb;
+            public bool Disabled, EventContent, Nuclear, Strategic, ShipRearm, Jammer, Bomb, Gun;
             public string AssetName;
 
             public bool Armed => AntiAir > 0f || AntiSurface > 0f || AntiMissile > 0f;
@@ -175,6 +175,10 @@ namespace WingCommand
             Nuclear = o.Nuclear, Strategic = o.Strategic, ShipRearm = o.ShipRearm, Pylons = pylons, Ammo = o.Ammo,
         };
 
+        /// <summary>The store keys of the airframe's standard loadout (the game's player-start preset): LOADOUT's NEW starts from them, so
+        /// an internal gun, radome or tail hook is never dropped by a new template (review R5).</summary>
+        public static void StandardKeys(AircraftDefinition definition, List<string> into) => KeysOf(GameStartLoadout(definition), into);
+
         /// <summary>The store keys an aircraft carries (Members' template check).</summary>
         public static void KeysOf(Loadout loadout, List<string> into)
         {
@@ -197,17 +201,9 @@ namespace WingCommand
             new StoreOption(info.Key, info.Label, info.Ammo, info.Mass, info.AntiAir, info.AntiSurface, info.Cargo, true, info.EventContent,
                 info.Nuclear, info.Strategic, info.ShipRearm, KindOf(info), info.AssetName, info.Disabled);
 
-        /// <summary>What a store is for the summary and the role (cargo, ECM, missile defence, bombs, then its better role).</summary>
-        private static StoreKind KindOf(MountInfo i)
-        {
-            if (i.Cargo) return StoreKind.Cargo;
-            if (i.Jammer) return StoreKind.Ecm;
-            if (i.AntiMissile > Mathf.Max(i.AntiAir, i.AntiSurface)) return StoreKind.MissileDefence;
-            if (i.Bomb) return StoreKind.Bomb;
-            if (i.AntiAir > 0f && i.AntiAir >= i.AntiSurface) return StoreKind.AirToAir;
-            if (i.AntiSurface > 0f) return StoreKind.AirToGround;
-            return StoreKind.Other;
-        }
+        /// <summary>What a store is for the summary and the role (LoadoutSummary.KindOf: a gun's rounds never count as AAM or AGM).</summary>
+        private static StoreKind KindOf(MountInfo i) =>
+            LoadoutSummary.KindOf(i.Cargo, i.Jammer, i.Gun, i.Bomb, i.AntiAir, i.AntiSurface, i.AntiMissile);
 
         private static MountInfo Lookup(Profile profile, int index, string key)
         {
@@ -649,6 +645,7 @@ namespace WingCommand
             if (weapon.cargo || weapon.troops) info.Cargo = true;
             if (weapon.jammer) info.Jammer = true;
             if (weapon.bomb || weapon.glideBomb) info.Bomb = true;
+            if (weapon.gun) info.Gun = true;
         }
 
         /// <summary>Find child station components, then reflect fields for mounts that reference stations

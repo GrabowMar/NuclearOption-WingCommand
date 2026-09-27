@@ -26,6 +26,20 @@ namespace WingCommand
 
     internal static class LoadoutSummary
     {
+        /// <summary>What a store is for the summary and ROLE: cargo, ECM, then a gun (review R5: an internal cannon, gun pod or turret is
+        /// rated like a missile, but its hundreds of rounds must never count as AAM or AGM), missile defence, bombs, then its better role.</summary>
+        public static StoreKind KindOf(bool cargo, bool jammer, bool gun, bool bomb, float antiAir, float antiSurface, float antiMissile)
+        {
+            if (cargo) return StoreKind.Cargo;
+            if (jammer) return StoreKind.Ecm;
+            if (gun) return StoreKind.Other;
+            if (antiMissile > System.Math.Max(antiAir, antiSurface)) return StoreKind.MissileDefence;
+            if (bomb) return StoreKind.Bomb;
+            if (antiAir > 0f && antiAir >= antiSurface) return StoreKind.AirToAir;
+            if (antiSurface > 0f) return StoreKind.AirToGround;
+            return StoreKind.Other;
+        }
+
         /// <summary>The fit of <paramref name="facts"/> (one per set) on <paramref name="layout"/>, as it would launch.</summary>
         public static FitSummary Of(StationLayout layout, StoreFacts[] facts)
         {
