@@ -30,11 +30,15 @@ namespace WingCommand
         /// <summary>Moves on every change (the studio's list and the roster rebuild on it).</summary>
         public int Version { get; private set; }
 
+        /// <summary>A file with text the reader cannot parse (review R7: it is kept aside before anything writes over it; a missing or
+        /// blank file is simply an empty squadron).</summary>
+        public static bool Unreadable(string json) => !string.IsNullOrWhiteSpace(json) && !MiniJson.TryParse(json, out _);
+
         public static SavedPilotStore FromJson(string json, List<string> problems)
         {
             var store = new SavedPilotStore();
             if (string.IsNullOrWhiteSpace(json)) return store;
-            if (!MiniJson.TryParse(json, out _))
+            if (Unreadable(json))
             {
                 problems?.Add("not a pilots file (unreadable JSON); nothing loaded");
                 return store;

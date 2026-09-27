@@ -110,7 +110,7 @@ namespace WingCommand
             listPage = Pages.Clamp(listPage, entries.Count, rowsPerPage);
             WmcKit.Set(listNote, StudioWords.ListHead(savedCount, client ? 0 : entries.Count - savedCount));
             emptyRoot.SetActive(entries.Count == 0);
-            WmcKit.Set(emptyText, StudioWords.EmptyList(0));
+            WmcKit.Set(emptyText, WingSavedPilots.Problem ?? StudioWords.EmptyList(0));
             int first = Pages.First(listPage, rowsPerPage);
             for (int i = 0; i < rowsPerPage; i++)
             {
@@ -164,7 +164,7 @@ namespace WingCommand
             if (v == null || v.Entry < 0 || v.Entry >= entries.Count) return;
             Entry e = entries[v.Entry];
             if (!draftNew && string.Equals(e.Callsign, selected, System.StringComparison.OrdinalIgnoreCase)) return;
-            if ((StateOf() == DraftState.Edited || (draftNew && touched)) && !rowGate.Press(e.Callsign, Time.unscaledTime))
+            if (Dirty && !rowGate.Press(e.Callsign, Time.unscaledTime))
             {
                 WingToast.Show(StudioWords.UnsavedAsk);
                 return;
@@ -209,6 +209,8 @@ namespace WingCommand
             draftLive = null;
             draftNew = true;
             NewDraft();
+            // Review R7: a CLONE is the player's pilot even before an edit; a row click asks before dropping it.
+            cloned = true;
             WmcRoom.Instance?.RefreshNow();
         }
 

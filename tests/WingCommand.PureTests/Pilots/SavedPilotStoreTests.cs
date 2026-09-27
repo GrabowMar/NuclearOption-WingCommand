@@ -58,6 +58,17 @@ namespace WingCommand.PureTests
         }
 
         [Fact]
+        public void AFileThatCannotBeParsedIsUnreadableAndAMissingOneIsNot()
+        {
+            // Review R7: an unreadable file is kept aside before anything writes over it.
+            Assert.True(SavedPilotStore.Unreadable("{\"pilots\":[{\"callsign\":\"A\",\"background\":\"say \"hi\"\"}]}"));
+            Assert.True(SavedPilotStore.Unreadable("{ pilots: [ }"));
+            Assert.False(SavedPilotStore.Unreadable(null));
+            Assert.False(SavedPilotStore.Unreadable("   "));
+            Assert.False(SavedPilotStore.Unreadable(Json("HATCH")));
+        }
+
+        [Fact]
         public void TheStoreHoldsAtMostTwentyFourPilots()
         {
             var problems = new List<string>();

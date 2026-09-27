@@ -12,7 +12,10 @@ namespace WingCommand
         public const string UserFile = "pilots.user.json", SimFile = "pilots.sim.json", ExportFile = "exported_pilots.json";
 
         private static SavedPilotStore store;
-        private static bool scratch, tallied;
+        private static bool scratch, tallied, locked;
+
+        /// <summary>Why the saved pilots could not be read this mission (the list's empty card says it), or null.</summary>
+        public static string Problem { get; private set; }
 
         public static string FilePath => Path.Combine(WingConfig.DataRoot, scratch ? SimFile : UserFile);
 
@@ -26,6 +29,7 @@ namespace WingCommand
         {
             var problems = new List<string>();
             string json = null;
+            bool unreadable = false;
             try
             {
                 if (File.Exists(FilePath)) json = File.ReadAllText(FilePath);
@@ -33,6 +37,26 @@ namespace WingCommand
             catch (Exception e)
             {
                 problems.Add(e.Message);
+                unreadable = true;
+            }
+            // Review R7: a file that cannot be read is kept aside before anything writes over it; if it cannot be kept, nothing writes.
+            locked = false;
+            Problem = null;
+            if (unreadable || SavedPilotStore.Unreadable(json))
+            {
+                string kept = FilePath + ".bad";
+                try
+                {
+                    File.Copy(FilePath, kept, overwrite: true);
+                    Problem = Path.GetFileName(FilePath) + " could not be read: kept as " + Path.GetFileName(kept) + "; SAVE starts a new file";
+                }
+                catch (Exception e)
+                {
+                    locked = true;
+                    Problem = Path.GetFileName(FilePath) + " could not be read or kept aside: saving is off until it is fixed";
+                    problems.Add(e.Message);
+                }
+                Plugin.Logger.LogWarning("[Pilots] " + Problem);
             }
             store = SavedPilotStore.FromJson(json, problems);
             foreach (string p in problems) Plugin.Logger.LogWarning("[Pilots] " + Path.GetFileName(FilePath) + ": " + p);
@@ -155,6 +179,11 @@ namespace WingCommand
 
         private static bool Write()
         {
+            if (locked)
+            {
+                Plugin.Logger.LogWarning("[Pilots] not writing " + Path.GetFileName(FilePath) + ": " + Problem);
+                return false;
+            }
             bool ok = AtomicFile.WriteAllText(FilePath, Store.ToJson(), out string error);
             if (!ok) Plugin.Logger.LogWarning("[Pilots] could not write " + Path.GetFileName(FilePath) + ": " + error);
             return ok;

@@ -36,7 +36,7 @@ namespace WingCommand
         private CustomPilotRecord draft, draftStart;
         private string draftOriginal;
         private WingPilot draftLive;
-        private bool draftNew, touched;
+        private bool draftNew, touched, cloned;
         private int draftSerial, draftRevision;
         private string problem;
         private WingPilot focusRequest;
@@ -56,6 +56,9 @@ namespace WingCommand
             body = pageBody;
             area = pageArea;
             ids.Clear();
+            // Review R7: the page is rebuilt every mission and on a re-layout; the studio's buttons are this build's.
+            studioButtonCount = 0;
+            System.Array.Clear(studioButtons, 0, studioButtons.Length);
             BuildList();
             BuildStudio();
             BuildRecord();
@@ -82,7 +85,13 @@ namespace WingCommand
             {
                 Entry e = Find(focusRequest.Callsign);
                 focusRequest = null;
-                if (e != null) Select(e);
+                // Review R7: STUDIO › asks before dropping unsaved edits, as a row press does (a second STUDIO › or the row drops them).
+                bool same = e != null && !draftNew && string.Equals(e.Callsign, selected, System.StringComparison.OrdinalIgnoreCase);
+                if (e != null && !same)
+                {
+                    if (Dirty && !rowGate.Press(e.Callsign, Time.unscaledTime)) WingToast.Show(StudioWords.UnsavedAsk);
+                    else Select(e);
+                }
             }
             if (!built) return;
             RefreshList();
@@ -183,6 +192,7 @@ namespace WingCommand
             draftSerial++;
             draftRevision++;
             touched = false;
+            cloned = false;
             problem = null;
             FillFields();
         }
@@ -216,6 +226,9 @@ namespace WingCommand
                 : DraftState.New;
             return stateShown;
         }
+
+        /// <summary>The draft holds work a switch would drop: edits against its source, or a NEW / CLONE that was touched or cloned.</summary>
+        private bool Dirty => draft != null && (draftNew ? touched || cloned : StateOf() == DraftState.Edited);
 
         private void Edited()
         {
