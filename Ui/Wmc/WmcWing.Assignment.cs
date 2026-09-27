@@ -87,7 +87,7 @@ namespace WingCommand
             AircraftDefinition current = m != null ? m.Aircraft.definition : isInbound ? launch.Type : null;
             WmcKit.Set(barName, WmcText.Cut(SquadronWords.Airframe(current?.unitName, p.LastAircraft), 44));
             SetIcon(current ?? LastFlown(p));
-            WmcKit.Set(barSlot, Slot(p, s, next, m, row, isInbound, launch, left, cost));
+            WmcKit.Set(barSlot, Slot(p, s, next, m, row, isInbound, launch, left, cost, airCan));
 
             // AIR SAR: the dossier's pilot, down on land; a helicopter already going latches its number.
             int rescuer = s == PilotStatus.Rescue ? number[at] : 0;
@@ -105,7 +105,7 @@ namespace WingCommand
         /// <summary>The slot line (wraps to two lines): the member's number, element and duty; the launch's phase and field; what a
         /// search costs; the countdown; the loss.</summary>
         private string Slot(WingPilot p, PilotStatus s, bool next, WingMember m, int row, bool isInbound, in InboundRow launch, float left,
-            float cost)
+            float cost, bool airCan)
         {
             switch (s)
             {
@@ -118,7 +118,7 @@ namespace WingCommand
                 case PilotStatus.Inbound:
                     return isInbound ? SquadronWords.InboundSlot(InboundWords.Phase(launch.Phase), FieldName(launch.Field))
                         : SquadronWords.InboundSlot(InboundWords.Phase(InboundPhase.Queued), null);
-                case PilotStatus.Downed: return SquadronWords.DownedSlot(Credits.Price(cost));
+                case PilotStatus.Downed: return SquadronWords.DownedSlot(Credits.Price(cost), airCan);
                 case PilotStatus.Rescue: return SquadronWords.RescueSlot(number[IndexOf(p)]);
                 case PilotStatus.Missing: return SquadronWords.MissingSlot(Credits.Price(cost), WmcText.Clock(WingSearchAndRescue.LocalRecoveryDuration));
                 case PilotStatus.LocalSar: return SquadronWords.LocalSarSlot(WmcText.Clock(left));

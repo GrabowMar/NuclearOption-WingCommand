@@ -78,7 +78,11 @@ namespace WingCommand.PureTests
             Assert.Equal("KIA · EXPLOSION · BY FS-12 REVOKER", SquadronWords.KiaSlot("explosion", "FS-12 Revoker"));
             Assert.Equal("KIA", SquadronWords.KiaSlot(null, null));
             Assert.True(SquadronWords.KiaSlot(new string('c', 80), new string('k', 80)).Length <= SquadronWords.SlotChars);
-            Assert.Contains("44 CR", SquadronWords.DownedSlot("44 CR"));
+            Assert.Contains("44 CR", SquadronWords.DownedSlot("44 CR", true));
+            // Review R6: with no helicopter able to go (an all fixed-wing wing), the slot line does not offer AIR SAR.
+            Assert.DoesNotContain("AIR SAR", SquadronWords.DownedSlot("44 CR", false));
+            Assert.Contains("NO HELICOPTER", SquadronWords.DownedSlot("44 CR", false));
+            Assert.Contains("44 CR", SquadronWords.DownedSlot("44 CR", false));
             Assert.Contains("SEARCHES 5:00", SquadronWords.MissingSlot("44 CR", "5:00"));
         }
 
@@ -96,6 +100,8 @@ namespace WingCommand.PureTests
             Assert.Null(SquadronWords.AirWhy(PilotStatus.Downed, false));
             Assert.Contains("LOCAL SAR", SquadronWords.AirWhy(PilotStatus.Missing, false));
             Assert.NotNull(SquadronWords.AirWhy(PilotStatus.Flying, false));
+            // Review R6: a pilot under a local search is down on land; the reason says what is going on instead.
+            Assert.Contains("local search", SquadronWords.AirWhy(PilotStatus.LocalSar, false));
             Assert.Equal(SquadronWords.ClientWhy, SquadronWords.AirWhy(PilotStatus.Downed, true));
             Assert.Equal("AIR SAR", SquadronWords.AirLabel(0));
             Assert.Equal("#3 GOING", SquadronWords.AirLabel(3));
@@ -108,6 +114,8 @@ namespace WingCommand.PureTests
             Assert.Null(SquadronWords.LocalWhy(PilotStatus.Missing, false));
             Assert.NotNull(SquadronWords.LocalWhy(PilotStatus.Flying, false));
             Assert.NotNull(SquadronWords.LocalWhy(PilotStatus.Kia, false));
+            // Review R6: a pilot a helicopter is going for is downed; the reason names the helicopter.
+            Assert.Contains("helicopter", SquadronWords.LocalWhy(PilotStatus.Rescue, false));
             Assert.Equal("LOCAL SAR?", SquadronWords.LocalLabel(true, null));
             Assert.Equal("4:59 LEFT", SquadronWords.LocalLabel(false, "4:59"));
             Assert.Contains("44 CR", SquadronWords.LocalAsk("HATCH", "44 CR", "5:00"));
@@ -124,8 +132,9 @@ namespace WingCommand.PureTests
         [Fact]
         public void TheAlertNamesTheDownedOrMissingPilot()
         {
-            Assert.Equal("HATCH DOWNED — AIR SAR OR LOCAL SAR", SquadronWords.Alert(PilotStatus.Downed, "HATCH"));
-            Assert.Equal("HATCH MIA — LOCAL SAR CAN SEARCH", SquadronWords.Alert(PilotStatus.Missing, "HATCH"));
+            // Review R6: the alert names the trouble, not a button that may be off (no helicopter; the ejection check).
+            Assert.Equal("HATCH DOWNED — SAR NEEDED", SquadronWords.Alert(PilotStatus.Downed, "HATCH"));
+            Assert.Equal("HATCH MIA — NO SIGNAL", SquadronWords.Alert(PilotStatus.Missing, "HATCH"));
             Assert.Null(SquadronWords.Alert(PilotStatus.Flying, "HATCH"));
         }
 

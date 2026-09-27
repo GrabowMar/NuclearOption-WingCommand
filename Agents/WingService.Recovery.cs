@@ -33,7 +33,8 @@ namespace WingCommand
             if (m.Settle != null)
             {
                 // From a settle the recovery flies the same pipeline: it picks up from the controls last applied (review
-                // M4c I3), not from the moment it touched down.
+                // M4c I3), not from the moment it touched down. Review R6: a rescue it cancels shows on WING at once.
+                if (m.Job != null && m.Job.Task == SettleTask.Rescue) WingPilotRoster.Touch();
                 m.Settle = null;
                 m.Job = null;
                 m.Brain.Track(m.Last, EngineSticks.ToPure(ControlWriter.Read(m.Aircraft.GetInputs())), m.Profile);

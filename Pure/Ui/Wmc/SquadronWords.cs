@@ -107,7 +107,9 @@ namespace WingCommand
 
         public static string FreeSlot(bool next) => next ? "NEXT UP · FLIES THE NEXT LAUNCH" : "FREE · SUPPLY SEATS THE NEXT UP FIRST";
 
-        public static string DownedSlot(string localCost) => Cap("DOWNED · AIR SAR SENDS A HELICOPTER · LOCAL SAR " + localCost);
+        /// <summary>A downed pilot's options: AIR SAR only when a helicopter can go (review R6: an all fixed-wing wing has none).</summary>
+        public static string DownedSlot(string localCost, bool air) =>
+            Cap((air ? "DOWNED · AIR SAR SENDS A HELICOPTER · LOCAL SAR " : "DOWNED · NO HELICOPTER CAN GO · LOCAL SAR ") + localCost);
 
         public static string RescueSlot(int rescuer) => "SAR #" + N(rescuer) + " EN ROUTE";
 
@@ -147,6 +149,7 @@ namespace WingCommand
             if (s == PilotStatus.Downed) return null;
             if (s == PilotStatus.Missing) return "No survivor signal: LOCAL SAR searches";
             if (s == PilotStatus.Rescue) return "A helicopter is already on the way";
+            if (s == PilotStatus.LocalSar) return "A local search is already under way";
             return "Only a pilot down on land can be picked up";
         }
 
@@ -159,6 +162,7 @@ namespace WingCommand
             if (client) return ClientWhy;
             if (s == PilotStatus.Downed || s == PilotStatus.Missing) return null;
             if (s == PilotStatus.LocalSar) return "A local search is already under way";
+            if (s == PilotStatus.Rescue) return "A helicopter is already on the way";
             return "Only a missing or downed pilot can be searched for";
         }
 
@@ -171,9 +175,10 @@ namespace WingCommand
         public static string LocalAsk(string callsign, string cost, string duration) =>
             "Local search for " + callsign + ": " + cost + ", back in " + duration + ". Press LOCAL SAR again";
 
+        /// <summary>The first pilot down, named with the trouble (review R6: not a button that may be off; WING's bar says which one can go).</summary>
         public static string Alert(PilotStatus s, string callsign) =>
-            s == PilotStatus.Downed ? callsign + " DOWNED — AIR SAR OR LOCAL SAR"
-            : s == PilotStatus.Missing ? callsign + " MIA — LOCAL SAR CAN SEARCH" : null;
+            s == PilotStatus.Downed ? callsign + " DOWNED — SAR NEEDED"
+            : s == PilotStatus.Missing ? callsign + " MIA — NO SIGNAL" : null;
 
         public static string Hint(bool client, int pilots) =>
             client ? "The host keeps the squadron roster; you can look."
