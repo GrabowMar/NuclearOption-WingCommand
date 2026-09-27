@@ -12,6 +12,8 @@ namespace WingCommand.PureTests
         {
             Assert.Equal("FLYING #2", SquadronWords.Row(PilotStatus.Flying, false, 2));
             Assert.Equal("FLYING #2", SquadronWords.Stamp(PilotStatus.Flying, false, 2));
+            // A seat kept while its aircraft is not a wing member (no number): the word alone.
+            Assert.Equal("FLYING", SquadronWords.Row(PilotStatus.Flying, false, 0));
             Assert.Equal("FREE · NEXT UP", SquadronWords.Row(PilotStatus.Free, true, 0));
             Assert.Equal("NEXT UP", SquadronWords.Stamp(PilotStatus.Free, true, 0));
             Assert.Equal("FREE", SquadronWords.Row(PilotStatus.Free, false, 0));
@@ -136,6 +138,11 @@ namespace WingCommand.PureTests
                     {
                         Assert.False(c == '…' || c == '†' || (c >= '■' && c <= '◿'), w);
                     }
+            foreach (string w in new[] { SquadronWords.RowTip, SquadronWords.RecruitTip, SquadronWords.AirTip, SquadronWords.ReleaseTip,
+                         SquadronWords.LocalTip("44 CR"), SquadronWords.StudioWhy, SquadronWords.Empty, SquadronWords.ClientWhy,
+                         SquadronWords.LocalPending, SquadronWords.LocalGone, SquadronWords.NoFunds, SquadronWords.LocalNeeds("44 CR", "9 CR") })
+                foreach (char c in w)
+                    Assert.False(c == '…' || c == '†' || (c >= '■' && c <= '◿') || (c >= '←' && c <= '⇿'), w);
         }
     }
 }

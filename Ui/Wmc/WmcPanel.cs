@@ -16,13 +16,8 @@ namespace WingCommand
         public const int TabTactical = 0, TabSupply = 1, TabLoadout = 2, TabWing = 3;
         public static readonly string[] TabLabels = { "TACTICAL", "SUPPLY", "LOADOUT", "WING" };
 
-        private static readonly string[] PendingTabs =
-        {
-            null,
-            null,
-            null,
-            "WING: the squadron roster and the pilot dossier. Arrives in a later update.",
-        };
+        /// <summary>A tab not built yet says so in its tooltip (every tab is built since R6).</summary>
+        private static readonly string[] PendingTabs = { null, null, null, null };
 
         public static WmcPanel Instance { get; private set; }
         public string Name => "WMC";
@@ -36,6 +31,7 @@ namespace WingCommand
         private WmcTactical tactical;
         private WmcSupply supply;
         private WmcLoadout loadout;
+        private WmcWing wingPage;
         private WmcMetricRow metrics;
         private MFDScreen screen;
         private Button bezelButton;
@@ -63,6 +59,7 @@ namespace WingCommand
         public WmcTactical Tactical => tactical;
         public WmcSupply Supply => supply;
         public WmcLoadout Loadout => loadout;
+        public WmcWing WingPage => wingPage;
         /// <summary>Labels that would still spill out of their box (the automation's text-fit audit).</summary>
         public int Overflow => content != null ? WmcKit.Overflow(content) : 0;
 
@@ -180,6 +177,7 @@ namespace WingCommand
             tactical = null;
             supply = null;
             loadout = null;
+            wingPage = null;
             metrics = null;
             profileShown = null;
             for (int i = 0; i < headerKeys.Length; i++) headerKeys[i] = -1;
@@ -289,7 +287,8 @@ namespace WingCommand
             tactical = new WmcTactical(controls);
             supply = new WmcSupply(controls);
             loadout = new WmcLoadout(controls);
-            pages = new IWmcPage[] { tactical, supply, loadout, null };
+            wingPage = new WmcWing(controls);
+            pages = new IWmcPage[] { tactical, supply, loadout, wingPage };
             for (int i = 0; i < pages.Length; i++)
             {
                 if (pages[i] == null)

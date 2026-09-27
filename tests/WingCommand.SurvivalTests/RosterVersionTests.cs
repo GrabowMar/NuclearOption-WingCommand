@@ -197,6 +197,19 @@ namespace WingCommand
             Assert.NotEqual(before, WingPilotRoster.Version);
         }
 
+        [Fact]
+        public void OnlyALookChangeMovesTheLookVersion()
+        {
+            var aircraft = Plane(1);
+            WingPilot live = WingPilotRoster.Assign(aircraft);
+            int look = WingPilotRoster.LookVersion;
+            WingPilotRoster.NoteKill(aircraft, 9, "tank", award: true);
+            WingPilotRoster.NoteSortie(aircraft);
+            Assert.Equal(look, WingPilotRoster.LookVersion);
+            WingPilotRoster.ApplyIdentity(live, new CustomPilotRecord { Name = "Ada Byrne", Callsign = live.Callsign });
+            Assert.NotEqual(look, WingPilotRoster.LookVersion);
+        }
+
         // ---- LOCAL SAR's price (SarRules) and its window
 
         [Fact]

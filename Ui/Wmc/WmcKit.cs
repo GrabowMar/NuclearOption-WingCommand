@@ -147,11 +147,12 @@ namespace WingCommand
     }
 
     /// <summary>A pilot's portrait in a frame (SUPPLY's pilot card; WING's dossier reuses it): the sprite is looked up only when
-    /// the pilot changes. ponytail: keyed on the pilot object; a portrait edited in the studio (R7) calls <see cref="Invalidate"/>.</summary>
+    /// the pilot or the roster's <see cref="WingPilotRoster.LookVersion"/> changes (a studio or interop edit).</summary>
     internal sealed class WmcPortrait
     {
         private Image image;
         private WingPilot shown;
+        private int look = int.MinValue;
         private bool set;
 
         public static WmcPortrait Build(RectTransform p, Rect r)
@@ -167,9 +168,10 @@ namespace WingCommand
         /// <summary>The pilot's face; with nobody, the generic one faded (a pilot drafted at launch).</summary>
         public void Set(WingPilot pilot)
         {
-            if (set && ReferenceEquals(pilot, shown)) return;
+            if (set && ReferenceEquals(pilot, shown) && look == WingPilotRoster.LookVersion) return;
             set = true;
             shown = pilot;
+            look = WingPilotRoster.LookVersion;
             image.sprite = PilotPortrait.For(pilot);
             image.enabled = image.sprite != null;
             image.color = pilot != null ? Color.white : new Color(1f, 1f, 1f, 0.3f);

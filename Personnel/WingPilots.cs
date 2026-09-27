@@ -74,6 +74,10 @@ namespace WingCommand
         /// <summary>A change made outside the roster that WING shows (a survivor seen, a search organized).</summary>
         internal static void Touch() => Version++;
 
+        /// <summary>Bumped only when a pilot's look (identity or portrait) changes: portraits are looked up again then, not on every
+        /// kill (critic resolution 13).</summary>
+        public static int LookVersion { get; private set; }
+
         /// <summary>The squadron in join order (WING's rows: stable, KIA in place), into a reused list.</summary>
         public static void Roster(List<WingPilot> into)
         {
@@ -365,6 +369,7 @@ namespace WingCommand
             live.Background = record.Background;
             if (record.HasCustomPortrait) live.PortraitSelection = record.Selection;
             Version++;
+            LookVersion++;
         }
 
         /// <summary>Discharge a free pilot (R6 ruling: never one flying, reserved, downed, missing or searched for, who could come back

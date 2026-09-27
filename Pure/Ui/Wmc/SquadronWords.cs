@@ -13,13 +13,21 @@ namespace WingCommand
         public const string Empty = "NO PILOTS · RECRUIT below, or requisition on SUPPLY";
         public const string NoFocus = "NO PILOT SELECTED";
         public const string StudioWhy = "The pilot studio lives in the planning room's SQUADRON. Arrives in a later update.";
+        public const string Title = "SQUADRON", PerksTitle = "PERKS", AssignTitle = "AIRFRAME ASSIGNMENT";
+        public const string RowTip = "Open this pilot's dossier (SUPPLY's pilot card picks who flies next).";
+        public const string RecruitTip = "Recruit a pilot into the squadron (free). A new pilot starts at 0 XP.";
+        public const string AirTip = "Send the nearest helicopter able to pick this pilot up (free; the rescue pays a bounty).";
+        public const string ReleaseTip = "Hand this aircraft to the game's AI (press twice): the pilot reads FREE, the jet flies on.";
+
+        public static string LocalTip(string cost) =>
+            "Search for this pilot locally (press twice): " + cost + ", back in 5:00. Not refunded if the pilot is lost meanwhile.";
 
         public static string Row(PilotStatus s, bool next, int number)
         {
             switch (s)
             {
                 case PilotStatus.Inbound: return "INBOUND";
-                case PilotStatus.Flying: return "FLYING #" + N(number);
+                case PilotStatus.Flying: return number > 0 ? "FLYING #" + N(number) : "FLYING";
                 case PilotStatus.Downed: return "DOWNED — SAR";
                 case PilotStatus.Rescue: return "SAR #" + N(number) + " GOING";
                 case PilotStatus.Missing: return "MIA";
