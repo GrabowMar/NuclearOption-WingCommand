@@ -109,28 +109,9 @@ namespace WingCommand
             listPage = at >= 0 ? Pages.Of(at, perPage) : Pages.Clamp(listPage, roster.Count, perPage);
         }
 
-        /// <summary>One status per pilot (PilotStatuses.Of) and the number it reads with: the member it flies, or the helicopter
-        /// going for it.</summary>
-        private PilotStatus StatusOf(WingPilot p, out int n)
-        {
-            WingMember m = MemberOf(p);
-            n = m != null ? m.Number : 0;
-            bool down = p.RecoveryStatus == PilotRecoveryStatus.Downed || p.RecoveryStatus == PilotRecoveryStatus.Missing;
-            bool local = down && WingSearchAndRescue.LocalRecoveryRemaining(p) >= 0f;
-            int rescuer = p.RecoveryStatus == PilotRecoveryStatus.Downed && wing != null ? wing.RescuerNumber(p) : 0;
-            PilotStatus s = PilotStatuses.Of(p.Lost, p.RecoveryStatus, WingPilotRoster.IsFlying(p), WingPilotRoster.IsReserved(p), local, rescuer > 0);
-            if (s == PilotStatus.Rescue) n = rescuer;
-            return s;
-        }
+        private PilotStatus StatusOf(WingPilot p, out int n) => WmcPilots.StatusOf(p, wing, out n);
 
-        /// <summary>The wing member this pilot flies, or null.</summary>
-        private WingMember MemberOf(WingPilot p)
-        {
-            if (wing == null || p == null) return null;
-            foreach (WingMember m in wing.Members)
-                if (!m.Released && m.Aircraft != null && ReferenceEquals(WingPilotRoster.Of(m.Aircraft), p)) return m;
-            return null;
-        }
+        private WingMember MemberOf(WingPilot p) => WmcPilots.MemberOf(p, wing);
 
         private int IndexOf(WingPilot p) => p != null ? roster.IndexOf(p) : -1;
 
@@ -238,10 +219,8 @@ namespace WingCommand
             recruit = AvStyled.Button(r, new Rect(216f, y, 116f, h), "RECRUIT", "btn", Recruit);
             recruit.WithTooltip(SquadronWords.RecruitTip);
             ids["wing.recruit"] = recruit;
-            studio = AvStyled.Button(r, new Rect(338f, y, width - 338f, h), "STUDIO ›", "btn", () => { }, AvButtonStyle.Quiet);
-            // R7 opens the room's SQUADRON on the inspected pilot; until then disabled with its reason, as EDIT SHAPES ›.
-            studio.SetEnabled(false);
-            studio.WithTooltip(SquadronWords.StudioWhy);
+            studio = AvStyled.Button(r, new Rect(338f, y, width - 338f, h), "STUDIO ›", "btn", OpenStudio, AvButtonStyle.Quiet);
+            studio.WithTooltip(SquadronWords.StudioTip);
             ids["wing.studio"] = studio;
         }
 
@@ -325,6 +304,15 @@ namespace WingCommand
             listPage = Pages.Turn(listPage, dir, roster.Count, perPage);
             inspected = roster[Pages.First(listPage, perPage)];
             WmcPanel.Instance?.Refresh();
+        }
+
+        /// <summary>STUDIO ›: the planning room's SQUADRON on the dossier's pilot (R7).</summary>
+        private void OpenStudio()
+        {
+            WmcRoom room = WmcRoom.Instance;
+            if (room == null) return;
+            if (!client && inspected != null) room.Squadron.Focus(inspected);
+            room.Open(RoomNotches.Squadron);
         }
 
         private void Recruit()

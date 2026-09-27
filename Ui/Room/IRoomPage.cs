@@ -9,6 +9,9 @@ namespace WingCommand
         /// <summary>The footer's help line for the page.</summary>
         string Hint { get; }
 
+        /// <summary>The page's controls by id (automation presses them).</summary>
+        System.Collections.Generic.IReadOnlyDictionary<string, NOAvionics.Ui.AvButton> Controls { get; }
+
         void Build(RectTransform body, Rect area);
 
         void Show(WmcContext c);

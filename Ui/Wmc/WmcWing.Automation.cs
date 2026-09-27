@@ -68,7 +68,7 @@ namespace WingCommand
             into["wing_next"] = upcoming != null ? upcoming.Callsign : "";
             into["wing_next_is_focus"] = upcoming != null && ReferenceEquals(upcoming, inspected) ? 1 : 0;
             into["wing_recruit"] = client ? 0 : 1;
-            into["wing_studio"] = 0;
+            into["wing_studio"] = WmcRoom.Instance != null ? 1 : 0;
             into["wing_release"] = releaseOn ? 1 : 0;
             into["wing_airsar"] = at >= 0 && airWhy == null ? 1 : 0;
             into["wing_localsar"] = at >= 0 && localWhy == null ? 1 : 0;

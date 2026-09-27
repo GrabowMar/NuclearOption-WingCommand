@@ -139,7 +139,7 @@ namespace WingCommand.PureTests
                         Assert.False(c == '…' || c == '†' || (c >= '■' && c <= '◿'), w);
                     }
             foreach (string w in new[] { SquadronWords.RowTip, SquadronWords.RecruitTip, SquadronWords.AirTip, SquadronWords.ReleaseTip,
-                         SquadronWords.LocalTip("44 CR"), SquadronWords.StudioWhy, SquadronWords.Empty, SquadronWords.ClientWhy,
+                         SquadronWords.LocalTip("44 CR"), SquadronWords.StudioTip, SquadronWords.Empty, SquadronWords.ClientWhy,
                          SquadronWords.LocalPending, SquadronWords.LocalGone, SquadronWords.NoFunds, SquadronWords.LocalNeeds("44 CR", "9 CR") })
                 foreach (char c in w)
                     Assert.False(c == '…' || c == '†' || (c >= '■' && c <= '◿') || (c >= '←' && c <= '⇿'), w);

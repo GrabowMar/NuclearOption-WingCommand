@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using NOAvionics;
 using NOAvionics.Ui;
 using TMPro;
@@ -62,10 +63,18 @@ namespace WingCommand
             Instance = this;
             Tactical = new RoomTactical();
             Register(RoomNotches.Plan, Tactical);
+            Squadron = new RoomSquadron();
+            Register(RoomNotches.Squadron, Squadron);
         }
 
         /// <summary>The TACTICAL page (automation reads its counters).</summary>
         public RoomTactical Tactical { get; }
+
+        /// <summary>The SQUADRON page (R7: records and the pilot studio).</summary>
+        public RoomSquadron Squadron { get; }
+
+        /// <summary>The open page's controls (automation presses them), or null.</summary>
+        public IReadOnlyDictionary<string, AvButton> PageControls => page >= 0 ? pages[page]?.Controls : null;
 
         /// <summary>One refresh of the open page now (automation: a change made in the same call shows in its report).</summary>
         public void RefreshNow()
