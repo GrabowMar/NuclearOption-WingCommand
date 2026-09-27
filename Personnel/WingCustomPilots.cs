@@ -144,7 +144,7 @@ namespace WingCommand
             {
                 if (!WingPilotRoster.ContainsCallsign(pilot.Callsign))
                 {
-                    WingPilot recruited = WingPilotRoster.ImportCustom(pilot);
+                    WingPilot recruited = WingPilotRoster.Enlist(pilot);
                     if (recruited != null) newPilotsCount++;
                 }
             }

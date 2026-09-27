@@ -327,12 +327,19 @@ namespace WingCommand
             return pilot;
         }
 
-        /// <summary>Add a custom pilot record to the squadron.</summary>
-        public static WingPilot ImportCustom(CustomPilotRecord record)
+        /// <summary>A new mission's squadron (R7): the last one forgotten, then every saved pilot enlisted in the store's order.</summary>
+        public static void StartMission(IReadOnlyList<CustomPilotRecord> saved)
         {
-            if (record == null) return null;
-            if (ContainsCallsign(record.Callsign)) return null;
+            Reset();
+            if (saved == null) return;
+            for (int i = 0; i < saved.Count; i++) Enlist(saved[i]);
+        }
 
+        /// <summary>A saved pilot joins this mission: identity and look only, a ROOKIE with no XP, kills, sorties or perks (the
+        /// 2026-09-25 decision). Null when the callsign is already on the roster.</summary>
+        public static WingPilot Enlist(CustomPilotRecord record)
+        {
+            if (record == null || string.IsNullOrWhiteSpace(record.Callsign) || ContainsCallsign(record.Callsign)) return null;
             var pilot = new WingPilot
             {
                 Name = record.Name,
@@ -340,23 +347,29 @@ namespace WingCommand
                 DialogueTag = record.ResolvedDialogueTag,
                 Persona = record.Persona,
                 Background = record.Background,
-                Xp = record.Xp,
-                Kills = record.Kills,
-                Sorties = record.Sorties,
             };
-
-            if (record.HasCustomPortrait)
-            {
-                pilot.PortraitSelection = record.Selection;
-            }
-
+            if (record.HasCustomPortrait) pilot.PortraitSelection = record.Selection;
             roster.Add(pilot);
-            Version++;
-            GrantPerks(pilot);
             if (selectedPilot == null) selectedPilot = pilot;
             created++;
+            Version++;
             return pilot;
         }
+
+        /// <summary>The studio's edit on a live pilot, a rename included (the seat, the record and the XP stay). Refused when another
+        /// pilot of this mission already has the new callsign.</summary>
+        public static bool UpdateIdentity(WingPilot live, CustomPilotRecord record)
+        {
+            if (live == null || record == null || string.IsNullOrWhiteSpace(record.Callsign)) return false;
+            WingPilot other = FindByCallsign(record.Callsign);
+            if (other != null && !ReferenceEquals(other, live)) return false;
+            live.Callsign = record.Callsign;
+            ApplyIdentity(live, record);
+            return true;
+        }
+
+        /// <summary>The saved pilots' callsigns (the store sets it): a drafted pilot never takes one.</summary>
+        public static Func<string, bool> SavedTaken { get; set; }
 
         /// <summary>The studio's identity on a live pilot (name, radio, dialogue, background, portrait); never the mission record
         /// (XP, kills, sorties), which the mission earns (R6 ruling: XP starts at 0 each mission).</summary>
@@ -568,7 +581,7 @@ namespace WingCommand
 
         private static WingPilot DefaultProvider(int index)
         {
-            string callsign = PilotIdentity.Callsign(n => Random.Range(0, n), ContainsCallsign);
+            string callsign = PilotIdentity.Callsign(n => Random.Range(0, n), c => ContainsCallsign(c) || (SavedTaken != null && SavedTaken(c)));
             var persona = (ChatterPersona)Random.Range(0, 4);
             return new WingPilot
             {

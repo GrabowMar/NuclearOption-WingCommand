@@ -175,7 +175,7 @@ namespace WingCommand.Interop
             if (string.IsNullOrWhiteSpace(callsign)) return false;
             if (WingPilotRoster.ContainsCallsign(callsign)) return true;
             CustomPilotRecord record = FindCustomPilot(callsign);
-            return record != null && WingPilotRoster.ImportCustom(record) != null;
+            return record != null && WingPilotRoster.Enlist(record) != null;
         }
 
         public static bool DischargeCustomPilot(string callsign)

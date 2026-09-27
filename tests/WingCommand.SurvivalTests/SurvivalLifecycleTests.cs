@@ -85,12 +85,15 @@ namespace WingCommand
         }
 
         [Fact]
-        public void ImportedRankGetsPerksAndLargePromotionAwardsEveryCrossedRank()
+        public void APromotionFromRookieAwardsEveryCrossedRank()
         {
-            var pilot = WingPilotRoster.ImportCustom(new CustomPilotRecord { Callsign = "TEST", Xp = 120 });
-            Assert.Single(pilot.Perks);
+            // R7: a saved pilot enlists a ROOKIE (the decision: XP resets every mission); promotions grant the perks.
+            var pilot = WingPilotRoster.Enlist(new CustomPilotRecord { Callsign = "TEST", Xp = 120 });
+            Assert.Empty(pilot.Perks);
             var aircraft = Plane();
             WingPilotRoster.Assign(aircraft, pilot);
+            WingPilotRoster.Award(aircraft, 120, "test");
+            Assert.Single(pilot.Perks);
             WingPilotRoster.Award(aircraft, 2000, "test");
             Assert.Equal(WingRank.Legend, pilot.Rank);
             Assert.Equal(4, pilot.Perks.Count);
@@ -99,7 +102,7 @@ namespace WingCommand
         }
 
         [Fact]
-        public void ImportedCustomPortraitKeepsSemanticSelectionRatherThanAtlasAddresses()
+        public void AnEnlistedCustomPortraitKeepsSemanticSelectionRatherThanAtlasAddresses()
         {
             var record = new CustomPilotRecord
             {
@@ -112,7 +115,7 @@ namespace WingCommand
                 Backdrop = 3,
             };
 
-            var pilot = WingPilotRoster.ImportCustom(record);
+            var pilot = WingPilotRoster.Enlist(record);
             Assert.True(pilot.HasCustomPortrait);
             Assert.Equal(record.Selection, pilot.PortraitSelection.Value);
         }

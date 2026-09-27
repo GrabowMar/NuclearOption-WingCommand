@@ -40,7 +40,7 @@ namespace WingCommand
             public static bool ContainsCallsign(string callsign) => WingPilotRoster.ContainsCallsign(callsign);
             public static WingRank RankFor(int xp) => WingPilotRoster.RankFor(xp);
             public static WingPilot FindByCallsign(string callsign) => WingPilotRoster.FindByCallsign(callsign);
-            public static WingPilot ImportCustom(CustomPilotRecord record) => WingPilotRoster.ImportCustom(record);
+            public static WingPilot Enlist(CustomPilotRecord record) => WingPilotRoster.Enlist(record);
             public static bool RemoveFromSquadron(WingPilot pilot) => WingPilotRoster.RemoveFromSquadron(pilot);
             public static bool HasPerk(Aircraft aircraft, PilotPerk perk) => WingPilotRoster.HasPerk(aircraft, perk);
             public static bool HasPerk(WingPilot pilot, PilotPerk perk) => WingPilotRoster.HasPerk(pilot, perk);
