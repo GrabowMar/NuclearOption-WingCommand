@@ -64,23 +64,6 @@ namespace WingCommand
             public static string Status(WingPilot pilot) => WingSearchAndRescue.Status(pilot);
         }
 
-        internal static class CustomPilots
-        {
-            public static void EnsurePilotsDirectory() => WingCustomPilots.EnsurePilotsDirectory();
-            public static bool TryGetEventLine(string tag, string eventName, string detail, out string phrase) =>
-                WingCustomPilots.TryGetEventLine(tag, eventName, detail, out phrase);
-            public static void OpenFolder() => WingCustomPilots.OpenFolder();
-            public static List<CustomPilotRecord> LoadAllCustomPilots(out int chattersCount) =>
-                WingCustomPilots.LoadAllCustomPilots(out chattersCount);
-            public static int ImportAll(out int chattersCount, out string message) =>
-                WingCustomPilots.ImportAll(out chattersCount, out message);
-            public static bool SaveCustomPilots(IEnumerable<CustomPilotRecord> pilots, string fileName = "custom_pilots.json") =>
-                WingCustomPilots.SaveCustomPilots(pilots, fileName);
-            public static bool SaveOrUpdatePilot(CustomPilotRecord pilot, string fileName = "custom_pilots.json") =>
-                WingCustomPilots.SaveOrUpdatePilot(pilot, fileName);
-            public static bool DeleteCustomPilot(string callsign) => WingCustomPilots.DeleteCustomPilot(callsign);
-        }
-
         internal static class Portraits
         {
             public static void Reset() => PilotPortrait.Reset();

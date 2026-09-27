@@ -76,7 +76,8 @@ namespace WingCommand
             Members.Clear();
             ResetElements();
             FieldRegistry.Clear();
-            WingPilotRoster.Reset();
+            // R7: the saved pilots join every mission as ROOKIEs (re-read, so a hand edit or another machine's save shows).
+            WingPilotRoster.StartMission(WingSavedPilots.Load().Records);
             WingKillCredit.Reset();
             WingLedger.Reset();
             WingSupplyReserve.Reset();
@@ -120,6 +121,8 @@ namespace WingCommand
 
         public void Deactivate()
         {
+            // R7: the saved pilots who flew add this mission to their service record (once; the roster is still this mission's).
+            WingSavedPilots.Tally();
             WingTakeover.Reset();
             Interop.WingSquad.Reset();
             flyingPlayer = null;

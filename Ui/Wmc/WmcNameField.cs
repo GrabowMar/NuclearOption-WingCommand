@@ -34,12 +34,16 @@ namespace WingCommand
         /// <summary>The field holds text not yet saved (the build card's EDITED).</summary>
         public bool Dirty => focused && field != null && field.text != shown;
 
-        public static WmcNameField Build(RectTransform parent, Rect r, int limit, Action<string, string> commit, string tip)
+        public static WmcNameField Build(RectTransform parent, Rect r, int limit, Action<string, string> commit, string tip,
+            string placeholder = "NAME", bool multiline = false)
         {
             var w = new WmcNameField { commit = commit };
-            w.field = AvKit.InputField(parent, r, limit, w.OnEndEdit, w.OnFocus, w.OnBlur, tip, "NAME");
+            w.field = AvKit.InputField(parent, r, limit, w.OnEndEdit, w.OnFocus, w.OnBlur, tip, placeholder, multiline);
             return w;
         }
+
+        /// <summary>What the field holds now, typed or not (SAVE reads the fields first: a click straight from a field is not lost).</summary>
+        public string Text => field != null ? field.text : "";
 
         /// <summary>The saved name, shown while the field is not being typed in.</summary>
         public void SetText(string text)

@@ -220,7 +220,9 @@ namespace WingCommand
             }
             if (Input.GetKeyDown(KeyCode.Escape))
             {
-                Close();
+                // R7: Esc while typing ends the edit (the field restores its text); the next Esc closes.
+                if (WmcNameField.Typing) WmcNameField.BlurAny();
+                else Close();
                 return;
             }
             // Review P5 I1: the runtime only stops ticking a faulted service; it never deactivates it. A fault here closes the
@@ -263,7 +265,7 @@ namespace WingCommand
 
         private bool Chord(WmcContext c)
         {
-            if (!Input.GetKey(KeyCode.LeftControl) && !Input.GetKey(KeyCode.RightControl)) return false;
+            if (WmcNameField.Typing || (!Input.GetKey(KeyCode.LeftControl) && !Input.GetKey(KeyCode.RightControl))) return false;
             for (int d = 1; d <= RoomNotches.Count; d++)
             {
                 if (!Input.GetKeyDown(KeyCode.Alpha0 + d)) continue;

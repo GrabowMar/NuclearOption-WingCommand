@@ -91,10 +91,10 @@ namespace WingCommand.Interop
                 body == 1 ? PortraitBody.Female : PortraitBody.Male, face, hair, uniform, accessory, backdrop));
         }
 
-        /// <summary>Callsigns of every custom pilot file found on this machine.</summary>
+        /// <summary>Callsigns of this machine's saved pilots (R7: <c>v1/pilots.user.json</c>).</summary>
         public static string[] ListCustomPilots()
         {
-            List<CustomPilotRecord> records = PersonnelFacade.CustomPilots.LoadAllCustomPilots(out _);
+            IReadOnlyList<CustomPilotRecord> records = WingSavedPilots.Store.Records;
             var result = new List<string>(Math.Min(records.Count, 128));
             for (int i = 0; i < records.Count && result.Count < 128; i++)
             {
@@ -111,10 +111,10 @@ namespace WingCommand.Interop
             return record == null ? null : Export(record);
         }
 
-        /// <summary>Flat records for every custom pilot on this machine.</summary>
+        /// <summary>Flat records for every saved pilot on this machine (fields 5-7: the service record's best XP, kills, sorties).</summary>
         public static object[][] GetCustomPilots()
         {
-            List<CustomPilotRecord> records = PersonnelFacade.CustomPilots.LoadAllCustomPilots(out _);
+            IReadOnlyList<CustomPilotRecord> records = WingSavedPilots.Store.Records;
             var result = new List<object[]>(Math.Min(records.Count, 128));
             for (int i = 0; i < records.Count && result.Count < 128; i++)
             {
@@ -124,8 +124,8 @@ namespace WingCommand.Interop
             return result.ToArray();
         }
 
-        /// <summary>Create or replace one custom pilot file. The live squadron pilot with
-        /// the same callsign is updated in place, matching the Wing Command Pilot Studio.</summary>
+        /// <summary>Create or replace one saved pilot by callsign (identity and look; the service record is Wing Command's). The
+        /// live squadron pilot with the same callsign takes the new identity, never XP (R7).</summary>
         public static bool SaveCustomPilot(object[] values)
         {
             if (values == null || values.Length < 15) return false;
@@ -152,9 +152,9 @@ namespace WingCommand.Interop
                         Convert.ToInt32(values[12]), Convert.ToInt32(values[13]),
                         Convert.ToInt32(values[14])));
                 }
-                if (!PersonnelFacade.CustomPilots.SaveOrUpdatePilot(record)) return false;
-                UpdateLivePilot(record);
-                return true;
+                bool ok = WingSavedPilots.Save(record, callsign, WingPilotRoster.FindByCallsign(callsign), out string why);
+                if (!ok) Plugin.Logger.LogWarning("[WingSquad] Custom pilot save refused: " + why);
+                return ok;
             }
             catch (Exception error)
             {
@@ -163,8 +163,7 @@ namespace WingCommand.Interop
             }
         }
 
-        public static bool DeleteCustomPilot(string callsign) =>
-            PersonnelFacade.CustomPilots.DeleteCustomPilot(Limit(callsign, 32));
+        public static bool DeleteCustomPilot(string callsign) => WingSavedPilots.Delete(Limit(callsign, 32), out _);
 
         public static bool IsPilotRecruited(string callsign) =>
             WingPilotRoster.ContainsCallsign(Limit(callsign, 32));
@@ -184,22 +183,17 @@ namespace WingCommand.Interop
             return pilot != null && WingPilotRoster.RemoveFromSquadron(pilot);
         }
 
-        /// <summary>Import every custom pilot that is not already in the live squadron.</summary>
-        public static int ImportAllCustomPilots() =>
-            PersonnelFacade.CustomPilots.ImportAll(out _, out _);
-
-        private static CustomPilotRecord FindCustomPilot(string callsign)
+        /// <summary>Enlist every saved pilot not already in this mission's squadron; returns how many joined.</summary>
+        public static int ImportAllCustomPilots()
         {
-            if (string.IsNullOrWhiteSpace(callsign)) return null;
-            List<CustomPilotRecord> records = PersonnelFacade.CustomPilots.LoadAllCustomPilots(out _);
-            for (int i = 0; i < records.Count; i++)
-            {
-                if (records[i] != null &&
-                    string.Equals(records[i].Callsign, callsign.Trim(), StringComparison.OrdinalIgnoreCase))
-                    return records[i];
-            }
-            return null;
+            int n = 0;
+            foreach (CustomPilotRecord r in WingSavedPilots.Store.Records)
+                if (WingPilotRoster.Enlist(r) != null) n++;
+            return n;
         }
+
+        private static CustomPilotRecord FindCustomPilot(string callsign) =>
+            string.IsNullOrWhiteSpace(callsign) ? null : WingSavedPilots.Store.Find(callsign);
 
         private static object[] Export(CustomPilotRecord record)
         {
@@ -223,9 +217,6 @@ namespace WingCommand.Interop
                 selection.Backdrop,
             };
         }
-
-        private static void UpdateLivePilot(CustomPilotRecord record) =>
-            WingPilotRoster.ApplyIdentity(WingPilotRoster.FindByCallsign(record.Callsign), record);
 
         private static int Clamp(int value, int min, int max) =>
             value < min ? min : value > max ? max : value;
