@@ -58,7 +58,6 @@
     <Quarantine Include="Ui\WingHud.cs" Milestone="M7" />
     <Quarantine Include="Ui\WingRadialOverlay.cs" Milestone="M7" />
     <Quarantine Include="Ui\WmcScreen.Groups.cs" Milestone="P10" />
-    <Quarantine Include="Ui\WmcScreen.Wing.cs" Milestone="M7" />
   </ItemGroup>
   <ItemGroup>
     <Compile Remove="@(Quarantine)" />

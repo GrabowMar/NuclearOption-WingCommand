@@ -16,6 +16,7 @@ namespace WingCommand
         private readonly TMP_Text[] rankLetters = new TMP_Text[5];
         private WmcPortrait portrait;
         private AvButton release;
+        private bool releaseOn;
         private readonly ConfirmGate releaseGate = new ConfirmGate();
         private int dossierKey = int.MinValue;
 
@@ -94,6 +95,7 @@ namespace WingCommand
 
         private void SetRelease(bool on, bool asking, string why)
         {
+            releaseOn = on;
             release.SetText(SquadronWords.ReleaseLabel(asking));
             release.SetLatched(asking);
             release.SetEnabled(on);

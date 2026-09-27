@@ -501,6 +501,12 @@ namespace WingCommand
         /// roster: free, flying, reserved and the upcoming pilot's callsign.</summary>
         public static Dictionary<string, object> Pilots(Dictionary<string, object> args)
         {
+            // R6: fresh starts the squadron empty (test hygiene, before any launch; R7's saved pilots would otherwise enlist).
+            if (Arg(args, "fresh") is bool fresh && fresh)
+            {
+                if (WingService.Instance != null && WingService.Instance.Members.Count > 0) return Fail("Pilots", "fresh only before any launch");
+                WingPilotRoster.Reset();
+            }
             for (int i = 0; i < Number(args, "hire", 0); i++) WingPilotRoster.RecruitManual();
             var free = new List<WingPilot>();
             WingPilotRoster.FreePilots(free);
@@ -686,6 +692,14 @@ namespace WingCommand
                 lo = Text(args, "lo_submit");
                 if (lo != null) loadout.SubmitName(lo);
             }
+            // R6 WING: inspect a pilot as a row press would (a callsign, or free / next / flying / inbound / lost).
+            string pilot = Text(args, "pilot");
+            if (pilot != null && panel.WingPage != null)
+            {
+                panel.Show(WmcPanel.TabWing);
+                panel.Refresh();
+                if (!panel.WingPage.Inspect(pilot)) return Fail("Wmc", "no pilot " + pilot);
+            }
             // Refresh now so a press in the same call acts on this scope.
             panel.Refresh();
             string press = Text(args, "press");
@@ -703,6 +717,7 @@ namespace WingCommand
             };
             if (supply != null && panel.Page == WmcPanel.TabSupply) supply.Report(result);
             if (loadout != null && panel.Page == WmcPanel.TabLoadout) loadout.Report(result);
+            if (panel.WingPage != null && panel.Page == WmcPanel.TabWing) panel.WingPage.Report(result);
             return result;
         }
 
