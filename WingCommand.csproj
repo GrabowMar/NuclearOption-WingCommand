@@ -54,7 +54,6 @@
   <ItemGroup Label="Quarantine">
     <Quarantine Include="Comms\WingChatterHud.cs" Milestone="M4" />
     <Quarantine Include="Ui\CombatHUDHitAudioPatch.cs" Milestone="M7" />
-    <Quarantine Include="Ui\WmcScreen.CustomPilots.cs" Milestone="M7" />
     <Quarantine Include="Ui\WingHud.cs" Milestone="M7" />
     <Quarantine Include="Ui\WingRadialOverlay.cs" Milestone="M7" />
     <Quarantine Include="Ui\WmcScreen.Groups.cs" Milestone="P10" />

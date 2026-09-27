@@ -501,13 +501,28 @@ namespace WingCommand
         /// roster: free, flying, reserved and the upcoming pilot's callsign.</summary>
         public static Dictionary<string, object> Pilots(Dictionary<string, object> args)
         {
-            // R6: fresh starts the squadron empty (test hygiene, before any launch; R7's saved pilots would otherwise enlist).
+            // R6/R7: fresh starts the squadron empty (test hygiene, before any launch: the machine's saved pilots joined at mission start).
             if (Arg(args, "fresh") is bool fresh && fresh)
             {
                 if (WingService.Instance != null && WingService.Instance.Members.Count > 0) return Fail("Pilots", "fresh only before any launch");
-                WingPilotRoster.Reset();
+                WingPilotRoster.StartMission(new CustomPilotRecord[0]);
             }
             for (int i = 0; i < Number(args, "hire", 0); i++) WingPilotRoster.RecruitManual();
+            // R7 by callsign: save this mission's pilot, forget a saved one, discharge a free one.
+            string callsign = Text(args, "save");
+            if (callsign != null)
+            {
+                WingPilot live = WingPilotRoster.FindByCallsign(callsign);
+                if (live == null) return Fail("Pilots", "no pilot " + callsign + " this mission");
+                var record = new CustomPilotRecord { Callsign = live.Callsign, Name = live.Name, DialogueTag = live.DialogueTag, Persona = live.Persona, Background = live.Background ?? "" };
+                record.ApplySelection(PilotStudio.Frozen(live.Name, live.Callsign, live.PortraitSelection));
+                if (!WingSavedPilots.Save(record, null, live, out string why)) return Fail("Pilots", why);
+            }
+            callsign = Text(args, "forget");
+            if (callsign != null && !WingSavedPilots.Delete(callsign, out string forgetWhy)) return Fail("Pilots", forgetWhy);
+            callsign = Text(args, "discharge");
+            if (callsign != null && !WingPilotRoster.RemoveFromSquadron(WingPilotRoster.FindByCallsign(callsign)))
+                return Fail("Pilots", callsign + " cannot be discharged now");
             var free = new List<WingPilot>();
             WingPilotRoster.FreePilots(free);
             int flying = 0, reserved = 0;
@@ -521,6 +536,7 @@ namespace WingCommand
             {
                 { "ok", true }, { "free", free.Count }, { "flying", flying }, { "reserved", reserved },
                 { "upcoming", next != null ? next.Callsign : "" }, { "firstFree", free.Count > 0 ? free[0].Callsign : "" },
+                { "version", WingPilotRoster.Version }, { "saved", WingSavedPilots.Store.Records.Count },
             };
         }
 
@@ -788,7 +804,23 @@ namespace WingCommand
         {
             WmcRoom room = global::WingCommand.WmcRoom.Instance;
             if (room == null) return Fail("WmcRoom", "no room");
+            // R7: scenarios keep their saved pilots in pilots.sim.json, never the player's pilots.user.json.
+            if (Arg(args, "scratch") is bool scratch && scratch) WingSavedPilots.UseScratch();
             if (Arg(args, "open") is bool open && open) room.Open(Number(args, "page", -1));
+            RoomSquadron sq = room.Squadron;
+            if (sq != null && room.Page == RoomNotches.Squadron)
+            {
+                string who = Text(args, "pick");
+                if (who != null && !sq.Pick(who)) return Fail("WmcRoom", "no pilot " + who);
+                if (Arg(args, "new") is bool fresh && fresh) sq.StartNew();
+                if (Text(args, "callsign") is string cs) sq.TypeCallsign(cs);
+                if (Text(args, "name") is string nm) sq.TypeName(nm);
+                if (Text(args, "bio") is string bio) sq.TypeBio(bio);
+                if (Text(args, "look") is string look && !sq.StepLook(look)) return Fail("WmcRoom", "no look step " + look);
+                if (Arg(args, "join") is bool join && join)
+                    foreach (CustomPilotRecord r in WingSavedPilots.Store.Records) WingPilotRoster.Enlist(r);
+                if (Arg(args, "save") is bool save && save) sq.SaveDraft();
+            }
             RoomTactical t = room.Tactical;
             if (Arg(args, "fit") is bool fit && fit) t?.FitNow();
             if (Arg(args, "log") is bool log) t?.SetLog(log);
@@ -809,7 +841,9 @@ namespace WingCommand
             }
             bool pressed = false;
             string press = Text(args, "press");
-            if (!string.IsNullOrEmpty(press) && t != null && t.Controls.TryGetValue(press, out NOAvionics.Ui.AvButton b) && b != null && b.gameObject.activeInHierarchy)
+            // A press goes to the open page's controls (room.* on PLAN, sq.* on SQUADRON).
+            IReadOnlyDictionary<string, NOAvionics.Ui.AvButton> controls = room.PageControls;
+            if (!string.IsNullOrEmpty(press) && controls != null && controls.TryGetValue(press, out NOAvionics.Ui.AvButton b) && b != null && b.gameObject.activeInHierarchy)
             {
                 b.OnPointerClick(new UnityEngine.EventSystems.PointerEventData(UnityEngine.EventSystems.EventSystem.current)
                     { button = UnityEngine.EventSystems.PointerEventData.InputButton.Left });
@@ -817,7 +851,7 @@ namespace WingCommand
             }
             room.RefreshNow();
             if (Arg(args, "close") is bool close && close) room.Close();
-            return new Dictionary<string, object>
+            var result = new Dictionary<string, object>
             {
                 { "ok", true }, { "open", room.IsOpen ? 1 : 0 }, { "page", room.Page }, { "keyboard_held", room.KeyboardHeld ? 1 : 0 },
                 { "pressed", pressed ? 1 : 0 }, { "markers", t?.Markers ?? 0 }, { "legs", t?.LegCount ?? 0 }, { "contacts", t?.ContactCount ?? 0 },
@@ -825,6 +859,8 @@ namespace WingCommand
                 { "card_member", t != null && t.CardMember != 0u ? 1 : 0 }, { "zoom_ratio", zoomRatio }, { "last", WingToast.Last ?? "" },
                 { "log_open", t != null && t.LogOpen ? 1 : 0 }, { "log_rows", t?.LogRowsShown ?? 0 },
             };
+            if (sq != null && room.Page == RoomNotches.Squadron) sq.Report(result);
+            return result;
         }
 
         private static float Kilometres(Dictionary<string, object> args, string key) =>

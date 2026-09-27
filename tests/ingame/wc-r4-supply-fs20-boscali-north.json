@@ -8,6 +8,7 @@
     {"op": "spawn", "id": "lead", "type": "FS-20 Vortex", "at": {"map": [-18632, 32049]}, "altitude": 900, "speed": 150, "heading": 0},
     {"op": "fly", "id": "lead", "program": [{"orbit": {"bank": 15, "seconds": 400}}]},
     {"op": "wait", "seconds": 3},
+    {"op": "call", "method": "WingCommand.Automation.Pilots", "store": "fresh", "args": {"fresh": true}},
     {"op": "call", "method": "WingCommand.Automation.Anchor", "store": "anchor", "args": {"id": "lead"}},
     {"op": "wait", "seconds": 1},
     {"op": "call", "method": "WingCommand.Automation.Grant", "store": "grant",
