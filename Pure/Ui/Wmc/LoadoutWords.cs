@@ -9,7 +9,7 @@ namespace WingCommand
     /// capped at the source, never with "…".</summary>
     internal static class LoadoutWords
     {
-        public const int ChipChars = 11, ValueChars = 7, CaptionChars = 22, StationChars = 40, StoreChars = 48, LiveryChars = 36;
+        public const int BuildChars = 60, ChipChars = 11, ValueChars = 7, CaptionChars = 22, StationChars = 40, StoreChars = 48, LiveryChars = 36;
         public const string NoTemplate = "NO TEMPLATE", EmptyStore = "EMPTY", MassCaption = "STORES ONLY", Standard = "STANDARD (FACTION)";
         public const string Unreadable = "This airframe's hardpoints cannot be read here";
 
@@ -36,6 +36,16 @@ namespace WingCommand
 
         public static string Chain(string code, string template, int stations) =>
             template == null ? code + " › " + NoTemplate : code + " › " + template + " › " + Count(stations, "STATION", "STATIONS");
+
+        /// <summary>The build card's second line (spec bezel v2: the STATIONS, MASS and ROLE tiles are gone; the card carries them):
+        /// fitted of stations, stores mass, role, then what does not fly.</summary>
+        public static string Build(in FitSummary f, bool hasTemplate, int emptyHere)
+        {
+            if (!hasTemplate) return NoTemplate + " · NEW STARTS ONE FROM THE STANDARD STORES";
+            string s = Stations(f) + " FITTED · " + Mass(f.Mass) + " KG · " + Role(f);
+            string caption = StationsCaption(f, true, emptyHere);
+            return caption == "ALL FITTED" || s.Length + 3 + caption.Length > BuildChars ? s : s + " · " + caption;
+        }
 
         /// <summary>The station's name and, for a pair or a multi-pylon set, how many pylons it fits ("Fuselage Pylon ×2").</summary>
         public static string StationName(string name, int pylons)

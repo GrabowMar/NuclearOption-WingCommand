@@ -16,7 +16,7 @@
     {"op": "call", "method": "WingCommand.Automation.Pilots", "store": "hired", "args": {"hire": 3}},
     {"op": "record", "ids": ["lead"], "hz": 2},
 
-    {"op": "call", "method": "WingCommand.Automation.Wmc", "store": "page", "args": {"open": true, "tab": 1}},
+    {"op": "call", "method": "WingCommand.Automation.Wmc", "store": "page", "args": {"open": true, "tab": "SUPPLY"}},
     {"op": "call", "method": "WingCommand.Automation.Wmc", "store": "picked",
      "args": {"airframe": "FS-20 Vortex", "fit": "auto", "base": "airbase_boscali_north"}},
     {"op": "call", "method": "WingCommand.Automation.Wmc", "store": "stepped", "args": {"press": "sup.pilot.next"}},
@@ -43,15 +43,16 @@
     {"op": "wait", "seconds": 5},
 
     {"op": "call", "method": "WingCommand.Automation.Grant", "store": "limit", "args": {"lead": "lead", "aiLimit": 0}},
-    {"op": "call", "method": "WingCommand.Automation.Wmc", "store": "over", "args": {"tab": 1}},
+    {"op": "call", "method": "WingCommand.Automation.Wmc", "store": "over", "args": {"tab": "SUPPLY"}},
 
-    {"op": "call", "method": "WingCommand.Automation.Wmc", "store": "full", "args": {"tab": 1}},
+    {"op": "call", "method": "WingCommand.Automation.Wmc", "store": "full", "args": {"tab": "SUPPLY"}},
     {"op": "end"}
   ],
   "checks": [
     {"check": "status_ok"},
     {"check": "result_above", "path": "hired.free", "min": 3},
-    {"check": "result_above", "path": "page.tab", "min": 1},
+    {"check": "result_above", "path": "page.tab", "min": 4},
+    {"check": "result_below", "path": "page.tab", "max": 4},
     {"check": "result_below", "path": "page.overflow", "max": 0},
     {"check": "result_above", "path": "page.sup_tiles", "min": 1},
     {"check": "result_above", "path": "picked.sup_selected", "min": 1},

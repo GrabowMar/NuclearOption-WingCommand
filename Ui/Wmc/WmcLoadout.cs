@@ -33,7 +33,7 @@ namespace WingCommand
         private StoreFacts[] setFacts = new StoreFacts[0];
         private readonly List<AircraftDefinition> airframes = new List<AircraftDefinition>();
 
-        private int pageKey = int.MinValue, metricKey = int.MinValue, metricGeneration = -1;
+        private int pageKey = int.MinValue;
         private string hint, alert;
 
         public WmcLoadout(Dictionary<string, AvButton> controls) => ids = controls;
@@ -89,30 +89,12 @@ namespace WingCommand
             }
         }
 
-        public void Metrics(WmcContext c, WmcMetricRow m)
+        /// <summary>LOADOUT came on screen: the airframe list and the faction's liveries are read again.</summary>
+        public void Shown(WmcContext c)
         {
             client = c.Client;
-            bool shown = m.Generation != metricGeneration;
-            // Escalation and rank move mid-mission: the rules are read every refresh (a struct, nothing allocated).
             ReadFaction();
-            if (shown) OnShown();
-            Resolve();
-            int key;
-            unchecked
-            {
-                key = (current != null ? current.Id.GetHashCode() : 0) + WingLoadoutTemplates.Revision * 31 + (airframe != null ? airframe.GetHashCode() : 0)
-                    + mission.Rank * 7 + (mission.TacticalOpen ? 11 : 0) + (mission.StrategicOpen ? 13 : 0);
-            }
-            if (key == metricKey && !shown) return;
-            metricKey = key;
-            metricGeneration = m.Generation;
-            bool has = current != null;
-            bool bad = summary.Blocked > 0 || summary.Refused > 0 || summary.Fitted == 0;
-            m.Set(0, has ? LoadoutWords.Stations(summary) : WmcText.Unknown, LoadoutWords.StationsCaption(summary, has, summary.Refused),
-                has && summary.Stations > 0 ? (float)summary.Fitted / summary.Stations : 0f, has && !bad ? AvTheme.Friendly : AvTheme.Warning);
-            m.Set(1, has ? LoadoutWords.Mass(summary.Mass) : WmcText.Unknown, has ? LoadoutWords.MassCaption : "", 0f, AvTheme.Friendly);
-            m.Set(2, has ? LoadoutWords.Role(summary) : WmcText.Unknown, has ? LoadoutWords.RoleCaption(summary) : "",
-                has && summary.Fitted > 0 ? 1f : 0f, AvTheme.Friendly);
+            OnShown();
         }
 
         /// <summary>The player's faction and rank: the liveries and the mission rules the table reads.</summary>
@@ -190,6 +172,8 @@ namespace WingCommand
         public void Refresh(WmcContext c)
         {
             client = c.Client;
+            // Escalation and rank move mid-mission: the rules are read every refresh (a struct, nothing allocated).
+            ReadFaction();
             Resolve();
             bool asking = current != null && deleteGate.IsArmed(current.Id, Time.unscaledTime);
             int key;
@@ -197,7 +181,8 @@ namespace WingCommand
             {
                 key = (current != null ? current.Id.GetHashCode() : 1) + WingLoadoutTemplates.Revision * 31 + (airframe != null ? airframe.GetHashCode() : 0)
                     + tilePage * 7 + hpPage * 131 + (client ? 3 : 0) + (asking ? 5 : 0) + (nameField.Dirty ? 17 : 0) + airframes.Count * 1009
-                    + (WingRequisition.FitOf(airframe) != null ? WingRequisition.FitOf(airframe).GetHashCode() : 0) + mission.Rank * 13;
+                    + (WingRequisition.FitOf(airframe) != null ? WingRequisition.FitOf(airframe).GetHashCode() : 0) + mission.Rank * 13
+                    + (mission.TacticalOpen ? 19 : 0) + (mission.StrategicOpen ? 23 : 0);
             }
             nameField.EditingId = current?.Id;
             if (key == pageKey) return;
@@ -247,8 +232,7 @@ namespace WingCommand
             WmcKit.Set(chipText, LoadoutWords.Chip(current != null, nameField.Dirty, supplyFit, out state));
             WmcUi.SetRail(chipRail, state);
             WmcUi.SetRail(cardRail, asking ? "warn" : state);
-            WmcKit.Set(chainText, airframe != null ? LoadoutWords.Chain(code, current?.Name, layout != null ? layout.Stations : 0)
-                : "Pick an airframe below");
+            WmcKit.Set(chainText, airframe != null ? LoadoutWords.Build(summary, current != null, summary.Refused) : "Pick an airframe below");
             cardIcon.sprite = airframe != null ? IconFactory.Aircraft(airframe) : null;
             cardIcon.enabled = cardIcon.sprite != null;
             nameField.SetText(current?.Name ?? "");

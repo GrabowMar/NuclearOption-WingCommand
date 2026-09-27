@@ -72,7 +72,7 @@ namespace WingCommand
             AvStyled.Label(empty, new Rect(12f, -26f, width - 150f, 16f), "Requisition on SUPPLY, or call from the radial menu.",
                 "row-sub");
             AvButton supply = AvStyled.Button(empty, new Rect(width - 128f, -12f, 120f, 24f), "OPEN SUPPLY", "btn",
-                () => WmcPanel.Instance?.Show(WmcPanel.TabSupply));
+                () => WmcPanel.Instance?.Show(WmcTabs.Supply));
             supply.WithTooltip("Requisition a wingman: pilot, airframe, fit and base.");
             ids["tac.list.supply"] = supply;
             emptyRoot.SetActive(false);

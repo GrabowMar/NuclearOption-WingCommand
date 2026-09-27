@@ -1,0 +1,210 @@
+{
+ "name": "wc-ui-tour-fs20",
+ "mods": [
+  "wingcommand"
+ ],
+ "timeout_s": 240,
+ "ops": [
+  {
+   "op": "spawn",
+   "id": "lead",
+   "type": "FS-20 Vortex",
+   "at": {
+    "map": [
+     0,
+     0
+    ]
+   },
+   "altitude": 3000,
+   "speed": 200,
+   "heading": 0
+  },
+  {
+   "op": "fly",
+   "id": "lead",
+   "program": [
+    {
+     "orbit": {
+      "bank": 15,
+      "seconds": 170
+     }
+    }
+   ]
+  },
+  {
+   "op": "wait",
+   "seconds": 2
+  },
+  {
+   "op": "call",
+   "method": "WingCommand.Automation.Wmc",
+   "store": "empty",
+   "args": {
+    "open": true,
+    "tab": "TACTICAL"
+   }
+  },
+  {
+   "op": "call",
+   "method": "WingCommand.Automation.FormOn",
+   "store": "form",
+   "args": {
+    "lead": "lead",
+    "count": 3,
+    "shape": "finger-four-right",
+    "spacing": "Standard"
+   }
+  },
+  {
+   "op": "wait",
+   "seconds": 40
+  },
+  {
+   "op": "call",
+   "method": "WingCommand.Automation.Wmc",
+   "store": "tactical",
+   "args": {
+    "tab": "TACTICAL"
+   }
+  },
+  {
+   "op": "wait",
+   "seconds": 1
+  },
+  {
+   "op": "capture",
+   "name": "tour-tactical"
+  },
+  {
+   "op": "call",
+   "method": "WingCommand.Automation.Wmc",
+   "store": "form",
+   "args": {
+    "tab": "FORM"
+   }
+  },
+  {
+   "op": "wait",
+   "seconds": 1
+  },
+  {
+   "op": "capture",
+   "name": "tour-form"
+  },
+  {
+   "op": "call",
+   "method": "WingCommand.Automation.Wmc",
+   "store": "plan",
+   "args": {
+    "tab": "PLAN"
+   }
+  },
+  {
+   "op": "wait",
+   "seconds": 1
+  },
+  {
+   "op": "capture",
+   "name": "tour-plan"
+  },
+  {
+   "op": "call",
+   "method": "WingCommand.Automation.Wmc",
+   "store": "supply",
+   "args": {
+    "tab": "SUPPLY"
+   }
+  },
+  {
+   "op": "wait",
+   "seconds": 1
+  },
+  {
+   "op": "capture",
+   "name": "tour-supply"
+  },
+  {
+   "op": "call",
+   "method": "WingCommand.Automation.Wmc",
+   "store": "loadout",
+   "args": {
+    "tab": "LOADOUT"
+   }
+  },
+  {
+   "op": "wait",
+   "seconds": 1
+  },
+  {
+   "op": "capture",
+   "name": "tour-loadout"
+  },
+  {
+   "op": "call",
+   "method": "WingCommand.Automation.Wmc",
+   "store": "squadron",
+   "args": {
+    "tab": "SQUADRON"
+   }
+  },
+  {
+   "op": "wait",
+   "seconds": 1
+  },
+  {
+   "op": "capture",
+   "name": "tour-squadron"
+  },
+  {
+   "op": "call",
+   "method": "WingCommand.Automation.Wmc",
+   "store": "inspect",
+   "args": {
+    "tab": "INSPECT"
+   }
+  },
+  {
+   "op": "end"
+  }
+ ],
+ "checks": [
+  {
+   "check": "status_ok"
+  },
+  {
+   "check": "result_below",
+   "path": "tactical.overflow",
+   "max": 0
+  },
+  {
+   "check": "result_below",
+   "path": "form.overflow",
+   "max": 0
+  },
+  {
+   "check": "result_below",
+   "path": "plan.overflow",
+   "max": 0
+  },
+  {
+   "check": "result_below",
+   "path": "supply.overflow",
+   "max": 0
+  },
+  {
+   "check": "result_below",
+   "path": "loadout.overflow",
+   "max": 0
+  },
+  {
+   "check": "result_below",
+   "path": "squadron.overflow",
+   "max": 0
+  },
+  {
+   "check": "result_below",
+   "path": "empty.overflow",
+   "max": 0
+  }
+ ]
+}

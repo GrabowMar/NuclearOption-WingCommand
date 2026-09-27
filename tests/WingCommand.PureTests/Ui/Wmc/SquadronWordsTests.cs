@@ -55,18 +55,13 @@ namespace WingCommand.PureTests
         }
 
         [Fact]
-        public void TheHeadAndTheCaptionsCountEachPilotOnce()
+        public void TheHeadCountsEachPilotOnce()
         {
-            Assert.Equal("10 PILOTS · 1 SAR · 1 KIA", SquadronWords.Head(10, 1, 1));
-            Assert.Equal("1 PILOT", SquadronWords.Head(1, 0, 0));
-            Assert.Equal("NO PILOTS", SquadronWords.Head(0, 0, 0));
-            Assert.Equal("2 FLYING · 1 INBOUND", SquadronWords.PilotsCaption(2, 1));
-            Assert.Equal("NONE FLYING", SquadronWords.PilotsCaption(0, 0));
-            Assert.Equal("NEXT HATCH", SquadronWords.ReadyCaption("HATCH"));
-            Assert.Equal("NEW PILOT AT LAUNCH", SquadronWords.ReadyCaption(null));
-            Assert.Equal("1 SAR · 1 KIA · 1 POW", SquadronWords.LostCaption(1, 1, 1));
-            Assert.Equal("NONE LOST", SquadronWords.LostCaption(0, 0, 0));
-            Assert.True(SquadronWords.LostCaption(99, 99, 99).Length <= SquadronWords.CaptionChars);
+            // Spec bezel v2: the PILOTS · READY · LOST tiles are gone; the head carries them.
+            Assert.Equal("10 PILOTS · 3 FLYING · 5 FREE · 2 LOST", SquadronWords.Head(10, 3, 5, 2));
+            Assert.Equal("1 PILOT · 1 FREE", SquadronWords.Head(1, 0, 1, 0));
+            Assert.Equal("NO PILOTS", SquadronWords.Head(0, 0, 0, 0));
+            Assert.True(SquadronWords.Head(99, 99, 99, 99).Length <= 45);
         }
 
         [Fact]

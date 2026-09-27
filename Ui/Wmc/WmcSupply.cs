@@ -27,6 +27,7 @@ namespace WingCommand
 
         // This refresh's snapshot: Metrics takes it first, Refresh reuses it.
         private WmcContext last;
+        private bool snapFresh;
         private Aircraft caller;
         private FactionHQ hq;
         private bool client;
@@ -37,8 +38,8 @@ namespace WingCommand
         private Airbase field;
 
         private string alert, hint;
-        private int hintKey = int.MinValue, metricKey = int.MinValue, metricGeneration = -1;
-        private readonly List<string> hangarCodes = new List<string>(4);
+        private int hintKey = int.MinValue, vitalsKey = int.MinValue;
+        private TMP_Text vitals;
 
         public WmcSupply(Dictionary<string, AvButton> controls) => ids = controls;
 
@@ -51,8 +52,11 @@ namespace WingCommand
             page = pageRoot;
             body = WmcUi.Page(page, shellBody, shellBody.height);
             width = body.width;
-            float view = BezelLayout.SupplyView(shellBody.height);
-            scroll = WmcScroll.Build(page, new Rect(body.x, body.y, width + 8f, view), "SupplyScroll");
+            // Spec bezel v2: the tiles' FUNDS · HANGAR · STOCK are one line over the steps.
+            vitals = WmcKit.Text(page, new Rect(body.x, body.y, width, BezelLayout.VitalsRow), "section-title");
+            float top = BezelLayout.VitalsRow + BezelLayout.HeadGap;
+            float view = BezelLayout.SupplyView(shellBody.height) - top;
+            scroll = WmcScroll.Build(page, new Rect(body.x, body.y - top, width + 8f, view), "SupplyScroll");
             RectTransform s = scroll.Content;
             inboundRoot = Container(s, "SupplyInbound", BezelLayout.InboundBlock(BezelLayout.InboundMax));
             adoptRoot = Container(s, "SupplyAdopt", BezelLayout.AdoptBand);
@@ -63,7 +67,7 @@ namespace WingCommand
             BuildAirframe(steps, -BezelLayout.PilotStep);
             BuildFit(steps, -(BezelLayout.PilotStep + BezelLayout.AirframeStep));
             BuildBase(steps, -(BezelLayout.PilotStep + BezelLayout.AirframeStep + BezelLayout.FitStep));
-            BuildPin(body.y - view);
+            BuildPin(body.y - top - view);
             // Popups hang off the page root, never inside the scroll viewport (F6).
             fitPopup = new AvKit.Popup(page, shellBody.width);
             Layout(0, false);
@@ -101,6 +105,7 @@ namespace WingCommand
         private void Snapshot(WmcContext c, bool force)
         {
             last = c;
+            snapFresh = force;
             client = c.Client;
             WingService w = c.Wing;
             // The player requisitions; without a player aircraft (automation) the anchor stands in, as the order does.
@@ -122,8 +127,10 @@ namespace WingCommand
 
         public void Refresh(WmcContext c)
         {
-            // WmcPanel.Refresh always runs Metrics first; the snapshot it took is this refresh's.
-            if (!ReferenceEquals(last, c)) Snapshot(c, false);
+            // One snapshot a refresh (Shown takes a forced one first when the page comes on screen).
+            if (!ReferenceEquals(last, c) || !snapFresh) Snapshot(c, false);
+            snapFresh = false;
+            RefreshVitals();
             RefreshInbound();
             RefreshAdopt(c);
             Layout(inboundCount, adoptVisible);
@@ -139,37 +146,30 @@ namespace WingCommand
             hint = SupplyWords.Hint(client, inboundCount);
         }
 
-        /// <summary>FUNDS · HANGAR · STOCK (spec WMC rebuild §bezel shell), rebuilt only when their inputs change.</summary>
-        public void Metrics(WmcContext c, WmcMetricRow m)
+        /// <summary>SUPPLY came on screen: the lists refill now (the snapshot is forced), and a fit deleted on LOADOUT goes back to
+        /// AUTO.</summary>
+        public void Shown(WmcContext c)
         {
-            bool shown = m.Generation != metricGeneration;
-            Snapshot(c, shown);
-            if (shown) OnShown();
-            float funds = wing.Funds, price = selected != null ? quote.Price : 0f;
+            Snapshot(c, true);
+            OnShown();
+            vitalsKey = int.MinValue;
+        }
+
+        /// <summary>FUNDS · HANGAR · STOCK, rebuilt only when their inputs change.</summary>
+        private void RefreshVitals()
+        {
+            float funds = wing.Funds;
             int stock = air.FactionStock + air.Held, held = WingSupplyReserve.Count, cap = WingSupplyReserve.Capacity;
             bool offline = client || !WingSupplyReserve.HasFaction;
             int key;
             unchecked
             {
-                key = (int)funds * 31 + (int)(price * 10f) * 17 + stock * 101 + held * 7 + cap * 3 + (offline ? 1 : 0) + (client ? 5 : 0)
-                    + (wing.Sandbox ? 11 : 0) + (selected != null ? selected.GetHashCode() : 0);
+                key = (int)funds * 31 + stock * 101 + held * 7 + cap * 3 + (offline ? 1 : 0) + (client ? 5 : 0) + (wing.Sandbox ? 11 : 0)
+                    + (selected != null ? selected.GetHashCode() : 0);
             }
-            if (key == metricKey && !shown) return;
-            metricKey = key;
-            metricGeneration = m.Generation;
-            bool afford = price <= 0f || funds >= price;
-            m.Set(0, Credits.Short(funds), SupplyWords.FundsCaption(client, wing.Sandbox, selected != null, price),
-                afford ? 1f : Mathf.Clamp01(funds / price), afford ? AvTheme.Friendly : AvTheme.Warning);
-            hangarCodes.Clear();
-            foreach (AircraftDefinition d in WingSupplyReserve.Stored)
-                if (d != null) hangarCodes.Add(SupplyWords.Code(d.code, d.unitName));
-            m.Set(1, HangarWords.Value(held, cap, offline), HangarWords.Caption(hangarCodes, WingSupplyReserve.IsHost && !client,
-                WingSupplyReserve.HasFaction), HangarWords.Level(held, cap), HangarWords.Full(held, cap) ? AvTheme.Warning : AvTheme.Friendly);
-            bool counted = selected != null && !wing.Sandbox;
-            m.Set(2, selected == null ? WmcText.Unknown : stock.ToString(CultureInfo.InvariantCulture),
-                selected != null && wing.Sandbox ? SupplyWords.SandboxStock
-                : SupplyWords.StockCaption(selected != null ? SupplyWords.Code(selected.code, selected.unitName) : null, stock, selected != null),
-                !counted || stock > 0 ? 1f : 0f, !counted || stock > 0 ? AvTheme.Friendly : AvTheme.Warning);
+            if (key == vitalsKey) return;
+            vitalsKey = key;
+            vitals.text = SupplyWords.Vitals(funds, client, wing.Sandbox, held, cap, offline, stock, selected != null);
         }
 
         /// <summary>SUPPLY came into view: the lists refill now, and a fit deleted on LOADOUT meanwhile goes back to AUTO.</summary>

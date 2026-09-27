@@ -30,7 +30,7 @@ namespace WingCommand
         private readonly List<WingPilot> roster = new List<WingPilot>();
         private PilotStatus[] status = new PilotStatus[0];
         private int[] number = new int[0];
-        private int scanVersion = int.MinValue, flying, inbound, free, sar, kia, captured, lost;
+        private int scanVersion = int.MinValue, flying, free, sar, kia, captured, lost;
         private bool scanClient;
         private WingService scanWing;
         private WingPilot upcoming;
@@ -38,7 +38,7 @@ namespace WingCommand
         private WingPilot inspected;
         private int listPage;
         private string hint, alert;
-        private int metricKey = int.MinValue, metricGeneration = -1, rowsKey = int.MinValue, alertVersion = int.MinValue;
+        private int rowsKey = int.MinValue, alertVersion = int.MinValue;
 
         public WmcWing(Dictionary<string, AvButton> controls) => ids = controls;
 
@@ -87,15 +87,15 @@ namespace WingCommand
                 status = new PilotStatus[roster.Count + 8];
                 number = new int[roster.Count + 8];
             }
-            flying = inbound = free = sar = kia = captured = 0;
+            flying = free = sar = kia = captured = 0;
             for (int i = 0; i < roster.Count; i++)
             {
                 status[i] = StatusOf(roster[i], out number[i]);
                 switch (status[i])
                 {
                     case PilotStatus.Free: free++; break;
-                    case PilotStatus.Inbound: inbound++; break;
                     case PilotStatus.Flying: flying++; break;
+                    case PilotStatus.Inbound: break;
                     case PilotStatus.Kia: kia++; break;
                     case PilotStatus.Captured: captured++; break;
                     default: sar++; break;
@@ -115,27 +115,7 @@ namespace WingCommand
 
         private int IndexOf(WingPilot p) => p != null ? roster.IndexOf(p) : -1;
 
-        /// <summary>PILOTS · READY · LOST (spec WMC rebuild §bezel shell; LOST is every pilot out of action), rebuilt on change.</summary>
-        public void Metrics(WmcContext c, WmcMetricRow m)
-        {
-            Snapshot(c);
-            bool shown = m.Generation != metricGeneration;
-            int key = client ? -1 : scanVersion;
-            if (key == metricKey && !shown) return;
-            metricKey = key;
-            metricGeneration = m.Generation;
-            if (client)
-            {
-                for (int i = 0; i < 3; i++) m.Set(i, WmcText.Unknown, "HOST ROSTER", 0f, AvTheme.Friendly);
-                return;
-            }
-            int pilots = roster.Count - kia;
-            m.Set(0, N(pilots), SquadronWords.PilotsCaption(flying, inbound), pilots > 0 ? (float)flying / pilots : 0f, AvTheme.Friendly);
-            m.Set(1, N(free), SquadronWords.ReadyCaption(upcoming != null ? WmcText.Cut(upcoming.Callsign, PilotPick.CallsignChars) : null),
-                pilots > 0 ? (float)free / pilots : 0f, AvTheme.Friendly);
-            m.Set(2, N(lost), SquadronWords.LostCaption(sar, kia, captured), roster.Count > 0 ? (float)lost / roster.Count : 0f,
-                lost > 0 ? AvTheme.Warning : AvTheme.Friendly);
-        }
+        public void Shown(WmcContext c) => Snapshot(c);
 
         public void Refresh(WmcContext c)
         {
@@ -234,7 +214,7 @@ namespace WingCommand
             }
             if (key == rowsKey) return;
             rowsKey = key;
-            WmcKit.Set(headNote, client ? WmcText.Unknown : SquadronWords.Head(roster.Count, sar, kia));
+            WmcKit.Set(headNote, client ? WmcText.Unknown : SquadronWords.Head(roster.Count - kia, flying, free, lost));
             bool none = client || roster.Count == 0;
             emptyRoot.SetActive(none);
             WmcKit.Set(emptyText, client ? SquadronWords.ClientWhy : SquadronWords.Empty);
@@ -325,6 +305,5 @@ namespace WingCommand
             Inspect(p);
         }
 
-        private static string N(int v) => v.ToString(CultureInfo.InvariantCulture);
     }
 }

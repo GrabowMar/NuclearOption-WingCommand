@@ -37,7 +37,7 @@
     {"op": "call", "method": "WingCommand.Automation.Members", "store": "after_eject"},
     {"op": "call", "method": "WingCommand.Automation.Ground", "store": "guard_after"},
 
-    {"op": "call", "method": "WingCommand.Automation.Wmc", "store": "panel", "args": {"open": true, "tab": 0, "sub": 0}},
+    {"op": "call", "method": "WingCommand.Automation.Wmc", "store": "panel", "args": {"open": true, "tab": "TACTICAL"}},
     {"op": "call", "method": "WingCommand.Automation.Damage", "store": "hurt", "args": {"member": 2, "hp": 40}},
     {"op": "wait", "seconds": 3},
     {"op": "call", "method": "WingCommand.Automation.Wmc", "store": "alerts_damaged"},

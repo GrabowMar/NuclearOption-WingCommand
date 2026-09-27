@@ -7,8 +7,9 @@ namespace WingCommand.PureTests
         [Fact]
         public void BodyIsThePanelLessTheChrome()
         {
-            Assert.Equal(636f, BezelLayout.Body(896f));
-            Assert.Equal(336f, BezelLayout.Body(596f));
+            // Spec bezel v2 §3: no metric row, so the chrome is 176 and the body grows by 84 px.
+            Assert.Equal(720f, BezelLayout.Body(896f));
+            Assert.Equal(420f, BezelLayout.Body(596f));
         }
 
         [Fact]

@@ -22,13 +22,48 @@ namespace WingCommand
         /// <summary>The status strip's alert line, or null.</summary>
         string Alert { get; }
 
-        void Metrics(WmcContext c, WmcMetricRow m);
+        /// <summary>The page came on screen (its tab was picked, or the panel opened on it): per-show work, before the first
+        /// refresh.</summary>
+        void Shown(WmcContext c);
     }
 
     /// <summary>The widgets WMC pages share that the NOAvionics toolkit does not have (spec WMC rebuild §widget kit), built
     /// only from toolkit primitives — WC never edits the toolkit.</summary>
     internal static class WmcKit
     {
+        /// <summary>The tallest empty band (px) inside <paramref name="body"/> between visible graphics on the page on show, the
+        /// trailing space under the last one excluded (spec bezel v2 §10 <c>gap_px</c>). Backdrops, spines and viewports (taller
+        /// than 120 px) do not count as content. Automation only: it allocates.</summary>
+        public static int LargestGap(RectTransform content, Rect body)
+        {
+            var spans = new List<Vector2>();
+            Rect cr = content.rect;
+            var corners = new Vector3[4];
+            float bodyBottom = body.y - body.height;
+            foreach (Graphic g in content.GetComponentsInChildren<Graphic>(false))
+            {
+                if (!g.enabled || g.color.a <= 0.01f) continue;
+                if (g is TMP_Text t && string.IsNullOrEmpty(t.text)) continue;
+                g.rectTransform.GetWorldCorners(corners);
+                float top = content.InverseTransformPoint(corners[1]).y - cr.yMax;
+                float bottom = content.InverseTransformPoint(corners[0]).y - cr.yMax;
+                if (top - bottom > 120f) continue;
+                top = Mathf.Min(top, body.y);
+                bottom = Mathf.Max(bottom, bodyBottom);
+                if (top - bottom <= 0.5f) continue;
+                spans.Add(new Vector2(top, bottom));
+            }
+            spans.Sort((a, b) => b.x.CompareTo(a.x));
+            float cursor = body.y;
+            int gap = 0;
+            foreach (Vector2 span in spans)
+            {
+                if (span.x < cursor) gap = Mathf.Max(gap, Mathf.RoundToInt(cursor - span.x));
+                cursor = Mathf.Min(cursor, span.y);
+            }
+            return gap;
+        }
+
         /// <summary>No "…" anywhere (spec WMC rebuild): every label under <paramref name="root"/> overflows instead of cutting
         /// and shrinks to the 10 px floor before it does. Once after a build (and after a popup opens).</summary>
         public static void FitAll(RectTransform root)
@@ -278,55 +313,6 @@ namespace WingCommand
                 segments[i].SetEnabled(on);
                 segments[i].WithTooltip(on ? (tips != null && i < tips.Length ? tips[i] : null) : reason);
             }
-        }
-    }
-
-    /// <summary>The header's three metric tiles with WC-drawn keys (spec WMC rebuild §bezel shell): the toolkit's
-    /// <c>Metric</c> keeps no handle on its key label, so the shell is built with empty keys and these labels change with the
-    /// tab. ponytail: until Boscali's toolkit exposes <c>Metric.Key</c> (a sync then retires these labels).</summary>
-    internal sealed class WmcMetricRow
-    {
-        private readonly AvStyled.Metric[] metrics;
-        private readonly TMP_Text[] keys;
-        private readonly string[] shown;
-
-        public WmcMetricRow(RectTransform content, AvStyled.Metric[] cells)
-        {
-            metrics = cells;
-            keys = new TMP_Text[cells.Length];
-            shown = new string[cells.Length * 3];
-            for (int i = 0; i < cells.Length; i++)
-            {
-                RectTransform value = cells[i].Value.rectTransform;
-                // MetricCell places the key 14 px above the value, as wide (AvStyled.MetricCell).
-                keys[i] = AvStyled.Label(content, new Rect(value.anchoredPosition.x, value.anchoredPosition.y + 14f,
-                    value.rect.width, 12f), "", "metric-key");
-            }
-        }
-
-        /// <summary>Bumps on every <see cref="SetKeys"/> (a tab switch blanks the tiles; a page that caches its values repaints).</summary>
-        public int Generation { get; private set; }
-
-        public void SetKeys(string[][] pairs)
-        {
-            Generation++;
-            for (int i = 0; i < keys.Length && i < pairs.Length; i++)
-            {
-                WmcKit.Set(keys[i], pairs[i][0]);
-                WmcKit.Set(metrics[i].Unit, pairs[i][1]);
-                Set(i, WmcText.Unknown, "", 0f, AvTheme.Friendly);
-            }
-        }
-
-        /// <summary>A tile's value, caption and bar; the strings are assigned only when they changed.</summary>
-        public void Set(int i, string value, string caption, float fraction, Color fill)
-        {
-            if (i < 0 || i >= metrics.Length) return;
-            AvStyled.Metric m = metrics[i];
-            if (shown[i * 3] != value) { shown[i * 3] = value; m.Value.text = value; }
-            if (shown[i * 3 + 1] != caption) { shown[i * 3 + 1] = caption; m.Caption.text = caption ?? ""; }
-            m.Fill.color = fill;
-            m.Fill.rectTransform.sizeDelta = new Vector2(Mathf.Clamp01(float.IsNaN(fraction) ? 0f : fraction) * m.TrackWidth, m.TrackHeight);
         }
     }
 

@@ -67,33 +67,15 @@ namespace WingCommand
 
         public static string Badge(WingRank r) => PilotPerks.RankName(r).Substring(0, 1);
 
-        public static string Head(int pilots, int sar, int kia)
+        /// <summary>The roster's head: pilots, then how many fly, are free and are out of action (SAR, missing, POW or KIA).</summary>
+        public static string Head(int pilots, int flying, int free, int lost)
         {
             if (pilots <= 0) return "NO PILOTS";
             var sb = new StringBuilder(N(pilots) + (pilots == 1 ? " PILOT" : " PILOTS"));
-            if (sar > 0) sb.Append(" · ").Append(N(sar)).Append(" SAR");
-            if (kia > 0) sb.Append(" · ").Append(N(kia)).Append(" KIA");
+            if (flying > 0) sb.Append(" · ").Append(N(flying)).Append(" FLYING");
+            if (free > 0) sb.Append(" · ").Append(N(free)).Append(" FREE");
+            if (lost > 0) sb.Append(" · ").Append(N(lost)).Append(" LOST");
             return sb.ToString();
-        }
-
-        public static string PilotsCaption(int flying, int inbound)
-        {
-            var sb = new StringBuilder();
-            Part(sb, flying, "FLYING");
-            Part(sb, inbound, "INBOUND");
-            return sb.Length == 0 ? "NONE FLYING" : sb.ToString();
-        }
-
-        public static string ReadyCaption(string next) =>
-            string.IsNullOrEmpty(next) ? "NEW PILOT AT LAUNCH" : "NEXT " + WmcText.Cut(next, CaptionChars - 5);
-
-        public static string LostCaption(int sar, int kia, int captured)
-        {
-            var sb = new StringBuilder();
-            Part(sb, sar, "SAR");
-            Part(sb, kia, "KIA");
-            Part(sb, captured, "POW");
-            return sb.Length == 0 ? "NONE LOST" : sb.ToString();
         }
 
         // ---- the pinned AIRFRAME ASSIGNMENT bar
@@ -186,15 +168,6 @@ namespace WingCommand
             : "A row opens the dossier; SUPPLY's pilot card picks who flies next.";
 
         public static string Recruited(string callsign, string name) => "Recruited " + callsign + (string.IsNullOrEmpty(name) ? "" : " (" + name + ")");
-
-        private static void Part(StringBuilder sb, int n, string word)
-        {
-            if (n <= 0) return;
-            string part = N(n) + " " + word;
-            if (sb.Length + (sb.Length > 0 ? 3 : 0) + part.Length > CaptionChars) return;
-            if (sb.Length > 0) sb.Append(" · ");
-            sb.Append(part);
-        }
 
         private static string Cap(string s) => WmcText.Cut(s, SlotChars);
 

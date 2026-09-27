@@ -99,7 +99,8 @@ namespace WingCommand.PureTests
         public void TheHintTellsTheHostWhatToDoAndAClientWhoDoesIt()
         {
             Assert.Contains("REQUISITION", SupplyWords.Hint(false, 0));
-            Assert.Equal("2 inbound · watch LINK", SupplyWords.Hint(false, 2));
+            // Spec bezel v2: the LINK chip is gone; the title counts who is inbound.
+            Assert.Equal("2 inbound · they join as they take off", SupplyWords.Hint(false, 2));
             Assert.Contains("host", SupplyWords.Hint(true, 2));
         }
 
@@ -109,6 +110,16 @@ namespace WingCommand.PureTests
             string line = ShopRules.DispatchLine("ABCDEFGHIJKLMN", SupplyWords.Fit("t", "ABCDEFGHIJKLMNOPQRS"), 100,
                 BaseName.Short("South Boscali General Aviation Field"));
             Assert.True(line.Length <= SupplyWords.DispatchChars, line);
+        }
+
+        [Fact]
+        public void TheVitalsLineCarriesWhatTheTilesSaid()
+        {
+            Assert.Equal("FUNDS 9,620 CR · HANGAR 1/3 · STOCK 95", SupplyWords.Vitals(9620f, false, false, 1, 3, false, 95, true));
+            Assert.Equal("FUNDS 9,620 CR · HANGAR 0/3", SupplyWords.Vitals(9620f, false, false, 0, 3, false, 0, false));
+            Assert.Equal("SANDBOX · FREE · HANGAR 0/3", SupplyWords.Vitals(0f, false, true, 0, 3, false, 5, true));
+            Assert.Equal("YOUR ALLOCATION · HANGAR —", SupplyWords.Vitals(0f, true, false, 0, 3, true, 0, false));
+            Assert.Equal("FUNDS 9,620 CR · HANGAR 1/3 · NONE LEFT", SupplyWords.Vitals(9620f, false, false, 1, 3, false, 0, true));
         }
     }
 }

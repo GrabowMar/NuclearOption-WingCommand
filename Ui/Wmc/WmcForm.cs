@@ -8,13 +8,51 @@ using UnityEngine.UI;
 
 namespace WingCommand
 {
-    /// <summary>TACTICAL › FORMATION (spec WMC rebuild §FORMATION; the 0.9 deck modernized): the plan view of the scope's shape
-    /// with the members' live positions, the family and shapes for the scope's element, the maneuver row, then what is
-    /// wing-wide — spacing, stack and power — under its own head so scope is never ambiguous.</summary>
-    internal sealed partial class WmcTactical
+    /// <summary>FORM (spec bezel v2 §5 FORM; the 0.9 deck modernized): the scope row, the plan view of the scope's shape with the
+    /// members' live positions, the family and shapes for the scope's element, the maneuver row, then what is wing-wide — spacing,
+    /// stack and power — under its own head so scope is never ambiguous.</summary>
+    internal sealed class WmcForm : IWmcPage
     {
         private const int MaxShapes = 12, MaxFamilies = 4, MaxDots = WcSnapshot.MaxMembers;
         private const float PreviewH = 150f, PlanSize = 140f;
+        private const float KeyWidth = 64f, ToggleH = 22f, TogglePitch = 24f;
+
+        private readonly Dictionary<string, AvButton> ids;
+        private readonly WmcScopeRow scope;
+        private float x, width;
+        private WmcContext last;
+
+        public WmcForm(Dictionary<string, AvButton> controls)
+        {
+            ids = controls;
+            scope = new WmcScopeRow(controls, "form.scope.");
+        }
+
+        public string Hint => "Shapes are the scope element's; spacing, stack and power are the whole wing's.";
+
+        public string Alert => null;
+
+        public void Build(RectTransform page, Rect shellBody)
+        {
+            Rect body = WmcUi.Page(page, shellBody, shellBody.height);
+            x = body.x;
+            width = body.width;
+            scope.Build(page, x, body.y, width, "SHAPE FOR", false);
+            float top = BezelLayout.ScopeRow + BezelLayout.ScopeGap;
+            BuildFormation(page, body.y - top);
+            formScroll.SetViewport(new Rect(x, body.y - top, width + 8f, Mathf.Max(40f, body.height - top)));
+        }
+
+        public void Shown(WmcContext c)
+        {
+        }
+
+        public void Refresh(WmcContext c)
+        {
+            last = c;
+            scope.Refresh(c);
+            RefreshFormation(c);
+        }
 
         private WmcScroll formScroll;
         private RectTransform planRect;
@@ -29,9 +67,9 @@ namespace WingCommand
         private SegmentRow spacingRow, stackRow, powerRow, maneuverRow;
         private int formKey = int.MinValue, shapesKey = int.MinValue;
 
-        private void BuildFormation(RectTransform root)
+        private void BuildFormation(RectTransform root, float top)
         {
-            formScroll = WmcScroll.Build(root, new Rect(x, -BannerTop, width + 8f, 100f), "FormScroll");
+            formScroll = WmcScroll.Build(root, new Rect(x, top, width + 8f, 100f), "FormScroll");
             RectTransform s = formScroll.Content;
             float w = formScroll.Width, y = 0f;
 
@@ -64,8 +102,8 @@ namespace WingCommand
             WmcKit.Text(s, new Rect(tx + 68f, ly, 40f, 18f), "row-sub").text = "LIVE";
             AvButton edit = AvStyled.Button(s, new Rect(w - 126f, y - PreviewH + 30f, 120f, 22f), "EDIT SHAPES ›", "btn", null);
             edit.SetEnabled(false);
-            edit.WithTooltip("The shape editor lives in the planning room's WORKSHOP. Arrives in a later update.");
-            ids["tac.form.edit"] = edit;
+            edit.WithTooltip("The shape editor: FORM's EDIT mode. Arrives in a later update.");
+            ids["form.edit"] = edit;
             y -= PreviewH + 6f;
 
             shapeHead = WmcKit.Text(s, new Rect(0f, y, w, 16f), "section-title");
@@ -77,7 +115,7 @@ namespace WingCommand
                 int k = i;
                 familyButtons[i] = AvStyled.Button(s, new Rect(KeyWidth + i * (fw + WmcUi.Gap), y, fw, ToggleH), "", "btn",
                     () => PickFamily(k), AvButtonStyle.Toggle);
-                ids["tac.form.family" + i] = familyButtons[i];
+                ids["form.family" + i] = familyButtons[i];
             }
             y -= TogglePitch;
             AvStyled.Label(s, new Rect(0f, y, KeyWidth, ToggleH), "SHAPE", "metric-key");
@@ -86,7 +124,7 @@ namespace WingCommand
                 int k = i;
                 shapeButtons[i] = AvStyled.Button(s, new Rect(KeyWidth + (i % 4) * (fw + WmcUi.Gap), y - (i / 4) * TogglePitch, fw, ToggleH), "",
                     "btn", () => PickShape(k), AvButtonStyle.Toggle);
-                ids["tac.form.shape" + i] = shapeButtons[i];
+                ids["form.shape" + i] = shapeButtons[i];
             }
             y -= 3 * TogglePitch;
             maneuverRow = SegmentRow.Build(s, new Rect(0f, y, w, ToggleH), KeyWidth, "MANEUVER",
@@ -96,7 +134,7 @@ namespace WingCommand
                     "Hard turn 90° left, then back to the slot.", "Hard turn 90° right, then back to the slot.",
                     "Climb 500 m straight on, then back to the slot.", "Turn 60° apart: a pair splits, one aircraft turns away from the lead.",
                     "Turn across the nearest air threat's line of sight (from the wing's tracks), then back to the slot.",
-                }, "tac.form.", new[] { "brkl", "brkr", "pullup", "split", "beam" }, ids,
+                }, "form.", new[] { "brkl", "brkr", "pullup", "split", "beam" }, ids,
                 i => WmcUi.Order(last, () => WingOrders.Run(new WingOrder { Kind = OrderKind.Maneuver, Number = i, Scope = last.Scope })));
             y -= TogglePitch + 6f;
 
@@ -104,23 +142,18 @@ namespace WingCommand
             y -= 20f;
             spacingRow = SegmentRow.Build(s, new Rect(0f, y, w, ToggleH), KeyWidth, "SPACING", new[] { "CLOSE", "STANDARD", "OPEN", "SPREAD" },
                 new[] { "40 m between slots.", "80 m between slots.", "160 m between slots.", "350 m between slots." },
-                "tac.form.spacing", new[] { "0", "1", "2", "3" }, ids,
+                "form.spacing", new[] { "0", "1", "2", "3" }, ids,
                 i => WmcUi.Order(last, () => WingCommands.SetSpacing((SpacingPreset)i)));
             y -= TogglePitch;
             stackRow = SegmentRow.Build(s, new Rect(0f, y, w, ToggleH), KeyWidth, "STACK", new[] { "HIGH", "LEVEL", "LOW" },
                 new[] { "The wing flies above you.", "Level with you.", "The wing flies below you." },
-                "tac.form.", new[] { "high", "level", "low" }, ids, PickStack);
+                "form.", new[] { "high", "level", "low" }, ids, PickStack);
             y -= TogglePitch;
             powerRow = SegmentRow.Build(s, new Rect(0f, y, w, ToggleH), KeyWidth, "POWER", new[] { "BUSTER", "GATE" },
-                new[] { "Full power, no afterburner.", "Afterburner allowed." }, "tac.form.", new[] { "buster", "gate" }, ids,
+                new[] { "Full power, no afterburner.", "Afterburner allowed." }, "form.", new[] { "buster", "gate" }, ids,
                 i => WmcUi.Order(last, () => WingCommands.Afterburner(i == 1)));
             y -= TogglePitch;
             formScroll.SetContentHeight(-y + 4f);
-        }
-
-        private void LayoutFormation(float region)
-        {
-            formScroll?.SetViewport(new Rect(x, -BannerTop, width + 8f, Mathf.Max(40f, region - BannerTop)));
         }
 
         private void PickFamily(int i)

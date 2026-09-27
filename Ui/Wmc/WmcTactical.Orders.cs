@@ -13,7 +13,7 @@ namespace WingCommand
     internal sealed partial class WmcTactical
     {
         private const float Banner = 24f, KeyWidth = 64f, ToggleH = 22f, TogglePitch = 24f, GridH = 26f, GridPitch = 29f;
-        private const float BannerTop = BezelLayout.SubTabs + BezelLayout.SubGap, ScrollTop = BannerTop + Banner + 4f;
+        private const float BannerTop = 0f, ScrollTop = BannerTop + Banner + 4f;
 
         private static readonly string[] TargetLabels = { "HOLD FIRE", "AIR", "GROUND", "BOTH", "COVER" };
         private static readonly string[] TargetKeys = { "hold", "air", "ground", "both", "cover" };

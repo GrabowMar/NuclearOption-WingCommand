@@ -8,16 +8,17 @@ using UnityEngine.UI;
 
 namespace WingCommand
 {
-    /// <summary>Spec WMC rebuild §bezel shell: the WMC bezel panel on the maximized map — the 0.9 four tabs TACTICAL · SUPPLY ·
-    /// LOADOUT · WING on an <see cref="AvScreen"/> (display glass included), claimed through <see cref="BezelRegistry.Wmc"/>,
-    /// refreshed at 5 Hz. The header's metric tiles change with the tab; ROOM opens the planning room from every tab.</summary>
+    /// <summary>Spec bezel v2 §3: the WMC bezel panel on the maximized map — TACTICAL · FORM · PLAN · INSPECT ‖ SUPPLY · LOADOUT ·
+    /// SQUADRON on an <see cref="AvScreen"/> (display glass included), claimed through <see cref="BezelRegistry.Wmc"/>, refreshed at
+    /// 5 Hz. The header is the wing's title and four vitals chips (FUEL · AMMO · THREAT · MODE) on every tab; there are no metric
+    /// tiles, so every page has 84 px more body.</summary>
     internal sealed class WmcPanel : IWingService
     {
-        public const int TabTactical = 0, TabSupply = 1, TabLoadout = 2, TabWing = 3;
-        public static readonly string[] TabLabels = { "TACTICAL", "SUPPLY", "LOADOUT", "WING" };
-
-        /// <summary>A tab not built yet says so in its tooltip (every tab is built since R6).</summary>
-        private static readonly string[] PendingTabs = { null, null, null, null };
+        /// <summary>A tab not built yet says so in its tooltip.</summary>
+        private static readonly string[] PendingTabs =
+        {
+            null, null, null, "INSPECT arrives with planning on the map: one aircraft in depth, and why it does what it does.", null, null, null,
+        };
 
         public static WmcPanel Instance { get; private set; }
         public string Name => "WMC";
@@ -25,14 +26,16 @@ namespace WingCommand
         private readonly Dictionary<string, AvButton> controls = new Dictionary<string, AvButton>();
         private readonly WmcContext context = new WmcContext();
         private readonly WmcMapOverlay overlay = new WmcMapOverlay();
-        private readonly int[] headerKeys = { -1, -1, -1, -1 };
-        private string profileShown;
+        private readonly int[] headerKeys = { -1, -1, -1, -1, -1 };
         private IWmcPage[] pages;
         private WmcTactical tactical;
+        private WmcForm form;
+        private WmcPlan plan;
         private WmcSupply supply;
         private WmcLoadout loadout;
         private WmcWing wingPage;
-        private WmcMetricRow metrics;
+        private int shownPage = -1;
+        private Color titleColor;
         private MFDScreen screen;
         private Button bezelButton;
         private GameObject root;
@@ -49,19 +52,25 @@ namespace WingCommand
         }
 
         public bool Visible => screen != null && screen.isActive && DynamicMap.mapMaximized;
-        /// <summary>TACTICAL is the page on show (an unarmed right-click MOVE is TACTICAL's only; spec WMC rebuild).</summary>
-        public bool TacticalShowing => Visible && shell != null && shell.Page == TabTactical;
+        /// <summary>A page with the COMMAND scope row is on show (spec bezel v2 §6: an unarmed right-click MOVE is TACTICAL's and
+        /// FORM's only).</summary>
+        public bool CommandShowing => Visible && shell != null && (shell.Page == WmcTabs.Tactical || shell.Page == WmcTabs.Form);
         public int Page => shell != null ? shell.Page : -1;
-        public int Sub => tactical != null ? tactical.Sub : -1;
+        public string PageName => shell != null && shell.Page >= 0 && shell.Page < WmcTabs.Labels.Length ? WmcTabs.Labels[shell.Page] : "";
         public IReadOnlyDictionary<string, AvButton> Controls => controls;
         public WmcContext Context => context;
         public WmcMapOverlay Overlay => overlay;
         public WmcTactical Tactical => tactical;
+        public WmcForm Form => form;
+        public WmcPlan Plan => plan;
         public WmcSupply Supply => supply;
         public WmcLoadout Loadout => loadout;
         public WmcWing WingPage => wingPage;
         /// <summary>Labels that would still spill out of their box (the automation's text-fit audit).</summary>
         public int Overflow => content != null ? WmcKit.Overflow(content) : 0;
+
+        /// <summary>The tallest empty band on the page on show, in px (the automation's density audit).</summary>
+        public int Gap => content != null && shell != null ? WmcKit.LargestGap(content, shell.Body) : 0;
 
         public void Activate()
         {
@@ -128,23 +137,19 @@ namespace WingCommand
         /// where it is.</summary>
         public void Show(int tab)
         {
-            if (shell == null || tab < 0 || tab >= TabLabels.Length || pages[tab] == null) return;
+            if (shell == null || tab < 0 || tab >= WmcTabs.Labels.Length || pages[tab] == null) return;
             shell.SetPage(tab);
             nextRefresh = 0f;
         }
 
-        /// <summary>Id prefixes of each tab's controls, in tab order.</summary>
-        private static readonly string[] TabPrefixes = { "tac.", "sup.", "lo.", "wing." };
-
-        /// <summary>Press a control by id as a click would (automation). A page's control shows its page first (and a TACTICAL
-        /// control its sub-page). False when there is none or it is hidden; a disabled button ignores the click itself.</summary>
+        /// <summary>Press a control by id as a click would (automation). A page's control shows its page first. False when there
+        /// is none or it is hidden; a disabled button ignores the click itself.</summary>
         public bool Press(string id)
         {
-            int tab = TabOf(id);
+            int tab = WmcTabs.Of(id);
             if (tab >= 0 && pages != null && pages[tab] != null)
             {
                 Show(tab);
-                if (tab == TabTactical) tactical.ShowSubFor(id);
                 Refresh();
             }
             if (!controls.TryGetValue(id ?? "", out AvButton b) || b == null || !b.gameObject.activeInHierarchy) return false;
@@ -152,14 +157,6 @@ namespace WingCommand
                 { button = UnityEngine.EventSystems.PointerEventData.InputButton.Left });
             nextRefresh = 0f;
             return true;
-        }
-
-        private static int TabOf(string id)
-        {
-            if (id == null) return -1;
-            for (int i = 0; i < TabPrefixes.Length; i++)
-                if (id.StartsWith(TabPrefixes[i], StringComparison.Ordinal)) return i;
-            return -1;
         }
 
         private void Reset()
@@ -175,11 +172,12 @@ namespace WingCommand
             shell = null;
             pages = null;
             tactical = null;
+            form = null;
+            plan = null;
             supply = null;
             loadout = null;
             wingPage = null;
-            metrics = null;
-            profileShown = null;
+            shownPage = -1;
             for (int i = 0; i < headerKeys.Length; i++) headerKeys[i] = -1;
             controls.Clear();
             context.Selection.Clear();
@@ -278,17 +276,19 @@ namespace WingCommand
             content.SetParent(rootRect, false);
             AvKit.Stretch(content);
 
-            // Keys are the panel's own (they change per tab); the toolkit's metric row gets none.
-            shell = AvScreen.Build(content, "WMC", TabLabels,
-                new[] { new[] { "", "" }, new[] { "", "" }, new[] { "", "" } }, 4, AvTokens.PanelWidth, height, OnTab);
-            metrics = new WmcMetricRow(content, shell.Metrics);
+            // Spec bezel v2 §3: no metric row; the four chips carry the vitals on every tab.
+            shell = AvScreen.Build(content, "WMC", WmcTabs.Labels, null, 4, AvTokens.PanelWidth, height, OnTab);
+            if (shell.DataBar?.State != null) titleColor = shell.DataBar.State.color;
             BuildRoomButton();
+            BuildGroupRule();
 
             tactical = new WmcTactical(controls);
+            form = new WmcForm(controls);
+            plan = new WmcPlan(controls);
             supply = new WmcSupply(controls);
             loadout = new WmcLoadout(controls);
             wingPage = new WmcWing(controls);
-            pages = new IWmcPage[] { tactical, supply, loadout, wingPage };
+            pages = new IWmcPage[] { tactical, form, plan, null, supply, loadout, wingPage };
             for (int i = 0; i < pages.Length; i++)
             {
                 if (pages[i] == null)
@@ -297,10 +297,10 @@ namespace WingCommand
                     shell.Tabs[i].WithTooltip(PendingTabs[i]);
                     continue;
                 }
-                var page = (RectTransform)shell.CreatePage(i, "Wmc" + TabLabels[i]).transform;
+                var page = (RectTransform)shell.CreatePage(i, "Wmc" + WmcTabs.Labels[i]).transform;
                 pages[i].Build(page, shell.Body);
             }
-            for (int i = 0; i < shell.Tabs.Length; i++) controls["tab." + TabLabels[i].ToLowerInvariant()] = shell.Tabs[i];
+            for (int i = 0; i < shell.Tabs.Length; i++) controls["tab." + WmcTabs.Labels[i].ToLowerInvariant()] = shell.Tabs[i];
 
             MFDScreen s = root.AddComponent<MFDScreen>();
             s.shortName = "WMC";
@@ -316,8 +316,17 @@ namespace WingCommand
             }
             // No "…" anywhere (spec WMC rebuild): every label overflows and shrinks to the 10 px floor instead.
             WmcKit.FitAll(content);
-            shell.SetPage(TabTactical);
+            shell.SetPage(WmcTabs.Tactical);
             return s;
+        }
+
+        /// <summary>A 2 px accent rule between the flying tabs and the logistics tabs (spec bezel v2 §2).</summary>
+        private void BuildGroupRule()
+        {
+            if (shell.Tabs.Length <= WmcTabs.FirstLogistics) return;
+            var tab = (RectTransform)shell.Tabs[WmcTabs.FirstLogistics].transform;
+            Vector2 at = tab.anchoredPosition;
+            AvKit.Rule(content, new Rect(at.x - 1f, at.y - 3f, 2f, tab.rect.height - 6f), AvTheme.Frame).raycastTarget = false;
         }
 
         /// <summary>ROOM in the title row, where the page index sat (four labelled tabs need no "01/04").</summary>
@@ -337,7 +346,6 @@ namespace WingCommand
         private void OnTab(int tab)
         {
             WmcNameField.BlurAny();
-            metrics?.SetKeys(WmcHeader.Keys(tab));
             AvKit.Popup.CloseAny();
             nextRefresh = 0f;
         }
@@ -389,9 +397,10 @@ namespace WingCommand
             IWmcPage p = page >= 0 && page < pages.Length ? pages[page] : null;
             if (p != null)
             {
-                p.Metrics(context, metrics);
+                if (page != shownPage) p.Shown(context);
                 p.Refresh(context);
             }
+            shownPage = page;
             bool fresh = WingToast.Last != null && Time.unscaledTime - WingToast.LastAt < 6f;
             shell.WriteStatus(p?.Alert, context.Map.Prompt(context.ScopeLabel), fresh ? WingToast.Last : p?.Hint ?? "");
         }
@@ -406,25 +415,25 @@ namespace WingCommand
                 if (duty != MemberDuty.Grounded && duty != MemberDuty.Settled) airborne++;
             }
             int max = WingService.MaxMembers;
-            if (Changed(0, context.Count * 10000 + max * 100 + airborne) && shell.DataBar?.State != null)
-                shell.DataBar.State.text = WmcHeader.Title(context.Count, max, airborne);
             int pending = !context.Client && SpawnService.Instance != null ? SpawnService.Instance.PendingTotal : 0;
-            if (Changed(1, context.Count * 1000 + pending * 10 + (context.Client ? 4 : 0) + (context.Stale ? 2 : 0)))
-                Chip(0, WmcHeader.Link(context.Count, pending, context.Client, context.Stale, out string s0), s0);
-            // Behaviour profiles arrive in R12; until then the chip names the scope element's doctrine pattern.
-            bool same = context.ScopeDoctrine(out WingDoctrine scoped);
-            string profile = context.Wing == null || context.Client ? WmcText.Unknown : same ? scoped.PatternName : "MIXED";
-            if (!ReferenceEquals(profile, profileShown) && profile != profileShown)
+            if (Changed(0, context.Count * 100000 + max * 1000 + airborne * 100 + pending * 4 + (context.Client ? 2 : 0) + (context.Stale ? 1 : 0))
+                && shell.DataBar?.State != null)
             {
-                profileShown = profile;
-                Chip(1, WmcHeader.Profile(profile, !same, out string s1), s1);
+                shell.DataBar.State.text = WmcHeader.Title(context.Count, max, airborne, pending, context.Client, context.Stale, out string st);
+                shell.DataBar.State.color = st == "danger" ? AvTheme.Alert : titleColor;
             }
-            bool offline = context.Client || !WingSupplyReserve.HasFaction;
-            if (Changed(2, WingSupplyReserve.Count * 100 + WingSupplyReserve.Capacity * 2 + (offline ? 1 : 0)))
-                Chip(2, WmcHeader.Hangar(WingSupplyReserve.Count, WingSupplyReserve.Capacity, offline, out string s2), s2);
-            if (Changed(3, (int)context.Map.Mode * 2 + (context.Client ? 1 : 0)))
+            WingVitals v = WingVitals.Of(context.Rows, context.Count);
+            int fuelKey = v.Count * 100000 + Percent(v.MinFuel) * 100 + (v.BingoSlot + 1) * 10 + v.JokerSlot + 1;
+            if (Changed(1, fuelKey)) Chip(0, WmcHeader.Fuel(v, out string s0), s0);
+            int ammoKey = v.Count * 100000 + Percent(v.MinAmmo) * 100 + v.WinchesterSlot + 1;
+            if (Changed(2, ammoKey)) Chip(1, WmcHeader.Ammo(v, out string s1), s1);
+            int hostiles = context.Wing != null && !context.Client ? context.Wing.HostilesNear() : -1;
+            if (Changed(3, (hostiles + 1) * 100 + v.DefendingSlot + 1)) Chip(2, WmcHeader.Threat(v, hostiles, out string s2), s2);
+            if (Changed(4, (int)context.Map.Mode * 2 + (context.Client ? 1 : 0)))
                 Chip(3, WmcHeader.Mode(context.Map.Mode, context.Client, out string s3), s3);
         }
+
+        private static int Percent(float f) => float.IsNaN(f) ? -1 : Mathf.RoundToInt(f * 100f);
 
         private bool Changed(int slot, int key)
         {

@@ -53,7 +53,7 @@
       "store": "open",
       "args": {
         "open": true,
-        "tab": 0
+        "tab": "TACTICAL"
       }
     },
     {
@@ -65,7 +65,7 @@
       "method": "WingCommand.Automation.Wmc",
       "store": "wing",
       "args": {
-        "tab": 0
+        "tab": "TACTICAL"
       }
     },
     {
@@ -73,8 +73,7 @@
       "method": "WingCommand.Automation.Wmc",
       "store": "orders",
       "args": {
-        "tab": 0,
-        "sub": 0
+        "tab": "TACTICAL"
       }
     },
     {
@@ -147,8 +146,7 @@
       "method": "WingCommand.Automation.Wmc",
       "store": "fit",
       "args": {
-        "tab": 0,
-        "sub": 0
+        "tab": "TACTICAL"
       }
     },
     {

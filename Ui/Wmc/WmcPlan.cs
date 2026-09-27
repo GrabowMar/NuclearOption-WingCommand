@@ -7,11 +7,64 @@ using UnityEngine.UI;
 
 namespace WingCommand
 {
-    /// <summary>TACTICAL › ROUTE (spec WMC rebuild §ROUTE; the user merged ROUTE and AP): the scope's quick route — draw points
-    /// on the map, set each one's altitude, speed and arrival action, send it, loop it, skip a leg, save it — then MY
-    /// AUTOPILOT: your own holds, and NAV, which flies the route you drew.</summary>
-    internal sealed partial class WmcTactical
+    /// <summary>PLAN (spec bezel v2 §5 PLAN › ROUTE; the user merged ROUTE and AP): the scope row, the scope's quick route — draw
+    /// points on the map, set each one's altitude, speed and arrival action, send it, loop it, skip a leg, save it — then MY
+    /// AUTOPILOT: your own holds, and NAV, which flies the route you drew. Planning on the map (elements, steps, the log) joins it
+    /// as sub-pages.</summary>
+    internal sealed class WmcPlan : IWmcPage
     {
+        private const float KeyWidth = 64f, ToggleH = 22f, TogglePitch = 24f;
+
+        private readonly Dictionary<string, AvButton> ids;
+        private readonly WmcScopeRow scope;
+        private RectTransform page;
+        private float x, width;
+        private WmcContext last;
+        private AvKit.Popup popup;
+
+        public WmcPlan(Dictionary<string, AvButton> controls)
+        {
+            ids = controls;
+            scope = new WmcScopeRow(controls, "plan.scope.");
+        }
+
+        public string Hint => "DRAW, then right-click the map to add points; SEND flies them. NAV flies your own aircraft along them.";
+
+        public string Alert => null;
+
+        public void Build(RectTransform pageRoot, Rect shellBody)
+        {
+            page = pageRoot;
+            Rect body = WmcUi.Page(page, shellBody, shellBody.height);
+            x = body.x;
+            width = body.width;
+            scope.Build(page, x, body.y, width, "ROUTE FOR", false);
+            float top = BezelLayout.ScopeRow + BezelLayout.ScopeGap;
+            BuildRoute(page, body.y - top);
+            routeScroll.SetViewport(new Rect(x, body.y - top, width + 8f, Mathf.Max(40f, body.height - top)));
+            popup = new AvKit.Popup(page, shellBody.width);
+        }
+
+        public void Shown(WmcContext c)
+        {
+        }
+
+        public void Refresh(WmcContext c)
+        {
+            last = c;
+            scope.Refresh(c);
+            RefreshRoute(c);
+        }
+
+        private static RectTransform Container(RectTransform parent, string name, Rect r)
+        {
+            var go = new GameObject(name, typeof(RectTransform));
+            var rt = (RectTransform)go.transform;
+            rt.SetParent(parent, false);
+            AvKit.Place(rt, r);
+            return rt;
+        }
+
         private const int DraftRows = 7;
         private const float ListRow = 24f;
         private static readonly ApField[] ApFields = { ApField.Heading, ApField.Altitude, ApField.VerticalSpeed, ApField.Speed };
@@ -34,16 +87,16 @@ namespace WingCommand
         private float altShown = -1f, spdShown = -1f;
         private RouteLoop loopShown = (RouteLoop)255;
 
-        private void BuildRoute(RectTransform root)
+        private void BuildRoute(RectTransform root, float top)
         {
-            routeScroll = WmcScroll.Build(root, new Rect(x, -BannerTop, width + 8f, 100f), "RouteScroll");
+            routeScroll = WmcScroll.Build(root, new Rect(x, top, width + 8f, 100f), "RouteScroll");
             RectTransform s = routeScroll.Content;
             float w = routeScroll.Width, y = 0f;
 
             routeHead = WmcKit.Text(s, new Rect(0f, y, w - 84f, 18f), "section-title");
             draw = AvStyled.Button(s, new Rect(w - 80f, y, 80f, 20f), "DRAW", "btn", ToggleDraw, AvButtonStyle.Toggle);
             draw.WithTooltip("Right-click the map to add route points while DRAW is lit.");
-            ids["tac.route.draw"] = draw;
+            ids["plan.route.draw"] = draw;
             y -= 24f;
             for (int i = 0; i < DraftRows; i++)
             {
@@ -51,7 +104,7 @@ namespace WingCommand
                 RectTransform row = Container(s, "RoutePoint" + i, new Rect(0f, y - i * ListRow, w, ListRow - 2f));
                 AvButton hit = WmcUi.Card(row, new Rect(0f, 0f, w, ListRow - 2f), () => PickPoint(k), out _, out draftRails[i]);
                 hit.WithTooltip("Select this point to change its altitude, speed or arrival action.");
-                ids["tac.route.row" + i] = hit;
+                ids["plan.route.row" + i] = hit;
                 draftLabels[i] = WmcKit.Text(row, new Rect(10f, -2f, w - 16f, ListRow - 6f), "row-sub");
                 draftRoots[i] = row.gameObject;
                 row.gameObject.SetActive(false);
@@ -66,38 +119,38 @@ namespace WingCommand
                 () => EditDraft(d => d.StepAltitude(+1)), "Altitude of the selected point, or of new points (AUTO: the task's own).");
             AvButton[] spd = AvKit.Stepper(s, half + WmcUi.Gap, y, half, out spdValue, () => EditDraft(d => d.StepSpeed(-1)),
                 () => EditDraft(d => d.StepSpeed(+1)), "Speed of the selected point, or of new points (AUTO: cruise).");
-            ids["tac.route.alt-"] = alt[0];
-            ids["tac.route.alt+"] = alt[1];
-            ids["tac.route.spd-"] = spd[0];
-            ids["tac.route.spd+"] = spd[1];
+            ids["plan.route.alt-"] = alt[0];
+            ids["plan.route.alt+"] = alt[1];
+            ids["plan.route.spd-"] = spd[0];
+            ids["plan.route.spd+"] = spd[1];
             y -= 34f;
 
             float third = (w - WmcUi.Gap * 2f) / 3f;
-            action = RouteButton(s, 0f, y, third, "ACTION", "tac.route.action", () => EditDraft(d => d.CycleAction()),
+            action = RouteButton(s, 0f, y, third, "ACTION", "plan.route.action", () => EditDraft(d => d.CycleAction()),
                 "The selected point's arrival: orbit 2 min, land, cargo, none.");
-            del = RouteButton(s, third + WmcUi.Gap, y, third, "DEL PT", "tac.route.del", () => EditDraft(d => d.RemoveSelected()),
+            del = RouteButton(s, third + WmcUi.Gap, y, third, "DEL PT", "plan.route.del", () => EditDraft(d => d.RemoveSelected()),
                 "Remove the selected point.");
-            skip = RouteButton(s, 2f * (third + WmcUi.Gap), y, third, "SKIP LEG", "tac.route.skip",
+            skip = RouteButton(s, 2f * (third + WmcUi.Gap), y, third, "SKIP LEG", "plan.route.skip",
                 () => WmcUi.Order(last, () => WingOrders.Run(WingOrder.Of(OrderKind.SkipLeg, last.Scope))),
                 "The scope's task goes on to its next point now.");
             y -= TogglePitch;
             float fifth = (w - WmcUi.Gap * 4f) / 5f;
-            send = RouteButton(s, 0f, y, fifth, "SEND", "tac.route.send", Send,
+            send = RouteButton(s, 0f, y, fifth, "SEND", "plan.route.send", Send,
                 "Fly the draft: one point is a MOVE, more a ROUTE; LOOP or PING-PONG makes a patrol.");
-            undo = RouteButton(s, fifth + WmcUi.Gap, y, fifth, "UNDO", "tac.route.undo", () => EditDraft(d => d.Undo()), "Remove the last point.");
-            clear = RouteButton(s, 2f * (fifth + WmcUi.Gap), y, fifth, "CLEAR", "tac.route.clear", () => EditDraft(d => d.Clear()), "Empty the draft.");
-            loop = RouteButton(s, 3f * (fifth + WmcUi.Gap), y, fifth, "ONCE", "tac.route.loop", () => EditDraft(d => d.CycleLoop()),
+            undo = RouteButton(s, fifth + WmcUi.Gap, y, fifth, "UNDO", "plan.route.undo", () => EditDraft(d => d.Undo()), "Remove the last point.");
+            clear = RouteButton(s, 2f * (fifth + WmcUi.Gap), y, fifth, "CLEAR", "plan.route.clear", () => EditDraft(d => d.Clear()), "Empty the draft.");
+            loop = RouteButton(s, 3f * (fifth + WmcUi.Gap), y, fifth, "ONCE", "plan.route.loop", () => EditDraft(d => d.CycleLoop()),
                 "Fly the route once, loop it, or back and forth.");
-            save = RouteButton(s, 4f * (fifth + WmcUi.Gap), y, fifth, "SAVE", "tac.route.save", SaveRoute, "Keep the draft as a saved route.");
+            save = RouteButton(s, 4f * (fifth + WmcUi.Gap), y, fifth, "SAVE", "plan.route.save", SaveRoute, "Keep the draft as a saved route.");
             y -= TogglePitch + 2f;
 
             AvStyled.Label(s, new Rect(0f, y, KeyWidth, ToggleH), "SAVED", "metric-key");
             savedPicker = AvStyled.Button(s, new Rect(KeyWidth, y, w - KeyWidth - 92f, ToggleH), "PICK A SAVED ROUTE ›", "btn", OpenSaved);
             savedPicker.WithTooltip("Load a saved route into the draft; SEND flies it.");
-            ids["tac.route.saved"] = savedPicker;
+            ids["plan.route.saved"] = savedPicker;
             savedDelete = AvStyled.Button(s, new Rect(w - 88f, y, 88f, ToggleH), "DELETE", "btn", DeleteSaved);
             savedDelete.WithTooltip("Delete the loaded saved route (press twice).");
-            ids["tac.route.saved.del"] = savedDelete;
+            ids["plan.route.saved.del"] = savedDelete;
             y -= TogglePitch + 8f;
 
             AvStyled.Label(s, new Rect(0f, y, w, 16f), "MY AUTOPILOT", "section-title");
@@ -116,7 +169,7 @@ namespace WingCommand
                 int k = i;
                 apModes[i] = AvStyled.Button(s, new Rect(i * (mw + WmcUi.Gap), y, mw, ToggleH), modes[i], "btn", () => PressAp(k), AvButtonStyle.Toggle);
                 apModes[i].WithTooltip(tips[i]);
-                ids["tac.route.ap." + keys[i]] = apModes[i];
+                ids["plan.ap." + keys[i]] = apModes[i];
             }
             y -= TogglePitch + 2f;
             for (int i = 0; i < ApFields.Length; i++)
@@ -126,7 +179,7 @@ namespace WingCommand
                 AvButton[] step = AvKit.Stepper(s, fx, fy, half, out apValues[i],
                     () => PlayerAutopilot.Instance?.Adjust(f, -1), () => PlayerAutopilot.Instance?.Adjust(f, 1),
                     ApNames[i] + ": the held value; the hold flies to it.");
-                string id = "tac.route.ap." + f.ToString().ToLowerInvariant();
+                string id = "plan.ap." + f.ToString().ToLowerInvariant();
                 ids[id + ".down"] = step[0];
                 ids[id + ".up"] = step[1];
             }
@@ -140,11 +193,6 @@ namespace WingCommand
             b.WithTooltip(tip);
             ids[id] = b;
             return b;
-        }
-
-        private void LayoutRoute(float region)
-        {
-            routeScroll?.SetViewport(new Rect(x, -BannerTop, width + 8f, Mathf.Max(40f, region - BannerTop)));
         }
 
         private void ToggleDraw()
@@ -199,7 +247,7 @@ namespace WingCommand
             for (int i = 0; i < routes.Count; i++)
                 routeEntries.Add(new AvKit.PopupEntry(routes[i].Name, routes[i].Points.Length + " PTS · " + RouteDraft.LoopText(routes[i].Loop),
                     i == savedSelected));
-            profilePopup.Show(WmcKit.RectIn(page, (RectTransform)savedPicker.transform), routeEntries, PickSaved);
+            popup.Show(WmcKit.RectIn(page, (RectTransform)savedPicker.transform), routeEntries, PickSaved);
         }
 
         private void PickSaved(int i)

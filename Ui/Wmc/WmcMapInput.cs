@@ -71,9 +71,9 @@ namespace WingCommand
         /// <summary>Every frame while the panel is installed: follow the right button and place a click.</summary>
         public void Update(WmcContext c, bool visible)
         {
-            // Spec WMC rebuild: with nothing armed, a right-click MOVE for the selection is TACTICAL's only (the 0.9 rule); on
-            // SUPPLY, LOADOUT or WING the right-click stays the game's. The room places its own orders (it is open over the map).
-            bool tactical = WmcPanel.Instance != null && WmcPanel.Instance.TacticalShowing;
+            // Spec bezel v2 §6: with nothing armed, a right-click MOVE for the selection is TACTICAL's and FORM's only (the tabs with
+            // the COMMAND scope row); elsewhere the right-click stays the game's. The room places its own orders (it is open over the map).
+            bool tactical = WmcPanel.Instance != null && WmcPanel.Instance.CommandShowing;
             bool room = WmcRoom.Instance != null && WmcRoom.Instance.IsOpen;
             selected = c != null && (tactical || room) ? c.Selection.Count : 0;
             if (!visible)

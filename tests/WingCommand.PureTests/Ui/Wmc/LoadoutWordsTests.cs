@@ -43,6 +43,18 @@ namespace WingCommand.PureTests
         }
 
         [Fact]
+        public void TheCardsBuildLineCarriesWhatTheTilesSaid()
+        {
+            var f = new FitSummary { Stations = 6, Fitted = 4, Mass = 420f, Aam = 4 };
+            Assert.Equal("4/6 FITTED · 420 KG · A-A · 2 EMPTY", LoadoutWords.Build(f, true, 0));
+            var all = new FitSummary { Stations = 2, Fitted = 2, Mass = 1500f, Bombs = 4 };
+            Assert.Equal("2/2 FITTED · 1,500 KG · A-G", LoadoutWords.Build(all, true, 0));
+            Assert.Equal("NO TEMPLATE · NEW STARTS ONE FROM THE STANDARD STORES", LoadoutWords.Build(default, false, 0));
+            var worst = new FitSummary { Stations = 12, Fitted = 1, Blocked = 5, Mass = 123456f, Aam = 3, Agm = 3 };
+            Assert.True(LoadoutWords.Build(worst, true, 3).Length <= LoadoutWords.BuildChars);
+        }
+
+        [Fact]
         public void AMirroredStationSaysHowManyPylonsItSets()
         {
             Assert.Equal("Fuselage Pylon ×2", LoadoutWords.StationName("Fuselage Pylon", 2));

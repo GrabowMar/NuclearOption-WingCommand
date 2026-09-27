@@ -2,20 +2,19 @@ using System;
 
 namespace WingCommand
 {
-    /// <summary>The bezel's fixed geometry (spec WMC rebuild §bezel shell): the synced <c>AvScreen</c> chrome (data bar 62,
-    /// metrics 76, tabs 34, status 56 and four 8 px gaps) leaves H − 260 for a page; TACTICAL stacks a scope row, the flight
-    /// list, a sub-tab strip and the sub-page.</summary>
+    /// <summary>The bezel's fixed geometry (spec bezel v2 §3): the synced <c>AvScreen</c> chrome with no metric row (data bar 62,
+    /// tabs 34, status 56 and three 8 px gaps) leaves H − 176 for a page; TACTICAL stacks a scope row, the flight list and ORDERS.</summary>
     internal static class BezelLayout
     {
-        public const float Chrome = 260f;
+        public const float Chrome = 176f;
         public const float ScopeRow = 26f, ScopeGap = 4f, HeaderPitch = 22f, RowPitch = 30f, Pager = 20f, SubTabs = 24f, SubGap = 6f;
-        /// <summary>The body kept for the sub-page on a tall dock (at 896 the list gets 188 px: three wingmen in two elements
-        /// with room to spare); short docks keep a header and three rows (paged beyond).</summary>
-        public const float SubPageReserve = 448f, ShortListCap = 116f;
+        /// <summary>The body kept for ORDERS below the list on a tall dock (at 896 the list gets 302 px: seven wingmen in two
+        /// elements); short docks keep a header and three rows (paged beyond).</summary>
+        public const float SubPageReserve = 418f, ShortListCap = 116f;
 
         // SUPPLY (spec WMC rebuild §SUPPLY; supply-ui §3 less its OVER-LIMIT row — the mode is a setting, user 2026-09-25):
         // a scroll viewport over the steps and a DISPATCH pin on the body's floor.
-        public const float Content = 458f;
+        public const float Content = 458f, VitalsRow = 20f;
         public const float PinGap = 6f, PinCard = 48f, PinGap2 = 4f, RequisitionH = 30f, SupplyPin = PinGap + PinCard + PinGap2 + RequisitionH;
         public const float StepHead = 18f, HeadGap = 4f, StepGap = 9f, PilotCard = 48f;
         public const float TileH = 56f, TileGap = 6f, TileFooter = 26f;

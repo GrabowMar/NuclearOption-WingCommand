@@ -53,8 +53,7 @@
       "store": "open",
       "args": {
         "open": true,
-        "tab": 0,
-        "sub": 0
+        "tab": "TACTICAL"
       }
     },
     {

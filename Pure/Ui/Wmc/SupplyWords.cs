@@ -84,12 +84,23 @@ namespace WingCommand
             return WmcText.Cut(code, CodeChars) + (stock > 0 ? " IN STOCK" : " NONE LEFT");
         }
 
+        /// <summary>SUPPLY's vitals line (spec bezel v2 §5 SUPPLY): what the FUNDS, HANGAR and STOCK tiles said, once.</summary>
+        public static string Vitals(float funds, bool client, bool sandbox, int held, int capacity, bool offline, int stock, bool selected)
+        {
+            string money = client ? "YOUR ALLOCATION" : sandbox ? SandboxFunds : "FUNDS " + Credits.Text(funds);
+            string s = money + " · " + HangarWords.Label(held, capacity, offline);
+            if (!selected || sandbox || client) return s;
+            return s + (stock > 0 ? " · STOCK " + N(stock) : " · NONE LEFT");
+        }
+
+        public const string SandboxFunds = "SANDBOX · FREE";
+
         public static string InboundChip(int n) => N(n) + " ON THE WAY";
 
         public static string Hint(bool client, int inbound)
         {
             if (client) return "The host runs SUPPLY; you can look, the host requisitions.";
-            if (inbound > 0) return N(inbound) + " inbound · watch LINK";
+            if (inbound > 0) return N(inbound) + " inbound · they join as they take off";
             return "Pick a pilot, an airframe, its fit and a base; REQUISITION launches it.";
         }
 
