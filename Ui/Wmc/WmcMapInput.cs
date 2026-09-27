@@ -220,8 +220,14 @@ namespace WingCommand
     [HarmonyPatch(typeof(DynamicMap), "MapControls")]
     internal static class WmcMapControlsPatch
     {
-        // The room covers the map: its wheel and drags are the room's, not the game map's underneath.
+        // The room covers the map: its wheel and drags are the room's, not the game map's underneath. A CENTER or FIT waiting
+        // for the map goes in first, so the game draws the view from the new offsets this frame (critic §14.12).
         [HarmonyPrefix]
-        private static bool Prefix() => !WmcMapInput.ConsumesNow() && !(WmcRoom.Instance != null && WmcRoom.Instance.IsOpen);
+        private static bool Prefix(DynamicMap __instance)
+        {
+            bool run = !WmcMapInput.ConsumesNow() && !(WmcRoom.Instance != null && WmcRoom.Instance.IsOpen);
+            if (run) WmcMap.Apply(__instance);
+            return run;
+        }
     }
 }

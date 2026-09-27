@@ -7,18 +7,26 @@ using UnityEngine.UI;
 
 namespace WingCommand
 {
-    /// <summary>PLAN (spec bezel v2 §5 PLAN › ROUTE; the user merged ROUTE and AP): the scope row, the scope's quick route — draw
-    /// points on the map, set each one's altitude, speed and arrival action, send it, loop it, skip a leg, save it — then MY
-    /// AUTOPILOT: your own holds, and NAV, which flies the route you drew. Planning on the map (elements, steps, the log) joins it
-    /// as sub-pages.</summary>
-    internal sealed class WmcPlan : IWmcPage
+    /// <summary>PLAN (spec bezel v2 §5 PLAN): planning on the game's map, in three sub-pages. ELEMENTS: a card per element in use
+    /// with its task and the legs still to fly, SELECT · SKIP · FORM UP · FIT (FIT frames it on the map). ROUTE (the user merged
+    /// ROUTE and AP): the scope row, the scope's quick route — draw points on the map, set each one's altitude, speed and arrival
+    /// action, send it, loop it, skip a leg, save it — then MY AUTOPILOT: your own holds, and NAV, which flies the route you drew.
+    /// LOG: the wing's events and radio lines, filtered by element or the selected aircraft; a line opens it on INSPECT and centres
+    /// the map on it.</summary>
+    internal sealed partial class WmcPlan : IWmcPage
     {
+        public const int SubElements = 0, SubRoute = 1, SubLog = 2;
+        private static readonly string[] SubLabels = { "ELEMENTS", "ROUTE", "LOG" };
         private const float KeyWidth = 64f, ToggleH = 22f, TogglePitch = 24f;
 
         private readonly Dictionary<string, AvButton> ids;
         private readonly WmcScopeRow scope;
+        private readonly GameObject[] subRoots = new GameObject[SubLabels.Length];
+        private AvButton[] subTabs;
         private RectTransform page;
+        private Rect body;
         private float x, width;
+        private int sub = -1;
         private WmcContext last;
         private AvKit.Popup popup;
 
@@ -28,32 +36,103 @@ namespace WingCommand
             scope = new WmcScopeRow(controls, "plan.scope.");
         }
 
-        public string Hint => "DRAW, then right-click the map to add points; SEND flies them. NAV flies your own aircraft along them.";
+        public int Sub => sub;
+
+        public string SubName => sub >= 0 && sub < SubLabels.Length ? SubLabels[sub] : "";
+
+        public string Hint => sub == SubRoute
+            ? "DRAW, then right-click the map to add points; SEND flies them. NAV flies your own aircraft along them."
+            : sub == SubLog ? "A line with an aircraft opens it on INSPECT and centres the map on it."
+            : "Each element's task and legs; FIT frames an element on the map.";
 
         public string Alert => null;
 
         public void Build(RectTransform pageRoot, Rect shellBody)
         {
             page = pageRoot;
-            Rect body = WmcUi.Page(page, shellBody, shellBody.height);
+            body = WmcUi.Page(page, shellBody, shellBody.height);
             x = body.x;
             width = body.width;
-            scope.Build(page, x, body.y, width, "ROUTE FOR", false);
-            float top = BezelLayout.ScopeRow + BezelLayout.ScopeGap;
-            BuildRoute(page, body.y - top);
-            routeScroll.SetViewport(new Rect(x, body.y - top, width + 8f, Mathf.Max(40f, body.height - top)));
+            subTabs = WmcKit.SubTabs(page, new Rect(x, body.y, width, BezelLayout.SubTabs), SubLabels, "plan.sub.", ids, ShowSub);
+            subTabs[SubElements].WithTooltip("Every element's task and legs, with SELECT, SKIP, FORM UP and FIT.");
+            subTabs[SubRoute].WithTooltip("The scope's quick route, and your own autopilot with NAV.");
+            subTabs[SubLog].WithTooltip("The wing's events and radio lines.");
+            float top = BezelLayout.SubTabs + BezelLayout.SubGap;
+
+            RectTransform route = SubRoot(SubRoute, "PlanRoute");
+            scope.Build(route, x, body.y - top, width, "ROUTE FOR", false);
+            float rt = top + BezelLayout.ScopeRow + BezelLayout.ScopeGap;
+            BuildRoute(route, body.y - rt);
+            routeScroll.SetViewport(new Rect(x, body.y - rt, width + 8f, Mathf.Max(40f, body.height - rt)));
+
+            BuildElements(SubRoot(SubElements, "PlanElements"), body.y - top, body.height - top);
+            BuildLog(SubRoot(SubLog, "PlanLog"), body.y - top, body.height - top);
             popup = new AvKit.Popup(page, shellBody.width);
+            ShowSub(SubElements);
+        }
+
+        private RectTransform SubRoot(int k, string name)
+        {
+            var go = new GameObject(name, typeof(RectTransform));
+            var rt = (RectTransform)go.transform;
+            rt.SetParent(page, false);
+            AvKit.Stretch(rt);
+            subRoots[k] = go;
+            return rt;
+        }
+
+        /// <summary>A sub-page by its number (automation, the tabs).</summary>
+        public void ShowSub(int k)
+        {
+            if (k < 0 || k >= subRoots.Length || subRoots[k] == null) return;
+            sub = k;
+            for (int i = 0; i < subRoots.Length; i++)
+            {
+                subRoots[i].SetActive(i == k);
+                subTabs[i].SetLatched(i == k);
+            }
+            AvKit.Popup.CloseAny();
+            if (last != null) Refresh(last);
+        }
+
+        /// <summary>A control of a sub-page shows that sub-page first (automation).</summary>
+        public void ShowSubFor(string id)
+        {
+            if (id == null) return;
+            if (id.StartsWith("plan.route.", System.StringComparison.Ordinal) || id.StartsWith("plan.ap.", System.StringComparison.Ordinal)
+                || id.StartsWith("plan.scope.", System.StringComparison.Ordinal)) ShowSub(SubRoute);
+            else if (id.StartsWith("plan.el", System.StringComparison.Ordinal)) ShowSub(SubElements);
+            else if (id.StartsWith("plan.log.", System.StringComparison.Ordinal)) ShowSub(SubLog);
+        }
+
+        /// <summary>A sub-page by its label (automation).</summary>
+        public bool ShowSubNamed(string name)
+        {
+            for (int i = 0; i < SubLabels.Length; i++)
+                if (string.Equals(SubLabels[i], name, System.StringComparison.OrdinalIgnoreCase))
+                {
+                    ShowSub(i);
+                    return true;
+                }
+            return false;
         }
 
         public void Shown(WmcContext c)
         {
+            elementsKey = int.MinValue;
+            for (int i = 0; i < logKeys.Length; i++) logKeys[i] = long.MinValue;
         }
 
         public void Refresh(WmcContext c)
         {
             last = c;
-            scope.Refresh(c);
-            RefreshRoute(c);
+            if (sub == SubRoute)
+            {
+                scope.Refresh(c);
+                RefreshRoute(c);
+            }
+            else if (sub == SubElements) RefreshElements(c);
+            else if (sub == SubLog) RefreshLog(c);
         }
 
         private static RectTransform Container(RectTransform parent, string name, Rect r)

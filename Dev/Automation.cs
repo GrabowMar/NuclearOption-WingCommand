@@ -657,6 +657,13 @@ namespace WingCommand
                 if (index < 0) return Fail("Wmc", "no tab " + name + " (tabs go by name: " + string.Join(", ", WmcTabs.Labels) + ")");
                 panel.Show(index);
             }
+            // PLAN's sub-pages by name: ELEMENTS, ROUTE, LOG.
+            string sub = Text(args, "sub");
+            if (sub != null)
+            {
+                panel.Show(WmcTabs.Plan);
+                if (panel.Plan == null || !panel.Plan.ShowSubNamed(sub)) return Fail("Wmc", "no PLAN sub-page " + sub);
+            }
             // Spec WMC program §4: the scope — clear, an element by letter, or wingmen by their #numbers.
             WmcSelection selection = panel.Context.Selection;
             if (Arg(args, "clear") is bool clear && clear) selection.Clear();
@@ -728,7 +735,8 @@ namespace WingCommand
             var result = new Dictionary<string, object>
             {
                 { "ok", string.IsNullOrEmpty(press) || pressed }, { "visible", panel.Visible }, { "tab", panel.Page },
-                { "tab_name", panel.PageName }, { "pressed", pressed }, { "members", panel.Context.Count }, { "controls", panel.Controls.Count },
+                { "tab_name", panel.PageName }, { "sub_name", panel.Page == WmcTabs.Plan ? panel.Plan.SubName : "" },
+                { "plan_cards", panel.Plan?.Cards ?? 0 }, { "log_rows", panel.Plan?.LogRowsShown ?? 0 }, { "pressed", pressed }, { "members", panel.Context.Count }, { "controls", panel.Controls.Count },
                 { "scope", panel.Context.Selection.Label(panel.Context.Rows, panel.Context.Count) },
                 { "overflow", panel.Overflow }, { "gap_px", panel.Gap }, { "alerts", panel.Tactical?.AlertsShown ?? 0 },
                 { "recent", panel.Tactical?.RecentShown ?? 0 },
@@ -738,6 +746,7 @@ namespace WingCommand
             if (supply != null && panel.Page == WmcTabs.Supply) supply.Report(result);
             if (loadout != null && panel.Page == WmcTabs.Loadout) loadout.Report(result);
             if (panel.WingPage != null && panel.Page == WmcTabs.Squadron) panel.WingPage.Report(result);
+            if (panel.InspectPage != null && panel.Page == WmcTabs.Inspect) panel.InspectPage.Report(result);
             return result;
         }
 

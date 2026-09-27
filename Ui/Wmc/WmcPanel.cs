@@ -17,7 +17,7 @@ namespace WingCommand
         /// <summary>A tab not built yet says so in its tooltip.</summary>
         private static readonly string[] PendingTabs =
         {
-            null, null, null, "INSPECT arrives with planning on the map: one aircraft in depth, and why it does what it does.", null, null, null,
+            null, null, null, null, null, null, null,
         };
 
         public static WmcPanel Instance { get; private set; }
@@ -31,6 +31,7 @@ namespace WingCommand
         private WmcTactical tactical;
         private WmcForm form;
         private WmcPlan plan;
+        private WmcInspect inspect;
         private WmcSupply supply;
         private WmcLoadout loadout;
         private WmcWing wingPage;
@@ -63,6 +64,7 @@ namespace WingCommand
         public WmcTactical Tactical => tactical;
         public WmcForm Form => form;
         public WmcPlan Plan => plan;
+        public WmcInspect InspectPage => inspect;
         public WmcSupply Supply => supply;
         public WmcLoadout Loadout => loadout;
         public WmcWing WingPage => wingPage;
@@ -142,6 +144,15 @@ namespace WingCommand
             nextRefresh = 0f;
         }
 
+        /// <summary>INSPECT on this aircraft (INSPECT › on a row, a log line, automation); it never changes who orders go to.</summary>
+        public void Inspect(uint id)
+        {
+            if (inspect == null || id == 0u) return;
+            inspect.Focus(id);
+            Show(WmcTabs.Inspect);
+            Refresh();
+        }
+
         /// <summary>Press a control by id as a click would (automation). A page's control shows its page first. False when there
         /// is none or it is hidden; a disabled button ignores the click itself.</summary>
         public bool Press(string id)
@@ -150,6 +161,7 @@ namespace WingCommand
             if (tab >= 0 && pages != null && pages[tab] != null)
             {
                 Show(tab);
+                if (tab == WmcTabs.Plan) plan.ShowSubFor(id);
                 Refresh();
             }
             if (!controls.TryGetValue(id ?? "", out AvButton b) || b == null || !b.gameObject.activeInHierarchy) return false;
@@ -174,6 +186,7 @@ namespace WingCommand
             tactical = null;
             form = null;
             plan = null;
+            inspect = null;
             supply = null;
             loadout = null;
             wingPage = null;
@@ -285,10 +298,11 @@ namespace WingCommand
             tactical = new WmcTactical(controls);
             form = new WmcForm(controls);
             plan = new WmcPlan(controls);
+            inspect = new WmcInspect(controls);
             supply = new WmcSupply(controls);
             loadout = new WmcLoadout(controls);
             wingPage = new WmcWing(controls);
-            pages = new IWmcPage[] { tactical, form, plan, null, supply, loadout, wingPage };
+            pages = new IWmcPage[] { tactical, form, plan, inspect, supply, loadout, wingPage };
             for (int i = 0; i < pages.Length; i++)
             {
                 if (pages[i] == null)

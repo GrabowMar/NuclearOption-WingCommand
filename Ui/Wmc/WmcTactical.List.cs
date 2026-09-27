@@ -127,7 +127,7 @@ namespace WingCommand
             v.Ej = RowButton(rt, 344f, 32f, "EJ", () => AskEject(index), id + ".ej",
                 "Eject this pilot (press twice): the aircraft is lost, search and rescue picks the pilot up.");
             v.Inspect = RowButton(rt, 380f, width - 380f, "INSPECT ›", () => Inspect(index), id + ".inspect",
-                "Open this aircraft in the planning room: stores, damage, fuel and what its AI is doing.");
+                "This aircraft on INSPECT: stores, fuel, hull, its task and what it has been doing.");
             v.Root.SetActive(false);
             return v;
         }
@@ -211,8 +211,7 @@ namespace WingCommand
         private void Inspect(int index)
         {
             if (last == null || rowViews[index].Id == 0u) return;
-            last.Selection.Inspect(rowViews[index].Id);
-            WmcRoom.Instance?.Open(RoomNotches.Plan);
+            WmcPanel.Instance?.Inspect(rowViews[index].Id);
         }
 
         private void TurnPage(int dir)

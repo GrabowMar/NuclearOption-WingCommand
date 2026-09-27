@@ -1,0 +1,259 @@
+{
+ "name": "wc-u3-plan-fs20",
+ "mods": [
+  "wingcommand"
+ ],
+ "timeout_s": 200,
+ "ops": [
+  {
+   "op": "spawn",
+   "id": "lead",
+   "type": "FS-20 Vortex",
+   "at": {
+    "map": [
+     0,
+     0
+    ]
+   },
+   "altitude": 3000,
+   "speed": 200,
+   "heading": 0
+  },
+  {
+   "op": "fly",
+   "id": "lead",
+   "program": [
+    {
+     "level": 280
+    }
+   ]
+  },
+  {
+   "op": "wait",
+   "seconds": 2
+  },
+  {
+   "op": "call",
+   "method": "WingCommand.Automation.FormOn",
+   "store": "form",
+   "args": {
+    "lead": "lead",
+    "count": 4,
+    "shape": "finger-four-right",
+    "spacing": "Standard"
+   }
+  },
+  {
+   "op": "wait",
+   "seconds": 45
+  },
+  {
+   "op": "call",
+   "method": "WingCommand.Automation.Wmc",
+   "store": "elements0",
+   "args": {
+    "open": true,
+    "tab": "PLAN",
+    "sub": "ELEMENTS"
+   }
+  },
+  {
+   "op": "call",
+   "method": "WingCommand.Automation.Wmc",
+   "store": "sel",
+   "args": {
+    "clear": true,
+    "select": [
+     4,
+     5
+    ]
+   }
+  },
+  {
+   "op": "call",
+   "method": "WingCommand.Automation.WmcMap",
+   "store": "orbit",
+   "args": {
+    "mode": "orbit",
+    "ahead_km": 12
+   }
+  },
+  {
+   "op": "wait",
+   "seconds": 3
+  },
+  {
+   "op": "call",
+   "method": "WingCommand.Automation.Elements",
+   "store": "elements"
+  },
+  {
+   "op": "call",
+   "method": "WingCommand.Automation.Wmc",
+   "store": "routed",
+   "args": {
+    "tab": "PLAN",
+    "sub": "ELEMENTS"
+   }
+  },
+  {
+   "op": "capture",
+   "name": "plan-elements"
+  },
+  {
+   "op": "call",
+   "method": "WingCommand.Automation.Wmc",
+   "store": "fit",
+   "args": {
+    "press": "plan.el1.fit"
+   }
+  },
+  {
+   "op": "wait",
+   "seconds": 1
+  },
+  {
+   "op": "capture",
+   "name": "plan-fit"
+  },
+  {
+   "op": "call",
+   "method": "WingCommand.Automation.Wmc",
+   "store": "log",
+   "args": {
+    "tab": "PLAN",
+    "sub": "LOG"
+   }
+  },
+  {
+   "op": "capture",
+   "name": "plan-log"
+  },
+  {
+   "op": "call",
+   "method": "WingCommand.Automation.Wmc",
+   "store": "insp",
+   "args": {
+    "clear": true,
+    "press": "tac.list.row0.inspect"
+   }
+  },
+  {
+   "op": "capture",
+   "name": "inspect"
+  },
+  {
+   "op": "call",
+   "method": "WingCommand.Automation.Wmc",
+   "store": "center",
+   "args": {
+    "press": "insp.center"
+   }
+  },
+  {
+   "op": "wait",
+   "seconds": 1
+  },
+  {
+   "op": "call",
+   "method": "WingCommand.Automation.WmcMap",
+   "store": "orbit_check"
+  },
+  {
+   "op": "call",
+   "method": "WingCommand.Automation.Wmc",
+   "store": "form_b",
+   "args": {
+    "press": "plan.el1.form"
+   }
+  },
+  {
+   "op": "end"
+  }
+ ],
+ "checks": [
+  {
+   "check": "status_ok"
+  },
+  {
+   "check": "result_above",
+   "path": "form.spawned",
+   "min": 3
+  },
+  {
+   "check": "result_above",
+   "path": "elements0.plan_cards",
+   "min": 1
+  },
+  {
+   "check": "result_above",
+   "path": "elements.b",
+   "min": 1
+  },
+  {
+   "check": "result_above",
+   "path": "routed.plan_cards",
+   "min": 2
+  },
+  {
+   "check": "result_above",
+   "path": "fit.pressed",
+   "min": 1
+  },
+  {
+   "check": "result_above",
+   "path": "log.log_rows",
+   "min": 1
+  },
+  {
+   "check": "result_above",
+   "path": "insp.inspect_member",
+   "min": 2
+  },
+  {
+   "check": "result_above",
+   "path": "insp.tab",
+   "min": 3
+  },
+  {
+   "check": "result_below",
+   "path": "insp.tab",
+   "max": 3
+  },
+  {
+   "check": "result_above",
+   "path": "center.pressed",
+   "min": 1
+  },
+  {
+   "check": "result_above",
+   "path": "orbit_check.orbiting",
+   "min": 1
+  },
+  {
+   "check": "result_above",
+   "path": "form_b.pressed",
+   "min": 1
+  },
+  {
+   "check": "result_below",
+   "path": "elements0.overflow",
+   "max": 0
+  },
+  {
+   "check": "result_below",
+   "path": "routed.overflow",
+   "max": 0
+  },
+  {
+   "check": "result_below",
+   "path": "log.overflow",
+   "max": 0
+  },
+  {
+   "check": "result_below",
+   "path": "insp.overflow",
+   "max": 0
+  }
+ ]
+}

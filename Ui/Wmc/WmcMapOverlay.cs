@@ -13,9 +13,10 @@ namespace WingCommand
     {
         private const float LineWidth = 2f, NodeSize = 9f, LabelWidth = 190f, LabelHeight = 16f, PingSeconds = 1.2f;
         private static readonly Color DraftColor = new Color(1f, 1f, 1f, 0.85f);
+        // Element C is violet (spec bezel v2 §6): amber read as a caution rail. A letter badge always goes with the colour.
         private static readonly Color[] Elements =
         {
-            new Color(0.22f, 1f, 0.40f), new Color(0.30f, 0.85f, 1f), new Color(1f, 0.75f, 0.25f), new Color(1f, 0.45f, 0.85f),
+            new Color(0.22f, 1f, 0.40f), new Color(0.30f, 0.85f, 1f), new Color(0.72f, 0.58f, 1f), new Color(1f, 0.45f, 0.85f),
         };
 
         private readonly List<RouteLeg> legs = new List<RouteLeg>();
