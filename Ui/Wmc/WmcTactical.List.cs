@@ -7,9 +7,10 @@ using UnityEngine.UI;
 
 namespace WingCommand
 {
-    /// <summary>TACTICAL's flight list (spec WMC rebuild §TACTICAL): the 0.9 rows — slot, airframe icon, type, callsign, state
-    /// — with [RTB] (press twice), [RDR], [EJ] and [INSPECT ›], under element headers. Views are built once and moved into
-    /// place; text is set only when it changes.</summary>
+    /// <summary>TACTICAL's flight list (spec bezel v2 §5 TACTICAL): the 0.9 rows — slot, airframe icon, type, callsign, state —
+    /// with [RTB] (press twice), [RDR], [EJ] and [INSPECT ›], under element headers, then an OPEN row per empty seat that offers
+    /// SUPPLY. The list keeps its tallest height (every wingman its own element), so nothing below it moves. Views are built once
+    /// and moved into place; text is set only when it changes.</summary>
     internal sealed partial class WmcTactical
     {
         private const int MaxRows = WcSnapshot.MaxMembers, MaxLines = MaxRows + ElementRoster.MaxElements;
@@ -45,6 +46,10 @@ namespace WingCommand
         private readonly ConfirmGate rtbGate = new ConfirmGate();
         // Its own gate (eject.md): RTB then EJ on one row must not confirm the ejection on the first EJ press.
         private readonly ConfirmGate ejGate = new ConfirmGate();
+        private readonly GameObject[] openRoots = new GameObject[MaxRows];
+        private readonly RectTransform[] openRects = new RectTransform[MaxRows];
+        private readonly TMP_Text[] openTexts = new TMP_Text[MaxRows];
+        private readonly int[] openKeys = new int[MaxRows];
         private GameObject pagerRoot, emptyRoot;
         private RectTransform pagerRect;
         private TMP_Text pagerLabel, emptyText;
@@ -55,6 +60,7 @@ namespace WingCommand
         {
             for (int e = 0; e < headerViews.Length; e++) headerViews[e] = BuildHeader(e);
             for (int i = 0; i < rowViews.Length; i++) rowViews[i] = BuildRow(i);
+            for (int i = 0; i < openRoots.Length; i++) BuildOpen(i);
 
             pagerRect = Container(page, "TacticalPager", new Rect(x, listTop, width, BezelLayout.Pager));
             pagerRoot = pagerRect.gameObject;
@@ -124,6 +130,21 @@ namespace WingCommand
                 "Open this aircraft in the planning room: stores, damage, fuel and what its AI is doing.");
             v.Root.SetActive(false);
             return v;
+        }
+
+        /// <summary>An empty seat: its number and where to fill it.</summary>
+        private void BuildOpen(int i)
+        {
+            RectTransform rt = Container(page, "TacticalOpen" + i, new Rect(x, listTop, width, RowH));
+            AvButton hit = WmcUi.Card(rt, new Rect(0f, 0f, width, RowH), () => WmcPanel.Instance?.Show(WmcTabs.Supply), out _, out Image rail);
+            WmcUi.SetRail(rail, "inert");
+            hit.WithTooltip("An empty seat in the wing: requisition a wingman on SUPPLY.");
+            ids["tac.list.open" + i] = hit;
+            openTexts[i] = WmcKit.Text(rt, new Rect(10f, -4f, width - 20f, RowH - 8f), "row-sub");
+            openRects[i] = rt;
+            openRoots[i] = rt.gameObject;
+            openKeys[i] = int.MinValue;
+            rt.gameObject.SetActive(false);
         }
 
         private AvButton RowButton(RectTransform row, float bx, float bw, string text, System.Action click, string id, string tip)
@@ -203,7 +224,8 @@ namespace WingCommand
 
         private void RefreshList(WmcContext c)
         {
-            float cap = BezelLayout.ListCap(body.height);
+            int max = Mathf.Max(WingService.MaxMembers, c.Count);
+            float cap = BezelLayout.ListReserve(max);
             int n = FlightList.Page(c.Rows, c.Count, order, cap, listPage, lines, out pageCount);
             if (listPage >= pageCount) listPage = pageCount - 1;
 
@@ -259,13 +281,28 @@ namespace WingCommand
 
             bool empty = c.Count == 0;
             if (emptyRoot.activeSelf != empty) emptyRoot.SetActive(empty);
-            if (empty)
+            if (empty) WmcKit.Set(emptyText, c.Client && c.Stale ? "WAITING FOR THE HOST'S WING" : "NO WINGMEN");
+            // Empty seats under the rows (a client does not know the host's seats; it shows none).
+            int open = empty || c.Client || paged ? 0 : Mathf.Max(0, WingService.MaxMembers - c.Count - Pending(c));
+            if (empty) y = listTop - EmptyH - 2f;
+            for (int i = 0; i < openRoots.Length; i++)
             {
-                WmcKit.Set(emptyText, c.Client && c.Stale ? "WAITING FOR THE HOST'S WING" : "NO WINGMEN");
-                height = EmptyH;
+                bool on = i < open && height + BezelLayout.RowPitch <= cap + 0.5f;
+                if (openRoots[i].activeSelf != on) openRoots[i].SetActive(on);
+                if (!on) continue;
+                openRects[i].anchoredPosition = new Vector2(x, y);
+                int seat = c.Count + Pending(c) + i + 2;
+                if (openKeys[i] != seat)
+                {
+                    openKeys[i] = seat;
+                    openTexts[i].text = "#" + seat.ToString(CultureInfo.InvariantCulture) + " OPEN · REQUISITION ON SUPPLY ›";
+                }
+                y -= BezelLayout.RowPitch;
+                height += BezelLayout.RowPitch;
             }
-            Layout(height);
         }
+
+        private static int Pending(WmcContext c) => !c.Client && SpawnService.Instance != null ? SpawnService.Instance.PendingTotal : 0;
 
         private void FillHeader(HeaderView h, int e, WmcContext c)
         {

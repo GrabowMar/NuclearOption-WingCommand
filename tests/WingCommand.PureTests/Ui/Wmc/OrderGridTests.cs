@@ -13,7 +13,7 @@ namespace WingCommand.PureTests
             {
                 "ATTACK", "SPLASH", "ENGAGE", "SWEEP",
                 "MOVE", "ORBIT", "CAP", "HOLD",
-                "BREAK", "FORM UP", "ECM", "DETACH",
+                "DISENGAGE", "FORM UP", "ECM", "DETACH",
                 "RTB", "REFIT", "LAND", "CARGO",
             };
             for (int r = 0; r < OrderGrid.Rows; r++)
@@ -91,6 +91,40 @@ namespace WingCommand.PureTests
             Assert.True(OrderGrid.HasHere(GridOrder.Hold));
             Assert.False(OrderGrid.HasHere(GridOrder.Move));
             Assert.False(OrderGrid.HasHere(GridOrder.Attack));
+        }
+
+        [Fact]
+        public void BreakReadsDisengageSoTheReactRowOwnsTheBreaks()
+        {
+            // Spec bezel v2 §1: the grid's BREAK is DISENGAGE; BRK L and BRK R are maneuvers. The id stays for scenarios.
+            GridCell c = OrderGrid.At(2, 0, false);
+            Assert.Equal("DISENGAGE", c.Label);
+            Assert.Equal("tac.orders.break", c.Id);
+        }
+
+        [Fact]
+        public void EachRowCarriesItsCategoryRail()
+        {
+            Assert.Equal(new[] { "danger", "info", "warn", "live" },
+                new[] { OrderGrid.RowRail(0), OrderGrid.RowRail(1), OrderGrid.RowRail(2), OrderGrid.RowRail(3) });
+            Assert.Equal("armed", OrderGrid.ReactRail);
+        }
+
+        [Fact]
+        public void TheReactRowFliesTheFiveManeuvers()
+        {
+            Assert.Equal("REACT", OrderGrid.ReactLabel);
+            Assert.Equal(5, OrderGrid.React.Length);
+            Assert.Equal(new[] { "BRK L", "BRK R", "PULL UP", "SPLIT", "BEAM" }, System.Array.ConvertAll(OrderGrid.React, c => c.Label));
+            Assert.Equal(new[] { "tac.react.brkl", "tac.react.brkr", "tac.react.pullup", "tac.react.split", "tac.react.beam" },
+                System.Array.ConvertAll(OrderGrid.React, c => c.Id));
+            for (int i = 0; i < OrderGrid.React.Length; i++)
+            {
+                Assert.Equal(GridOrder.Maneuver, OrderGrid.React[i].Order);
+                Assert.Equal(i, OrderGrid.React[i].Number);
+                Assert.True(OrderGrid.React[i].Built);
+                Assert.Equal(MapMode.Off, OrderGrid.React[i].Map);
+            }
         }
     }
 }

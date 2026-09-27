@@ -13,14 +13,6 @@ namespace WingCommand.PureTests
         }
 
         [Fact]
-        public void TheListFitsThreeWingmenInTwoElementsOnATallDock()
-        {
-            float cap = BezelLayout.ListCap(BezelLayout.Body(896f));
-            Assert.True(cap >= 2 * BezelLayout.HeaderPitch + 3 * BezelLayout.RowPitch);
-            Assert.Equal(116f, BezelLayout.ListCap(BezelLayout.Body(596f)));
-        }
-
-        [Fact]
         public void TheDispatchPinSitsOnTheBodyFloorAtBothDocks()
         {
             Assert.Equal(548f, BezelLayout.SupplyView(636f));
@@ -222,6 +214,50 @@ namespace WingCommand.PureTests
             float w = BezelLayout.TileWidth(BezelLayout.Content);
             Assert.Equal(458f, 3f * w + 2f * BezelLayout.TileGap, 3);
             Assert.True(w >= 140f);
+        }
+
+        [Theory]
+        [InlineData(1)]
+        [InlineData(2)]
+        [InlineData(3)]
+        public void TheListReservesItsMostSoNothingBelowItMoves(int maxWingmen)
+        {
+            // Critic §14.1: every wingman in its own element is the tallest the list gets.
+            int heads = System.Math.Min(maxWingmen, 4);
+            Assert.Equal(heads * BezelLayout.HeaderPitch + maxWingmen * BezelLayout.RowPitch, BezelLayout.ListReserve(maxWingmen));
+        }
+
+        [Theory]
+        [InlineData(420f)]
+        [InlineData(720f)]
+        public void TheGridFitsEveryDockWithDoctrineClosed(float body)
+        {
+            float top = BezelLayout.TacticalFixed(3, false);
+            Assert.True(top <= body, "fixed " + top + " > body " + body);
+        }
+
+        [Fact]
+        public void DoctrineStartsOpenOnATallDockAndClosedOnAShortOne()
+        {
+            Assert.True(BezelLayout.DoctrineOpenByDefault(720f, 3));
+            Assert.False(BezelLayout.DoctrineOpenByDefault(420f, 3));
+            Assert.True(BezelLayout.TacticalFixed(3, true) > BezelLayout.TacticalFixed(3, false));
+        }
+
+        [Fact]
+        public void RecentTakesTheRowsThatFitAndHidesUnderTwo()
+        {
+            Assert.Equal(5, BezelLayout.RecentRows(BezelLayout.RecentHead + 5 * BezelLayout.RecentPitch + 3f));
+            Assert.Equal(0, BezelLayout.RecentRows(BezelLayout.RecentHead + 1 * BezelLayout.RecentPitch));
+            Assert.Equal(BezelLayout.RecentMax, BezelLayout.RecentRows(2000f));
+        }
+
+        [Fact]
+        public void TheFormPreviewGrowsWithTheDock()
+        {
+            Assert.Equal(136f, BezelLayout.FormPreview(420f));
+            Assert.Equal(220f, BezelLayout.FormPreview(720f));
+            Assert.Equal(200f, BezelLayout.FormPreview(500f));
         }
     }
 }

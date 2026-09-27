@@ -731,6 +731,7 @@ namespace WingCommand
                 { "tab_name", panel.PageName }, { "pressed", pressed }, { "members", panel.Context.Count }, { "controls", panel.Controls.Count },
                 { "scope", panel.Context.Selection.Label(panel.Context.Rows, panel.Context.Count) },
                 { "overflow", panel.Overflow }, { "gap_px", panel.Gap }, { "alerts", panel.Tactical?.AlertsShown ?? 0 },
+                { "recent", panel.Tactical?.RecentShown ?? 0 },
                 { "armed", panel.Context.Map.Mode != MapMode.Off ? 1 : 0 },
                 { "disabled", panel.Tactical != null ? string.Join(",", panel.Tactical.DisabledOrders()) : "" },
             };

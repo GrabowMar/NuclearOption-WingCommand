@@ -8,9 +8,6 @@ namespace WingCommand
     {
         public const float Chrome = 176f;
         public const float ScopeRow = 26f, ScopeGap = 4f, HeaderPitch = 22f, RowPitch = 30f, Pager = 20f, SubTabs = 24f, SubGap = 6f;
-        /// <summary>The body kept for ORDERS below the list on a tall dock (at 896 the list gets 302 px: seven wingmen in two
-        /// elements); short docks keep a header and three rows (paged beyond).</summary>
-        public const float SubPageReserve = 418f, ShortListCap = 116f;
 
         // SUPPLY (spec WMC rebuild §SUPPLY; supply-ui §3 less its OVER-LIMIT row — the mode is a setting, user 2026-09-25):
         // a scroll viewport over the steps and a DISPATCH pin on the body's floor.
@@ -49,6 +46,42 @@ namespace WingCommand
         public const int MinPilotRows = 4, MaxPilotRows = 8;
 
         public static float Body(float panelHeight) => panelHeight - Chrome;
+
+        /// <summary>FORM's plan view: as big as the body leaves after the controls (about 300 px), 136 to 220 px square.</summary>
+        public static float FormPreview(float body) => Math.Max(136f, Math.Min(220f, body - 300f));
+
+        // TACTICAL (spec bezel v2 §5; critic §14.1): scope, list at its reserve, cue, DOCTRINE, the grid and REACT sit at fixed
+        // places; alerts, the situation and RECENT scroll below.
+        public const float ListGap = 4f, Cue = 24f, CueGap = 4f, DoctrineHead = 24f, DoctrineRow = 24f, DoctrineGap = 4f;
+        public const int DoctrineRows = 4;
+        public const float GridCell = 24f, GridPitch = 26f, GridGap = 6f, RecentHead = 20f, RecentPitch = 20f, KvPitch = 20f, AlertPitch = 20f;
+        public const int RecentMax = 12;
+
+        /// <summary>The list's height with every wingman in its own element (the tallest it gets), so nothing below it moves.</summary>
+        public static float ListReserve(int maxWingmen)
+        {
+            int n = maxWingmen < 1 ? 1 : maxWingmen;
+            int heads = n < ElementRoster.MaxElements ? n : ElementRoster.MaxElements;
+            return heads * HeaderPitch + n * RowPitch;
+        }
+
+        public static float DoctrineBlock(bool open) => DoctrineHead + (open ? DoctrineRows * DoctrineRow : 0f) + DoctrineGap;
+
+        public const float GridBlock = (OrderGrid.Rows + 1) * GridPitch + GridGap;
+
+        /// <summary>From the body's top to the first scrolled line: scope, list, cue, DOCTRINE and the grid with REACT.</summary>
+        public static float TacticalFixed(int maxWingmen, bool doctrineOpen) =>
+            ScopeRow + ScopeGap + ListReserve(maxWingmen) + ListGap + Cue + CueGap + DoctrineBlock(doctrineOpen) + GridBlock;
+
+        /// <summary>DOCTRINE starts open when, open, the page still has room for the situation (120 px) under the grid.</summary>
+        public static bool DoctrineOpenByDefault(float body, int maxWingmen) => TacticalFixed(maxWingmen, true) + 120f <= body;
+
+        /// <summary>RECENT rows in <paramref name="free"/> px under its head; hidden (0) when fewer than two fit.</summary>
+        public static int RecentRows(float free)
+        {
+            int n = (int)Math.Floor((free - RecentHead) / RecentPitch);
+            return n < 2 ? 0 : n > RecentMax ? RecentMax : n;
+        }
 
         public static float WingView(float body) => body - WingPin;
 
@@ -125,8 +158,5 @@ namespace WingCommand
         public static float SupplyContent(int inbound, bool adopt) => InboundBlock(inbound) + AdoptBlock(adopt) + SupplySteps;
 
         public static float TileWidth(float content) => (content - (TileCols - 1) * TileGap) / TileCols;
-
-        /// <summary>Pixels the flight list may take.</summary>
-        public static float ListCap(float body) => body - SubPageReserve > ShortListCap ? body - SubPageReserve : ShortListCap;
     }
 }

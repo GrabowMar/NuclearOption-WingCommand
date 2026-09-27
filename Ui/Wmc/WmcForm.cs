@@ -9,12 +9,13 @@ using UnityEngine.UI;
 namespace WingCommand
 {
     /// <summary>FORM (spec bezel v2 §5 FORM; the 0.9 deck modernized): the scope row, the plan view of the scope's shape with the
-    /// members' live positions, the family and shapes for the scope's element, the maneuver row, then what is wing-wide — spacing,
-    /// stack and power — under its own head so scope is never ambiguous.</summary>
+    /// members' live positions (as big as the dock allows), the family and shapes for the scope's element, then what is wing-wide —
+    /// spacing, stack and power — under its own head so scope is never ambiguous. The maneuvers are TACTICAL's REACT row.</summary>
     internal sealed class WmcForm : IWmcPage
     {
         private const int MaxShapes = 12, MaxFamilies = 4, MaxDots = WcSnapshot.MaxMembers;
-        private const float PreviewH = 150f, PlanSize = 140f;
+        // The plan view grows with the dock (spec bezel v2 §5 FORM: the page's flex block).
+        private float PlanSize = 140f, PreviewH = 150f;
         private const float KeyWidth = 64f, ToggleH = 22f, TogglePitch = 24f;
 
         private readonly Dictionary<string, AvButton> ids;
@@ -39,6 +40,8 @@ namespace WingCommand
             width = body.width;
             scope.Build(page, x, body.y, width, "SHAPE FOR", false);
             float top = BezelLayout.ScopeRow + BezelLayout.ScopeGap;
+            PlanSize = BezelLayout.FormPreview(body.height);
+            PreviewH = PlanSize + 10f;
             BuildFormation(page, body.y - top);
             formScroll.SetViewport(new Rect(x, body.y - top, width + 8f, Mathf.Max(40f, body.height - top)));
         }
@@ -64,7 +67,7 @@ namespace WingCommand
         private readonly string[] shapeIds = new string[MaxShapes];
         private readonly List<FormationDefinition> shapes = new List<FormationDefinition>();
         private readonly List<string> families = new List<string>();
-        private SegmentRow spacingRow, stackRow, powerRow, maneuverRow;
+        private SegmentRow spacingRow, stackRow, powerRow;
         private int formKey = int.MinValue, shapesKey = int.MinValue;
 
         private void BuildFormation(RectTransform root, float top)
@@ -127,16 +130,7 @@ namespace WingCommand
                 ids["form.shape" + i] = shapeButtons[i];
             }
             y -= 3 * TogglePitch;
-            maneuverRow = SegmentRow.Build(s, new Rect(0f, y, w, ToggleH), KeyWidth, "MANEUVER",
-                new[] { "BRK L", "BRK R", "PULL UP", "SPLIT", "BEAM" },
-                new[]
-                {
-                    "Hard turn 90° left, then back to the slot.", "Hard turn 90° right, then back to the slot.",
-                    "Climb 500 m straight on, then back to the slot.", "Turn 60° apart: a pair splits, one aircraft turns away from the lead.",
-                    "Turn across the nearest air threat's line of sight (from the wing's tracks), then back to the slot.",
-                }, "form.", new[] { "brkl", "brkr", "pullup", "split", "beam" }, ids,
-                i => WmcUi.Order(last, () => WingOrders.Run(new WingOrder { Kind = OrderKind.Maneuver, Number = i, Scope = last.Scope })));
-            y -= TogglePitch + 6f;
+            y -= 6f;
 
             AvStyled.Label(s, new Rect(0f, y, w, 16f), "WHOLE WING", "section-title");
             y -= 20f;
@@ -229,12 +223,6 @@ namespace WingCommand
             stackRow.SetEnabled(c.CanOrder, "Orders are host only for now");
             powerRow.Set(w.AfterburnerAllowed ? 1 : 0);
             powerRow.SetEnabled(c.CanOrder, "Orders are host only for now");
-            // A maneuver is a one-shot order: nothing stays latched.
-            bool flying = false;
-            for (int i = 0; i < c.Count && !flying; i++)
-                flying = c.InScope(c.Rows[i]) && (MemberDuty)c.Rows[i].Duty == MemberDuty.Formation;
-            maneuverRow.Set(-1);
-            maneuverRow.SetEnabled(c.CanOrder && flying, !c.CanOrder ? "Orders are host only for now" : "Nobody in scope is flying in formation");
             RefreshPlanView(c, current, sel.SpacingMetres, e, members);
         }
 

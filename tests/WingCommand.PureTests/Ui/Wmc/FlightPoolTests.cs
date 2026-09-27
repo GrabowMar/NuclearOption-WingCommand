@@ -47,5 +47,14 @@ namespace WingCommand.PureTests
             FlightPool.StationLines(d, lines);
             Assert.Equal(new[] { "ST1  AIM-9  1/2", "ST2  GUN  300/600" }, lines);
         }
+
+        [Fact]
+        public void TheShortLineCountsEveryKindOnOneRow()
+        {
+            var t = new PoolTotals { AirMissiles = 12, Bombs = 8, Agm = 2, GunRounds = 540, Ecm = 1 };
+            Assert.Equal("12 MSL · 8 BOMB · 2 AGM · 540 RDS · 1 ECM", FlightPool.Short(t));
+            Assert.Equal("2 MSL", FlightPool.Short(new PoolTotals { AirMissiles = 2 }));
+            Assert.Equal("NO STORES", FlightPool.Short(default));
+        }
     }
 }

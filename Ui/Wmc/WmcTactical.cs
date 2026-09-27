@@ -1,23 +1,23 @@
-using System;
 using System.Collections.Generic;
 using NOAvionics;
 using NOAvionics.Ui;
-using TMPro;
 using UnityEngine;
-using UnityEngine.UI;
 
 namespace WingCommand
 {
-    /// <summary>TACTICAL (spec bezel v2 §5 TACTICAL), the 0.9 main page rebuilt: who orders go to (the scope row), the flight list
-    /// with inline RTB · RDR · EJ · INSPECT, then ORDERS — the cue banner, doctrine, the order grid and the situation. The scope
-    /// row and the list stay put; ORDERS scrolls on its own and keeps its place across refreshes.</summary>
+    /// <summary>TACTICAL (spec bezel v2 §5 TACTICAL), the 0.9 main page rebuilt dense: who orders go to (the scope row), the flight
+    /// list with inline RTB · RDR · EJ · INSPECT, the cue row, DOCTRINE, the order grid and REACT — every one at a fixed place, the
+    /// list reserving its tallest so a wingman joining, leaving or splitting moves nothing under the cursor (critic §14.1) — then one
+    /// scroll with the alerts, the situation and RECENT.</summary>
     internal sealed partial class WmcTactical : IWmcPage
     {
         private readonly Dictionary<string, AvButton> ids;
         private readonly WmcScopeRow scope;
-        private RectTransform page, subArea;
+        private RectTransform page;
         private Rect body;
-        private float x, width, listTop, bottom, panelWidth, listHeight = -1f;
+        private float x, width, listTop, bottom, panelWidth;
+        private int reservedFor = -1;
+        private bool doctrineOpen, placed;
         private WmcContext last;
 
         public WmcTactical(Dictionary<string, AvButton> controls)
@@ -43,10 +43,12 @@ namespace WingCommand
             scope.Build(page, x, body.y, width, "COMMAND", true);
             listTop = body.y - BezelLayout.ScopeRow - BezelLayout.ScopeGap;
             BuildList();
-
-            subArea = Container(page, "TacticalOrders", new Rect(0f, listTop, panelWidth, 10f));
-            BuildOrders(subArea);
-            Layout(BezelLayout.RowPitch);
+            BuildCue();
+            BuildDoctrine();
+            BuildGrid();
+            BuildSituation();
+            doctrineOpen = BezelLayout.DoctrineOpenByDefault(body.height, WingService.MaxMembers);
+            PlaceBlocks();
         }
 
         private static RectTransform Container(RectTransform parent, string name, Rect r)
@@ -58,21 +60,33 @@ namespace WingCommand
             return rt;
         }
 
-        /// <summary>The flight list took <paramref name="height"/> px: ORDERS follows it.</summary>
-        private void Layout(float height)
+        /// <summary>The cue, DOCTRINE, the grid and the scroll under the list's reserve; again only when the reserve (the wing's
+        /// size setting) or DOCTRINE's toggle changed.</summary>
+        private void PlaceBlocks()
         {
-            if (Mathf.Abs(height - listHeight) < 0.5f) return;
-            listHeight = height;
-            float top = listTop - height - BezelLayout.ScopeGap;
-            AvKit.Place(subArea, new Rect(0f, top, panelWidth, top - bottom));
-            LayoutOrders(top - bottom);
+            int max = WingService.MaxMembers;
+            if (placed && max == reservedFor && doctrineOpen == doctrineShown) return;
+            placed = true;
+            reservedFor = max;
+            doctrineShown = doctrineOpen;
+            float y = listTop - BezelLayout.ListReserve(max) - BezelLayout.ListGap;
+            AvKit.Place(cueRoot, new Rect(x, y, width, BezelLayout.Cue));
+            y -= BezelLayout.Cue + BezelLayout.CueGap;
+            AvKit.Place(doctrineRoot, new Rect(x, y, width, BezelLayout.DoctrineBlock(true)));
+            doctrineRows.SetActive(doctrineOpen);
+            y -= BezelLayout.DoctrineBlock(doctrineOpen);
+            AvKit.Place(gridRoot, new Rect(x, y, width, BezelLayout.GridBlock));
+            y -= BezelLayout.GridBlock;
+            situationScroll.SetViewport(new Rect(x, y, width + 8f, Mathf.Max(20f, y - bottom)));
+            recentKey = int.MinValue;
+            situationLayout = int.MinValue;
         }
+
+        private bool doctrineShown;
 
         private static bool InScope(WmcContext c, in SnapshotMember m) => c.InScope(m);
 
         private void PickElement(int e) => scope.PickElement(e);
-
-        // ---------------------------------------------------------------- refresh
 
         public void Shown(WmcContext c)
         {
@@ -81,9 +95,11 @@ namespace WingCommand
         public void Refresh(WmcContext c)
         {
             last = c;
+            PlaceBlocks();
             scope.Refresh(c);
             RefreshList(c);
             RefreshOrders(c);
+            RefreshSituation(c);
         }
     }
 }

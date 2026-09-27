@@ -54,6 +54,25 @@ namespace WingCommand
             if (into.Count == 0) into.Add("NO STORES");
         }
 
+        /// <summary>One row for TACTICAL's POOL line: every kind the scope carries, by count.</summary>
+        public static string Short(in PoolTotals t)
+        {
+            var sb = new System.Text.StringBuilder();
+            Part(sb, t.AirMissiles, "MSL");
+            Part(sb, t.Bombs, "BOMB");
+            Part(sb, t.Agm, "AGM");
+            Part(sb, t.GunRounds, "RDS");
+            Part(sb, t.Ecm, "ECM");
+            return sb.Length == 0 ? "NO STORES" : sb.ToString();
+        }
+
+        private static void Part(System.Text.StringBuilder sb, int n, string word)
+        {
+            if (n <= 0) return;
+            if (sb.Length > 0) sb.Append(" · ");
+            sb.Append(N(n)).Append(' ').Append(word);
+        }
+
         public static void StationLines(in MemberDetail d, List<string> into)
         {
             into.Clear();

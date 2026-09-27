@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using System.Text;
 using NOAvionics;
 using NOAvionics.Ui;
 using TMPro;
@@ -7,13 +8,13 @@ using UnityEngine.UI;
 
 namespace WingCommand
 {
-    /// <summary>TACTICAL › ORDERS (spec WMC rebuild §TACTICAL): the cue banner (the armed order and what to click, with HERE
-    /// and CANCEL; otherwise the top alert), the PROFILE picker and the four fast toggles, one 4×4 order grid in labelled rows
-    /// whose point and target orders latch and arm the map, then the situation.</summary>
+    /// <summary>TACTICAL's controls (spec bezel v2 §5 TACTICAL): the cue row (the armed order and what to click, with HERE and
+    /// CANCEL; otherwise the top alert), DOCTRINE (the PROFILE picker and the four fast toggles, closed to a one-line summary on a
+    /// short dock), the 4×4 order grid in labelled rows with a category rail each, whose point and target orders latch and arm the
+    /// map, and REACT: the five maneuvers.</summary>
     internal sealed partial class WmcTactical
     {
-        private const float Banner = 24f, KeyWidth = 64f, ToggleH = 22f, TogglePitch = 24f, GridH = 26f, GridPitch = 29f;
-        private const float BannerTop = 0f, ScrollTop = BannerTop + Banner + 4f;
+        private const float KeyWidth = 64f, ToggleH = 22f, ProfileW = 150f, ToggleW = 52f;
 
         private static readonly string[] TargetLabels = { "HOLD FIRE", "AIR", "GROUND", "BOTH", "COVER" };
         private static readonly string[] TargetKeys = { "hold", "air", "ground", "both", "cover" };
@@ -25,97 +26,128 @@ namespace WingCommand
             "Shoot at air and ground targets in reach on their own.",
             "Cover: take the one air threat nearest the protected aircraft.",
         };
+        private static readonly string[] WeaponLabels = { "AUTO", "MISSILES", "GUNS", "NO A-G" };
+        private static readonly string[] RadarLabels = { "ON", "SILENT", "OFF" };
 
-        private WmcScroll ordersScroll;
+        private RectTransform cueRoot, doctrineRoot, gridRoot;
+        private GameObject doctrineRows;
         private Image bannerRail;
-        private TMP_Text bannerText;
-        private AvButton bannerHit, here, cancel, profileButton;
+        private TMP_Text bannerText, doctrineSummary;
+        private AvButton bannerHit, here, cancel, profileButton, doctrineToggle;
         private SegmentRow targets, weapons, radar, guard;
         private readonly AvButton[] grid = new AvButton[OrderGrid.Rows * OrderGrid.Columns];
+        private readonly AvButton[] react = new AvButton[5];
         private readonly GridCell[] shownCells = new GridCell[OrderGrid.Rows * OrderGrid.Columns];
         private readonly string[] shownTips = new string[OrderGrid.Rows * OrderGrid.Columns];
         private readonly bool[] shownEnabled = new bool[OrderGrid.Rows * OrderGrid.Columns];
         private readonly List<AvKit.PopupEntry> popupEntries = new List<AvKit.PopupEntry>(3);
+        private readonly StringBuilder summary = new StringBuilder(48);
         private static readonly WingDoctrine[] Profiles = { WingDoctrine.Reserve, WingDoctrine.Escort, WingDoctrine.Sweep };
         private AvKit.Popup profilePopup;
-        private int bannerKey = int.MinValue;
+        private int bannerKey = int.MinValue, summaryKey = int.MinValue;
         private uint bannerAlertId;
-        private string profileShown;
-        private bool helosShown, gridBuilt;
+        private string profileShown, reactWhy;
+        private bool helosShown, gridBuilt, reactOn = true;
 
-        private void BuildOrders(RectTransform root)
+        // ---------------------------------------------------------------- the cue row
+
+        private void BuildCue()
         {
-            // Pinned cue banner.
-            var banner = new Rect(x, -BannerTop, width, Banner);
-            bannerHit = WmcUi.Card(root, banner, BannerClick, out _, out bannerRail);
-            bannerText = WmcKit.Text(root, new Rect(x + 10f, -BannerTop - 2f, width - 150f, Banner - 4f), "row-name");
-            here = AvStyled.Button(root, new Rect(x + width - 128f, -BannerTop - 2f, 58f, Banner - 4f), "HERE", "btn", Here);
+            cueRoot = Container(page, "TacticalCue", new Rect(x, listTop, width, BezelLayout.Cue));
+            float h = BezelLayout.Cue;
+            bannerHit = WmcUi.Card(cueRoot, new Rect(0f, 0f, width, h), BannerClick, out _, out bannerRail);
+            bannerText = WmcKit.Text(cueRoot, new Rect(10f, -2f, width - 150f, h - 4f), "row-name");
+            here = AvStyled.Button(cueRoot, new Rect(width - 128f, -2f, 58f, h - 4f), "HERE", "btn", Here);
             here.WithTooltip("Orbit or hold where the scope is now.");
             ids["tac.orders.here"] = here;
-            cancel = AvStyled.Button(root, new Rect(x + width - 66f, -BannerTop - 2f, 64f, Banner - 4f), "CANCEL", "btn",
-                () => last?.Map.Disarm());
+            cancel = AvStyled.Button(cueRoot, new Rect(width - 66f, -2f, 64f, h - 4f), "CANCEL", "btn", () => last?.Map.Disarm());
             cancel.WithTooltip("Disarm the map order (Esc does too).");
             ids["tac.orders.cancel"] = cancel;
+            profilePopup = new AvKit.Popup(page, panelWidth);
+        }
 
-            ordersScroll = WmcScroll.Build(root, new Rect(x, -ScrollTop, width + 8f, 100f), "OrdersScroll");
-            RectTransform s = ordersScroll.Content;
-            float w = ordersScroll.Width, y = 0f;
+        // ---------------------------------------------------------------- DOCTRINE
 
-            AvStyled.Label(s, new Rect(0f, y, KeyWidth, 24f), "PROFILE", "metric-key");
-            profileButton = AvStyled.Button(s, new Rect(KeyWidth, y, 186f, 24f), "RESERVE ›", "btn", OpenProfiles);
-            profileButton.WithTooltip("The behaviour the scope flies with: RESERVE holds fire in close formation, ESCORT covers you, SWEEP hunts wide.");
+        private void BuildDoctrine()
+        {
+            doctrineRoot = Container(page, "TacticalDoctrine", new Rect(x, listTop, width, BezelLayout.DoctrineBlock(true)));
+            RectTransform r = doctrineRoot;
+            float h = BezelLayout.DoctrineHead - 2f;
+            AvStyled.Label(r, new Rect(0f, 0f, KeyWidth, h), "PROFILE", "metric-key");
+            profileButton = AvStyled.Button(r, new Rect(KeyWidth, 0f, ProfileW, h), "RESERVE ›", "btn", OpenProfiles);
+            profileButton.WithTooltip("The behaviour the scope flies with: RESERVE holds fire in close formation, ESCORT covers you, SWEEP hunts wide. "
+                + "Fine-tuning and rules arrive with SETUP.");
             ids["tac.orders.profile"] = profileButton;
-            AvButton tune = AvStyled.Button(s, new Rect(KeyWidth + 190f, y, w - KeyWidth - 190f, 24f), "FINE-TUNE › BEHAVIOUR", "btn", null);
-            tune.SetEnabled(false);
-            tune.WithTooltip("Behaviour profiles, tuning and reaction rules in the planning room. Arrives in a later update.");
-            ids["tac.orders.tune"] = tune;
-            y -= 28f;
+            doctrineSummary = WmcKit.Text(r, new Rect(KeyWidth + ProfileW + 8f, -1f, width - KeyWidth - ProfileW - ToggleW - 14f, h - 2f), "row-sub");
+            doctrineToggle = AvStyled.Button(r, new Rect(width - ToggleW, 0f, ToggleW, h), "HIDE", "btn", ToggleDoctrine, AvButtonStyle.Quiet);
+            ids["tac.doct.toggle"] = doctrineToggle;
 
-            targets = SegmentRow.Build(s, new Rect(0f, y, w, ToggleH), KeyWidth, "TARGETS", TargetLabels, TargetTips,
+            RectTransform rows = Container(r, "DoctrineRows", new Rect(0f, -BezelLayout.DoctrineHead, width, BezelLayout.DoctrineRows * BezelLayout.DoctrineRow));
+            doctrineRows = rows.gameObject;
+            float y = 0f;
+            targets = SegmentRow.Build(rows, new Rect(0f, y, width, ToggleH), KeyWidth, "TARGETS", TargetLabels, TargetTips,
                 "tac.orders.targets.", TargetKeys, ids, PickTargets);
-            y -= TogglePitch;
-            weapons = SegmentRow.Build(s, new Rect(0f, y, w, ToggleH), KeyWidth, "WEAPONS", new[] { "AUTO", "MISSILES", "GUNS", "NO A-G" },
+            y -= BezelLayout.DoctrineRow;
+            weapons = SegmentRow.Build(rows, new Rect(0f, y, width, ToggleH), KeyWidth, "WEAPONS", WeaponLabels,
                 new[]
                 {
                     "Every weapon aboard.", "Missiles only: no guns, no bombs.", "Guns only.",
                     "Every weapon, at air targets only.",
                 }, "tac.orders.weapons.", new[] { "auto", "missiles", "guns", "noag" }, ids, i => PickAxis(DoctrineAxis.Weapons, i));
-            y -= TogglePitch;
-            radar = SegmentRow.Build(s, new Rect(0f, y, w, ToggleH), KeyWidth, "RADAR", new[] { "ON", "SILENT", "OFF" },
+            y -= BezelLayout.DoctrineRow;
+            radar = SegmentRow.Build(rows, new Rect(0f, y, width, ToggleH), KeyWidth, "RADAR", RadarLabels,
                 new[]
                 {
                     "Radar on: the wing sees and shares its picture.",
                     "Silent: radar off until engaged, then on (enemy warners stay quiet).",
                     "Off: no radar, no radar-guided (SARH) shots. The aircraft finds little on its own.",
                 }, "tac.orders.radar.", new[] { "on", "silent", "off" }, ids, i => PickAxis(DoctrineAxis.Radar, i));
-            y -= TogglePitch;
-            guard = SegmentRow.Build(s, new Rect(0f, y, w, ToggleH), KeyWidth, "MSL GUARD", new[] { "OFF", "SELF", "WING", "LEAD" },
+            y -= BezelLayout.DoctrineRow;
+            guard = SegmentRow.Build(rows, new Rect(0f, y, width, ToggleH), KeyWidth, "MSL GUARD", new[] { "OFF", "SELF", "WING", "LEAD" },
                 null, "tac.orders.guard.", new[] { "off", "self", "wing", "lead" }, ids, null);
             guard.SetEnabled(false, "Shoot down missiles aimed at self, the wing or the lead. Arrives with the area orders update.");
-            y -= TogglePitch + 4f;
+        }
 
-            float cw = (w - KeyWidth - WmcUi.Gap * (OrderGrid.Columns - 1)) / OrderGrid.Columns;
+        private void ToggleDoctrine()
+        {
+            doctrineOpen = !doctrineOpen;
+            PlaceBlocks();
+            summaryKey = int.MinValue;
+            if (last != null) RefreshOrders(last);
+        }
+
+        // ---------------------------------------------------------------- the grid and REACT
+
+        private void BuildGrid()
+        {
+            gridRoot = Container(page, "TacticalGrid", new Rect(x, listTop, width, BezelLayout.GridBlock));
+            RectTransform s = gridRoot;
+            float cw = (width - KeyWidth - WmcUi.Gap * (OrderGrid.Columns - 1)) / OrderGrid.Columns, h = BezelLayout.GridCell;
             for (int r = 0; r < OrderGrid.Rows; r++)
             {
-                AvStyled.Label(s, new Rect(0f, y - r * GridPitch, KeyWidth, GridH), OrderGrid.RowLabels[r], "metric-key");
+                float y = -r * BezelLayout.GridPitch;
+                AvStyled.Rail(s, new Rect(0f, y, 3f, h), OrderGrid.RowRail(r));
+                AvStyled.Label(s, new Rect(7f, y, KeyWidth - 7f, h), OrderGrid.RowLabels[r], "metric-key");
                 for (int col = 0; col < OrderGrid.Columns; col++)
                 {
                     int k = r * OrderGrid.Columns + col;
-                    grid[k] = AvStyled.Button(s, new Rect(KeyWidth + col * (cw + WmcUi.Gap), y - r * GridPitch, cw, GridH), "", "btn",
+                    grid[k] = AvStyled.Button(s, new Rect(KeyWidth + col * (cw + WmcUi.Gap), y, cw, h), "", "btn",
                         () => PressCell(k), AvButtonStyle.Toggle);
                 }
             }
             SetGrid(false);
-            situationTop = y - OrderGrid.Rows * GridPitch - 6f;
-            BuildSituation(s, w);
-            profilePopup = new AvKit.Popup(page, panelWidth);
-        }
-
-        /// <summary>The sub-page region is <paramref name="region"/> px tall (below the sub-tab strip's top).</summary>
-        private void LayoutOrders(float region)
-        {
-            if (ordersScroll == null) return;
-            ordersScroll.SetViewport(new Rect(x, -ScrollTop, width + 8f, Mathf.Max(40f, region - ScrollTop)));
+            float ry = -OrderGrid.Rows * BezelLayout.GridPitch;
+            AvStyled.Rail(s, new Rect(0f, ry, 3f, h), OrderGrid.ReactRail);
+            AvStyled.Label(s, new Rect(7f, ry, KeyWidth - 7f, h), OrderGrid.ReactLabel, "metric-key");
+            float rw = (width - KeyWidth - WmcUi.Gap * (react.Length - 1)) / react.Length;
+            for (int i = 0; i < react.Length; i++)
+            {
+                int k = i;
+                GridCell cell = OrderGrid.React[i];
+                react[i] = AvStyled.Button(s, new Rect(KeyWidth + i * (rw + WmcUi.Gap), ry, rw, h), cell.Label, "btn", () => PressReact(k));
+                react[i].WithTooltip(cell.Tip);
+                ids[cell.Id] = react[i];
+            }
         }
 
         /// <summary>The grid's cells for jets or, with helicopters in scope, the helo swap (spec: SWEEP → SCOUT, SUPPORT → TAKE
@@ -146,29 +178,33 @@ namespace WingCommand
             if (!cell.Built) return;
             if (cell.Map != MapMode.Off)
             {
-                // The latched order again disarms it (the banner's CANCEL does too).
+                // The latched order again disarms it (the cue's CANCEL does too).
                 if (last.Map.Mode == cell.Map) last.Map.Disarm();
                 else last.Map.Arm(last, cell.Map);
                 return;
             }
             WmcUi.Order(last, () =>
             {
-                WingScope scope = last.Scope;
+                WingScope scoped = last.Scope;
                 switch (cell.Order)
                 {
-                    case GridOrder.Splash: WingCommands.Splash(scope); break;
-                    case GridOrder.Engage: WingCommands.Engage(scope); break;
-                    case GridOrder.Scout: WingCommands.ScoutAhead(scope); break;
-                    case GridOrder.Break: WingCommands.Disengage(scope); break;
-                    case GridOrder.FormUp: WingCommands.FormUp(scope); break;
+                    case GridOrder.Splash: WingCommands.Splash(scoped); break;
+                    case GridOrder.Engage: WingCommands.Engage(scoped); break;
+                    case GridOrder.Scout: WingCommands.ScoutAhead(scoped); break;
+                    case GridOrder.Break: WingCommands.Disengage(scoped); break;
+                    case GridOrder.FormUp: WingCommands.FormUp(scoped); break;
                     case GridOrder.Detach: Detach(); break;
-                    case GridOrder.Rtb: WingCommands.Rtb(scope); break;
-                    case GridOrder.Refit: WingCommands.Refit(scope); break;
-                    case GridOrder.TakeOff: WingCommands.TakeOff(scope); break;
-                    case GridOrder.Rescue: WingCommands.Rescue(scope); break;
+                    case GridOrder.Rtb: WingCommands.Rtb(scoped); break;
+                    case GridOrder.Refit: WingCommands.Refit(scoped); break;
+                    case GridOrder.TakeOff: WingCommands.TakeOff(scoped); break;
+                    case GridOrder.Rescue: WingCommands.Rescue(scoped); break;
                 }
             });
         }
+
+        /// <summary>A maneuver is a one-shot order: flown through the pipeline, then back to the slot.</summary>
+        private void PressReact(int i) =>
+            WmcUi.Order(last, () => WingOrders.Run(new WingOrder { Kind = OrderKind.Maneuver, Number = OrderGrid.React[i].Number, Scope = last.Scope }));
 
         /// <summary>The selected wingmen orbit the point they are over now, as their own element.</summary>
         private void Detach()
@@ -259,8 +295,6 @@ namespace WingCommand
         private void SetDoctrine(WingDoctrine d) =>
             WingOrders.Run(new WingOrder { Kind = OrderKind.SetDoctrine, Text = d.ToString(), Scope = last.Scope });
 
-        /// <summary><paramref name="target"/>'s rectangle in <paramref name="root"/>'s top-left coordinates (y down negative),
-        /// for a popup parented to the page while its button sits in a scroll view.</summary>
         private void RefreshOrders(WmcContext c)
         {
             RefreshBanner(c);
@@ -274,12 +308,17 @@ namespace WingCommand
             }
             profileButton.SetEnabled(c.CanOrder);
             string cannot = c.Client ? "Orders are host only for now" : "Wing Command is not ready";
-            targets.Set(c.ScopeValue(DoctrineAxis.Targets));
-            targets.SetEnabled(c.CanOrder, cannot);
-            weapons.Set(c.ScopeValue(DoctrineAxis.Weapons));
-            weapons.SetEnabled(c.CanOrder, cannot);
-            radar.Set(c.ScopeValue(DoctrineAxis.Radar));
-            radar.SetEnabled(c.CanOrder, cannot);
+            int t = c.ScopeValue(DoctrineAxis.Targets), w = c.ScopeValue(DoctrineAxis.Weapons), r = c.ScopeValue(DoctrineAxis.Radar);
+            if (doctrineOpen)
+            {
+                targets.Set(t);
+                targets.SetEnabled(c.CanOrder, cannot);
+                weapons.Set(w);
+                weapons.SetEnabled(c.CanOrder, cannot);
+                radar.Set(r);
+                radar.SetEnabled(c.CanOrder, cannot);
+            }
+            RefreshSummary(t, w, r);
 
             SetGrid(HelosInScope(c));
             bool scoped = c.Scope.Kind != ScopeKind.Wing;
@@ -298,7 +337,44 @@ namespace WingCommand
                 }
                 grid[k].SetLatched(cell.Map != MapMode.Off && c.Map.Mode == cell.Map);
             }
-            RefreshSituation(c);
+            RefreshReact(c);
+        }
+
+        /// <summary>Closed, DOCTRINE says the scope's settings in words; open, the segments say them.</summary>
+        private void RefreshSummary(int t, int w, int r)
+        {
+            int key = doctrineOpen ? -1 : t * 100 + w * 10 + r;
+            if (key == summaryKey) return;
+            summaryKey = key;
+            doctrineToggle.SetText(doctrineOpen ? "HIDE" : "SHOW");
+            doctrineToggle.WithTooltip(doctrineOpen ? "Close the doctrine rows to their summary." : "Open TARGETS, WEAPONS, RADAR and MSL GUARD.");
+            if (doctrineOpen)
+            {
+                WmcKit.Set(doctrineSummary, "");
+                return;
+            }
+            summary.Length = 0;
+            summary.Append(Word(TargetLabels, t)).Append(" · ").Append(Word(WeaponLabels, w)).Append(" · RDR ").Append(Word(RadarLabels, r));
+            WmcKit.Set(doctrineSummary, summary.ToString());
+        }
+
+        private static string Word(string[] labels, int i) => i >= 0 && i < labels.Length ? labels[i] : "MIXED";
+
+        private void RefreshReact(WmcContext c)
+        {
+            bool flying = false;
+            for (int i = 0; i < c.Count && !flying; i++)
+                flying = c.InScope(c.Rows[i]) && (MemberDuty)c.Rows[i].Duty == MemberDuty.Formation;
+            bool on = c.CanOrder && flying;
+            string why = !c.CanOrder ? "Orders are host only for now" : "Nobody in scope is flying in formation";
+            if (on == reactOn && (on || ReferenceEquals(why, reactWhy))) return;
+            reactOn = on;
+            reactWhy = why;
+            for (int i = 0; i < react.Length; i++)
+            {
+                react[i].SetEnabled(on);
+                react[i].WithTooltip(on ? OrderGrid.React[i].Tip : why);
+            }
         }
 
         private void RefreshBanner(WmcContext c)
