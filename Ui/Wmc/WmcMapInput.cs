@@ -72,19 +72,12 @@ namespace WingCommand
         public void Update(WmcContext c, bool visible)
         {
             // Spec bezel v2 §6: with nothing armed, a right-click MOVE for the selection is TACTICAL's and FORM's only (the tabs with
-            // the COMMAND scope row); elsewhere the right-click stays the game's. The room places its own orders (it is open over the map).
-            bool tactical = WmcPanel.Instance != null && WmcPanel.Instance.CommandShowing;
-            bool room = WmcRoom.Instance != null && WmcRoom.Instance.IsOpen;
-            selected = c != null && (tactical || room) ? c.Selection.Count : 0;
+            // the COMMAND scope row); elsewhere the right-click stays the game's.
+            bool command = WmcPanel.Instance != null && WmcPanel.Instance.CommandShowing;
+            selected = c != null && command ? c.Selection.Count : 0;
             if (!visible)
             {
                 if (Mode != MapMode.Off) Disarm();
-                pressed = false;
-                return;
-            }
-            // Review P5 I2: under the room (and on the frame it closed) a right-click is the room's, never the map's.
-            if (WmcRoom.Instance != null && WmcRoom.Instance.JustOpen)
-            {
                 pressed = false;
                 return;
             }
@@ -220,12 +213,12 @@ namespace WingCommand
     [HarmonyPatch(typeof(DynamicMap), "MapControls")]
     internal static class WmcMapControlsPatch
     {
-        // The room covers the map: its wheel and drags are the room's, not the game map's underneath. A CENTER or FIT waiting
-        // for the map goes in first, so the game draws the view from the new offsets this frame (critic §14.12).
+        // A CENTER or FIT waiting for the map goes in first, so the game draws the view from the new offsets this frame
+        // (critic §14.12).
         [HarmonyPrefix]
         private static bool Prefix(DynamicMap __instance)
         {
-            bool run = !WmcMapInput.ConsumesNow() && !(WmcRoom.Instance != null && WmcRoom.Instance.IsOpen);
+            bool run = !WmcMapInput.ConsumesNow();
             if (run) WmcMap.Apply(__instance);
             return run;
         }

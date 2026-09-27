@@ -14,8 +14,8 @@ namespace WingCommand
         public bool Contains(uint id) => ids.Contains(id);
         public uint Single => ids.Count == 1 ? ids[0] : 0u;
 
-        /// <summary>The aircraft INSPECT › (or a LOG line) asked the room to show; 0 for none. It never changes who orders go
-        /// to, and any new pick ends it (review R1 I1: the room's card stuck on it and its RTB went to the wrong wingman).</summary>
+        /// <summary>An aircraft asked for by id; 0 for none. It never changes who orders go to, and any new pick ends it (review R1
+        /// I1: a card stuck on it and its RTB went to the wrong wingman). INSPECT keeps its own aircraft.</summary>
         public uint Inspected { get; private set; }
 
         public void Inspect(uint id) => Inspected = id;

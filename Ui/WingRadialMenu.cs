@@ -123,7 +123,7 @@ namespace WingCommand
                 Leaf("Escort Target", WingCommands.EscortTarget, "selection"),
                 Leaf("Escort Me", WingCommands.EscortMe, "rejoin"),
                 Leaf("Dismiss", WingCommands.Dismiss, "rtb"),
-                Leaf("WMC Room", () => WmcRoom.Instance?.Open(), "selection"),
+                Leaf("WMC", () => WmcPanel.Instance?.Open(), "selection"),
                 Back(),
             };
             recoverMenu = new[]

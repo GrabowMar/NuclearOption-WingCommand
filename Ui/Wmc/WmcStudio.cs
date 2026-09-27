@@ -4,12 +4,12 @@ using UnityEngine;
 
 namespace WingCommand
 {
-    /// <summary>SQUADRON (spec WMC rebuild §Big panel; research squadron-studio): the PILOTS list (saved pilots, then this mission's
-    /// unsaved ones), the STUDIO that edits one pilot as a draft (identity, radio, look, bio; nothing is written until SAVE, and a
-    /// rename saves in place), and the RECORD (the lifetime SERVICE record, THIS MISSION's numbers, perks, RECRUIT / DISCHARGE). Saved
-    /// pilots join every mission as ROOKIEs (the 2026-09-25 decision). The draft lives in the page, so a re-layout rebuilds the widgets
-    /// and refills them; a field that has the keyboard lets go before the room gives it back.</summary>
-    internal sealed partial class RoomSquadron : IRoomPage
+    /// <summary>SQUADRON › STUDIO (spec bezel v2 §5; the room's SQUADRON moved onto the bezel): a pilot picker (saved pilots, then this
+    /// mission's unsaved ones), the studio that edits one pilot as a draft (identity, radio, look, bio; nothing is written until SAVE,
+    /// and a rename saves in place), SAVE · REVERT, RECRUIT / DISCHARGE and the lifetime SERVICE line. Saved pilots join every mission as
+    /// ROOKIEs (the 2026-09-25 decision). The draft lives here and survives tab switches (critic §14.5: a switch cannot be refused);
+    /// only NEW, CLONE, another pilot, DELETE and REVERT replace it, and those ask first when it holds edits.</summary>
+    internal sealed partial class WmcStudio
     {
         private sealed class Entry
         {
@@ -18,18 +18,18 @@ namespace WingCommand
             public string Callsign;
         }
 
-        private readonly Dictionary<string, AvButton> ids = new Dictionary<string, AvButton>();
+        private readonly Dictionary<string, AvButton> ids;
         private readonly List<Entry> entries = new List<Entry>();
         private readonly List<WingPilot> roster = new List<WingPilot>();
         private readonly System.Random rng = new System.Random();
-        private RectTransform body;
-        private Rect area;
+        private RectTransform root, popupParent;
+        private float left, top, width, height, panelWidth;
         private bool built;
 
         private WmcContext last;
         private WingService wing;
         private bool client, scanClient;
-        private int storeVersion = int.MinValue, rosterVersion = int.MinValue, savedCount;
+        private int storeVersion = int.MinValue, rosterVersion = int.MinValue;
 
         // The draft: what the studio edits, where it came from, and its place among the rows.
         private string selected;
@@ -42,7 +42,7 @@ namespace WingCommand
         private WingPilot focusRequest;
         private readonly ConfirmGate rowGate = new ConfirmGate();
 
-        public IReadOnlyDictionary<string, AvButton> Controls => ids;
+        public WmcStudio(Dictionary<string, AvButton> controls) => ids = controls;
 
         public string Hint => StudioWords.Hint;
 
@@ -51,20 +51,22 @@ namespace WingCommand
 
         public DraftState State => StateOf();
 
-        public void Build(RectTransform pageBody, Rect pageArea)
+        /// <summary>The studio in <paramref name="parent"/>, its top-left at (<paramref name="x"/>, <paramref name="y"/>), in a scroll
+        /// of <paramref name="w"/> × <paramref name="h"/>; popups hang off <paramref name="popups"/> (never inside the scroll).</summary>
+        public void Build(RectTransform parent, float x, float y, float w, float h, RectTransform popups, float panelW)
         {
-            body = pageBody;
-            area = pageArea;
-            ids.Clear();
-            // Review R7: the page is rebuilt every mission and on a re-layout; the studio's buttons are this build's.
+            root = parent;
+            left = x;
+            top = y;
+            width = w;
+            height = h;
+            popupParent = popups;
+            panelWidth = panelW;
             studioButtonCount = 0;
             System.Array.Clear(studioButtons, 0, studioButtons.Length);
-            BuildList();
-            BuildStudio();
-            BuildRecord();
-            WmcKit.FitAll(body);
+            BuildView();
             built = true;
-            listKey = studioKey = recordKey = int.MinValue;
+            pickerKey = studioKey = recordKey = int.MinValue;
             FillFields();
         }
 
@@ -72,7 +74,7 @@ namespace WingCommand
 
         public void Hide()
         {
-            // A field lets go before the room gives the keyboard back (critic §5 R7 2: the toolkit's guard must release first).
+            // A field lets go of the keyboard when the studio leaves the screen; the draft stays.
             WmcNameField.BlurAny();
             AvKit.Popup.CloseAny();
         }
@@ -85,7 +87,7 @@ namespace WingCommand
             {
                 Entry e = Find(focusRequest.Callsign);
                 focusRequest = null;
-                // Review R7: STUDIO › asks before dropping unsaved edits, as a row press does (a second STUDIO › or the row drops them).
+                // Review R7: STUDIO › asks before dropping unsaved edits, as a pilot pick does (a second STUDIO › drops them).
                 bool same = e != null && !draftNew && string.Equals(e.Callsign, selected, System.StringComparison.OrdinalIgnoreCase);
                 if (e != null && !same)
                 {
@@ -94,7 +96,7 @@ namespace WingCommand
                 }
             }
             if (!built) return;
-            RefreshList();
+            RefreshPicker();
             RefreshStudio();
             RefreshRecord();
         }
@@ -103,7 +105,7 @@ namespace WingCommand
         {
         }
 
-        /// <summary>WING's STUDIO ›: the room opens on this pilot.</summary>
+        /// <summary>ROSTER's STUDIO ›: the studio opens on this pilot.</summary>
         public void Focus(WingPilot p) => focusRequest = p;
 
         // ---------------------------------------------------------------- the rows' pilots
@@ -125,10 +127,9 @@ namespace WingCommand
             entries.Clear();
             foreach (CustomPilotRecord r in store.Records)
                 entries.Add(new Entry { Saved = r, Live = client ? null : WingPilotRoster.FindByCallsign(r.Callsign), Callsign = r.Callsign });
-            savedCount = entries.Count;
             foreach (WingPilot p in roster)
                 if (store.Find(p.Callsign) == null) entries.Add(new Entry { Live = p, Callsign = p.Callsign });
-            listKey = studioKey = recordKey = int.MinValue;
+            pickerKey = studioKey = recordKey = int.MinValue;
 
             // The draft follows its pilot: a row that went away gives way to the first; a source changed elsewhere (the interop, a
             // save, a delete) reloads a draft the player has not touched — never while a field has the keyboard.
@@ -172,8 +173,6 @@ namespace WingCommand
             draftLive = e.Live;
             draftNew = false;
             NewDraft();
-            int at = IndexOf(selected);
-            if (at >= 0) listPage = Pages.Of(at, rowsPerPage);
         }
 
         private void Clear()
@@ -235,7 +234,7 @@ namespace WingCommand
             touched = true;
             draftRevision++;
             problem = null;
-            WmcRoom.Instance?.RefreshNow();
+            WmcPanel.Instance?.Refresh();
         }
 
         /// <summary>A callsign the studio must not hand out: saved, or flying this mission.</summary>

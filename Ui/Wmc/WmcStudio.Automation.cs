@@ -4,13 +4,10 @@ using System.Globalization;
 
 namespace WingCommand
 {
-    // SQUADRON for scenarios (Automation.WmcRoom page 2): pick a pilot, start a draft, type through the page's own commit path, step the
-    // look, save, and report the page as numbers (the harness checks result_above / result_below only).
-    internal sealed partial class RoomSquadron
+    // SQUADRON › STUDIO for scenarios (Automation.Wmc sq_* arguments): pick a pilot, start a draft, type through the page's own commit
+    // path, step the look, save, and report the page as numbers (the harness checks result_above / result_below only).
+    internal sealed partial class WmcStudio
     {
-        /// <summary>Labels that would still spill out of their box (the text-fit audit).</summary>
-        public int Overflow => body != null ? WmcKit.Overflow(body) : 0;
-
         /// <summary>Open a pilot as a row press would, without the unsaved-edits ask: a callsign, or "live0" (this mission's first unsaved
         /// pilot). False when nobody matches.</summary>
         public bool Pick(string who)
@@ -66,7 +63,6 @@ namespace WingCommand
             into["sq_saved"] = WingSavedPilots.Store.Records.Count;
             into["sq_roster"] = roster.Count;
             into["sq_rows"] = entries.Count;
-            into["sq_pages"] = Pages.Count(entries.Count, rowsPerPage);
             into["sq_draft"] = draft != null ? draft.Callsign : "";
             into["sq_chip"] = draft != null ? (int)StateOf() : -1;
             into["sq_problem"] = problem != null ? 1 : 0;
@@ -77,7 +73,6 @@ namespace WingCommand
             into["sq_joined_xp"] = live != null ? live.Xp : -1;
             into["sq_recruit"] = recruitReason == null ? 1 : 0;
             into["typing"] = WmcNameField.Typing ? 1 : 0;
-            into["overflow"] = Overflow;
         }
     }
 }

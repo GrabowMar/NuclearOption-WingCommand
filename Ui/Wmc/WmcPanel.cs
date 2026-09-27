@@ -104,8 +104,7 @@ namespace WingCommand
             if (!enabled)
             {
                 if (screen != null && screen.isActive) screen.CloseScreen(screen.transform.localPosition);
-                // A mode armed in the room stays armed while the room is open (R2: the disabled panel used to disarm it).
-                context.Map.Update(context, WmcRoom.Instance != null && WmcRoom.Instance.IsOpen);
+                context.Map.Update(context, false);
                 overlay.Hide();
                 return;
             }
@@ -118,8 +117,7 @@ namespace WingCommand
             }
             MfdPresentation.Tick();
             // Every frame: the right button is followed per frame (spec WMC program §5).
-            // Review P5 I4: the room places map orders too; a mode armed there stays armed.
-            context.Map.Update(context, Visible || (WmcRoom.Instance != null && WmcRoom.Instance.IsOpen));
+            context.Map.Update(context, Visible);
             overlay.Tick(context, Visible);
             if (!Visible || Time.unscaledTime < nextRefresh) return;
             nextRefresh = Time.unscaledTime + WingFidelity.Interval(0.2f);
@@ -162,6 +160,7 @@ namespace WingCommand
             {
                 Show(tab);
                 if (tab == WmcTabs.Plan) plan.ShowSubFor(id);
+                if (tab == WmcTabs.Squadron) wingPage.ShowSubFor(id);
                 Refresh();
             }
             if (!controls.TryGetValue(id ?? "", out AvButton b) || b == null || !b.gameObject.activeInHierarchy) return false;
@@ -191,6 +190,8 @@ namespace WingCommand
             loadout = null;
             wingPage = null;
             shownPage = -1;
+            fitButton = null;
+            fitStep = -1;
             for (int i = 0; i < headerKeys.Length; i++) headerKeys[i] = -1;
             controls.Clear();
             context.Selection.Clear();
@@ -292,7 +293,7 @@ namespace WingCommand
             // Spec bezel v2 §3: no metric row; the four chips carry the vitals on every tab.
             shell = AvScreen.Build(content, "WMC", WmcTabs.Labels, null, 4, AvTokens.PanelWidth, height, OnTab);
             if (shell.DataBar?.State != null) titleColor = shell.DataBar.State.color;
-            BuildRoomButton();
+            BuildFitButton();
             BuildGroupRule();
 
             tactical = new WmcTactical(controls);
@@ -344,17 +345,63 @@ namespace WingCommand
         }
 
         /// <summary>ROOM in the title row, where the page index sat (four labelled tabs need no "01/04").</summary>
-        private void BuildRoomButton()
+        private static readonly string[] FitLabels = { "FIT", "ALL", "FOLLOW" };
+        private static readonly string[] FitTips =
+        {
+            "Frame the wing on the map (you and every wingman).", "Show the whole theatre.", "Back to following you.",
+        };
+        private AvButton fitButton;
+        private int fitStep = -1;
+        private float fitAt;
+
+        /// <summary>[FIT] where the page index sat (spec bezel v2 §3): each press one step of FIT › ALL › FOLLOW; the label names the
+        /// next step, and reads FIT again once the map follows you. Hidden when the game's map view could not be reached.</summary>
+        private void BuildFitButton()
         {
             AvStyled.DataBar bar = shell.DataBar;
             if (bar?.PageIndex == null) return;
             RectTransform slot = bar.PageIndex.rectTransform;
             bar.PageIndex.gameObject.SetActive(false);
             Vector2 at = slot.anchoredPosition;
-            AvButton room = AvStyled.Button(content, new Rect(at.x + 1f, at.y - 4f, slot.rect.width - 2f, 24f), "ROOM", "btn",
-                () => WmcRoom.Instance?.Open(), AvButtonStyle.Quiet);
-            room.WithTooltip("Open the planning room: plans, behaviour, squadron and workshop.");
-            controls["hdr.room"] = room;
+            fitButton = AvStyled.Button(content, new Rect(at.x + 1f, at.y - 4f, slot.rect.width - 2f, 24f), "FIT", "btn", PressFit,
+                AvButtonStyle.Quiet);
+            controls["hdr.fit"] = fitButton;
+            fitButton.gameObject.SetActive(WmcMap.Usable);
+            SetFit(0);
+        }
+
+        private void PressFit()
+        {
+            fitAt = Time.unscaledTime;
+            switch (fitStep)
+            {
+                case 0:
+                    var box = new MapBox();
+                    Aircraft player = context.Wing?.Player;
+                    if (player != null) box.Add(player.GlobalPosition().x, player.GlobalPosition().z);
+                    if (context.Wing != null && !context.Client)
+                        foreach (WingMember m in context.Wing.Members)
+                            if (!m.Released && m.Alive && (object)m.Aircraft != null) box.Add(m.Last.Pos.X, m.Last.Pos.Z);
+                    WmcMap.Fit(box);
+                    SetFit(1);
+                    break;
+                case 1:
+                    WmcMap.All();
+                    SetFit(2);
+                    break;
+                default:
+                    WmcMap.Follow();
+                    SetFit(0);
+                    break;
+            }
+        }
+
+        private void SetFit(int step)
+        {
+            if (fitButton == null || step == fitStep) return;
+            fitStep = step;
+            fitButton.SetText(FitLabels[step]);
+            fitButton.WithTooltip(FitTips[step]);
         }
 
         private void OnTab(int tab)
@@ -422,6 +469,8 @@ namespace WingCommand
         /// <summary>Title and chips, each rebuilt only when its inputs change (no strings per refresh in steady state).</summary>
         private void RefreshHeader()
         {
+            // The map follows you again (the game's own controls, or FOLLOW): FIT starts over.
+            if (fitStep > 0 && Time.unscaledTime - fitAt > 1f && WmcMap.Following) SetFit(0);
             int airborne = 0;
             for (int i = 0; i < context.Count; i++)
             {

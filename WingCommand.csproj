@@ -56,7 +56,6 @@
     <Quarantine Include="Ui\CombatHUDHitAudioPatch.cs" Milestone="M7" />
     <Quarantine Include="Ui\WingHud.cs" Milestone="M7" />
     <Quarantine Include="Ui\WingRadialOverlay.cs" Milestone="M7" />
-    <Quarantine Include="Ui\WmcScreen.Groups.cs" Milestone="P10" />
   </ItemGroup>
   <ItemGroup>
     <Compile Remove="@(Quarantine)" />

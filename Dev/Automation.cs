@@ -718,11 +718,35 @@ namespace WingCommand
                 lo = Text(args, "lo_submit");
                 if (lo != null) loadout.SubmitName(lo);
             }
+            // SQUADRON › STUDIO (the room's SQUADRON moved here): scenarios keep their saved pilots in pilots.sim.json (sq_scratch), pick a
+            // pilot (a callsign or live0), start a NEW draft, type through the page's own commits, step the look, join the saved pilots,
+            // save.
+            if (Arg(args, "sq_scratch") is bool scratch && scratch) WingSavedPilots.UseScratch();
+            WmcStudio studio = panel.WingPage?.Studio;
+            if (studio != null && args != null && (Arg(args, "sq_pick") != null || Arg(args, "sq_new") != null || Arg(args, "sq_callsign") != null
+                    || Arg(args, "sq_name") != null || Arg(args, "sq_bio") != null || Arg(args, "sq_look") != null || Arg(args, "sq_join") != null
+                    || Arg(args, "sq_save") != null || Arg(args, "sq_studio") != null))
+            {
+                panel.Show(WmcTabs.Squadron);
+                panel.WingPage.ShowSub(WmcWing.SubStudio);
+                panel.Refresh();
+                string who = Text(args, "sq_pick");
+                if (who != null && !studio.Pick(who)) return Fail("Wmc", "no pilot " + who);
+                if (Arg(args, "sq_new") is bool fresh && fresh) studio.StartNew();
+                if (Text(args, "sq_callsign") is string cs) studio.TypeCallsign(cs);
+                if (Text(args, "sq_name") is string nm) studio.TypeName(nm);
+                if (Text(args, "sq_bio") is string bio) studio.TypeBio(bio);
+                if (Text(args, "sq_look") is string look && !studio.StepLook(look)) return Fail("Wmc", "no look step " + look);
+                if (Arg(args, "sq_join") is bool join && join)
+                    foreach (CustomPilotRecord r in WingSavedPilots.Store.Records) WingPilotRoster.Enlist(r);
+                if (Arg(args, "sq_save") is bool save && save) studio.SaveDraft();
+            }
             // R6 WING: inspect a pilot as a row press would (a callsign, or free / next / flying / inbound / lost).
             string pilot = Text(args, "pilot");
             if (pilot != null && panel.WingPage != null)
             {
                 panel.Show(WmcTabs.Squadron);
+                panel.WingPage.ShowSub(WmcWing.SubRoster);
                 panel.Refresh();
                 if (!panel.WingPage.Inspect(pilot)) return Fail("Wmc", "no pilot " + pilot);
             }
@@ -738,14 +762,20 @@ namespace WingCommand
                 { "tab_name", panel.PageName }, { "sub_name", panel.Page == WmcTabs.Plan ? panel.Plan.SubName : "" },
                 { "plan_cards", panel.Plan?.Cards ?? 0 }, { "log_rows", panel.Plan?.LogRowsShown ?? 0 }, { "pressed", pressed }, { "members", panel.Context.Count }, { "controls", panel.Controls.Count },
                 { "scope", panel.Context.Selection.Label(panel.Context.Rows, panel.Context.Count) },
-                { "overflow", panel.Overflow }, { "gap_px", panel.Gap }, { "alerts", panel.Tactical?.AlertsShown ?? 0 },
+                { "overflow", panel.Overflow }, { "gap_px", panel.Gap }, { "typing", WmcNameField.Typing ? 1 : 0 }, { "alerts", panel.Tactical?.AlertsShown ?? 0 },
                 { "recent", panel.Tactical?.RecentShown ?? 0 },
                 { "armed", panel.Context.Map.Mode != MapMode.Off ? 1 : 0 },
                 { "disabled", panel.Tactical != null ? string.Join(",", panel.Tactical.DisabledOrders()) : "" },
             };
             if (supply != null && panel.Page == WmcTabs.Supply) supply.Report(result);
             if (loadout != null && panel.Page == WmcTabs.Loadout) loadout.Report(result);
-            if (panel.WingPage != null && panel.Page == WmcTabs.Squadron) panel.WingPage.Report(result);
+            if (panel.WingPage != null && panel.Page == WmcTabs.Squadron)
+            {
+                result["sq_sub"] = panel.WingPage.SubName;
+                result["sq_sub_index"] = panel.WingPage.Sub;
+                if (panel.WingPage.Sub == WmcWing.SubStudio) panel.WingPage.Studio.Report(result);
+                else panel.WingPage.Report(result);
+            }
             if (panel.InspectPage != null && panel.Page == WmcTabs.Inspect) panel.InspectPage.Report(result);
             return result;
         }
@@ -808,72 +838,6 @@ namespace WingCommand
                 { "orbiting", p != null && p.Active && p.Current.Kind == TaskKind.Orbit ? 1 : 0 },
                 { "last", WingToast.Last ?? "" },
             };
-        }
-
-        /// <summary>Spec WMC program §6: the room as a player drives it — <c>open</c>, <c>page</c>, <c>fit</c>, <c>zoom</c> (factor
-        /// at the view centre), <c>click_ahead_km</c>/<c>click_right_km</c> with <c>button</c> "left" or "right" through TACTICAL's
-        /// own click path, <c>press</c> a room control, <c>close</c> — then report it.</summary>
-        public static Dictionary<string, object> WmcRoom(Dictionary<string, object> args)
-        {
-            WmcRoom room = global::WingCommand.WmcRoom.Instance;
-            if (room == null) return Fail("WmcRoom", "no room");
-            // R7: scenarios keep their saved pilots in pilots.sim.json, never the player's pilots.user.json.
-            if (Arg(args, "scratch") is bool scratch && scratch) WingSavedPilots.UseScratch();
-            if (Arg(args, "open") is bool open && open) room.Open(Number(args, "page", -1));
-            RoomSquadron sq = room.Squadron;
-            if (sq != null && room.Page == RoomNotches.Squadron)
-            {
-                string who = Text(args, "pick");
-                if (who != null && !sq.Pick(who)) return Fail("WmcRoom", "no pilot " + who);
-                if (Arg(args, "new") is bool fresh && fresh) sq.StartNew();
-                if (Text(args, "callsign") is string cs) sq.TypeCallsign(cs);
-                if (Text(args, "name") is string nm) sq.TypeName(nm);
-                if (Text(args, "bio") is string bio) sq.TypeBio(bio);
-                if (Text(args, "look") is string look && !sq.StepLook(look)) return Fail("WmcRoom", "no look step " + look);
-                if (Arg(args, "join") is bool join && join)
-                    foreach (CustomPilotRecord r in WingSavedPilots.Store.Records) WingPilotRoster.Enlist(r);
-                if (Arg(args, "save") is bool save && save) sq.SaveDraft();
-            }
-            RoomTactical t = room.Tactical;
-            if (Arg(args, "fit") is bool fit && fit) t?.FitNow();
-            if (Arg(args, "log") is bool log) t?.SetLog(log);
-            float mppBefore = t != null ? t.MetresPerPixel : 0f;
-            if (Arg(args, "zoom") != null) t?.ZoomCentre((float)Convert.ToDouble(Arg(args, "zoom"), CultureInfo.InvariantCulture));
-            float zoomRatio = t != null && mppBefore > 0f ? t.MetresPerPixel / mppBefore : 1f;
-            if ((Arg(args, "click_ahead_km") != null || Arg(args, "click_right_km") != null) && t != null)
-            {
-                Aircraft player = WingService.Instance?.Player;
-                if (player == null) return Fail("WmcRoom", "not flying");
-                float ahead = Kilometres(args, "click_ahead_km"), right = Kilometres(args, "click_right_km");
-                GlobalPosition at = player.GlobalPosition();
-                UnityEngine.Vector3 f = player.transform.forward, r = player.transform.right;
-                f.y = r.y = 0f;
-                f.Normalize();
-                r.Normalize();
-                t.ClickWorld(at.x + f.x * ahead + r.x * right, at.z + f.z * ahead + r.z * right, Text(args, "button") != "left", Arg(args, "shift") is bool sh && sh);
-            }
-            bool pressed = false;
-            string press = Text(args, "press");
-            // A press goes to the open page's controls (room.* on PLAN, sq.* on SQUADRON).
-            IReadOnlyDictionary<string, NOAvionics.Ui.AvButton> controls = room.PageControls;
-            if (!string.IsNullOrEmpty(press) && controls != null && controls.TryGetValue(press, out NOAvionics.Ui.AvButton b) && b != null && b.gameObject.activeInHierarchy)
-            {
-                b.OnPointerClick(new UnityEngine.EventSystems.PointerEventData(UnityEngine.EventSystems.EventSystem.current)
-                    { button = UnityEngine.EventSystems.PointerEventData.InputButton.Left });
-                pressed = true;
-            }
-            room.RefreshNow();
-            if (Arg(args, "close") is bool close && close) room.Close();
-            var result = new Dictionary<string, object>
-            {
-                { "ok", true }, { "open", room.IsOpen ? 1 : 0 }, { "page", room.Page }, { "keyboard_held", room.KeyboardHeld ? 1 : 0 },
-                { "pressed", pressed ? 1 : 0 }, { "markers", t?.Markers ?? 0 }, { "legs", t?.LegCount ?? 0 }, { "contacts", t?.ContactCount ?? 0 },
-                { "fields", t?.FieldCount ?? 0 }, { "mpp", t?.MetresPerPixel ?? 0f }, { "cards", t?.Cards ?? 0 },
-                { "card_member", t != null && t.CardMember != 0u ? 1 : 0 }, { "zoom_ratio", zoomRatio }, { "last", WingToast.Last ?? "" },
-                { "log_open", t != null && t.LogOpen ? 1 : 0 }, { "log_rows", t?.LogRowsShown ?? 0 },
-            };
-            if (sq != null && room.Page == RoomNotches.Squadron) sq.Report(result);
-            return result;
         }
 
         private static float Kilometres(Dictionary<string, object> args, string key) =>

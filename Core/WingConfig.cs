@@ -36,7 +36,7 @@ namespace WingCommand
         public ConfigEntry<KeyboardShortcut> KeyNextShape { get; }
         public ConfigEntry<KeyboardShortcut> KeyNextSpacing { get; }
         public ConfigEntry<KeyboardShortcut> KeyDismiss { get; }
-        public ConfigEntry<KeyboardShortcut> KeyWmcRoom { get; }
+        public ConfigEntry<KeyboardShortcut> KeyWmc { get; }
         public ConfigEntry<KeyboardShortcut> KeyApLevel { get; }
         public ConfigEntry<KeyboardShortcut> KeyApHeading { get; }
         public ConfigEntry<KeyboardShortcut> KeyApAltitude { get; }
@@ -177,7 +177,7 @@ namespace WingCommand
             KeyNextShape = Key(c, "NextShape", "Next formation shape in the family.", 48);
             KeyNextSpacing = Key(c, "NextSpacing", "Next spacing preset (Close, Standard, Open, Spread).", 47);
             KeyDismiss = Key(c, "Dismiss", "Release every wingman to the game's AI.", 46);
-            KeyWmcRoom = Key(c, "WmcRoom", "Open or close the Wing Command room (the full-screen WMC).", 45);
+            KeyWmc = Key(c, "Wmc", "Open the WMC on the map: maximizes the map and shows the WMC screen (planning is on the main map).", 45);
             KeyApLevel = Key(c, "AutopilotLevel", "Autopilot: wings level.", 45);
             KeyApHeading = Key(c, "AutopilotHeading", "Autopilot: hold the current heading.", 44);
             KeyApAltitude = Key(c, "AutopilotAltitude", "Autopilot: hold the current altitude.", 43);

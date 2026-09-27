@@ -8,14 +8,23 @@ using UnityEngine.UI;
 
 namespace WingCommand
 {
-    /// <summary>WING (spec WMC rebuild §WING), the 0.9 squadron page with its critique fixed: the SQUADRON roster in join order with
-    /// one status word per pilot (the same word on the row, the dossier stamp and the tiles), a dossier (portrait, rank and XP bar with
-    /// rank ticks, record, radio, RELEASE), PERKS 2×2, and an AIRFRAME ASSIGNMENT bar pinned to the floor with AIR SAR and LOCAL SAR.
-    /// A row inspects only (R6 ruling): SUPPLY's pilot card picks who flies. The roster is the host's; a client sees one card.</summary>
+    /// <summary>SQUADRON (spec bezel v2 §5; WING renamed so "wing" keeps meaning the aircraft), in two sub-pages. ROSTER, the 0.9
+    /// squadron page with its critique fixed: the roster in join order with one status word per pilot (the same word on the row, the
+    /// dossier stamp and the head), a dossier (portrait, rank and XP bar with rank ticks, record, radio, RELEASE), PERKS 2×2, and an
+    /// AIRFRAME ASSIGNMENT bar pinned to the floor with AIR SAR and LOCAL SAR. A row inspects only (R6 ruling): SUPPLY's pilot card
+    /// picks who flies. STUDIO: the saved pilots and the pilot studio (the room's SQUADRON, moved here). The roster is the host's; a
+    /// client sees one card.</summary>
     internal sealed partial class WmcWing : IWmcPage
     {
+        public const int SubRoster = 0, SubStudio = 1;
+        private static readonly string[] SubLabels = { "ROSTER", "STUDIO" };
+
         private readonly Dictionary<string, AvButton> ids;
-        private RectTransform page, content;
+        private readonly WmcStudio studioPage;
+        private readonly GameObject[] subRoots = new GameObject[2];
+        private AvButton[] subTabs;
+        private int sub = -1;
+        private RectTransform page, pageRoot, content;
         private Rect body;
         private float width;
         private WmcScroll scroll;
@@ -40,24 +49,41 @@ namespace WingCommand
         private string hint, alert;
         private int rowsKey = int.MinValue, alertVersion = int.MinValue;
 
-        public WmcWing(Dictionary<string, AvButton> controls) => ids = controls;
+        public WmcWing(Dictionary<string, AvButton> controls)
+        {
+            ids = controls;
+            studioPage = new WmcStudio(controls);
+        }
 
-        public string Hint => hint;
+        public int Sub => sub;
+
+        public string SubName => sub >= 0 && sub < SubLabels.Length ? SubLabels[sub] : "";
+
+        public WmcStudio Studio => studioPage;
+
+        public string Hint => sub == SubStudio ? studioPage.Hint : hint;
 
         public string Alert => alert;
 
         /// <summary>The pilot the dossier shows (R7's STUDIO › opens the studio on it).</summary>
         public WingPilot Inspected => inspected;
 
-        public void Build(RectTransform pageRoot, Rect shellBody)
+        public void Build(RectTransform root, Rect shellBody)
         {
-            page = pageRoot;
-            body = WmcUi.Page(page, shellBody, shellBody.height);
+            pageRoot = root;
+            body = WmcUi.Page(root, shellBody, shellBody.height);
             width = body.width;
-            float view = BezelLayout.WingView(shellBody.height);
+            subTabs = WmcKit.SubTabs(root, new Rect(body.x, body.y, width, BezelLayout.SubTabs), SubLabels, "sq.sub.", ids, ShowSub);
+            subTabs[SubRoster].WithTooltip("This mission's pilots: the roster, the dossier and SAR.");
+            subTabs[SubStudio].WithTooltip("The saved pilots and the pilot studio: identity, look, radio and bio.");
+            float off = BezelLayout.SubTabs + BezelLayout.SubGap;
+            page = SubRoot(SubRoster, "SquadronRoster");
+            studioPage.Build(SubRoot(SubStudio, "SquadronStudio"), body.x, body.y - off, width, body.height - off, root, shellBody.width);
+            body = new Rect(body.x, body.y - off, body.width, body.height - off);
+            float view = BezelLayout.WingView(shellBody.height) - off;
             scroll = WmcScroll.Build(page, new Rect(body.x, body.y, width + 8f, view), "WingScroll");
             content = scroll.Content;
-            perPage = BezelLayout.PilotRows(shellBody.height);
+            perPage = BezelLayout.PilotRows(shellBody.height - off);
             BuildRoster(content);
             float footer = BezelLayout.SquadHead + BezelLayout.HeadGap + perPage * BezelLayout.PilotPitch + BezelLayout.HeadGap;
             float dossier = footer + BezelLayout.RosterFoot + BezelLayout.DossierGap;
@@ -66,6 +92,41 @@ namespace WingCommand
             BuildPerks(content, -(dossier + BezelLayout.DossierH + BezelLayout.DossierGap));
             BuildAssignment(body.y - view);
             scroll.SetContentHeight(BezelLayout.WingContent(perPage));
+            ShowSub(SubRoster);
+        }
+
+        private RectTransform SubRoot(int k, string name)
+        {
+            var go = new GameObject(name, typeof(RectTransform));
+            var rt = (RectTransform)go.transform;
+            rt.SetParent(pageRoot, false);
+            AvKit.Stretch(rt);
+            subRoots[k] = go;
+            return rt;
+        }
+
+        /// <summary>A sub-page (the tabs, STUDIO ›, automation). Leaving STUDIO lets go of the keyboard; its draft stays.</summary>
+        public void ShowSub(int k)
+        {
+            if (k < 0 || k >= subRoots.Length || subRoots[k] == null) return;
+            if (sub == SubStudio && k != SubStudio) studioPage.Hide();
+            sub = k;
+            for (int i = 0; i < subRoots.Length; i++)
+            {
+                subRoots[i].SetActive(i == k);
+                subTabs[i].SetLatched(i == k);
+            }
+            AvKit.Popup.CloseAny();
+            if (last != null) Refresh(last);
+        }
+
+        /// <summary>A control of a sub-page shows that sub-page first (automation).</summary>
+        public void ShowSubFor(string id)
+        {
+            if (id == null) return;
+            if (id.StartsWith("sq.sub.", System.StringComparison.Ordinal)) return;
+            if (id.StartsWith("sq.", System.StringComparison.Ordinal)) ShowSub(SubStudio);
+            else if (id.StartsWith("wing.", System.StringComparison.Ordinal)) ShowSub(SubRoster);
         }
 
         /// <summary>The wing and the roster's statuses, once a panel refresh (Metrics takes it, Refresh reuses it); the statuses are
@@ -119,6 +180,12 @@ namespace WingCommand
 
         public void Refresh(WmcContext c)
         {
+            if (sub == SubStudio)
+            {
+                last = c;
+                studioPage.Refresh(c);
+                return;
+            }
             if (!ReferenceEquals(last, c)) Snapshot(c);
             RefreshRoster();
             RefreshDossier();
@@ -286,13 +353,11 @@ namespace WingCommand
             WmcPanel.Instance?.Refresh();
         }
 
-        /// <summary>STUDIO ›: the planning room's SQUADRON on the dossier's pilot (R7).</summary>
+        /// <summary>STUDIO ›: the studio on the dossier's pilot (R7; it opened the room's SQUADRON).</summary>
         private void OpenStudio()
         {
-            WmcRoom room = WmcRoom.Instance;
-            if (room == null) return;
-            if (!client && inspected != null) room.Squadron.Focus(inspected);
-            room.Open(RoomNotches.Squadron);
+            if (!client && inspected != null) studioPage.Focus(inspected);
+            ShowSub(SubStudio);
         }
 
         private void Recruit()
