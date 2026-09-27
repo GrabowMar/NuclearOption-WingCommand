@@ -678,7 +678,7 @@ namespace WingCommand.PureTests
         {
             var field = new FieldTraffic(TestFields.Simple(), 0, false);
             Pose spawn = field.Field.Hangars[1].Spawn;
-            var pilot = new GroundPilot(3, field, AirframeClass.Rotary, spawn, 1);
+            var pilot = new GroundPilot(3, field, AirframeClass.Rotary, spawn, -1); // a pad spawn: a hangar spawn hovers out first
             AirframeProfile helo = AirframeProfile.Derive(new ProfileInputs { Class = AirframeClass.Rotary, MaxSpeed = 134f });
             IFlightPipeline pipeline = FlightStack.NewPipeline(AirframeClass.Rotary);
             var phases = new List<GroundPhase> { pilot.Phase };

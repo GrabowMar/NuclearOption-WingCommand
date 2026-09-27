@@ -192,6 +192,64 @@ namespace WingCommand.FlightSim
             Assert.True(closest >= 25f, $"came within {closest:0.0} m in the climb-out ({closeWho})");
         }
 
+        /// <summary>Night-1 sim runs (2026-09-28): a UH-90 spawned in a Boscali North hangar whose roof the upward ray missed climbed
+        /// straight into it and hovered there, pinned, for five minutes. A helicopter launched from a hangar hovers out of it first,
+        /// whatever the ray says.</summary>
+        [Fact]
+        public void AHelicopterLaunchedFromAHangarLeavesItBeforeClimbing()
+        {
+            var field = new FieldTraffic(Field(), 0, false);
+            AirframeProfile p = SimProfiles.Utility();
+            Pose spawn = field.Field.Hangars[0].Spawn;
+            var pilot = new GroundPilot(0, field, AirframeClass.Rotary, spawn, 0) { RoofOverhead = false };
+            var plant = new RotaryPlant(RotaryParams.Utility, spawn.Pos, Vec3.Zero, Vec3.HeadingDeg(spawn.Fwd)) { GroundY = spawn.Pos.Y };
+            IFlightPipeline pipe = FlightStack.NewPipeline(AirframeClass.Rotary);
+            pipe.Track(plant.Read(Dt), new ControlOutput { Throttle = plant.Collective }, p);
+            var events = new WingEventRing();
+            float highestInside = 0f;
+            for (float t = 0f; t < 90f && !pilot.Done; t += Dt)
+            {
+                field.Step(Dt);
+                plant.Step(pilot.Step(plant.Read(Dt), p, pipe, t, Dt, events, 0), Dt);
+                float out_ = Vec3.Dot(plant.Position - spawn.Pos, spawn.Fwd.Horizontal.Normalized);
+                if (out_ < TaxiGraph.HangarExitDistance - 2f) highestInside = Math.Max(highestInside, plant.Position.Y - spawn.Pos.Y);
+            }
+            Assert.True(pilot.Done, $"still {pilot.Phase}");
+            Assert.True(highestInside <= GroundPilot.HoverExitHeight + 2f, $"climbed to {highestInside:0.0} m before leaving the hangar");
+        }
+
+        /// <summary>A helicopter that cannot get up (a roof, a wall) is moved out of the hangar once rather than hovering there for
+        /// the rest of the mission.</summary>
+        [Fact]
+        public void AHelicopterPinnedOnItsLiftOffIsMovedOutOnce()
+        {
+            var field = new FieldTraffic(Field(), 0, false);
+            AirframeProfile p = SimProfiles.Utility();
+            Pose spawn = field.Field.Hangars[0].Spawn;
+            var pilot = new GroundPilot(0, field, AirframeClass.Rotary, spawn, 0) { RoofOverhead = true };
+            IFlightPipeline pipe = FlightStack.NewPipeline(AirframeClass.Rotary);
+            var events = new WingEventRing();
+            var stuck = new AircraftState
+            {
+                Pos = spawn.Pos + Vec3.Up * 5f, Fwd = spawn.Fwd, Up = Vec3.Up, Right = Vec3.Cross(Vec3.Up, spawn.Fwd), RadarAlt = 5f, RotorRpm = 1f,
+                Dt = Dt,
+            };
+            int moves = 0;
+            Pose to = default;
+            for (float t = 0f; t < 120f; t += Dt)
+            {
+                field.Step(Dt);
+                pilot.Step(stuck, p, pipe, t, Dt, events, 0);
+                if (pilot.TakeRelocation(out Pose pose))
+                {
+                    moves++;
+                    to = pose;
+                }
+            }
+            Assert.Equal(1, moves);
+            Assert.True(Vec3.Dot(to.Pos - spawn.Pos, spawn.Fwd.Horizontal.Normalized) >= TaxiGraph.HangarExitDistance - 1f, $"moved to {to.Pos}");
+        }
+
         [Fact]
         public void ABlockedTaxiwayIsReroutedAroundWithoutARelocation()
         {

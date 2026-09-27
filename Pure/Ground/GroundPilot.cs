@@ -56,12 +56,15 @@ namespace WingCommand
         public static float ThresholdEntry = 10f, ClearedPastThreshold = 30f, LineupRunIn = 25f, AlignTail = 80f;
         public static float LineupTolerance = 3f, LineupAlignDeg = 10f, StoppedSpeed = 0.5f;
         public static float LiftOffHeight = 30f, HoverExitHeight = 3f, HoverExitReached = 5f;
+        /// <summary>A helicopter still not up this long after starting its lift-off is moved out of its hangar, once (night-1 sim runs:
+        /// a UH-90 hovered pinned under a roof for five minutes).</summary>
+        public static float LiftOffStuckSeconds = 40f;
         public static float ClimbOutHeight = 150f, ClimbOutSeconds = 30f, ClimbOutAboveRunway = 300f, ClimbOutSpeedFactor = 1.3f;
         /// <summary>The takeoff roll rotates from <see cref="RotateFraction"/> × the takeoff speed toward
         /// <see cref="RotatePitchDeg"/> nose-up (pitch stick <see cref="RotateGain"/> per degree short), as the game's own
         /// takeoff aims up from 0.7 × takeoff speed; climb-out begins only above <see cref="WheelsOffHeight"/> radar altitude
         /// (the fly-by-wire is off on the wheels) and holds full throttle, as the game's does.</summary>
-        public static float RotateFraction = 0.7f, RotatePitchDeg = 10f, RotateGain = 0.08f, WheelsOffHeight = 1.5f;
+        public static float RotateFraction = 0.7f, RotatePitchDeg = 10f, RotateGain = 0.25f, RotateForceFactor = 1.1f, WheelsOffHeight = 1.5f;
         public static float RerouteCost = 1e4f, OppositeCost = 1000f, RelocateClearRadius = 30f, RelocateCancelMetres = 10f;
         public static float AlignSettleSeconds = 5f, LineUpSeconds = 120f, RollSeconds = 60f;
         public static float PullAsideMetres = 45f, PullAsideSeconds = 90f;
@@ -102,6 +105,7 @@ namespace WingCommand
         // The climb-out's own lane (its offset from the centreline at lift-off: abreast departures stay abreast) and the wing's floor
         // and collision bias for it (night-1 sim runs, 2026-09-28).
         private float lane;
+        private bool liftOffMoved;
         private LimitContext air;
         private bool hasAir;
         private int restands;
@@ -193,6 +197,7 @@ namespace WingCommand
             enqueued = taxiReleased = clearedThreshold = rolling = airborneReported = exitedHangar = false;
             liftoffTime = settleStart = rollStart = float.NaN;
             lane = 0f;
+            liftOffMoved = false;
             Phase = GroundPhase.Parked;
             phaseStart = float.NaN;
         }
@@ -690,8 +695,9 @@ namespace WingCommand
             o.Throttle = blocked ? 0f : 1f;
             o.Brake = blocked ? 1f : 0f;
             float speed = Vec3.Dot(s.Vel, s.Fwd.Horizontal.Normalized);
-            if (!blocked && speed >= RotateFraction * p.TakeoffSpeed)
-                o.Pitch = Scalar.Clamp((RotatePitchDeg - s.PitchDeg) * RotateGain, 0f, 1f);
+            // Some published take-off speeds are far below the lift-off (the FS-20 lists 35 m/s): the rotation starts from the larger
+            // of it and the stall speed, so a fighter never hauls its nose up at a walking pace.
+            if (!blocked) o.Pitch = Math.Max(o.Pitch, RotateStick(speed, Math.Max(p.TakeoffSpeed, p.StallSpeed), s.PitchDeg));
             if (s.RadarAlt > WheelsOffHeight)
             {
                 pipeline.Track(s, o, p);
@@ -708,6 +714,17 @@ namespace WingCommand
         }
 
         public static float ClimbOutClearance = 40f;
+
+        /// <summary>The take-off roll's pitch stick (night-1 sim runs: an SFB-81 never rotated on (10° − pitch) × 0.08, the fly-by-wire
+        /// passing a fifth of it on the ground): none below <see cref="RotateFraction"/> × take-off speed, then full nose-up stick easing
+        /// off over the last degrees to <see cref="RotatePitchDeg"/>, and full stick again past <see cref="RotateForceFactor"/> ×
+        /// take-off speed while still on the wheels.</summary>
+        internal static float RotateStick(float speed, float takeoffSpeed, float pitchDeg)
+        {
+            if (speed < RotateFraction * takeoffSpeed) return 0f;
+            if (speed >= RotateForceFactor * takeoffSpeed) return 1f;
+            return Scalar.Clamp((RotatePitchDeg - pitchDeg) * RotateGain, 0f, 1f);
+        }
 
         /// <summary>The wing's terrain floor and collision bias for this member (the engine sets them each tick): the climb-out flies
         /// under them.</summary>
@@ -768,9 +785,21 @@ namespace WingCommand
         {
             Vec3 fwd = spawn.Fwd.Horizontal.Normalized;
             Vec3 exit = spawn.Pos + fwd * TaxiGraph.HangarExitDistance;
-            if (RoofOverhead && !exitedHangar && (s.Pos - exit).Horizontal.Length < HoverExitReached) exitedHangar = true;
-            bool outside = !RoofOverhead || exitedHangar;
-            Vec3 over = RoofOverhead ? exit : spawn.Pos;
+            // Night-1 sim runs: a helicopter launched from a hangar hovers out of it first whatever the upward ray found (a roof it
+            // missed pinned a UH-90 for five minutes).
+            bool roof = RoofOverhead || hangar >= 0;
+            if (roof && !exitedHangar && (s.Pos - exit).Horizontal.Length < HoverExitReached) exitedHangar = true;
+            bool outside = !roof || exitedHangar;
+            Vec3 over = roof ? exit : spawn.Pos;
+            // Still not up long after starting: moved out of the hangar, on the ground at its exit, once.
+            if (!liftOffMoved && !float.IsNaN(phaseStart) && time - phaseStart > LiftOffStuckSeconds && s.RadarAlt < LiftOffHeight - 3f)
+            {
+                liftOffMoved = true;
+                exitedHangar = true;
+                relocation = new Pose(new Vec3(exit.X, spawn.Pos.Y, exit.Z), fwd);
+                relocationPending = true;
+                Log(events, time, slot, WingEventKind.Relocated);
+            }
             Vec3 target = new Vec3(over.X, spawn.Pos.Y + (outside ? LiftOffHeight : HoverExitHeight), over.Z);
             var intent = new FlightIntent
             {
