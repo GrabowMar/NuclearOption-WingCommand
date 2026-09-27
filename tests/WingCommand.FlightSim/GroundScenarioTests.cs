@@ -77,7 +77,9 @@ namespace WingCommand.FlightSim
             public float DoneAt = float.NaN;
         }
 
-        private static List<Member> Launch(FieldTraffic field, AirframeProfile p, int count)
+        private static List<Member> Launch(FieldTraffic field, AirframeProfile p, int count) => Launch(field, p, count, p.TakeoffSpeed);
+
+        private static List<Member> Launch(FieldTraffic field, AirframeProfile p, int count, float liftSpeed)
         {
             var members = new List<Member>();
             for (int i = 0; i < count; i++)
@@ -87,7 +89,7 @@ namespace WingCommand.FlightSim
                 members.Add(new Member
                 {
                     Pilot = new GroundPilot(i, field, AirframeClass.FixedWing, spawn, i),
-                    Plant = new DepartingPlant(PlantParams.GenericFighter, spawn, p.TakeoffSpeed, p.WheelbaseM, p.SteerLockDeg),
+                    Plant = new DepartingPlant(PlantParams.GenericFighter, spawn, liftSpeed, p.WheelbaseM, p.SteerLockDeg),
                     Pipeline = FlightStack.NewPipeline(AirframeClass.FixedWing),
                 });
             }
@@ -139,6 +141,55 @@ namespace WingCommand.FlightSim
             foreach (Member m in members) last = Math.Max(last, m.DoneAt);
             // Spec M3 §9 T1: the 4-ship is off the field within 180 s.
             Assert.True(last < 180f, $"the last member finished its climb-out at {last:0} s");
+        }
+
+        /// <summary>Night-1 sim runs (2026-09-28): the game's jets leave the runway below the loaded minimum speed their profile
+        /// reckons (they rotate at 0.7 × take-off speed and fly, the profile's stall estimate is conservative); the climb-out's speed
+        /// priority then pushed the nose down and #3 touched the runway again at 105 m/s, and the members, all aiming at one point over
+        /// the centreline, passed 13 m apart. Here the controller's profile believes the stall 35% higher than the plant's own, as in
+        /// the game: the four-ship must keep climbing and keep its distance.</summary>
+        [Fact]
+        public void AFourShipLiftingOffBelowItsMinimumSpeedClimbsOutWithoutSinkingBackOrConverging()
+        {
+            var field = new FieldTraffic(Field(), 0, false);
+            AirframeProfile p = Jet();
+            float plantLift = p.TakeoffSpeed;
+            p.StallSpeed *= 1.35f;
+            List<Member> members = Launch(field, p, 4, plantLift);
+            var events = new WingEventRing();
+            var airborneAt = new float[members.Count];
+            for (int k = 0; k < airborneAt.Length; k++) airborneAt[k] = float.NaN;
+            float lowest = float.MaxValue, closest = float.MaxValue;
+            string lowWho = null, closeWho = null;
+            for (int i = 0; i < 400 * 30 && members.Exists(m => !m.Pilot.Done); i++)
+            {
+                float t = i * Dt;
+                Step(field, members, p, t, events);
+                for (int k = 0; k < members.Count; k++)
+                {
+                    Member m = members[k];
+                    if (!m.Plant.Airborne) continue;
+                    if (float.IsNaN(airborneAt[k])) airborneAt[k] = t;
+                    if (!m.Pilot.Done && t - airborneAt[k] > 2f && m.Plant.Position.Y < lowest)
+                    {
+                        lowest = m.Plant.Position.Y;
+                        lowWho = $"member {k} at {t - airborneAt[k]:0.0} s after lift-off";
+                    }
+                    for (int j = k + 1; j < members.Count; j++)
+                    {
+                        if (!members[j].Plant.Airborne || m.Pilot.Done || members[j].Pilot.Done) continue;
+                        float d = (m.Plant.Position - members[j].Plant.Position).Length;
+                        if (d < closest)
+                        {
+                            closest = d;
+                            closeWho = $"members {k} and {j} at t {t:0.0}";
+                        }
+                    }
+                }
+            }
+            for (int k = 0; k < members.Count; k++) Assert.True(members[k].Pilot.Done, $"member {k} still {members[k].Pilot.Phase}");
+            Assert.True(lowest >= 3f, $"sank back to {lowest:0.0} m ({lowWho})");
+            Assert.True(closest >= 25f, $"came within {closest:0.0} m in the climb-out ({closeWho})");
         }
 
         [Fact]

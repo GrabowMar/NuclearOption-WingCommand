@@ -99,6 +99,11 @@ namespace WingCommand
         private float[] cum = new float[0];
         private int progress;
         private float phaseStart = float.NaN, liftoffTime = float.NaN, settleStart = float.NaN, rollStart = float.NaN;
+        // The climb-out's own lane (its offset from the centreline at lift-off: abreast departures stay abreast) and the wing's floor
+        // and collision bias for it (night-1 sim runs, 2026-09-28).
+        private float lane;
+        private LimitContext air;
+        private bool hasAir;
         private int restands;
         private bool enqueued, taxiReleased, clearedThreshold, rolling, airborneReported, exitedHangar, relocationPending, relocationWanted;
         private Pose relocation;
@@ -187,6 +192,7 @@ namespace WingCommand
             RoofOverhead = false;
             enqueued = taxiReleased = clearedThreshold = rolling = airborneReported = exitedHangar = false;
             liftoffTime = settleStart = rollStart = float.NaN;
+            lane = 0f;
             Phase = GroundPhase.Parked;
             phaseStart = float.NaN;
         }
@@ -690,12 +696,40 @@ namespace WingCommand
             {
                 pipeline.Track(s, o, p);
                 liftoffTime = time;
+                RunwaySample rw = traffic.Runway;
+                Vec3 d = rw.Direction(traffic.Reverse);
+                lane = Vec3.Dot(s.Pos - (traffic.Reverse ? rw.End : rw.Start), Vec3.Cross(Vec3.Up, d).Normalized);
                 Enter(GroundPhase.ClimbOut, time);
                 return o;
             }
             // Still on the wheels this long: reject the takeoff rather than report a jet in the grass as airborne.
             if (time - rollStart > RollSeconds) return Abort(time, events, slot);
             return o;
+        }
+
+        public static float ClimbOutClearance = 40f;
+
+        /// <summary>The wing's terrain floor and collision bias for this member (the engine sets them each tick): the climb-out flies
+        /// under them.</summary>
+        public void SetAir(in LimitContext context)
+        {
+            air = context;
+            hasAir = true;
+        }
+
+        /// <summary>What the climb-out flies under (night-1 sim runs, 2026-09-28): the ground under the jet or the wing's floor, whichever
+        /// is higher, with <see cref="ClimbOutClearance"/> above it — so the speed priority can never push a jet that left the runway
+        /// below its loaded minimum speed back onto it — and the wing's collision bias, so departures keep apart. No GCAS: its
+        /// recovery model would trip on the runway just left.</summary>
+        internal static LimitContext ClimbOutLimits(in AircraftState s, in LimitContext air, bool hasAir)
+        {
+            float ground = s.Pos.Y - Math.Max(0f, s.RadarAlt);
+            float floor = hasAir && !float.IsNaN(air.FloorY) ? Math.Max(air.FloorY, ground) : ground;
+            return new LimitContext
+            {
+                FloorY = floor, NearFloorY = floor, HasNearFloor = false, Clearance = ClimbOutClearance, Aggression = 0.3f,
+                CollisionBias = hasAir ? air.CollisionBias : Vec3.Zero,
+            };
         }
 
         private ControlOutput ClimbOut(in AircraftState s, AirframeProfile p, IFlightPipeline pipeline, float time, float dt,
@@ -705,7 +739,7 @@ namespace WingCommand
             Vec3 dir = r.Direction(traffic.Reverse);
             Vec3 threshold = traffic.Reverse ? r.End : r.Start;
             float along = Vec3.Dot(s.Pos - threshold, dir);
-            Vec3 line = threshold + dir * along;
+            Vec3 line = threshold + dir * along + Vec3.Cross(Vec3.Up, dir).Normalized * lane;
             var intent = new FlightIntent
             {
                 Ref = new RefState(new Vec3(line.X, threshold.Y + ClimbOutAboveRunway, line.Z), dir * (ClimbOutSpeedFactor * p.TakeoffSpeed), Vec3.Zero),
@@ -716,7 +750,7 @@ namespace WingCommand
                 HeadingDeg = Vec3.HeadingDeg(dir),
             };
             GuidanceCommand g = pipeline.Guide(intent, s, p);
-            ControlOutput o = pipeline.Step(g, s, new LimitContext { FloorY = float.NaN, Aggression = 0.3f }, p, dt);
+            ControlOutput o = pipeline.Step(g, s, ClimbOutLimits(s, air, hasAir), p, dt);
             o.Throttle = 1f;
             o.Airbrake = false;
             if (!airborneReported && s.RadarAlt > DepartureSequencer.ClearHeight)

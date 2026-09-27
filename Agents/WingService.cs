@@ -314,6 +314,14 @@ namespace WingCommand
         private void StepGround(WingMember m, float dt)
         {
             m.NoFbwSeconds = 0f;
+            // Night-1 sim runs: the climb-out flies under the wing's terrain floor and collision bias for this member.
+            WingFrame f = FrameOf(m);
+            int slot = m.Brain.Slot;
+            if (f != null && slot >= 0 && slot < f.Count)
+                m.Ground.SetAir(new LimitContext
+                {
+                    FloorY = f.HasNearFloor[slot] ? f.NearFloorY[slot] : f.FloorY, NearFloorY = f.NearFloorY[slot], CollisionBias = f.Bias[slot],
+                });
             ControlOutput o = m.Ground.Step(m.Last, m.Profile, m.Brain.Pipeline, missionTime, dt, Events, m.Seat);
             m.GroundOutput = o;
             ControlWriter.Fly(m.Aircraft, o, m.Profile.Class);
