@@ -112,6 +112,17 @@ namespace WingCommand
             return sb.ToString();
         }
 
+        /// <summary>A number that moves whenever an event or a radio line was logged: a page fills its rows (which allocates while it
+        /// describes events) only when it moved.</summary>
+        public static long Stamp(WingEventRing events, RadioLog radio)
+        {
+            if (events == null && radio == null) return 0L;
+            long k = (events?.Total ?? 0L) * 1000003L;
+            int n = radio?.Count ?? 0;
+            if (n > 0) k += n * 131L + (long)(radio.TimeAt(n - 1) * 10f) * 7L + (radio.TextAt(n - 1)?.Length ?? 0);
+            return k;
+        }
+
         /// <summary>Newest first, at most <paramref name="max"/> rows; on a tie the event goes first. Returns the count.</summary>
         public static int Fill(WingEventRing events, RadioLog radio, List<LogRow> into, int max = MaxRows) =>
             Fill(events, radio, into, max, LogFilter.None);

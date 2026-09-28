@@ -73,9 +73,13 @@ namespace WingCommand
             AvKit.Place(cueRoot, new Rect(x, y, width, BezelLayout.Cue));
             y -= BezelLayout.Cue + BezelLayout.CueGap;
             AvKit.Place(doctrineRoot, new Rect(x, y, width, BezelLayout.DoctrineBlock(true)));
+            // Review U1-U2: on a short dock the open rows swap in where the grid was; they never push it off the body.
+            bool swap = doctrineOpen && BezelLayout.DoctrineSwaps(body.height, max);
             doctrineRows.SetActive(doctrineOpen);
-            y -= BezelLayout.DoctrineBlock(doctrineOpen);
+            ((RectTransform)doctrineRows.transform).anchoredPosition = new Vector2(0f, -BezelLayout.DoctrineHead);
+            y -= BezelLayout.DoctrineBlock(doctrineOpen && !swap);
             AvKit.Place(gridRoot, new Rect(x, y, width, BezelLayout.GridBlock));
+            gridRoot.gameObject.SetActive(!swap);
             y -= BezelLayout.GridBlock;
             situationScroll.SetViewport(new Rect(x, y, width + 8f, Mathf.Max(20f, y - bottom)));
             recentKey = int.MinValue;

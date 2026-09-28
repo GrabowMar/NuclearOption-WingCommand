@@ -259,5 +259,17 @@ namespace WingCommand.PureTests
             Assert.Equal(220f, BezelLayout.FormPreview(720f));
             Assert.Equal(200f, BezelLayout.FormPreview(500f));
         }
+
+        [Fact]
+        public void OnAShortDockOpenDoctrineSwapsInForTheGridInsteadOfPushingItOffTheBody()
+        {
+            // Review U1-U2: SHOW at H 596 pushed SUPPORT, REACT and the situation under the status strip.
+            Assert.True(BezelLayout.DoctrineSwaps(420f, 3));
+            Assert.False(BezelLayout.DoctrineSwaps(720f, 3));
+            // Swapped in, the rows take no more than the grid gives up.
+            Assert.True(BezelLayout.DoctrineRows * BezelLayout.DoctrineRow <= BezelLayout.GridBlock);
+            for (float body = 420f; body <= 720f; body += 20f)
+                Assert.True(BezelLayout.TacticalFixed(3, !BezelLayout.DoctrineSwaps(body, 3)) <= body, "body " + body);
+        }
     }
 }

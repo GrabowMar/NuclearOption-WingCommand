@@ -326,7 +326,8 @@ namespace WingCommand
             for (int i = 0; i < routes.Count; i++)
                 routeEntries.Add(new AvKit.PopupEntry(routes[i].Name, routes[i].Points.Length + " PTS · " + RouteDraft.LoopText(routes[i].Loop),
                     i == savedSelected));
-            popup.Show(WmcKit.RectIn(page, (RectTransform)savedPicker.transform), routeEntries, PickSaved);
+            // Review U1-U2: placed inside the body (scrolling the page when it must), as SUPPLY's and LOADOUT's popups are.
+            popup.Show(WmcKit.PopupArea(page, body, (RectTransform)savedPicker.transform, routeEntries.Count, routeScroll), routeEntries, PickSaved);
         }
 
         private void PickSaved(int i)

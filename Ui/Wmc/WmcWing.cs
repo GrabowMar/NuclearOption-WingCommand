@@ -186,7 +186,8 @@ namespace WingCommand
                 studioPage.Refresh(c);
                 return;
             }
-            if (!ReferenceEquals(last, c)) Snapshot(c);
+            // Review U1-U2: every refresh (the panel passes the same context each time; Snapshot skips the work when nothing moved).
+            Snapshot(c);
             RefreshRoster();
             RefreshDossier();
             RefreshPerks();

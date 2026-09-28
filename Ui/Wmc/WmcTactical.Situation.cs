@@ -36,6 +36,7 @@ namespace WingCommand
         private int alertCount = -1, situationLayout = int.MinValue, recentKey = int.MinValue, recentShown;
         private int targetKey = int.MinValue, poolKey = int.MinValue, teleKey = int.MinValue;
         private string alertText;
+        private long recentStamp = long.MinValue;
 
         private void BuildSituation()
         {
@@ -119,7 +120,9 @@ namespace WingCommand
 
         private float ViewHeight()
         {
-            return Mathf.Max(0f, body.height - BezelLayout.TacticalFixed(WingService.MaxMembers, doctrineOpen));
+            int max = WingService.MaxMembers;
+            bool open = doctrineOpen && !BezelLayout.DoctrineSwaps(body.height, max);
+            return Mathf.Max(0f, body.height - BezelLayout.TacticalFixed(max, open));
         }
 
         /// <summary>Alert rows showing now (automation).</summary>
@@ -300,10 +303,14 @@ namespace WingCommand
         private void RefreshRecent(WmcContext c)
         {
             if (recentShown <= 0) return;
-            int n = LogRows.Fill(c.Client ? null : c.Wing?.Events, RadioDirector.Instance?.Log, recentRows, recentShown, LogFilter.None);
-            int key = n * 7919 + (n > 0 ? (int)(recentRows[0].Time * 10f) + (recentRows[0].Text?.Length ?? 0) : 0);
-            if (key == recentKey) return;
-            recentKey = key;
+            WingEventRing events = c.Client ? null : c.Wing?.Events;
+            RadioLog radio = RadioDirector.Instance?.Log;
+            // Review U1-U2: Fill allocates while it describes events; it runs only when something was logged (or the rows changed).
+            long stamp = LogRows.Stamp(events, radio) * 31L + recentShown;
+            if (stamp == recentStamp && recentKey != int.MinValue) return;
+            recentStamp = stamp;
+            recentKey = 0;
+            int n = LogRows.Fill(events, radio, recentRows, recentShown, LogFilter.None);
             WmcKit.Set(recentNote, n > 0 ? "LATEST " + n.ToString(CultureInfo.InvariantCulture) : "");
             if (recentEmpty.gameObject.activeSelf != (n == 0)) recentEmpty.gameObject.SetActive(n == 0);
             for (int i = 0; i < recentRoots.Length; i++)

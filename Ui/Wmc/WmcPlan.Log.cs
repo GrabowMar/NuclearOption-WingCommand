@@ -26,6 +26,7 @@ namespace WingCommand
         private TMP_Text logEmpty, logCount;
         private int logElement = -1, logShown = -1;
         private bool logSelected;
+        private long logStamp = long.MinValue;
 
         /// <summary>LOG lines showing now (automation).</summary>
         public int LogRowsShown { get; private set; }
@@ -79,8 +80,14 @@ namespace WingCommand
 
         private void RefreshLog(WmcContext c)
         {
+            WingEventRing events = c.Client ? null : c.Wing?.Events;
+            RadioLog radio = RadioDirector.Instance?.Log;
+            // Fill allocates while it describes events: only when something was logged, or the filter or the selection changed.
+            long stamp = LogRows.Stamp(events, radio) * 31L + (logElement + 2) * 7L + (logSelected ? c.Selection.Single : 0u) + (logSelected ? 3L : 0L);
+            if (stamp == logStamp && logKeys[0] != long.MinValue) return;
+            logStamp = stamp;
             var filter = new LogFilter { Element = logElement, ById = logSelected, Id = c.Selection.Single, Rows = c.Rows, Count = c.Count };
-            int n = LogRows.Fill(c.Client ? null : c.Wing?.Events, RadioDirector.Instance?.Log, logRows, logLabels.Length, filter);
+            int n = LogRows.Fill(events, radio, logRows, logLabels.Length, filter);
             LogRowsShown = n;
             for (int k = 0; k < logChipButtons.Length; k++)
                 logChipButtons[k].SetLatched(k == 5 ? logSelected : k == 0 ? !logSelected && logElement < 0 : !logSelected && logElement == k - 1);

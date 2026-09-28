@@ -73,6 +73,13 @@ namespace WingCommand
         public static float TacticalFixed(int maxWingmen, bool doctrineOpen) =>
             ScopeRow + ScopeGap + ListReserve(maxWingmen) + ListGap + Cue + CueGap + DoctrineBlock(doctrineOpen) + GridBlock;
 
+        /// <summary>The least of the situation scroll a page keeps under the grid.</summary>
+        public const float MinTail = 40f;
+
+        /// <summary>Open DOCTRINE would push the grid past the body (a short dock): its rows swap in where the grid was instead, and
+        /// HIDE brings the grid back — nothing moves off the page (review U1-U2).</summary>
+        public static bool DoctrineSwaps(float body, int maxWingmen) => TacticalFixed(maxWingmen, true) + MinTail > body;
+
         /// <summary>DOCTRINE starts open when, open, the page still has room for the situation (120 px) under the grid.</summary>
         public static bool DoctrineOpenByDefault(float body, int maxWingmen) => TacticalFixed(maxWingmen, true) + 120f <= body;
 

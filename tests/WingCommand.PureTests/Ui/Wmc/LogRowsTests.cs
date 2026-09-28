@@ -150,5 +150,26 @@ namespace WingCommand.PureTests
                 { Kind = WingEventKind.BehaviourChanged, From = BehaviourId.React, To = BehaviourId.Rejoin, Reason = TransitionReason.ManeuverDone }));
             Assert.Null(LogRows.Describe(new WingEvent { Kind = WingEventKind.BehaviourChanged, From = BehaviourId.Rejoin, To = BehaviourId.StationKeep }));
         }
+
+        [Fact]
+        public void TheStampMovesOnlyWhenSomethingWasLogged()
+        {
+            // Review U1-U2: RECENT, LOG and INSPECT fill their rows only when the stamp moved (Fill allocates while describing).
+            var events = new WingEventRing();
+            var radio = new RadioLog();
+            long empty = LogRows.Stamp(events, radio);
+            Assert.Equal(empty, LogRows.Stamp(events, radio));
+            events.Push(new WingEvent { Kind = WingEventKind.Bingo, Time = 3f });
+            long one = LogRows.Stamp(events, radio);
+            Assert.NotEqual(empty, one);
+            radio.Push(4f, "Two, bingo.");
+            long two = LogRows.Stamp(events, radio);
+            Assert.NotEqual(one, two);
+            for (int i = 0; i < RadioLog.Capacity + 3; i++) radio.Push(5f + i, "line");
+            long full = LogRows.Stamp(events, radio);
+            radio.Push(100f, "one more on a full ring");
+            Assert.NotEqual(full, LogRows.Stamp(events, radio));
+            Assert.Equal(0L, LogRows.Stamp(null, null));
+        }
     }
 }

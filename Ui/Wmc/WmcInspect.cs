@@ -36,6 +36,7 @@ namespace WingCommand
         private int recentRowsFit, key = int.MinValue, chipsKey = int.MinValue, recentKey = int.MinValue;
         private uint inspected;
         private string pilotCallsign;
+        private long inspectStamp = long.MinValue;
         private WmcContext last;
 
         public WmcInspect(Dictionary<string, AvButton> controls) => ids = controls;
@@ -232,6 +233,9 @@ namespace WingCommand
 
         private void RefreshRecent(WmcContext c)
         {
+            long stamp = LogRows.Stamp(c.Wing?.Events, null) * 31L + inspected;
+            if (stamp == inspectStamp && recentKey != int.MinValue) return;
+            inspectStamp = stamp;
             var filter = new LogFilter { Element = -1, ById = true, Id = inspected, Rows = c.Rows, Count = c.Count };
             int n = LogRows.Fill(c.Wing?.Events, null, recentRows, recentRowsFit, filter);
             int k = n * 7919 + (int)(inspected % 1009u) + (n > 0 ? (int)(recentRows[0].Time * 10f) : 0);
