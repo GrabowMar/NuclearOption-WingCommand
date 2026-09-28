@@ -1113,6 +1113,11 @@ namespace WingCommand
                                               $"tries {r.FailedLandings}, state {m.Pilot?.currentState?.GetType().Name ?? "none"} " +
                                               $"{NativeLandingBridge.Mode(m.Pilot)}");
                     }
+                    else if (r == null && m.Profile.Class != AirframeClass.FixedWing && (object)m.Aircraft != null)
+                        // Night-2 sim (H2): hovering wingmen sank at full collective; rotor speed against collective says why.
+                        Plugin.Logger.LogInfo($"[Wing] rotor trace t={missionTime:0} #{m.Number} {m.Brain.Mind.Current} alt {m.Last.Pos.Y:0} radar " +
+                                              $"{m.Last.RadarAlt:0} vy {m.Last.Vel.Y:0.0} tas {m.Last.Tas:0} rpm {m.Last.RotorRpm:0.000} collective " +
+                                              $"{m.Aircraft.GetInputs().throttle:0.00}{Vertical(m)}");
                     continue;
                 }
                 GroundPilot g = m.Ground;
