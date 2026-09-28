@@ -16,6 +16,56 @@ namespace WingCommand
             }
         }
 
+        private static readonly HarmonyLib.AccessTools.FieldRef<AeroPart, int> airfoilOf = FieldOrNull();
+        private static readonly UnityEngine.Vector3[] sweep = new UnityEngine.Vector3[46];
+
+        private static HarmonyLib.AccessTools.FieldRef<AeroPart, int> FieldOrNull()
+        {
+            try
+            {
+                return HarmonyLib.AccessTools.FieldRefAccess<AeroPart, int>("airfoil");
+            }
+            catch (System.Exception)
+            {
+                return null;
+            }
+        }
+
+        /// <summary>The 1-g stall speed its wings give at its weight now (m/s EAS; 0 when unreadable): the airflow swept from −5° to
+        /// 40° across the pitch plane, each part's lift as the game computes it (CL(α)·S along the lift normal, decompiled
+        /// AeroJob_Math), its vertical share summed; the best total is the wings' ΣCL·S (<see cref="LiftStall"/>). Fins and
+        /// the fuselage lift sideways or not at all and add nothing.</summary>
+        public static float LiftStallSpeed(Aircraft a)
+        {
+            if (a == null || a.partLookup == null) return 0f;
+            AircraftParameters parameters = a.GetAircraftParameters();
+            UnityEngine.Quaternion toBody = UnityEngine.Quaternion.Inverse(a.transform.rotation);
+            float best = 0f;
+            for (int k = 0; k < sweep.Length; k++)
+            {
+                float alpha = (k - 5) * UnityEngine.Mathf.Deg2Rad;
+                // Nose up by alpha to the airflow: the air meets the aircraft from ahead and below.
+                UnityEngine.Vector3 v = new UnityEngine.Vector3(0f, -UnityEngine.Mathf.Sin(alpha), UnityEngine.Mathf.Cos(alpha));
+                float total = 0f;
+                foreach (UnitPart part in a.partLookup)
+                {
+                    if (!(part is AeroPart aero) || aero.WingArea <= 0f || aero.LiftNormal == null) continue;
+                    UnityEngine.Quaternion r = toBody * aero.LiftNormal.rotation;
+                    UnityEngine.Vector3 local = UnityEngine.Quaternion.Inverse(r) * v;
+                    float partAlpha = UnityEngine.Mathf.Atan2(local.y, local.z);
+                    int foil = airfoilOf != null ? airfoilOf(aero) : -1;
+                    float cl = foil >= 0 && parameters != null && parameters.airfoils != null && foil < parameters.airfoils.Length
+                        && parameters.airfoils[foil]?.liftCoef != null
+                        ? parameters.airfoils[foil].liftCoef.Evaluate(partAlpha)
+                        : 1.8f * UnityEngine.Mathf.Sin(5f * partAlpha);
+                    UnityEngine.Vector3 lift = -UnityEngine.Vector3.Cross(v, r * UnityEngine.Vector3.right).normalized;
+                    total += UnityEngine.Vector3.Dot(lift, UnityEngine.Vector3.up) * cl * aero.WingArea;
+                }
+                if (total > best) best = total;
+            }
+            return LiftStall.Speed(a.GetMass(), best);
+        }
+
         /// <summary>The class of a type, from its prefab (fixed-wing when unknown).</summary>
         public static AirframeClass ClassOf(AircraftDefinition d)
         {

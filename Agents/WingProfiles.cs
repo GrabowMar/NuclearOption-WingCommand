@@ -24,11 +24,19 @@ namespace WingCommand
             }
             string key = inputs.UnitName ?? "generic";
             if (cache.TryGetValue(key, out AirframeProfile p)) return p;
+            try
+            {
+                inputs.LiftStallSpeed = ProfileReader.LiftStallSpeed(a);
+            }
+            catch (System.Exception e)
+            {
+                Plugin.Logger.LogWarning("[Profile] could not read " + key + "'s wings: " + e.Message);
+            }
             var rejected = new List<string>();
             p = WingData.Profiles.Build(inputs, rejected);
             foreach (string r in rejected) Plugin.Logger.LogWarning("[Data] airframe override ignored: " + r);
             cache[key] = p;
-            Plugin.LogVerbose($"[Profile] {key}: stall {p.StallSpeed:0} m/s, corner {p.CornerSpeed:0}, max {p.MaxSpeed:0}, " +
+            Plugin.LogVerbose($"[Profile] {key}: stall {p.StallSpeed:0} m/s (published {inputs.PublishedStallKmh / 3.6f:0}, wings {inputs.LiftStallSpeed:0}), corner {p.CornerSpeed:0}, max {p.MaxSpeed:0}, " +
                 $"g {p.GLimit:0.0}, roll {p.RollRateMaxDps:0} deg/s" +
                 (p.Class != AirframeClass.FixedWing ? $", hover collective {p.HoverCollective:0.00}" : ""));
             return p;

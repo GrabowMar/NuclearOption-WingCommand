@@ -23,6 +23,8 @@ namespace WingCommand
         /// <summary>Landing gear: the steering leg's lock (degrees, signed: its sign reverses the wheel) and slew rate,
         /// the wheelbase (steering leg to braked legs), and the wingspan.</summary>
         public float SteerLockDeg, SteerRateDps, WheelbaseM, SpanM;
+        /// <summary>The 1-g stall speed (m/s EAS) its wings give at its weight (<see cref="LiftStall"/>); 0 unknown.</summary>
+        public float LiftStallSpeed;
     }
 #pragma warning restore CS0649
 
@@ -33,6 +35,8 @@ namespace WingCommand
         public string Id = "generic";
         public AirframeClass Class = AirframeClass.FixedWing;
         public float StallSpeed = 55f, CornerSpeed = 170f, MaxSpeed = 300f, MilSpeed = 255f, RefAirspeed = 200f;
+        /// <summary>How far the wings' stall speed may raise the published one.</summary>
+        public static float LiftStallCap = 2f;
         public float CruiseThrottle = 0.6f;
         public float GLimit = 9f, NegativeGLimit = 3f;
         /// <summary>Seed for the in-flight roll authority (<see cref="RateAuthority"/>) and its upper bound: the FBW
@@ -99,6 +103,9 @@ namespace WingCommand
             if (n.PublishedStallKmh > 0f) p.StallSpeed = n.PublishedStallKmh / 3.6f;
             else if (n.LandingSpeed > 0f) p.StallSpeed = n.LandingSpeed / 1.3f;
             else if (n.TakeoffSpeed > 0f) p.StallSpeed = n.TakeoffSpeed / 1.15f;
+            // The wings' own stall speed wins over a lower published one (at most twice it: a bad lift read never grounds a jet).
+            if (n.LiftStallSpeed > 0f && n.Class != AirframeClass.Rotary)
+                p.StallSpeed = Math.Max(p.StallSpeed, Math.Min(n.LiftStallSpeed, LiftStallCap * p.StallSpeed));
             float corner = n.FbwCornerSpeed > 0f ? n.FbwCornerSpeed : n.CornerSpeed;
             if (corner > 0f) p.CornerSpeed = corner;
             if (n.MaxSpeed > 0f)

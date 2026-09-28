@@ -46,6 +46,35 @@ namespace WingCommand.PureTests
         }
 
         [Fact]
+        public void TheWingsStallSpeedWinsOverALowPublishedOne()
+        {
+            // Overnight 2026-09-28: the EW-25 publishes 119 km/h (33 m/s) but could not hold 1 g at 62 m/s and 71° bank; its
+            // envelope let it bank 86° at 67 m/s and it stalled into the ground after take-off.
+            var p = AirframeProfile.Derive(new ProfileInputs { PublishedStallKmh = 119f, LiftStallSpeed = 55f });
+            Assert.Equal(55f, p.StallSpeed, 3);
+        }
+
+        [Fact]
+        public void AHigherPublishedStallSpeedStands() =>
+            Assert.Equal(75f, AirframeProfile.Derive(new ProfileInputs { PublishedStallKmh = 270f, LiftStallSpeed = 60f }).StallSpeed, 3);
+
+        [Fact]
+        public void TheWingsEstimateIsCappedAtTwiceThePublishedSpeed() =>
+            Assert.Equal(60f, AirframeProfile.Derive(new ProfileInputs { PublishedStallKmh = 108f, LiftStallSpeed = 90f }).StallSpeed, 3);
+
+        [Fact]
+        public void AHelicopterIgnoresItsWings() =>
+            Assert.Equal(23f, AirframeProfile.Derive(new ProfileInputs { Class = AirframeClass.Rotary, PublishedStallKmh = 23f * 3.6f, LiftStallSpeed = 40f }).StallSpeed, 3);
+
+        [Fact]
+        public void TheStallSpeedFollowsFromWeightAndLift()
+        {
+            // 1-g lift at sea level: m·g = ½·ρ·V²·ΣCL·S.
+            Assert.Equal(50f, LiftStall.Speed(10000f, 2f * 10000f * 9.81f / (1.225f * 2500f)), 2);
+            Assert.Equal(0f, LiftStall.Speed(10000f, 0f));
+        }
+
+        [Fact]
         public void MissingNativeNumbersKeepGenericDefaults()
         {
             AirframeProfile p = AirframeProfile.Derive(new ProfileInputs());
