@@ -13,7 +13,7 @@ namespace WingCommand
     internal sealed class FieldTraffic
     {
         public static float DeadlockPeriod = 1f, RunwayMargin = 5f, BlockSeconds = 20f, BlockCorridor = 10f, StandingRadius = 3f;
-        public static float PassedRadius = 20f;
+        public static float PassedRadius = 20f, HoldingRadius = 20f;
         /// <summary>A jet handed to the game's landing has the runway to itself until it is down, its landing fails, or this
         /// long has passed (a turn never given back lapses). In game a 60 s spacing let two jets into the pattern, and the
         /// game's final approach aborts when another aircraft on the landing list is ahead and closing.</summary>
@@ -162,6 +162,20 @@ namespace WingCommand
         public void ReleaseLanding(int owner)
         {
             if (lander == owner) lander = -1;
+        }
+
+        /// <summary>Another member waiting to line up in this group stands at the hold-short (within <see cref="HoldingRadius"/>)
+        /// and nearer it than <paramref name="owner"/>: it goes first. Overnight 2026-09-28 (SFB-81, Boscali North): whoever asked
+        /// first after the group formed lined up, and a relocated bomber swept past the one holding short and wrecked both.</summary>
+        public bool OtherLinesUpFirst(int owner, Vec3 pos)
+        {
+            int hold = Graph.HoldShort(RunwayIndex, Reverse);
+            if (hold < 0) return false;
+            Vec3 at = Graph.NodePos(hold);
+            float mine = Math.Min((pos - at).Horizontal.Length, HoldingRadius);
+            foreach (KeyValuePair<int, Vec3> m in positions)
+                if (m.Key != owner && Departures.WaitingToLineUp(m.Key) && (m.Value - at).Horizontal.Length < mine) return true;
+            return false;
         }
 
         public bool TryGetPosition(int owner, out Vec3 pos) => positions.TryGetValue(owner, out pos);

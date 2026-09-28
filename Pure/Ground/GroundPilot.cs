@@ -52,7 +52,10 @@ namespace WingCommand
     internal sealed class GroundPilot
     {
         public static float ParkedSeconds = 2f, ClaimAhead = 80f, NodeClearRadius = 15f, FollowGap = 40f, QueueReach = 400f;
-        public static float ObstacleCorridor = 15f, ObstacleGap = 30f, ObstacleLookahead = 150f, PassMargin = 2f;
+        public static float ObstacleCorridor = 15f, ObstacleGap = 30f, ObstacleLookahead = 150f, PassMargin = 2f, ForeignHalfSpan = 8f;
+        /// <summary>Leaving a stand (or a service-point spawn) with the way out more than this far round from the nose, it is towed
+        /// round where it stands first (overnight 2026-09-28: a refitted FS-20 U-turned out of its stand into something).</summary>
+        public static float TowTurnDeg = 100f, TowLookMetres = 20f;
         public static float ThresholdEntry = 10f, ClearedPastThreshold = 30f, LineupRunIn = 25f, AlignTail = 80f;
         public static float LineupTolerance = 3f, LineupAlignDeg = 10f, StoppedSpeed = 0.5f;
         public static float LiftOffHeight = 30f, HoverExitHeight = 3f, HoverExitReached = 5f;
@@ -345,6 +348,7 @@ namespace WingCommand
                         else
                         {
                             RouteFrom(new[] { s.Pos }, StartNode(s.Pos));
+                            TowRound(s);
                             Enter(GroundPhase.TaxiOut, time);
                             Log(events, time, slot, WingEventKind.Taxiing);
                         }
@@ -379,6 +383,24 @@ namespace WingCommand
             }
             LastOutput = o;
             return o;
+        }
+
+        /// <summary>From a stand or a service point whose way out lies behind it: turned where it stands to face the way out (the
+        /// engine moves it, as a tow would), never a tight U-turn next to what surrounds a stand. A hangar spawn faces out already.</summary>
+        private void TowRound(in AircraftState s)
+        {
+            if (hangar >= 0 || path.Length < 2) return;
+            Vec3 nose = s.Fwd.Horizontal;
+            if (nose.SqrLength < 1e-4f) return;
+            Vec3 way = Vec3.Zero;
+            for (int i = 1; i < path.Length && way.SqrLength < 1e-4f; i++)
+                if ((path[i] - s.Pos).Horizontal.Length >= TowLookMetres || i == path.Length - 1) way = (path[i] - s.Pos).Horizontal;
+            if (way.SqrLength < 1e-4f) return;
+            float cos = Vec3.Dot(nose.Normalized, way.Normalized);
+            if (cos >= (float)Math.Cos(TowTurnDeg * Scalar.Deg2Rad)) return;
+            relocation = new Pose(s.Pos, way.Normalized);
+            relocationPending = true;
+            spawn = relocation;
         }
 
         /// <summary>A pending relocation (the engine moves the aircraft there, once).</summary>
@@ -512,7 +534,7 @@ namespace WingCommand
                 Log(events, time, slot, WingEventKind.Parked);
                 return new ControlOutput { Brake = 1f };
             }
-            if (Phase == GroundPhase.HoldShort && atGoal && traffic.Departures.MayLineUp(Owner, time))
+            if (Phase == GroundPhase.HoldShort && atGoal && !traffic.OtherLinesUpFirst(Owner, s.Pos) && traffic.Departures.MayLineUp(Owner, time))
             {
                 BeginLineUp(s.Pos, time);
                 Log(events, time, slot, WingEventKind.LiningUp);
@@ -699,7 +721,7 @@ namespace WingCommand
             // Anything foreign in the lane ahead (the whole runway: one long segment): hold or reject the takeoff.
             float along = Along(s.Pos);
             bool blocked = false;
-            foreach (Vec3 obstacle in traffic.Obstacles) blocked |= OnPathAt(obstacle, along, s, out _) < float.MaxValue;
+            foreach (Vec3 obstacle in traffic.Obstacles) blocked |= OnPathAt(obstacle, along, s, ObstacleCorridor, out _) < float.MaxValue;
             o.Throttle = blocked ? 0f : 1f;
             o.Brake = blocked ? 1f : 0f;
             float speed = Vec3.Dot(s.Vel, s.Fwd.Horizontal.Normalized);
@@ -1069,15 +1091,18 @@ namespace WingCommand
             float stop = float.MaxValue;
             member = -1;
             if (path.Length < 2) return stop;
+            // Overnight 2026-09-28 (SFB-81): a fixed 15 m corridor let a 42 m wingspan sweep a member 25 m off the path. A member
+            // is taken to be as wide as this aircraft; a foreign one as wide as a fighter.
+            float foreign = Math.Max(ObstacleCorridor, 0.5f * p.SpanM + ForeignHalfSpan), members = Math.Max(ObstacleCorridor, p.SpanM + PassMargin);
             foreach (Vec3 o in traffic.Obstacles)
             {
-                float at = OnPathAt(o, along, s, out _);
+                float at = OnPathAt(o, along, s, foreign, out _);
                 if (at - ObstacleGap < stop) stop = at - ObstacleGap;
             }
             foreach (KeyValuePair<int, Vec3> m in traffic.Positions)
             {
                 if (m.Key == Owner) continue;
-                float at = OnPathAt(m.Value, along, s, out float lateral);
+                float at = OnPathAt(m.Value, along, s, members, out float lateral);
                 if (at == float.MaxValue) continue;
                 // It waits for us: the lower id goes first, when it passes clear of it.
                 if (Owner < m.Key && traffic.WaitsFor(m.Key) == Owner && lateral >= p.SpanM + PassMargin) continue;
@@ -1089,16 +1114,16 @@ namespace WingCommand
         }
 
         /// <summary>How far along the path this one would reach an aircraft at <paramref name="o"/> (float.MaxValue: never):
-        /// one within <see cref="ObstacleCorridor"/> of the path ahead (up to <see cref="ObstacleLookahead"/>), or of the
+        /// one within <paramref name="corridor"/> of the path ahead (up to <see cref="ObstacleLookahead"/>), or of the
         /// line ahead of the nose; <paramref name="lateral"/> is how far it stands off that line.</summary>
-        private float OnPathAt(Vec3 o, float along, in AircraftState s, out float lateral)
+        private float OnPathAt(Vec3 o, float along, in AircraftState s, float corridor, out float lateral)
         {
             float at = float.MaxValue;
             lateral = float.MaxValue;
             Vec3 nose = s.Fwd.Horizontal.SqrLength > 1e-4f ? s.Fwd.Horizontal.Normalized : Vec3.Forward;
             Vec3 d = (o - s.Pos).Horizontal;
             float ahead = Vec3.Dot(d, nose), side = Math.Abs(Vec3.Dot(d, Vec3.Cross(Vec3.Up, nose)));
-            if (ahead > 0f && ahead < ObstacleLookahead && side < ObstacleCorridor)
+            if (ahead > 0f && ahead < ObstacleLookahead && side < corridor)
             {
                 at = along + ahead;
                 lateral = side;
@@ -1110,7 +1135,7 @@ namespace WingCommand
                 if (len < 1e-4f) continue;
                 Vec3 u = ab / len, ao = o.Horizontal - a;
                 float t = Vec3.Dot(ao, u), off = (ao - u * t).Length;
-                if (t < 0f || t > len || off >= ObstacleCorridor || cum[i] + t <= along) continue;
+                if (t < 0f || t > len || off >= corridor || cum[i] + t <= along) continue;
                 at = Math.Min(at, cum[i] + t);
                 lateral = Math.Min(lateral, off);
                 break;

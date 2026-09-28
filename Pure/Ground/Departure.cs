@@ -111,6 +111,10 @@ namespace WingCommand
             return true;
         }
 
+        /// <summary>Queued and not lined up yet, in the group once it formed (a later arrival waits for the next group).</summary>
+        public bool WaitingToLineUp(int owner) =>
+            queue.Contains(owner) && !order.Contains(owner) && !removed.Contains(owner) && (!RunwayLocked || group.Contains(owner));
+
         /// <summary>The member is well past the threshold on its way to its slot: the next may line up.</summary>
         public void ClearedThreshold(int owner) => cleared.Add(owner);
 

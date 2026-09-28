@@ -85,7 +85,7 @@ namespace WingCommand
                 if (FuelPrev != null)
                     foreach (FuelTank f in o.GetComponentsInChildren<FuelTank>(true)) FuelPrev.SetValue(f, Vector3.zero);
             }
-            Plugin.Logger.LogWarning($"[Ground] relocated {a.definition.unitName} to ({to.Pos.X:0}, {to.Pos.Z:0}) after it was stuck");
+            Plugin.Logger.LogWarning($"[Ground] relocated {a.definition.unitName} to ({to.Pos.X:0}, {to.Pos.Z:0}) heading {Vec3.HeadingDeg(to.Fwd):0} (stuck, or towed round at its stand)");
             WingRuntime.Instance?.StartCoroutine(Watch(a, target));
         }
 
