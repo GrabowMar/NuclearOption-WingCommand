@@ -32,7 +32,7 @@ namespace WingCommand
         /// <summary>A new mission: no attack order, no refusal or override carried over (review M5d I1).</summary>
         private void ResetCombat()
         {
-            attackCount = 0;
+            claims.ClearAll();
             reallocateClock = 0f;
             outnumberedClock = 0f;
             judge.Reset();
@@ -211,7 +211,7 @@ namespace WingCommand
                 if (judge.Overridden) judge.Reset();
                 return;
             }
-            if (attackCount > 0) return;
+            if (Attacking) return;
             LastHostiles = CountHostiles(any, sum / engaged);
             if (!judge.Update(LastHostiles, engaged, FallBackRatio, step)) return;
             foreach (WingMember m in Members)
@@ -526,8 +526,8 @@ namespace WingCommand
         /// Returns how many are engaged.</summary>
         public int Engage(Func<WingMember, bool> who = null)
         {
-            attackCount = 0;
-            attackWho = null;
+            // A3: they fight on their own choices — out of any attack order (another element's stays).
+            Unclaim(who);
             return EngageAll(who);
         }
 
@@ -566,16 +566,42 @@ namespace WingCommand
         }
 
         public static float ReallocateSeconds = 1f;
+        // A3 (spec WMC rebuild §AI R8): up to one attack order per element at once, each over the members it claimed (AttackClaims:
+        // the newest order on a member wins), each with its own targets.
+        private readonly AttackClaims claims = new AttackClaims();
+        private readonly Unit[,] setTargets = new Unit[AttackClaims.MaxSets, TargetAllocator.MaxTargets];
+        private readonly int[] setCount = new int[AttackClaims.MaxSets];
+        private readonly bool[,] setWasAlive = new bool[AttackClaims.MaxSets, TargetAllocator.MaxTargets];
+        private readonly List<uint> claimIds = new List<uint>(FormationCatalog.MaxSlots);
         private readonly Unit[] attackTargets = new Unit[TargetAllocator.MaxTargets];
-        private int attackCount;
         private float reallocateClock;
+
+        /// <summary>An attack order is running (the odds judge and the reallocation read it).</summary>
+        private bool Attacking
+        {
+            get
+            {
+                for (int s = 0; s < AttackClaims.MaxSets; s++)
+                    if (claims.Active(s) && setCount[s] > 0) return true;
+                return false;
+            }
+        }
+
+        /// <summary>The members <paramref name="who"/> names leave every attack order (all of them for null).</summary>
+        private void Unclaim(Func<WingMember, bool> who)
+        {
+            if (who == null)
+            {
+                claims.ClearAll();
+                return;
+            }
+            foreach (WingMember m in Members)
+                if ((object)m.Aircraft != null && who(m)) claims.Release(m.Aircraft.persistentID.Id);
+        }
         private readonly bool[] canAttack = new bool[FormationCatalog.MaxSlots * TargetAllocator.MaxTargets];
         private readonly float[] keepScale = new float[FormationCatalog.MaxSlots];
-        /// <summary>The members an attack order is restricted to (a scoped order, Buddy Attack), null for the whole wing.</summary>
-        private Func<WingMember, bool> attackWho;
         private readonly float[] targetDistance = new float[FormationCatalog.MaxSlots * TargetAllocator.MaxTargets];
         private readonly bool[] targetAlive = new bool[TargetAllocator.MaxTargets];
-        private readonly bool[] targetWasAlive = new bool[TargetAllocator.MaxTargets];
         private readonly int[] currentTarget = new int[FormationCatalog.MaxSlots], nextTarget = new int[FormationCatalog.MaxSlots];
         private readonly WingMember[] engagedNow = new WingMember[FormationCatalog.MaxSlots];
         private readonly float[] targetLost = new float[FormationCatalog.MaxSlots];
@@ -597,18 +623,24 @@ namespace WingCommand
         /// engaged.</summary>
         public int Attack(IReadOnlyList<Unit> targets, Func<WingMember, bool> who = null)
         {
-            attackCount = 0;
-            // A scoped order is those members': the others stay out of it (review M5f I3).
-            attackWho = who;
+            int n = EngageAll(who);
+            // A scoped order is those members': the others stay out of it (review M5f I3). A3: it claims them from any older order,
+            // and an order another element flies goes on.
+            claimIds.Clear();
+            foreach (WingMember m in Members)
+                if (m.Engaged && !m.Released && m.Alive && (object)m.Aircraft != null && (who == null || who(m)))
+                    claimIds.Add(m.Aircraft.persistentID.Id);
+            if (n == 0 || claimIds.Count == 0) return n;
+            int set = claims.Claim(claimIds);
+            setCount[set] = 0;
             if (targets != null)
                 foreach (Unit u in targets)
-                    if (u != null && !u.disabled && attackCount < attackTargets.Length)
+                    if (u != null && !u.disabled && setCount[set] < TargetAllocator.MaxTargets)
                     {
-                        targetWasAlive[attackCount] = true;
-                        attackTargets[attackCount++] = u;
+                        setWasAlive[set, setCount[set]] = true;
+                        setTargets[set, setCount[set]++] = u;
                     }
-            int n = EngageAll(who);
-            if (n == 0) attackCount = 0;
+            if (setCount[set] == 0) claims.End(set);
             reallocateClock = 0f;
             Allocate(0f);
             return n;
@@ -618,28 +650,41 @@ namespace WingCommand
         /// fight on their own choices.</summary>
         private void Allocate(float dt)
         {
-            if (attackCount == 0) return;
+            for (int s = 0; s < AttackClaims.MaxSets; s++)
+                if (claims.Active(s)) Allocate(s, dt);
+        }
+
+        /// <summary>Attack order <paramref name="set"/>'s targets across its engaged members.</summary>
+        private void Allocate(int set, float dt)
+        {
+            int attackCount = setCount[set];
+            if (attackCount == 0)
+            {
+                claims.End(set);
+                return;
+            }
             bool any = false;
             for (int t = 0; t < attackCount; t++)
             {
+                attackTargets[t] = setTargets[set, t];
                 targetAlive[t] = attackTargets[t] != null && !attackTargets[t].disabled;
                 any |= targetAlive[t];
-                if (targetWasAlive[t] && !targetAlive[t]) Destroyed(attackTargets[t]);
-                targetWasAlive[t] = targetAlive[t];
+                if (setWasAlive[set, t] && !targetAlive[t]) Destroyed(attackTargets[t]);
+                setWasAlive[set, t] = targetAlive[t];
             }
             int k = 0;
             foreach (WingMember m in Members)
-                if (m.Engaged && !m.Released && m.Alive && InNativeCombat(m) && k < engagedNow.Length &&
-                    (attackWho == null || attackWho(m))) engagedNow[k++] = m;
+                if (m.Engaged && !m.Released && m.Alive && (object)m.Aircraft != null && InNativeCombat(m) && k < engagedNow.Length &&
+                    claims.SetOf(m.Aircraft.persistentID.Id) == set) engagedNow[k++] = m;
             if (k == 0)
             {
                 // Everyone taken back: the order ends rather than capturing the next Engage (review M5b I1).
-                attackCount = 0;
+                claims.End(set);
                 return;
             }
             if (!any)
             {
-                attackCount = 0;
+                claims.End(set);
                 for (int i = 0; i < k; i++) Assign(engagedNow[i], null);
                 return;
             }
@@ -718,12 +763,8 @@ namespace WingCommand
         /// <summary>Every engaged member back into formation (Commanded). Returns how many.</summary>
         public int Disengage(Func<WingMember, bool> who = null)
         {
-            if (who == null)
-            {
-                attackCount = 0;
-                attackWho = null;
-                judge.Reset();
-            }
+            Unclaim(who);
+            if (who == null) judge.Reset();
             int n = 0;
             foreach (WingMember m in Members)
                 if (m.Engaged && (who == null || who(m)))
@@ -781,7 +822,7 @@ namespace WingCommand
                 FollowOn(m, reason);
             }
             JudgeOdds(dt);
-            if (attackCount > 0 && (reallocateClock += dt) >= ReallocateSeconds)
+            if (Attacking && (reallocateClock += dt) >= ReallocateSeconds)
             {
                 float step = reallocateClock;
                 reallocateClock = 0f;
