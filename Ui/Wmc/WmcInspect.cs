@@ -241,12 +241,17 @@ namespace WingCommand
         private void RefreshWhy(WmcContext c, WingMember m)
         {
             float now = c.MissionTime;
-            bool ours = !m.Engaged && m.Recovery == null && !m.OnGround;
-            int k = ours ? m.Why.Key(now) : m.Engaged ? -2 : m.OnGround ? -3 : -4;
+            // Review I1: only the landing itself is the game's; the approach home and a settle are Wing Command's (no formation
+            // limits to say then), and a report that stopped coming says nothing stale.
+            RecoveryPhase phase = m.Recovery != null ? m.Recovery.Phase : RecoveryPhase.Done;
+            bool ours = !m.Engaged && m.Recovery == null && !m.OnGround && m.Why.Live(now);
+            int k = ours ? m.Why.Key(now) : m.Engaged ? -2 : m.OnGround ? -3 : m.Recovery != null ? -4 - (int)phase : m.Settle != null ? -20 : -21;
             if (k == whyKey) return;
             whyKey = k;
             WmcKit.Set(why, ours ? m.Why.Line(now) : m.Engaged ? "THE GAME'S COMBAT AI FLIES IT (ENGAGED)"
-                : m.OnGround ? "ON THE GROUND · TAXI AND TAKE-OFF ARE WING COMMAND'S" : "THE GAME'S LANDING FLIES IT (RECOVERY)");
+                : m.OnGround ? "ON THE GROUND · TAXI AND TAKE-OFF ARE WING COMMAND'S"
+                : m.Recovery != null ? (phase == RecoveryPhase.Landing ? "THE GAME'S LANDING FLIES IT" : "FLYING HOME TO LAND · WING COMMAND")
+                : m.Settle != null ? "SETTLING AT ITS POINT · WING COMMAND" : "NOT IN FORMATION FLIGHT");
         }
 
         private void RefreshRecent(WmcContext c)

@@ -12,14 +12,28 @@ namespace WingCommand
         public const float HoldSeconds = 1f;
         public const int MaxChars = 60;
         public const string Free = "NOTHING LIMITS IT";
+        /// <summary>Reports further apart than this (s) mean the member left formation flight (a fight, a settle, a recovery): what
+        /// held before is forgotten.</summary>
+        public const float GapSeconds = 0.5f;
 
         private const int Gcas = 0, Collision = 1, Bank = 2, Nz = 3, Vertical = 4, Speed = 5, Kinds = 6;
         private readonly float[] since = { float.NaN, float.NaN, float.NaN, float.NaN, float.NaN, float.NaN };
         private readonly ConstraintId[] by = new ConstraintId[Kinds];
         private BindingReport last;
+        private float lastUpdate = float.NaN;
+
+        /// <summary>Reports are coming (the member flies in formation now).</summary>
+        public bool Live(float time) => !float.IsNaN(lastUpdate) && time - lastUpdate <= GapSeconds;
 
         public void Update(in BindingReport r, float time)
         {
+            if (!float.IsNaN(lastUpdate) && time - lastUpdate > GapSeconds)
+                for (int k = 0; k < Kinds; k++)
+                {
+                    since[k] = float.NaN;
+                    by[k] = ConstraintId.None;
+                }
+            lastUpdate = time;
             Track(Gcas, r.GcasActive ? ConstraintId.Gcas : ConstraintId.None, time);
             Track(Collision, r.CollisionActive ? ConstraintId.Collision : ConstraintId.None, time);
             Track(Bank, r.BankBy, time);

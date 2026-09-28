@@ -71,5 +71,20 @@ namespace WingCommand.PureTests
                 foreach (char ch in line) Assert.False(ch == '…' || (ch >= '←' && ch <= '⇿') || (ch >= '■' && ch <= '◿'), line);
             }
         }
+
+        [Fact]
+        public void AReasonFromBeforeAGapInTheReportsIsForgotten()
+        {
+            // Review (combat): WHY kept a formation reason with a growing counter while the member settled or fought (its reports
+            // stopped), and after a fight said a limit at once from its pre-combat start.
+            var why = new WhyText();
+            for (float t = 0f; t <= 5f; t += 0.1f) why.Update(Bank(ConstraintId.Terrain, 25f, 60f), t);
+            Assert.True(why.Live(5f));
+            Assert.False(why.Live(8f));
+            why.Update(Bank(ConstraintId.Terrain, 25f, 60f), 70f);
+            Assert.Equal(WhyText.Free, why.Line(70.5f));          // held again for less than a second
+            for (float t = 70.1f; t <= 71.2f; t += 0.1f) why.Update(Bank(ConstraintId.Terrain, 25f, 60f), t);
+            Assert.StartsWith("BANK HELD BY THE TERRAIN FLOOR", why.Line(71.2f));
+        }
     }
 }
