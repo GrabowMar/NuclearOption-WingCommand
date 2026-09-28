@@ -117,6 +117,7 @@ namespace WingCommand.FlightSim
 
         public void SetThrottleState(float throttle) => ThrottleActual = Clamp(throttle, 0f, 1f);
         public void SetBankState(float bankDeg) => bank = bankDeg * Deg;
+        public void SetGammaState(float gammaDeg) => gamma = gammaDeg * Deg;
 
         /// <summary>Throttle that balances drag in 1 g level flight at the current speed and height.</summary>
         public float TrimThrottle()

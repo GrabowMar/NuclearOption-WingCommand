@@ -299,5 +299,62 @@ namespace WingCommand.PureTests
             Assert.True(Math.Abs(a.BankDeg) < 50f, $"bank {a.BankDeg:0}");
             Assert.Equal(ConstraintId.Envelope, report.SpeedBy);
         }
+
+        private static AircraftState Climbing(float speed, float gammaDeg)
+        {
+            float g = gammaDeg * Scalar.Deg2Rad;
+            var vel = new Vec3(0f, speed * (float)Math.Sin(g), speed * (float)Math.Cos(g));
+            return new AircraftState { Pos = new Vec3(0f, 500f, 0f), Vel = vel, Tas = speed, Qbar = Isa.DynamicPressure(0f, speed), Nz = 1f };
+        }
+
+        [Fact]
+        public void TheSpeedPriorityCutTurnsASteepClimbWithoutAskingItToSlowDown()
+        {
+            // Sim 2026-09-28 (EW-25, 45 deg zoom at 85 m/s): the cut, applied as a vertical acceleration, read along the path as a
+            // ~7 m/s² deceleration and the energy law idled the engines of an aircraft protected for being slow.
+            float speed = Fighter.MinimumSpeed(1f) * 1.3f;
+            AircraftState s = Climbing(speed, 45f);
+            Vec3 path = s.Vel / speed;
+            var g = new GuidanceCommand { VelCmd = new Vec3(0f, 40f, 200f), Accel = path * 3f };
+            var report = new BindingReport();
+            new ConstraintChain().ApplyAccel(ref g, s, Floor(float.NaN), Fighter, ref report);
+            Assert.True(g.VelCmd.Y < 40f, $"climb {g.VelCmd.Y:0.0} m/s");
+            Assert.True(Vec3.Dot(g.Accel, path) >= 3f - 1e-3f, $"along-path {Vec3.Dot(g.Accel, path):0.00} m/s²");
+            Assert.Equal(ConstraintId.Envelope, report.SpeedBy);
+        }
+
+        [Fact]
+        public void ASlowAircraftClimbingFasterThanCommandedTradesTheClimbForSpeed()
+        {
+            // At the minimum speed, 20 m/s of climb over the command becomes g·20/V of speed, never a throttle cut.
+            float speed = Fighter.MinimumSpeed(1f);
+            AircraftState s = Climbing(speed, 30f);
+            Vec3 path = s.Vel / speed;
+            var g = new GuidanceCommand { VelCmd = new Vec3(0f, s.Vel.Y - 20f, 150f), Accel = path * -4f };
+            var report = new BindingReport();
+            new ConstraintChain().ApplyAccel(ref g, s, Floor(float.NaN), Fighter, ref report);
+            float keep = Scalar.G * 20f / speed;
+            Assert.True(Vec3.Dot(g.Accel, path) >= keep - 1e-3f, $"along-path {Vec3.Dot(g.Accel, path):0.00} m/s² (keep {keep:0.00})");
+        }
+
+        [Theory]
+        [InlineData(1.3f, true)]
+        [InlineData(2.5f, false)]
+        public void APushOverKeepsHalfAGOfLiftOnlyWhileSlow(float speedOverMinimum, bool limited)
+        {
+            // Sim 2026-09-28: a slow EW-25 pushed to 0 g lost its roll and went inverted; a jet with speed in hand may still unload.
+            float speed = Fighter.MinimumSpeed(1f) * speedOverMinimum;
+            AircraftState s = Climbing(speed, 30f);
+            var g = new GuidanceCommand { VelCmd = s.Vel, Accel = new Vec3(0f, -2f * Scalar.G, 0f) };
+            var report = new BindingReport();
+            new ConstraintChain().ApplyAccel(ref g, s, Floor(float.NaN), Fighter, ref report);
+            AttitudeCommand a = AccelMapping.Map(g, s.Vel, 0f);
+            if (limited)
+            {
+                Assert.Equal(0.5f, a.Nz, 2);
+                Assert.Equal(ConstraintId.Envelope, report.NzBy);
+            }
+            else Assert.Equal(0f, a.Nz, 2);
+        }
     }
 }

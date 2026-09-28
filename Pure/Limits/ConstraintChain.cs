@@ -13,6 +13,10 @@ namespace WingCommand
         public static float BankFloorDeg = 60f, BankRangeDeg = 25f;
         public static float NzSlew = 3f;
         public static float SpeedProtectFactor = 1.5f, RecoverSinkGain = 1f, RecoverSinkMax = 10f;
+        /// <summary>Least lift (g) above the horizon of the velocity frame a push-over may leave the wing while slow: all of it
+        /// from <see cref="PushFloorFactor"/>·Vmin(1) up to <see cref="SpeedProtectFactor"/>·Vmin(1), none from
+        /// <see cref="PushFadeFactor"/> times that, nor at Vmin(1) itself.</summary>
+        public static float MinPushG = 0.5f, PushFadeFactor = 1.2f, PushFloorFactor = 1.1f;
 
         private bool gcas;
         private float lastBank, lastNz;
@@ -23,17 +27,57 @@ namespace WingCommand
         public void ApplyAccel(ref GuidanceCommand c, in AircraftState s, in LimitContext ctx, AirframeProfile p,
             ref BindingReport r)
         {
+            float speed = s.Vel.Length;
+            Vec3 path = speed > 1f ? s.Vel / speed : Vec3.Zero;
+
             // Speed priority: a slow aircraft may not climb away its speed (at full throttle the climb would bleed
             // it toward the stall). It clamps the guidance's own vertical acceleration to what the allowed climb
             // needs (never an unbounded cut: the guidance may already have limited it to the lift available), before
-            // the collision bias and the terrain floor, which both still win.
+            // the collision bias and the terrain floor, which both still win. The cut turns the flight path only: read
+            // along a steep climb it would be a demand to slow down, and the energy law idled a slow EW-25 in a 45° zoom
+            // (sim 2026-09-28).
             float maxVy = SpeedLimitedClimb(s, p);
             if (c.VelCmd.Y > maxVy)
             {
                 c.VelCmd = new Vec3(c.VelCmd.X, maxVy, c.VelCmd.Z);
                 float ay = (maxVy - s.Vel.Y) / Math.Max(0.1f, p.TauVel);
-                if (c.Accel.Y > ay) c.Accel = new Vec3(c.Accel.X, ay, c.Accel.Z);
+                if (c.Accel.Y > ay) c.Accel += AcrossPath(Vec3.Up * (ay - c.Accel.Y), path);
                 r.SpeedBy = ConstraintId.Envelope;
+            }
+
+            // A slow aircraft climbing faster than commanded trades that climb for speed; it never throws the energy away
+            // (it idled, braked and stalled instead). Full at the minimum speed, gone at SpeedProtectFactor × it.
+            float slow = SlowWeight(s, p);
+            float excess = s.Vel.Y - c.VelCmd.Y;
+            if (slow > 0f && excess > 0f && speed > 1f)
+            {
+                float keep = slow * Scalar.G * excess / speed, along = Vec3.Dot(c.Accel, path);
+                if (along < keep)
+                {
+                    c.Accel += path * (keep - along);
+                    r.SpeedBy = ConstraintId.Envelope;
+                }
+            }
+
+            // No zero-g push-over while slow: the wing keeps MinPushG of lift above the velocity frame's horizon, so
+            // the bank stays defined and the lift to recover is there (a slow EW-25 unloaded to 0 g lost its roll and went
+            // inverted, sim 2026-09-28). Normal to the path, so the speed demand is untouched; the collision bias and the
+            // terrain floor still win.
+            // At the minimum speed it may unload again: getting the nose down is the stall recovery.
+            float vmin = p.WingMinimumSpeed(1f), slowTop = SpeedProtectFactor * vmin;
+            float push = vmin <= 0f ? 0f
+                : MinPushG * Scalar.SmoothStep(vmin, PushFloorFactor * vmin, s.Eas)
+                  * (1f - Scalar.SmoothStep(slowTop, Math.Max(1.01f, PushFadeFactor) * slowTop, s.Eas));
+            Vec3 across = Vec3.Cross(Vec3.Up, path);
+            if (push > 0f && across.SqrLength > 1e-4f)
+            {
+                Vec3 lift = Vec3.Cross(path, across.Normalized);
+                float vertical = Vec3.Dot(c.Accel + Vec3.Up * Scalar.G, lift) / Scalar.G;
+                if (vertical < push)
+                {
+                    c.Accel += lift * ((push - vertical) * Scalar.G);
+                    r.BindNz(ConstraintId.Envelope, vertical, push);
+                }
             }
 
             if (ctx.CollisionBias.SqrLength > 1e-4f)
@@ -148,6 +192,18 @@ namespace WingCommand
             }
             return -Math.Min(RecoverSinkMax, RecoverSinkGain * (vmin - s.Eas));
         }
+
+        /// <summary>How slow the aircraft is for the speed priority: 1 at or under Vmin(1), falling linearly to 0 at
+        /// <see cref="SpeedProtectFactor"/>·Vmin(1).</summary>
+        public static float SlowWeight(in AircraftState s, AirframeProfile p)
+        {
+            float vmin = p.WingMinimumSpeed(1f);
+            if (vmin <= 0f) return 0f;
+            return 1f - Scalar.Clamp01((s.Eas - vmin) / Math.Max(1f, (SpeedProtectFactor - 1f) * vmin));
+        }
+
+        /// <summary><paramref name="a"/> without its part along the unit <paramref name="path"/>.</summary>
+        private static Vec3 AcrossPath(Vec3 a, Vec3 path) => a - path * Vec3.Dot(a, path);
 
         /// <summary>Seed the authority stage from the aircraft's actual attitude (handover, spawn).</summary>
         public void Track(in AircraftState s) => Track(s, null);
