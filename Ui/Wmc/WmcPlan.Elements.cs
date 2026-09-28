@@ -588,8 +588,7 @@ namespace WingCommand
             }
             string name = store.Plans[index].Name;
             store.Remove(index);
-            WmcPlanFiles.Save();
-            WingToast.Show(name + " deleted");
+            WingToast.Show(WmcPlanFiles.Save() ? name + " deleted" : "Could not delete " + name + " from disk (see the log)");
         }
 
         /// <summary>SAVE: this plan for this theatre (a first save names it PLAN n).</summary>
