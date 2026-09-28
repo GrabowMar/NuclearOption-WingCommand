@@ -26,8 +26,16 @@ namespace WingCommand
             WmcPanel.Instance?.Refresh();
         }
 
-        private void NewPilot()
+        private void NewPilot() => NewPilot(false);
+
+        /// <summary>NEW: with unsaved edits the first press asks, the second drops them (automation's StartNew does not ask).</summary>
+        private void NewPilot(bool confirmed)
         {
+            if (!confirmed && Dirty && !rowGate.Press("#new", Time.unscaledTime))
+            {
+                WingToast.Show(StudioWords.UnsavedAsk);
+                return;
+            }
             WmcNameField.BlurAny();
             draft = PilotStudio.Generate(rng.Next, Taken);
             draftStart = draft.Clone();

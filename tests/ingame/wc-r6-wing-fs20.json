@@ -31,7 +31,7 @@
  {"check":"result_above","path":"flying.wing_release","min":1},
  {"check":"result_above","path":"next.wing_next_is_focus","min":1},
  {"check":"result_above","path":"page2.wing_page","min":1},{"check":"result_above","path":"page2.wing_focus_shown","min":1},
- {"check":"result_above","path":"row0.pressed","min":1},{"check":"result_above","path":"studio.wing_studio","min":1},{"check":"result_above","path":"studio.sq_sub_index","min":1},
+ {"check":"result_above","path":"row0.pressed","min":1},{"check":"result_above","path":"studio.sq_sub_index","min":1},
  {"check":"result_above","path":"down.wing_lost","min":1},{"check":"result_above","path":"down.wing_focus_shown","min":1},
  {"check":"result_above","path":"ask.wing_local_armed","min":1},{"check":"result_above","path":"search.wing_local_left","min":1},
  {"check":"result_below","path":"final.overflow","max":0}]}

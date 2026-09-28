@@ -138,6 +138,12 @@ namespace WingCommand
         private void Revert()
         {
             if (draft == null) return;
+            ReadFields();
+            if (Dirty && !rowGate.Press("#revert", Time.unscaledTime))
+            {
+                WingToast.Show(StudioWords.UnsavedAsk);
+                return;
+            }
             WmcNameField.BlurAny();
             Entry e = draftNew ? null : Find(selected);
             if (e != null) Select(e);

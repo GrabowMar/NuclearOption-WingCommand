@@ -89,6 +89,11 @@
   },
   {
    "op": "call",
+   "method": "WingCommand.Automation.WmcMap",
+   "store": "orbit_check"
+  },
+  {
+   "op": "call",
    "method": "WingCommand.Automation.Wmc",
    "store": "routed",
    "args": {
@@ -153,11 +158,6 @@
   {
    "op": "wait",
    "seconds": 1
-  },
-  {
-   "op": "call",
-   "method": "WingCommand.Automation.WmcMap",
-   "store": "orbit_check"
   },
   {
    "op": "call",

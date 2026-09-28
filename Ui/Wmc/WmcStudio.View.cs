@@ -16,6 +16,7 @@ namespace WingCommand
         private static readonly string[] LayerKeys = { "BODY", "FACE", "HAIR", "SUIT", "SCENE" };
         private static readonly string[] LayerIds = { "body", "face", "hair", "suit", "scene" };
         private const float Row = 24f, Field = 26f, StepPitch = 32f, PortraitW = 96f, PortraitH = 144f, KeyW = 64f, RandomW = 76f, BioH = 64f;
+        private const float Foot = 4f + 22f + Field + 6f + 20f;
 
         private WmcScroll scroll;
         private RectTransform view;
@@ -121,18 +122,25 @@ namespace WingCommand
             bioField = WmcNameField.Build(s, new Rect(0f, y, w, BioH), PilotText.BioChars, CommitBio,
                 "A few lines about the pilot, 280 characters at most. SAVE keeps it.", "BIO", multiline: true);
             y -= BioH + 6f;
+            float content = -y;
+            scroll.SetContentHeight(content);
 
-            // Why SAVE cannot go; SAVE · REVERT and RECRUIT / DISCHARGE; SERVICE.
-            problemText = WmcKit.Text(s, new Rect(0f, y, w, 18f), "row-sub");
-            y -= 22f;
+            // Why SAVE cannot go; SAVE · REVERT and RECRUIT / DISCHARGE; SERVICE — under the fields, pinned on a short dock (review
+            // U3-U4: at H 596 they sat below the fold).
+            var go = new GameObject("StudioFoot", typeof(RectTransform));
+            var foot = (RectTransform)go.transform;
+            foot.SetParent(root, false);
+            AvKit.Place(foot, new Rect(left, top - content, w, Foot));
+            float fy = -4f;
+            problemText = WmcKit.Text(foot, new Rect(0f, fy, w, 18f), "row-sub");
+            fy -= 22f;
             float third = (w - 2f * WmcUi.Gap) / 3f;
-            saveButton = Button(s, "sq.save", "SAVE", 0f, y, third, Save, "Keep this pilot for every mission: identity, look and bio.", AvButtonStyle.Primary);
-            revertButton = Button(s, "sq.revert", "REVERT", third + WmcUi.Gap, y, third, Revert, "Drop the edits since the last save or pick.");
-            recruitButton = Button(s, "sq.recruit", "RECRUIT", 2f * (third + WmcUi.Gap), y, third, RecruitOrDischarge, StudioWords.RecruitTip);
-            y -= Field + 6f;
-            service = WmcKit.Text(s, new Rect(0f, y, w, 18f), "row-sub");
-            y -= 22f;
-            scroll.SetContentHeight(-y);
+            saveButton = Button(foot, "sq.save", "SAVE", 0f, fy, third, Save, "Keep this pilot for every mission: identity, look and bio.", AvButtonStyle.Primary);
+            revertButton = Button(foot, "sq.revert", "REVERT", third + WmcUi.Gap, fy, third, Revert, "Drop the edits since the last save or pick.");
+            recruitButton = Button(foot, "sq.recruit", "RECRUIT", 2f * (third + WmcUi.Gap), fy, third, RecruitOrDischarge, StudioWords.RecruitTip);
+            fy -= Field + 6f;
+            service = WmcKit.Text(foot, new Rect(0f, fy, w, 18f), "row-sub");
+            new WmcFooter(scroll, foot, new Rect(left, top, width + 8f, height - Foot)).Fit(content);
             pickPopup = new AvKit.Popup(popupParent, panelWidth);
         }
 
@@ -203,7 +211,7 @@ namespace WingCommand
             if (key == pickerKey) return;
             pickerKey = key;
             string name = draft == null ? (entries.Count == 0 ? (WingSavedPilots.Problem != null ? "SAVED PILOTS UNREADABLE" : "NO PILOTS · NEW STARTS ONE") : "PICK A PILOT")
-                : WmcText.Cut(draft.Callsign, PilotText.CallsignChars) + " · " + WmcText.Cut(draft.Name, PilotText.NameChars);
+                : WmcText.Cut(draft.Callsign, PilotText.CallsignChars);
             picker.SetText(name + " ›");
             picker.WithTooltip(WingSavedPilots.Problem ?? "Pick a pilot: saved pilots first, then this mission's unsaved ones.");
             bool several = entries.Count > 1 || (draftNew && entries.Count > 0);

@@ -31,7 +31,7 @@ namespace WingCommand
             return true;
         }
 
-        public void StartNew() => NewPilot();
+        public void StartNew() => NewPilot(true);
 
         public void TypeCallsign(string text) => CommitCallsign(SerialText, text);
 

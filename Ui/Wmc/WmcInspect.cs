@@ -227,7 +227,7 @@ namespace WingCommand
             for (int i = 0; i < stores.Length; i++) WmcKit.Set(stores[i], i < storeLines.Count ? storeLines[i] : "");
             WingPilot wp = WingPilotRoster.Of(a);
             pilotCallsign = wp?.Callsign;
-            WmcKit.Set(pilot, InspectWords.Pilot(wp?.Callsign, detail.Rank, wp?.Xp ?? 0, wp?.Kills ?? 0, detail.Perks));
+            WmcKit.Set(pilot, InspectWords.Pilot(wp?.Callsign, detail.Rank, wp?.Xp ?? 0, wp?.Kills ?? 0, null));
             dossier.SetEnabled(wp != null);
         }
 
@@ -291,12 +291,17 @@ namespace WingCommand
             if (u != null) WmcMap.Center(u);
         }
 
+        /// <summary>SQUADRON's ROSTER on this pilot (review U3-U4: it could land on STUDIO, and before SQUADRON had ever been shown the
+        /// empty roster made it open on the next free pilot instead).</summary>
         private void OpenDossier()
         {
-            if (pilotCallsign == null || WmcPanel.Instance == null) return;
-            WmcPanel.Instance.Show(WmcTabs.Squadron);
-            WmcPanel.Instance.WingPage?.Inspect(pilotCallsign);
-            WmcPanel.Instance.Refresh();
+            WmcPanel panel = WmcPanel.Instance;
+            if (pilotCallsign == null || panel == null || panel.WingPage == null) return;
+            panel.Show(WmcTabs.Squadron);
+            panel.WingPage.ShowSub(WmcWing.SubRoster);
+            panel.Refresh();
+            panel.WingPage.Inspect(pilotCallsign);
+            panel.Refresh();
         }
 
         private void Rtb() => Confirmed(rtbGate, OrderKind.Rtb, "Send " + WingRows.Number(Seat()) + " home? Press RTB again");

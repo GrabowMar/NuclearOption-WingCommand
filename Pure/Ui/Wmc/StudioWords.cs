@@ -16,8 +16,8 @@ namespace WingCommand
         public const string NotSaved = "NOT SAVED · SAVE keeps this pilot for every mission";
         public const string NotInMission = "NOT IN THIS MISSION · RECRUIT adds them now";
         public const string ClientRecord = "THE HOST KEEPS THIS MISSION'S ROSTER · your saved pilots are this machine's";
-        public const string UnsavedAsk = "UNSAVED EDITS · click the row again to drop them";
-        public const string Hint = "A row opens a pilot; SAVE keeps identity and look for every mission. Every pilot starts a mission a ROOKIE.";
+        public const string UnsavedAsk = "UNSAVED EDITS · press again to drop them";
+        public const string Hint = "PILOT › or ‹ › opens a pilot; SAVE keeps identity and look for every mission. Every pilot starts a mission a ROOKIE.";
         public const string NoPilot = "NO PILOT · NEW makes one";
 
         public static string Chip(DraftState s, out string rail)
