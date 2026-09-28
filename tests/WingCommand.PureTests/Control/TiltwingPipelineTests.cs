@@ -33,27 +33,6 @@ namespace WingCommand.PureTests
         }
 
         [Fact]
-        public void AHoveringTiltwingNeverAsksMoreCollectiveThanKeepsItsNacellesUp()
-        {
-            // Night-2 sim (VL-49): full collective at a hover — the game's auto-tilt rotates the nacelles forward above 0.8 throttle
-            // at low speed (TiltWingController), and past a fifth of their travel the pitch stick moves them too — held a VL-49 at
-            // 3 m for two minutes. Rotary mode asks at most HoverCollectiveMax, all of it when the climb does not come.
-            AirframeProfile p = Tiltwing();
-            var t = new TiltwingPipeline();
-            var ctx = new LimitContext { FloorY = float.NaN, Clearance = 60f };
-            AircraftState still = At(0f);
-            float most = 0f, last = 0f;
-            for (int i = 0; i < (int)(10f / Dt); i++)
-            {
-                last = t.Step(new GuidanceCommand { VelCmd = new Vec3(0f, 8f, 0f), Accel = new Vec3(0f, 3f, 0f) }, still, ctx, p, Dt).Throttle;
-                most = Math.Max(most, last);
-            }
-            Assert.Equal(TiltwingMode.Rotary, t.Mode);
-            Assert.True(most <= TiltwingPipeline.HoverCollectiveMax + 1e-4f, $"collective reached {most:0.000}");
-            Assert.True(last >= TiltwingPipeline.HoverCollectiveMax - 0.01f, $"collective {last:0.000} short of the cap");
-        }
-
-        [Fact]
         public void ModeFollowsTheAirspeedWithHysteresis()
         {
             AirframeProfile p = Tiltwing();

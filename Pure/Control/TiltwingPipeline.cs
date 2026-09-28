@@ -21,9 +21,6 @@ namespace WingCommand
     internal sealed class TiltwingPipeline : IFlightPipeline
     {
         public static float MinDwell = 3f, RotaryCapFactor = 0.9f, RotaryCatchUp = 10f, PlaneFloorFactor = 1.05f;
-        /// <summary>The most collective rotary mode asks: above 0.8 throttle at low speed the game's auto-tilt rotates the nacelles
-        /// forward (TiltWingController), and past a fifth of their travel the pitch stick moves them too.</summary>
-        public static float HoverCollectiveMax = 0.8f;
 
         public readonly FixedWingPipeline Plane = new FixedWingPipeline();
         public readonly RotaryPipeline Rotary = new RotaryPipeline();
@@ -60,7 +57,6 @@ namespace WingCommand
         public ControlOutput Step(in GuidanceCommand guidance, in AircraftState s, in LimitContext ctx, AirframeProfile p, float dt)
         {
             Prime(s, p);
-            Rotary.Controller.CollectiveMax = HoverCollectiveMax;
             ControlOutput o = Active.Step(guidance, s, ctx, p, dt);
             dwell += dt;
             TiltwingMode wanted = Mode == TiltwingMode.Plane

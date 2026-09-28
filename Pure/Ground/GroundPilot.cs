@@ -811,6 +811,9 @@ namespace WingCommand
             // Night-2 sim (SAH-46, mountains): off the ground and clear of its hangar, a lift-off that stopped climbing hands over to
             // flight — moving it from the air onto the ground lost all three.
             bool handOver = stuck && outside && s.RadarAlt >= LiftOffAirborneHeight;
+            // Night-2 sim (VL-49, mountains): in the open, one that never left the ground gives up the departure — a move cannot
+            // help it lift, and moving it destroyed all three.
+            if (stuck && outside && !handOver) return Abort(time, events, slot);
             if (!liftOffMoved && stuck && !handOver)
             {
                 liftOffMoved = true;

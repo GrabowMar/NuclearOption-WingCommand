@@ -311,6 +311,33 @@ namespace WingCommand.FlightSim
         }
 
         [Fact]
+        public void AVtolThatCannotLeaveTheGroundInTheOpenGoesBackToTheReserveInsteadOfBeingMoved()
+        {
+            // Night-2 sim (VL-49, mountain field): out in the open, three VL-49s asked their most collective and never left the ground;
+            // the watchdog moved each 39 m ahead — which cannot help a lift-off — and the move destroyed all three. In the open, a
+            // lift-off that has not left the ground for the whole time gives up the departure (the aircraft goes back to the reserve).
+            var field = new FieldTraffic(Field(), 0, false);
+            AirframeProfile p = SimProfiles.Utility();
+            Pose spawn = field.Field.Hangars[0].Spawn;
+            var pilot = new GroundPilot(0, field, AirframeClass.Rotary, spawn, -1);
+            IFlightPipeline pipe = FlightStack.NewPipeline(AirframeClass.Rotary);
+            var events = new WingEventRing();
+            var s = new AircraftState
+            {
+                Pos = spawn.Pos, Fwd = spawn.Fwd, Up = Vec3.Up, Right = Vec3.Cross(Vec3.Up, spawn.Fwd), RadarAlt = 0f, RotorRpm = 1f, Dt = Dt,
+            };
+            int moves = 0;
+            for (float t = 0f; t < 90f && pilot.Phase != GroundPhase.Aborted; t += Dt)
+            {
+                field.Step(Dt);
+                pilot.Step(s, p, pipe, t, Dt, events, 0);
+                if (pilot.TakeRelocation(out _)) moves++;
+            }
+            Assert.Equal(0, moves);
+            Assert.Equal(GroundPhase.Aborted, pilot.Phase);
+        }
+
+        [Fact]
         public void AVtolStandingTallAboveItsHangarFloorAsksToClimbNotToDescend()
         {
             // Night-2 sim (VL-49 at Boscali North): the spawn pose is the hangar floor, but the aircraft's root stands its spawn
