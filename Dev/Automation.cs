@@ -915,6 +915,7 @@ namespace WingCommand
             return new Dictionary<string, object>
             {
                 { "ok", true }, { "engaged", wing.EngagedCount }, { "assigned", wing.AssignedCount }, { "members", wing.Members.Count },
+                { "jamming", wing.Jamming(null) ? 1 : 0 },
                 { "engage_events", wing.Events.CountOf(WingEventKind.Engaged) },
                 { "disengage_events", wing.Events.CountOf(WingEventKind.Disengaged) },
                 { "redirected", SwitchStateGuard.Redirected },

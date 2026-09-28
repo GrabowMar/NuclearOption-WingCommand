@@ -198,6 +198,7 @@ namespace WingCommand
                     case GridOrder.Refit: WingCommands.Refit(scoped); break;
                     case GridOrder.TakeOff: WingCommands.TakeOff(scoped); break;
                     case GridOrder.Rescue: WingCommands.Rescue(scoped); break;
+                    case GridOrder.Ecm: WingOrders.Run(WingOrder.Of(OrderKind.Ecm, scoped)); break;
                 }
             });
         }
@@ -335,7 +336,7 @@ namespace WingCommand
                     grid[k].SetEnabled(on);
                     grid[k].WithTooltip(tip);
                 }
-                grid[k].SetLatched(cell.Map != MapMode.Off && c.Map.Mode == cell.Map);
+                grid[k].SetLatched(cell.Map != MapMode.Off ? c.Map.Mode == cell.Map : cell.Order == GridOrder.Ecm && JammingInScope(c));
             }
             RefreshReact(c);
         }
@@ -410,6 +411,19 @@ namespace WingCommand
                 WmcUi.SetRail(bannerRail, "info");
             }
             bannerHit.SetEnabled(!armed && alertId != 0u);
+        }
+
+        /// <summary>A member in scope jams now (ECM stays lit while one does); no allocation.</summary>
+        private static bool JammingInScope(WmcContext c)
+        {
+            if (c.Wing == null || c.Client) return false;
+            foreach (WingMember m in c.Wing.Members)
+            {
+                if (float.IsNaN(m.JamUntil) || (object)m.Aircraft == null) continue;
+                int i = WingRows.IndexOf(c.Rows, c.Count, m.Aircraft.persistentID.Id);
+                if (i >= 0 && InScope(c, c.Rows[i])) return true;
+            }
+            return false;
         }
 
         /// <summary>Any scoped member a helicopter or tiltwing (host; a client's rows carry no airframe class).</summary>

@@ -55,7 +55,6 @@ namespace WingCommand
             new GridCell(GridOrder.Maneuver, "beam", "BEAM", GridInput.Now, MapMode.Off,
                 "Turn across the nearest air threat's line of sight (from the wing's tracks), then back to the slot.", null, "tac.react.", 4),
         };
-        private const string Later = " Arrives in a later update.";
 
         private static readonly GridCell Attack = new GridCell(GridOrder.Attack, "attack", "ATTACK", GridInput.Target, MapMode.Attack,
             "Right-click an enemy on the map to attack it; shift-click adds targets.");
@@ -80,7 +79,7 @@ namespace WingCommand
         private static readonly GridCell FormUp = new GridCell(GridOrder.FormUp, "formup", "FORM UP", GridInput.Now, MapMode.Off,
             "Back to formation on you.");
         private static readonly GridCell Ecm = new GridCell(GridOrder.Ecm, "ecm", "ECM", GridInput.Now, MapMode.Off,
-            "Jam the radars locking the scope.", "ECM: jam the radars locking the scope." + Later);
+            "The scope's jammers on for a minute (only aircraft carrying one); press again to stop.");
         private static readonly GridCell Detach = new GridCell(GridOrder.Detach, "detach", "DETACH", GridInput.Now, MapMode.Off,
             "The selected wingmen orbit where they are, as their own element.");
         private static readonly GridCell Rtb = new GridCell(GridOrder.Rtb, "rtb", "RTB", GridInput.Now, MapMode.Off,

@@ -400,6 +400,54 @@ namespace WingCommand
             result = new CombatAI.TargetSearchResults(best, bestStation, result.opportunity, result.outOfAmmo);
         }
 
+        /// <summary>How long an ECM order jams.</summary>
+        public static float EcmSeconds = 60f;
+
+        /// <summary>The scope's jammers: off when any of them jams, else on for <see cref="EcmSeconds"/>. How many carry one, and
+        /// whether they were started.</summary>
+        public int Ecm(Func<WingMember, bool> who, out bool started)
+        {
+            int capable = 0, jamming = 0;
+            foreach (WingMember m in Members)
+            {
+                if (m.Released || !m.Alive || m.OnGround || (who != null && !who(m)) || !m.Jammer.HasJammer(m.Aircraft)) continue;
+                capable++;
+                if (!float.IsNaN(m.JamUntil)) jamming++;
+            }
+            started = jamming == 0;
+            if (capable == 0) return 0;
+            foreach (WingMember m in Members)
+            {
+                if (m.Released || !m.Alive || m.OnGround || (who != null && !who(m)) || !m.Jammer.HasJammer(m.Aircraft)) continue;
+                m.JamUntil = started ? missionTime + EcmSeconds : float.NaN;
+            }
+            Plugin.Logger.LogInfo($"[Wing] ECM {(started ? "on" : "off")} for {capable} aircraft");
+            return capable;
+        }
+
+        /// <summary>Members jamming now (the grid's ECM stays lit while any in scope does).</summary>
+        public bool Jamming(Func<WingMember, bool> who)
+        {
+            foreach (WingMember m in Members)
+                if (!float.IsNaN(m.JamUntil) && (who == null || who(m))) return true;
+            return false;
+        }
+
+        /// <summary>Every tick: jammers pulse until their minute is up (or the aircraft is gone).</summary>
+        private void StepJammers()
+        {
+            foreach (WingMember m in Members)
+            {
+                if (float.IsNaN(m.JamUntil)) continue;
+                if (missionTime >= m.JamUntil || m.Released || !m.Alive)
+                {
+                    m.JamUntil = float.NaN;
+                    continue;
+                }
+                m.Jammer.Pulse(m.Aircraft);
+            }
+        }
+
         public static float GuardSeconds = 0.5f;
         private float guardClock;
         private readonly bool[] guardFighting = new bool[ElementRoster.MaxElements];
@@ -690,6 +738,7 @@ namespace WingCommand
             AnchorSample anchor = default;
             bool sampled = false;
             GuardAreas(dt);
+            StepJammers();
             foreach (WingMember m in Members)
             {
                 if (!m.Engaged || m.Released || !m.Alive || !InNativeCombat(m)) continue;

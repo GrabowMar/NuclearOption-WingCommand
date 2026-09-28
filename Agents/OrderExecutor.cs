@@ -121,6 +121,12 @@ namespace WingCommand
             switch (o.Kind)
             {
                 case OrderKind.Rtb: return Recover(w, RecoveryIntent.Rtb, "returning to base", who);
+                case OrderKind.Ecm:
+                {
+                    int n = w.Ecm(who, out bool started);
+                    if (n == 0) return OrderResult.Refused("Nobody in scope carries a jammer");
+                    return OrderResult.Acked(started ? $"{n} jamming for {WingService.EcmSeconds:0} s" : "ECM off");
+                }
                 case OrderKind.Maneuver:
                 {
                     var kind = (ReactionKind)(int)o.Number;

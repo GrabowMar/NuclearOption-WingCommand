@@ -49,8 +49,11 @@ namespace WingCommand.PureTests
         [Fact]
         public void UnbuiltOrdersSayWhyAndAreNeverPressable()
         {
-            // CAP and SWEEP are live (A1); ECM still waits.
-            foreach (var (r, c) in new[] { (2, 2) })
+            // CAP, SWEEP (A1) and ECM (A2) are live: no jet cell waits any more.
+            for (int r = 0; r < OrderGrid.Rows; r++)
+                for (int col = 0; col < OrderGrid.Columns; col++)
+                    Assert.True(OrderGrid.At(r, col, false).Built, OrderGrid.At(r, col, false).Label);
+            foreach (var (r, c) in new (int, int)[0])
             {
                 GridCell cell = OrderGrid.At(r, c, false);
                 Assert.False(cell.Built);

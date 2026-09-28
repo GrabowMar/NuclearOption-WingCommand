@@ -13,6 +13,8 @@ namespace WingCommand
         SetOverride,
         // WMC rebuild R3: a reaction maneuver for the scope (Number = ReactionKind).
         Maneuver,
+        // Bezel v2 A2: the scope's jammers on for a minute, or off when any of them jams (a toggle).
+        Ecm,
     }
 
     internal enum ScopeKind : byte { Wing, Element, Members }
