@@ -69,7 +69,7 @@ def main():
         log = os.path.join(d, "bepinex.log") if d else None
         if log and os.path.exists(log):
             for line in open(log, encoding="utf-8", errors="replace"):
-                if "Wing Command" in line and LOSS.search(line):
+                if "Wing Command" in line and "[Automation] Ground:" not in line and LOSS.search(line):
                     print("    log:", line.strip()[:220])
     print("%d passed, %d not passed" % (passed, failed))
 
