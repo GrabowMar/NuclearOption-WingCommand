@@ -17,7 +17,20 @@ namespace WingCommand
     {
         public static string Label(MapMode m) => m == MapMode.Off ? "OFF" : m.ToString().ToUpperInvariant();
 
-        public static bool Consumes(MapMode mode, bool selection, bool otherOwner) => !otherOwner && (mode != MapMode.Off || selection);
+        public static bool Consumes(MapMode mode, bool selection, bool otherOwner) => Consumes(mode != MapMode.Off, selection, otherOwner);
+
+        /// <summary>An order mode or a PLAN tool armed, or a selection for MOVE.</summary>
+        public static bool Consumes(bool armed, bool selection, bool otherOwner) => !otherOwner && (armed || selection);
+
+        /// <summary>CAP and SWEEP place an area: a right-press dragged sets its radius (spec bezel v2 §6).</summary>
+        public static bool IsArea(MapMode mode) => mode == MapMode.Cap || mode == MapMode.Sweep;
+
+        /// <summary>The radius a right-drag from the press point to the release point sets, within the guard's range.</summary>
+        public static float DragRadius(float pressX, float pressZ, float releaseX, float releaseZ)
+        {
+            float dx = releaseX - pressX, dz = releaseZ - pressZ;
+            return AreaGuard.Clamp((float)System.Math.Sqrt(dx * dx + dz * dz));
+        }
 
         public static MapClick Resolve(MapMode mode, bool selection, MapPointer pointer, bool shift)
         {

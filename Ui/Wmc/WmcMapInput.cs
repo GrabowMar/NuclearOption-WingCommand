@@ -17,17 +17,33 @@ namespace WingCommand
         private static WmcMapInput active;
         private readonly MapGesture gesture = new MapGesture();
         private readonly List<uint> targets = new List<uint>(WingOrder.MaxUnits);
-        private bool pressed, heldForMove;
+        private bool pressed, heldForMove, pressOnMap;
+        private GlobalPosition pressAt;
         private int selected;
 
         public MapMode Mode { get; private set; }
+        /// <summary>The PLAN tool armed (spec bezel v2 §6): its right-clicks go to <see cref="PlanClick"/>, not to an order.</summary>
+        public PlanTool Tool { get; private set; }
+        /// <summary>PLAN's editor takes a tool's click: the point, the unit under it, shift, and the radius a drag set (0: none).</summary>
+        public Action<WmcContext, GlobalPosition, Unit, bool, float> PlanClick;
+        /// <summary>The lane a tool adds to, in words (the cue and the status line).</summary>
+        public string ToolLane = "A";
+
+        /// <summary>A CAP or SWEEP right-drag under way: its centre and radius (the overlay's live ring).</summary>
+        public bool Dragging { get; private set; }
+        public float DragX { get; private set; }
+        public float DragZ { get; private set; }
+        public float DragRadius { get; private set; }
+
+        private bool Armed => Mode != MapMode.Off || Tool != PlanTool.Off;
+        private bool Area => MapOrders.IsArea(Mode) || Tool == PlanTool.Cap || Tool == PlanTool.Sweep;
 
         /// <summary>An accepted order was placed at a point (the overlay pings it).</summary>
         public event Action<GlobalPosition> Placed;
 
         public WmcMapInput() => active = this;
 
-        public string Prompt(string scope) => MapOrders.Prompt(Mode, scope);
+        public string Prompt(string scope) => Tool != PlanTool.Off ? PlanWords.ToolCue(Tool, ToolLane) : MapOrders.Prompt(Mode, scope);
 
         /// <summary>Arms a mode for the next right-clicks; says why when it cannot.</summary>
         public bool Arm(WmcContext c, MapMode mode)
@@ -53,6 +69,7 @@ namespace WingCommand
                 return false;
             }
             Mode = mode;
+            Tool = PlanTool.Off;
             heldForMove = false;
             gesture.Clear();
             pressed = false;
@@ -61,9 +78,43 @@ namespace WingCommand
             return true;
         }
 
+        /// <summary>Arms a PLAN tool (an armed order mode goes); says why when it cannot.</summary>
+        public bool ArmTool(WmcContext c, PlanTool tool)
+        {
+            if (tool == PlanTool.Off)
+            {
+                Disarm();
+                return true;
+            }
+            if (!DynamicMap.mapMaximized || SceneSingleton<DynamicMap>.i == null)
+            {
+                WingToast.Show("Open the map to plan");
+                return false;
+            }
+            if (c == null || !c.CanOrder)
+            {
+                WingToast.Show(c != null && c.Client ? "The host plans this mission" : "Wing Command is not ready");
+                return false;
+            }
+            if (OtherOwner() || !MapPicker.TryArm(MapPicker.WingPoint, MapPicker.GestureRight, PlanWords.ToolCue(tool, ToolLane)))
+            {
+                WingToast.Show("Another map tool is armed - cancel it first");
+                return false;
+            }
+            Mode = MapMode.Off;
+            Tool = tool;
+            heldForMove = false;
+            gesture.Clear();
+            pressed = false;
+            Publish();
+            return true;
+        }
+
         public void Disarm()
         {
             Mode = MapMode.Off;
+            Tool = PlanTool.Off;
+            Dragging = false;
             heldForMove = false;
             MapPicker.Disarm(MapPicker.WingPoint);
             gesture.Clear();
@@ -76,15 +127,15 @@ namespace WingCommand
         /// pausing; spec bezel v2 §6).</summary>
         private void Publish()
         {
-            WingCommand.Interop.WingMapMode.GestureArmed = Mode != MapMode.Off || heldForMove;
-            PauseKeyHold.Set(KeyHold.Map, Mode != MapMode.Off);
+            WingCommand.Interop.WingMapMode.GestureArmed = Armed || heldForMove;
+            PauseKeyHold.Set(KeyHold.Map, Armed);
         }
 
         /// <summary>With nothing armed and wingmen selected on a COMMAND tab, a right-click is WMC's MOVE: WMC holds the map picker
         /// while that is so, so a companion's right-click menu does not open on the same click (spec bezel v2 §6).</summary>
         private void HoldForMove(bool want, string scope)
         {
-            if (Mode != MapMode.Off) return;
+            if (Armed) return;
             if (want && !heldForMove)
             {
                 if (OtherOwner() || !MapPicker.TryArm(MapPicker.WingPoint, MapPicker.GestureRight, MapOrders.Prompt(MapMode.Move, scope ?? "WING"))) return;
@@ -109,40 +160,67 @@ namespace WingCommand
             WingCommand.Interop.WingMapMode.TacticalCommandActive = command;
             if (!visible)
             {
-                if (Mode != MapMode.Off) Disarm();
+                if (Armed) Disarm();
                 HoldForMove(false, null);
                 pressed = false;
                 return;
             }
+            // A PLAN tool belongs to PLAN › ELEMENTS: leaving it disarms the tool (an order mode stays armed across tabs).
+            if (Tool != PlanTool.Off && WmcPanel.Instance != null && !WmcPanel.Instance.PlanShowing) Disarm();
             HoldForMove(selected > 0 && DynamicMap.mapMaximized && c != null && c.CanOrder, c?.ScopeLabel);
-            if (Mode != MapMode.Off && Input.GetKeyDown(KeyCode.Escape) && !WmcNameField.Typing)
+            if (Armed && Input.GetKeyDown(KeyCode.Escape) && !WmcNameField.Typing)
             {
                 Disarm();
-                WingToast.Show("Map order cancelled");
+                WingToast.Show("Map tool cancelled");
                 return;
             }
-            if (!MapOrders.Consumes(Mode, selected > 0, OtherOwner()))
+            if (!MapOrders.Consumes(Armed, selected > 0, OtherOwner()))
             {
                 pressed = false;
+                Dragging = false;
                 return;
             }
             Vector3 mouse = Input.mousePosition;
+            DynamicMap map = SceneSingleton<DynamicMap>.i;
             if (Input.GetMouseButtonDown(1))
             {
                 pressed = true;
                 gesture.NotePointerDown(mouse.x, mouse.y);
+                pressOnMap = WmcMapPointer.TryGet(map, out pressAt, out _, out _);
                 return;
+            }
+            // CAP and SWEEP: the press is the centre, the drag the radius, drawn live.
+            if (pressed && Area && pressOnMap && !gesture.ReleasedAsClick(mouse.x, mouse.y)
+                && WmcMapPointer.TryGet(map, out GlobalPosition now, out _, out _))
+            {
+                Dragging = true;
+                DragX = pressAt.x;
+                DragZ = pressAt.z;
+                DragRadius = MapOrders.DragRadius(pressAt.x, pressAt.z, now.x, now.z);
             }
             if (!pressed || !Input.GetMouseButtonUp(1)) return;
             pressed = false;
+            bool shift = Input.GetKey(KeyCode.LeftShift) || Input.GetKey(KeyCode.RightShift);
+            if (Dragging)
+            {
+                Dragging = false;
+                Place(c, pressAt, null, shift, DragRadius);
+                return;
+            }
             if (!gesture.ReleasedAsClick(mouse.x, mouse.y)) return;
-            if (!WmcMapPointer.TryGet(SceneSingleton<DynamicMap>.i, out GlobalPosition point, out Unit unit, out _)) return;
-            Place(c, point, unit, Input.GetKey(KeyCode.LeftShift) || Input.GetKey(KeyCode.RightShift));
+            if (!WmcMapPointer.TryGet(map, out GlobalPosition point, out Unit unit, out _)) return;
+            Place(c, point, unit, shift);
         }
 
-        /// <summary>Places what the current mode (or a plain MOVE for a selection) does at <paramref name="point"/>.</summary>
-        public void Place(WmcContext c, GlobalPosition point, Unit unit, bool shift)
+        /// <summary>Places what the current mode or PLAN tool (or a plain MOVE for a selection) does at <paramref name="point"/>;
+        /// <paramref name="radius"/> is a CAP or SWEEP's (0: the tool's or the order's default).</summary>
+        public void Place(WmcContext c, GlobalPosition point, Unit unit, bool shift, float radius = 0f)
         {
+            if (Tool != PlanTool.Off)
+            {
+                PlanClick?.Invoke(c, point, unit, shift, radius);
+                return;
+            }
             MapPointer pointer = unit == null || unit.disabled ? MapPointer.Empty
                 : DynamicMap.GetFactionMode(unit.NetworkHQ, false) == FactionMode.Enemy ? MapPointer.Enemy : MapPointer.Other;
             MapClick click = MapOrders.Resolve(Mode, selected > 0, pointer, shift);
@@ -159,11 +237,11 @@ namespace WingCommand
             }
             WmcUi.Order(c, () =>
             {
-                if (WingOrders.Run(Build(c, click, point, unit)).Accepted) Placed?.Invoke(point);
+                if (WingOrders.Run(Build(c, click, point, unit, radius)).Accepted) Placed?.Invoke(point);
             });
         }
 
-        private WingOrder Build(WmcContext c, MapClick click, GlobalPosition point, Unit unit)
+        private WingOrder Build(WmcContext c, MapClick click, GlobalPosition point, Unit unit, float radius)
         {
             Waypoint at = Waypoint.At(point.x, point.z);
             at.Altitude = c.Draft.Altitude;
@@ -182,8 +260,8 @@ namespace WingCommand
                 case MapClick.Land:
                     at.Action = ArrivalAction.Land;
                     return WingOrder.Tasked(WingTask.Move(at), c.Scope);
-                case MapClick.Cap: return WingOrder.Tasked(WingTask.Cap(at, AreaGuard.CapRadius), c.Scope);
-                case MapClick.Sweep: return WingOrder.Tasked(WingTask.Sweep(at, AreaGuard.SweepRadius), c.Scope);
+                case MapClick.Cap: return WingOrder.Tasked(WingTask.Cap(at, radius > 0f ? radius : AreaGuard.CapRadius), c.Scope);
+                case MapClick.Sweep: return WingOrder.Tasked(WingTask.Sweep(at, radius > 0f ? radius : AreaGuard.SweepRadius), c.Scope);
                 case MapClick.Attack:
                 case MapClick.AddTarget:
                 {
@@ -239,7 +317,7 @@ namespace WingCommand
             WmcMapInput m = active;
             if (m == null || !DynamicMap.mapMaximized || WmcPanel.Instance == null || !WmcPanel.Instance.Visible) return false;
             if (!Input.GetMouseButton(1) && !Input.GetMouseButtonDown(1) && !Input.GetMouseButtonUp(1)) return false;
-            return MapOrders.Consumes(m.Mode, m.selected > 0, OtherOwner());
+            return MapOrders.Consumes(m.Armed, m.selected > 0, OtherOwner());
         }
     }
 

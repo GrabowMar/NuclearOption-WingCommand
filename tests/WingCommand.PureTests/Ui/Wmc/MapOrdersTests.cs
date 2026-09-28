@@ -63,5 +63,25 @@ namespace WingCommand.PureTests
             Assert.Equal(MapClick.Land, MapOrders.Resolve(MapMode.Land, false, MapPointer.Empty, false));
             Assert.Equal("LAND · WING · RIGHT-CLICK THE MAP", MapOrders.Prompt(MapMode.Land, "WING"));
         }
+
+        [Fact]
+        public void ARightDragSetsAnAreasRadiusWithinTheGuardsRange()
+        {
+            // Spec bezel v2 §6: CAP and SWEEP take their centre from the press and their radius from the drag, 2-40 km.
+            Assert.True(MapOrders.IsArea(MapMode.Cap));
+            Assert.True(MapOrders.IsArea(MapMode.Sweep));
+            Assert.False(MapOrders.IsArea(MapMode.Orbit));
+            Assert.Equal(12400f, MapOrders.DragRadius(1000f, 2000f, 1000f, 14400f), 1);
+            Assert.Equal(AreaGuard.MinRadius, MapOrders.DragRadius(0f, 0f, 300f, 400f));
+            Assert.Equal(AreaGuard.MaxRadius, MapOrders.DragRadius(0f, 0f, 60000f, 0f));
+        }
+
+        [Fact]
+        public void AnArmedPlanToolTakesTheRightClickUnlessAnotherModOwnsTheMap()
+        {
+            Assert.True(MapOrders.Consumes(true, false, false));
+            Assert.False(MapOrders.Consumes(true, false, true));
+            Assert.False(MapOrders.Consumes(false, false, false));
+        }
     }
 }

@@ -457,6 +457,17 @@ namespace WingCommand
             result["steps"] = steps;
             result["held"] = held;
             result["blocked"] = blocked;
+            WmcPlan page = WmcPanel.Instance?.Plan;
+            result["sel_lane"] = page?.SelectedLane ?? -1;
+            result["sel_step"] = (page?.SelectedStep ?? -2) + 1;
+            for (int l = 0; l < WingPlan.Lanes; l++)
+            {
+                string key = ElementRoster.Letter(l).ToLowerInvariant();
+                result[key + "_steps"] = plans.Plan.Steps[l].Count;
+                result[key + "_kinds"] = string.Join(",", plans.Plan.Steps[l].ConvertAll(s => s.Kind.ToString()));
+            }
+            if (plans.Plan.Steps[0].Count > 1) result["a2_radius_km"] = plans.Plan.Steps[0][1].Radius / 1000f;
+            if (plans.Plan.Steps[1].Count > 0) result["b1_after"] = plans.Plan.Steps[1][0].Start == PlanStart.After ? 1 : 0;
             return result;
         }
 
@@ -902,7 +913,8 @@ namespace WingCommand
                 c.Map.Place(c, new GlobalPosition(at.x + f.x * ahead + r.x * right, 0f, at.z + f.z * ahead + r.z * right), null, shift);
             }
             else if (Arg(args, "x") != null && Arg(args, "z") != null)
-                c.Map.Place(c, new GlobalPosition(Number(args, "x", 0), 0f, Number(args, "z", 0)), null, shift);
+                // radius_km: a CAP or SWEEP right-drag of that radius from the point.
+                c.Map.Place(c, new GlobalPosition(Number(args, "x", 0), 0f, Number(args, "z", 0)), null, shift, Float(args, "radius_km", 0f) * 1000f);
             // PLAN › ROUTE's controls.
             int pressed = 0;
             foreach (string control in new[] { "loop", "send", "skip", "save", "clear", "undo" })
@@ -914,7 +926,7 @@ namespace WingCommand
             WingPlanner p = wing.Roster.InUse(c.ScopeElement) ? wing.PlannerOf(c.ScopeElement) : null;
             return new Dictionary<string, object>
             {
-                { "ok", true }, { "mode", c.Map.Mode.ToString() }, { "armed", c.Map.Mode != MapMode.Off ? 1 : 0 },
+                { "ok", true }, { "mode", c.Map.Mode.ToString() }, { "armed", c.Map.Mode != MapMode.Off ? 1 : 0 }, { "tool", c.Map.Tool.ToString() },
                 { "draft", c.Draft.Count }, { "loop", (int)c.Draft.Loop }, { "pressed", pressed },
                 { "legs", panel.Overlay.LegCount }, { "rings", panel.Overlay.RingCount }, { "routes", WmcRoutes.Store.Routes.Count },
                 { "scope", c.ScopeLabel }, { "scope_element", c.ScopeElement },

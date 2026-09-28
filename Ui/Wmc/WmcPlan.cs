@@ -43,7 +43,7 @@ namespace WingCommand
         public string Hint => sub == SubRoute
             ? "DRAW, then right-click the map to add points; SEND flies them. NAV flies your own aircraft along them."
             : sub == SubLog ? "A line with an aircraft opens it on INSPECT and centres the map on it."
-            : "Each element's task and legs; FIT frames an element on the map.";
+            : "Pick a tool and right-click the map to add steps to the selected lane; EXECUTE runs the plan.";
 
         public string Alert => null;
 
@@ -101,7 +101,10 @@ namespace WingCommand
             if (id == null) return;
             if (id.StartsWith("plan.route.", System.StringComparison.Ordinal) || id.StartsWith("plan.ap.", System.StringComparison.Ordinal)
                 || id.StartsWith("plan.scope.", System.StringComparison.Ordinal)) ShowSub(SubRoute);
-            else if (id.StartsWith("plan.el", System.StringComparison.Ordinal)) ShowSub(SubElements);
+            else if (id.StartsWith("plan.el", System.StringComparison.Ordinal) || id.StartsWith("plan.step", System.StringComparison.Ordinal)
+                     || id.StartsWith("plan.edit.", System.StringComparison.Ordinal) || id.StartsWith("plan.tool.", System.StringComparison.Ordinal)
+                     || id.StartsWith("plan.bar.", System.StringComparison.Ordinal) || id.StartsWith("plan.cue.", System.StringComparison.Ordinal)
+                     || id.StartsWith("plan.add.", System.StringComparison.Ordinal)) ShowSub(SubElements);
             else if (id.StartsWith("plan.log.", System.StringComparison.Ordinal)) ShowSub(SubLog);
         }
 
@@ -119,7 +122,7 @@ namespace WingCommand
 
         public void Shown(WmcContext c)
         {
-            elementsKey = int.MinValue;
+            elementsKey = long.MinValue;
             logFilled = false;
             for (int i = 0; i < logKeys.Length; i++) logKeys[i] = long.MinValue;
         }

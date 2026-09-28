@@ -56,6 +56,8 @@ namespace WingCommand
         /// <summary>A page with the COMMAND scope row is on show (spec bezel v2 §6: an unarmed right-click MOVE is TACTICAL's and
         /// FORM's only).</summary>
         public bool CommandShowing => Visible && shell != null && (shell.Page == WmcTabs.Tactical || shell.Page == WmcTabs.Form);
+        /// <summary>PLAN › ELEMENTS is showing: its map tools stay armed only here.</summary>
+        public bool PlanShowing => Visible && shell != null && shell.Page == WmcTabs.Plan && plan != null && plan.Sub == WmcPlan.SubElements;
         public int Page => shell != null ? shell.Page : -1;
         public string PageName => shell != null && shell.Page >= 0 && shell.Page < WmcTabs.Labels.Length ? WmcTabs.Labels[shell.Page] : "";
         public IReadOnlyDictionary<string, AvButton> Controls => controls;

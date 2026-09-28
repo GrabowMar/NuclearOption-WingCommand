@@ -117,7 +117,7 @@ namespace WingCommand
         }
 
         /// <summary>Whether step (l, s) — or anything it waits for — waits for (tl, ts): the step before it in its lane, and its AFTER.</summary>
-        private static bool WaitsFor(WingPlan plan, int l, int s, int tl, int ts, int depth)
+        internal static bool WaitsFor(WingPlan plan, int l, int s, int tl, int ts, int depth = 0)
         {
             if (l == tl && s == ts) return true;
             if (depth > WingPlan.Lanes * WingPlan.MaxSteps) return true;

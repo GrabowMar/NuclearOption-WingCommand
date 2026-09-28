@@ -8,7 +8,10 @@ namespace WingCommand
 {
     /// <summary>The map's route layer (spec WMC program §5): every element's task path in the element's colour, the route
     /// draft while WMC is open, numbered points with distance and ETA, orbit rings and an order ping — pooled objects in the
-    /// map's icon layer, moved at 5 Hz and when the zoom changes, hidden while the map is minimized.</summary>
+    /// map's icon layer, moved at 5 Hz and when the zoom changes, hidden while the map is minimized. The plan layer (spec bezel v2
+    /// §6), while PLAN › ELEMENTS shows or a plan runs: each lane's steps chained from its element, pending ones faded, finished
+    /// ones gone, each anchored "B2 CAP · AFTER B1", the selected step wide with its legs numbered; and a CAP or SWEEP drag's live
+    /// ring with its radius.</summary>
     internal sealed class WmcMapOverlay
     {
         private const float LineWidth = 2f, NodeSize = 9f, LabelWidth = 190f, LabelHeight = 16f, PingSeconds = 1.2f;
@@ -29,7 +32,9 @@ namespace WingCommand
         private readonly List<TMP_Text> labels = new List<TMP_Text>();
         private readonly List<long> labelKeys = new List<long>();
         private Transform layer;
-        private Image ping;
+        private Image ping, ghost;
+        private TMP_Text ghostLabel;
+        private float ghostRadius = -1f;
         private GlobalPosition pingAt;
         private float pingStart = -1f, nextRefresh, drawnInverse = -1f;
         private bool dirty, shown;
@@ -68,6 +73,43 @@ namespace WingCommand
             else if (dirty && !Mathf.Approximately(Inverse(map), drawnInverse)) Draw(map);
             dirty = false;
             AnimatePing(map);
+            DrawGhost(map, c.Map);
+        }
+
+        /// <summary>A CAP or SWEEP right-drag: the ring it would guard and its radius, every frame.</summary>
+        private void DrawGhost(DynamicMap map, WmcMapInput input)
+        {
+            if (!input.Dragging)
+            {
+                HideObject(ghost);
+                HideObject(ghostLabel);
+                return;
+            }
+            if (ghost == null) ghost = MakeImage("WmcAreaGhost", Ring());
+            if (ghostLabel == null)
+            {
+                ghostLabel = AvStyled.Label((RectTransform)layer, new Rect(0f, 0f, LabelWidth, LabelHeight), "", "row-sub");
+                RectTransform lt = ghostLabel.rectTransform;
+                lt.anchorMin = lt.anchorMax = new Vector2(0.5f, 0.5f);
+                lt.pivot = Vector2.zero;
+                ghostLabel.raycastTarget = false;
+                ghostLabel.enableWordWrapping = false;
+                ghostLabel.overflowMode = TextOverflowModes.Overflow;
+            }
+            float factor = map.mapDisplayFactor, inverse = Inverse(map);
+            Vector3 at = new Vector3(input.DragX * factor, input.DragZ * factor, 0f);
+            ghost.rectTransform.localPosition = at;
+            ghost.rectTransform.sizeDelta = Vector2.one * Mathf.Max(2f * input.DragRadius * factor, NodeSize * 2f * inverse);
+            ghost.color = new Color(1f, 1f, 1f, 0.9f);
+            ghostLabel.rectTransform.localPosition = at + new Vector3(7f, 3f, 0f) * inverse;
+            ghostLabel.rectTransform.localScale = Vector3.one * inverse;
+            if (!Mathf.Approximately(ghostRadius, input.DragRadius))
+            {
+                ghostRadius = input.DragRadius;
+                ghostLabel.text = "R " + (input.DragRadius / 1000f).ToString("0.0", System.Globalization.CultureInfo.InvariantCulture) + " KM";
+            }
+            Show(ghost.gameObject);
+            Show(ghostLabel.gameObject);
         }
 
         private void Collect(WmcContext c, bool wmcVisible)
@@ -93,6 +135,75 @@ namespace WingCommand
                 RouteView.Draft(c.Draft, from, speed, legs);
                 while (legColors.Count < legs.Count) legColors.Add(DraftColor);
             }
+            WingPlans plans = WingPlans.Instance;
+            WmcPanel panel = WmcPanel.Instance;
+            bool planShowing = wmcVisible && panel != null && panel.PlanShowing;
+            if (w != null && plans != null && !c.Client && (planShowing || plans.Running))
+                CollectPlan(w, plans, planShowing ? panel.Plan.SelectedLane : -1, planShowing ? panel.Plan.SelectedStep : -1);
+        }
+
+        /// <summary>The plan layer: each lane's steps from where its element is, in its colour.</summary>
+        private void CollectPlan(WingService w, WingPlans plans, int selLane, int selStep)
+        {
+            WingPlan plan = plans.Plan;
+            PlanRunner r = plans.Runner;
+            bool live = r != null && (r.Running || plans.Completed);
+            for (int e = 0; e < WingPlan.Lanes; e++)
+            {
+                var steps = plan.Steps[e];
+                if (steps.Count == 0) continue;
+                if (!WmcPlan.From(w, e, out float x0, out float z0, out float speed) && !PlanEdit.EndPoint(steps[0], out x0, out z0)) continue;
+                Color color = ElementColor(e);
+                for (int i = 0; i < steps.Count; i++)
+                {
+                    PlanStep p = steps[i];
+                    StepState st = r != null ? r.State(e, i) : StepState.Pending;
+                    bool gone = live && (st == StepState.Done || st == StepState.Skipped), selected = e == selLane && i == selStep;
+                    if (!gone)
+                    {
+                        int first = legs.Count, firstRing = rings.Count;
+                        if (p.Kind == PlanKind.Attack)
+                        {
+                            foreach (uint id in p.Targets ?? new uint[0])
+                            {
+                                Unit u = WmcContext.UnitOf(id);
+                                if (u == null) continue;
+                                GlobalPosition t = u.GlobalPosition();
+                                legs.Add(new RouteLeg { FromX = x0, FromZ = z0, ToX = t.x, ToZ = t.z, Number = 1, Km = float.NaN, Eta = float.NaN });
+                                rings.Add(new RouteRing { X = t.x, Z = t.z, Radius = 400f });
+                            }
+                        }
+                        else if (p.Points != null && p.Points.Length > 0)
+                            RouteView.Task(PlanCompile.Order(p, e).Task, 0, new Vec3(x0, 0f, z0), speed, legs, rings);
+                        string tag = PlanRules.Name(e, i) + " " + PlanWords.Kind(p.Kind) + " · " + PlanWords.Start(plan, e, i)
+                                     + (st == StepState.Held ? " · HELD" : st == StepState.Blocked ? " · BLOCKED" : "");
+                        float alpha = selected || st == StepState.Running ? 1f : 0.55f;
+                        for (int j = first; j < legs.Count; j++)
+                        {
+                            RouteLeg l = legs[j];
+                            // Anchored once, at the step's last point; the selected step keeps its numbered legs.
+                            if (j == legs.Count - 1) l.Text = tag;
+                            else if (!selected) l.Number = 0;
+                            l.Wide = selected;
+                            legs[j] = l;
+                            Color lc = color;
+                            lc.a *= alpha;
+                            legColors.Add(lc);
+                        }
+                        for (int j = firstRing; j < rings.Count; j++)
+                        {
+                            Color rc = color;
+                            rc.a *= alpha;
+                            ringColors.Add(rc);
+                        }
+                    }
+                    if (PlanEdit.EndPoint(p, out float ex, out float ez))
+                    {
+                        x0 = ex;
+                        z0 = ez;
+                    }
+                }
+            }
         }
 
         private static float Inverse(DynamicMap map) => 1f / Mathf.Max(0.01f, map.mapImage.transform.localScale.x);
@@ -113,7 +224,7 @@ namespace WingCommand
                 RectTransform rt = line.rectTransform;
                 rt.localPosition = from;
                 rt.localRotation = Quaternion.Euler(0f, 0f, Mathf.Atan2(d.y, d.x) * Mathf.Rad2Deg);
-                rt.sizeDelta = new Vector2(d.magnitude, LineWidth * inverse);
+                rt.sizeDelta = new Vector2(d.magnitude, (l.Wide ? 1.5f * LineWidth : LineWidth) * inverse);
                 if (line.color != color) line.color = color;
                 Show(line.gameObject);
                 if (l.Number <= 0) continue;
@@ -129,7 +240,8 @@ namespace WingCommand
                 if (labelKeys[node] != key)
                 {
                     labelKeys[node] = key;
-                    label.text = l.Action == ArrivalAction.None || l.Action == ArrivalAction.Orbit
+                    label.text = l.Text != null ? l.Text
+                        : l.Action == ArrivalAction.None || l.Action == ArrivalAction.Orbit
                         ? RouteView.Label(l) : RouteView.Label(l) + " · " + (l.Action == ArrivalAction.Land ? "LAND" : "CARGO");
                 }
                 if (label.color != color) label.color = color;
@@ -162,7 +274,7 @@ namespace WingCommand
         {
             long km = float.IsNaN(l.Km) ? 0xFFFFF : (long)(l.Km * 10f) & 0xFFFFF;
             long eta = float.IsNaN(l.Eta) ? 0xFFFFF : (long)l.Eta & 0xFFFFF;
-            return ((long)l.Number << 44) | (km << 24) | (eta << 4) | (long)l.Action;
+            return (((long)l.Number << 44) | (km << 24) | (eta << 4) | (long)l.Action) ^ ((long)(l.Text?.GetHashCode() ?? 0) << 12);
         }
 
         private void AnimatePing(DynamicMap map)
@@ -191,6 +303,8 @@ namespace WingCommand
             foreach (TMP_Text t in labels) HideObject(t);
             foreach (Image i in ringImages) HideObject(i);
             HideObject(ping);
+            HideObject(ghost);
+            HideObject(ghostLabel);
             pingStart = -1f;
             shown = false;
         }
@@ -203,6 +317,11 @@ namespace WingCommand
             foreach (TMP_Text t in labels) if (t != null) Object.Destroy(t.gameObject);
             foreach (Image i in ringImages) if (i != null) Object.Destroy(i.gameObject);
             if (ping != null) Object.Destroy(ping.gameObject);
+            if (ghost != null) Object.Destroy(ghost.gameObject);
+            if (ghostLabel != null) Object.Destroy(ghostLabel.gameObject);
+            ghost = null;
+            ghostLabel = null;
+            ghostRadius = -1f;
             lines.Clear();
             nodes.Clear();
             labels.Clear();

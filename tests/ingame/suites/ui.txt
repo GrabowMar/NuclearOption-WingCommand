@@ -9,3 +9,4 @@ wc-m7b1-wmc-fs20
 wc-p4-map-fs20
 wc-r3-orders-fs20
 wc-p2-elements-fs20
+wc-p2-editor-fs20

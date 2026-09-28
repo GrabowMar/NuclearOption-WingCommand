@@ -13,6 +13,10 @@ namespace WingCommand
         public float Km, Eta;
         public ArrivalAction Action;
         public bool Closing;
+        /// <summary>A plan step's anchor ("B2 CAP · AFTER B1") in place of the number, distance and time; and its line drawn wide
+        /// (the selected step).</summary>
+        public string Text;
+        public bool Wide;
     }
 
     internal struct RouteRing
