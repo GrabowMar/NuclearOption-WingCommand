@@ -1060,7 +1060,30 @@ namespace WingCommand
                                   $"command {m.Ground.LastCommand.Speed:0.0} m/s{(m.Ground.LastCommand.Stop ? " stop" : "")} curvature {m.Ground.LastCommand.Curvature:0.000}/m, " +
                                   $"yaw {m.Aircraft.GetInputs().yaw:0.00}, " +
                                   $"{m.Ground.StopDistance:0} m to the stop, throttle {m.Last.Throttle:0.00}, brake {m.Aircraft.GetInputs().brake:0.00}, " +
-                                  $"radar {m.Last.RadarAlt:0.0}, pitch {m.Last.PitchDeg:0.0}, bank {m.Last.BankDeg:0.0}, gear {m.Aircraft.gearState}");
+                                  $"radar {m.Last.RadarAlt:0.0}, pitch {m.Last.PitchDeg:0.0}, bank {m.Last.BankDeg:0.0}, gear {m.Aircraft.gearState}; " +
+                                  StopDiagnostics(m.Aircraft));
+        }
+
+        /// <summary>Night-1 refit and RTB runs: landed jets stood at 85 % throttle with 436 m to go and never moved. What the engines
+        /// give, whether the body can move, and who flies it (a native state still driving the inputs would show here).</summary>
+        private static string StopDiagnostics(Aircraft a)
+        {
+            float thrust = 0f, max = 0f, rpm = -1f;
+            int n = 0;
+            foreach (IEngine e in a.engines)
+            {
+                if (e == null) continue;
+                thrust += e.GetThrust();
+                max += e.GetMaxThrust();
+                if (rpm < 0f) rpm = e.GetRPMRatio();
+                n++;
+            }
+            Rigidbody rb = a.rb;
+            Pilot p = a.pilots != null && a.pilots.Length > 0 ? a.pilots[0] : null;
+            ControlInputs i = a.GetInputs();
+            return $"engines {n} thrust {thrust:0} of {max:0} N rpm {rpm:0.00}; body kinematic {(rb != null && rb.isKinematic)} sleeping {(rb != null && rb.IsSleeping())} " +
+                   $"v {(rb != null ? rb.velocity.magnitude : -1f):0.00} m/s mass {(rb != null ? rb.mass : -1f):0}; state {(p != null ? p.GetCurrentState() : "none")}; " +
+                   $"inputs {i}";
         }
 
         public static float GroundTraceSeconds = 10f;
