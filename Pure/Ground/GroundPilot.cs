@@ -108,6 +108,8 @@ namespace WingCommand
         private bool liftOffMoved;
         /// <summary>The lift-off's best progress so far (height plus distance from the spawn) and when it last grew a metre.</summary>
         private float liftOffBest = float.NaN, liftOffProgressAt = float.NaN;
+        // How high the root stood above the spawn pose when the lift-off began (its gear: 5.3 m for a VL-49).
+        private float standHeight;
         private LimitContext air;
         private bool hasAir;
         private int restands;
@@ -335,6 +337,7 @@ namespace WingCommand
                         if (Vertical)
                         {
                             pipeline.Track(s, LastOutput, p);
+                            standHeight = Math.Max(0f, s.Pos.Y - spawn.Pos.Y);
                             Enter(GroundPhase.LiftOff, time);
                         }
                         else
@@ -810,7 +813,9 @@ namespace WingCommand
                 relocationPending = true;
                 Log(events, time, slot, WingEventKind.Relocated);
             }
-            Vec3 target = new Vec3(over.X, spawn.Pos.Y + (outside ? LiftOffHeight : HoverExitHeight), over.Z);
+            // Night-2 sim (VL-49): the pose is the hangar floor and the root stands its gear above it, so the heights are measured
+            // from where it stood — from the floor, 3 m up was below a tall aircraft's root and the lift-off asked it to descend.
+            Vec3 target = new Vec3(over.X, spawn.Pos.Y + standHeight + (outside ? LiftOffHeight : HoverExitHeight), over.Z);
             var intent = new FlightIntent
             {
                 Ref = new RefState(target, Vec3.Zero, Vec3.Zero),

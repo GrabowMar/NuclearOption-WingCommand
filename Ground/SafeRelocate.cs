@@ -1,3 +1,4 @@
+using System.Collections;
 using System.Reflection;
 using HarmonyLib;
 using UnityEngine;
@@ -15,9 +16,10 @@ namespace WingCommand
         private static readonly FieldInfo ImpactPrev = AccessTools.Field(typeof(ImpactDetector), "velocityPrev");
         private static readonly FieldInfo FuelPrev = AccessTools.Field(typeof(FuelTank), "velocityPrev");
 
-        /// <param name="level">Put it down level, not only turned (a helicopter caught climbing nose-down would strike its rotor and
-        /// tail: night-2 sim, two UH-90s). A jet on the ground keeps its sitting pitch.</param>
-        public static void Move(Aircraft a, Pose to, bool level = false)
+        /// <remarks>It is put down as the game's spawner puts an aircraft down: its spawn offset above the ground, turned to the
+        /// pose and at its rest attitude (definition.restRotation). Night-2 sim: an attitude kept from the move (a helicopter caught
+        /// climbing nose-down) or a level one (not its resting pitch) starts the gear's springs compressed.</remarks>
+        public static void Move(Aircraft a, Pose to)
         {
             Transform root = a.transform;
             // The pose is on the ground; the aircraft's root stands its spawn offset above it (as a hangar spawn does). The
@@ -29,15 +31,28 @@ namespace WingCommand
             float[] ys = new float[hits.Length];
             foreach (RaycastHit hit in hits)
                 if (hit.collider != null && !hit.collider.transform.IsChildOf(a.transform)) ys[n++] = hit.point.y;
+            float graphY = target.y;
             target.y = SurfacePick.Closest(target.y, ys, n, SurfaceProbeHeight);
+            float surfaceY = target.y;
             target += Vector3.up * (a.definition != null ? a.definition.spawnOffset.y : 0f);
             Vector3 fwd = to.Fwd.Horizontal.SqrLength > 1e-4f ? to.Fwd.Horizontal.Normalized.ToUnity() : root.forward;
-            Quaternion turn = level
-                ? Quaternion.LookRotation(fwd, Vector3.up) * Quaternion.Inverse(root.rotation)
-                : Quaternion.LookRotation(fwd, Vector3.up) * Quaternion.Inverse(Quaternion.LookRotation(
-                    Vector3.ProjectOnPlane(root.forward, Vector3.up).normalized, Vector3.up));
+            Quaternion rest = Quaternion.LookRotation(fwd, Vector3.up) * Quaternion.Euler(a.definition != null ? a.definition.restRotation : Vector3.zero);
+            Quaternion turn = rest * Quaternion.Inverse(root.rotation);
             Vector3 origin = root.position;
-            foreach (Rigidbody rb in a.GetComponentsInChildren<Rigidbody>())
+            // Night-2 sim: relocated aircraft (VL-49, SFB-81, FS-20) were often flung (40-100 m/s, nose 56 deg down) and lost the
+            // moment they were moved. Evidence first: every body moved, every joint and whether it holds a body left behind.
+            Rigidbody[] bodies = a.GetComponentsInChildren<Rigidbody>();
+            int joints = 0, outside = 0;
+            foreach (Joint j in a.GetComponentsInChildren<Joint>(true))
+            {
+                joints++;
+                if (j.connectedBody != null && !j.connectedBody.transform.IsChildOf(root)) outside++;
+            }
+            Plugin.Logger.LogInfo($"[Ground] relocating {a.definition?.unitName}: {bodies.Length} bodies, {joints} joints ({outside} to bodies outside it), " +
+                                  $"from {origin} to {target} (graph y {graphY:0.00}, surface y {surfaceY:0.00} of {n} hits, offset " +
+                                  $"{(a.definition != null ? a.definition.spawnOffset.y : 0f):0.00}), pitch {-root.eulerAngles.x:0.0} to rest " +
+                                  $"{-rest.eulerAngles.x:0.0}");
+            foreach (Rigidbody rb in bodies)
             {
                 rb.position = target + turn * (rb.position - origin);
                 rb.rotation = turn * rb.rotation;
@@ -55,6 +70,27 @@ namespace WingCommand
             if (FuelPrev != null)
                 foreach (FuelTank f in a.GetComponentsInChildren<FuelTank>(true)) FuelPrev.SetValue(f, Vector3.zero);
             Plugin.Logger.LogWarning($"[Ground] relocated {a.definition.unitName} to ({to.Pos.X:0}, {to.Pos.Z:0}) after it was stuck");
+            WingRuntime.Instance?.StartCoroutine(Watch(a, target));
+        }
+
+        /// <summary>How the aircraft moves in the physics frames after a relocation (dev evidence, a few log lines).</summary>
+        private static IEnumerator Watch(Aircraft a, Vector3 target)
+        {
+            int frame = 0;
+            foreach (int at in new[] { 1, 2, 5, 15, 60 })
+            {
+                while (frame < at)
+                {
+                    yield return new WaitForFixedUpdate();
+                    frame++;
+                }
+                if (a == null) yield break;
+                Rigidbody rb = a.rb;
+                Plugin.Logger.LogInfo($"[Ground] after relocation +{frame} frames: {(a.transform.position - target).magnitude:0.0} m from where it was put, " +
+                                      $"v {(rb != null ? rb.velocity.magnitude : 0f):0.0} m/s, w {(rb != null ? rb.angularVelocity.magnitude : 0f):0.00} rad/s, " +
+                                      $"pitch {-a.transform.eulerAngles.x:0.0}, radar {a.radarAlt:0.0}, disabled {a.disabled}");
+                if (a.disabled) yield break;
+            }
         }
     }
 }

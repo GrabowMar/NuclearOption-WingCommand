@@ -281,6 +281,34 @@ namespace WingCommand.FlightSim
         }
 
         [Fact]
+        public void AVtolStandingTallAboveItsHangarFloorAsksToClimbNotToDescend()
+        {
+            // Night-2 sim (VL-49 at Boscali North): the spawn pose is the hangar floor, but the aircraft's root stands its spawn
+            // offset (5.3 m on its tall gear) above it. The hover-out height was measured from the floor, so 3 m up was 2.3 m below
+            // the root: the lift-off asked to descend, the collective sank to its floor (0.24) and two VL-49s sat until moved.
+            var field = new FieldTraffic(Field(), 0, false);
+            AirframeProfile p = SimProfiles.Utility();
+            Pose spawn = field.Field.Hangars[0].Spawn;
+            var pilot = new GroundPilot(0, field, AirframeClass.Rotary, spawn, 0) { RoofOverhead = true };
+            IFlightPipeline pipe = FlightStack.NewPipeline(AirframeClass.Rotary);
+            var events = new WingEventRing();
+            const float offset = 5.3f;
+            var s = new AircraftState
+            {
+                Pos = spawn.Pos + Vec3.Up * offset, Fwd = spawn.Fwd, Up = Vec3.Up, Right = Vec3.Cross(Vec3.Up, spawn.Fwd),
+                RadarAlt = 0f, RotorRpm = 1f, Dt = Dt,
+            };
+            ControlOutput o = default;
+            for (float t = 0f; t < 12f; t += Dt)
+            {
+                field.Step(Dt);
+                o = pilot.Step(s, p, pipe, t, Dt, events, 0);
+            }
+            Assert.Equal(GroundPhase.LiftOff, pilot.Phase);
+            Assert.True(o.Throttle > p.HoverCollective, $"collective {o.Throttle:0.00} with hover at {p.HoverCollective:0.00}");
+        }
+
+        [Fact]
         public void ABlockedTaxiwayIsReroutedAroundWithoutARelocation()
         {
             // T3: a wreck appears on the parallel taxiway south of the apron while the wing taxis.

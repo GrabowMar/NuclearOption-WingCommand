@@ -327,7 +327,7 @@ namespace WingCommand
             m.GroundOutput = o;
             ControlWriter.Fly(m.Aircraft, o, m.Profile.Class);
             LogLongStop(m);
-            if (m.Ground.TakeRelocation(out Pose to)) SafeRelocate.Move(m.Aircraft, to, m.Profile.Class != AirframeClass.FixedWing);
+            if (m.Ground.TakeRelocation(out Pose to)) SafeRelocate.Move(m.Aircraft, to);
             if (m.Ground.Phase == GroundPhase.Aborted)
             {
                 Release(m, "could not take off");
@@ -1120,9 +1120,22 @@ namespace WingCommand
                                       $"{(g.StopWho >= 0 ? " (" + NumberOf(g.StopWho) + ")" : "")} at ({m.Last.Pos.X:0}, {m.Last.Pos.Z:0}) " +
                                       $"v {m.Last.Speed:0.0} alt {m.Last.RadarAlt:0.0} throttle {m.GroundOutput.Throttle:0.00} brake {m.GroundOutput.Brake:0.0}" +
                                       (m.Profile.Class != AirframeClass.FixedWing
-                                          ? $" rpm {m.Last.RotorRpm:0.00} roof {g.RoofOverhead} exited {g.ExitedHangar}" : ""));
+                                          ? $" rpm {m.Last.RotorRpm:0.00} roof {g.RoofOverhead} exited {g.ExitedHangar}{Vertical(m)}" : ""));
                 if (traced.Add(g.Field)) Plugin.Logger.LogInfo($"[Ground] trace {g.Field.Field.Name}: {g.Field.Describe()}");
             }
+        }
+
+        /// <summary>A VTOL's lift in the ground trace: which stack flies, the collective trim against the hover estimate, and a
+        /// tiltwing's nacelle angle (night-2 sim: VL-49s that never climbed).</summary>
+        private static string Vertical(WingMember m)
+        {
+            RotaryController c = m.Brain.Pipeline is TiltwingPipeline tw ? tw.Rotary.Controller
+                : m.Brain.Pipeline is RotaryPipeline rp ? rp.Controller : null;
+            string mode = m.Brain.Pipeline is TiltwingPipeline t ? " " + t.Mode.ToString().ToLowerInvariant() : "";
+            string tilt = "";
+            TiltWingController nacelles = m.Profile.Class == AirframeClass.Tiltwing ? m.Aircraft.GetComponentInChildren<TiltWingController>() : null;
+            if (nacelles != null) tilt = $" nacelles {nacelles.GetWingAngle():0.00} of {nacelles.GetLowerAngleLimit():0.00}..{nacelles.GetUpperAngleLimit():0.00}";
+            return c == null ? mode + tilt : $"{mode} trim {c.Trim:0.00} hover {m.Profile.HoverCollective:0.00} ceiling {c.CollectiveCeiling:0.00}{tilt}";
         }
 
         /// <summary>The wing number (#2…) of the member with <paramref name="id"/>, or its id when it has left.</summary>

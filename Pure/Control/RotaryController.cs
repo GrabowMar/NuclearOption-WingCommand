@@ -46,6 +46,10 @@ namespace WingCommand
         public float TiltScale => tiltScale;
         /// <summary>The governor's collective ceiling (1 while the rotor holds its speed).</summary>
         public float CollectiveCeiling => ceiling;
+        /// <summary>The most collective this airframe may ask (a tiltwing's hover limit; 1 for a helicopter), part of the ceiling.</summary>
+        public float CollectiveMax = 1f;
+        /// <summary>The collective trim (the hover estimate the loop has learned).</summary>
+        public float Trim => integrator;
 
         public ControlOutput Step(in GuidanceCommand g, in AircraftState s, AirframeProfile p, float dt)
         {
@@ -92,9 +96,9 @@ namespace WingCommand
             if (g.HasHeading)
                 yawRate = Scalar.Clamp(YawGain * Scalar.Wrap180(g.HeadingDeg - Vec3.HeadingDeg(fwd)), -YawRateMaxDps, YawRateMaxDps);
 
-            ceiling = s.RotorRpm > 0f
+            ceiling = Math.Min(CollectiveMax, s.RotorRpm > 0f
                 ? Scalar.Clamp(1f - GovernorGain * Math.Max(0f, RpmFloor - s.RotorRpm), CeilingMin, 1f)
-                : 1f;
+                : 1f);
 
             float error = g.VelCmd.Y - s.Vel.Y;
             float cos = Scalar.Clamp(s.Up.Y, 0.7f, 1f);

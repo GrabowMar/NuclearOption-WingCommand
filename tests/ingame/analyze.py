@@ -11,6 +11,9 @@ import os
 import re
 import sys
 
+# Log lines carry non-ASCII (arrows, Polish decimals); a cp1250 console must not stop the report.
+sys.stdout.reconfigure(errors='replace')
+
 LOSS = re.compile(r"lost|left the wing|destroy|crash|Aborted|abort|GcasActivated|fault|Exception|relocat|ejected|stopped 15 s")
 
 
