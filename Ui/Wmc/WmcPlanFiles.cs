@@ -10,7 +10,7 @@ namespace WingCommand
     {
         private static PlanStore store;
 
-        private static string FilePath => Path.Combine(WingConfig.DataRoot, "plans.user.json");
+        private static string FilePath => Path.Combine(WingConfig.RecordsRoot, "plans.user.json");
 
         /// <summary>The mission's map (MissionManager.CurrentMission.MapKey.Path), or "" outside a mission.</summary>
         public static string Theatre => MissionManager.CurrentMission?.MapKey.Path ?? "";
@@ -39,7 +39,7 @@ namespace WingCommand
         {
             try
             {
-                Directory.CreateDirectory(WingConfig.DataRoot);
+                Directory.CreateDirectory(WingConfig.RecordsRoot);
                 string tmp = FilePath + ".tmp";
                 File.WriteAllText(tmp, Store.ToJson());
                 if (File.Exists(FilePath)) File.Delete(FilePath);

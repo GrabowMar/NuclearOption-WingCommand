@@ -17,10 +17,10 @@ namespace WingCommand
         /// <summary>Why the saved pilots could not be read this mission (the list's empty card says it), or null.</summary>
         public static string Problem { get; private set; }
 
-        public static string FilePath => Path.Combine(WingConfig.DataRoot, scratch ? SimFile : UserFile);
+        public static string FilePath => Path.Combine(WingConfig.RecordsRoot, scratch ? SimFile : UserFile);
 
         /// <summary>Where EXPORT writes and IMPORT reads first (FOLDER opens it).</summary>
-        public static string Folder => Path.Combine(WingConfig.DataRoot, "Pilots");
+        public static string Folder => Path.Combine(WingConfig.RecordsRoot, "Pilots");
 
         public static SavedPilotStore Store => store ?? Load();
 

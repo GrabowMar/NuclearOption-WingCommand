@@ -77,6 +77,7 @@ namespace WingCommand
             Logger.LogInfo($"{PluginName} {PluginVersion}-{PluginPrerelease} loaded. " +
                 $"mvid={typeof(Plugin).Assembly.ManifestModule.ModuleVersionId}");
             Logger.LogInfo(new WingDiagnostic(WingDiagnosticEvent.PluginReady, 0));
+            if (WingConfig.SimRun) Logger.LogInfo("Sim run: the player's records are left alone; this run's go to " + WingConfig.RecordsRoot);
             LogVerbose($"Effective settings: Mode={Settings.Mode.Value} DevTools={Settings.DevTools.Value} " +
                 $"DataRoot={WingConfig.DataRoot}");
         }

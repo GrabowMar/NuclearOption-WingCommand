@@ -77,7 +77,8 @@ namespace WingCommand
             else liveries[key] = token;
             try
             {
-                Plugin.Settings.LoadoutLiveries.Value = LiveryChoice.Encode(liveries);
+                // A sim run keeps its liveries and templates in memory: the player's .cfg is not the scenario's (audit 2026-09-28).
+                if (!WingConfig.SimRun) Plugin.Settings.LoadoutLiveries.Value = LiveryChoice.Encode(liveries);
             }
             catch (Exception e)
             {
@@ -134,7 +135,7 @@ namespace WingCommand
         {
             try
             {
-                Plugin.Settings.LoadoutTemplates.Value = LoadoutTemplateCodec.Encode(records);
+                if (!WingConfig.SimRun) Plugin.Settings.LoadoutTemplates.Value = LoadoutTemplateCodec.Encode(records);
             }
             catch (Exception e)
             {

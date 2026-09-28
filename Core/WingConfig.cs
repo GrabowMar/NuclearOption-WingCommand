@@ -21,6 +21,17 @@ namespace WingCommand
 
         internal static string DataRoot => Path.Combine(Paths.ConfigPath, "WingCommand", "v1");
 
+        private static bool? simRun;
+
+        /// <summary>A nomodkit sim run (<c>NOMODKIT_SIM_SCENARIO</c> set in the game's environment). Audit 2026-09-28: every sim
+        /// run's mission-end tally wrote the player's pilots.user.json, and its debriefs, plans, routes, telemetry and loadout
+        /// templates landed in the player's files too. A sim run still reads the player's airframes and tuning (so it flies as the
+        /// player's game does) but keeps every record it writes under <see cref="RecordsRoot"/>.</summary>
+        internal static bool SimRun => simRun ?? (simRun = !string.IsNullOrEmpty(System.Environment.GetEnvironmentVariable("NOMODKIT_SIM_SCENARIO"))).Value;
+
+        /// <summary>Where the player's records live: <see cref="DataRoot"/>, or its <c>sim</c> folder in a sim run.</summary>
+        internal static string RecordsRoot => SimRun ? Path.Combine(DataRoot, "sim") : DataRoot;
+
         public ConfigEntry<WingMode> Mode { get; }
         public ConfigEntry<string> DefaultFormation { get; }
         public ConfigEntry<SpacingPreset> DefaultSpacing { get; }

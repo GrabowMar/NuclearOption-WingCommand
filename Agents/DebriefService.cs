@@ -16,7 +16,7 @@ namespace WingCommand
         private EventCursor cursor;
         private DebriefStore store;
 
-        private static string FilePath => Path.Combine(WingConfig.DataRoot, "debrief.user.json");
+        private static string FilePath => Path.Combine(WingConfig.RecordsRoot, "debrief.user.json");
 
         public DebriefService()
         {
@@ -61,7 +61,7 @@ namespace WingCommand
             Store.Add(Sortie.Lines(), Sortie.Theatre);
             try
             {
-                Directory.CreateDirectory(WingConfig.DataRoot);
+                Directory.CreateDirectory(WingConfig.RecordsRoot);
                 string tmp = FilePath + ".tmp";
                 File.WriteAllText(tmp, Store.ToJson());
                 if (File.Exists(FilePath)) File.Delete(FilePath);

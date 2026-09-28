@@ -51,7 +51,7 @@ namespace WingCommand
             }
             try
             {
-                string dir = Path.Combine(WingConfig.DataRoot, "telemetry");
+                string dir = Path.Combine(WingConfig.RecordsRoot, "telemetry");
                 Directory.CreateDirectory(dir);
                 string path = Path.Combine(dir,
                     DateTime.Now.ToString("yyyyMMdd-HHmmss", CultureInfo.InvariantCulture) + "-" + reason + ".csv");

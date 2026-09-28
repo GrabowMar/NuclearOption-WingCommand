@@ -10,7 +10,7 @@ namespace WingCommand
     {
         private static RouteStore store;
 
-        private static string FilePath => Path.Combine(WingConfig.DataRoot, "routes.user.json");
+        private static string FilePath => Path.Combine(WingConfig.RecordsRoot, "routes.user.json");
 
         public static RouteStore Store
         {
@@ -36,7 +36,7 @@ namespace WingCommand
         {
             try
             {
-                Directory.CreateDirectory(WingConfig.DataRoot);
+                Directory.CreateDirectory(WingConfig.RecordsRoot);
                 string tmp = FilePath + ".tmp";
                 File.WriteAllText(tmp, Store.ToJson());
                 if (File.Exists(FilePath)) File.Delete(FilePath);

@@ -132,7 +132,7 @@ namespace WingCommand
             string unit = m.Aircraft != null ? m.Aircraft.definition.unitName : "unknown";
             try
             {
-                string dir = Path.Combine(WingConfig.DataRoot, "telemetry");
+                string dir = Path.Combine(WingConfig.RecordsRoot, "telemetry");
                 Directory.CreateDirectory(dir);
                 File.WriteAllText(Path.Combine(dir, "steptest-" + unit + "-" +
                     DateTime.Now.ToString("yyyyMMdd-HHmmss", CultureInfo.InvariantCulture) + ".csv"), TelemetryCsv.Write(ring));
@@ -149,7 +149,7 @@ namespace WingCommand
                     WingToast.Show("Step test: nothing to fit (see the CSV)");
                     return;
                 }
-                string path = Path.Combine(WingConfig.DataRoot, "airframes.calibrated.json");
+                string path = Path.Combine(WingConfig.RecordsRoot, "airframes.calibrated.json");
                 File.WriteAllText(path, ProfileFit.Merge(File.Exists(path) ? File.ReadAllText(path) : null, unit, values));
                 WingData.LoadProfiles(Plugin.Logger);
                 WingProfiles.Clear();
