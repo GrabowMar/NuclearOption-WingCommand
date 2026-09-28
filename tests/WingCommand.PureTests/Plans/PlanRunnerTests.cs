@@ -69,13 +69,38 @@ namespace WingCommand.PureTests
             plan.Steps[3].Add(new PlanStep { Kind = PlanKind.Attack, Targets = new uint[] { 7 }, End = PlanEnd.TargetsDown });
             var r = new PlanRunner(plan);
             r.Execute(0f);
+            LaneFacts[] on = Facts();
+            on[0].OnStation = true;
             Tick(r, 0f, Facts());
-            Tick(r, 29f, Facts());
+            Tick(r, 0.5f, on);
+            Tick(r, 29f, on);
             Assert.Equal(StepState.Running, r.State(0, 0));
             LaneFacts[] f = Facts();
+            f[0].OnStation = true;
             f[1].Bingo = f[2].Winchester = f[3].TargetsDown = true;
             Tick(r, 31f, f);
             for (int lane = 0; lane < 4; lane++) Assert.Equal(StepState.Done, r.State(lane, 0));
+        }
+
+        [Fact]
+        public void ATimedOrbitCountsFromArrivalNotFromTheOrder()
+        {
+            // Review 2 [6]: "ORBIT 1:00" ended a minute after the order went out, transit included, while the TIMELINE drew the
+            // minute from arrival.
+            var plan = new WingPlan();
+            plan.Steps[0].Add(new PlanStep { Kind = PlanKind.Orbit, Points = new[] { P }, End = PlanEnd.Time, EndSeconds = 60f });
+            var r = new PlanRunner(plan);
+            r.Execute(0f);
+            Tick(r, 0f, Facts());
+            Tick(r, 100f, Facts());
+            Assert.Equal(StepState.Running, r.State(0, 0));
+            LaneFacts[] on = Facts();
+            on[0].OnStation = true;
+            Tick(r, 100.5f, on);
+            Tick(r, 150f, on);
+            Assert.Equal(StepState.Running, r.State(0, 0));
+            Tick(r, 161f, on);
+            Assert.Equal(StepState.Done, r.State(0, 0));
         }
 
         [Fact]

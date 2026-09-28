@@ -45,7 +45,8 @@ namespace WingCommand
         private readonly long[] elementCompleted = new long[WingPlan.Lanes];
         private readonly long[] elementFailed = new long[WingPlan.Lanes];
         private readonly TransitionReason[] elementFailedWhy = new TransitionReason[WingPlan.Lanes];
-        private readonly List<uint> scratch = new List<uint>(FormationCatalog.MaxSlots);
+        private readonly List<uint> scratch = new List<uint>(FormationCatalog.MaxSlots), elementScratch = new List<uint>(FormationCatalog.MaxSlots);
+        private readonly bool[] laneActive = new bool[WingPlan.Lanes];
         private EventCursor cursor;
         private float lastTick = float.NegativeInfinity;
 
@@ -99,6 +100,8 @@ namespace WingCommand
             Completed = false;
             Sent = 0;
             cursor.Seen = w.Events.Total;
+            // A new run owns nothing yet: the last run's aircraft must not keep lane A from its own element.
+            foreach (List<uint> ids in laneIds) ids.Clear();
             for (int l = 0; l < WingPlan.Lanes; l++)
             {
                 ordered[l] = false;
@@ -139,7 +142,7 @@ namespace WingCommand
                     if (scope.Members == null) return 0;
                     foreach (uint id in scope.Members)
                         for (int l = 0; l < WingPlan.Lanes; l++)
-                            if (laneIds[l].Contains(id) || (w != null && w.Roster.ElementOf(id) == laneElement[l])) bits |= 1 << l;
+                            if (PlanLanes.Reaches(laneIds[l], laneElement[l], id, w != null ? w.Roster.ElementOf(id) : -1)) bits |= 1 << l;
                     return bits;
                 default: return (1 << WingPlan.Lanes) - 1;
             }
@@ -216,14 +219,13 @@ namespace WingCommand
             int l = e.Lane;
             string name = PlanRules.Name(l, e.Step);
             WingOrder o = e.Order;
-            // The lane's aircraft: its element while that is in use (lane A always), else its own aircraft by id — an element that
-            // merged into A (all recovering) is regrouped for its next step.
-            if (!w.Roster.InUse(laneElement[l]) || (laneElement[l] == 0 && l != 0))
-            {
-                Alive(w, l, scratch);
-                if (scratch.Count > 0) o.Scope = WingScope.OfMembers(scratch.ToArray());
-            }
-            else o.Scope = WingScope.OfElement(laneElement[l]);
+            // The lane's aircraft: its element while that holds exactly them, else its own aircraft by id — an element that merged
+            // into A (all recovering), a letter reused by other aircraft, or A holding another lane's jets (review 2 [1], [4]).
+            Alive(w, l, scratch);
+            Members(w, laneElement[l], elementScratch);
+            if (PlanLanes.ByElement(l, laneElement[l], w.Roster.InUse(laneElement[l]), scratch, elementScratch))
+                o.Scope = WingScope.OfElement(laneElement[l]);
+            else if (scratch.Count > 0) o.Scope = WingScope.OfMembers(scratch.ToArray());
             sentAt[l] = w.Events.Total;
             OrderResult r = OrderExecutor.Execute(o);
             if (!r.Accepted)
@@ -231,21 +233,34 @@ namespace WingCommand
                 Block(l, e.Step, r.Reason);
                 return;
             }
-            if (r.Element >= 0 && r.Element < WingPlan.Lanes && w.Roster.InUse(r.Element)) laneElement[l] = r.Element;
-            // The aircraft the step went to (an RTB or REFIT keeps them: they may leave the element while they recover).
+            bool inUse = r.Element >= 0 && r.Element < WingPlan.Lanes && w.Roster.InUse(r.Element);
+            if (inUse) laneElement[l] = r.Element;
+            // The aircraft the step went to (review 2 [2], [3]: not after an RTB or REFIT, an ATTACK, or a FORM UP into A).
             PlanKind kind = Plan.Steps[l][e.Step].Kind;
-            if (kind != PlanKind.Rtb && kind != PlanKind.Refit) Capture(w, l, laneElement[l]);
+            if (PlanLanes.Recapture(l, r.Element, inUse, kind)) Capture(w, l, laneElement[l]);
             Sent++;
             Plugin.Logger.LogInfo($"[Plan] {name} {kind}: {r.Ack}");
         }
 
-        /// <summary>Lane <paramref name="l"/>'s aircraft are element <paramref name="e"/>'s members now.</summary>
+        /// <summary>Lane <paramref name="l"/>'s aircraft are element <paramref name="e"/>'s members now — less any flying for another
+        /// lane that still has steps (review 2 [4]: lane A took B's recovering jets).</summary>
         private void Capture(WingService w, int l, int e)
         {
             laneIds[l].Clear();
             if (!w.Roster.InUse(e)) return;
+            for (int k = 0; k < WingPlan.Lanes; k++) laneActive[k] = Runner != null && Runner.Current(k) >= 0;
             foreach (WingMember m in w.Members)
-                if (!m.Released && m.Alive && (object)m.Aircraft != null && w.ElementOf(m) == e) laneIds[l].Add(m.Aircraft.persistentID.Id);
+                if (!m.Released && m.Alive && (object)m.Aircraft != null && w.ElementOf(m) == e
+                    && !PlanLanes.OwnedElsewhere(l, m.Aircraft.persistentID.Id, laneIds, laneActive))
+                    laneIds[l].Add(m.Aircraft.persistentID.Id);
+        }
+
+        /// <summary>Element <paramref name="e"/>'s live members, into <paramref name="into"/>.</summary>
+        private static void Members(WingService w, int e, List<uint> into)
+        {
+            into.Clear();
+            foreach (WingMember m in w.Members)
+                if (!m.Released && m.Alive && (object)m.Aircraft != null && w.ElementOf(m) == e) into.Add(m.Aircraft.persistentID.Id);
         }
 
         /// <summary>The lane's aircraft still flying with the wing, into <paramref name="into"/>.</summary>
@@ -285,6 +300,7 @@ namespace WingCommand
                 if (m.Recovery == null && !m.HasPendingRecovery && !m.OnGround) back++;
             }
             f.Winchester = alive > 0 && empty == alive;
+            f.OnStation = OnStation(w, l, step);
             f.TargetsDown = step.Targets != null && step.Targets.Length > 0 && TargetsDown(step.Targets);
             switch (step.Kind)
             {
@@ -300,6 +316,24 @@ namespace WingCommand
             // An RTB or REFIT with no aircraft left is done, not blocked.
             if ((step.Kind == PlanKind.Rtb || step.Kind == PlanKind.Refit || step.Kind == PlanKind.FormUp) && alive == 0) alive = 1;
             return f;
+        }
+
+        /// <summary>How near a step's point counts as on its area (at least; an area step's own radius when larger).</summary>
+        public static float StationMetres = 3000f;
+
+        /// <summary>A lane aircraft is within the step's area (review 2 [6]: a timed ORBIT, CAP or SWEEP counts from here).</summary>
+        private bool OnStation(WingService w, int l, PlanStep step)
+        {
+            if (step.Points == null || step.Points.Length == 0) return false;
+            Waypoint p = step.Points[0];
+            float r = System.Math.Max(StationMetres, step.Radius);
+            foreach (WingMember m in w.Members)
+            {
+                if (m.Released || !m.Alive || (object)m.Aircraft == null || !laneIds[l].Contains(m.Aircraft.persistentID.Id)) continue;
+                float dx = m.Last.Pos.X - p.X, dz = m.Last.Pos.Z - p.Z;
+                if (dx * dx + dz * dz <= r * r) return true;
+            }
+            return false;
         }
 
         private static bool TargetsDown(uint[] ids)

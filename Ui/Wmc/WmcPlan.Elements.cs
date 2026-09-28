@@ -496,11 +496,18 @@ namespace WingCommand
             if (row.activeSelf) row.SetActive(false);
         }
 
+        /// <summary>The plan itself was edited: after a run it shows as drawn, not the old run's states (review P2).</summary>
         private void Changed()
         {
-            // Review P2: editing after a run shows the plan as drawn, not the old run's states.
             WingPlans plans = Plans;
             if (plans != null && !plans.Running && plans.Runner != null) plans.ForgetRun();
+            Refreshed();
+        }
+
+        /// <summary>Something on the page changed (a pick, a tool, SAVE, EXECUTE/ABORT, SKIP): the run's states stay (review 2 [5]:
+        /// SAVE, a click or ABORT itself used to forget the run just ended).</summary>
+        private void Refreshed()
+        {
             version++;
             elementsKey = long.MinValue;
             if (last != null) RefreshElements(last);
@@ -587,7 +594,7 @@ namespace WingCommand
             plan.Name = name;
             WmcPlanFiles.Save();
             WingToast.Show("Saved " + name);
-            Changed();
+            Refreshed();
         }
 
         private void NewPlan()
@@ -617,12 +624,12 @@ namespace WingCommand
                 if (!planGate.Press("abort", Time.unscaledTime))
                 {
                     WingToast.Show("ABORT again to stop the plan");
-                    Changed();
+                    Refreshed();
                     return;
                 }
                 plans.Abort();
                 WingToast.Show(plans.Plan.Name + " aborted");
-                Changed();
+                Refreshed();
                 return;
             }
             last?.Map.Disarm();
@@ -631,7 +638,7 @@ namespace WingCommand
             if (errors != null && errors.Count > 0)
                 WingToast.Show("Cannot run: " + errors[0] + (errors.Count > 1 ? " (+" + (errors.Count - 1) + " more)" : ""));
             else WingToast.Show(plans.Plan.Name + " running");
-            Changed();
+            Refreshed();
         }
 
         private void PressTool(int i)
@@ -643,7 +650,7 @@ namespace WingCommand
             {
                 c.Map.Disarm();
                 routeOpen = false;
-                Changed();
+                Refreshed();
                 return;
             }
             if (tool == PlanTool.Replace && selStep < 0)
@@ -655,13 +662,13 @@ namespace WingCommand
             c.Map.ToolLane = LaneName(c.Client ? null : c.Wing, selLane);
             routeOpen = false;
             c.Map.ArmTool(c, tool);
-            Changed();
+            Refreshed();
         }
 
         private void StepToolRadius(int dir)
         {
             toolRadius = AreaGuard.Clamp(toolRadius + dir * 1000f);
-            Changed();
+            Refreshed();
         }
 
         private void EndRoute()
@@ -766,7 +773,7 @@ namespace WingCommand
             }
             routeOpen = false;
             if (last != null && last.Map.Tool == PlanTool.Replace) last.Map.Disarm();
-            Changed();
+            Refreshed();
         }
 
         private void AddStep(int lane, PlanKind kind)
@@ -789,7 +796,7 @@ namespace WingCommand
             if (act == 0) r.Resume(lane);
             else if (act == 1) r.Retry(lane);
             else r.Skip(lane, WingService.Instance?.MissionTime ?? 0f);
-            Changed();
+            Refreshed();
         }
 
         private void SelectElement(int e)
@@ -807,7 +814,7 @@ namespace WingCommand
                 c.Selection.SelectElement(e, elementIds);
                 c.Rescope();
             }
-            Changed();
+            Refreshed();
             WmcPanel.Instance?.Refresh();
         }
 

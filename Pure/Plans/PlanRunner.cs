@@ -10,6 +10,8 @@ namespace WingCommand
         /// <summary>The task this lane's running step gave completed (only a completion after the step started).</summary>
         public bool TaskDone;
         public bool Bingo, Winchester, TargetsDown;
+        /// <summary>A lane aircraft has reached the step's area (an ORBIT, CAP or SWEEP's TIME counts from here).</summary>
+        public bool OnStation;
         /// <summary>The player ordered this element since the last tick: the lane is HELD.</summary>
         public bool PlayerOrdered;
     }
@@ -33,6 +35,8 @@ namespace WingCommand
         private readonly float[,] startedAt = new float[WingPlan.Lanes, WingPlan.MaxSteps];
         private readonly int[] current = new int[WingPlan.Lanes];
         private readonly float[] startAt = new float[WingPlan.Lanes];
+        // When the running step's aircraft first reached its area (NaN: not yet): a timed ORBIT, CAP or SWEEP counts from here.
+        private readonly float[] stationAt = new float[WingPlan.Lanes];
         private readonly bool[] resend = new bool[WingPlan.Lanes];
         // Whether a step's order went out (RESUME and RETRY send again only what went out; one held before it did still waits).
         private readonly bool[,] wentOut = new bool[WingPlan.Lanes, WingPlan.MaxSteps];
@@ -118,7 +122,13 @@ namespace WingCommand
                     }
                     if (st == StepState.Running)
                     {
-                        if (!Ended(steps[i], f, time - startAt[l])) break;
+                        float from = startAt[l];
+                        if (OnArea(steps[i].Kind))
+                        {
+                            if (float.IsNaN(stationAt[l]) && f.OnStation) stationAt[l] = time;
+                            from = stationAt[l];
+                        }
+                        if (!Ended(steps[i], f, float.IsNaN(from) ? -1f : time - from)) break;
                         state[l, i] = StepState.Done;
                         doneAt[l, i] = time;
                         current[l]++;
@@ -130,6 +140,7 @@ namespace WingCommand
                     wentOut[l, i] = true;
                     if (float.IsNaN(startedAt[l, i])) startedAt[l, i] = time;
                     startAt[l] = time;
+                    stationAt[l] = float.NaN;
                     into?.Add(new PlanEmit { Lane = l, Step = i, Order = PlanCompile.Order(steps[i], l) });
                     sent++;
                     break;
@@ -154,6 +165,10 @@ namespace WingCommand
             }
         }
 
+        /// <summary>Kinds whose TIME is spent on their area, after the transit (review 2 [6]: the TIMELINE draws them so).</summary>
+        private static bool OnArea(PlanKind k) => k == PlanKind.Orbit || k == PlanKind.Cap || k == PlanKind.Sweep;
+
+        /// <summary><paramref name="elapsed"/> &lt; 0: the clock has not started (not on its area yet).</summary>
         private static bool Ended(PlanStep p, in LaneFacts f, float elapsed)
         {
             switch (p.End)
