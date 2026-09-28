@@ -82,6 +82,32 @@ namespace WingCommand.PureTests
         }
 
         [Fact]
+        public void NoTowRoundWithAnotherAircraftWithinASpanOfTheStand()
+        {
+            // Review (day 1): turning in place with a neighbour inside the swept circle interpenetrates them; it drives out instead
+            // (the span-aware corridor then stops it for the neighbour).
+            var field = new FieldTraffic(TestFields.WithServicePointAndExit(), 0, false);
+            var standAt = new Pose(new Vec3(-200f, 0f, 300f), new Vec3(-1f, 0f, 0f));
+            var plant = new TestGroundPlant(standAt);
+            var pilot = new GroundPilot(4, field, AirframeClass.FixedWing, standAt, -1);
+            IFlightPipeline pipeline = FlightStack.NewPipeline(AirframeClass.FixedWing);
+            pilot.StandHere(standAt, 0f);
+            field.Report(5, standAt.Pos + new Vec3(0f, 0f, 9f));
+            field.Departures.Expect(4, 1);
+            pilot.Depart(0f);
+            bool towed = false;
+            for (int i = 0; i < 10 * 30 && pilot.Phase == GroundPhase.Parked; i++)
+            {
+                field.Report(5, standAt.Pos + new Vec3(0f, 0f, 9f));
+                field.Step(Dt);
+                plant.Step(pilot.Step(plant.Read(Dt), Jet(), pipeline, i * Dt, Dt, null, 0), Dt);
+                towed |= pilot.TakeRelocation(out _);
+            }
+            Assert.Equal(GroundPhase.TaxiOut, pilot.Phase);
+            Assert.False(towed, "towed round next to another aircraft");
+        }
+
+        [Fact]
         public void AJetParkedFacingAwayFromItsWayOutIsTowedRoundBeforeItTaxis()
         {
             var field = new FieldTraffic(TestFields.WithServicePointAndExit(), 0, false);

@@ -348,7 +348,7 @@ namespace WingCommand
                         else
                         {
                             RouteFrom(new[] { s.Pos }, StartNode(s.Pos));
-                            TowRound(s);
+                            TowRound(s, p);
                             Enter(GroundPhase.TaxiOut, time);
                             Log(events, time, slot, WingEventKind.Taxiing);
                         }
@@ -386,10 +386,13 @@ namespace WingCommand
         }
 
         /// <summary>From a stand or a service point whose way out lies behind it: turned where it stands to face the way out (the
-        /// engine moves it, as a tow would), never a tight U-turn next to what surrounds a stand. A hangar spawn faces out already.</summary>
-        private void TowRound(in AircraftState s)
+        /// engine moves it, as a tow would), never a tight U-turn next to what surrounds a stand. A hangar spawn faces out already.
+        /// Not with another aircraft within a span of it (review, day 1: turning in place would put the two into each other); then it
+        /// drives out and the span-aware corridor stops it for the neighbour.</summary>
+        private void TowRound(in AircraftState s, AirframeProfile p)
         {
             if (hangar >= 0 || path.Length < 2) return;
+            if (traffic.Occupied(s.Pos, Math.Max(ServiceSpots.ClearRadius, p.SpanM + PassMargin), Owner)) return;
             Vec3 nose = s.Fwd.Horizontal;
             if (nose.SqrLength < 1e-4f) return;
             Vec3 way = Vec3.Zero;

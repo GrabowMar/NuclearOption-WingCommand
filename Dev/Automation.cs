@@ -758,17 +758,14 @@ namespace WingCommand
                 if (old == "FORM" || old == "PLAN") panel.Plan?.ShowSubNamed(old);
                 else if (old == "INSPECT") panel.WingPage?.ShowSub(WmcWing.SubInspect);
             }
-            // A sub-page by name: BEHAVIOUR's (FORM, OPTIONS, PLAN or ELEMENTS, ROUTE, TIMELINE, LOG) or SQUADRON's (ROSTER, STUDIO,
-            // INSPECT); SQUADRON's when it shows, else BEHAVIOUR's.
+            // A sub-page by name: SQUADRON's (ROSTER, STUDIO, INSPECT) or BEHAVIOUR's (FORM, OPTIONS, PLAN or ELEMENTS, ROUTE, TIMELINE,
+            // LOG); the two sets of names never overlap, so the name alone picks the tab (review, day 1).
             string sub = Text(args, "sub");
             if (sub != null)
             {
-                bool squadron = panel.Page == WmcTabs.Squadron && panel.WingPage != null && panel.WingPage.ShowSubNamed(sub);
-                if (!squadron)
-                {
-                    panel.Show(WmcTabs.Behaviour);
-                    if (panel.Plan == null || !panel.Plan.ShowSubNamed(sub)) return Fail("Wmc", "no sub-page " + sub);
-                }
+                if (panel.WingPage != null && panel.WingPage.ShowSubNamed(sub)) panel.Show(WmcTabs.Squadron);
+                else if (panel.Plan != null && panel.Plan.ShowSubNamed(sub)) panel.Show(WmcTabs.Behaviour);
+                else return Fail("Wmc", "no sub-page " + sub);
             }
             // Spec WMC program §4: the scope — clear, an element by letter, or wingmen by their #numbers.
             WmcSelection selection = panel.Context.Selection;
