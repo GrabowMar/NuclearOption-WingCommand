@@ -76,6 +76,9 @@ namespace WingCommand
                 foreach (Airbase.VerticalLandingPoint v in a.verticalLandingPoints)
                     if (v != null && v.point != null) pads.Add(new Pose(v.point.GlobalPosition().ToVec3(), v.point.forward.ToVec3()));
             sample.Pads = pads.ToArray();
+            // In-game 2026-09-28: Opal Airport listed a hangar on another island; nothing far from the field is taxied from or to.
+            string dropped = FieldBounds.Prune(sample);
+            if (dropped != null) Plugin.Logger.LogWarning("[Ground] " + a.name + ": not part of the field, not used: " + dropped);
             return sample;
         }
 

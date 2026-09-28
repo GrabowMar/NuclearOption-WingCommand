@@ -494,13 +494,17 @@ namespace WingCommand
             {
                 Hangar h = airbase.hangars[i];
                 if (h == null || used.Contains(h) || h.Disabled || !h.Available || !h.CanSpawnAircraft(definition)) continue;
+                // A hangar the field does not own in fact (FieldBounds dropped it: kilometres away) is never launched from; the taxi
+                // graph knows its hangars by their place in the field's sample.
+                int sample = FieldBounds.SampleOf(traffic.Field, i);
+                if (sample < 0) continue;
                 GameObject before = GameAccess.GetHangarSpawnedObject(h);
                 if (!h.TrySpawnAircraft(null, definition, livery, loadout, fuel).Allowed) continue;
                 used.Add(h);
                 Transform t = h.GetSpawnTransform();
                 return new GroundLaunch
                 {
-                    Hangar = h, Before = before, Traffic = traffic, HangarIndex = i,
+                    Hangar = h, Before = before, Traffic = traffic, HangarIndex = sample,
                     Spawn = new Pose(t.GlobalPosition().ToVec3(), t.forward.ToVec3()),
                 };
             }
@@ -578,6 +582,12 @@ namespace WingCommand
                     continue;
                 }
                 groundPending.RemoveAt(i);
+                // Where it appeared against where it was launched: a gap says the spawn, not the taxi, went wrong.
+                Vec3 at = g.Aircraft.GlobalPosition().ToVec3();
+                float off = (at - g.Spawn.Pos).Horizontal.Length;
+                if (off > 300f)
+                    Plugin.Logger.LogWarning("[Spawn] " + g.Aircraft.definition.unitName + " appeared " + (off / 1000f).ToString("0.0", System.Globalization.CultureInfo.InvariantCulture)
+                        + " km from its launch point at " + g.Field?.name);
                 WingService wing = WingService.Instance;
                 if (wing != null && wing.AdoptGround(g.Aircraft, g.Traffic, g.Spawn, g.HangarIndex, g.StartNode, g.Pilot))
                 {
