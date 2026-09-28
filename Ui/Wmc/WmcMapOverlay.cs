@@ -11,10 +11,12 @@ namespace WingCommand
     /// map's icon layer, moved at 5 Hz and when the zoom changes, hidden while the map is minimized. The plan layer (spec bezel v2
     /// §6), while PLAN › ELEMENTS shows or a plan runs: each lane's steps chained from its element, pending ones faded, finished
     /// ones gone, each anchored "B2 CAP · AFTER B1", the selected step wide with its legs numbered; and a CAP or SWEEP drag's live
-    /// ring with its radius.</summary>
+    /// ring with its radius. Every point goes through <see cref="WmcMapProjection"/>: flat on the game's map, through the camera of
+    /// Boscali Summer's 3D relief while it draws (its rings as polygons, redrawn whenever that camera moves).</summary>
     internal sealed class WmcMapOverlay
     {
         private const float LineWidth = 2f, NodeSize = 9f, LabelWidth = 190f, LabelHeight = 16f, PingSeconds = 1.2f;
+        private const int RingSegments = 32;
         private static readonly Color DraftColor = new Color(1f, 1f, 1f, 0.85f);
         // Element C is violet (spec bezel v2 §6): amber read as a caution rail. A letter badge always goes with the colour.
         private static readonly Color[] Elements =
@@ -37,6 +39,7 @@ namespace WingCommand
         private float ghostRadius = -1f;
         private GlobalPosition pingAt;
         private float pingStart = -1f, nextRefresh, drawnInverse = -1f;
+        private int drawnRevision;
         private bool dirty, shown;
         private static Sprite disc, ring;
 
@@ -70,7 +73,7 @@ namespace WingCommand
                 Collect(c, wmcVisible);
                 Draw(map);
             }
-            else if (dirty && !Mathf.Approximately(Inverse(map), drawnInverse)) Draw(map);
+            else if ((dirty && !Mathf.Approximately(Inverse(map), drawnInverse)) || WmcMapProjection.Revision != drawnRevision) Draw(map);
             dirty = false;
             AnimatePing(map);
             DrawGhost(map, c.Map);
@@ -96,10 +99,13 @@ namespace WingCommand
                 ghostLabel.enableWordWrapping = false;
                 ghostLabel.overflowMode = TextOverflowModes.Overflow;
             }
-            float factor = map.mapDisplayFactor, inverse = Inverse(map);
-            Vector3 at = new Vector3(input.DragX * factor, input.DragZ * factor, 0f);
+            float inverse = Inverse(map);
+            Vector3 at = At(map, input.DragX, input.DragZ);
+            // On the relief the drag's circle is drawn round (the ring it leaves is the true shape).
+            float radius = Mathf.Max((At(map, input.DragX + input.DragRadius, input.DragZ) - at).magnitude,
+                (At(map, input.DragX, input.DragZ + input.DragRadius) - at).magnitude);
             ghost.rectTransform.localPosition = at;
-            ghost.rectTransform.sizeDelta = Vector2.one * Mathf.Max(2f * input.DragRadius * factor, NodeSize * 2f * inverse);
+            ghost.rectTransform.sizeDelta = Vector2.one * Mathf.Max(2f * radius, NodeSize * 2f * inverse);
             ghost.color = new Color(1f, 1f, 1f, 0.9f);
             ghostLabel.rectTransform.localPosition = at + new Vector3(7f, 3f, 0f) * inverse;
             ghostLabel.rectTransform.localScale = Vector3.one * inverse;
@@ -214,25 +220,22 @@ namespace WingCommand
 
         private static float Inverse(DynamicMap map) => 1f / Mathf.Max(0.01f, map.mapImage.transform.localScale.x);
 
+        private Vector3 At(DynamicMap map, float x, float z) => WmcMapProjection.At(map, layer, x, z);
+
         private void Draw(DynamicMap map)
         {
-            float inverse = Inverse(map), factor = map.mapDisplayFactor;
+            float inverse = Inverse(map);
+            bool relief = WmcMapProjection.Relief;
             drawnInverse = inverse;
-            int node = 0;
+            drawnRevision = WmcMapProjection.Revision;
+            int node = 0, line = 0;
             for (int i = 0; i < legs.Count; i++)
             {
                 RouteLeg l = legs[i];
                 Color color = legColors[i];
                 if (l.Closing) color.a *= 0.5f;
-                Vector3 from = new Vector3(l.FromX * factor, l.FromZ * factor, 0f), to = new Vector3(l.ToX * factor, l.ToZ * factor, 0f);
-                Vector3 d = to - from;
-                Image line = Line(i);
-                RectTransform rt = line.rectTransform;
-                rt.localPosition = from;
-                rt.localRotation = Quaternion.Euler(0f, 0f, Mathf.Atan2(d.y, d.x) * Mathf.Rad2Deg);
-                rt.sizeDelta = new Vector2(d.magnitude, (l.Wide ? 1.5f * LineWidth : LineWidth) * inverse);
-                if (line.color != color) line.color = color;
-                Show(line.gameObject);
+                Vector3 to = At(map, l.ToX, l.ToZ);
+                Segment(line++, At(map, l.FromX, l.FromZ), to, (l.Wide ? 1.5f * LineWidth : LineWidth) * inverse, color);
                 if (l.Number <= 0) continue;
                 Image n = Node(node);
                 n.rectTransform.localPosition = to;
@@ -254,25 +257,52 @@ namespace WingCommand
                 Show(label.gameObject);
                 node++;
             }
+            int ringShown = 0;
             for (int i = 0; i < rings.Count; i++)
             {
-                Image r = RingImage(i);
-                r.rectTransform.localPosition = new Vector3(rings[i].X * factor, rings[i].Z * factor, 0f);
-                r.rectTransform.sizeDelta = Vector2.one * Mathf.Max(2f * rings[i].Radius * factor, NodeSize * 2f * inverse);
                 Color color = ringColors[i];
                 color.a *= 0.8f;
+                RouteRing g = rings[i];
+                if (relief)
+                {
+                    // A circle on the tilted relief is an ellipse: a polygon of projected points.
+                    Vector3 prev = At(map, g.X + g.Radius, g.Z);
+                    for (int k = 1; k <= RingSegments; k++)
+                    {
+                        float a = k * 2f * Mathf.PI / RingSegments;
+                        Vector3 next = At(map, g.X + Mathf.Cos(a) * g.Radius, g.Z + Mathf.Sin(a) * g.Radius);
+                        Segment(line++, prev, next, LineWidth * inverse, color);
+                        prev = next;
+                    }
+                    continue;
+                }
+                Image r = RingImage(ringShown++);
+                r.rectTransform.localPosition = At(map, g.X, g.Z);
+                r.rectTransform.sizeDelta = Vector2.one * Mathf.Max(2f * g.Radius * map.mapDisplayFactor, NodeSize * 2f * inverse);
                 if (r.color != color) r.color = color;
                 Show(r.gameObject);
             }
             // Review focus 5: anything past this refresh's counts goes (a merged or finished element leaves nothing).
-            for (int i = legs.Count; i < lines.Count; i++) HideObject(lines[i]);
+            for (int i = line; i < lines.Count; i++) HideObject(lines[i]);
             for (int i = node; i < nodes.Count; i++)
             {
                 HideObject(nodes[i]);
                 HideObject(labels[i]);
             }
-            for (int i = rings.Count; i < ringImages.Count; i++) HideObject(ringImages[i]);
+            for (int i = ringShown; i < ringImages.Count; i++) HideObject(ringImages[i]);
             shown = true;
+        }
+
+        private void Segment(int i, Vector3 from, Vector3 to, float width, Color color)
+        {
+            Vector3 d = to - from;
+            Image img = Line(i);
+            RectTransform rt = img.rectTransform;
+            rt.localPosition = from;
+            rt.localRotation = Quaternion.Euler(0f, 0f, Mathf.Atan2(d.y, d.x) * Mathf.Rad2Deg);
+            rt.sizeDelta = new Vector2(d.magnitude, width);
+            if (img.color != color) img.color = color;
+            Show(img.gameObject);
         }
 
         /// <summary>A label's content: rebuilt only when point, tenth of a km, whole second or action change.</summary>
@@ -294,8 +324,8 @@ namespace WingCommand
                 HideObject(ping);
                 return;
             }
-            float factor = map.mapDisplayFactor, inverse = Inverse(map);
-            ping.rectTransform.localPosition = new Vector3(pingAt.x * factor, pingAt.z * factor, 0f);
+            float inverse = Inverse(map);
+            ping.rectTransform.localPosition = At(map, pingAt.x, pingAt.z);
             ping.rectTransform.sizeDelta = Vector2.one * Mathf.Lerp(24f, 96f, t) * inverse;
             ping.color = new Color(1f, 1f, 1f, 1f - t);
             Show(ping.gameObject);
