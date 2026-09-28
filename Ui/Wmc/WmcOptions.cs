@@ -39,7 +39,7 @@ namespace WingCommand
         {
             page = pageRoot;
             Rect body = WmcUi.Page(page, shellBody, shellBody.height);
-            scope.Build(page, body.x, body.y, body.width, "SET FOR", false);
+            scope.Build(page, body.x, body.y, body.width, "SET FOR");
             float top = BezelLayout.ScopeRow + BezelLayout.ScopeGap;
             WmcScroll scroll = WmcScroll.Build(page, new Rect(body.x, body.y - top, body.width + 8f, Mathf.Max(40f, body.height - top)), "OptionsScroll");
             RectTransform s = scroll.Content;

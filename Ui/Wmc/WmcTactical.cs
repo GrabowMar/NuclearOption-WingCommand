@@ -38,7 +38,7 @@ namespace WingCommand
             body = WmcUi.Page(page, shellBody, shellBody.height);
             x = body.x;
             width = body.width;
-            scope.Build(page, x, body.y, width, "COMMAND", true);
+            scope.Build(page, x, body.y, width, "COMMAND");
             listTop = body.y - BezelLayout.ScopeRow - BezelLayout.ScopeGap;
             BuildList();
             BuildCue();

@@ -77,7 +77,7 @@ namespace WingCommand
             options.Build(SubRoot(SubOptions, "BehaviourOptions"), under);
 
             RectTransform route = SubRoot(SubRoute, "PlanRoute");
-            scope.Build(route, x, body.y - top, width, "ROUTE FOR", false);
+            scope.Build(route, x, body.y - top, width, "ROUTE FOR");
             float rt = top + BezelLayout.ScopeRow + BezelLayout.ScopeGap;
             BuildRoute(route, body.y - rt);
             routeScroll.SetViewport(new Rect(x, body.y - rt, width + 8f, Mathf.Max(40f, body.height - rt)));

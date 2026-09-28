@@ -11,7 +11,7 @@ namespace WingCommand
     /// tabs.</summary>
     internal sealed class WmcScopeRow
     {
-        private const float ChipGap = 3f, AllWidth = 38f, PresetWidth = 30f, KeyW = 60f, TextW = 126f;
+        private const float ChipGap = 3f, AllWidth = 38f, KeyW = 60f, TextW = 126f;
 
         private readonly Dictionary<string, AvButton> ids;
         private readonly string prefix;
@@ -32,9 +32,8 @@ namespace WingCommand
             prefix = idPrefix;
         }
 
-        /// <summary>The row at the top edge <paramref name="top"/>; <paramref name="preset"/> adds TACTICAL's [+] (element presets,
-        /// disabled until P2).</summary>
-        public void Build(RectTransform page, float left, float top, float w, string key, bool preset)
+        /// <summary>The row at the top edge <paramref name="top"/>.</summary>
+        public void Build(RectTransform page, float left, float top, float w, string key)
         {
             x = left;
             y = top;
@@ -44,14 +43,6 @@ namespace WingCommand
             AvStyled.Label(page, new Rect(x + 8f, y - 2f, KeyW, h), key, "metric-key");
             scopeText = WmcKit.Text(page, new Rect(x + 8f + KeyW, y - 2f, TextW, h), "row-name");
             chipsEnd = x + width - 2f;
-            if (preset)
-            {
-                AvButton plus = AvStyled.Button(page, new Rect(chipsEnd - PresetWidth, y - 2f, PresetWidth, h), "+", "btn", null);
-                plus.SetEnabled(false);
-                plus.WithTooltip("Element presets: saved splits of the wing, made on PLAN. Arrives in a later update.");
-                ids[prefix + "preset"] = plus;
-                chipsEnd -= PresetWidth + ChipGap;
-            }
             float allX = x + 8f + KeyW + TextW + 4f;
             allChip = AvStyled.Button(page, new Rect(allX, y - 2f, AllWidth, h), "ALL", "btn", PickAll, AvButtonStyle.Toggle);
             allChip.WithTooltip("Orders go to the whole wing.");

@@ -2,7 +2,7 @@ using System.Globalization;
 
 namespace WingCommand
 {
-    /// <summary>The WING tab's words for a member, from its snapshot entry (spec M7b §3): the host and a client read the
+    /// <summary>The SQUADRON tab's words for a member, from its snapshot entry (spec M7b §3): the host and a client read the
     /// same entry.</summary>
     internal static class WingRows
     {

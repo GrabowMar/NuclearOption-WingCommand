@@ -39,7 +39,7 @@ namespace WingCommand
             Rect body = WmcUi.Page(page, shellBody, shellBody.height);
             x = body.x;
             width = body.width;
-            scope.Build(page, x, body.y, width, "SHAPE FOR", false);
+            scope.Build(page, x, body.y, width, "SHAPE FOR");
             float top = BezelLayout.ScopeRow + BezelLayout.ScopeGap;
             PlanSize = BezelLayout.FormPreview(body.height);
             PreviewH = PlanSize + 10f;
@@ -104,10 +104,6 @@ namespace WingCommand
             WmcKit.Text(s, new Rect(tx + 12f, ly, 40f, 18f), "row-sub").text = "SLOT";
             AvKit.Panel(s, new Rect(tx + 58f, ly - 6f, 5f, 5f), AvTheme.Friendly).raycastTarget = false;
             WmcKit.Text(s, new Rect(tx + 68f, ly, 40f, 18f), "row-sub").text = "LIVE";
-            AvButton edit = AvStyled.Button(s, new Rect(w - 126f, y - PreviewH + 30f, 120f, 22f), "EDIT SHAPES ›", "btn", null);
-            edit.SetEnabled(false);
-            edit.WithTooltip("The shape editor: FORM's EDIT mode. Arrives in a later update.");
-            ids["form.edit"] = edit;
             y -= PreviewH + 6f;
 
             shapeHead = WmcKit.Text(s, new Rect(0f, y, w, 16f), "section-title");

@@ -2,7 +2,7 @@ using System.Globalization;
 
 namespace WingCommand
 {
-    /// <summary>The WING tab's element blocks (spec WMC program §4): rows in element order A–D, seats ascending inside each,
+    /// <summary>The SQUADRON tab's element blocks (spec WMC program §4): rows in element order A–D, seats ascending inside each,
     /// and each block's header words.</summary>
     internal static class ElementGroups
     {

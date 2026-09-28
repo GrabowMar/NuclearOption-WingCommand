@@ -18,15 +18,15 @@ namespace WingCommand
         private static readonly PlanTool[] ToolOrder =
         {
             PlanTool.Move, PlanTool.Route, PlanTool.Orbit, PlanTool.Cap, PlanTool.Sweep,
-            PlanTool.Attack, PlanTool.Off, PlanTool.Land, PlanTool.Cargo, PlanTool.Replace,
+            PlanTool.Attack, PlanTool.Land, PlanTool.Cargo, PlanTool.Replace,
         };
-        private static readonly string[] ToolLabels = { "MOVE", "ROUTE", "ORBIT", "CAP", "SWEEP", "ATTACK", "ESCORT", "LAND", "CARGO", "RE-PLACE" };
-        private static readonly string[] ToolIds = { "move", "route", "orbit", "cap", "sweep", "attack", "escort", "land", "cargo", "replace" };
+        private static readonly string[] ToolLabels = { "MOVE", "ROUTE", "ORBIT", "CAP", "SWEEP", "ATTACK", "LAND", "CARGO", "RE-PLACE" };
+        private static readonly string[] ToolIds = { "move", "route", "orbit", "cap", "sweep", "attack", "land", "cargo", "replace" };
         private static readonly string[] ToolTips =
         {
             "A step to fly to a point.", "A step to fly a route: right-click its points, DONE ends it.", "A step to orbit a point.",
             "A step to guard an area: right-press the centre and drag the radius.", "A step to sweep an area: right-press and drag.",
-            "A step to attack enemies: right-click one, SHIFT adds more.", "Escort by any element comes with A3.",
+            "A step to attack enemies: right-click one, SHIFT adds more.",
             "A step to land at a point (helicopters).", "A step to deliver cargo at a point (helicopters).",
             "Put the selected step's point, area or targets somewhere else.",
         };
@@ -98,7 +98,6 @@ namespace WingCommand
                 tools[i].WithTooltip(ToolTips[i]);
                 ids["plan.tool." + ToolIds[i]] = tools[i];
             }
-            tools[6].SetEnabled(false);
             y -= 2f * (Row + 2f);
             cueText = WmcKit.Text(root, new Rect(x, y, width - 196f, Row - 2f), "row-sub");
             cueMinus = AvStyled.Button(root, new Rect(x + width - 192f, y, 22f, Row - 2f), "-", "btn", () => StepToolRadius(-1));
@@ -380,7 +379,7 @@ namespace WingCommand
             if (why == toolWhy) return;
             toolWhy = why;
             for (int i = 0; i < tools.Length; i++)
-                if (i != 6) tools[i].WithTooltip(why ?? ToolTips[i]);
+                tools[i].WithTooltip(why ?? ToolTips[i]);
         }
 
         private void RefreshCue(WmcContext c, WingPlan plan, bool running)
