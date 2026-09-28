@@ -74,5 +74,20 @@ namespace WingCommand.PureTests
             Assert.Equal(free / 2f, TargetSpread.Score(1f, 0f, 1000f, 500f, 0, false, 1), 6);     // beyond 1.2 × max range
             Assert.Equal(1f / 500f, TargetSpread.Score(1f, 0f, 100f, 5000f, 0, false, 1), 6);     // range floor
         }
+
+        [Fact]
+        public void AskingWhetherTheWingIsOutnumberedNeverCountsAsAConfirmation()
+        {
+            // Review (A1 fix pass): the area guard asked AllowEngage every 0.5 s; its second call read as the player's confirming
+            // ENGAGE, so a CAP engaged outnumbered and the fall-back was switched off. Holds asks without side effects.
+            var j = new OutnumberedJudge();
+            Assert.True(j.Holds(4, 2, 2f, 0f));
+            Assert.True(j.Holds(4, 2, 2f, 0.5f));
+            Assert.False(j.Overridden);
+            Assert.False(j.AllowEngage(4, 2, 2f, 1f));                // the player's first ENGAGE is still refused
+            Assert.True(j.AllowEngage(4, 2, 2f, 2f));                 // and the second confirms
+            Assert.False(j.Holds(4, 2, 2f, 2.5f));                    // confirmed: it no longer holds the area back
+            Assert.False(new OutnumberedJudge().Holds(3, 2, 2f, 0f)); // not outnumbered
+        }
     }
 }

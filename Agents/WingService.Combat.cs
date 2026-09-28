@@ -41,7 +41,11 @@ namespace WingCommand
 
         /// <summary>The radial Engage asks first (spec M5 §6.3): false while outnumbered, unless this is the second press
         /// within the confirmation window.</summary>
-        public bool MayEngage(out int hostiles, out int members)
+        public bool MayEngage(out int hostiles, out int members) => Odds(out hostiles, out members, true);
+
+        /// <summary>The wing's odds: flying members and hostile air threats around them; <paramref name="order"/> asks as the player's
+        /// ENGAGE does (a refusal, then a confirming second press), otherwise only whether the odds hold the wing back.</summary>
+        private bool Odds(out int hostiles, out int members, bool order)
         {
             hostiles = 0;
             members = 0;
@@ -56,7 +60,7 @@ namespace WingCommand
             }
             if (members == 0) return true;
             hostiles = CountHostiles(any, sum / members);
-            return judge.AllowEngage(hostiles, members, FallBackRatio, missionTime);
+            return order ? judge.AllowEngage(hostiles, members, FallBackRatio, missionTime) : !judge.Holds(hostiles, members, FallBackRatio, missionTime);
         }
 
         private float hostilesAt = float.NegativeInfinity;
@@ -510,7 +514,7 @@ namespace WingCommand
                     continue;
                 }
                 // Review A1: not while the wing is outnumbered (the fall-back held half a second).
-                if (!MayEngage(out _, out _)) continue;
+                if (!Odds(out _, out _, false)) continue;
                 // EngageAll, not Engage: an ATTACK order another element flies stays.
                 // Not a member the supervisor would take straight back (no ammunition, bingo, beyond the area's leash), nor one it just
                 // took back: engaged every half second, its missile defence never started (review A1).
