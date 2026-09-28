@@ -7,7 +7,7 @@ namespace WingCommand
         public static string Text(WingTask task, int leg, Vec3 lead, float leadSpeed)
         {
             if (task == null || task.Kind == TaskKind.Form) return "FORM · on you";
-            string kind = task.Kind.ToString().ToUpperInvariant();
+            string kind = AreaGuard.Word(task) ?? task.Kind.ToString().ToUpperInvariant();
             int n = task.Points?.Length ?? 0;
             if (n == 0) return kind + " · no points";
             bool path = task.Kind == TaskKind.Move || task.Kind == TaskKind.Route || task.Kind == TaskKind.Patrol;
@@ -30,7 +30,7 @@ namespace WingCommand
         public static string Short(WingTask task, int leg, Vec3 lead, float leadSpeed)
         {
             if (task == null || task.Kind == TaskKind.Form) return "FORM";
-            string kind = task.Kind.ToString().ToUpperInvariant();
+            string kind = AreaGuard.Word(task) ?? task.Kind.ToString().ToUpperInvariant();
             int n = task.Points?.Length ?? 0;
             if (n == 0) return kind;
             bool path = task.Kind == TaskKind.Move || task.Kind == TaskKind.Route || task.Kind == TaskKind.Patrol;

@@ -2,13 +2,13 @@ namespace WingCommand
 {
     /// <summary>The map-order modes armed from TACTICAL's order grid (spec WMC rebuild §TACTICAL). SWEEP and CAP join with
     /// their orders (R8).</summary>
-    internal enum MapMode : byte { Off, Move, Route, Orbit, Hold, Attack, Cargo, Land }
+    internal enum MapMode : byte { Off, Move, Route, Orbit, Hold, Attack, Cargo, Land, Cap, Sweep }
 
     /// <summary>What is under the cursor on a right-click.</summary>
     internal enum MapPointer : byte { Empty, Enemy, Other }
 
     /// <summary>What a right-click does.</summary>
-    internal enum MapClick : byte { None, Move, AddPoint, Orbit, Hold, Attack, AddTarget, Cargo, NeedEnemy, Land }
+    internal enum MapClick : byte { None, Move, AddPoint, Orbit, Hold, Attack, AddTarget, Cargo, NeedEnemy, Land, Cap, Sweep }
 
     /// <summary>Right-click rules of the map layer (spec WMC program §5): an armed mode places its order for the scope; with
     /// no mode and wingmen selected a right-click is MOVE (0.9); otherwise, or while another mod holds the map, the
@@ -30,6 +30,8 @@ namespace WingCommand
                 case MapMode.Hold: return MapClick.Hold;
                 case MapMode.Cargo: return MapClick.Cargo;
                 case MapMode.Land: return MapClick.Land;
+                case MapMode.Cap: return MapClick.Cap;
+                case MapMode.Sweep: return MapClick.Sweep;
                 case MapMode.Attack:
                     return pointer != MapPointer.Enemy ? MapClick.NeedEnemy : shift ? MapClick.AddTarget : MapClick.Attack;
                 default: return MapClick.None;

@@ -43,6 +43,9 @@ namespace WingCommand
         public FollowOn Then;
         /// <summary>Scouting: the radio reports ground contacts too (spec M7 §2.4); a follow-on orbit keeps it.</summary>
         public bool Scout;
+        /// <summary>CAP and SWEEP (<see cref="AreaGuard"/>): the guarded area's centre and radius (0: guards nothing).</summary>
+        public Waypoint Center;
+        public float GuardRadius;
 
         public static WingTask Form() => new WingTask { Kind = TaskKind.Form };
         public static WingTask Move(Waypoint to) => new WingTask { Kind = TaskKind.Move, Points = new[] { to } };
@@ -51,6 +54,17 @@ namespace WingCommand
             new WingTask { Kind = TaskKind.Patrol, Points = points, Loop = loop };
         public static WingTask Orbit(Waypoint at, float seconds = 0f) =>
             new WingTask { Kind = TaskKind.Orbit, Points = new[] { at }, Seconds = seconds };
+        /// <summary>CAP: orbit <paramref name="at"/> and fight hostile aircraft entering <paramref name="radius"/> of it.</summary>
+        public static WingTask Cap(Waypoint at, float radius) =>
+            new WingTask { Kind = TaskKind.Orbit, Points = new[] { at }, Center = at, GuardRadius = AreaGuard.Clamp(radius) };
+
+        /// <summary>SWEEP: loop round <paramref name="at"/> and fight hostile aircraft inside <paramref name="radius"/> of it.</summary>
+        public static WingTask Sweep(Waypoint at, float radius)
+        {
+            float r = AreaGuard.Clamp(radius);
+            return new WingTask { Kind = TaskKind.Patrol, Loop = true, Points = AreaGuard.Circuit(at, r), Center = at, GuardRadius = r };
+        }
+
         public static WingTask Hold(Waypoint at, float headingDeg, float seconds = 0f) =>
             new WingTask { Kind = TaskKind.Hold, Points = new[] { at }, HeadingDeg = headingDeg, Seconds = seconds };
     }

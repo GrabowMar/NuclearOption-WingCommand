@@ -8,3 +8,4 @@ wc-m5d-outnumbered-fs20
 wc-m5d-standing-fire-fs20
 wc-m5e-splash-fs20
 wc-m8-perf-8ship-fs20
+wc-a1-cap-fs20

@@ -1,0 +1,188 @@
+{
+ "name": "wc-a1-cap-fs20",
+ "mods": [
+  "wingcommand"
+ ],
+ "timeout_s": 330,
+ "ops": [
+  {
+   "op": "spawn",
+   "id": "lead",
+   "type": "FS-20 Vortex",
+   "at": {
+    "map": [
+     0,
+     0
+    ]
+   },
+   "altitude": 3000,
+   "speed": 200,
+   "heading": 0
+  },
+  {
+   "op": "fly",
+   "id": "lead",
+   "program": [
+    {
+     "level": 5
+    },
+    {
+     "orbit": {
+      "bank": 25,
+      "seconds": 400
+     }
+    }
+   ]
+  },
+  {
+   "op": "wait",
+   "seconds": 2
+  },
+  {
+   "op": "call",
+   "method": "WingCommand.Automation.FormOn",
+   "store": "form",
+   "args": {
+    "lead": "lead",
+    "count": 2,
+    "shape": "finger-four-right",
+    "spacing": "Standard"
+   }
+  },
+  {
+   "op": "wait",
+   "seconds": 45
+  },
+  {
+   "op": "call",
+   "method": "WingCommand.Automation.Wmc",
+   "store": "open",
+   "args": {
+    "open": true,
+    "tab": "TACTICAL",
+    "press": "tac.orders.cap"
+   }
+  },
+  {
+   "op": "call",
+   "method": "WingCommand.Automation.WmcMap",
+   "store": "capped",
+   "args": {
+    "x": 0,
+    "z": 15000
+   }
+  },
+  {
+   "op": "wait",
+   "seconds": 30
+  },
+  {
+   "op": "call",
+   "method": "WingCommand.Automation.WmcMap",
+   "store": "on_cap"
+  },
+  {
+   "op": "call",
+   "method": "WingCommand.Automation.CombatState",
+   "store": "calm"
+  },
+  {
+   "op": "spawn",
+   "id": "bandit",
+   "type": "FS-12 Revoker",
+   "faction": "Primeva",
+   "at": {
+    "map": [
+     0,
+     19000
+    ]
+   },
+   "altitude": 3000,
+   "speed": 200,
+   "heading": 180
+  },
+  {
+   "op": "wait",
+   "seconds": 40
+  },
+  {
+   "op": "call",
+   "method": "WingCommand.Automation.CombatState",
+   "store": "fight"
+  },
+  {
+   "op": "call",
+   "method": "WingCommand.Automation.Wmc",
+   "store": "tac",
+   "args": {
+    "tab": "TACTICAL"
+   }
+  },
+  {
+   "op": "capture",
+   "name": "cap-fight"
+  },
+  {
+   "op": "wait",
+   "seconds": 120
+  },
+  {
+   "op": "call",
+   "method": "WingCommand.Automation.CombatState",
+   "store": "after"
+  },
+  {
+   "op": "call",
+   "method": "WingCommand.Automation.Metrics",
+   "store": "wing"
+  },
+  {
+   "op": "end"
+  }
+ ],
+ "checks": [
+  {
+   "check": "status_ok"
+  },
+  {
+   "check": "result_above",
+   "path": "form.spawned",
+   "min": 2
+  },
+  {
+   "check": "result_above",
+   "path": "open.pressed",
+   "min": 1
+  },
+  {
+   "check": "result_above",
+   "path": "on_cap.orbiting",
+   "min": 1
+  },
+  {
+   "check": "result_above",
+   "path": "on_cap.rings",
+   "min": 2
+  },
+  {
+   "check": "result_below",
+   "path": "calm.engaged",
+   "max": 0
+  },
+  {
+   "check": "result_above",
+   "path": "fight.engaged",
+   "min": 1
+  },
+  {
+   "check": "result_below",
+   "path": "tac.overflow",
+   "max": 0
+  },
+  {
+   "check": "result_above",
+   "path": "after.members",
+   "min": 1
+  }
+ ]
+}

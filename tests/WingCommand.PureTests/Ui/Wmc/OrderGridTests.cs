@@ -49,7 +49,8 @@ namespace WingCommand.PureTests
         [Fact]
         public void UnbuiltOrdersSayWhyAndAreNeverPressable()
         {
-            foreach (var (r, c) in new[] { (0, 3), (1, 2), (2, 2) })
+            // CAP and SWEEP are live (A1); ECM still waits.
+            foreach (var (r, c) in new[] { (2, 2) })
             {
                 GridCell cell = OrderGrid.At(r, c, false);
                 Assert.False(cell.Built);

@@ -63,16 +63,16 @@ namespace WingCommand
             "One missile at the nearest enemy aircraft.");
         private static readonly GridCell Engage = new GridCell(GridOrder.Engage, "engage", "ENGAGE", GridInput.Now, MapMode.Off,
             "Fight the enemies in reach, then come back.");
-        private static readonly GridCell Sweep = new GridCell(GridOrder.Sweep, "sweep", "SWEEP", GridInput.Area, MapMode.Off,
-            "Search an area and fight what is found there.", "SWEEP: search an area and fight what is found there." + Later);
+        private static readonly GridCell Sweep = new GridCell(GridOrder.Sweep, "sweep", "SWEEP", GridInput.Area, MapMode.Sweep,
+            "Right-click the map: loop round a 12 km area there and fight hostile aircraft found in it.");
         private static readonly GridCell Scout = new GridCell(GridOrder.Scout, "scout", "SCOUT", GridInput.Now, MapMode.Off,
             "A low route 20 km ahead, reporting contacts.");
         private static readonly GridCell Move = new GridCell(GridOrder.Move, "move", "MOVE", GridInput.Point, MapMode.Move,
             "Right-click the map: fly there, then orbit.");
         private static readonly GridCell Orbit = new GridCell(GridOrder.Orbit, "orbit", "ORBIT", GridInput.Point, MapMode.Orbit,
             "Right-click the map: orbit there. HERE orbits where they are now.");
-        private static readonly GridCell Cap = new GridCell(GridOrder.Cap, "cap", "CAP", GridInput.Area, MapMode.Off,
-            "Orbit a point and fight what enters the radius.", "CAP: orbit a point and fight what enters the radius." + Later);
+        private static readonly GridCell Cap = new GridCell(GridOrder.Cap, "cap", "CAP", GridInput.Area, MapMode.Cap,
+            "Right-click the map: orbit there and fight hostile aircraft entering 8 km of it.");
         private static readonly GridCell Hold = new GridCell(GridOrder.Hold, "hold", "HOLD", GridInput.Point, MapMode.Hold,
             "Right-click the map: hold there. HERE holds where they are now.");
         private static readonly GridCell Break = new GridCell(GridOrder.Break, "break", "DISENGAGE", GridInput.Now, MapMode.Off,

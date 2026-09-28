@@ -182,6 +182,8 @@ namespace WingCommand
                 case MapClick.Land:
                     at.Action = ArrivalAction.Land;
                     return WingOrder.Tasked(WingTask.Move(at), c.Scope);
+                case MapClick.Cap: return WingOrder.Tasked(WingTask.Cap(at, AreaGuard.CapRadius), c.Scope);
+                case MapClick.Sweep: return WingOrder.Tasked(WingTask.Sweep(at, AreaGuard.SweepRadius), c.Scope);
                 case MapClick.Attack:
                 case MapClick.AddTarget:
                 {

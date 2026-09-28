@@ -75,6 +75,7 @@ namespace WingCommand
         private static string TaskWords(WingTask t)
         {
             if (t == null) return "forming up";
+            if (t.GuardRadius > 0f) return t.Kind == TaskKind.Patrol ? "sweeping the area" : "on CAP";
             switch (t.Kind)
             {
                 case TaskKind.Move: return t.Scout ? "scouting" : "moving";

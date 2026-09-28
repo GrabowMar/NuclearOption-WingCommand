@@ -400,6 +400,66 @@ namespace WingCommand
             result = new CombatAI.TargetSearchResults(best, bestStation, result.opportunity, result.outOfAmmo);
         }
 
+        public static float GuardSeconds = 0.5f;
+        private float guardClock;
+        private readonly bool[] guardFighting = new bool[ElementRoster.MaxElements];
+
+        /// <summary>Element <paramref name="e"/>'s task when it guards an area (CAP, SWEEP) and it flies it, else null.</summary>
+        private WingTask GuardedTask(int e)
+        {
+            if (e < 0 || e >= ElementRoster.MaxElements || (e > 0 && !Roster.InUse(e))) return null;
+            WingPlanner p = PlannerOf(e);
+            return p != null && p.Active && p.Current != null && p.Current.GuardRadius > 0f ? p.Current : null;
+        }
+
+        /// <summary>Twice a second: an element on CAP or SWEEP engages when a hostile aircraft is inside its area (its doctrine
+        /// holding fire excepted); its members come back to the task when the fight is over, as after ENGAGE.</summary>
+        private void GuardAreas(float dt)
+        {
+            if ((guardClock += dt) < GuardSeconds) return;
+            guardClock = 0f;
+            for (int e = 0; e < ElementRoster.MaxElements; e++)
+            {
+                WingTask area = GuardedTask(e);
+                if (area == null)
+                {
+                    guardFighting[e] = false;
+                    continue;
+                }
+                FactionHQ hq = null;
+                bool idle = false;
+                int element = e;
+                foreach (WingMember m in Members)
+                {
+                    if (m.Released || !m.Alive || m.OnGround || m.Recovery != null || ElementOf(m) != e) continue;
+                    if (hq == null && m.Aircraft != null) hq = m.Aircraft.NetworkHQ;
+                    if (!m.Engaged && DoctrineFor(m).Targets != TargetPolicy.Hold && !m.Bingo.Bingo) idle = true;
+                }
+                if (!idle || hq == null || hq.trackingDatabase == null) continue;
+                Unit threat = null;
+                foreach (KeyValuePair<PersistentID, TrackingInfo> pair in hq.trackingDatabase)
+                {
+                    TrackingInfo t = pair.Value;
+                    if (t == null || !t.TryGetUnit(out Unit u) || !(u is Aircraft) || u.disabled || u.NetworkHQ == null || u.NetworkHQ == hq) continue;
+                    if (!AreaGuard.Inside(area, t.GetPosition().ToVec3())) continue;
+                    threat = u;
+                    break;
+                }
+                if (threat == null)
+                {
+                    guardFighting[e] = false;
+                    continue;
+                }
+                // EngageAll, not Engage: an ATTACK order another element flies stays.
+                // Not a member the supervisor would take straight back (no ammunition, bingo): it would be engaged every half second.
+                int n = EngageAll(m => ElementOf(m) == element && !m.Engaged && DoctrineFor(m).Targets != TargetPolicy.Hold
+                    && AmmoFraction(m.Aircraft) > 0f && !m.Bingo.Bingo);
+                if (n > 0 && !guardFighting[e])
+                    Plugin.Logger.LogInfo($"[Wing] element {ElementRoster.Letter(e)} {AreaGuard.Word(area)}: {threat.unitName} inside the area, {n} engaging");
+                guardFighting[e] = n > 0 || guardFighting[e];
+            }
+        }
+
         /// <summary>Every member flying with the wing fights on its own choices (an attack order ends: review M5b I1).
         /// Returns how many are engaged.</summary>
         public int Engage(Func<WingMember, bool> who = null)
@@ -629,6 +689,7 @@ namespace WingCommand
         {
             AnchorSample anchor = default;
             bool sampled = false;
+            GuardAreas(dt);
             foreach (WingMember m in Members)
             {
                 if (!m.Engaged || m.Released || !m.Alive || !InNativeCombat(m)) continue;
@@ -639,10 +700,16 @@ namespace WingCommand
                 }
                 // The sensor is not read here: a second read in a tick would zero its derived acceleration.
                 bool bingo = BingoNow(m, dt);
+                Vec3 at = m.Aircraft.GlobalPosition().ToVec3();
+                // A CAP or SWEEP element fights round its area, not round the wing's anchor (A1).
+                WingTask area = GuardedTask(ElementOf(m));
+                float leash = AreaGuard.Leash(area);
                 var s = new CombatSituation
                 {
-                    AnchorPresent = anchor.Present,
-                    AnchorDistance = anchor.Present ? (anchor.Pos - m.Aircraft.GlobalPosition().ToVec3()).Length : 0f,
+                    AnchorPresent = area != null || anchor.Present,
+                    AnchorDistance = area != null ? new Vec3(at.X - area.Center.X, 0f, at.Z - area.Center.Z).Length
+                        : anchor.Present ? (anchor.Pos - at).Length : 0f,
+                    LeashMetres = leash,
                     Ammo = AmmoFraction(m.Aircraft), Bingo = bingo,
                     NoTargetSeconds = m.NoTargetClock = NativeTarget(m) != null ? 0f : m.NoTargetClock + dt,
                 };

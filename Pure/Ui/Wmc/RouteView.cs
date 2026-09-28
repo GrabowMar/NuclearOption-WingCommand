@@ -29,6 +29,8 @@ namespace WingCommand
         {
             if (task == null || task.Points == null || task.Points.Length == 0) return;
             Waypoint[] p = task.Points;
+            // CAP and SWEEP: the guarded area is drawn with the task.
+            if (task.GuardRadius > 0f) rings.Add(new RouteRing { X = task.Center.X, Z = task.Center.Z, Radius = task.GuardRadius });
             switch (task.Kind)
             {
                 case TaskKind.Move:

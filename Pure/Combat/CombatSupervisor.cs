@@ -15,6 +15,8 @@ namespace WingCommand
         public NativeExit Exit;
         /// <summary>How long the game's combat state has had no target.</summary>
         public float NoTargetSeconds;
+        /// <summary>This member's leash (a CAP or SWEEP area's), m; 0 for <see cref="CombatSupervisor.LeashMetres"/>.</summary>
+        public float LeashMetres;
     }
 
     /// <summary>Spec M5 §2.2: an engaged member stays in the game's combat state until it would leave it (no target, low
@@ -30,7 +32,7 @@ namespace WingCommand
             reason = s.Bingo ? TransitionReason.Fuel
                 : s.Exit != NativeExit.None || s.NoTargetSeconds > NoTargetSeconds ? TransitionReason.NoTarget
                 : s.Ammo <= 0f ? TransitionReason.Winchester
-                : s.AnchorPresent && s.AnchorDistance > LeashMetres ? TransitionReason.Leash
+                : s.AnchorPresent && s.AnchorDistance > (s.LeashMetres > 0f ? s.LeashMetres : LeashMetres) ? TransitionReason.Leash
                 : TransitionReason.None;
             return reason != TransitionReason.None;
         }
