@@ -127,6 +127,11 @@ namespace WingCommand
         /// <summary>Maximize the map and select the WMC screen, as the player's bezel press would (automation).</summary>
         public void Open()
         {
+            if (gaveUp)
+            {
+                WingToast.Show("The WMC could not install on the map's bezel (see the log); orders stay on the radial menu");
+                return;
+            }
             DynamicMap map = SceneSingleton<DynamicMap>.i;
             if (map != null && !DynamicMap.mapMaximized) map.Maximize();
             if (screen != null && !screen.isActive && bezelButton != null) bezelButton.onClick.Invoke();
@@ -261,7 +266,7 @@ namespace WingCommand
             gaveUp = true;
             BezelRegistry.Release(BezelRegistry.Wmc);
             screen = null;
-            Plugin.Logger.LogWarning("[WMC] could not install the panel (" + reason + "). The radial menu and hotkeys still work.");
+            Plugin.Logger.LogWarning("[WMC] could not install the panel (" + reason + "). The radial menu still gives the orders; the WMC hotkey says why it cannot open.");
         }
 
         private MFDScreen Build(MFDScreen template, Button bezel, out float height)
@@ -380,9 +385,13 @@ namespace WingCommand
                     var box = new MapBox();
                     Aircraft player = context.Wing?.Player;
                     if (player != null) box.Add(player.GlobalPosition().x, player.GlobalPosition().z);
-                    if (context.Wing != null && !context.Client)
-                        foreach (WingMember m in context.Wing.Members)
-                            if (!m.Released && m.Alive && (object)m.Aircraft != null) box.Add(m.Last.Pos.X, m.Last.Pos.Z);
+                    for (int i = 0; i < context.Count; i++)
+                    {
+                        Unit u = WmcContext.UnitOf(context.Rows[i].Id);
+                        if (u == null) continue;
+                        GlobalPosition g = u.GlobalPosition();
+                        box.Add(g.x, g.z);
+                    }
                     WmcMap.Fit(box);
                     SetFit(1);
                     break;

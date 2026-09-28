@@ -198,7 +198,8 @@ namespace WingCommand
             unchecked
             {
                 int k = (int)inspected * 7 + R(detail.Fuel * 100f) * 31 + R(detail.Ammo * 100f) * 131 + R(detail.Damage * 100f) * 17
-                    + detail.Radar * 3 + R(m.Last.RadarAlt / 10f) * 1009 + R(m.Last.Speed * 3.6f) * 97 + R(detail.BingoSeconds)
+                    + detail.Radar * 3 + R(m.Last.RadarAlt / 50f) * 1009 + R(m.Last.Speed * 0.36f) * 97 + R(detail.BingoSeconds / 10f)
+                    + m.Seat * 7919 + e * 104729
                     + (detail.Target?.GetHashCode() ?? 0) + (row >= 0 ? c.Rows[row].Duty * 13 + c.Rows[row].Flags * 19 : 0)
                     + (p != null && p.Active ? (int)p.Current.Kind * 23 + p.Leg * 29 : -1) + detail.StoreCount * 41;
                 for (int i = 0; i < detail.StoreCount && i < detail.Stores.Length; i++) k = k * 3 + detail.Stores[i].Ammo;

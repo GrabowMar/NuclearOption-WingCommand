@@ -120,6 +120,7 @@ namespace WingCommand
         public void Shown(WmcContext c)
         {
             elementsKey = int.MinValue;
+            logFilled = false;
             for (int i = 0; i < logKeys.Length; i++) logKeys[i] = long.MinValue;
         }
 

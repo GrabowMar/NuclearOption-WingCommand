@@ -27,6 +27,7 @@ namespace WingCommand
         private int logElement = -1, logShown = -1;
         private bool logSelected;
         private long logStamp = long.MinValue;
+        private bool logFilled;
 
         /// <summary>LOG lines showing now (automation).</summary>
         public int LogRowsShown { get; private set; }
@@ -65,6 +66,7 @@ namespace WingCommand
         {
             logSelected = chip == 5;
             logElement = chip >= 1 && chip <= 4 ? chip - 1 : -1;
+            logFilled = false;
             for (int i = 0; i < logKeys.Length; i++) logKeys[i] = long.MinValue;
             if (last != null) RefreshLog(last);
         }
@@ -75,7 +77,7 @@ namespace WingCommand
             uint id = logIds[i];
             if (last == null || id == 0u || WmcContext.UnitOf(id) == null) return;
             WmcMap.Center(WmcContext.UnitOf(id));
-            WmcPanel.Instance?.Inspect(id);
+            if (WingRows.IndexOf(last.Rows, last.Count, id) >= 0) WmcPanel.Instance?.Inspect(id);
         }
 
         private void RefreshLog(WmcContext c)
@@ -83,9 +85,10 @@ namespace WingCommand
             WingEventRing events = c.Client ? null : c.Wing?.Events;
             RadioLog radio = RadioDirector.Instance?.Log;
             // Fill allocates while it describes events: only when something was logged, or the filter or the selection changed.
-            long stamp = LogRows.Stamp(events, radio) * 31L + (logElement + 2) * 7L + (logSelected ? c.Selection.Single : 0u) + (logSelected ? 3L : 0L);
-            if (stamp == logStamp && logKeys[0] != long.MinValue) return;
+            long stamp = LogRows.Stamp(events, radio) * 31L + (logElement + 2) * 7L + c.Selection.Single * 3L + (logSelected ? 1L : 0L);
+            if (stamp == logStamp && logFilled) return;
             logStamp = stamp;
+            logFilled = true;
             var filter = new LogFilter { Element = logElement, ById = logSelected, Id = c.Selection.Single, Rows = c.Rows, Count = c.Count };
             int n = LogRows.Fill(events, radio, logRows, logLabels.Length, filter);
             LogRowsShown = n;

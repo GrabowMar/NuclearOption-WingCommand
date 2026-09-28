@@ -189,6 +189,7 @@ namespace WingCommand
                 pickEntries.Add(new AvKit.PopupEntry(WmcText.Cut(e.Callsign, PilotText.CallsignChars), detail, pickEntries.Count == at));
             }
             pickPopup.Show(WmcKit.RectIn(popupParent, (RectTransform)picker.transform), pickEntries, Open);
+            WmcKit.FitAll(popupParent);
         }
 
         /// <summary>‹ and ›: the next pilot in the picker's order (asking before dropping edits, as a pick does).</summary>

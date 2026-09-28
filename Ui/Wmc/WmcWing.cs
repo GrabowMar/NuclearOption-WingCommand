@@ -183,7 +183,8 @@ namespace WingCommand
         {
             if (sub == SubStudio)
             {
-                last = c;
+                Snapshot(c);
+                RefreshAlert();
                 studioPage.Refresh(c);
                 return;
             }
@@ -193,6 +194,12 @@ namespace WingCommand
             RefreshDossier();
             RefreshPerks();
             RefreshAssignment();
+            RefreshAlert();
+        }
+
+        /// <summary>The page's hint and alert, again only when the roster moved (STUDIO keeps it current too).</summary>
+        private void RefreshAlert()
+        {
             if (alertVersion == scanVersion) return;
             alertVersion = scanVersion;
             hint = SquadronWords.Hint(client, roster.Count);
