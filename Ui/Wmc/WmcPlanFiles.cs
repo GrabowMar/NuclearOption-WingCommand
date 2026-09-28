@@ -31,11 +31,23 @@ namespace WingCommand
                     store = new PlanStore();
                 }
                 foreach (string e in errors) Plugin.Logger.LogWarning("[Plans] plans.user.json: " + e);
+                // Review minor: a file that could not be read is kept aside before any SAVE writes a fresh one.
+                if (errors.Count > 0 && File.Exists(FilePath))
+                    try
+                    {
+                        File.Copy(FilePath, FilePath + ".bad", true);
+                        Plugin.Logger.LogWarning("[Plans] kept the unreadable plans.user.json as plans.user.json.bad");
+                    }
+                    catch (Exception e)
+                    {
+                        Plugin.Logger.LogWarning("[Plans] could not keep the unreadable plans.user.json aside: " + e.Message);
+                    }
                 return store;
             }
         }
 
-        public static void Save()
+        /// <summary>Writes the store; false (logged) when the write failed.</summary>
+        public static bool Save()
         {
             try
             {
@@ -44,10 +56,12 @@ namespace WingCommand
                 File.WriteAllText(tmp, Store.ToJson());
                 if (File.Exists(FilePath)) File.Delete(FilePath);
                 File.Move(tmp, FilePath);
+                return true;
             }
             catch (Exception e)
             {
                 Plugin.Logger.LogWarning("[Plans] could not save plans.user.json: " + e.Message);
+                return false;
             }
         }
     }

@@ -30,9 +30,12 @@ namespace WingCommand
         private static float FallBackRatio => Plugin.Settings != null ? Plugin.Settings.FallBackRatio.Value : 0f;
 
         /// <summary>A new mission: no attack order, no refusal or override carried over (review M5d I1).</summary>
+        private readonly HashSet<Unit> destroyedReported = new HashSet<Unit>();
+
         private void ResetCombat()
         {
             claims.ClearAll();
+            destroyedReported.Clear();
             reallocateClock = 0f;
             outnumberedClock = 0f;
             judge.Reset();
@@ -689,7 +692,8 @@ namespace WingCommand
                 attackTargets[t] = setTargets[set, t];
                 targetAlive[t] = attackTargets[t] != null && !attackTargets[t].disabled;
                 any |= targetAlive[t];
-                if (setWasAlive[set, t] && !targetAlive[t]) Destroyed(attackTargets[t]);
+                // Two elements attacking the same unit report its kill once (review minor).
+                if (setWasAlive[set, t] && !targetAlive[t] && destroyedReported.Add(attackTargets[t])) Destroyed(attackTargets[t]);
                 setWasAlive[set, t] = targetAlive[t];
             }
             int k = 0;
@@ -915,6 +919,8 @@ namespace WingCommand
             m.Engaged = false;
             m.TakenBackAt = missionTime;
             m.AssignedTarget = null;
+            // 1.0 (review minor): every take-back leaves its attack set, not only the player's ENGAGE / BREAK.
+            if ((object)a != null) claims.Release(a.persistentID.Id);
             m.Pilot?.SetPrimaryTarget(null);
             // The fight's own Winchester already told the wing: the formation sample must not say it again.
             if (reason == TransitionReason.Winchester) m.Winchester.Latched = true;

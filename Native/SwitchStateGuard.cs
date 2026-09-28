@@ -13,18 +13,33 @@ namespace WingCommand
         /// <summary>Native switches redirected this session (automation reads it).</summary>
         public static int Redirected { get; private set; }
 
+        private static bool faulted;
+
         private static void Prefix(Pilot __instance, ref PilotBaseState state)
         {
             WingService wing = WingService.Instance;
             if (wing == null || __instance == null || __instance.dead) return;
             PilotBaseState asked = state;
-            PilotBaseState ours = wing.LeaveNativeLanding(__instance, state) ?? wing.LeaveNativeCombat(__instance, state);
-            if (ours != null && !ReferenceEquals(ours, state))
+            // 1.0: every AI pilot's state change passes here; a fault of ours must never break the game's switch.
+            try
             {
-                state = ours;
-                Redirected++;
+                PilotBaseState ours = wing.LeaveNativeLanding(__instance, state) ?? wing.LeaveNativeCombat(__instance, state);
+                if (ours != null && !ReferenceEquals(ours, state))
+                {
+                    state = ours;
+                    Redirected++;
+                }
+                wing.TraceSwitch(__instance, asked, state);
             }
-            wing.TraceSwitch(__instance, asked, state);
+            catch (System.Exception e)
+            {
+                state = asked;
+                if (!faulted)
+                {
+                    faulted = true;
+                    Plugin.Logger.LogError("[Native] state switch supervision failed (the game's switch goes ahead): " + e);
+                }
+            }
         }
     }
 }

@@ -24,6 +24,8 @@ namespace WingCommand
         public bool Running => Runner != null && Runner.Running;
         /// <summary>The last run went through every step.</summary>
         public bool Completed { get; private set; }
+        /// <summary>Mission time the last run went through its last step (the TIMELINE's DONE stops there).</summary>
+        public float FinishedAt { get; private set; }
         public int Sent { get; private set; }
         /// <summary>Each step's planned start and end, s after EXECUTE, frozen then (the TIMELINE's PLAN; NaN: open).</summary>
         public readonly float[,] PlannedStart = new float[WingPlan.Lanes, WingPlan.MaxSteps], PlannedEnd = new float[WingPlan.Lanes, WingPlan.MaxSteps];
@@ -184,6 +186,7 @@ namespace WingCommand
             foreach (PlanEmit e in emits) Send(w, e);
             if (!Runner.Finished) return;
             Completed = true;
+            FinishedAt = now;
             Runner.Abort();
             Plugin.Logger.LogInfo($"[Plan] {Plan.Name} complete");
             WingToast.Show($"{Plan.Name} complete");

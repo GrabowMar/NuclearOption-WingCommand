@@ -86,7 +86,9 @@ namespace WingCommand
                     if (!From(w, l, out fromX[l], out fromZ[l], out fromSpeed[l])) fromSpeed[l] = 150f;
                 PlanTimeline.Planned(plan, fromX, fromZ, fromSpeed, drawnStart, drawnEnd);
             }
-            float now = live && WingService.Instance != null ? WingService.Instance.MissionTime - r.ExecutedAt : 0f;
+            // Review minor: a finished run's clock stops at its end ("DONE T+" kept counting).
+            float now = !live || WingService.Instance == null ? 0f
+                : (r.Running ? WingService.Instance.MissionTime : plans.FinishedAt) - r.ExecutedAt;
             float span = Mathf.Max(60f, now);
             for (int l = 0; l < WingPlan.Lanes; l++)
                 for (int s = 0; s < plan.Steps[l].Count; s++)

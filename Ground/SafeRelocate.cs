@@ -54,7 +54,8 @@ namespace WingCommand
             if (a.partLookup != null)
                 foreach (UnitPart part in a.partLookup)
                 {
-                    if (part == null) continue;
+                    // A part that broke off stays where it lies (review minor: debris was carried along).
+                    if (part == null || part.IsDetached()) continue;
                     if (part.rb != null && !bodies.Contains(part.rb)) bodies.Add(part.rb);
                     if (!part.transform.IsChildOf(root)) objects.Add(part.gameObject);
                 }

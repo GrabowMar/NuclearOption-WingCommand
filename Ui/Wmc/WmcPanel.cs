@@ -31,6 +31,7 @@ namespace WingCommand
         private WmcLoadout loadout;
         private WmcWing wingPage;
         private int shownPage = -1;
+        private readonly HashSet<int> pageFaults = new HashSet<int>();
         private Color titleColor;
         private MFDScreen screen;
         private Button bezelButton;
@@ -463,8 +464,16 @@ namespace WingCommand
             IWmcPage p = page >= 0 && page < pages.Length ? pages[page] : null;
             if (p != null)
             {
-                if (page != shownPage) p.Shown(context);
-                p.Refresh(context);
+                // 1.0: a page that fails to refresh is logged once and skipped; it never takes the whole panel down.
+                try
+                {
+                    if (page != shownPage) p.Shown(context);
+                    p.Refresh(context);
+                }
+                catch (Exception e)
+                {
+                    if (pageFaults.Add(page)) Plugin.Logger.LogError("[WMC] the " + WmcTabs.Labels[page] + " page failed to refresh: " + e);
+                }
             }
             shownPage = page;
             bool fresh = WingToast.Last != null && Time.unscaledTime - WingToast.LastAt < 6f;

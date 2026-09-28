@@ -199,7 +199,7 @@ namespace WingCommand
         {
             if (a == null || a.weaponStations == null) return null;
             foreach (WeaponStation w in a.weaponStations)
-                if (w.WeaponInfo != null && w.WeaponInfo.cargo && w.Ammo > 0) return w;
+                if (w != null && w.WeaponInfo != null && w.WeaponInfo.cargo && w.Ammo > 0) return w;
             return null;
         }
 

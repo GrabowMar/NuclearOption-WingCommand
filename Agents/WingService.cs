@@ -730,7 +730,8 @@ namespace WingCommand
                 if (p == null || !p.Active) MergeElement(e);
             }
             FieldRegistry.Step(dt, this);
-            foreach (WingMember m in Members) m.Last = m.Sensor.Read(m.Aircraft, dt);
+            foreach (WingMember m in Members)
+                if (!m.Released && (object)m.Aircraft != null && m.Aircraft != null) m.Last = m.Sensor.Read(m.Aircraft, dt);
             AnchorSample leader = SampleAnchor(dt);
             for (int e = 0; e < ElementRoster.MaxElements; e++)
             {

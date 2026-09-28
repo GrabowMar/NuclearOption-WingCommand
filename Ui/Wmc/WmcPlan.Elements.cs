@@ -461,8 +461,11 @@ namespace WingCommand
         {
             x0 = z0 = speed = 0f;
             if (w == null || !w.Roster.InUse(e)) return false;
+            bool airborne = false;
+            foreach (WingMember m in w.Members)
+                if (!m.Released && m.Alive && (object)m.Aircraft != null && w.ElementOf(m) == e && !m.OnGround) airborne = true;
             WingPlanner p = w.PlannerOf(e);
-            if (p != null && p.Active && p.Lead != null)
+            if (airborne && p != null && p.Active && p.Lead != null)
             {
                 x0 = p.Lead.Position.X;
                 z0 = p.Lead.Position.Z;
@@ -482,8 +485,13 @@ namespace WingCommand
             x0 /= n;
             z0 /= n;
             speed /= n;
+            // Still on the field: its legs are flown at cruise, not at taxi speed (review minor).
+            if (!airborne) speed = GroundedCruise;
             return true;
         }
+
+        /// <summary>The speed a planned leg from the field is timed at (m/s).</summary>
+        public static float GroundedCruise = 150f;
 
         private static void Toggle(AvButton b, bool on)
         {
@@ -553,6 +561,13 @@ namespace WingCommand
             {
                 WingPlan copy = store.Load(planIndices[k - 1]);
                 if (copy == null) return;
+                // Review minor: a drawn plan is not replaced without a second pick (as NEW asks).
+                if (Count(plans.Plan) > 0 && !planGate.Press("load" + planIndices[k - 1], Time.unscaledTime))
+                {
+                    WingToast.Show("Pick " + copy.Name + " again to replace this plan");
+                    Refreshed();
+                    return;
+                }
                 plans.Load(copy);
                 selLane = 0;
                 selStep = -1;
@@ -592,8 +607,7 @@ namespace WingCommand
                 return;
             }
             plan.Name = name;
-            WmcPlanFiles.Save();
-            WingToast.Show("Saved " + name);
+            WingToast.Show(WmcPlanFiles.Save() ? "Saved " + name : "Could not save " + name + " (see the log)");
             Refreshed();
         }
 
