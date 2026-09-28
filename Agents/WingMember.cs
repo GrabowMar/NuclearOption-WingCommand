@@ -7,6 +7,8 @@ namespace WingCommand
         public readonly Aircraft Aircraft;
         public readonly Pilot Pilot;
         public readonly FormationPilot Brain;
+        /// <summary>INSPECT's WHY: what has held this aircraft back, from its pipeline's binding report (I1).</summary>
+        public readonly WhyText Why = new WhyText();
         public readonly AircraftSensor Sensor = new AircraftSensor();
         public readonly AirframeProfile Profile;
         public readonly FaultGuard Faults = new FaultGuard();

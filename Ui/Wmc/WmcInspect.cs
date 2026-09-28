@@ -29,7 +29,8 @@ namespace WingCommand
         private MemberDetail detail = new MemberDetail { Stores = new StoreLine[8] };
         private RectTransform page, content;
         private Rect body;
-        private TMP_Text title, status, fuel, ammo, hull, radar, alt, task, storesHead, pilot, recentHead, empty;
+        private TMP_Text title, status, why, fuel, ammo, hull, radar, alt, task, storesHead, pilot, recentHead, empty;
+        private int whyKey = int.MinValue;
         private AvButton center, dossier, rtb, refit, release;
         private GameObject detailRoot;
         private float width;
@@ -83,6 +84,9 @@ namespace WingCommand
             statusCard.SetEnabled(false);
             WmcUi.SetRail(rail, "info");
             status = WmcKit.Text(r, new Rect(10f, cy - 1f, width - 16f, Line - 2f), "row-name");
+            cy -= Line + 2f;
+            AvStyled.Label(r, new Rect(0f, cy, KvKey, Line - 2f), "WHY", "metric-key");
+            why = WmcKit.Text(r, new Rect(KvKey, cy, width - KvKey, Line - 2f), "row-sub");
             cy -= Line + 4f;
             float col = (width - 8f) / 2f, vx = col + 8f;
             fuel = Kv(r, 0f, cy, col, "FUEL");
@@ -166,6 +170,7 @@ namespace WingCommand
                 return;
             }
             RefreshDetail(c, m);
+            RefreshWhy(c, m);
             RefreshRecent(c);
             RefreshFoot(c);
         }
@@ -230,6 +235,18 @@ namespace WingCommand
             pilotCallsign = wp?.Callsign;
             WmcKit.Set(pilot, InspectWords.Pilot(wp?.Callsign, detail.Rank, wp?.Xp ?? 0, wp?.Kills ?? 0, null));
             dossier.SetEnabled(wp != null);
+        }
+
+        /// <summary>What holds the aircraft back and for how long; when the game's combat or landing AI flies it, that says so.</summary>
+        private void RefreshWhy(WmcContext c, WingMember m)
+        {
+            float now = c.MissionTime;
+            bool ours = !m.Engaged && m.Recovery == null && !m.OnGround;
+            int k = ours ? m.Why.Key(now) : m.Engaged ? -2 : m.OnGround ? -3 : -4;
+            if (k == whyKey) return;
+            whyKey = k;
+            WmcKit.Set(why, ours ? m.Why.Line(now) : m.Engaged ? "THE GAME'S COMBAT AI FLIES IT (ENGAGED)"
+                : m.OnGround ? "ON THE GROUND · TAXI AND TAKE-OFF ARE WING COMMAND'S" : "THE GAME'S LANDING FLIES IT (RECOVERY)");
         }
 
         private void RefreshRecent(WmcContext c)

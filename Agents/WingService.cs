@@ -273,6 +273,7 @@ namespace WingCommand
                 m.Brain.Threat = ReadThreat(m);
                 ControlOutput o = StepTest.Adjust(m, m.Brain.Step(frame, m.Last, m.Profile, missionTime, dt, Events), dt);
                 ControlWriter.Fly(m.Aircraft, o, m.Profile.Class);
+                m.Why.Update(m.Brain.Pipeline.Report, missionTime);
                 Trigger(m.Aircraft, m.Brain.Mind.Current == BehaviourId.Defend && m.Brain.LastDefence.Countermeasures);
                 FireFromSlot(m, dt);
                 int slot = m.Brain.Slot;
