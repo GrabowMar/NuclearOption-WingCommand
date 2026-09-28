@@ -19,11 +19,15 @@ namespace WingCommand
         {
             Transform root = a.transform;
             // The pose is on the ground; the aircraft's root stands its spawn offset above it (as a hangar spawn does). The
-            // graph's height can be off the pavement's: the surface under the point (hit from above, near the pose) wins.
+            // graph's height can be off the pavement's: of the surfaces under the point, the one nearest the graph's height wins —
+            // never the first from above, which in a hangar is its roof (night-1 m3b-refit: a jet put on a roof fell and was lost).
             Vector3 target = to.Pos.ToLocal();
-            if (Physics.Raycast(target + Vector3.up * SurfaceProbeHeight, Vector3.down, out RaycastHit hit, 2f * SurfaceProbeHeight) &&
-                Mathf.Abs(hit.point.y - target.y) < SurfaceProbeHeight && !hit.collider.transform.IsChildOf(a.transform))
-                target.y = hit.point.y;
+            RaycastHit[] hits = Physics.RaycastAll(target + Vector3.up * SurfaceProbeHeight, Vector3.down, 2f * SurfaceProbeHeight);
+            int n = 0;
+            float[] ys = new float[hits.Length];
+            foreach (RaycastHit hit in hits)
+                if (hit.collider != null && !hit.collider.transform.IsChildOf(a.transform)) ys[n++] = hit.point.y;
+            target.y = SurfacePick.Closest(target.y, ys, n, SurfaceProbeHeight);
             target += Vector3.up * (a.definition != null ? a.definition.spawnOffset.y : 0f);
             Vector3 fwd = to.Fwd.Horizontal.SqrLength > 1e-4f ? to.Fwd.Horizontal.Normalized.ToUnity() : root.forward;
             Quaternion turn = Quaternion.LookRotation(fwd, Vector3.up) * Quaternion.Inverse(Quaternion.LookRotation(
