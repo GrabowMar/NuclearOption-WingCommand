@@ -54,7 +54,9 @@ namespace WingCommand
 
             float sideMax = Math.Max(refSpeed, 1f) * (float)Math.Tan(CrossTrackMaxDeg * Scalar.Deg2Rad);
             float vSide = Scalar.Clamp(side * precision / p.TauCross, -sideMax, sideMax);
-            float climbMax = Math.Min(p.ClimbRateMax, 0.5f * Math.Max(s.Tas, refSpeed));
+            // At most a 30° climb on the aircraft's OWN speed (night-2 sim: capped on the leader's, a 75 m/s EW-25 was allowed 80 m/s up
+            // and stalled climbing to a fast leader far above).
+            float climbMax = Math.Min(p.ClimbRateMax, 0.5f * s.Tas);
             float vUp = Scalar.Clamp(e.Y * precision / p.TauVert, -climbMax, climbMax);
 
             Vec3 velCmd = r.Vel + track * vAlong + cross * vSide + Vec3.Up * vUp;

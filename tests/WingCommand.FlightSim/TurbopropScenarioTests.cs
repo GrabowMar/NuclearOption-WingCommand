@@ -93,5 +93,47 @@ namespace WingCommand.FlightSim
             }
             Assert.True(minTas >= profile.MinimumSpeed(1f), $"TAS fell to {minTas:0.0} m/s (minimum {profile.MinimumSpeed(1f):0.0})");
         }
+
+        [Fact]
+        public void AHeavyAircraftRejoiningAFastLeaderFarAboveNeverClimbsIntoAStall()
+        {
+            // Night-2 sim runs: three EW-25s off the runway rejoining a 160 m/s leader 1,400 m above climbed at 40-70° pitch,
+            // bled from 79 to 37 m/s and stalled into the ground. The climb was capped at half the LEADER's speed (80 m/s up
+            // for a 75 m/s aircraft), and the published stall (120 km/h) put the speed protection far below the real one.
+            PlantParams heavy = PlantParams.CoinTurboprop;
+            heavy.MassKg = 20000f;
+            heavy.WingAreaM2 = 80f;
+            heavy.ClMax = 2.0f;
+            heavy.DryThrustN = 40000f;
+            heavy.AfterburnerThrustN = 40000f;
+            heavy.CornerSpeed = 120f;
+            float realStall = (float)Math.Sqrt(heavy.MassKg * Scalar.G / (0.5 * 1.225 * heavy.WingAreaM2 * heavy.ClMax));
+            AirframeProfile profile = AirframeProfile.Derive(new ProfileInputs
+            {
+                UnitName = "sim-heavy", PublishedStallKmh = 120f, MaxSpeed = 300f, CornerSpeed = 120f, PidReferenceAirspeed = 180f,
+                GLimit = 6f, CruiseThrottle = 1f, FbwMaxRollAngularVel = heavy.MaxRollAngularVel, FbwGLimit = 6f, FbwCornerSpeed = 120f,
+                MaxRadius = 6f, TakeoffSpeed = 40f, LandingSpeed = 70f,
+            });
+            var leader = new VirtualLeader(new Vec3(0f, 1500f, 0f), 160f, 0f);
+            var plant = new FixedWingPlant(heavy, new Vec3(0f, 100f, -2500f), 75f, 0f);
+            plant.SetThrottleState(1f);
+            var pilot = new SimPilot(plant, profile);
+
+            float minTas = float.MaxValue, maxPitch = float.MinValue;
+            for (int i = 0; i < 90 * 60; i++)
+            {
+                float t = i * Dt;
+                leader.Step(0f, Dt, 160f, 0f);
+                RefState slot = leader.Slot(40f, 15f, 0f);
+                pilot.StepTracking(SlotIntent(slot, profile, 50f), Dt);
+                if (t > 2f)
+                {
+                    minTas = Math.Min(minTas, plant.Speed);
+                    maxPitch = Math.Max(maxPitch, plant.GammaDeg);
+                }
+            }
+            Assert.True(minTas >= 1.15f * realStall, $"TAS fell to {minTas:0.0} m/s (stall {realStall:0.0})");
+            Assert.True(maxPitch <= 30f, $"climb angle reached {maxPitch:0.0} deg");
+        }
     }
 }
