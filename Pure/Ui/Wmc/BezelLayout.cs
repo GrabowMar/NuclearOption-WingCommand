@@ -32,7 +32,7 @@ namespace WingCommand
         public const float LoadoutTiles = 2f * LoadoutTileH + TileGap, TemplateBar = 26f, TemplatePick = 242f, TemplateBtn = 64f, DeleteGap = 16f;
         public const float HardpointsTop = CardH + BlockGap + SectionHead + HeadGap + LoadoutTiles + BlockGap + TemplateBar + BlockGap;
         public const float ColumnHead = 16f, HardpointHead = SectionHead + HeadGap + ColumnHead, HpRowH = 42f, HpPitch = 44f, HpPager = 26f;
-        public const int HpRowsMin = 4, HpRowsMax = 6;
+        public const int HpRowsMin = 4, HpRowsMax = 8;
         public const float ColStation = 8f, ColStationW = 164f, ColStore = 176f, ColStoreW = 172f, ColMass = 352f, ColMassW = 48f;
         public const float ColVerb = 404f, ColVerbW = 54f;
         public const float PopupRowPitch = 32f, PopupPad = 8f;

@@ -319,6 +319,35 @@ namespace WingCommand
     /// <summary>A scroll viewport whose content height may change after build (the toolkit's <c>AvScreen.Scroll</c> decides
     /// once): a clamped, inertia-free ScrollRect with a 4 px thumb in an 8 px gutter; changing the height keeps the reader's
     /// place (0.9 critique: the scroll reset every refresh).</summary>
+    /// <summary>A page's footer (DISPATCH, LIVERY, the SAR bar) that sits right under its scroll's content and pins to the body's
+    /// floor only when the content scrolls (critic §14.2: pinned footers left 160-320 px empty on a tall dock). The viewport shrinks
+    /// to the content, so nothing is left between them.</summary>
+    internal sealed class WmcFooter
+    {
+        private readonly WmcScroll scroll;
+        private readonly RectTransform footer;
+        private readonly Rect area;
+        private float shown = -1f;
+
+        /// <summary><paramref name="maxView"/>: the viewport at its tallest (x, top, width with the scroll's gutter, height).</summary>
+        public WmcFooter(WmcScroll scroll, RectTransform footer, Rect maxView)
+        {
+            this.scroll = scroll;
+            this.footer = footer;
+            area = maxView;
+        }
+
+        /// <summary>The content is <paramref name="content"/> px tall now.</summary>
+        public void Fit(float content)
+        {
+            float view = Mathf.Max(20f, Mathf.Min(content, area.height));
+            if (Mathf.Abs(view - shown) < 0.5f) return;
+            shown = view;
+            scroll.SetViewport(new Rect(area.x, area.y, area.width, view));
+            footer.anchoredPosition = new Vector2(footer.anchoredPosition.x, area.y - view);
+        }
+    }
+
     internal sealed class WmcScroll
     {
         private ScrollRect scroll;

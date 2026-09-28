@@ -20,10 +20,17 @@ namespace WingCommand
         private readonly InboundRow[] inboundRows = new InboundRow[8];
         private int barKey = int.MinValue, iconFor = int.MinValue;
         private string airWhy, localWhy;
+        private RectTransform assignRoot;
 
         private void BuildAssignment(float top)
         {
-            float x = body.x, y = top - BezelLayout.WingPinGap;
+            // Its own container, docked under the roster's content (WmcFooter).
+            var go = new GameObject("SquadronAssignment", typeof(RectTransform));
+            assignRoot = (RectTransform)go.transform;
+            assignRoot.SetParent(this.page, false);
+            AvKit.Place(assignRoot, new Rect(0f, top, 1f, BezelLayout.WingPin));
+            RectTransform page = assignRoot;
+            float x = body.x, y = -BezelLayout.WingPinGap;
             const float h = BezelLayout.AssignBar;
             AvStyled.Box(page, new Rect(x, y, width, h), "card");
             barRail = AvStyled.Rail(page, new Rect(x, y, 3f, h), "inert");

@@ -92,6 +92,7 @@ namespace WingCommand
             BuildPerks(content, -(dossier + BezelLayout.DossierH + BezelLayout.DossierGap));
             BuildAssignment(body.y - view);
             scroll.SetContentHeight(BezelLayout.WingContent(perPage));
+            new WmcFooter(scroll, assignRoot, new Rect(body.x, body.y, width + 8f, view)).Fit(BezelLayout.WingContent(perPage));
             ShowSub(SubRoster);
         }
 

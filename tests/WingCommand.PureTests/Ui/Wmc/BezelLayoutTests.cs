@@ -271,5 +271,14 @@ namespace WingCommand.PureTests
             for (float body = 420f; body <= 720f; body += 20f)
                 Assert.True(BezelLayout.TacticalFixed(3, !BezelLayout.DoctrineSwaps(body, 3)) <= body, "body " + body);
         }
+
+        [Fact]
+        public void ATallDockShowsEightHardpointRowsWithoutPaging()
+        {
+            // Spec bezel v2: the table is LOADOUT's flex block; 84 px more body at 896 buys two more rows.
+            Assert.Equal(8, BezelLayout.HardpointRows(720f));
+            Assert.True(BezelLayout.LoadoutContent(8, false) <= BezelLayout.LoadoutView(720f));
+            Assert.Equal(4, BezelLayout.HardpointRows(420f));
+        }
     }
 }

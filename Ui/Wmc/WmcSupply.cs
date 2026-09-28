@@ -40,6 +40,8 @@ namespace WingCommand
         private string alert, hint;
         private int hintKey = int.MinValue, vitalsKey = int.MinValue;
         private TMP_Text vitals;
+        private RectTransform pinRoot;
+        private WmcFooter footer;
 
         public WmcSupply(Dictionary<string, AvButton> controls) => ids = controls;
 
@@ -68,6 +70,7 @@ namespace WingCommand
             BuildFit(steps, -(BezelLayout.PilotStep + BezelLayout.AirframeStep));
             BuildBase(steps, -(BezelLayout.PilotStep + BezelLayout.AirframeStep + BezelLayout.FitStep));
             BuildPin(body.y - top - view);
+            footer = new WmcFooter(scroll, pinRoot, new Rect(body.x, body.y - top, width + 8f, view));
             // Popups hang off the page root, never inside the scroll viewport (F6).
             fitPopup = new AvKit.Popup(page, shellBody.width);
             Layout(0, false);
@@ -97,6 +100,7 @@ namespace WingCommand
             y -= BezelLayout.AdoptBlock(adopt);
             AvKit.Place(steps, new Rect(0f, y, width, BezelLayout.SupplySteps));
             scroll.SetContentHeight(BezelLayout.SupplyContent(inbound, adopt));
+            footer?.Fit(BezelLayout.SupplyContent(inbound, adopt));
         }
 
         /// <summary>The wing, the selected airframe's quote and its launch field, once a panel refresh: Metrics takes it and
@@ -195,7 +199,11 @@ namespace WingCommand
 
         private void BuildPin(float top)
         {
-            float x = body.x, y = top - BezelLayout.PinGap;
+            // The card lives in its own container, docked under the steps (WmcFooter).
+            pinRoot = Container(this.page, "SupplyPin", BezelLayout.SupplyPin);
+            AvKit.Place(pinRoot, new Rect(0f, top, 1f, BezelLayout.SupplyPin));
+            RectTransform page = pinRoot;
+            float x = body.x, y = -BezelLayout.PinGap;
             AvStyled.Box(page, new Rect(x, y, width, BezelLayout.PinCard), "card");
             cardRail = AvStyled.Rail(page, new Rect(x, y, 3f, BezelLayout.PinCard), "inert");
             var state = new Rect(x + 6f, y - 4f, 84f, 16f);

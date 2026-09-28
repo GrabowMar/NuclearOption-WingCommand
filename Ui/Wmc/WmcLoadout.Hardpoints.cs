@@ -87,6 +87,7 @@ namespace WingCommand
             {
                 contentShown = height;
                 scroll.SetContentHeight(height);
+                footer?.Fit(height);
             }
             WmcKit.Set(hpNote, layout != null ? LoadoutWords.HardpointsNote(stations, summary.Blocked) : "");
             string empty = airframe == null ? "Pick an airframe above." : layout == null ? LoadoutWords.Unreadable

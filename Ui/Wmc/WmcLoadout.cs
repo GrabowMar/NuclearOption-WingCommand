@@ -57,8 +57,10 @@ namespace WingCommand
                 + BezelLayout.LoadoutTiles + BezelLayout.BlockGap));
             BuildHardpoints(content, -BezelLayout.HardpointsTop);
             BuildLivery(body.y - view);
+            footer = new WmcFooter(scroll, liveryRoot, new Rect(body.x, body.y, width + 8f, view));
             popup = new AvKit.Popup(page, shellBody.width);
             scroll.SetContentHeight(BezelLayout.LoadoutContent(rowsPerPage, false));
+            footer.Fit(BezelLayout.LoadoutContent(rowsPerPage, false));
         }
 
         /// <summary>LOADOUT came into view: the airframe list and the faction's liveries are read again.</summary>
@@ -253,13 +255,20 @@ namespace WingCommand
         private readonly List<WingLoadoutTemplates.LiveryOption> liveries = new List<WingLoadoutTemplates.LiveryOption>();
         private readonly List<string> liveryTokens = new List<string>();
         private AircraftDefinition liveryFor;
+        private RectTransform liveryRoot;
+        private WmcFooter footer;
         private Faction liveryFaction;
 
         private void BuildLivery(float top)
         {
-            float y = top - (BezelLayout.LiveryPin - BezelLayout.LiveryRow);
-            liveryKey = WmcKit.Text(page, new Rect(body.x, y, 112f, BezelLayout.LiveryRow), "metric-key");
-            liveryStepper = AvKit.Stepper(page, body.x + 116f, y, width - 116f, out liveryLabel, () => StepLivery(-1), () => StepLivery(1),
+            // Its own container, docked under the table (WmcFooter).
+            var go = new GameObject("LoadoutLivery", typeof(RectTransform));
+            liveryRoot = (RectTransform)go.transform;
+            liveryRoot.SetParent(page, false);
+            AvKit.Place(liveryRoot, new Rect(0f, top, 1f, BezelLayout.LiveryPin));
+            float y = -(BezelLayout.LiveryPin - BezelLayout.LiveryRow);
+            liveryKey = WmcKit.Text(liveryRoot, new Rect(body.x, y, 112f, BezelLayout.LiveryRow), "metric-key");
+            liveryStepper = AvKit.Stepper(liveryRoot, body.x + 116f, y, width - 116f, out liveryLabel, () => StepLivery(-1), () => StepLivery(1),
                 "The livery this airframe's wingmen wear (STANDARD: the faction's own).");
             ids["lo.livery.prev"] = liveryStepper[0];
             ids["lo.livery.next"] = liveryStepper[1];
