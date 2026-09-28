@@ -17,7 +17,7 @@ namespace WingCommand
         private static WmcMapInput active;
         private readonly MapGesture gesture = new MapGesture();
         private readonly List<uint> targets = new List<uint>(WingOrder.MaxUnits);
-        private bool pressed;
+        private bool pressed, heldForMove;
         private int selected;
 
         public MapMode Mode { get; private set; }
@@ -53,19 +53,50 @@ namespace WingCommand
                 return false;
             }
             Mode = mode;
+            heldForMove = false;
             gesture.Clear();
             pressed = false;
             targets.Clear();
+            Publish();
             return true;
         }
 
         public void Disarm()
         {
             Mode = MapMode.Off;
+            heldForMove = false;
             MapPicker.Disarm(MapPicker.WingPoint);
             gesture.Clear();
             pressed = false;
             targets.Clear();
+            Publish();
+        }
+
+        /// <summary>What a companion reads (WingMapMode) and the pause key: held while an order is armed (Esc disarms it instead of
+        /// pausing; spec bezel v2 §6).</summary>
+        private void Publish()
+        {
+            WingCommand.Interop.WingMapMode.GestureArmed = Mode != MapMode.Off || heldForMove;
+            PauseKeyHold.Set(KeyHold.Map, Mode != MapMode.Off);
+        }
+
+        /// <summary>With nothing armed and wingmen selected on a COMMAND tab, a right-click is WMC's MOVE: WMC holds the map picker
+        /// while that is so, so a companion's right-click menu does not open on the same click (spec bezel v2 §6).</summary>
+        private void HoldForMove(bool want, string scope)
+        {
+            if (Mode != MapMode.Off) return;
+            if (want && !heldForMove)
+            {
+                if (OtherOwner() || !MapPicker.TryArm(MapPicker.WingPoint, MapPicker.GestureRight, MapOrders.Prompt(MapMode.Move, scope ?? "WING"))) return;
+                heldForMove = true;
+                Publish();
+            }
+            else if (!want && heldForMove)
+            {
+                heldForMove = false;
+                MapPicker.Disarm(MapPicker.WingPoint);
+                Publish();
+            }
         }
 
         /// <summary>Every frame while the panel is installed: follow the right button and place a click.</summary>
@@ -75,12 +106,15 @@ namespace WingCommand
             // the COMMAND scope row); elsewhere the right-click stays the game's.
             bool command = WmcPanel.Instance != null && WmcPanel.Instance.CommandShowing;
             selected = c != null && command ? c.Selection.Count : 0;
+            WingCommand.Interop.WingMapMode.TacticalCommandActive = command;
             if (!visible)
             {
                 if (Mode != MapMode.Off) Disarm();
+                HoldForMove(false, null);
                 pressed = false;
                 return;
             }
+            HoldForMove(selected > 0 && DynamicMap.mapMaximized && c != null && c.CanOrder, c?.ScopeLabel);
             if (Mode != MapMode.Off && Input.GetKeyDown(KeyCode.Escape) && !WmcNameField.Typing)
             {
                 Disarm();

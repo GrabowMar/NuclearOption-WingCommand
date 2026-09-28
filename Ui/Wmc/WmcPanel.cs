@@ -196,6 +196,7 @@ namespace WingCommand
             controls.Clear();
             context.Selection.Clear();
             context.Map.Disarm();
+            PauseKeyHold.ReleaseAll();
             context.Draft.Clear();
             overlay.Destroy();
             WingMarkers.Reset();

@@ -15,8 +15,6 @@ namespace WingCommand
     {
         private static WmcNameField focusedField;
         private static int typingUntilFrame = -1;
-        private static bool pauseHeld, pauseWas;
-        private static int pauseReleaseFrame = -1;
 
         private TMP_InputField field;
         private Action<string, string> commit;
@@ -83,10 +81,7 @@ namespace WingCommand
             focused = true;
             idAtFocus = EditingId;
             focusedField = this;
-            if (pauseHeld) return;
-            pauseWas = GameplayUI.AllowPauseKeybind;
-            GameplayUI.AllowPauseKeybind = false;
-            pauseHeld = true;
+            PauseKeyHold.Set(KeyHold.Field, true);
         }
 
         private void OnEndEdit(string text)
@@ -102,7 +97,7 @@ namespace WingCommand
             if (ReferenceEquals(focusedField, this)) focusedField = null;
             typingUntilFrame = Time.frameCount + 1;
             // The Esc that ended the edit must not pause the game later this frame: the pause key comes back next frame.
-            pauseReleaseFrame = Time.frameCount + 1;
+            PauseKeyHold.Set(KeyHold.Field, false);
         }
 
         /// <summary>Lets go: the field is deselected (the toolkit releases the keyboard); a field that still thinks it is focused
@@ -116,7 +111,7 @@ namespace WingCommand
             focused = false;
             if (ReferenceEquals(focusedField, this)) focusedField = null;
             AvKit.ReleaseKeyboardGuard();
-            ReleasePause();
+            PauseKeyHold.Set(KeyHold.Field, false, now: true);
         }
 
         /// <summary>Lets any field go now, the pause key included (review R5: the room opening records the pause key as the player had
@@ -124,22 +119,14 @@ namespace WingCommand
         public static void BlurAny()
         {
             focusedField?.Blur();
-            if (focusedField == null && pauseHeld) ReleasePause();
+            if (focusedField == null) PauseKeyHold.Set(KeyHold.Field, false, now: true);
         }
 
         /// <summary>Every frame (WmcPanel.Tick): a pending blur after Enter, and the pause key back one frame after the edit ended.</summary>
         public static void TickAll()
         {
             if (focusedField != null && focusedField.blurPending) focusedField.Blur();
-            if (pauseReleaseFrame >= 0 && Time.frameCount >= pauseReleaseFrame && focusedField == null) ReleasePause();
-        }
-
-        private static void ReleasePause()
-        {
-            pauseReleaseFrame = -1;
-            if (!pauseHeld) return;
-            pauseHeld = false;
-            GameplayUI.AllowPauseKeybind = pauseWas;
+            PauseKeyHold.Tick();
         }
     }
 }
