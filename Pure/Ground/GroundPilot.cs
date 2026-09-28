@@ -65,7 +65,7 @@ namespace WingCommand
         /// takeoff aims up from 0.7 × takeoff speed; climb-out begins only above <see cref="WheelsOffHeight"/> radar altitude
         /// (the fly-by-wire is off on the wheels) and holds full throttle, as the game's does.</summary>
         public static float RotateFraction = 0.7f, RotatePitchDeg = 10f, RotateGain = 0.25f, RotateForceFactor = 1.1f, WheelsOffHeight = 1.5f;
-        public static float RerouteCost = 1e4f, OppositeCost = 1000f, RelocateClearRadius = 30f, RelocateCancelMetres = 10f;
+        public static float RerouteCost = 1e4f, OppositeCost = 1000f, RelocateClearRadius = 30f, RelocateCancelMetres = 10f, RelocateSpanMargin = 10f;
         public static float AlignSettleSeconds = 5f, LineUpSeconds = 120f, RollSeconds = 60f;
         public static float PullAsideMetres = 45f, PullAsideSeconds = 90f;
         public static float SpoolRpm = 0.9f, SpoolCollective = 0.05f, SpoolSeconds = 30f;
@@ -397,7 +397,7 @@ namespace WingCommand
             if (relocationWanted)
             {
                 if ((s.Pos - relocateFrom).Horizontal.Length > RelocateCancelMetres) relocationWanted = false;
-                else if (Relocate(s, time, events, slot)) return new ControlOutput { Brake = 1f };
+                else if (Relocate(s, p.SpanM, time, events, slot)) return new ControlOutput { Brake = 1f };
             }
             float along = Along(s.Pos);
             int step = StepAt(along);
@@ -528,7 +528,7 @@ namespace WingCommand
                 case WatchdogAction.Relocate:
                     relocationWanted = true;
                     relocateFrom = s.Pos;
-                    if (Relocate(s, time, events, slot)) return new ControlOutput { Brake = 1f };
+                    if (Relocate(s, p.SpanM, time, events, slot)) return new ControlOutput { Brake = 1f };
                     break;
             }
 
@@ -932,13 +932,14 @@ namespace WingCommand
 
         /// <summary>Once, when the goal (hold-short or stand) is free: claimed, then the engine moves the aircraft there.
         /// False while it is not free (an arriving member looks for another stand instead, <see cref="Restand"/>).</summary>
-        private bool Relocate(in AircraftState s, float time, WingEventRing events, int slot)
+        private bool Relocate(in AircraftState s, float span, float time, WingEventRing events, int slot)
         {
             int hold = Goal;
             Vec3 at = traffic.Graph.NodePos(hold);
             int owner = traffic.Reservations.OwnerOfNode(hold);
-            if ((owner >= 0 && owner != Owner) || traffic.Occupied(at, RelocateClearRadius, Owner) ||
-                traffic.RelocatedNear(at, RelocateClearRadius, Owner))
+            // Night-2 sim (SFB-81): nobody nearer than this aircraft's span and a margin — 30 m is less than a bomber's wingspan.
+            float clear = Math.Max(RelocateClearRadius, span + RelocateSpanMargin);
+            if ((owner >= 0 && owner != Owner) || traffic.Occupied(at, clear, Owner) || traffic.RelocatedNear(at, clear, Owner))
                 return arriving && Restand(s, time, events, slot);
             traffic.Reservations.ReleaseAll(Owner);
             holdClaim[0] = hold;

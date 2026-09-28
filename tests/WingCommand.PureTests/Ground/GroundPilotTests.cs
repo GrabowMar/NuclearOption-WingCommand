@@ -592,6 +592,39 @@ namespace WingCommand.PureTests
         }
 
         [Fact]
+        public void ABigAircraftIsNeverRelocatedCloserToAnotherThanItsSpan()
+        {
+            // Night-2 sim (SFB-81 at Boscali North): a stuck bomber was moved to the hold-short with another one waiting 30-odd m
+            // away — the fixed 30 m clearance is less than a 42 m wingspan — and was destroyed on arrival.
+            var field = new FieldTraffic(TestFields.Simple(), 0, false);
+            int hold = field.Graph.HoldShort(0, false);
+            Vec3 at = field.Graph.NodePos(hold);
+            field.Report(2, at + new Vec3(35f, 0f, 0f));
+            Pose spawn = field.Field.Hangars[0].Spawn;
+            var pilot = new GroundPilot(1, field, AirframeClass.FixedWing, spawn, 0);
+            var s = new AircraftState { Pos = spawn.Pos, Fwd = spawn.Fwd, Up = Vec3.Up, Right = Vec3.Cross(Vec3.Up, spawn.Fwd) };
+            AirframeProfile bomber = Jet();
+            bomber.SpanM = 42f;
+            IFlightPipeline pipeline = FlightStack.NewPipeline(AirframeClass.FixedWing);
+            int relocations = 0, i = 0;
+            for (; i < 150 * 30; i++)
+            {
+                field.Step(Dt);
+                pilot.Step(s, bomber, pipeline, i * Dt, Dt, null, 0);
+                if (pilot.TakeRelocation(out _)) relocations++;
+            }
+            Assert.Equal(0, relocations);
+            field.Leave(2);
+            for (int j = 0; j < 5 * 30; j++, i++)
+            {
+                field.Step(Dt);
+                pilot.Step(s, bomber, pipeline, i * Dt, Dt, null, 0);
+                if (pilot.TakeRelocation(out _)) relocations++;
+            }
+            Assert.Equal(1, relocations);
+        }
+
+        [Fact]
         public void ASpotSomeoneWasJustMovedToIsNotGivenToAnotherWhateverTheirReportSays()
         {
             // In game (boscali_north, M3b RTB run): two stuck members were relocated 0.4 s apart onto the same hold-short
