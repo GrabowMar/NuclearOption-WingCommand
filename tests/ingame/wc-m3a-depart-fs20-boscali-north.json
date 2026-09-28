@@ -1,0 +1,126 @@
+{
+  "name": "wc-m3a-depart-fs20-boscali-north",
+  "mods": [
+    "wingcommand"
+  ],
+  "timeout_s": 540,
+  "ops": [
+    {
+      "op": "spawn",
+      "id": "lead",
+      "type": "FS-20 Vortex",
+      "at": {
+        "map": [
+          -18632,
+          32049
+        ]
+      },
+      "altitude": 900,
+      "speed": 150,
+      "heading": 0
+    },
+    {
+      "op": "fly",
+      "id": "lead",
+      "program": [
+        {
+          "orbit": {
+            "bank": 15,
+            "seconds": 480
+          }
+        }
+      ]
+    },
+    {
+      "op": "wait",
+      "seconds": 3
+    },
+    {
+      "op": "call",
+      "method": "WingCommand.Automation.Launch",
+      "store": "launch",
+      "args": {
+        "lead": "lead",
+        "field": "airbase_boscali_north",
+        "count": 2,
+        "type": "FS-20 Vortex"
+      }
+    },
+    {
+      "op": "record",
+      "ids": [
+        "lead"
+      ],
+      "hz": 2
+    },
+    {
+      "op": "wait",
+      "seconds": 60
+    },
+    {
+      "op": "call",
+      "method": "WingCommand.Automation.Ground",
+      "store": "early"
+    },
+    {
+      "op": "call",
+      "method": "WingCommand.Automation.DumpFields"
+    },
+    {
+      "op": "wait",
+      "seconds": 300
+    },
+    {
+      "op": "call",
+      "method": "WingCommand.Automation.Members"
+    },
+    {
+      "op": "call",
+      "method": "WingCommand.Automation.Ground",
+      "store": "ground"
+    },
+    {
+      "op": "call",
+      "method": "WingCommand.Automation.Metrics",
+      "store": "wing"
+    },
+    {
+      "op": "end"
+    }
+  ],
+  "checks": [
+    {
+      "check": "status_ok"
+    },
+    {
+      "check": "result_above",
+      "path": "launch.launched",
+      "min": 2
+    },
+    {
+      "check": "result_above",
+      "path": "ground.flying",
+      "min": 2
+    },
+    {
+      "check": "result_below",
+      "path": "ground.grounded",
+      "max": 0
+    },
+    {
+      "check": "result_below",
+      "path": "ground.relocated",
+      "max": 0
+    },
+    {
+      "check": "result_below",
+      "path": "wing.left",
+      "max": 0
+    },
+    {
+      "check": "result_below",
+      "path": "ground.aborted",
+      "max": 0
+    }
+  ]
+}

@@ -1,0 +1,109 @@
+{
+  "name": "wc-m3a-liftoff-uh90-city",
+  "mods": [
+    "wingcommand"
+  ],
+  "timeout_s": 360,
+  "ops": [
+    {
+      "op": "spawn",
+      "id": "lead",
+      "type": "UH-90 Ibis",
+      "at": {
+        "map": [
+          13045,
+          19568
+        ]
+      },
+      "altitude": 900,
+      "speed": 50,
+      "heading": 0
+    },
+    {
+      "op": "fly",
+      "id": "lead",
+      "program": [
+        {
+          "orbit": {
+            "bank": 15,
+            "seconds": 300
+          }
+        }
+      ]
+    },
+    {
+      "op": "wait",
+      "seconds": 3
+    },
+    {
+      "op": "call",
+      "method": "WingCommand.Automation.Launch",
+      "store": "launch",
+      "args": {
+        "lead": "lead",
+        "field": "airbase_city",
+        "count": 2,
+        "type": "UH-90 Ibis",
+        "shape": "staggered-trail"
+      }
+    },
+    {
+      "op": "record",
+      "ids": [
+        "lead"
+      ],
+      "hz": 2
+    },
+    {
+      "op": "wait",
+      "seconds": 180
+    },
+    {
+      "op": "call",
+      "method": "WingCommand.Automation.Members"
+    },
+    {
+      "op": "call",
+      "method": "WingCommand.Automation.Ground",
+      "store": "ground"
+    },
+    {
+      "op": "call",
+      "method": "WingCommand.Automation.Metrics",
+      "store": "wing"
+    },
+    {
+      "op": "end"
+    }
+  ],
+  "checks": [
+    {
+      "check": "status_ok"
+    },
+    {
+      "check": "result_above",
+      "path": "launch.launched",
+      "min": 2
+    },
+    {
+      "check": "result_above",
+      "path": "ground.flying",
+      "min": 2
+    },
+    {
+      "check": "result_below",
+      "path": "ground.grounded",
+      "max": 0
+    },
+    {
+      "check": "result_below",
+      "path": "ground.relocated",
+      "max": 0
+    },
+    {
+      "check": "result_below",
+      "path": "wing.left",
+      "max": 0
+    }
+  ]
+}

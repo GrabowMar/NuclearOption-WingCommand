@@ -2,7 +2,7 @@
 
   <PropertyGroup>
     <TargetFramework>net8.0</TargetFramework>
-    <LangVersion>latest</LangVersion>
+    <LangVersion>12</LangVersion>
     <Nullable>disable</Nullable>
     <IsPackable>false</IsPackable>
     <RootNamespace>WingCommand.PureTests</RootNamespace>
@@ -10,6 +10,8 @@
 
   <ItemGroup>
     <None Include="..\..\Assets\maneuvers.json" Link="maneuvers.json" CopyToOutputDirectory="PreserveNewest" />
+    <None Include="..\..\Assets\Data\formations.json" Link="formations.json" CopyToOutputDirectory="PreserveNewest" />
+    <None Include="Fixtures\airbases\*.json" CopyToOutputDirectory="PreserveNewest" />
     <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.11.1" />
     <PackageReference Include="xunit" Version="2.9.2" />
     <PackageReference Include="xunit.runner.visualstudio" Version="2.8.2" />
@@ -20,15 +22,12 @@
                      Unity/BepInEx assemblies to be present on disk to build.">
     <Compile Include="..\..\Pure\**\*.cs" Link="Pure\%(RecursiveDir)%(Filename)%(Extension)" />
     <Compile Include="..\..\Avionics\*.cs" Link="Avionics\%(Filename)%(Extension)" />
-    <Compile Include="..\..\Core\WingCommandSelection.cs" Link="Core\WingCommandSelection.cs" />
-    <Compile Include="..\..\Core\WingCommandManager.Recruit.cs" Link="Core\WingCommandManager.Recruit.cs" />
-    <Compile Include="..\..\Core\WingOrderCatalog.cs" Link="Core\WingOrderCatalog.cs" />
-    <Compile Include="..\..\Core\WingDirective.cs" Link="Core\WingDirective.cs" />
-    <Compile Include="..\..\Personnel\WingKillCredit.cs" Link="Personnel\WingKillCredit.cs" />
-    <Compile Include="..\..\Combat\TacticalCoordinator.cs" Link="Combat\TacticalCoordinator.cs" />
-    <Compile Include="..\..\Combat\SlotEngagement.cs" Link="Combat\SlotEngagement.cs" />
-    <Compile Include="..\..\Economy\HangarDepartureLane.cs" Link="Economy\HangarDepartureLane.cs" />
-    <Compile Include="..\..\Flight\HoverAssist.cs" Link="Flight\HoverAssist.cs" />
+    <Compile Include="..\..\Agents\HoverAssist.cs" Link="Agents\HoverAssist.cs" />
+  </ItemGroup>
+
+  <!-- Tests whose production subject is quarantined in WingCommand.csproj; restored with it. -->
+  <ItemGroup Label="Quarantine">
+    <Compile Remove="WingKillCreditTests.cs" /> <!-- M3 -->
   </ItemGroup>
 
 </Project>

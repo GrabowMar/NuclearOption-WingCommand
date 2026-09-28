@@ -1,0 +1,156 @@
+{
+  "name": "wc-m5a-engage-fs20",
+  "mods": [
+    "wingcommand"
+  ],
+  "timeout_s": 600,
+  "ops": [
+    {
+      "op": "spawn",
+      "id": "lead",
+      "type": "FS-20 Vortex",
+      "at": {
+        "map": [
+          0,
+          0
+        ]
+      },
+      "altitude": 3000,
+      "speed": 200,
+      "heading": 0
+    },
+    {
+      "op": "fly",
+      "id": "lead",
+      "program": [
+        {
+          "level": 5
+        },
+        {
+          "orbit": {
+            "bank": 25,
+            "seconds": 580
+          }
+        }
+      ]
+    },
+    {
+      "op": "wait",
+      "seconds": 2
+    },
+    {
+      "op": "call",
+      "method": "WingCommand.Automation.FormOn",
+      "store": "form",
+      "args": {
+        "lead": "lead",
+        "count": 2,
+        "shape": "finger-four-right",
+        "spacing": "Standard"
+      }
+    },
+    {
+      "op": "wait",
+      "seconds": 60
+    },
+    {
+      "op": "spawn",
+      "id": "bandit",
+      "type": "FS-12 Revoker",
+      "faction": "Primeva",
+      "at": {
+        "map": [
+          0,
+          18000
+        ]
+      },
+      "altitude": 3000,
+      "speed": 200,
+      "heading": 180
+    },
+    {
+      "op": "spawn",
+      "id": "bandit2",
+      "type": "FS-12 Revoker",
+      "faction": "Primeva",
+      "at": {
+        "map": [
+          3000,
+          18000
+        ]
+      },
+      "altitude": 3000,
+      "speed": 200,
+      "heading": 180
+    },
+    {
+      "op": "wait",
+      "seconds": 10
+    },
+    {
+      "op": "call",
+      "method": "WingCommand.Automation.Engage",
+      "store": "engage",
+      "args": {
+        "target": "bandit",
+        "target2": "bandit2"
+      }
+    },
+    {
+      "op": "wait",
+      "seconds": 150
+    },
+    {
+      "op": "call",
+      "method": "WingCommand.Automation.CombatState",
+      "store": "fight"
+    },
+    {
+      "op": "call",
+      "method": "WingCommand.Automation.Disengage",
+      "store": "disengage"
+    },
+    {
+      "op": "wait",
+      "seconds": 90
+    },
+    {
+      "op": "call",
+      "method": "WingCommand.Automation.CombatState",
+      "store": "after"
+    },
+    {
+      "op": "call",
+      "method": "WingCommand.Automation.Metrics",
+      "store": "wing"
+    },
+    {
+      "op": "end"
+    }
+  ],
+  "checks": [
+    {
+      "check": "status_ok"
+    },
+    {
+      "check": "result_above",
+      "path": "form.spawned",
+      "min": 2
+    },
+    {
+      "check": "result_above",
+      "path": "engage.engaged",
+      "min": 2
+    },
+    {
+      "check": "result_below",
+      "path": "after.engaged",
+      "max": 0
+    },
+    {
+      "check": "result_above",
+      "path": "after.members",
+      "min": 1
+    }
+  ]
+}

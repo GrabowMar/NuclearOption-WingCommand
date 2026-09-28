@@ -1,0 +1,28 @@
+{
+  "name": "wc-m2-helo-trail-fs20",
+  "mods": ["wingcommand"],
+  "timeout_s": 480,
+  "ops": [
+    {"op": "spawn", "id": "lead", "type": "FS-20 Vortex", "at": {"map": [0, 0]}, "altitude": 1500, "speed": 160, "heading": 0},
+    {"op": "fly", "id": "lead", "program": [{"level": 60}, {"turn": {"heading": 60, "bank": 30}}, {"level": 40}, {"speed": {"to": 110}}, {"level": 300}]},
+    {"op": "wait", "seconds": 2},
+    {"op": "call", "method": "WingCommand.Automation.FormOn", "store": "form",
+     "args": {"lead": "lead", "count": 2, "type": "UH-90 Ibis", "shape": "staggered-trail", "spacing": "Standard"}},
+    {"op": "wait", "seconds": 5},
+    {"op": "call", "method": "WingCommand.Automation.Members"},
+    {"op": "record", "ids": ["*"], "hz": 5},
+    {"op": "wait", "seconds": 300},
+    {"op": "call", "method": "WingCommand.Automation.Metrics", "store": "helo"},
+    {"op": "end"}
+  ],
+  "checks": [
+    {"check": "status_ok"},
+    {"check": "alive", "ids": ["*"]},
+    {"check": "result_above", "path": "form.spawned", "min": 2},
+    {"check": "result_above", "path": "helo.members", "min": 2},
+    {"check": "result_below", "path": "helo.left", "max": 0},
+    {"check": "result_below", "path": "helo.collision", "max": 0},
+    {"check": "result_below", "path": "helo.gcas", "max": 0},
+    {"check": "result_above", "path": "helo.min_separation_m", "min": 20}
+  ]
+}

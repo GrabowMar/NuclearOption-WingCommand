@@ -1,0 +1,33 @@
+{
+  "name": "wc-m5e-splash-fs20",
+  "mods": ["wingcommand"],
+  "timeout_s": 300,
+  "ops": [
+    {"op": "spawn", "id": "lead", "type": "FS-20 Vortex", "at": {"map": [0, 0]}, "altitude": 3000, "speed": 200, "heading": 0},
+    {"op": "fly", "id": "lead", "program": [{"level": 280}]},
+    {"op": "wait", "seconds": 2},
+    {"op": "call", "method": "WingCommand.Automation.FormOn", "store": "form",
+     "args": {"lead": "lead", "count": 2, "shape": "finger-four-right", "spacing": "Standard"}},
+    {"op": "call", "method": "WingCommand.Automation.Doctrine", "store": "doctrine", "args": {"name": "Reserve"}},
+    {"op": "wait", "seconds": 60},
+    {"op": "spawn", "id": "b1", "type": "FS-12 Revoker", "faction": "Primeva", "at": {"map": [-1000, 30000]}, "altitude": 3000, "speed": 220, "heading": 180},
+    {"op": "spawn", "id": "b2", "type": "FS-12 Revoker", "faction": "Primeva", "at": {"map": [1000, 30000]}, "altitude": 3000, "speed": 220, "heading": 180},
+    {"op": "wait", "seconds": 20},
+    {"op": "call", "method": "WingCommand.Automation.Splash", "store": "s1"},
+    {"op": "wait", "seconds": 10},
+    {"op": "call", "method": "WingCommand.Automation.Splash", "store": "s2"},
+    {"op": "wait", "seconds": 10},
+    {"op": "call", "method": "WingCommand.Automation.Splash", "store": "s3"},
+    {"op": "wait", "seconds": 20},
+    {"op": "call", "method": "WingCommand.Automation.CombatState", "store": "fight"},
+    {"op": "call", "method": "WingCommand.Automation.RadioState", "store": "radio"},
+    {"op": "end"}
+  ],
+  "checks": [
+    {"check": "status_ok"},
+    {"check": "result_above", "path": "form.spawned", "min": 2},
+    {"check": "result_above", "path": "s3.shots", "min": 1},
+    {"check": "result_below", "path": "fight.standing_shots", "max": 0},
+    {"check": "result_below", "path": "fight.engaged", "max": 0}
+  ]
+}

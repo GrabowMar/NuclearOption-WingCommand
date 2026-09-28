@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using Rewired;
 using TMPro;
 using UnityEngine;
 using UnityEngine.UI;
@@ -429,8 +430,7 @@ namespace NOAvionics.Ui
         public static TMP_InputField InputField(
             RectTransform parent, Rect area, int characterLimit,
             Action<string> onChanged, Action onFocus = null, Action onBlur = null,
-            string tooltip = null, string placeholderText = "NAME",
-            TMP_InputField.LineType lineType = TMP_InputField.LineType.SingleLine)
+            string tooltip = null, string placeholderText = "NAME", bool multiline = false)
         {
             var go = new GameObject("InputField", typeof(RectTransform), typeof(Image));
             var rt = go.GetComponent<RectTransform>();
@@ -455,8 +455,6 @@ namespace NOAvionics.Ui
                                          AvTheme.Disabled, AvTokens.FontBody, FontStyles.Italic, TextAlignmentOptions.Left);
             placeholder.raycastTarget = false;
 
-            bool multiline = lineType != TMP_InputField.LineType.SingleLine;
-            text.enableWordWrapping = placeholder.enableWordWrapping = multiline;
             if (multiline)
             {
                 text.alignment = TextAlignmentOptions.TopLeft;
@@ -470,7 +468,9 @@ namespace NOAvionics.Ui
             field.textComponent = text;
             field.placeholder = placeholder;
             AvInput.StripNavigation(field);
-            field.lineType = lineType;
+            field.lineType = multiline
+                ? TMP_InputField.LineType.MultiLineNewline
+                : TMP_InputField.LineType.SingleLine;
             field.characterLimit = characterLimit;
             field.richText = false;
             field.restoreOriginalTextOnEscape = true;
@@ -480,39 +480,85 @@ namespace NOAvionics.Ui
             field.selectionColor = new Color(AvTheme.Accent.r, AvTheme.Accent.g, AvTheme.Accent.b, 0.35f);
 
             if (onChanged != null) field.onEndEdit.AddListener(v => onChanged(v));
-            if (onFocus != null) field.onSelect.AddListener(_ => onFocus());
-            if (onBlur != null) field.onDeselect.AddListener(_ => onBlur());
-            if (!string.IsNullOrEmpty(tooltip))
-                go.AddComponent<AvTooltipTarget>().Initialise(tooltip);
+            field.onSelect.AddListener(_ =>
+            {
+                KeyboardGuard.Acquire();
+                onFocus?.Invoke();
+            });
+            field.onDeselect.AddListener(_ =>
+            {
+                KeyboardGuard.Release();
+                onBlur?.Invoke();
+            });
 
             return field;
+        }
+
+        /// <summary>Force-release Rewired keyboard after a screen reset or hide.</summary>
+        public static void ReleaseKeyboardGuard() => KeyboardGuard.Reset();
+
+        private static class KeyboardGuard
+        {
+            private static int holds;
+            private static bool previous = true;
+
+            public static void Acquire()
+            {
+                if (holds++ > 0) return;
+                Keyboard keyboard = TryKeyboard();
+                if (keyboard == null) return;
+                previous = keyboard.enabled;
+                keyboard.enabled = false;
+            }
+
+            public static void Release()
+            {
+                if (holds <= 0) return;
+                if (--holds > 0) return;
+                Restore();
+            }
+
+            public static void Reset()
+            {
+                if (holds == 0) return;
+                holds = 0;
+                Restore();
+            }
+
+            private static void Restore()
+            {
+                Keyboard keyboard = TryKeyboard();
+                if (keyboard != null) keyboard.enabled = previous;
+            }
+
+            private static Keyboard TryKeyboard()
+            {
+                if (!ReInput.isReady || ReInput.controllers == null) return null;
+                return ReInput.controllers.Keyboard;
+            }
         }
 
         // ---------------------------------------------------------------- Popup Menu
         public class Popup
         {
             private readonly GameObject root;
-            private readonly RectTransform sourcePageRoot;
-            private readonly RectTransform scrim;
-            private readonly float panelWidth;
             private readonly RectTransform listRect;
             private readonly Image listGround;
             private readonly List<PopupRow> rows = new List<PopupRow>();
             private static Popup open;
 
             public const int MaxRows = 7;
+            private const int PagedRows = MaxRows - 1;
             private int page;
 
             public Popup(RectTransform pageRoot, float panelWidth)
             {
-                sourcePageRoot = pageRoot;
-                this.panelWidth = panelWidth;
                 root = new GameObject("AvPopup", typeof(RectTransform));
                 var rt = root.GetComponent<RectTransform>();
                 rt.SetParent(pageRoot, worldPositionStays: false);
                 Stretch(rt);
 
-                scrim = (RectTransform)HitButton(rt, new Rect(0f, 0f, panelWidth, 4000f), Close).transform;
+                HitButton(rt, new Rect(0f, 0f, panelWidth, 4000f), Close);
 
                 var listGo = new GameObject("PopupList", typeof(RectTransform), typeof(Image));
                 listRect = listGo.GetComponent<RectTransform>();
@@ -537,18 +583,13 @@ namespace NOAvionics.Ui
 
             private void Render(Rect area, IReadOnlyList<PopupEntry> entries, Action<int> onPick)
             {
-                if (root == null || sourcePageRoot == null) return;
+                if (root == null) return;
                 open?.Close();
                 open = this;
 
-                Rect placement = area;
-                bool bounded = PrepareOverlay(ref placement, out Rect bounds);
-                int capacity = bounded
-                    ? Mathf.Clamp(Mathf.FloorToInt((bounds.height - AvTokens.Space1 * 2f) / AvTokens.RowPitch), 2, MaxRows)
-                    : MaxRows;
                 int total = entries?.Count ?? 0;
-                bool paged = total > capacity;
-                int perPage = paged ? capacity - 1 : capacity;
+                bool paged = total > MaxRows;
+                int perPage = paged ? PagedRows : MaxRows;
                 int pages = paged ? Mathf.CeilToInt(total / (float)perPage) : 1;
 
                 page = pages > 0 ? ((page % pages) + pages) % pages : 0;
@@ -557,13 +598,7 @@ namespace NOAvionics.Ui
                 int used = shown + (paged ? 1 : 0);
 
                 float height = Mathf.Max(AvTokens.RowPitch, AvTokens.RowPitch * used) + AvTokens.Space1 * 2f;
-                if (bounded)
-                {
-                    placement.width = Mathf.Min(placement.width, bounds.width);
-                    placement.x = Mathf.Clamp(placement.x, bounds.x, bounds.x + bounds.width - placement.width);
-                    placement.y = Mathf.Clamp(placement.y, bounds.y - bounds.height + height, bounds.y);
-                }
-                Place(listRect, new Rect(placement.x, placement.y, placement.width, height));
+                Place(listRect, new Rect(area.x, area.y, area.width, height));
 
                 while (rows.Count < MaxRows) rows.Add(new PopupRow(listRect, rows.Count));
 
@@ -572,7 +607,7 @@ namespace NOAvionics.Ui
                     if (i < shown)
                     {
                         int index = first + i;
-                        rows[i].Bind(entries[index], placement.width, () =>
+                        rows[i].Bind(entries[index], area.width, () =>
                         {
                             Close();
                             onPick?.Invoke(index);
@@ -580,7 +615,7 @@ namespace NOAvionics.Ui
                     }
                     else if (paged && i == shown)
                     {
-                        rows[i].Bind(new PopupEntry("MORE...", "page " + (page + 1) + " of " + pages), placement.width, () =>
+                        rows[i].Bind(new PopupEntry("MORE...", "page " + (page + 1) + " of " + pages), area.width, () =>
                         {
                             page++;
                             Render(area, entries, onPick);
@@ -594,43 +629,6 @@ namespace NOAvionics.Ui
 
                 root.SetActive(true);
                 root.transform.SetAsLastSibling();
-            }
-
-            // Pages are wrapped in ScrollRect after their controls are built. Resolve the
-            // viewport when opened, then draw outside its mask without losing the trigger's
-            // original page coordinates. The overlay stays within the visible body.
-            private bool PrepareOverlay(ref Rect area, out Rect bounds)
-            {
-                var rt = (RectTransform)root.transform;
-                ScrollRect scroll = sourcePageRoot.GetComponentInParent<ScrollRect>();
-                RectTransform viewport = scroll != null
-                    ? (scroll.viewport != null ? scroll.viewport : (RectTransform)scroll.transform)
-                    : sourcePageRoot;
-                RectTransform overlayParent = scroll != null && viewport != null ? viewport.parent as RectTransform : null;
-                rt.SetParent(overlayParent != null ? overlayParent : sourcePageRoot, false);
-                Stretch(rt);
-                if (viewport == null)
-                {
-                    bounds = default;
-                    Place(scrim, new Rect(0f, 0f, panelWidth, 4000f));
-                    return false;
-                }
-
-                Vector2 trigger = PointIn(sourcePageRoot, rt, area.x, area.y);
-                Vector2 triggerRight = PointIn(sourcePageRoot, rt, area.x + area.width, area.y);
-                area = new Rect(trigger.x, trigger.y, Mathf.Abs(triggerRight.x - trigger.x), area.height);
-                Vector2 topLeft = PointIn(viewport, rt, 0f, 0f);
-                Vector2 bottomRight = PointIn(viewport, rt, viewport.rect.width, -viewport.rect.height);
-                bounds = new Rect(topLeft.x, topLeft.y, bottomRight.x - topLeft.x, topLeft.y - bottomRight.y);
-                Place(scrim, bounds);
-                return true;
-            }
-
-            private static Vector2 PointIn(RectTransform from, RectTransform to, float x, float y)
-            {
-                Vector3 world = from.TransformPoint(new Vector3(from.rect.xMin + x, from.rect.yMax + y, 0f));
-                Vector3 local = to.InverseTransformPoint(world);
-                return new Vector2(local.x - to.rect.xMin, local.y - to.rect.yMax);
             }
 
             public void Close()
@@ -695,11 +693,11 @@ namespace NOAvionics.Ui
                 Place((RectTransform)hit.transform, new Rect(0f, 0f, width, AvTokens.RowHeight));
 
                 label.text = entry.Text ?? "";
-                label.color = !entry.Enabled ? AvTheme.Disabled : entry.Selected ? AvTheme.Accent : AvTheme.TextPrimary;
+                label.color = !entry.Enabled ? AvTheme.Disabled : entry.Selected ? AvTheme.Accent : AvTheme.Friendly;
                 detail.text = entry.Detail ?? "";
 
-                Color rest = AvTheme.Unity(AvTokens.RowFill(AvTheme.Accent.ToRgba(), entry.Selected));
-                Color hover = AvTheme.Unity(AvTokens.RowFill(AvTheme.Accent.ToRgba(), entry.Selected, true));
+                Color rest = entry.Selected ? AvTheme.Unity(AvTokens.Wash(AvTheme.Accent.ToRgba(), AvTokens.SelectedScale, AvTokens.SelectedAlpha)) : AvTheme.Ground;
+                Color hover = AvTheme.Unity(AvTokens.RowFill(AvTheme.Accent.ToRgba(), false, true));
                 hit.SetRowHighlight(fill, rest, hover);
                 hit.SetAction(entry.Enabled ? onPick : null);
                 hit.SetEnabled(entry.Enabled);

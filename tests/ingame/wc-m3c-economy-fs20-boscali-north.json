@@ -1,0 +1,166 @@
+{
+  "name": "wc-m3c-economy-fs20-boscali-north",
+  "mods": [
+    "wingcommand"
+  ],
+  "timeout_s": 840,
+  "ops": [
+    {
+      "op": "spawn",
+      "id": "lead",
+      "type": "FS-20 Vortex",
+      "at": {
+        "map": [
+          -18632,
+          32049
+        ]
+      },
+      "altitude": 900,
+      "speed": 150,
+      "heading": 0
+    },
+    {
+      "op": "fly",
+      "id": "lead",
+      "program": [
+        {
+          "orbit": {
+            "bank": 15,
+            "seconds": 780
+          }
+        }
+      ]
+    },
+    {
+      "op": "wait",
+      "seconds": 3
+    },
+    {
+      "op": "call",
+      "method": "WingCommand.Automation.Grant",
+      "store": "grant",
+      "args": {
+        "lead": "lead",
+        "allocation": 100000000,
+        "type": "FS-20 Vortex",
+        "stock": 4
+      }
+    },
+    {
+      "op": "call",
+      "method": "WingCommand.Automation.Economy",
+      "store": "before",
+      "args": {
+        "type": "FS-20 Vortex",
+        "lead": "lead"
+      }
+    },
+    {
+      "op": "call",
+      "method": "WingCommand.Automation.Launch",
+      "store": "launch",
+      "args": {
+        "lead": "lead",
+        "field": "airbase_boscali_north",
+        "count": 2,
+        "type": "FS-20 Vortex",
+        "sandbox": false
+      }
+    },
+    {
+      "op": "record",
+      "ids": [
+        "lead"
+      ],
+      "hz": 2
+    },
+    {
+      "op": "wait",
+      "seconds": 10
+    },
+    {
+      "op": "call",
+      "method": "WingCommand.Automation.Economy",
+      "store": "charged",
+      "args": {
+        "type": "FS-20 Vortex",
+        "lead": "lead"
+      }
+    },
+    {
+      "op": "wait",
+      "seconds": 230
+    },
+    {
+      "op": "call",
+      "method": "WingCommand.Automation.Ground",
+      "store": "departed"
+    },
+    {
+      "op": "call",
+      "method": "WingCommand.Automation.Rtb",
+      "store": "recover"
+    },
+    {
+      "op": "wait",
+      "seconds": 480
+    },
+    {
+      "op": "call",
+      "method": "WingCommand.Automation.Ground",
+      "store": "ground"
+    },
+    {
+      "op": "call",
+      "method": "WingCommand.Automation.Economy",
+      "store": "after",
+      "args": {
+        "type": "FS-20 Vortex",
+        "lead": "lead"
+      }
+    },
+    {
+      "op": "end"
+    }
+  ],
+  "checks": [
+    {
+      "check": "status_ok"
+    },
+    {
+      "check": "result_above",
+      "path": "launch.launched",
+      "min": 2
+    },
+    {
+      "check": "result_above",
+      "path": "charged.charged",
+      "min": 1
+    },
+    {
+      "check": "result_above",
+      "path": "charged.flying",
+      "min": 2
+    },
+    {
+      "check": "result_above",
+      "path": "ground.reserved",
+      "min": 2
+    },
+    {
+      "check": "result_above",
+      "path": "after.refunded",
+      "min": 1
+    },
+    {
+      "check": "result_below",
+      "path": "after.flying",
+      "max": 0
+    },
+    {
+      "check": "result_below",
+      "path": "after.lost",
+      "max": 0
+    }
+  ]
+}

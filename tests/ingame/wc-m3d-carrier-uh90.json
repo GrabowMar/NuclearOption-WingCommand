@@ -1,0 +1,106 @@
+{
+  "name": "wc-m3d-carrier-uh90",
+  "mods": [
+    "wingcommand"
+  ],
+  "timeout_s": 720,
+  "ops": [
+    {
+      "op": "spawn",
+      "id": "lead",
+      "type": "UH-90 Ibis",
+      "at": {
+        "map": [
+          -36000,
+          -13500
+        ]
+      },
+      "altitude": 400,
+      "speed": 40,
+      "heading": 0
+    },
+    {
+      "op": "fly",
+      "id": "lead",
+      "program": [
+        {
+          "orbit": {
+            "bank": 15,
+            "seconds": 700
+          }
+        }
+      ]
+    },
+    {
+      "op": "wait",
+      "seconds": 3
+    },
+    {
+      "op": "call",
+      "method": "WingCommand.Automation.Launch",
+      "store": "launch",
+      "args": {
+        "lead": "lead",
+        "field": "AssaultCarrier1",
+        "count": 2,
+        "type": "UH-90 Ibis"
+      }
+    },
+    {
+      "op": "wait",
+      "seconds": 120
+    },
+    {
+      "op": "call",
+      "method": "WingCommand.Automation.Ground",
+      "store": "departed"
+    },
+    {
+      "op": "call",
+      "method": "WingCommand.Automation.Rtb",
+      "store": "recover"
+    },
+    {
+      "op": "wait",
+      "seconds": 420
+    },
+    {
+      "op": "call",
+      "method": "WingCommand.Automation.Ground",
+      "store": "ground"
+    },
+    {
+      "op": "end"
+    }
+  ],
+  "checks": [
+    {
+      "check": "status_ok"
+    },
+    {
+      "check": "result_above",
+      "path": "launch.launched",
+      "min": 2
+    },
+    {
+      "check": "result_above",
+      "path": "departed.flying",
+      "min": 2
+    },
+    {
+      "check": "result_above",
+      "path": "recover.recovering",
+      "min": 2
+    },
+    {
+      "check": "result_above",
+      "path": "ground.landed",
+      "min": 1
+    },
+    {
+      "check": "result_above",
+      "path": "ground.reserved",
+      "min": 1
+    }
+  ]
+}

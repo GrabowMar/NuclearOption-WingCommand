@@ -2,293 +2,58 @@ using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
-using UnityEngine;
-using Random = UnityEngine.Random;
 
 namespace WingCommand
 {
-    /// <summary>Discovers custom pilot files, creates samples, and loads pilots and chatter.</summary>
+    /// <summary>Pilot files on disk, read only (R7: the studio's IMPORT; 0.9's folder included): the top-level <c>*.json</c> of a folder,
+    /// pilots only. Nothing here writes, seeds samples or registers chatter — saved pilots live in <see cref="WingSavedPilots"/>.</summary>
     internal static class WingCustomPilots
     {
-        public static string PilotsDirectory =>
-            Path.Combine(BepInEx.Paths.ConfigPath, "WingCommand", "Pilots");
+        /// <summary>0.9's pilot folder (outside the v1 root).</summary>
+        public static string LegacyDirectory => Path.Combine(BepInEx.Paths.ConfigPath, "WingCommand", "Pilots");
 
-        private static readonly Dictionary<string, List<string>> customEvents =
-            new Dictionary<string, List<string>>(StringComparer.OrdinalIgnoreCase);
-
-        /// <summary>Create the Pilots directory and seed sample_pilots.json when empty.</summary>
-        public static void EnsurePilotsDirectory()
+        /// <summary>The pilots in every readable top-level JSON file of <paramref name="dir"/>; <paramref name="files"/> counts the files.</summary>
+        public static List<CustomPilotRecord> LoadFolder(string dir, out int files)
         {
-            try
-            {
-                string dir = PilotsDirectory;
-                if (!Directory.Exists(dir))
-                {
-                    Directory.CreateDirectory(dir);
-                    Plugin.LogVerbose("[CustomPilots] Created Pilots directory at " + dir);
-                }
-
-                string[] jsonFiles = Directory.GetFiles(dir, "*.json", SearchOption.TopDirectoryOnly);
-                if (jsonFiles.Length == 0)
-                {
-                    string samplePath = Path.Combine(dir, "sample_pilots.json");
-                    File.WriteAllText(samplePath, CustomPilotCodec.SampleJson());
-                    Plugin.LogVerbose("[CustomPilots] Wrote sample_pilots.json to " + samplePath);
-                }
-            }
-            catch (Exception e)
-            {
-                Plugin.Logger.LogWarning("[CustomPilots] Failed to initialize Pilots directory: " + e.Message);
-            }
-        }
-
-        /// <summary>Show the Pilots directory in Windows Explorer.</summary>
-        public static void OpenFolder()
-        {
-            EnsurePilotsDirectory();
-            string dir = PilotsDirectory;
-            try
-            {
-                Process.Start(new ProcessStartInfo
-                {
-                    FileName = dir,
-                    UseShellExecute = true,
-                });
-                WingCommandManager.Instance?.Toast("Opened Pilots folder");
-            }
-            catch (Exception e)
-            {
-                Plugin.Logger.LogWarning("[CustomPilots] Could not open folder: " + e.Message);
-                WingCommandManager.Instance?.Toast("Pilots folder: " + dir);
-            }
-        }
-
-        /// <summary>Load custom pilots and chatter from the Pilots directory, returning pilots and chatter
-        /// count.</summary>
-        public static List<CustomPilotRecord> LoadAllCustomPilots(out int chattersCount)
-        {
-            EnsurePilotsDirectory();
-            chattersCount = 0;
             var pilots = new List<CustomPilotRecord>();
-            var seenCallsigns = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-
-            ChatterDialogue.ClearCustomAmbient();
-            customEvents.Clear();
-
-            string dir = PilotsDirectory;
-            var searchPaths = new List<string> { dir };
-
-            string pluginPilots = Path.Combine(BepInEx.Paths.PluginPath, "WingCommand", "Pilots");
-            if (Directory.Exists(pluginPilots) && !string.Equals(pluginPilots, dir, StringComparison.OrdinalIgnoreCase))
+            files = 0;
+            try
             {
-                searchPaths.Add(pluginPilots);
-            }
-
-            var allFiles = new List<string>();
-            foreach (string searchDir in searchPaths)
-            {
-                if (Directory.Exists(searchDir))
+                if (!Directory.Exists(dir)) return pilots;
+                foreach (string file in Directory.GetFiles(dir, "*.json", SearchOption.TopDirectoryOnly))
                 {
-                    allFiles.AddRange(Directory.GetFiles(searchDir, "*.json", SearchOption.AllDirectories));
-                }
-            }
-
-            foreach (string file in allFiles)
-            {
-                try
-                {
-                    string content = File.ReadAllText(file);
-                    CustomPilotPayload payload = CustomPilotCodec.Decode(content);
-
-                    foreach (CustomChatterRecord chatter in payload.Chatters)
+                    try
                     {
-                        if (chatter.IsAmbientExchange)
-                        {
-                            ChatterDialogue.RegisterCustomAmbient(new ChatterExchange(
-                                chatter.Opening, chatter.Reply, chatter.SpeakerTag, chatter.ReplyTag));
-                            chattersCount++;
-                        }
-                        else if (chatter.IsEventLine)
-                        {
-                            RegisterEventLine(chatter.SpeakerTag, chatter.Event, chatter.Text);
-                            chattersCount++;
-                        }
+                        pilots.AddRange(CustomPilotCodec.Decode(File.ReadAllText(file)).Pilots);
+                        files++;
                     }
-
-                    foreach (CustomPilotRecord pilot in payload.Pilots)
+                    catch (Exception e)
                     {
-                        if (pilot != null && !string.IsNullOrWhiteSpace(pilot.Callsign) && seenCallsigns.Add(pilot.Callsign))
-                        {
-                            pilots.Add(pilot);
-                        }
+                        Plugin.Logger.LogWarning("[Pilots] could not read " + Path.GetFileName(file) + ": " + e.Message);
                     }
                 }
-                catch (Exception e)
-                {
-                    Plugin.Logger.LogWarning("[CustomPilots] Error loading " + Path.GetFileName(file) + ": " + e.Message);
-                }
             }
-
-            Plugin.LogVerbose(
-                $"[CustomPilots] Loaded {pilots.Count} pilot(s), {chattersCount} chatter(s) across {allFiles.Count} file(s)");
+            catch (Exception e)
+            {
+                Plugin.Logger.LogWarning("[Pilots] could not list " + dir + ": " + e.Message);
+            }
             return pilots;
         }
 
-        /// <summary>Import all discovered pilots and chatter.</summary>
-        public static int ImportAll(out int chattersCount, out string message)
-        {
-            List<CustomPilotRecord> pilots = LoadAllCustomPilots(out chattersCount);
-            int newPilotsCount = 0;
-
-            foreach (CustomPilotRecord pilot in pilots)
-            {
-                if (!WingPilotRoster.ContainsCallsign(pilot.Callsign))
-                {
-                    WingPilot recruited = WingPilotRoster.ImportCustom(pilot);
-                    if (recruited != null) newPilotsCount++;
-                }
-            }
-
-            if (newPilotsCount > 0)
-            {
-                message = $"Imported {newPilotsCount} custom pilot(s) and {chattersCount} chatter(s)";
-            }
-            else if (pilots.Count > 0)
-            {
-                message = $"Loaded {chattersCount} chatter(s). All {pilots.Count} pilot(s) in folder already in squadron.";
-            }
-            else
-            {
-                message = "No pilots found in Pilots folder. Sample file created.";
-            }
-
-            return newPilotsCount;
-        }
-
-        /// <summary>Save custom pilots to a JSON file in the Pilots directory.</summary>
-        public static bool SaveCustomPilots(IEnumerable<CustomPilotRecord> pilots, string fileName = "custom_pilots.json")
+        /// <summary>Shows <paramref name="dir"/> in the file browser (created when missing).</summary>
+        public static void OpenFolder(string dir)
         {
             try
             {
-                EnsurePilotsDirectory();
-                string path = Path.Combine(PilotsDirectory, fileName);
-                string json = CustomPilotCodec.Encode(pilots);
-                File.WriteAllText(path, json);
-                Plugin.LogVerbose($"[CustomPilots] Saved pilots to {path}");
-                return true;
+                Directory.CreateDirectory(dir);
+                Process.Start(new ProcessStartInfo { FileName = dir, UseShellExecute = true });
+                WingToast.Show("Opened the Pilots folder");
             }
             catch (Exception e)
             {
-                Plugin.Logger.LogWarning($"[CustomPilots] Failed to save {fileName}: {e.Message}");
-                return false;
+                Plugin.Logger.LogWarning("[Pilots] could not open the folder: " + e.Message);
+                WingToast.Show("Pilots folder: " + dir);
             }
         }
-
-        /// <summary>Save or update a single pilot record in the primary custom pilots file.</summary>
-        public static bool SaveOrUpdatePilot(CustomPilotRecord pilot, string fileName = "custom_pilots.json")
-        {
-            if (pilot == null || string.IsNullOrWhiteSpace(pilot.Callsign)) return false;
-            try
-            {
-                EnsurePilotsDirectory();
-                string path = Path.Combine(PilotsDirectory, fileName);
-                var existing = new List<CustomPilotRecord>();
-                if (File.Exists(path))
-                {
-                    CustomPilotPayload payload = CustomPilotCodec.Decode(File.ReadAllText(path));
-                    existing.AddRange(payload.Pilots);
-                }
-
-                int index = existing.FindIndex(p => string.Equals(p.Callsign, pilot.Callsign, StringComparison.OrdinalIgnoreCase));
-                if (index >= 0)
-                {
-                    existing[index] = pilot;
-                }
-                else
-                {
-                    existing.Add(pilot);
-                }
-
-                return SaveCustomPilots(existing, fileName);
-            }
-            catch (Exception e)
-            {
-                Plugin.Logger.LogWarning($"[CustomPilots] Failed to save pilot {pilot.Callsign}: {e.Message}");
-                return false;
-            }
-        }
-
-        /// <summary>Delete a custom pilot by callsign from every file in the Pilots directory.</summary>
-        public static bool DeleteCustomPilot(string callsign)
-        {
-            if (string.IsNullOrWhiteSpace(callsign)) return false;
-            try
-            {
-                EnsurePilotsDirectory();
-                bool deleted = false;
-                foreach (string path in Directory.GetFiles(PilotsDirectory, "*.json", SearchOption.AllDirectories))
-                {
-                    string json = CustomPilotCodec.RemovePilot(File.ReadAllText(path), callsign, out bool removed);
-                    if (!removed) continue;
-
-                    File.WriteAllText(path, json);
-                    deleted = true;
-                }
-                return deleted;
-            }
-            catch (Exception e)
-            {
-                Plugin.Logger.LogWarning($"[CustomPilots] Failed to delete pilot {callsign}: {e.Message}");
-                return false;
-            }
-        }
-
-        private static void RegisterEventLine(string speakerTag, string eventName, string text)
-        {
-            string tag = string.IsNullOrWhiteSpace(speakerTag) ? "*" : speakerTag.Trim().ToUpperInvariant();
-            string evt = eventName.Trim().ToUpperInvariant();
-            string key = tag + "|" + evt;
-
-            if (!customEvents.TryGetValue(key, out List<string> lines))
-            {
-                lines = new List<string>();
-                customEvents[key] = lines;
-            }
-            lines.Add(text);
-        }
-
-        /// <summary>Try to resolve a custom phrase for this pilot and event.</summary>
-        public static bool TryGetEventLine(string tag, string eventName, string detail, out string phrase)
-        {
-            phrase = null;
-            if (string.IsNullOrWhiteSpace(eventName)) return false;
-
-            string cleanTag = !string.IsNullOrWhiteSpace(tag) ? tag.Trim().ToUpperInvariant() : "*";
-            string cleanEvent = eventName.Trim().ToUpperInvariant();
-
-            string specificKey = cleanTag + "|" + cleanEvent;
-            if (customEvents.TryGetValue(specificKey, out List<string> lines) && lines.Count > 0)
-            {
-                phrase = FormatLine(lines[Random.Range(0, lines.Count)], detail);
-                return true;
-            }
-
-            string generalKey = "*|" + cleanEvent;
-            if (customEvents.TryGetValue(generalKey, out List<string> generalLines) && generalLines.Count > 0)
-            {
-                phrase = FormatLine(generalLines[Random.Range(0, generalLines.Count)], detail);
-                return true;
-            }
-
-            return false;
-        }
-
-        private static string FormatLine(string template, string detail)
-        {
-            if (string.IsNullOrWhiteSpace(template)) return "";
-            string subject = string.IsNullOrWhiteSpace(detail) ? "target" : detail.Trim();
-            return template.Replace("{target}", subject).Replace("{0}", subject);
-        }
-
     }
 }

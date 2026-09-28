@@ -1,0 +1,176 @@
+using System.Globalization;
+using System.Text;
+
+namespace WingCommand
+{
+    /// <summary>WING's words (spec WMC rebuild §WING): one status word per pilot on the row, the dossier stamp and the tiles; the slot line
+    /// that says where the pilot is; the SAR and RELEASE buttons with their reasons; the empty and client states. Capped at the source,
+    /// never with "…" or "†".</summary>
+    internal static class SquadronWords
+    {
+        public const int RowChars = 22, StampChars = 11, CaptionChars = 22, SlotChars = 90, SarChars = 14, NameChars = 17;
+        public const string ClientWhy = "THE HOST KEEPS THE SQUADRON ROSTER";
+        public const string Empty = "NO PILOTS · RECRUIT below, or requisition on SUPPLY";
+        public const string NoFocus = "NO PILOT SELECTED";
+        public const string StudioTip = "Open this pilot in STUDIO: save them for every mission, edit the look and bio.";
+        public const string Title = "SQUADRON", PerksTitle = "PERKS", AssignTitle = "AIRFRAME ASSIGNMENT";
+        public const string RowTip = "Open this pilot's dossier (SUPPLY's pilot card picks who flies next).";
+        public const string RecruitTip = "Recruit a pilot into the squadron (free). A new pilot starts at 0 XP.";
+        public const string AirTip = "Send the nearest helicopter able to pick this pilot up (free; the rescue pays a bounty).";
+        public const string ReleaseTip = "Hand this aircraft to the game's AI (press twice): the pilot reads FREE, the jet flies on.";
+
+        public static string LocalTip(string cost) =>
+            "Search for this pilot locally (press twice): " + cost + ", back in 5:00. Not refunded if the pilot is lost meanwhile.";
+
+        public static string Row(PilotStatus s, bool next, int number)
+        {
+            switch (s)
+            {
+                case PilotStatus.Inbound: return "INBOUND";
+                case PilotStatus.Flying: return number > 0 ? "FLYING #" + N(number) : "FLYING";
+                case PilotStatus.Downed: return "DOWNED — SAR";
+                case PilotStatus.Rescue: return "SAR #" + N(number) + " GOING";
+                case PilotStatus.Missing: return "MIA";
+                case PilotStatus.LocalSar: return "LOCAL SAR";
+                case PilotStatus.Captured: return "CAPTURED";
+                case PilotStatus.Kia: return "KIA";
+                default: return next ? "FREE · NEXT UP" : "FREE";
+            }
+        }
+
+        public static string Stamp(PilotStatus s, bool next, int number)
+        {
+            switch (s)
+            {
+                case PilotStatus.Downed: return "DOWNED";
+                case PilotStatus.Rescue: return "SAR GOING";
+                case PilotStatus.Free: return next ? "NEXT UP" : "FREE";
+                default: return Row(s, next, number);
+            }
+        }
+
+        public static string Rail(PilotStatus s, bool next)
+        {
+            switch (s)
+            {
+                case PilotStatus.Free: return next ? "info" : "inert";
+                case PilotStatus.Inbound: return "info";
+                case PilotStatus.Flying: return "live";
+                case PilotStatus.Captured:
+                case PilotStatus.Kia: return "danger";
+                default: return "warn";
+            }
+        }
+
+        public static string Level(PilotStatus s) =>
+            s == PilotStatus.Flying ? "ok" : s == PilotStatus.Captured || s == PilotStatus.Kia ? "bad" : PilotStatuses.Lost(s) ? "warn" : "";
+
+        public static string Badge(WingRank r) => PilotPerks.RankName(r).Substring(0, 1);
+
+        /// <summary>The roster's head: pilots, then how many fly, are free and are out of action (SAR, missing, POW or KIA).</summary>
+        public static string Head(int pilots, int flying, int free, int lost)
+        {
+            if (pilots <= 0) return "NO PILOTS";
+            var sb = new StringBuilder(N(pilots) + (pilots == 1 ? " PILOT" : " PILOTS"));
+            if (flying > 0) sb.Append(" · ").Append(N(flying)).Append(" FLYING");
+            if (free > 0) sb.Append(" · ").Append(N(free)).Append(" FREE");
+            if (lost > 0) sb.Append(" · ").Append(N(lost)).Append(" LOST");
+            return sb.ToString();
+        }
+
+        // ---- the pinned AIRFRAME ASSIGNMENT bar
+
+        public static string Airframe(string current, string lastFlew) =>
+            !string.IsNullOrEmpty(current) ? current : !string.IsNullOrEmpty(lastFlew) ? "LAST FLEW " + lastFlew : "NO AIRFRAME YET";
+
+        public static string FlyingSlot(int number, string element, string duty) => Cap("#" + N(number) + " · " + element + " · " + duty);
+
+        public static string InboundSlot(string phase, string field) => Cap(phase + (string.IsNullOrEmpty(field) ? "" : " · FROM " + field));
+
+        public static string FreeSlot(bool next) => next ? "NEXT UP · FLIES THE NEXT LAUNCH" : "FREE · SUPPLY SEATS THE NEXT UP FIRST";
+
+        /// <summary>A downed pilot's options: AIR SAR only when a helicopter can go (review R6: an all fixed-wing wing has none).</summary>
+        public static string DownedSlot(string localCost, bool air) =>
+            Cap((air ? "DOWNED · AIR SAR SENDS A HELICOPTER · LOCAL SAR " : "DOWNED · NO HELICOPTER CAN GO · LOCAL SAR ") + localCost);
+
+        public static string RescueSlot(int rescuer) => "SAR #" + N(rescuer) + " EN ROUTE";
+
+        public static string MissingSlot(string localCost, string duration) => Cap("MIA · NO SIGNAL · LOCAL SAR " + localCost + " SEARCHES " + duration);
+
+        public static string LocalSarSlot(string countdown) => "LOCAL SAR · BACK IN " + countdown;
+
+        public const string CapturedSlot = "CAPTURED · OUT FOR THIS MISSION";
+
+        public static string KiaSlot(string cause, string killer) =>
+            Cap("KIA" + (string.IsNullOrEmpty(cause) ? "" : " · " + cause.ToUpperInvariant())
+                + (string.IsNullOrEmpty(killer) ? "" : " · BY " + killer.ToUpperInvariant()));
+
+        // ---- the dossier
+
+        public static string Record(int kills, int sorties) =>
+            N(kills) + (kills == 1 ? " KILL · " : " KILLS · ") + N(sorties) + (sorties == 1 ? " SORTIE" : " SORTIES");
+
+        public static string Persona(string persona) => "RADIO · " + WmcText.Cut((persona ?? "STANDARD").ToUpperInvariant(), 24);
+
+        public static string ReleaseLabel(bool asking) => asking ? "RELEASE?" : "RELEASE";
+
+        public static string ReleaseWhy(PilotStatus s, bool client) =>
+            client ? ClientWhy : s == PilotStatus.Flying ? null : "Only a flying pilot can be released";
+
+        public static string ReleaseAsk(string callsign, int number) =>
+            "Release #" + N(number) + " " + callsign + " to the game's AI? The pilot reads FREE; the jet flies on. Press RELEASE again";
+
+        // ---- search and rescue
+
+        public static string AirLabel(int rescuer) => rescuer > 0 ? "#" + N(rescuer) + " GOING" : "AIR SAR";
+
+        /// <summary>Why AIR SAR cannot go for this pilot (the helicopter and ground checks come from the wing).</summary>
+        public static string AirWhy(PilotStatus s, bool client)
+        {
+            if (client) return ClientWhy;
+            if (s == PilotStatus.Downed) return null;
+            if (s == PilotStatus.Missing) return "No survivor signal: LOCAL SAR searches";
+            if (s == PilotStatus.Rescue) return "A helicopter is already on the way";
+            if (s == PilotStatus.LocalSar) return "A local search is already under way";
+            return "Only a pilot down on land can be picked up";
+        }
+
+        public static string LocalLabel(bool asking, string countdown) =>
+            !string.IsNullOrEmpty(countdown) ? countdown + " LEFT" : asking ? "LOCAL SAR?" : "LOCAL SAR";
+
+        /// <summary>Why LOCAL SAR cannot search for this pilot (funds and the waiting window come from the search itself).</summary>
+        public static string LocalWhy(PilotStatus s, bool client)
+        {
+            if (client) return ClientWhy;
+            if (s == PilotStatus.Downed || s == PilotStatus.Missing) return null;
+            if (s == PilotStatus.LocalSar) return "A local search is already under way";
+            if (s == PilotStatus.Rescue) return "A helicopter is already on the way";
+            return "Only a missing or downed pilot can be searched for";
+        }
+
+        public const string LocalPending = "Checking for an ejection: wait for the survivor's signal";
+        public const string LocalGone = "The survivor can no longer be reached";
+        public const string NoFunds = "No funds to draw on";
+
+        public static string LocalNeeds(string cost, string funds) => "Needs " + cost + " (funds " + funds + ")";
+
+        public static string LocalAsk(string callsign, string cost, string duration) =>
+            "Local search for " + callsign + ": " + cost + ", back in " + duration + ". Press LOCAL SAR again";
+
+        /// <summary>The first pilot down, named with the trouble (review R6: not a button that may be off; WING's bar says which one can go).</summary>
+        public static string Alert(PilotStatus s, string callsign) =>
+            s == PilotStatus.Downed ? callsign + " DOWNED — SAR NEEDED"
+            : s == PilotStatus.Missing ? callsign + " MIA — NO SIGNAL" : null;
+
+        public static string Hint(bool client, int pilots) =>
+            client ? "The host keeps the squadron roster; you can look."
+            : pilots == 0 ? "Recruit a pilot, or requisition on SUPPLY: a new pilot is drafted at launch."
+            : "A row opens the dossier; SUPPLY's pilot card picks who flies next.";
+
+        public static string Recruited(string callsign, string name) => "Recruited " + callsign + (string.IsNullOrEmpty(name) ? "" : " (" + name + ")");
+
+        private static string Cap(string s) => WmcText.Cut(s, SlotChars);
+
+        private static string N(int v) => v.ToString(CultureInfo.InvariantCulture);
+    }
+}

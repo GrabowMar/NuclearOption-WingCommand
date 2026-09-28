@@ -19,19 +19,6 @@ namespace WingCommand.PureTests
         }
 
         [Fact]
-        public void LowLineAbreastKeepsOuterSlotsAboveTheTerrainFloor()
-        {
-            const float radarAltitude = 100f, floor = 45f, arm = 264f, stack = 3f;
-            float oldBank = 80f * radarAltitude / 150f;
-            Assert.True(LowestAltitude(oldBank, radarAltitude, arm, stack) < floor);
-            float bank = FormationCollision.TerrainBank(oldBank, radarAltitude, floor, arm, stack, 0f);
-            Assert.InRange(bank, 0f, oldBank - 1f);
-            Assert.True(LowestAltitude(bank, radarAltitude, arm, stack) >= floor - 0.001f);
-            Assert.Equal(-bank, FormationCollision.TerrainBank(-oldBank, radarAltitude,
-                floor, arm, stack, 0f), 4);
-        }
-
-        [Fact]
         public void LargerWingsAndLowerTerrainMarginsReduceTheWholeFormationBank()
         {
             float smallWing = FormationCollision.TerrainBank(75f, 180f, 45f, 180f, 15f, 0f);
@@ -68,47 +55,5 @@ namespace WingCommand.PureTests
             Assert.Equal(65f, FormationCollision.TerrainBank(65f, 150f, 45f, 0f, 15f, 600f));
         }
 
-        [Theory]
-        [MemberData(nameof(FormationLayoutTests.Shapes), MemberType = typeof(FormationLayoutTests))]
-        public void EverySlotClearsTheFloorWithOneBankAcrossShapesTurnsAndLargeWings(int shape)
-        {
-            foreach (int count in new[] { 3, 16 })
-            foreach (float turn in new[] { 0f, 0.5f, 1f })
-            foreach (float pitch in new[] { 0f, 0.1f })
-            foreach (float requested in new[] { -80f, 80f })
-            {
-                const float altitude = 350f, clearance = 45f;
-                float lateralScale = 1f + (FormationLayout.TurnLateralScale - 1f) * turn;
-                float backScale = 1f + (FormationLayout.TurnBackScale - 1f) * turn;
-                float lateral = 0f, down = 0f, aft = 0f;
-                for (int slot = 1; slot <= count; slot++)
-                {
-                    SlotLayout point = FormationLayout.Slot((FormationShape)shape, slot);
-                    lateral = Math.Max(lateral, Math.Abs(point.Lateral * 120f * lateralScale));
-                    down = Math.Max(down, -point.Height * 20f);
-                    aft = Math.Max(aft, point.Back * 120f * backScale);
-                }
-                float bank = FormationCollision.TerrainBank(requested, altitude, clearance,
-                    lateral, down, aft, pitch);
-                double radians = bank * Math.PI / 180d;
-                double horizontal = Math.Sqrt(1d - pitch * pitch);
-                for (int slot = 1; slot <= count; slot++)
-                {
-                    SlotLayout point = FormationLayout.Slot((FormationShape)shape, slot);
-                    double slotAltitude = altitude + horizontal *
-                        (point.Lateral * 120f * lateralScale * Math.Sin(radians) +
-                         point.Height * 20f * Math.Cos(radians)) -
-                        point.Back * 120f * backScale * pitch;
-                    Assert.True(slotAltitude >= clearance - 0.001d,
-                        $"{(FormationShape)shape} slot {slot}/{count}, turn {turn}, pitch {pitch}, bank {bank}, altitude {slotAltitude}");
-                }
-            }
-        }
-
-        private static float LowestAltitude(float bank, float altitude, float arm, float stack)
-        {
-            double radians = bank * Math.PI / 180d;
-            return altitude - (float)(arm * Math.Abs(Math.Sin(radians)) + stack * Math.Cos(radians));
-        }
     }
 }

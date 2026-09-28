@@ -7,26 +7,6 @@ namespace WingCommand
     {
         public const float SlotResponseSeconds = 0.5f;
 
-        // During rejoin, measure closure along rendezvous line of sight. Lateral and opposing-heading
-        // joins are not captured along-track overshoots.
-        public static float ApproachSpeed(float gapX, float gapZ,
-            float ownVx, float ownVz, float slotVx, float slotVz,
-            float braking, float aggression, float damping, float responseSeconds,
-            float slotVy = 0f, float speedLead = 0f)
-        {
-            float distance = (float)Math.Sqrt(gapX * gapX + gapZ * gapZ);
-            if (distance < 1f) return Math.Max(0f,
-                (float)Math.Sqrt(slotVx * slotVx + slotVy * slotVy + slotVz * slotVz) + speedLead);
-            float x = gapX / distance, z = gapZ / distance;
-            float closing = (ownVx - slotVx) * x + (ownVz - slotVz) * z;
-            float closure = Math.Max(0f, Math.Min(90f, FormationControlRules.RejoinClosure(
-                distance, closing, braking, aggression, damping, 0.45f, 3f, 90f, responseSeconds)));
-            float vx = slotVx + x * closure, vz = slotVz + z * closure;
-            // Closure uses measured motion; engine lead survives rejoin blending and climbs retain
-            // their vertical speed demand instead of throttling back to horizontal speed.
-            return Math.Max(0f, (float)Math.Sqrt(vx * vx + slotVy * slotVy + vz * vz) + speedLead);
-        }
-
         public static float QuietTurnRate(float rate, float deadband, float horizontalSpeed = 100f)
         {
             if (deadband <= 0f) return rate;

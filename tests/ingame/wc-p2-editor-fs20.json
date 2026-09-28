@@ -1,0 +1,399 @@
+{
+ "name": "wc-p2-editor-fs20",
+ "mods": [
+  "wingcommand"
+ ],
+ "timeout_s": 540,
+ "ops": [
+  {
+   "op": "spawn",
+   "id": "lead",
+   "type": "FS-20 Vortex",
+   "at": {
+    "map": [
+     0,
+     0
+    ]
+   },
+   "altitude": 3000,
+   "speed": 200,
+   "heading": 0
+  },
+  {
+   "op": "fly",
+   "id": "lead",
+   "program": [
+    {
+     "level": 5
+    },
+    {
+     "orbit": {
+      "bank": 25,
+      "seconds": 600
+     }
+    }
+   ]
+  },
+  {
+   "op": "wait",
+   "seconds": 2
+  },
+  {
+   "op": "call",
+   "method": "WingCommand.Automation.FormOn",
+   "store": "form",
+   "args": {
+    "lead": "lead",
+    "count": 3,
+    "shape": "finger-four-right",
+    "spacing": "Standard"
+   }
+  },
+  {
+   "op": "wait",
+   "seconds": 40
+  },
+  {
+   "op": "call",
+   "method": "WingCommand.Automation.Order",
+   "store": "split",
+   "args": {
+    "kind": "Task",
+    "task": "Move",
+    "members": [
+     3,
+     4
+    ],
+    "offsets": [
+     [
+      6000,
+      6000
+     ]
+    ]
+   }
+  },
+  {
+   "op": "wait",
+   "seconds": 3
+  },
+  {
+   "op": "call",
+   "method": "WingCommand.Automation.Wmc",
+   "store": "open",
+   "args": {
+    "open": true,
+    "tab": "PLAN",
+    "sub": "ELEMENTS"
+   }
+  },
+  {
+   "op": "call",
+   "method": "WingCommand.Automation.Wmc",
+   "store": "sel_a",
+   "args": {
+    "press": "plan.el0.select"
+   }
+  },
+  {
+   "op": "call",
+   "method": "WingCommand.Automation.Wmc",
+   "store": "t_move",
+   "args": {
+    "press": "plan.tool.move"
+   }
+  },
+  {
+   "op": "call",
+   "method": "WingCommand.Automation.WmcMap",
+   "store": "a1",
+   "args": {
+    "x": 8000,
+    "z": 8000
+   }
+  },
+  {
+   "op": "call",
+   "method": "WingCommand.Automation.Wmc",
+   "store": "t_cap",
+   "args": {
+    "press": "plan.tool.cap"
+   }
+  },
+  {
+   "op": "call",
+   "method": "WingCommand.Automation.WmcMap",
+   "store": "a2",
+   "args": {
+    "x": 8000,
+    "z": 14000,
+    "radius_km": 6
+   }
+  },
+  {
+   "op": "call",
+   "method": "WingCommand.Automation.Wmc",
+   "store": "a2_time",
+   "args": {
+    "press": "plan.edit.end.time"
+   }
+  },
+  {
+   "op": "call",
+   "method": "WingCommand.Automation.Wmc",
+   "store": "a3",
+   "args": {
+    "press": "plan.el0.formup"
+   }
+  },
+  {
+   "op": "call",
+   "method": "WingCommand.Automation.Wmc",
+   "store": "sel_b",
+   "args": {
+    "press": "plan.el1.select"
+   }
+  },
+  {
+   "op": "call",
+   "method": "WingCommand.Automation.Wmc",
+   "store": "t_orbit",
+   "args": {
+    "press": "plan.tool.orbit"
+   }
+  },
+  {
+   "op": "call",
+   "method": "WingCommand.Automation.WmcMap",
+   "store": "b1",
+   "args": {
+    "x": -8000,
+    "z": 8000
+   }
+  },
+  {
+   "op": "call",
+   "method": "WingCommand.Automation.Wmc",
+   "store": "b1_after",
+   "args": {
+    "press": "plan.edit.start.after"
+   }
+  },
+  {
+   "op": "call",
+   "method": "WingCommand.Automation.Wmc",
+   "store": "b2",
+   "args": {
+    "press": "plan.el1.formup"
+   }
+  },
+  {
+   "op": "call",
+   "method": "WingCommand.Automation.Wmc",
+   "store": "cancel",
+   "args": {
+    "press": "plan.cue.cancel"
+   }
+  },
+  {
+   "op": "call",
+   "method": "WingCommand.Automation.Plan",
+   "store": "drawn",
+   "args": {}
+  },
+  {
+   "op": "capture",
+   "name": "plan-editor-drawn"
+  },
+  {
+   "op": "call",
+   "method": "WingCommand.Automation.Wmc",
+   "store": "exec",
+   "args": {
+    "press": "plan.bar.execute"
+   }
+  },
+  {
+   "op": "call",
+   "method": "WingCommand.Automation.Plan",
+   "store": "started",
+   "args": {}
+  },
+  {
+   "op": "wait",
+   "seconds": 20
+  },
+  {
+   "op": "call",
+   "method": "WingCommand.Automation.Plan",
+   "store": "early",
+   "args": {}
+  },
+  {
+   "op": "call",
+   "method": "WingCommand.Automation.WmcMap",
+   "store": "layer",
+   "args": {}
+  },
+  {
+   "op": "call",
+   "method": "WingCommand.Automation.Wmc",
+   "store": "tour",
+   "args": {
+    "tab": "PLAN",
+    "sub": "ELEMENTS"
+   }
+  },
+  {
+   "op": "capture",
+   "name": "plan-editor-running"
+  },
+  {
+   "op": "wait",
+   "seconds": 300
+  },
+  {
+   "op": "call",
+   "method": "WingCommand.Automation.Plan",
+   "store": "done",
+   "args": {}
+  },
+  {
+   "op": "call",
+   "method": "WingCommand.Automation.Elements",
+   "store": "elements"
+  },
+  {
+   "op": "call",
+   "method": "WingCommand.Automation.Metrics",
+   "store": "wing"
+  },
+  {
+   "op": "end"
+  }
+ ],
+ "checks": [
+  {
+   "check": "status_ok"
+  },
+  {
+   "check": "result_above",
+   "path": "form.spawned",
+   "min": 3
+  },
+  {
+   "check": "result_above",
+   "path": "split.element",
+   "min": 1
+  },
+  {
+   "check": "result_above",
+   "path": "t_move.pressed",
+   "min": 1
+  },
+  {
+   "check": "result_above",
+   "path": "t_cap.pressed",
+   "min": 1
+  },
+  {
+   "check": "result_above",
+   "path": "t_orbit.pressed",
+   "min": 1
+  },
+  {
+   "check": "result_above",
+   "path": "a2_time.pressed",
+   "min": 1
+  },
+  {
+   "check": "result_above",
+   "path": "a3.pressed",
+   "min": 1
+  },
+  {
+   "check": "result_above",
+   "path": "b1_after.pressed",
+   "min": 1
+  },
+  {
+   "check": "result_above",
+   "path": "b2.pressed",
+   "min": 1
+  },
+  {
+   "check": "result_above",
+   "path": "drawn.a_steps",
+   "min": 3
+  },
+  {
+   "check": "result_below",
+   "path": "drawn.a_steps",
+   "max": 3
+  },
+  {
+   "check": "result_above",
+   "path": "drawn.b_steps",
+   "min": 2
+  },
+  {
+   "check": "result_below",
+   "path": "drawn.b_steps",
+   "max": 2
+  },
+  {
+   "check": "result_above",
+   "path": "drawn.a2_radius_km",
+   "min": 5.9
+  },
+  {
+   "check": "result_below",
+   "path": "drawn.a2_radius_km",
+   "max": 6.1
+  },
+  {
+   "check": "result_above",
+   "path": "drawn.b1_after",
+   "min": 1
+  },
+  {
+   "check": "result_above",
+   "path": "exec.pressed",
+   "min": 1
+  },
+  {
+   "check": "result_above",
+   "path": "started.running",
+   "min": 1
+  },
+  {
+   "check": "result_above",
+   "path": "early.sent",
+   "min": 1
+  },
+  {
+   "check": "result_above",
+   "path": "layer.legs",
+   "min": 1
+  },
+  {
+   "check": "result_below",
+   "path": "tour.overflow",
+   "max": 0
+  },
+  {
+   "check": "result_above",
+   "path": "done.completed",
+   "min": 1
+  },
+  {
+   "check": "result_below",
+   "path": "done.blocked",
+   "max": 0
+  },
+  {
+   "check": "result_below",
+   "path": "elements.in_use",
+   "max": 1
+  }
+ ]
+}

@@ -26,6 +26,30 @@ namespace WingCommand
             return portrait;
         }
 
+        private static Texture2D previewTexture;
+        private static Sprite previewSprite;
+
+        /// <summary>The studio's preview (R7): one texture drawn over in place, so stepping through looks never grows the cache.</summary>
+        public static Sprite Preview(PortraitSelection selection)
+        {
+            if (!LoadLayers()) return null;
+            byte[] pixels = PilotPortraitGenerator.Compose(PilotPortraitGenerator.Normalize(selection), layers);
+            if (previewTexture == null)
+            {
+                previewTexture = new Texture2D(PilotPortraitGenerator.Width, PilotPortraitGenerator.Height, TextureFormat.RGBA32, mipChain: false)
+                {
+                    name = "WingCommand_Pilot_Preview", filterMode = FilterMode.Bilinear, wrapMode = TextureWrapMode.Clamp,
+                    hideFlags = HideFlags.HideAndDontSave,
+                };
+                previewSprite = UnityEngine.Sprite.Create(previewTexture, new Rect(0, 0, previewTexture.width, previewTexture.height),
+                    new Vector2(0.5f, 0.5f), 100f);
+                previewSprite.hideFlags = HideFlags.HideAndDontSave;
+            }
+            previewTexture.LoadRawTextureData(pixels);
+            previewTexture.Apply(updateMipmaps: false, makeNoLongerReadable: false);
+            return previewSprite;
+        }
+
         public static Sprite ForCustom(PortraitBody body, int face, int hair, int uniform, int accessory, int backdrop) =>
             ForSelection(new PortraitSelection(body, face, hair, uniform, accessory, backdrop));
 
@@ -108,6 +132,10 @@ namespace WingCommand
                 UnityEngine.Object.Destroy(portrait);
             }
             portraits.Clear();
+            if (previewTexture != null) UnityEngine.Object.Destroy(previewTexture);
+            if (previewSprite != null) UnityEngine.Object.Destroy(previewSprite);
+            previewTexture = null;
+            previewSprite = null;
             layers = null;
             loadAttempted = false;
         }

@@ -13,7 +13,8 @@ namespace WingCommand.Interop
     /// Campaign rules, rewards and replication belong to the requesting companion.</summary>
     public static class WingSquad
     {
-        public static int ApiVersion => 1;
+        /// <summary>2: the 1.0 wing (fresh roster and config; same method names as 1).</summary>
+        public static int ApiVersion => 2;
         public const int MaxAircraft = 24;
         public const int MaxWingSize = 4;
         private static readonly Dictionary<Aircraft, Aircraft> owned = new Dictionary<Aircraft, Aircraft>();
@@ -90,10 +91,10 @@ namespace WingCommand.Interop
                 body == 1 ? PortraitBody.Female : PortraitBody.Male, face, hair, uniform, accessory, backdrop));
         }
 
-        /// <summary>Callsigns of every custom pilot file found on this machine.</summary>
+        /// <summary>Callsigns of this machine's saved pilots (R7: <c>v1/pilots.user.json</c>).</summary>
         public static string[] ListCustomPilots()
         {
-            List<CustomPilotRecord> records = PersonnelFacade.CustomPilots.LoadAllCustomPilots(out _);
+            IReadOnlyList<CustomPilotRecord> records = WingSavedPilots.Store.Records;
             var result = new List<string>(Math.Min(records.Count, 128));
             for (int i = 0; i < records.Count && result.Count < 128; i++)
             {
@@ -110,10 +111,10 @@ namespace WingCommand.Interop
             return record == null ? null : Export(record);
         }
 
-        /// <summary>Flat records for every custom pilot on this machine.</summary>
+        /// <summary>Flat records for every saved pilot on this machine (fields 5-7: the service record's best XP, kills, sorties).</summary>
         public static object[][] GetCustomPilots()
         {
-            List<CustomPilotRecord> records = PersonnelFacade.CustomPilots.LoadAllCustomPilots(out _);
+            IReadOnlyList<CustomPilotRecord> records = WingSavedPilots.Store.Records;
             var result = new List<object[]>(Math.Min(records.Count, 128));
             for (int i = 0; i < records.Count && result.Count < 128; i++)
             {
@@ -123,8 +124,8 @@ namespace WingCommand.Interop
             return result.ToArray();
         }
 
-        /// <summary>Create or replace one custom pilot file. The live squadron pilot with
-        /// the same callsign is updated in place, matching the Wing Command Pilot Studio.</summary>
+        /// <summary>Create or replace one saved pilot by callsign (identity and look; the service record is Wing Command's). The
+        /// live squadron pilot with the same callsign takes the new identity, never XP (R7).</summary>
         public static bool SaveCustomPilot(object[] values)
         {
             if (values == null || values.Length < 15) return false;
@@ -151,9 +152,9 @@ namespace WingCommand.Interop
                         Convert.ToInt32(values[12]), Convert.ToInt32(values[13]),
                         Convert.ToInt32(values[14])));
                 }
-                if (!PersonnelFacade.CustomPilots.SaveOrUpdatePilot(record)) return false;
-                UpdateLivePilot(record);
-                return true;
+                bool ok = WingSavedPilots.Save(record, callsign, WingPilotRoster.FindByCallsign(callsign), out string why);
+                if (!ok) Plugin.Logger.LogWarning("[WingSquad] Custom pilot save refused: " + why);
+                return ok;
             }
             catch (Exception error)
             {
@@ -162,8 +163,7 @@ namespace WingCommand.Interop
             }
         }
 
-        public static bool DeleteCustomPilot(string callsign) =>
-            PersonnelFacade.CustomPilots.DeleteCustomPilot(Limit(callsign, 32));
+        public static bool DeleteCustomPilot(string callsign) => WingSavedPilots.Delete(Limit(callsign, 32), out _);
 
         public static bool IsPilotRecruited(string callsign) =>
             WingPilotRoster.ContainsCallsign(Limit(callsign, 32));
@@ -174,7 +174,7 @@ namespace WingCommand.Interop
             if (string.IsNullOrWhiteSpace(callsign)) return false;
             if (WingPilotRoster.ContainsCallsign(callsign)) return true;
             CustomPilotRecord record = FindCustomPilot(callsign);
-            return record != null && WingPilotRoster.ImportCustom(record) != null;
+            return record != null && WingPilotRoster.Enlist(record) != null;
         }
 
         public static bool DischargeCustomPilot(string callsign)
@@ -183,22 +183,17 @@ namespace WingCommand.Interop
             return pilot != null && WingPilotRoster.RemoveFromSquadron(pilot);
         }
 
-        /// <summary>Import every custom pilot that is not already in the live squadron.</summary>
-        public static int ImportAllCustomPilots() =>
-            PersonnelFacade.CustomPilots.ImportAll(out _, out _);
-
-        private static CustomPilotRecord FindCustomPilot(string callsign)
+        /// <summary>Enlist every saved pilot not already in this mission's squadron; returns how many joined.</summary>
+        public static int ImportAllCustomPilots()
         {
-            if (string.IsNullOrWhiteSpace(callsign)) return null;
-            List<CustomPilotRecord> records = PersonnelFacade.CustomPilots.LoadAllCustomPilots(out _);
-            for (int i = 0; i < records.Count; i++)
-            {
-                if (records[i] != null &&
-                    string.Equals(records[i].Callsign, callsign.Trim(), StringComparison.OrdinalIgnoreCase))
-                    return records[i];
-            }
-            return null;
+            int n = 0;
+            foreach (CustomPilotRecord r in WingSavedPilots.Store.Records)
+                if (WingPilotRoster.Enlist(r) != null) n++;
+            return n;
         }
+
+        private static CustomPilotRecord FindCustomPilot(string callsign) =>
+            string.IsNullOrWhiteSpace(callsign) ? null : WingSavedPilots.Store.Find(callsign);
 
         private static object[] Export(CustomPilotRecord record)
         {
@@ -221,18 +216,6 @@ namespace WingCommand.Interop
                 selection.Accessory,
                 selection.Backdrop,
             };
-        }
-
-        private static void UpdateLivePilot(CustomPilotRecord record)
-        {
-            WingPilot live = WingPilotRoster.FindByCallsign(record.Callsign);
-            if (live == null) return;
-            live.Name = record.Name;
-            live.Persona = record.Persona;
-            live.DialogueTag = record.DialogueTag;
-            live.Background = record.Background;
-            live.Xp = record.Xp;
-            if (record.HasCustomPortrait) live.PortraitSelection = record.Selection;
         }
 
         private static int Clamp(int value, int min, int max) =>
@@ -341,7 +324,7 @@ namespace WingCommand.Interop
                 if (owned[aircraft] != target) WakeCombat(aircraft, target);
                 owned[aircraft] = target;
                 RefreshHuntTrack(aircraft, target);
-                WingRegistry.PrimaryPilot(aircraft)?.SetPrimaryTarget(target);
+                PrimaryPilot(aircraft)?.SetPrimaryTarget(target);
                 changed = true;
             }
             return changed;
@@ -374,9 +357,9 @@ namespace WingCommand.Interop
         /// Reads the same authority/settings gate as the actual perk hooks.</summary>
         public static int AbilityMask(Aircraft aircraft) => WingSurvivalPerks.AceAbilityMask(aircraft);
 
+        // ponytail: a toast until the radio returns with comms (M4); context is unused meanwhile.
         public static void Chatter(string callsign, string context, string message) =>
-            WingChatterHud.Enqueue(Limit(callsign, 32), Limit(context, 64), Limit(message, 240),
-                                   null, urgent: true, key: "squad:" + Limit(callsign, 32) + ":" + Limit(message, 80));
+            WingToast.Show(Limit(callsign, 32) + ": " + Limit(message, 240));
 
         /// <summary>Enroll while still seated, then read native evidence after ejection.
         /// 0 unknown, 1 living dismounted pilot, 2 returned, 3 dead, 4 captured.</summary>
@@ -451,7 +434,7 @@ namespace WingCommand.Interop
             if (!(searcher is Aircraft aircraft) || !aircraft.IsServer || aircraft.Player != null ||
                 aircraft.disabled || !owned.TryGetValue(aircraft, out Aircraft target) || target == null)
                 return false;
-            Pilot targetPilot = WingRegistry.PrimaryPilot(target);
+            Pilot targetPilot = PrimaryPilot(target);
             if (target.disabled || target.Player == null || targetPilot == null || targetPilot.dead ||
                 targetPilot.ejected || target.NetworkHQ == null || target.NetworkHQ == aircraft.NetworkHQ)
             {
@@ -496,7 +479,7 @@ namespace WingCommand.Interop
 
         private static void WakeCombat(Aircraft aircraft, Aircraft target)
         {
-            Pilot pilot = WingRegistry.PrimaryPilot(aircraft);
+            Pilot pilot = PrimaryPilot(aircraft);
             if (pilot == null || pilot.dead || pilot.ejected) return;
             if (target != null) RefreshHuntTrack(aircraft, target);
             pilot.SetPrimaryTarget(target);
@@ -566,7 +549,7 @@ namespace WingCommand.Interop
 
         private static Loadout InterceptLoadout(AircraftDefinition definition)
         {
-            int pylons = EconomyFacade.LoadoutCatalog.PylonCount(definition);
+            int pylons = WingLoadoutCatalog.PylonCount(definition);
             if (pylons <= 0 || pylons > 32) return null;
             var keys = new List<string>(pylons);
             var options = new List<WingLoadoutCatalog.StoreOption>();
@@ -574,7 +557,7 @@ namespace WingCommand.Interop
             for (int i = 0; i < pylons; i++)
             {
                 options.Clear();
-                EconomyFacade.LoadoutCatalog.OptionsFor(definition, i, options);
+                WingLoadoutCatalog.OptionsFor(definition, i, options);
                 string key = null;
                 float value = 0f;
                 for (int j = 0; j < Math.Min(options.Count, 128); j++)
@@ -587,7 +570,7 @@ namespace WingCommand.Interop
                 armed |= key != null;
                 keys.Add(key);
             }
-            return armed ? EconomyFacade.LoadoutCatalog.FillScratch(definition, keys) : null;
+            return armed ? WingLoadoutCatalog.FillScratch(definition, keys) : null;
         }
 
         private static void Prune()
@@ -598,6 +581,18 @@ namespace WingCommand.Interop
             foreach (Aircraft aircraft in stale)
             { WingSurvivalPerks.RemoveAce(aircraft); owned.Remove(aircraft); }
             stale.Clear();
+        }
+
+        private static Pilot PrimaryPilot(Aircraft aircraft) =>
+            aircraft != null && aircraft.pilots != null && aircraft.pilots.Length > 0 ? aircraft.pilots[0] : null;
+
+        /// <summary>Aces spawned here hunt the aircraft they were sent after (the game's own target choice otherwise).</summary>
+        [HarmonyPatch(typeof(CombatAI), nameof(CombatAI.ChooseHQTarget))]
+        internal static class AceTargetPatch
+        {
+            [HarmonyPostfix]
+            private static void Postfix(Unit searcher, List<WeaponStation> stationList, ref CombatAI.TargetSearchResults __result) =>
+                TrySelectTarget(searcher, stationList, ref __result);
         }
 
         private static string Limit(string value, int length) => string.IsNullOrEmpty(value)

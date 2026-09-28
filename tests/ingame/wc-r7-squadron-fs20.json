@@ -1,0 +1,326 @@
+{
+ "name": "wc-r7-squadron-fs20",
+ "mods": [
+  "wingcommand"
+ ],
+ "timeout_s": 240,
+ "ops": [
+  {
+   "op": "spawn",
+   "id": "lead",
+   "type": "FS-20 Vortex",
+   "at": {
+    "map": [
+     0,
+     0
+    ]
+   },
+   "altitude": 3000,
+   "speed": 200,
+   "heading": 0
+  },
+  {
+   "op": "fly",
+   "id": "lead",
+   "program": [
+    {
+     "level": 280
+    }
+   ]
+  },
+  {
+   "op": "wait",
+   "seconds": 2
+  },
+  {
+   "op": "call",
+   "method": "WingCommand.Automation.Pilots",
+   "store": "fresh",
+   "args": {
+    "fresh": true
+   }
+  },
+  {
+   "op": "call",
+   "method": "WingCommand.Automation.Pilots",
+   "store": "hired",
+   "args": {
+    "hire": 2
+   }
+  },
+  {
+   "op": "call",
+   "method": "WingCommand.Automation.FormOn",
+   "store": "form",
+   "args": {
+    "lead": "lead",
+    "count": 2
+   }
+  },
+  {
+   "op": "wait",
+   "seconds": 15
+  },
+  {
+   "op": "call",
+   "method": "WingCommand.Automation.Wmc",
+   "store": "open",
+   "args": {
+    "sq_scratch": true,
+    "open": true,
+    "tab": "SQUADRON",
+    "sq_studio": true
+   }
+  },
+  {
+   "op": "call",
+   "method": "WingCommand.Automation.Wmc",
+   "store": "live",
+   "args": {
+    "sq_pick": "live0"
+   }
+  },
+  {
+   "op": "call",
+   "method": "WingCommand.Automation.Wmc",
+   "store": "saved1",
+   "args": {
+    "sq_save": true
+   }
+  },
+  {
+   "op": "call",
+   "method": "WingCommand.Automation.Wmc",
+   "store": "zulu",
+   "args": {
+    "sq_new": true,
+    "sq_callsign": "zulu",
+    "sq_name": "Zofia \u0141\u0119cka",
+    "sq_bio": "Flies low\u2026\nand fast.",
+    "sq_look": "face:+1",
+    "sq_save": true
+   }
+  },
+  {
+   "op": "call",
+   "method": "WingCommand.Automation.Wmc",
+   "store": "renamed",
+   "args": {
+    "sq_callsign": "ZULU-X",
+    "sq_save": true
+   }
+  },
+  {
+   "op": "call",
+   "method": "WingCommand.Automation.Wmc",
+   "store": "cloned",
+   "args": {
+    "press": "sq.clone"
+   }
+  },
+  {
+   "op": "call",
+   "method": "WingCommand.Automation.Wmc",
+   "store": "clone_saved",
+   "args": {
+    "sq_save": true
+   }
+  },
+  {
+   "op": "call",
+   "method": "WingCommand.Automation.Wmc",
+   "store": "ask",
+   "args": {
+    "press": "sq.delete"
+   }
+  },
+  {
+   "op": "call",
+   "method": "WingCommand.Automation.Wmc",
+   "store": "deleted",
+   "args": {
+    "press": "sq.delete"
+   }
+  },
+  {
+   "op": "call",
+   "method": "WingCommand.Automation.Wmc",
+   "store": "pick_zulu",
+   "args": {
+    "sq_pick": "ZULU-X"
+   }
+  },
+  {
+   "op": "call",
+   "method": "WingCommand.Automation.Wmc",
+   "store": "joined",
+   "args": {
+    "sq_join": true
+   }
+  },
+  {
+   "op": "call",
+   "method": "WingCommand.Automation.Wmc",
+   "store": "flying",
+   "args": {
+    "sq_pick": "live0"
+   }
+  },
+  {
+   "op": "call",
+   "method": "WingCommand.Automation.Wmc",
+   "store": "discharge1",
+   "args": {
+    "press": "sq.recruit"
+   }
+  },
+  {
+   "op": "call",
+   "method": "WingCommand.Automation.Wmc",
+   "store": "discharge2",
+   "args": {
+    "press": "sq.recruit"
+   }
+  },
+  {
+   "op": "wait",
+   "seconds": 1
+  },
+  {
+   "op": "call",
+   "method": "WingCommand.Automation.Wmc",
+   "store": "closed",
+   "args": {
+    "tab": "TACTICAL"
+   }
+  },
+  {
+   "op": "end"
+  }
+ ],
+ "checks": [
+  {
+   "check": "status_ok"
+  },
+  {
+   "check": "result_below",
+   "path": "open.overflow",
+   "max": 0
+  },
+  {
+   "check": "result_above",
+   "path": "live.sq_chip",
+   "min": 3
+  },
+  {
+   "check": "result_above",
+   "path": "saved1.sq_saved",
+   "min": 1
+  },
+  {
+   "check": "result_above",
+   "path": "saved1.sq_chip",
+   "min": 1
+  },
+  {
+   "check": "result_below",
+   "path": "saved1.sq_chip",
+   "max": 1
+  },
+  {
+   "check": "result_above",
+   "path": "zulu.sq_saved",
+   "min": 2
+  },
+  {
+   "check": "result_below",
+   "path": "zulu.sq_problem",
+   "max": 0
+  },
+  {
+   "check": "result_above",
+   "path": "renamed.sq_saved",
+   "min": 2
+  },
+  {
+   "check": "result_below",
+   "path": "renamed.sq_saved",
+   "max": 2
+  },
+  {
+   "check": "result_above",
+   "path": "clone_saved.sq_saved",
+   "min": 3
+  },
+  {
+   "check": "result_above",
+   "path": "deleted.sq_saved",
+   "min": 2
+  },
+  {
+   "check": "result_below",
+   "path": "deleted.sq_saved",
+   "max": 2
+  },
+  {
+   "check": "result_below",
+   "path": "pick_zulu.sq_in_squadron",
+   "max": 0
+  },
+  {
+   "check": "result_above",
+   "path": "joined.sq_in_squadron",
+   "min": 1
+  },
+  {
+   "check": "result_below",
+   "path": "joined.sq_joined_xp",
+   "max": 0
+  },
+  {
+   "check": "result_above",
+   "path": "joined.sq_joined_xp",
+   "min": 0
+  },
+  {
+   "check": "result_below",
+   "path": "flying.sq_recruit",
+   "max": 0
+  },
+  {
+   "check": "result_above",
+   "path": "discharge2.sq_roster",
+   "min": 2
+  },
+  {
+   "check": "result_below",
+   "path": "closed.overflow",
+   "max": 0
+  },
+  {
+   "check": "result_above",
+   "path": "open.tab",
+   "min": 6
+  },
+  {
+   "check": "result_below",
+   "path": "open.tab",
+   "max": 6
+  },
+  {
+   "check": "result_above",
+   "path": "open.sq_sub_index",
+   "min": 1
+  },
+  {
+   "check": "result_below",
+   "path": "closed.typing",
+   "max": 0
+  },
+  {
+   "check": "result_below",
+   "path": "zulu.overflow",
+   "max": 0
+  }
+ ]
+}

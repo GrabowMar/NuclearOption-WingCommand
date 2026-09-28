@@ -41,8 +41,7 @@ namespace WingCommand
         /// <summary>Play a distinct avionics earcon.</summary>
         public static void Play(Earcon earcon)
         {
-            if (unavailable || Plugin.Settings == null || Plugin.Settings.Radio.Value == ChatterLevel.Off) return;
-            if (earcon == Earcon.Transmission && Plugin.Settings.Radio.Value != ChatterLevel.TextAndTone) return;
+            if (unavailable || Plugin.Settings == null || Plugin.Settings.Radio.Value == RadioLevel.Off) return;
             if (earcon == Earcon.Transmission && Time.unscaledTime - lastPlayed < MinimumGap) return;
             if (earcon == Earcon.RadialTick)
             {

@@ -1,0 +1,121 @@
+{
+ "name": "wc-a2-ecm-ew25",
+ "mods": [
+  "wingcommand"
+ ],
+ "timeout_s": 150,
+ "ops": [
+  {
+   "op": "spawn",
+   "id": "lead",
+   "type": "FS-20 Vortex",
+   "at": {
+    "map": [
+     0,
+     0
+    ]
+   },
+   "altitude": 3000,
+   "speed": 150,
+   "heading": 0
+  },
+  {
+   "op": "fly",
+   "id": "lead",
+   "program": [
+    {
+     "level": 5
+    },
+    {
+     "orbit": {
+      "bank": 15,
+      "seconds": 200
+     }
+    }
+   ]
+  },
+  {
+   "op": "wait",
+   "seconds": 2
+  },
+  {
+   "op": "call",
+   "method": "WingCommand.Automation.FormOn",
+   "store": "form",
+   "args": {
+    "lead": "lead",
+    "count": 2,
+    "type": "EW-25 Medusa",
+    "spacing": "Standard"
+   }
+  },
+  {
+   "op": "wait",
+   "seconds": 40
+  },
+  {
+   "op": "call",
+   "method": "WingCommand.Automation.Wmc",
+   "store": "on",
+   "args": {
+    "open": true,
+    "tab": "TACTICAL",
+    "press": "tac.orders.ecm"
+   }
+  },
+  {
+   "op": "wait",
+   "seconds": 5
+  },
+  {
+   "op": "call",
+   "method": "WingCommand.Automation.CombatState",
+   "store": "jamming"
+  },
+  {
+   "op": "call",
+   "method": "WingCommand.Automation.Wmc",
+   "store": "off",
+   "args": {
+    "press": "tac.orders.ecm"
+   }
+  },
+  {
+   "op": "wait",
+   "seconds": 2
+  },
+  {
+   "op": "call",
+   "method": "WingCommand.Automation.CombatState",
+   "store": "quiet"
+  },
+  {
+   "op": "end"
+  }
+ ],
+ "checks": [
+  {
+   "check": "status_ok"
+  },
+  {
+   "check": "result_above",
+   "path": "form.spawned",
+   "min": 2
+  },
+  {
+   "check": "result_above",
+   "path": "on.pressed",
+   "min": 1
+  },
+  {
+   "check": "result_above",
+   "path": "jamming.jamming",
+   "min": 1
+  },
+  {
+   "check": "result_below",
+   "path": "quiet.jamming",
+   "max": 0
+  }
+ ]
+}

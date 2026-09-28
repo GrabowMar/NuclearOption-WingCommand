@@ -128,8 +128,8 @@ namespace WingCommand
                     "). Falling back to the standalone wheel; bind Keys/FallbackRadialMenu to use it.");
             }
 
-            // Optional and independent: failure only disables wingman overdrive.
-            InitialiseFlyByWireLimits();
+            // Optional and independent: flight fields for profiles, wind and the player autopilot.
+            InitialiseFlight();
         }
 
         private static AccessTools.FieldRef<TClass, TField> Field<TClass, TField>(string name)

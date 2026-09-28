@@ -3,258 +3,118 @@ using UnityEngine;
 
 namespace WingCommand
 {
-    /// <summary>Shared wing membership and engaged-target roles for map outlines and HUD
-    /// colours.</summary>
+    /// <summary>What the map and HUD mark (spec WMC program §5): wing members in their element's colour with a badge
+    /// (element letter + number, e.g. "B4"), the targets the wing is attacking, and downed wing pilots. Polled at 4 Hz;
+    /// a unit that loses its mark gets the game's own colours back.</summary>
     internal static class WingMarkers
     {
-        internal enum Role
+        public enum Role { None, Member, Target, Downed }
+
+        private struct Mark
         {
-            /// <summary>No wing role; retain native symbology.</summary>
-            None,
-
-            /// <summary>Aircraft under wing command.</summary>
-            Member,
-
-            /// <summary>Current wing engagement target.</summary>
-            Target,
-
-            /// <summary>Living squadron pilot awaiting rescue.</summary>
-            Downed,
+            public Unit Unit;
+            public Role Role;
+            public int Element, Number;
         }
 
-        // Poll weapon managers for engaged targets periodically rather than each frame.
-        private const float TargetPollInterval = 0.25f;
-
-        private static readonly List<Unit> engaged = new List<Unit>();
-        private static readonly List<Unit> scratch = new List<Unit>();
-        private static readonly List<Unit> repaint = new List<Unit>();
+        public static readonly Color TargetColor = new Color(1f, 0.69f, 0.13f), DownedColor = new Color(1f, 0.22f, 0.18f);
+        private static readonly List<Mark> marks = new List<Mark>(), previous = new List<Mark>();
         private static readonly List<Unit> downed = new List<Unit>();
-        private static readonly List<Unit> downedScratch = new List<Unit>();
+        private static readonly string[,] badges = new string[ElementRoster.MaxElements, 40];
         private static float nextPoll;
-
-        /// <summary>Engaged units from the latest poll.</summary>
-        public static IReadOnlyList<Unit> EngagedTargets => engaged;
-        public static IReadOnlyList<Unit> DownedPilots => downed;
 
         public static void Reset()
         {
-            engaged.Clear();
-            scratch.Clear();
-            downed.Clear();
-            downedScratch.Clear();
+            marks.Clear();
+            previous.Clear();
             nextPoll = 0f;
         }
 
-        /// <summary>Poll role changes and repaint affected units four times per second.</summary>
-        public static void Tick(WingRegistry wing)
+        public static void Tick(WingService w)
         {
             if (Time.unscaledTime < nextPoll) return;
-            nextPoll = Time.unscaledTime + WingFidelity.Interval(TargetPollInterval);
-
-            CollectTargets(wing);
-            CollectDowned();
-
-            if (!SameAsEngaged())
+            nextPoll = Time.unscaledTime + WingFidelity.Interval(0.25f);
+            previous.Clear();
+            previous.AddRange(marks);
+            marks.Clear();
+            HighlightMode mode = Plugin.Settings.MapMarkers.Value;
+            if (w != null)
             {
-                // Install the new target set before repainting the union of old and new units so
-                // departed targets lose their role.
-                repaint.Clear();
-                repaint.AddRange(engaged);
-                foreach (Unit u in scratch)
+                if (mode != HighlightMode.Off)
                 {
-                    if (!repaint.Contains(u)) repaint.Add(u);
+                    downed.Clear();
+                    PersonnelFacade.SearchAndRescue.CollectDowned(downed);
+                    foreach (Unit u in downed) Add(u, Role.Downed, 0, 0);
                 }
-
-                engaged.Clear();
-                engaged.AddRange(scratch);
-
-                foreach (Unit u in repaint) Repaint(u);
-                repaint.Clear();
+                // Members are always known: WMC's selection brackets show with marks off (rings and badges do not).
+                foreach (WingMember m in w.Members)
+                    if ((object)m.Aircraft != null && m.Alive && !m.Released) Add(m.Aircraft, Role.Member, w.ElementOf(m), m.Number);
+                if (mode == HighlightMode.WingAndTargets)
+                    foreach (WingMember m in w.Members)
+                        if (m.Alive && !m.Released) Add(TargetOf(m), Role.Target, 0, 0);
             }
-
-            if (!Same(downed, downedScratch))
+            // A unit that lost its mark gets the game's colours back; the marked are reasserted (icons are recreated and
+            // repainted by the game at will).
+            foreach (Mark p in previous)
+                if (IndexOf(p.Unit) < 0) Restore(p.Unit);
+            foreach (Mark m in marks)
             {
-                repaint.Clear();
-                repaint.AddRange(downed);
-                foreach (Unit u in downedScratch)
-                    if (!repaint.Contains(u)) repaint.Add(u);
-
-                downed.Clear();
-                downed.AddRange(downedScratch);
-                foreach (Unit u in repaint) Repaint(u);
-                repaint.Clear();
-            }
-
-            // Restore map markings after icon recreation or external UI changes.
-            WingMapTint.Reassert(wing);
-
-            // Reassert HUD tint after native creation fades and stale-track recolouring.
-            WingHudTint.Reassert(wing);
-        }
-
-        private static void CollectTargets(WingRegistry wing)
-        {
-            scratch.Clear();
-            if (wing == null || Plugin.Settings.Highlight.Value != HighlightMode.WingAndTargets) return;
-
-            IReadOnlyList<WingMember> members = wing.Members;
-            for (int i = 0; i < members.Count; i++)
-            {
-                WingMember m = members[i];
-                if (!m.Alive) continue;
-
-                Unit target = TargetOf(m);
-                if (target == null || target.disabled) continue;
-                if (!scratch.Contains(target)) scratch.Add(target);
+                WingMapTint.Reassert(m.Unit);
+                WingHudTint.Reassert(m.Unit);
             }
         }
 
-        private static void CollectDowned()
+        private static void Add(Unit u, Role role, int element, int number)
         {
-            downedScratch.Clear();
-            PersonnelFacade.SearchAndRescue.CollectDowned(downedScratch);
+            if (u == null || u.disabled || IndexOf(u) >= 0) return;
+            marks.Add(new Mark { Unit = u, Role = role, Element = element, Number = number });
         }
 
-        /// <summary>Prefer explicit assignments. Count autonomous weapon targets only during active combat
-        /// because native managers retain old targets after engagement.</summary>
-        private static Unit TargetOf(WingMember member)
+        private static int IndexOf(Unit u)
         {
-            if (member.IsPanicking && member.Aircraft != null)
-            {
-                MissileWarning warning = member.Aircraft.GetMissileWarningSystem();
-                if (warning != null && warning.TryGetNearestIncoming(out Missile missile))
-                    return missile;
-            }
-
-            Unit assigned = member.AssignedTarget;
-            if (assigned != null && !assigned.disabled) return assigned;
-
-            if (member.Order != WingOrder.Engage) return null;
-
-            Aircraft aircraft = member.Aircraft;
-            if (aircraft == null || aircraft.weaponManager == null) return null;
-
-            List<Unit> list = aircraft.weaponManager.GetTargetList();
-            return (list != null && list.Count > 0) ? list[0] : null;
+            for (int i = 0; i < marks.Count; i++)
+                if (ReferenceEquals(marks[i].Unit, u)) return i;
+            return -1;
         }
 
-        private static bool SameAsEngaged()
+        /// <summary>The explicit target first; while fighting, what the weapons are on.</summary>
+        private static Unit TargetOf(WingMember m)
         {
-            if (scratch.Count != engaged.Count) return false;
-            for (int i = 0; i < scratch.Count; i++)
-            {
-                if (!engaged.Contains(scratch[i])) return false;
-            }
-            return true;
+            Unit t = m.AssignedTarget != null && !m.AssignedTarget.disabled ? m.AssignedTarget : m.StandingTarget;
+            if (t != null && !t.disabled) return t;
+            if (!m.Engaged || m.Aircraft == null || m.Aircraft.weaponManager == null) return null;
+            List<Unit> list = m.Aircraft.weaponManager.GetTargetList();
+            return list != null && list.Count > 0 ? list[0] : null;
         }
 
-        private static bool Same(List<Unit> first, List<Unit> second)
+        public static Role RoleOf(Unit unit, out int element, out int number)
         {
-            if (first.Count != second.Count) return false;
-            for (int i = 0; i < first.Count; i++)
-                if (!second.Contains(first[i])) return false;
-            return true;
+            int i = unit != null ? IndexOf(unit) : -1;
+            element = i >= 0 ? marks[i].Element : 0;
+            number = i >= 0 ? marks[i].Number : 0;
+            return i >= 0 ? marks[i].Role : Role.None;
         }
 
-        /// <summary>Resolve a unit's wing symbology role.</summary>
-        public static Role RoleOf(Unit unit)
+        public static Color ColorOf(Role role, int element) =>
+            role == Role.Member ? WmcMapOverlay.ElementColor(element) : role == Role.Downed ? DownedColor : TargetColor;
+
+        /// <summary>"B4": the element's letter and the member's number, built once per pair.</summary>
+        public static string Badge(int element, int number)
         {
-            if (unit == null) return Role.None;
-
-            WingCommandManager mgr = WingCommandManager.Instance;
-            if (mgr == null) return Role.None;
-
-            for (int i = 0; i < downed.Count; i++)
-                if (downed[i] == unit) return Role.Downed;
-
-            // Membership takes precedence if a wingman is also targeted.
-            if (unit is Aircraft aircraft && mgr.Wing.Contains(aircraft))
-                return Plugin.Settings.Highlight.Value != HighlightMode.Off
-                    ? Role.Member
-                    : Role.None;
-
-            for (int i = 0; i < engaged.Count; i++)
-            {
-                if (engaged[i] == unit) return Role.Target;
-            }
-
-            return Role.None;
+            if (element < 0 || element >= ElementRoster.MaxElements || number < 0 || number >= badges.GetLength(1)) return null;
+            return badges[element, number] ?? (badges[element, number] = ElementRoster.Letter(element) + number);
         }
 
-        /// <summary>Refresh wing symbology on every supported display for this unit.</summary>
-        public static void Repaint(Unit unit)
+        public static string DownedLabel(Unit unit)
         {
-            WingMapTint.Refresh(unit);
-            WingHudTint.Refresh(unit);
+            WingPilot pilot = PersonnelFacade.SearchAndRescue.PilotOf(unit as PilotDismounted);
+            return pilot != null ? "SAR · " + pilot.Callsign : "SAR";
         }
 
-
-        // Marker colours.
-
-        private static Color memberColor = new Color(0.22f, 1f, 0.40f);
-        private static string memberFrom;
-
-        private static Color targetColor = new Color(1f, 0.69f, 0.13f);
-        private static string targetFrom;
-
-        public static Color DownedColor => new Color(1f, 0.22f, 0.18f);
-
-        /// <summary>Wing-member colour cached per distinct configuration value.</summary>
-        public static Color MemberColor
+        private static void Restore(Unit unit)
         {
-            get
-            {
-                Parse(Plugin.Settings.WingIconColor.Value, ref memberFrom, ref memberColor,
-                      new Color(0.22f, 1f, 0.40f), "WingMemberColor");
-                return memberColor;
-            }
-        }
-
-        /// <summary>Configured wing-target colour.</summary>
-        public static Color TargetColor
-        {
-            get
-            {
-                Parse(Plugin.Settings.WingTargetColor.Value, ref targetFrom, ref targetColor,
-                      new Color(1f, 0.69f, 0.13f), "WingTargetColor");
-                return targetColor;
-            }
-        }
-
-        public static Color ColorFor(Role role)
-        {
-            return role == Role.Member ? MemberColor :
-                role == Role.Downed ? DownedColor : TargetColor;
-        }
-
-        private static void Parse(string raw, ref string cachedFrom, ref Color cached,
-                                  Color fallback, string setting)
-        {
-            if (raw == cachedFrom) return;
-
-            cachedFrom = raw;
-            if (!ColorUtility.TryParseHtmlString(raw, out cached))
-            {
-                cached = fallback;
-                Plugin.Logger.LogWarning(
-                    "Could not parse " + setting + " '" + raw + "'; using the default.");
-            }
-        }
-
-        private static Color Brighten(Color c, float amount)
-        {
-            return new Color(
-                Mathf.Clamp01(c.r + amount),
-                Mathf.Clamp01(c.g + amount),
-                Mathf.Clamp01(c.b + amount),
-                c.a);
-        }
-
-        /// <summary>Brighten selected markings consistently with the native theme.</summary>
-        public static Color ColorFor(Role role, bool selected)
-        {
-            Color c = ColorFor(role);
-            return selected ? Brighten(c, 0.35f) : c;
+            WingMapTint.Restore(unit);
+            WingHudTint.Restore(unit);
         }
     }
 }

@@ -1,4 +1,6 @@
 using System.Collections.Generic;
+using System.Reflection;
+using HarmonyLib;
 using UnityEngine;
 
 namespace WingCommand
@@ -8,6 +10,21 @@ namespace WingCommand
     /// shot-window heuristic; use native killer attribution if it becomes available.</summary>
     internal static class WingKillCredit
     {
+        /// <summary>Review M5g C1: the game's kill message names the killer — a wing pilot's kill is credited from it
+        /// (host only; never a friendly or a missile).</summary>
+        public static void Credit(PersistentID killerID, PersistentID killedID)
+        {
+            if (!UnitRegistry.TryGetPersistentUnit(killerID, out PersistentUnit k) || !(k.unit is Aircraft shooter) || !shooter.IsServer) return;
+            // The persistent record outlives the destroyed victim (its type and side stay known).
+            if (!UnitRegistry.TryGetPersistentUnit(killedID, out PersistentUnit victim) || victim.unit is Missile ||
+                victim.GetHQ() == shooter.NetworkHQ) return;
+            string type = victim.definition != null ? victim.definition.unitName : victim.unitName;
+            WingPilotRoster.NoteKill(shooter, killedID.Id, type, Plugin.Settings.PilotProgression.Value);
+        }
+
+        private static string TypeOf(Unit u) =>
+            u == null ? "target" : u.definition != null ? u.definition.unitName : u.unitName;
+
         /// <summary>Seconds after a shot during which target disappearance earns credit.</summary>
         private const float CreditWindow = 25f;
 
@@ -84,8 +101,22 @@ namespace WingCommand
                     if (j < i) i--;
                 }
 
-                WingPilotRoster.NoteKill(shooter, victim);
+                WingPilotRoster.NoteKill(shooter, victim != null ? victim.persistentID.Id : 0u, TypeOf(victim), true);
             }
         }
     }
+
+    // Harmony calls the prefix by name.
+#pragma warning disable IDE0051
+    /// <summary>Review M5g C1: every kill message (host and received) passes the killer and victim to the kill credit.</summary>
+    [HarmonyPatch]
+    internal static class WingKillMessagePatch
+    {
+        private static MethodBase TargetMethod() => AccessTools.FirstMethod(typeof(MessageManager),
+            method => method.Name.StartsWith("UserCode_RpcKillMessage_"));
+
+        [HarmonyPrefix]
+        private static void Prefix(PersistentID killerID, PersistentID killedID) => WingKillCredit.Credit(killerID, killedID);
+    }
+#pragma warning restore IDE0051
 }

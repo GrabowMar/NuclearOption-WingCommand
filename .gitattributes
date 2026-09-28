@@ -1,0 +1,2 @@
+# Shell scripts keep LF so Git Bash can run them on Windows checkouts (core.autocrlf would give them CRLF).
+*.sh text eol=lf

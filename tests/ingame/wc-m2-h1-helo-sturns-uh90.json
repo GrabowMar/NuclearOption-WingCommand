@@ -1,0 +1,36 @@
+{
+  "name": "wc-m2-h1-helo-sturns-uh90",
+  "mods": ["wingcommand"],
+  "timeout_s": 520,
+  "ops": [
+    {"op": "spawn", "id": "lead", "type": "UH-90 Ibis", "at": {"map": [0, 0]}, "altitude": 600, "speed": 55, "heading": 0},
+    {"op": "fly", "id": "lead", "program": [{"level": 150}, {"reversals": {"bank": 20, "period": 10, "count": 10}}, {"level": 30}]},
+    {"op": "wait", "seconds": 2},
+    {"op": "call", "method": "WingCommand.Automation.FormOn", "store": "form",
+     "args": {"lead": "lead", "count": 2, "type": "UH-90 Ibis", "shape": "staggered-trail", "spacing": "Standard"}},
+    {"op": "wait", "seconds": 3},
+    {"op": "call", "method": "WingCommand.Automation.Members"},
+    {"op": "record", "ids": ["*"], "hz": 5},
+    {"op": "wait", "seconds": 150},
+    {"op": "call", "method": "WingCommand.Automation.Metrics", "store": "join"},
+    {"op": "call", "method": "WingCommand.Automation.ResetMetrics"},
+    {"op": "mark", "text": "s-turns"},
+    {"op": "wait", "seconds": 100},
+    {"op": "call", "method": "WingCommand.Automation.Metrics", "store": "h1"},
+    {"op": "call", "method": "WingCommand.Automation.Dismiss"},
+    {"op": "wait", "seconds": 20},
+    {"op": "end"}
+  ],
+  "checks": [
+    {"check": "status_ok"},
+    {"check": "alive", "ids": ["*"]},
+    {"check": "result_above", "path": "join.captured", "min": 2},
+    {"check": "result_above", "path": "h1.members", "min": 2},
+    {"check": "result_below", "path": "h1.left", "max": 0},
+    {"check": "result_below", "path": "h1.slot_rms_m", "max": 15},
+    {"check": "result_below", "path": "h1.collision", "max": 0},
+    {"check": "result_below", "path": "h1.gcas", "max": 0},
+    {"check": "result_below", "path": "h1.transitions_per_member_min", "max": 1.5},
+    {"check": "result_above", "path": "h1.min_separation_m", "min": 20}
+  ]
+}

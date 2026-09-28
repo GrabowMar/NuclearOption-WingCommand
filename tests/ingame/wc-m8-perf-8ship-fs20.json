@@ -1,0 +1,21 @@
+{
+  "name": "wc-m8-perf-8ship-fs20",
+  "mods": ["wingcommand"],
+  "timeout_s": 300,
+  "ops": [
+    {"op": "spawn", "id": "lead", "type": "FS-20 Vortex", "at": {"map": [0, 0]}, "altitude": 3000, "speed": 200, "heading": 0},
+    {"op": "fly", "id": "lead", "program": [{"level": 30}, {"orbit": {"bank": 25, "seconds": 240}}]},
+    {"op": "wait", "seconds": 2},
+    {"op": "call", "method": "WingCommand.Automation.FormOn", "store": "form",
+     "args": {"lead": "lead", "count": 7, "shape": "finger-four-right", "spacing": "Standard"}},
+    {"op": "wait", "seconds": 240},
+    {"op": "call", "method": "WingCommand.Automation.Metrics", "store": "wing"},
+    {"op": "end"}
+  ],
+  "checks": [
+    {"check": "status_ok"},
+    {"check": "result_above", "path": "form.spawned", "min": 7},
+    {"check": "result_below", "path": "wing.ai_ms_mean", "max": 1.0},
+    {"check": "result_below", "path": "wing.collision", "max": 0}
+  ]
+}

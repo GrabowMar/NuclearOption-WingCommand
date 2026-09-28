@@ -1,0 +1,35 @@
+{
+  "name": "wc-m4a-move-orbit-fs20",
+  "mods": ["wingcommand"],
+  "timeout_s": 600,
+  "ops": [
+    {"op": "spawn", "id": "lead", "type": "FS-20 Vortex", "at": {"map": [0, 0]}, "altitude": 2500, "speed": 200, "heading": 0},
+    {"op": "fly", "id": "lead", "program": [{"level": 5}, {"orbit": {"bank": 30, "seconds": 580}}]},
+    {"op": "wait", "seconds": 2},
+    {"op": "call", "method": "WingCommand.Automation.FormOn", "store": "form",
+     "args": {"lead": "lead", "count": 2, "shape": "finger-four-right", "spacing": "Standard"}},
+    {"op": "record", "ids": ["*"], "hz": 2},
+    {"op": "wait", "seconds": 90},
+    {"op": "call", "method": "WingCommand.Automation.Task", "store": "order",
+     "args": {"kind": "Move", "offsets": [[15000, 0]]}},
+    {"op": "wait", "seconds": 240},
+    {"op": "call", "method": "WingCommand.Automation.TaskState", "store": "task"},
+    {"op": "call", "method": "WingCommand.Automation.Metrics", "store": "wing"},
+    {"op": "call", "method": "WingCommand.Automation.Task", "store": "resume", "args": {"kind": "Form"}},
+    {"op": "wait", "seconds": 180},
+    {"op": "call", "method": "WingCommand.Automation.TaskState", "store": "after"},
+    {"op": "end"}
+  ],
+  "checks": [
+    {"check": "status_ok"},
+    {"check": "alive", "ids": ["*"]},
+    {"check": "result_above", "path": "form.spawned", "min": 2},
+    {"check": "result_above", "path": "task.completed", "min": 1},
+    {"check": "result_above", "path": "task.kind", "min": 4},
+    {"check": "result_below", "path": "task.kind", "max": 4},
+    {"check": "result_below", "path": "task.failed", "max": 0},
+    {"check": "result_above", "path": "wing.min_separation_m", "min": 20},
+    {"check": "result_below", "path": "wing.collision", "max": 0},
+    {"check": "result_below", "path": "after.kind", "max": 0}
+  ]
+}

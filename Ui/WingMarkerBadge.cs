@@ -12,7 +12,7 @@ namespace WingCommand
         private const string SelectionObjectName = "WingCommand_SelectionBadge";
         private const string StatusObjectName = "WingCommand_StatusLabel";
 
-        public static void Apply(Image host, WingMapPresentation presentation, string status = null)
+        public static void Apply(Image host, WingMapPresentation presentation, Color color, string status = null)
         {
             if (host == null) return;
             Transform child = host.transform.Find(RingObjectName);
@@ -52,21 +52,18 @@ namespace WingCommand
                 ring.raycastTarget = false;
                 AlignToScreen(ring.rectTransform, canvas, camera);
                 ring.SetGeometry(geometry);
-                ring.color = presentation.Outline == WingMapPresentation.OutlineKind.Member
-                    ? WingMarkers.MemberColor
-                    : presentation.Outline == WingMapPresentation.OutlineKind.Downed
-                        ? WingMarkers.DownedColor : WingMarkers.TargetColor;
+                if (ring.color != color) ring.color = color;
             }
             else if (ring != null)
             {
                 ring.gameObject.SetActive(false);
             }
 
-            ApplyCommandSelection(host, presentation.CommandBrackets, geometry, canvas, camera);
-            ApplyStatus(host, status, geometry, canvas, camera);
+            ApplyCommandSelection(host, presentation.CommandBrackets, color, geometry, canvas, camera);
+            ApplyStatus(host, status, color, geometry, canvas, camera);
         }
 
-        private static void ApplyStatus(Image host, string text, WingMapBadgeGeometry geometry,
+        private static void ApplyStatus(Image host, string text, Color color, WingMapBadgeGeometry geometry,
             Canvas canvas, Camera camera)
         {
             Transform child = host.transform.Find(StatusObjectName);
@@ -92,8 +89,8 @@ namespace WingCommand
             AlignToScreen(label.rectTransform, canvas, camera);
             label.rectTransform.anchoredPosition = new Vector2(0f, geometry.OuterRadiusPixels + 5f);
             label.rectTransform.sizeDelta = new Vector2(120f, 18f);
-            label.color = WingMarkers.DownedColor;
-            label.text = text;
+            if (label.color != color) label.color = color;
+            if (!ReferenceEquals(label.text, text)) label.text = text;
         }
 
         private static Vector2 ScreenPoint(RectTransform transform, Vector2 point, Camera camera) =>
@@ -115,7 +112,7 @@ namespace WingCommand
                                           1f / Mathf.Max(0.0001f, scaleY), 1f);
         }
 
-        private static void ApplyCommandSelection(Image host, bool selected,
+        private static void ApplyCommandSelection(Image host, bool selected, Color color,
             WingMapBadgeGeometry geometry, Canvas canvas, Camera camera)
         {
             Transform child = host.transform.Find(SelectionObjectName);
@@ -140,7 +137,6 @@ namespace WingCommand
             badge.raycastTarget = false;
             badge.gameObject.SetActive(true);
 
-            Color color = WingMarkers.MemberColor;
             badge.color = new Color(Mathf.Clamp01(color.r + 0.65f),
                 Mathf.Clamp01(color.g + 0.65f), Mathf.Clamp01(color.b + 0.65f), 1f);
         }

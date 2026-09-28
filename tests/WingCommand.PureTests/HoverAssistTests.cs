@@ -13,6 +13,8 @@ namespace WingCommand
         public void SetAutoHover(bool enabled) => HoverEnabled = enabled;
     }
 
+    // Mirrors the game's ControlInputs layout; HoverAssist reads only some fields.
+#pragma warning disable CS0649
     internal sealed class ControlInputs
     {
         public float customAxis1;
@@ -22,6 +24,7 @@ namespace WingCommand
         public float pitch;
         public float roll;
     }
+#pragma warning restore CS0649
 
     internal sealed class SwivelDuctSystem { }
     internal sealed class DuctedThrustSystem { }

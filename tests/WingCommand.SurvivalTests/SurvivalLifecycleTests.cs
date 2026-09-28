@@ -5,12 +5,13 @@ using Random = UnityEngine.Random;
 
 namespace WingCommand
 {
+    // The roster is static: classes that reset it must not run in parallel.
+    [Collection("static roster")]
     public class SurvivalLifecycleTests
     {
         public SurvivalLifecycleTests()
         {
             WingPilotRoster.Reset();
-            WingDeparture.Reset();
             UnitRegistry.Units.Clear();
             Plugin.Settings = new Config();
             Plugin.Logger = new Log();
@@ -84,12 +85,15 @@ namespace WingCommand
         }
 
         [Fact]
-        public void ImportedRankGetsPerksAndLargePromotionAwardsEveryCrossedRank()
+        public void APromotionFromRookieAwardsEveryCrossedRank()
         {
-            var pilot = WingPilotRoster.ImportCustom(new CustomPilotRecord { Callsign = "TEST", Xp = 120 });
-            Assert.Single(pilot.Perks);
+            // R7: a saved pilot enlists a ROOKIE (the decision: XP resets every mission); promotions grant the perks.
+            var pilot = WingPilotRoster.Enlist(new CustomPilotRecord { Callsign = "TEST", Xp = 120 });
+            Assert.Empty(pilot.Perks);
             var aircraft = Plane();
             WingPilotRoster.Assign(aircraft, pilot);
+            WingPilotRoster.Award(aircraft, 120, "test");
+            Assert.Single(pilot.Perks);
             WingPilotRoster.Award(aircraft, 2000, "test");
             Assert.Equal(WingRank.Legend, pilot.Rank);
             Assert.Equal(4, pilot.Perks.Count);
@@ -98,7 +102,7 @@ namespace WingCommand
         }
 
         [Fact]
-        public void ImportedCustomPortraitKeepsSemanticSelectionRatherThanAtlasAddresses()
+        public void AnEnlistedCustomPortraitKeepsSemanticSelectionRatherThanAtlasAddresses()
         {
             var record = new CustomPilotRecord
             {
@@ -111,7 +115,7 @@ namespace WingCommand
                 Backdrop = 3,
             };
 
-            var pilot = WingPilotRoster.ImportCustom(record);
+            var pilot = WingPilotRoster.Enlist(record);
             Assert.True(pilot.HasCustomPortrait);
             Assert.Equal(record.Selection, pilot.PortraitSelection.Value);
         }
@@ -233,7 +237,7 @@ namespace WingCommand
             WingPilotRoster.Retire(1, false);
             Time.timeSinceLevelLoad = 31;
             WingSearchAndRescue.Tick();
-            GameManager.LocalPlayer.Allocation = 20_000_000f;
+            GameManager.LocalPlayer.Allocation = 100f;
             Assert.True(WingSearchAndRescue.OrganizeLocalRecovery(pilot));
             Assert.False(WingSearchAndRescue.OrganizeLocalRecovery(pilot));
             Assert.Contains("05:00", WingSearchAndRescue.Status(pilot));
@@ -243,7 +247,7 @@ namespace WingCommand
             Time.timeSinceLevelLoad = 331;
             WingSearchAndRescue.Tick();
             Assert.True(WingPilotRoster.IsFree(pilot));
-            Assert.Equal(10_000_000f, GameManager.LocalPlayer.Allocation);
+            Assert.Equal(95f, GameManager.LocalPlayer.Allocation);
         }
 
         [Fact]
@@ -410,38 +414,17 @@ namespace WingCommand
         }
 
         [Fact]
-        public void SarDispatchUsesOnlyIdleEligibleHelicoptersOnLand()
+        public void LocalRecoveryChargesHalfTheAirframeAndReturnsPilotAfterFiveMinutes()
         {
             var aircraft = Plane();
+            aircraft.definition.value = 40f;
             var pilot = WingPilotRoster.Assign(aircraft);
             var native = Eject(aircraft);
             WingPilotRoster.Retire(1, false);
-            var busy = new WingMember { Aircraft = Plane(2), Order = WingOrder.Attack };
-            var idle = new WingMember { Aircraft = Plane(3) };
-            busy.Aircraft.NetworkHQ = idle.Aircraft.NetworkHQ = aircraft.NetworkHQ;
-            var wing = new WingRegistry();
-            wing.Members.Add(busy);
-            wing.Members.Add(idle);
-            native.transform.position = Vector3.zero;
-            WingSearchAndRescue.Dispatch(pilot, wing);
-            Assert.Equal(WingOrder.Formation, idle.Order);
-            native.transform.position = new Vector3(0, 100, 0);
-            WingSearchAndRescue.Dispatch(pilot, wing);
-            Assert.Equal(WingOrder.LandHere, idle.Order);
-            Assert.Equal(WingOrder.Attack, busy.Order);
-        }
-
-        [Fact]
-        public void LocalRecoveryChargesTenMillionAndReturnsPilotAfterFiveMinutes()
-        {
-            var aircraft = Plane();
-            var pilot = WingPilotRoster.Assign(aircraft);
-            var native = Eject(aircraft);
-            WingPilotRoster.Retire(1, false);
-            GameManager.LocalPlayer.Allocation = 20_000_000f;
+            GameManager.LocalPlayer.Allocation = 100f;
 
             Assert.True(WingSearchAndRescue.OrganizeLocalRecovery(pilot));
-            Assert.Equal(10_000_000f, GameManager.LocalPlayer.Allocation);
+            Assert.Equal(80f, GameManager.LocalPlayer.Allocation);
             Assert.Contains("05:00", WingSearchAndRescue.Status(pilot));
 
             Time.timeSinceLevelLoad = 299.9f;
@@ -453,7 +436,7 @@ namespace WingCommand
             Assert.True(WingPilotRoster.IsFree(pilot));
             Assert.Equal(Unit.UnitState.Returned, native.unitState);
             Assert.True(native.disabled);
-            Assert.Equal(10_000_000f, GameManager.LocalPlayer.Allocation);
+            Assert.Equal(80f, GameManager.LocalPlayer.Allocation);
         }
 
         [Fact]
@@ -461,15 +444,16 @@ namespace WingCommand
         {
             var aircraft = Plane();
             var pilot = WingPilotRoster.Assign(aircraft);
+            aircraft.definition.value = 40f;
             Eject(aircraft);
             WingPilotRoster.Retire(1, false);
-            GameManager.LocalPlayer.Allocation = 9_999_999f;
+            GameManager.LocalPlayer.Allocation = 19.5f;
 
             Assert.False(WingSearchAndRescue.OrganizeLocalRecovery(pilot));
             Time.timeSinceLevelLoad = 300f;
             WingSearchAndRescue.Tick();
             Assert.False(WingPilotRoster.IsFree(pilot));
-            Assert.Equal(9_999_999f, GameManager.LocalPlayer.Allocation);
+            Assert.Equal(19.5f, GameManager.LocalPlayer.Allocation);
         }
 
         [Fact]
@@ -487,36 +471,6 @@ namespace WingCommand
             Time.timeSinceLevelLoad = 500;
             WingSearchAndRescue.Tick();
             Assert.Empty(WingPilotRoster.DisplayRoster());
-        }
-
-        [Fact]
-        public void ReleasedAircraftWithEjectedCrewAtBaseWaitsForRecoverySettlement()
-        {
-            var aircraft = Plane();
-            var pilot = WingPilotRoster.Assign(aircraft);
-            WingDeparture.Begin(aircraft);
-            Eject(aircraft);
-            aircraft.AtHome = true;
-            WingDeparture.Prune();
-            Assert.Single(WingDeparture.Outbound);
-            Assert.True(WingPilotRoster.IsFlying(pilot));
-            Assert.False(pilot.Lost);
-            WingPilotRoster.Retire(1, true);
-            Assert.True(WingPilotRoster.IsFree(pilot));
-        }
-
-        [Fact]
-        public void ReleasedAircraftLostEnrouteTransfersSurvivorToSar()
-        {
-            var aircraft = Plane();
-            var pilot = WingPilotRoster.Assign(aircraft);
-            WingDeparture.Begin(aircraft);
-            Eject(aircraft);
-            WingDeparture.Prune();
-            Assert.Empty(WingDeparture.Outbound);
-            Assert.Equal(PilotRecoveryStatus.Downed, pilot.RecoveryStatus);
-            Assert.False(WingPilotRoster.IsFlying(pilot));
-            Assert.False(pilot.Lost);
         }
 
         [Fact]

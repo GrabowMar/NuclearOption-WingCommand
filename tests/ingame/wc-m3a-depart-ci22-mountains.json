@@ -1,0 +1,126 @@
+{
+  "name": "wc-m3a-depart-ci22-mountains",
+  "mods": [
+    "wingcommand"
+  ],
+  "timeout_s": 540,
+  "ops": [
+    {
+      "op": "spawn",
+      "id": "lead",
+      "type": "CI-22 Cricket",
+      "at": {
+        "map": [
+          -1131,
+          -26845
+        ]
+      },
+      "altitude": 2500,
+      "speed": 150,
+      "heading": 0
+    },
+    {
+      "op": "fly",
+      "id": "lead",
+      "program": [
+        {
+          "orbit": {
+            "bank": 15,
+            "seconds": 480
+          }
+        }
+      ]
+    },
+    {
+      "op": "wait",
+      "seconds": 3
+    },
+    {
+      "op": "call",
+      "method": "WingCommand.Automation.Launch",
+      "store": "launch",
+      "args": {
+        "lead": "lead",
+        "field": "nearest",
+        "count": 3,
+        "type": "CI-22 Cricket"
+      }
+    },
+    {
+      "op": "record",
+      "ids": [
+        "lead"
+      ],
+      "hz": 2
+    },
+    {
+      "op": "wait",
+      "seconds": 60
+    },
+    {
+      "op": "call",
+      "method": "WingCommand.Automation.Ground",
+      "store": "early"
+    },
+    {
+      "op": "call",
+      "method": "WingCommand.Automation.DumpFields"
+    },
+    {
+      "op": "wait",
+      "seconds": 300
+    },
+    {
+      "op": "call",
+      "method": "WingCommand.Automation.Members"
+    },
+    {
+      "op": "call",
+      "method": "WingCommand.Automation.Ground",
+      "store": "ground"
+    },
+    {
+      "op": "call",
+      "method": "WingCommand.Automation.Metrics",
+      "store": "wing"
+    },
+    {
+      "op": "end"
+    }
+  ],
+  "checks": [
+    {
+      "check": "status_ok"
+    },
+    {
+      "check": "result_above",
+      "path": "launch.launched",
+      "min": 3
+    },
+    {
+      "check": "result_above",
+      "path": "ground.flying",
+      "min": 3
+    },
+    {
+      "check": "result_below",
+      "path": "ground.grounded",
+      "max": 0
+    },
+    {
+      "check": "result_below",
+      "path": "ground.relocated",
+      "max": 0
+    },
+    {
+      "check": "result_below",
+      "path": "wing.left",
+      "max": 0
+    },
+    {
+      "check": "result_below",
+      "path": "ground.aborted",
+      "max": 0
+    }
+  ]
+}

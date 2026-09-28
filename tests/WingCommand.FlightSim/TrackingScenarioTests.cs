@@ -1,0 +1,209 @@
+using System;
+using Xunit;
+
+namespace WingCommand.FlightSim
+{
+    public class TrackingScenarioTests
+    {
+        private const float Dt = 1f / 60f;
+
+        private static FlightIntent SlotIntent(RefState slot, AirframeProfile p, bool afterburner, float spacing,
+            float aggression = 1f) =>
+            new FlightIntent
+            {
+                Ref = slot,
+                Limits = new SpeedLimits(p.MinimumSpeed(1f), p.MaxSpeed, afterburner, true),
+                Precision = 1f,
+                Aggression = aggression,
+                Spacing = spacing,
+                TerrainClearance = 60f,
+            };
+
+        [Fact]
+        public void ReversalsKeepACloseSlotWithinFifteenMetresAndMatchBank()
+        {
+            AirframeProfile profile = SimProfiles.GenericFighter();
+            var leader = new VirtualLeader(new Vec3(0f, 2000f, 0f), 200f, 0f);
+            RefState start = leader.Slot(60f, 20f, 0f);
+            var plant = new FixedWingPlant(PlantParams.GenericFighter, start.Pos, 200f, 0f);
+            var pilot = new SimPilot(plant, profile);
+
+            double sumErr2 = 0, sumBank2 = 0;
+            int samples = 0, saturated = 0, reversals = 0;
+            float lastThrottle = plant.ThrottleActual, lastDelta = 0f, deltaWindow = 0f;
+            for (int i = 0; i < 65 * 60; i++)
+            {
+                float t = i * Dt;
+                float bank = t < 5f ? 0f : ((int)((t - 5f) / 8f) % 2 == 0 ? 60f : -60f);
+                leader.Step(bank, Dt);
+                RefState slot = leader.Slot(60f, 20f, 0f);
+                pilot.StepTracking(SlotIntent(slot, profile, false, 80f), Dt);
+                if (t < 5f) continue;
+                float err = (slot.Pos - plant.Position).Length;
+                sumErr2 += err * err;
+                float bankErr = Scalar.Wrap180(plant.BankDeg - leader.BankDeg);
+                sumBank2 += bankErr * bankErr;
+                if (Math.Abs(pilot.Last.Roll) >= 0.99f) saturated++;
+                deltaWindow += plant.ThrottleActual - lastThrottle;
+                lastThrottle = plant.ThrottleActual;
+                if (i % 30 == 0)
+                {
+                    if (Math.Abs(deltaWindow) > 0.05f && Math.Sign(deltaWindow) != Math.Sign(lastDelta) && lastDelta != 0f) reversals++;
+                    if (Math.Abs(deltaWindow) > 0.05f) lastDelta = deltaWindow;
+                    deltaWindow = 0f;
+                }
+                samples++;
+            }
+            double rmsErr = Math.Sqrt(sumErr2 / samples), rmsBank = Math.Sqrt(sumBank2 / samples);
+            double minutes = samples * Dt / 60.0;
+            Assert.True(rmsErr < 15.0, $"slot RMS {rmsErr:0.0} m");
+            Assert.True(rmsBank < 8.0, $"bank RMS {rmsBank:0.0} deg");
+            Assert.True(saturated < 0.05 * samples, $"roll saturated {100.0 * saturated / samples:0.0}%");
+            Assert.True(reversals / minutes < 12.0, $"{reversals / minutes:0.0} throttle reversals/min");
+        }
+
+        [Fact]
+        public void JoinFromFourKilometresAsternCapturesWithoutOvershoot()
+        {
+            AirframeProfile profile = SimProfiles.GenericFighter();
+            var leader = new VirtualLeader(new Vec3(0f, 2000f, 4000f), 200f, 0f);
+            var plant = new FixedWingPlant(PlantParams.GenericFighter, new Vec3(80f, 2000f, 0f), 140f, 0f);
+            var pilot = new SimPilot(plant, profile);
+            const float spacing = 80f;
+
+            float inside = 0f, captureTime = float.NaN, maxAhead = float.NegativeInfinity;
+            for (int i = 0; i < 180 * 60; i++)
+            {
+                float t = i * Dt;
+                leader.Step(0f, Dt);
+                RefState slot = leader.Slot(spacing, 0f, 0f);
+                pilot.StepTracking(SlotIntent(slot, profile, true, spacing), Dt);
+                Vec3 e = plant.Position - slot.Pos;
+                maxAhead = Math.Max(maxAhead, e.Z);
+                inside = e.Length < 0.25f * spacing ? inside + Dt : 0f;
+                if (float.IsNaN(captureTime) && inside >= 5f) captureTime = t;
+            }
+            Assert.False(float.IsNaN(captureTime), "never captured");
+            Assert.True(captureTime < 120f, $"captured at {captureTime:0} s");
+            Assert.True(maxAhead < spacing, $"passed {maxAhead:0} m ahead of the slot");
+        }
+
+        [Theory]
+        [InlineData(150f)]
+        [InlineData(3000f)]
+        public void SlotFarBelowIsReachedWingsLevelWithoutStalling(float below)
+        {
+            AirframeProfile profile = SimProfiles.GenericFighter();
+            var leader = new VirtualLeader(new Vec3(0f, 4000f, 0f), 200f, 0f);
+            var plant = new FixedWingPlant(PlantParams.GenericFighter, leader.Slot(60f, 20f, 0f).Pos, 200f, 0f);
+            var pilot = new SimPilot(plant, profile);
+            float maxBank = 0f, minSpeed = float.MaxValue, maxSpeed = 0f;
+            RefState slot = default;
+            for (int i = 0; i < 120 * 60; i++)
+            {
+                leader.Step(0f, Dt);
+                slot = leader.Slot(60f, 20f, -below);
+                pilot.StepTracking(SlotIntent(slot, profile, false, 80f), Dt);
+                maxBank = Math.Max(maxBank, Math.Abs(plant.BankDeg));
+                minSpeed = Math.Min(minSpeed, plant.Speed);
+                maxSpeed = Math.Max(maxSpeed, plant.Speed);
+            }
+            Assert.True(maxBank < 10f, $"max |bank| {maxBank:0.0}");
+            Assert.True(minSpeed > 1.1f * profile.MinimumSpeed(1f), $"min speed {minSpeed:0}");
+            Assert.True(maxSpeed < profile.MaxSpeed, $"max speed {maxSpeed:0}");
+            Assert.True((slot.Pos - plant.Position).Length < 20f, $"final error {(slot.Pos - plant.Position).Length:0} m");
+        }
+
+        [Fact]
+        public void WideSideOffsetAtLowAggressionTurnsWithoutClimbing()
+        {
+            AirframeProfile profile = SimProfiles.GenericFighter();
+            var leader = new VirtualLeader(new Vec3(0f, 2000f, 0f), 200f, 0f);
+            var plant = new FixedWingPlant(PlantParams.GenericFighter, new Vec3(0f, 2000f, -20f), 200f, 0f);
+            var pilot = new SimPilot(plant, profile);
+            float maxDy = 0f;
+            for (int i = 0; i < 60 * 60; i++)
+            {
+                leader.Step(0f, Dt);
+                pilot.StepTracking(SlotIntent(leader.Slot(1500f, 20f, 0f), profile, false, 80f, aggression: 0f), Dt);
+                maxDy = Math.Max(maxDy, Math.Abs(plant.Position.Y - 2000f));
+            }
+            Assert.True(maxDy < 50f, $"max height excursion {maxDy:0} m");
+        }
+
+        [Fact]
+        public void HeadOnLeaderIsRejoinedByTurningAroundAboveMinimumSpeed()
+        {
+            AirframeProfile profile = SimProfiles.GenericFighter();
+            var leader = new VirtualLeader(new Vec3(0f, 2000f, 3000f), 200f, 180f);
+            var plant = new FixedWingPlant(PlantParams.GenericFighter, new Vec3(0f, 2000f, 0f), 200f, 0f);
+            var pilot = new SimPilot(plant, profile);
+            float minSpeed = float.MaxValue;
+            RefState slot = default;
+            for (int i = 0; i < 240 * 60; i++)
+            {
+                leader.Step(0f, Dt);
+                slot = leader.Slot(60f, 20f, 0f);
+                pilot.StepTracking(SlotIntent(slot, profile, true, 80f, aggression: 0.5f), Dt);
+                minSpeed = Math.Min(minSpeed, plant.Speed);
+            }
+            Assert.True(minSpeed > 1.1f * profile.MinimumSpeed(1f), $"min speed {minSpeed:0}");
+            Assert.True((slot.Pos - plant.Position).Length < 50f, $"final error {(slot.Pos - plant.Position).Length:0} m");
+        }
+
+        [Fact]
+        public void RollingTerrainBindsTheFloorWithAtMostOneGcasEvent()
+        {
+            // Hills from 0 to 300 m under a leader at 200 m: the slot often lies inside the clearance, so the
+            // floor binds. The floor is the highest terrain 0, 2, 5 and 10 s ahead, as the engine probes see it.
+            AirframeProfile profile = SimProfiles.GenericFighter();
+            var leader = new VirtualLeader(new Vec3(0f, 200f, 0f), 220f, 0f);
+            var plant = new FixedWingPlant(PlantParams.GenericFighter, new Vec3(60f, 600f, -20f), 220f, 0f);
+            var pilot = new SimPilot(plant, profile);
+            int events = 0, bound = 0, ticks = 0;
+            bool previous = false;
+            float minClearance = float.PositiveInfinity;
+            for (int i = 0; i < 180 * 60; i++)
+            {
+                leader.Step(0f, Dt);
+                float z = plant.Position.Z, v = plant.Speed;
+                float floorY = Math.Max(Math.Max(Hill(z), Hill(z + 2f * v)), Math.Max(Hill(z + 5f * v), Hill(z + 10f * v)));
+                pilot.StepTracking(SlotIntent(leader.Slot(60f, 20f, 0f), profile, false, 80f), Dt, floorY);
+                bool gcas = pilot.Pipeline.Constraints.GcasActive;
+                if (gcas && !previous) events++;
+                previous = gcas;
+                if (pilot.Pipeline.Report.VerticalBy == ConstraintId.Terrain) bound++;
+                ticks++;
+                minClearance = Math.Min(minClearance, plant.Position.Y - Hill(z));
+            }
+            Assert.True(bound > 0.2f * ticks, $"floor bound {bound} of {ticks} ticks");
+            Assert.True(events <= 1, $"{events} GCAS events");
+            Assert.True(minClearance > 0f, $"minimum clearance {minClearance:0} m");
+        }
+
+        private static float Hill(float z) => 150f + 150f * (float)Math.Sin(z / 3000f);
+
+        [Fact]
+        public void ValleyFlightNeverDescendsIntoTheFloor()
+        {
+            AirframeProfile profile = SimProfiles.GenericFighter();
+            var leader = new VirtualLeader(new Vec3(0f, 300f, 0f), 180f, 0f);
+            var plant = new FixedWingPlant(PlantParams.GenericFighter, new Vec3(60f, 300f, -20f), 180f, 0f);
+            var pilot = new SimPilot(plant, profile);
+            float minClearance = float.PositiveInfinity;
+            for (int i = 0; i < 90 * 60; i++)
+            {
+                float t = i * Dt;
+                float bank = (int)(t / 10f) % 2 == 0 ? 45f : -45f;
+                leader.Step(bank, Dt);
+                // Terrain rises and falls under the path; the slot sits 100 m above the leader's own floor.
+                float floorY = 200f + 120f * (float)Math.Sin(plant.Position.Z / 1500f);
+                RefState slot = leader.Slot(60f, 20f, 0f);
+                var raised = new RefState(new Vec3(slot.Pos.X, Math.Max(slot.Pos.Y, floorY + 100f), slot.Pos.Z), slot.Vel, slot.Acc);
+                pilot.StepTracking(SlotIntent(raised, profile, false, 80f), Dt, floorY);
+                minClearance = Math.Min(minClearance, plant.Position.Y - floorY);
+            }
+            Assert.True(minClearance > 0f, $"minimum clearance {minClearance:0} m");
+        }
+    }
+}

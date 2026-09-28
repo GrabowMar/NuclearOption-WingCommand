@@ -1,0 +1,437 @@
+using System;
+using System.Collections.Generic;
+using NOAvionics;
+using NOAvionics.Ui;
+using TMPro;
+using UnityEngine;
+using UnityEngine.UI;
+
+namespace WingCommand
+{
+    /// <summary>A bezel page (spec WMC rebuild §bezel shell): built once into its page root, refreshed at the panel's rate
+    /// while it shows; its metric tiles, status-strip alert and ambient hint are its own.</summary>
+    internal interface IWmcPage
+    {
+        void Build(RectTransform page, Rect body);
+
+        void Refresh(WmcContext c);
+
+        /// <summary>The status strip's ambient line while the page shows.</summary>
+        string Hint { get; }
+
+        /// <summary>The status strip's alert line, or null.</summary>
+        string Alert { get; }
+
+        /// <summary>The page came on screen (its tab was picked, or the panel opened on it): per-show work, before the first
+        /// refresh.</summary>
+        void Shown(WmcContext c);
+    }
+
+    /// <summary>The widgets WMC pages share that the NOAvionics toolkit does not have (spec WMC rebuild §widget kit), built
+    /// only from toolkit primitives — WC never edits the toolkit.</summary>
+    internal static class WmcKit
+    {
+        /// <summary>The tallest empty band (px) inside <paramref name="body"/> between visible graphics on the page on show, the
+        /// trailing space under the last one excluded (spec bezel v2 §10 <c>gap_px</c>). Backdrops, spines and viewports (taller
+        /// than 120 px) do not count as content. Automation only: it allocates.</summary>
+        public static int LargestGap(RectTransform content, Rect body)
+        {
+            var spans = new List<Vector2>();
+            Rect cr = content.rect;
+            var corners = new Vector3[4];
+            float bodyBottom = body.y - body.height;
+            foreach (Graphic g in content.GetComponentsInChildren<Graphic>(false))
+            {
+                if (!g.enabled || g.color.a <= 0.01f) continue;
+                if (g is TMP_Text t && string.IsNullOrEmpty(t.text)) continue;
+                g.rectTransform.GetWorldCorners(corners);
+                float top = content.InverseTransformPoint(corners[1]).y - cr.yMax;
+                float bottom = content.InverseTransformPoint(corners[0]).y - cr.yMax;
+                if (top - bottom > 120f) continue;
+                top = Mathf.Min(top, body.y);
+                bottom = Mathf.Max(bottom, bodyBottom);
+                if (top - bottom <= 0.5f) continue;
+                spans.Add(new Vector2(top, bottom));
+            }
+            spans.Sort((a, b) => b.x.CompareTo(a.x));
+            float cursor = body.y;
+            int gap = 0;
+            foreach (Vector2 span in spans)
+            {
+                if (span.x < cursor) gap = Mathf.Max(gap, Mathf.RoundToInt(cursor - span.x));
+                cursor = Mathf.Min(cursor, span.y);
+            }
+            return gap;
+        }
+
+        /// <summary>No "…" anywhere (spec WMC rebuild): every label under <paramref name="root"/> overflows instead of cutting
+        /// and shrinks to the 10 px floor before it does. Once after a build (and after a popup opens).</summary>
+        public static void FitAll(RectTransform root)
+        {
+            if (root == null) return;
+            foreach (TMP_Text t in root.GetComponentsInChildren<TMP_Text>(true))
+            {
+                if (t.GetComponentInParent<TMP_InputField>(true) != null) continue;
+                if (t.overflowMode == TextOverflowModes.Ellipsis || (!t.enableWordWrapping && t.overflowMode == TextOverflowModes.Truncate))
+                    t.overflowMode = TextOverflowModes.Overflow;
+                if (t.enableAutoSizing) continue;
+                t.fontSizeMax = t.fontSize;
+                t.fontSizeMin = Mathf.Min(AvTokens.FontMicro, t.fontSize);
+                t.enableAutoSizing = true;
+            }
+        }
+
+        /// <summary>Labels that would still spill out of their box at their smallest size (the automation's text-fit audit).
+        /// ponytail: estimated from the preferred width at the largest size scaled to the smallest; measure per size if the
+        /// estimate ever disagrees with a screenshot.</summary>
+        public static int Overflow(RectTransform root)
+        {
+            if (root == null) return 0;
+            int n = 0;
+            foreach (TMP_Text t in root.GetComponentsInChildren<TMP_Text>(false))
+            {
+                if (string.IsNullOrEmpty(t.text) || t.enableWordWrapping) continue;
+                float width = t.rectTransform.rect.width;
+                if (width <= 1f) continue;
+                float scale = t.enableAutoSizing && t.fontSizeMax > 0f ? t.fontSizeMin / t.fontSizeMax : 1f;
+                if (t.GetPreferredValues(t.text).x * scale > width + 1f) n++;
+            }
+            return n;
+        }
+
+        /// <summary>A strip of sub-tabs (Boscali's PageFrame pattern): tab-styled buttons, the picked one latched.</summary>
+        public static AvButton[] SubTabs(RectTransform parent, Rect r, string[] labels, string idPrefix,
+            Dictionary<string, AvButton> ids, Action<int> pick)
+        {
+            var tabs = new AvButton[labels.Length];
+            float w = r.width / labels.Length;
+            for (int i = 0; i < labels.Length; i++)
+            {
+                int k = i;
+                tabs[i] = AvStyled.Button(parent, new Rect(r.x + i * w, r.y, w - (i < labels.Length - 1 ? 1f : 0f), r.height),
+                    labels[i], "tab", () => pick(k), AvButtonStyle.Tab);
+                ids[idPrefix + labels[i].ToLowerInvariant()] = tabs[i];
+            }
+            return tabs;
+        }
+
+        /// <summary>A small text label that never wraps.</summary>
+        public static TMP_Text Text(RectTransform parent, Rect r, string classes, TextAlignmentOptions? align = null)
+        {
+            TMP_Text t = AvStyled.Label(parent, r, "", classes, align: align);
+            // A wrapped style (row-sub, hint) comes top-aligned and truncating: one line, on the midline, never cut.
+            t.enableWordWrapping = false;
+            t.overflowMode = TextOverflowModes.Overflow;
+            if (align == null) t.alignment = TextAlignmentOptions.MidlineLeft;
+            return t;
+        }
+
+        /// <summary>Sets a label only when its text changed (TMP relays out on every assignment).</summary>
+        public static void Set(TMP_Text t, string text)
+        {
+            if (t != null && t.text != text) t.text = text;
+        }
+
+        /// <summary>A numbered step's head (the 0.9 SUPPLY steps): a boxed digit (never a U+24xx circled one), the title, and a
+        /// state chip on the right with its rail; returns the chip's label (<see cref="SetStep"/> writes it).</summary>
+        public static TMP_Text StepHeader(RectTransform p, Rect r, int n, string title, out Image rail)
+        {
+            const float box = 16f, chip = 96f;
+            var digit = new Rect(r.x, r.y - 1f, box, box);
+            AvStyled.Box(p, digit, "chip");
+            AvKit.Outline(p, digit, AvTheme.Frame);
+            AvStyled.Label(p, digit, n.ToString(System.Globalization.CultureInfo.InvariantCulture), "section-title",
+                align: TextAlignmentOptions.Center);
+            AvStyled.Label(p, new Rect(r.x + box + 8f, r.y, r.width - box - 8f - chip - 4f, r.height), title, "section-title");
+            var state = new Rect(r.x + r.width - chip, r.y, chip, r.height);
+            AvStyled.Box(p, state, "chip");
+            rail = AvStyled.Rail(p, new Rect(state.x, state.y, 3f, state.height), "inert");
+            return Text(p, new Rect(state.x + 8f, state.y, chip - 10f, state.height), "row-sub");
+        }
+
+        /// <summary>A step chip's words and rail class ("live", "info", "warn", "inert").</summary>
+        public static void SetStep(TMP_Text state, Image rail, string text, string railClass)
+        {
+            Set(state, text);
+            WmcUi.SetRail(rail, railClass);
+        }
+
+        /// <summary>The area for a popup of <paramref name="entries"/> rows opened from <paramref name="row"/>: below it when it fits,
+        /// else above, else after scrolling <paramref name="scroll"/> up so it fits below or down so it fits above (BezelLayout.PopupPlace) — never over its row and
+        /// never past the body, where the chrome would hide it. <paramref name="width"/> 0 keeps the row's width.</summary>
+        public static Rect PopupArea(RectTransform page, Rect body, RectTransform row, int entries, WmcScroll scroll, float width = 0f)
+        {
+            Rect r = RectIn(page, row);
+            float popupH = BezelLayout.PopupHeight(entries);
+            float max = scroll != null ? scroll.MaxOffset - scroll.Offset : 0f, back = scroll != null ? scroll.Offset : 0f;
+            float top = BezelLayout.PopupPlace(body.y - r.y, r.height, popupH, body.height, max, out float moved, back);
+            if (moved != 0f && scroll != null) scroll.ScrollBy(moved);
+            return new Rect(width > 0f ? body.x : r.x, body.y - top, width > 0f ? width : r.width, popupH);
+        }
+
+        /// <summary>Where <paramref name="target"/> sits inside <paramref name="root"/> (a popup opens beside its button, parented
+        /// to the page root and never inside a scroll viewport).</summary>
+        public static Rect RectIn(RectTransform root, RectTransform target)
+        {
+            var corners = new Vector3[4];
+            target.GetWorldCorners(corners);
+            Vector3 tl = root.InverseTransformPoint(corners[1]);
+            Rect r = root.rect;
+            return new Rect(tl.x - r.xMin, tl.y - r.yMax, target.rect.width, target.rect.height);
+        }
+    }
+
+    /// <summary>A pilot's portrait in a frame (SUPPLY's pilot card; WING's dossier reuses it): the sprite is looked up only when
+    /// the pilot or the roster's <see cref="WingPilotRoster.LookVersion"/> changes (a studio or interop edit).</summary>
+    internal sealed class WmcPortrait
+    {
+        private Image image;
+        private WingPilot shown;
+        private int look = int.MinValue;
+        private bool set;
+
+        public static WmcPortrait Build(RectTransform p, Rect r)
+        {
+            AvKit.Panel(p, r, AvTheme.SurfaceInert).raycastTarget = false;
+            AvKit.Outline(p, r, AvTheme.Frame);
+            var w = new WmcPortrait { image = AvKit.Panel(p, new Rect(r.x + 1f, r.y - 1f, r.width - 2f, r.height - 2f), Color.white) };
+            w.image.preserveAspect = true;
+            w.image.raycastTarget = false;
+            return w;
+        }
+
+        /// <summary>The pilot's face; with nobody, the generic one faded (a pilot drafted at launch).</summary>
+        public void Set(WingPilot pilot)
+        {
+            if (set && ReferenceEquals(pilot, shown) && look == WingPilotRoster.LookVersion) return;
+            set = true;
+            shown = pilot;
+            look = WingPilotRoster.LookVersion;
+            image.sprite = PilotPortrait.For(pilot);
+            image.enabled = image.sprite != null;
+            image.color = pilot != null ? Color.white : new Color(1f, 1f, 1f, 0.3f);
+        }
+
+        public void Invalidate() => set = false;
+    }
+
+    /// <summary>A body-relative pager ("‹ 1 / 2 ›"): always shown, the arrows enabled by bounds, the label built on change.</summary>
+    internal sealed class WmcPager
+    {
+        private AvButton prev, next;
+        private TMP_Text label;
+        private int page = -1, pages = -1;
+        private bool enabled = true;
+        private string why;
+
+        public static WmcPager Build(RectTransform p, Rect r, string idPrefix, Dictionary<string, AvButton> ids, Action<int> turn)
+        {
+            const float arrow = 28f;
+            var pager = new WmcPager
+            {
+                prev = AvStyled.Button(p, new Rect(r.x, r.y, arrow, r.height), "‹", "btn", () => turn(-1), AvButtonStyle.Quiet),
+                next = AvStyled.Button(p, new Rect(r.x + r.width - arrow, r.y, arrow, r.height), "›", "btn", () => turn(1), AvButtonStyle.Quiet),
+                label = WmcKit.Text(p, new Rect(r.x + arrow + 2f, r.y, r.width - 2f * arrow - 4f, r.height), "row-sub", TextAlignmentOptions.Center),
+            };
+            pager.prev.WithTooltip("Previous page");
+            pager.next.WithTooltip("Next page");
+            ids[idPrefix + "prev"] = pager.prev;
+            ids[idPrefix + "next"] = pager.next;
+            pager.Set(0, 1);
+            return pager;
+        }
+
+        public void Set(int page, int pages)
+        {
+            if (page == this.page && pages == this.pages) return;
+            this.page = page;
+            this.pages = pages;
+            WmcKit.Set(label, Pages.Label(page, pages));
+            Apply();
+        }
+
+        /// <summary>Disables both arrows with <paramref name="reason"/> until enabled again (page changes keep it).</summary>
+        public void SetEnabled(bool on, string reason)
+        {
+            if (on == enabled && reason == why) return;
+            enabled = on;
+            why = reason;
+            Apply();
+        }
+
+        private void Apply()
+        {
+            prev.SetEnabled(enabled && page > 0);
+            next.SetEnabled(enabled && page < pages - 1);
+            prev.WithTooltip(enabled ? "Previous page" : why);
+            next.WithTooltip(enabled ? "Next page" : why);
+        }
+    }
+
+    /// <summary>A key and a row of toggle segments (the 0.9 doctrine rows): one latched, none for MIXED, disabled with a
+    /// reason in every segment's tooltip.</summary>
+    internal sealed class SegmentRow
+    {
+        private AvButton[] segments;
+        private string[] tips;
+        private int latched = -2;
+        private bool enabled = true;
+        private string why;
+
+        public static SegmentRow Build(RectTransform parent, Rect r, float keyWidth, string key, string[] labels, string[] tips,
+            string idPrefix, string[] keys, Dictionary<string, AvButton> ids, Action<int> pick)
+        {
+            var row = new SegmentRow { segments = new AvButton[labels.Length], tips = tips };
+            AvStyled.Label(parent, new Rect(r.x, r.y, keyWidth, r.height), key, "metric-key");
+            float x = r.x + keyWidth, w = (r.width - keyWidth - WmcUi.Gap * (labels.Length - 1)) / labels.Length;
+            for (int i = 0; i < labels.Length; i++)
+            {
+                int k = i;
+                row.segments[i] = AvStyled.Button(parent, new Rect(x + i * (w + WmcUi.Gap), r.y, w, r.height), labels[i], "btn",
+                    () => pick(k), AvButtonStyle.Toggle);
+                if (tips != null && i < tips.Length) row.segments[i].WithTooltip(tips[i]);
+                ids[idPrefix + keys[i]] = row.segments[i];
+            }
+            return row;
+        }
+
+        /// <summary>Latch segment <paramref name="index"/>; -1 latches none (MIXED).</summary>
+        public void Set(int index)
+        {
+            if (index == latched) return;
+            latched = index;
+            for (int i = 0; i < segments.Length; i++) segments[i].SetLatched(i == index);
+        }
+
+        public void SetEnabled(bool on, string reason)
+        {
+            if (on == enabled && reason == why) return;
+            enabled = on;
+            why = reason;
+            for (int i = 0; i < segments.Length; i++)
+            {
+                segments[i].SetEnabled(on);
+                segments[i].WithTooltip(on ? (tips != null && i < tips.Length ? tips[i] : null) : reason);
+            }
+        }
+    }
+
+    /// <summary>A scroll viewport whose content height may change after build (the toolkit's <c>AvScreen.Scroll</c> decides
+    /// once): a clamped, inertia-free ScrollRect with a 4 px thumb in an 8 px gutter; changing the height keeps the reader's
+    /// place (0.9 critique: the scroll reset every refresh).</summary>
+    /// <summary>A page's footer (DISPATCH, LIVERY, the SAR bar) that sits right under its scroll's content and pins to the body's
+    /// floor only when the content scrolls (critic §14.2: pinned footers left 160-320 px empty on a tall dock). The viewport shrinks
+    /// to the content, so nothing is left between them.</summary>
+    internal sealed class WmcFooter
+    {
+        private readonly WmcScroll scroll;
+        private readonly RectTransform footer;
+        private readonly Rect area;
+        private float shown = -1f;
+
+        /// <summary><paramref name="maxView"/>: the viewport at its tallest (x, top, width with the scroll's gutter, height).</summary>
+        public WmcFooter(WmcScroll scroll, RectTransform footer, Rect maxView)
+        {
+            this.scroll = scroll;
+            this.footer = footer;
+            area = maxView;
+        }
+
+        /// <summary>The content is <paramref name="content"/> px tall now.</summary>
+        public void Fit(float content)
+        {
+            float view = Mathf.Max(20f, Mathf.Min(content, area.height));
+            if (Mathf.Abs(view - shown) < 0.5f) return;
+            shown = view;
+            scroll.SetViewport(new Rect(area.x, area.y, area.width, view));
+            footer.anchoredPosition = new Vector2(footer.anchoredPosition.x, area.y - view);
+        }
+    }
+
+    internal sealed class WmcScroll
+    {
+        private ScrollRect scroll;
+        private RectTransform view, track;
+        private float height = -1f;
+
+        public RectTransform Content { get; private set; }
+        public float Width { get; private set; }
+
+        public static WmcScroll Build(RectTransform parent, Rect viewport, string name)
+        {
+            const float gutter = 8f;
+            var s = new WmcScroll { Width = Mathf.Max(0f, viewport.width - gutter) };
+            Image view = AvKit.Panel(parent, new Rect(viewport.x, viewport.y, s.Width, viewport.height), Color.clear);
+            view.gameObject.name = name;
+            view.raycastTarget = true;
+            view.gameObject.AddComponent<RectMask2D>();
+            s.view = view.rectTransform;
+            var go = new GameObject(name + "Content", typeof(RectTransform));
+            s.Content = (RectTransform)go.transform;
+            s.Content.SetParent(view.rectTransform, false);
+            AvKit.Place(s.Content, new Rect(0f, 0f, s.Width, viewport.height));
+
+            s.scroll = view.gameObject.AddComponent<ScrollRect>();
+            s.scroll.viewport = view.rectTransform;
+            s.scroll.content = s.Content;
+            s.scroll.horizontal = false;
+            s.scroll.movementType = ScrollRect.MovementType.Clamped;
+            s.scroll.scrollSensitivity = 24f;
+            s.scroll.inertia = false;
+
+            Image track = AvKit.Panel(parent, new Rect(viewport.x + viewport.width - 4f, viewport.y, 4f, viewport.height), AvTheme.Hairline);
+            track.raycastTarget = true;
+            s.track = track.rectTransform;
+            Image thumb = AvKit.Panel(track.rectTransform, new Rect(0f, 0f, 4f, viewport.height), AvTheme.Dim);
+            thumb.raycastTarget = true;
+            AvKit.Stretch(thumb.rectTransform);
+            Scrollbar bar = track.gameObject.AddComponent<Scrollbar>();
+            bar.handleRect = thumb.rectTransform;
+            bar.targetGraphic = thumb;
+            bar.direction = Scrollbar.Direction.BottomToTop;
+            AvInput.StripNavigation(bar);
+            s.scroll.verticalScrollbar = bar;
+            s.scroll.verticalScrollbarVisibility = ScrollRect.ScrollbarVisibility.AutoHide;
+            s.SetContentHeight(viewport.height);
+            return s;
+        }
+
+        /// <summary>How far the content is scrolled down, and how far it can go.</summary>
+        public float Offset => Content.anchoredPosition.y;
+        public float MaxOffset => Mathf.Max(0f, height - view.rect.height);
+
+        /// <summary>Scrolls by <paramref name="dy"/> (positive: the content moves up), clamped; returns how far it moved.</summary>
+        public float ScrollBy(float dy)
+        {
+            Vector2 at = Content.anchoredPosition;
+            float to = Mathf.Clamp(at.y + dy, 0f, MaxOffset);
+            Content.anchoredPosition = new Vector2(at.x, to);
+            return to - at.y;
+        }
+
+        /// <summary>The content's height; the offset stays where the reader left it, clamped into the new range.</summary>
+        public void SetContentHeight(float h)
+        {
+            if (Mathf.Abs(h - height) < 0.5f) return;
+            height = h;
+            Content.sizeDelta = new Vector2(Content.sizeDelta.x, h);
+            Clamp();
+        }
+
+        /// <summary>Moves or resizes the viewport (the flight list above it grew or shrank); the reader's place is kept.</summary>
+        public void SetViewport(Rect viewport)
+        {
+            Width = Mathf.Max(0f, viewport.width - 8f);
+            AvKit.Place(view, new Rect(viewport.x, viewport.y, Width, viewport.height));
+            AvKit.Place(track, new Rect(viewport.x + viewport.width - 4f, viewport.y, 4f, viewport.height));
+            Clamp();
+        }
+
+        private void Clamp()
+        {
+            Vector2 at = Content.anchoredPosition;
+            float max = Mathf.Max(0f, height - view.rect.height);
+            if (at.y > max) Content.anchoredPosition = new Vector2(at.x, max);
+        }
+    }
+}

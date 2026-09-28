@@ -184,11 +184,11 @@ namespace WingCommand
                                                  string placeholderText = "NAME",
                                                  TMP_InputField.LineType lineType = TMP_InputField.LineType.SingleLine)
         {
+            // The toolkit holds the keyboard itself since the 2026-09-24 sync; a second guard would record the keyboard
+            // already off and restore that on blur.
             return AvKit.InputField(parent, rect, characterLimit, onChanged,
-                                    onFocus: WingKeyboardGuard.Capture,
-                                    onBlur: WingKeyboardGuard.Release,
                                     tooltip: tooltip, placeholderText: placeholderText,
-                                    lineType: lineType);
+                                    multiline: lineType != TMP_InputField.LineType.SingleLine);
         }
 
         public static Sprite PanelSprite() => AvSprites.Panel;

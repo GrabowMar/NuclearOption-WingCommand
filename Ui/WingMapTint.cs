@@ -2,100 +2,79 @@ using System;
 using System.Collections.Generic;
 using System.Reflection;
 using HarmonyLib;
-using UnityEngine;
+
+// Harmony calls postfixes by reflection.
+#pragma warning disable IDE0051
 
 namespace WingCommand
 {
-    /// <summary>Reconciles wing outlines and command selection after native icon updates.</summary>
+    /// <summary>Wing marks on map icons (spec WMC program §5): a ring in the member's element colour with its badge, command
+    /// brackets on the WMC selection, target and downed-pilot rings — kept apart from the game's own icon colours, which
+    /// stay authoritative.</summary>
     internal static class WingMapTint
     {
-        // Read the icon's selected flag because DynamicMap updates selectedIcons after its colour
-        // callback.
-        private static readonly AccessTools.FieldRef<MapIcon, bool> nativeSelected =
-            AccessTools.FieldRefAccess<MapIcon, bool>("isSelected");
+        // The icon's own selected flag: DynamicMap updates selectedIcons after its colour callback.
+        private static readonly AccessTools.FieldRef<MapIcon, bool> nativeSelected = AccessTools.FieldRefAccess<MapIcon, bool>("isSelected");
+        private static bool warned;
 
-        /// <summary>Refresh map identity for one unit.</summary>
-        public static void Refresh(Unit unit)
+        /// <summary>The game's colours back, then the current mark (none for a unit that lost it).</summary>
+        public static void Restore(Unit unit)
         {
-            if (unit == null) return;
-
+            if (unit == null || SceneSingleton<DynamicMap>.i == null) return;
             try
             {
-                if (DynamicMap.TryGetMapIcon(unit, out UnitMapIcon icon) && icon != null)
-                {
-                    // Use the unit repaint path to preserve native filter dimming and player
-                    // highlighting; base MapIcon.UpdateColor omits them.
-                    icon.UnitMapIcon_UpdateColor();
-                    Apply(icon);
-                }
+                if (!DynamicMap.TryGetMapIcon(unit, out UnitMapIcon icon) || icon == null) return;
+                // The unit repaint keeps the game's filter dimming and player highlight (MapIcon.UpdateColor does not).
+                icon.UnitMapIcon_UpdateColor();
+                Apply(icon);
             }
             catch (Exception e)
             {
-                if (Plugin.Settings.VerboseLogging.Value)
-                    Plugin.Logger.LogWarning("Map icon refresh failed: " + e.Message);
+                Warn(e);
             }
         }
 
-        /// <summary>Restore markings after icon recreation or external component changes without
-        /// repainting native fade state.</summary>
-        public static void Reassert(WingRegistry wing)
+        /// <summary>The mark again without repainting the game's fade state (icons are recreated and repainted at will).</summary>
+        public static void Reassert(Unit unit)
         {
-            if (SceneSingleton<DynamicMap>.i == null) return;
-            if (wing != null)
+            if (unit == null || SceneSingleton<DynamicMap>.i == null) return;
+            try
             {
-                foreach (WingMember member in wing.Members)
-                    Reassert(member.Aircraft);
+                if (DynamicMap.TryGetMapIcon(unit, out UnitMapIcon icon)) Apply(icon);
             }
-            foreach (Unit unit in WingMarkers.EngagedTargets) Reassert(unit);
-            foreach (Unit unit in WingMarkers.DownedPilots) Reassert(unit);
+            catch (Exception e)
+            {
+                Warn(e);
+            }
         }
 
-        private static void Reassert(Unit unit)
+        private static void Warn(Exception e)
         {
-            if (unit != null && DynamicMap.TryGetMapIcon(unit, out UnitMapIcon icon))
-                Apply(icon);
+            if (warned) return;
+            warned = true;
+            Plugin.Logger.LogWarning("[Map] wing marks failed once (further failures are silent): " + e.Message);
         }
 
-        private static void Apply(UnitMapIcon icon)
+        internal static void Apply(UnitMapIcon icon)
         {
             if (icon == null || icon.iconImage == null) return;
-
-            WingCommandManager manager = WingCommandManager.Instance;
-            WingMember member = icon.unit is Aircraft aircraft ? manager?.Wing.Find(aircraft) : null;
-            bool tactical = WmcScreen.TacticalCommandModeActive;
-            bool nativeSelected = IsSelected(icon);
-            bool commandSelected = manager != null && manager.Selection.Contains(member);
-
-            // Keep native-selected aircraft clickable for Tactical; restore stock raycast behaviour on
-            // exit without changing weapon targets.
-            bool isPlayer = SceneSingleton<CombatHUD>.i?.aircraft == icon.unit;
-            icon.iconImage.raycastTarget = MapSelectionPolicy.IconReceivesPointer(
-                isPlayer, nativeSelected, member != null, tactical);
-
-            HighlightMode highlight = Plugin.Settings.Highlight.Value;
-            WingPilot downedPilot = PersonnelFacade.SearchAndRescue.PilotOf(icon.unit as PilotDismounted);
-            WingMapPresentation presentation = WingMapPresentation.Resolve(
-                isWingMember: member != null,
-                isWingTarget: WingMarkers.RoleOf(icon.unit) == WingMarkers.Role.Target,
-                highlightWing: highlight != HighlightMode.Off,
-                highlightTargets: highlight == HighlightMode.WingAndTargets,
-                tacticalActive: tactical,
-                commandSelected: commandSelected,
-                isDowned: downedPilot != null);
-
-            // Keep wing identity in a separate outline so native faction, target, filter, and theme
-            // repainting remains authoritative.
-            WingMarkerBadge.Apply(icon.iconImage, presentation,
-                downedPilot != null ? "SAR · " + downedPilot.Callsign : null);
+            WingMarkers.Role role = WingMarkers.RoleOf(icon.unit, out int element, out int number);
+            WmcPanel panel = WmcPanel.Instance;
+            bool wmc = panel != null && panel.Visible;
+            // The WMC selection is by clicks on wing icons: keep them clickable while WMC is open, even when the game has
+            // them selected.
+            bool isPlayer = SceneSingleton<CombatHUD>.i != null && ReferenceEquals(SceneSingleton<CombatHUD>.i.aircraft, icon.unit);
+            icon.iconImage.raycastTarget = MapSelectionPolicy.IconReceivesPointer(isPlayer, nativeSelected(icon), role == WingMarkers.Role.Member, wmc);
+            HighlightMode mode = Plugin.Settings.MapMarkers.Value;
+            bool selected = wmc && role == WingMarkers.Role.Member && icon.unit is Aircraft a && panel.Context.Selection.Contains(a.persistentID.Id);
+            WingMapPresentation p = WingMapPresentation.Resolve(role == WingMarkers.Role.Member, role == WingMarkers.Role.Target,
+                mode != HighlightMode.Off, mode == HighlightMode.WingAndTargets, wmc, selected, role == WingMarkers.Role.Downed);
+            string status = role == WingMarkers.Role.Member ? (mode != HighlightMode.Off ? WingMarkers.Badge(element, number) : null)
+                : role == WingMarkers.Role.Downed ? WingMarkers.DownedLabel(icon.unit) : null;
+            WingMarkerBadge.Apply(icon.iconImage, p, WingMarkers.ColorOf(role, element), status);
         }
 
-        private static bool IsSelected(UnitMapIcon icon)
-        {
-            return nativeSelected(icon);
-        }
-
-        // Attach identity to the Image rather than native TargetMarkers removed during deselection.
-        // Reconcile on icon setup, reuse, and scope changes.
+        /// <summary>The mark survives the game's repaint on setup, reuse and colour changes.</summary>
         [HarmonyPatch]
         internal static class MapIconColorPatch
         {
@@ -107,15 +86,15 @@ namespace WingCommand
                 yield return AccessTools.Method(typeof(UnitMapIcon), nameof(UnitMapIcon.SetIcon));
                 yield return AccessTools.Method(typeof(UnitMapIcon), nameof(UnitMapIcon.UpdateIcon));
             }
+
             [HarmonyPostfix]
             private static void Postfix(MapIcon __instance)
             {
-                if (__instance is UnitMapIcon unitIcon) Apply(unitIcon);
+                if (__instance is UnitMapIcon u && WingMarkers.RoleOf(u.unit, out _, out _) != WingMarkers.Role.None) Apply(u);
             }
         }
 
-        /// <summary>Keep airbase icons visible during tactical planning and active wing landing or
-        /// RTB.</summary>
+        /// <summary>Airbases stay on the map while WMC is open or a member is landing or going home.</summary>
         [HarmonyPatch(typeof(DynamicMap), "ShouldShowAirbase")]
         internal static class ShowAirbasePatch
         {
@@ -123,18 +102,19 @@ namespace WingCommand
             internal static void Postfix(ref bool __result)
             {
                 if (__result) return;
-
-                if (WmcScreen.TacticalCommandModeActive)
+                if (WmcPanel.Instance != null && WmcPanel.Instance.Visible)
                 {
                     __result = true;
                     return;
                 }
-
-                WingCommandManager manager = WingCommandManager.Instance;
-                if (manager != null && manager.Wing != null && manager.Wing.HasAnyLandingOrder())
-                {
-                    __result = true;
-                }
+                WingService w = WingService.Instance;
+                if (w == null) return;
+                foreach (WingMember m in w.Members)
+                    if (m.Recovery != null)
+                    {
+                        __result = true;
+                        return;
+                    }
             }
         }
     }

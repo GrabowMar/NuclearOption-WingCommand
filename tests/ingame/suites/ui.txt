@@ -1,0 +1,12 @@
+# The bezel: every tab and sub-page, PLAN on the map, INSPECT, SQUADRON's studio, SUPPLY, LOADOUT and the order flows.
+wc-ui-tour-fs20
+wc-u3-plan-fs20
+wc-r7-squadron-fs20
+wc-r6-wing-fs20
+wc-r4-supply-fs20-boscali-north
+wc-r5-loadout-fs20
+wc-m7b1-wmc-fs20
+wc-p4-map-fs20
+wc-r3-orders-fs20
+wc-p2-elements-fs20
+wc-p2-editor-fs20

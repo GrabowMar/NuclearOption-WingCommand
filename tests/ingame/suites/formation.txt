@@ -1,0 +1,8 @@
+# Formation flying: joins, reversals, slow leaders, helicopters and mixed wings.
+wc-m1-join-fs20
+wc-m1-reversals-fs20
+wc-m1-slow-ci22
+wc-m2-h1-helo-sturns-uh90
+wc-m2-h2-helo-stop-uh90
+wc-m2-helo-trail-fs20
+wc-m2-mixed-ci22

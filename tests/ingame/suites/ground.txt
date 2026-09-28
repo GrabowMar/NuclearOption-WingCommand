@@ -1,0 +1,10 @@
+# Airfields and carriers: departures, recovery, refit, RTB, the economy and deck ops.
+wc-m3a-depart-ci22-mountains
+wc-m3a-depart-fs20-boscali-north
+wc-m3a-depart4-fs20-boscali-north
+wc-m3a-liftoff-uh90-city
+wc-m3b-refit-fs20-boscali-north
+wc-m3b-rtb-fs20-boscali-north
+wc-m3c-economy-fs20-boscali-north
+wc-m3d-carrier-uh90
+wc-m3d-s6-carrier

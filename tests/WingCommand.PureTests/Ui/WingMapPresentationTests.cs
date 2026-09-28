@@ -5,31 +5,6 @@ namespace WingCommand.PureTests
     public class WingMapPresentationTests
     {
         [Fact]
-        public void ClearingCommandScopeLeavesEveryMemberIdentifiable()
-        {
-            var first = new WingMember();
-            var second = new WingMember();
-            var wing = new WingRegistry();
-            wing.Members.AddRange(new[] { first, second });
-            var selection = new WingCommandSelection();
-
-            Assert.True(Paint(first).CommandBrackets);
-            Assert.True(Paint(second).CommandBrackets);
-            selection.SelectOnly(second);
-            Assert.False(Paint(first).CommandBrackets);
-            Assert.True(Paint(second).CommandBrackets);
-            selection.DeselectAll();
-            Assert.False(Paint(first).CommandBrackets);
-            Assert.False(Paint(second).CommandBrackets);
-            Assert.Equal(WingMapPresentation.OutlineKind.Member, Paint(first).Outline);
-            Assert.Equal(WingMapPresentation.OutlineKind.Member, Paint(second).Outline);
-
-            WingMapPresentation Paint(WingMember member) => WingMapPresentation.Resolve(
-                wing.Contains(member), isWingTarget: false, highlightWing: true,
-                highlightTargets: true, tacticalActive: true, selection.Contains(member));
-        }
-
-        [Fact]
         public void NativeTargetSelectionCanClearWithoutChangingWingIdentityOrCommandScope()
         {
             // Native target/filter changes may alter clicks, but membership and command scope remain

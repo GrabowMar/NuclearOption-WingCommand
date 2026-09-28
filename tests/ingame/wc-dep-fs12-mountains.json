@@ -1,0 +1,149 @@
+{
+ "name": "wc-dep-fs12-mountains",
+ "mods": [
+  "wingcommand"
+ ],
+ "timeout_s": 600,
+ "ops": [
+  {
+   "op": "spawn",
+   "id": "lead",
+   "type": "FS-20 Vortex",
+   "at": {
+    "map": [
+     -1131,
+     -26845
+    ]
+   },
+   "altitude": 1500,
+   "speed": 160,
+   "heading": 0
+  },
+  {
+   "op": "fly",
+   "id": "lead",
+   "program": [
+    {
+     "orbit": {
+      "bank": 15,
+      "seconds": 540
+     }
+    }
+   ]
+  },
+  {
+   "op": "wait",
+   "seconds": 3
+  },
+  {
+   "op": "call",
+   "method": "WingCommand.Automation.Pilots",
+   "store": "fresh",
+   "args": {
+    "fresh": true
+   }
+  },
+  {
+   "op": "call",
+   "method": "WingCommand.Automation.Launch",
+   "store": "launch",
+   "args": {
+    "lead": "lead",
+    "field": "nearest",
+    "count": 3,
+    "type": "FS-12 Revoker"
+   }
+  },
+  {
+   "op": "wait",
+   "seconds": 30
+  },
+  {
+   "op": "call",
+   "method": "WingCommand.Automation.Members",
+   "store": "adopted"
+  },
+  {
+   "op": "record",
+   "ids": [
+    "*"
+   ],
+   "hz": 4
+  },
+  {
+   "op": "wait",
+   "seconds": 60
+  },
+  {
+   "op": "call",
+   "method": "WingCommand.Automation.Ground",
+   "store": "early"
+  },
+  {
+   "op": "wait",
+   "seconds": 150
+  },
+  {
+   "op": "call",
+   "method": "WingCommand.Automation.Ground",
+   "store": "mid"
+  },
+  {
+   "op": "wait",
+   "seconds": 150
+  },
+  {
+   "op": "call",
+   "method": "WingCommand.Automation.Members",
+   "store": "members"
+  },
+  {
+   "op": "call",
+   "method": "WingCommand.Automation.Ground",
+   "store": "ground"
+  },
+  {
+   "op": "call",
+   "method": "WingCommand.Automation.Metrics",
+   "store": "wing"
+  },
+  {
+   "op": "end"
+  }
+ ],
+ "checks": [
+  {
+   "check": "status_ok"
+  },
+  {
+   "check": "result_above",
+   "path": "launch.launched",
+   "min": 3
+  },
+  {
+   "check": "result_above",
+   "path": "ground.flying",
+   "min": 3
+  },
+  {
+   "check": "result_below",
+   "path": "ground.grounded",
+   "max": 0
+  },
+  {
+   "check": "result_below",
+   "path": "ground.aborted",
+   "max": 0
+  },
+  {
+   "check": "result_below",
+   "path": "wing.left",
+   "max": 0
+  },
+  {
+   "check": "result_below",
+   "path": "ground.ejections_blocked",
+   "max": 0
+  }
+ ]
+}

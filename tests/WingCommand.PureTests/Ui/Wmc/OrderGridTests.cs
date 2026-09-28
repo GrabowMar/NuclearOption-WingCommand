@@ -1,0 +1,134 @@
+// OrderGridTests.cs
+using System.Collections.Generic;
+using Xunit;
+
+namespace WingCommand.PureTests
+{
+    public class OrderGridTests
+    {
+        [Fact]
+        public void JetsGetTheFourLabelledRows()
+        {
+            string[] want =
+            {
+                "ATTACK", "SPLASH", "ENGAGE", "SWEEP",
+                "MOVE", "ORBIT", "CAP", "HOLD",
+                "DISENGAGE", "FORM UP", "ECM", "DETACH",
+                "RTB", "REFIT", "LAND", "CARGO",
+            };
+            for (int r = 0; r < OrderGrid.Rows; r++)
+                for (int c = 0; c < OrderGrid.Columns; c++)
+                    Assert.Equal(want[r * 4 + c], OrderGrid.At(r, c, false).Label);
+            Assert.Equal(new[] { "OFFENSE", "MOVE", "DEFENSE", "SUPPORT" }, OrderGrid.RowLabels);
+        }
+
+        [Fact]
+        public void HelosSwapScoutAndTheSupportRow()
+        {
+            // The user's answer 2026-09-24: SWEEP -> SCOUT, SUPPORT -> TAKE OFF · RESCUE · LAND · CARGO.
+            Assert.Equal("SCOUT", OrderGrid.At(0, 3, true).Label);
+            Assert.Equal(new[] { "TAKE OFF", "RESCUE", "LAND", "CARGO" },
+                new[] { OrderGrid.At(3, 0, true).Label, OrderGrid.At(3, 1, true).Label, OrderGrid.At(3, 2, true).Label, OrderGrid.At(3, 3, true).Label });
+            Assert.Equal("ORBIT", OrderGrid.At(1, 1, true).Label);
+        }
+
+        [Fact]
+        public void PointAndTargetOrdersArmTheirMapMode()
+        {
+            Assert.Equal(MapMode.Attack, OrderGrid.At(0, 0, false).Map);
+            Assert.Equal(GridInput.Target, OrderGrid.At(0, 0, false).Input);
+            Assert.Equal(MapMode.Move, OrderGrid.At(1, 0, false).Map);
+            Assert.Equal(MapMode.Orbit, OrderGrid.At(1, 1, false).Map);
+            Assert.Equal(MapMode.Hold, OrderGrid.At(1, 3, false).Map);
+            Assert.Equal(MapMode.Land, OrderGrid.At(3, 2, false).Map);
+            Assert.Equal(MapMode.Cargo, OrderGrid.At(3, 3, false).Map);
+            Assert.Equal(GridInput.Now, OrderGrid.At(0, 1, false).Input);
+            Assert.Equal(MapMode.Off, OrderGrid.At(2, 1, false).Map);
+        }
+
+        [Fact]
+        public void UnbuiltOrdersSayWhyAndAreNeverPressable()
+        {
+            // CAP, SWEEP (A1) and ECM (A2) are live: no jet cell waits any more.
+            for (int r = 0; r < OrderGrid.Rows; r++)
+                for (int col = 0; col < OrderGrid.Columns; col++)
+                    Assert.True(OrderGrid.At(r, col, false).Built, OrderGrid.At(r, col, false).Label);
+            foreach (var (r, c) in new (int, int)[0])
+            {
+                GridCell cell = OrderGrid.At(r, c, false);
+                Assert.False(cell.Built);
+                Assert.Equal(cell.Pending, OrderGrid.Why(cell, true, 3, true));
+            }
+        }
+
+        [Fact]
+        public void WhyNamesTheBlocker()
+        {
+            GridCell engage = OrderGrid.At(0, 2, false), detach = OrderGrid.At(2, 3, false);
+            Assert.Null(OrderGrid.Why(engage, true, 3, false));
+            Assert.Equal("Orders are host only for now", OrderGrid.Why(engage, false, 3, false));
+            Assert.Equal("No wingmen: call or recruit some first", OrderGrid.Why(engage, true, 0, false));
+            Assert.Equal("Select the wingmen to detach", OrderGrid.Why(detach, true, 3, false));
+            Assert.Null(OrderGrid.Why(detach, true, 3, true));
+        }
+
+        [Fact]
+        public void IdsAreUniqueAndTipsNeverEmpty()
+        {
+            var seen = new HashSet<string>();
+            foreach (bool helos in new[] { false, true })
+                for (int r = 0; r < 4; r++)
+                    for (int c = 0; c < 4; c++)
+                    {
+                        GridCell cell = OrderGrid.At(r, c, helos);
+                        Assert.StartsWith("tac.orders.", cell.Id);
+                        Assert.False(string.IsNullOrEmpty(cell.Tip));
+                        seen.Add(cell.Id);
+                    }
+            Assert.Equal(19, seen.Count);   // 16 jet cells + SCOUT, TAKE OFF, RESCUE
+        }
+
+        [Fact]
+        public void HereExistsForOrbitAndHoldOnly()
+        {
+            Assert.True(OrderGrid.HasHere(GridOrder.Orbit));
+            Assert.True(OrderGrid.HasHere(GridOrder.Hold));
+            Assert.False(OrderGrid.HasHere(GridOrder.Move));
+            Assert.False(OrderGrid.HasHere(GridOrder.Attack));
+        }
+
+        [Fact]
+        public void BreakReadsDisengageSoTheReactRowOwnsTheBreaks()
+        {
+            // Spec bezel v2 §1: the grid's BREAK is DISENGAGE; BRK L and BRK R are maneuvers. The id stays for scenarios.
+            GridCell c = OrderGrid.At(2, 0, false);
+            Assert.Equal("DISENGAGE", c.Label);
+            Assert.Equal("tac.orders.break", c.Id);
+        }
+
+        [Fact]
+        public void EachRowCarriesItsCategoryRail()
+        {
+            Assert.Equal(new[] { "danger", "info", "warn", "live" },
+                new[] { OrderGrid.RowRail(0), OrderGrid.RowRail(1), OrderGrid.RowRail(2), OrderGrid.RowRail(3) });
+            Assert.Equal("armed", OrderGrid.ReactRail);
+        }
+
+        [Fact]
+        public void TheReactRowFliesTheFiveManeuvers()
+        {
+            Assert.Equal("REACT", OrderGrid.ReactLabel);
+            Assert.Equal(5, OrderGrid.React.Length);
+            Assert.Equal(new[] { "BRK L", "BRK R", "PULL UP", "SPLIT", "BEAM" }, System.Array.ConvertAll(OrderGrid.React, c => c.Label));
+            Assert.Equal(new[] { "tac.react.brkl", "tac.react.brkr", "tac.react.pullup", "tac.react.split", "tac.react.beam" },
+                System.Array.ConvertAll(OrderGrid.React, c => c.Id));
+            for (int i = 0; i < OrderGrid.React.Length; i++)
+            {
+                Assert.Equal(GridOrder.Maneuver, OrderGrid.React[i].Order);
+                Assert.Equal(i, OrderGrid.React[i].Number);
+                Assert.True(OrderGrid.React[i].Built);
+                Assert.Equal(MapMode.Off, OrderGrid.React[i].Map);
+            }
+        }
+    }
+}

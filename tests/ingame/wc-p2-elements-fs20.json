@@ -1,0 +1,30 @@
+{
+  "name": "wc-p2-elements-fs20",
+  "mods": ["wingcommand"],
+  "timeout_s": 300,
+  "ops": [
+    {"op": "spawn", "id": "lead", "type": "FS-20 Vortex", "at": {"map": [0, 0]}, "altitude": 3000, "speed": 200, "heading": 0},
+    {"op": "fly", "id": "lead", "program": [{"level": 280}]},
+    {"op": "wait", "seconds": 2},
+    {"op": "call", "method": "WingCommand.Automation.FormOn", "store": "form",
+     "args": {"lead": "lead", "count": 3, "shape": "finger-four-right", "spacing": "Standard"}},
+    {"op": "wait", "seconds": 45},
+    {"op": "call", "method": "WingCommand.Automation.Order", "store": "detach",
+     "args": {"kind": "Task", "task": "Orbit", "members": [3, 4], "offsets": [[8000, 3000]]}},
+    {"op": "wait", "seconds": 60},
+    {"op": "call", "method": "WingCommand.Automation.Elements", "store": "split"},
+    {"op": "call", "method": "WingCommand.Automation.Order", "store": "rejoin", "args": {"kind": "FormUp", "element": "B"}},
+    {"op": "wait", "seconds": 90},
+    {"op": "call", "method": "WingCommand.Automation.Elements", "store": "joined"},
+    {"op": "end"}
+  ],
+  "checks": [
+    {"check": "status_ok"},
+    {"check": "result_above", "path": "form.spawned", "min": 3},
+    {"check": "result_above", "path": "detach.accepted", "min": 1},
+    {"check": "result_above", "path": "split.b", "min": 2},
+    {"check": "result_above", "path": "rejoin.accepted", "min": 1},
+    {"check": "result_below", "path": "joined.in_use", "max": 1},
+    {"check": "result_above", "path": "joined.a", "min": 3}
+  ]
+}

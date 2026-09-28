@@ -1,0 +1,169 @@
+using System;
+
+namespace WingCommand
+{
+    /// <summary>The bezel's fixed geometry (spec bezel v2 §3): the synced <c>AvScreen</c> chrome with no metric row (data bar 62,
+    /// tabs 34, status 56 and three 8 px gaps) leaves H − 176 for a page; TACTICAL stacks a scope row, the flight list and ORDERS.</summary>
+    internal static class BezelLayout
+    {
+        public const float Chrome = 176f;
+        public const float ScopeRow = 26f, ScopeGap = 4f, HeaderPitch = 22f, RowPitch = 30f, Pager = 20f, SubTabs = 24f, SubGap = 6f;
+
+        // SUPPLY (spec WMC rebuild §SUPPLY; supply-ui §3 less its OVER-LIMIT row — the mode is a setting, user 2026-09-25):
+        // a scroll viewport over the steps and a DISPATCH pin on the body's floor.
+        public const float Content = 458f, VitalsRow = 20f;
+        public const float PinGap = 6f, PinCard = 48f, PinGap2 = 4f, RequisitionH = 30f, SupplyPin = PinGap + PinCard + PinGap2 + RequisitionH;
+        public const float StepHead = 18f, HeadGap = 4f, StepGap = 9f, PilotCard = 48f;
+        public const float TileH = 56f, TileGap = 6f, TileFooter = 26f;
+        public const int TileCols = 3, TileRows = 2;
+        public const float FitRow = 26f, FitDetail = 28f, BaseMode = 24f, BaseRowH = 28f, BasePitch = 30f;
+        public const int BaseRows = 3;
+        public const float InboundHead = 18f, InboundRow = 22f, AdoptBand = 26f;
+        public const int InboundMax = 4;
+        public const float PilotStep = StepHead + HeadGap + PilotCard + StepGap;
+        public const float AirframeStep = StepHead + HeadGap + TileRows * TileH + (TileRows - 1) * TileGap + HeadGap + TileFooter + StepGap;
+        public const float FitStep = StepHead + HeadGap + FitRow + HeadGap + FitDetail + StepGap;
+        public const float BaseStep = StepHead + HeadGap + BaseMode + HeadGap + BaseRows * BasePitch + HeadGap;
+        public const float SupplySteps = PilotStep + AirframeStep + FitStep + BaseStep;
+
+        // LOADOUT (spec WMC rebuild §LOADOUT; research loadout-ui §2): a scroll viewport over the build card, airframe tiles, the
+        // template bar and the HARDPOINTS table, and a LIVERY row pinned on the body's floor.
+        public const float LiveryRow = 30f, LiveryPin = 6f + LiveryRow, CardH = 84f, BlockGap = 10f, SectionHead = 22f, LoadoutTileH = 44f;
+        public const float LoadoutTiles = 2f * LoadoutTileH + TileGap, TemplateBar = 26f, TemplatePick = 242f, TemplateBtn = 64f, DeleteGap = 16f;
+        public const float HardpointsTop = CardH + BlockGap + SectionHead + HeadGap + LoadoutTiles + BlockGap + TemplateBar + BlockGap;
+        public const float ColumnHead = 16f, HardpointHead = SectionHead + HeadGap + ColumnHead, HpRowH = 42f, HpPitch = 44f, HpPager = 26f;
+        public const int HpRowsMin = 4, HpRowsMax = 8;
+        public const float ColStation = 8f, ColStationW = 164f, ColStore = 176f, ColStoreW = 172f, ColMass = 352f, ColMassW = 48f;
+        public const float ColVerb = 404f, ColVerbW = 54f;
+        public const float PopupRowPitch = 32f, PopupPad = 8f;
+        public const int PopupMaxRows = 7;
+
+        // WING (spec WMC rebuild §WING; research squadron-wing-tab §2): the roster, its footer, the dossier and PERKS in a scroll viewport,
+        // the AIRFRAME ASSIGNMENT bar pinned on the floor.
+        public const float WingPinGap = 6f, AssignBar = 56f, WingPin = WingPinGap + AssignBar, SquadHead = 18f, PilotRowH = 30f, PilotPitch = 32f;
+        public const float RosterFoot = 26f, DossierH = 120f, PerkCardH = 48f, PerkGap = 6f, PerksBlock = 18f + 4f + 48f + 6f + 48f, DossierGap = 8f;
+        public const float WingFixed = SquadHead + HeadGap + HeadGap + RosterFoot + DossierGap + DossierH + DossierGap + PerksBlock;
+        public const int MinPilotRows = 4, MaxPilotRows = 8;
+
+        public static float Body(float panelHeight) => panelHeight - Chrome;
+
+        /// <summary>FORM's plan view: as big as the body leaves after the controls (about 300 px), 136 to 220 px square.</summary>
+        public static float FormPreview(float body) => Math.Max(136f, Math.Min(220f, body - 300f));
+
+        // TACTICAL (spec bezel v2 §5; critic §14.1): scope, list at its reserve, cue, DOCTRINE, the grid and REACT sit at fixed
+        // places; alerts, the situation and RECENT scroll below.
+        public const float ListGap = 4f, Cue = 24f, CueGap = 4f, DoctrineHead = 24f, DoctrineRow = 24f, DoctrineGap = 4f;
+        public const int DoctrineRows = 4;
+        public const float GridCell = 24f, GridPitch = 26f, GridGap = 6f, RecentHead = 20f, RecentPitch = 20f, KvPitch = 20f, AlertPitch = 20f;
+        public const int RecentMax = 12;
+
+        /// <summary>The list's height with every wingman in its own element (the tallest it gets), so nothing below it moves.</summary>
+        public static float ListReserve(int maxWingmen)
+        {
+            int n = maxWingmen < 1 ? 1 : maxWingmen;
+            int heads = n < ElementRoster.MaxElements ? n : ElementRoster.MaxElements;
+            return heads * HeaderPitch + n * RowPitch;
+        }
+
+        public static float DoctrineBlock(bool open) => DoctrineHead + (open ? DoctrineRows * DoctrineRow : 0f) + DoctrineGap;
+
+        public const float GridBlock = (OrderGrid.Rows + 1) * GridPitch + GridGap;
+
+        /// <summary>From the body's top to the first scrolled line: scope, list, cue, DOCTRINE and the grid with REACT.</summary>
+        public static float TacticalFixed(int maxWingmen, bool doctrineOpen) =>
+            ScopeRow + ScopeGap + ListReserve(maxWingmen) + ListGap + Cue + CueGap + DoctrineBlock(doctrineOpen) + GridBlock;
+
+        /// <summary>The least of the situation scroll a page keeps under the grid.</summary>
+        public const float MinTail = 40f;
+
+        /// <summary>Open DOCTRINE would push the grid past the body (a short dock): its rows swap in where the grid was instead, and
+        /// HIDE brings the grid back — nothing moves off the page (review U1-U2).</summary>
+        public static bool DoctrineSwaps(float body, int maxWingmen) => TacticalFixed(maxWingmen, true) + MinTail > body;
+
+        /// <summary>DOCTRINE starts open when, open, the page still has room for the situation (120 px) under the grid.</summary>
+        public static bool DoctrineOpenByDefault(float body, int maxWingmen) => TacticalFixed(maxWingmen, true) + 120f <= body;
+
+        /// <summary>RECENT rows in <paramref name="free"/> px under its head; hidden (0) when fewer than two fit.</summary>
+        public static int RecentRows(float free)
+        {
+            int n = (int)Math.Floor((free - RecentHead) / RecentPitch);
+            return n < 2 ? 0 : n > RecentMax ? RecentMax : n;
+        }
+
+        public static float WingView(float body) => body - WingPin;
+
+        /// <summary>Roster rows per page: as many as a tall dock shows with the dossier and PERKS (8), at least 4.</summary>
+        public static int PilotRows(float body)
+        {
+            int n = (int)Math.Floor((WingView(body) - WingFixed) / PilotPitch);
+            return n < MinPilotRows ? MinPilotRows : n > MaxPilotRows ? MaxPilotRows : n;
+        }
+
+        public static float WingContent(int rows) => WingFixed + rows * PilotPitch;
+
+        public static float PerkCardW(float content) => (content - PerkGap) / 2f;
+
+        /// <summary>LOADOUT's scroll viewport: the body less the pinned LIVERY row.</summary>
+        public static float LoadoutView(float body) => body - LiveryPin;
+
+        /// <summary>Hardpoint rows per page: as many as the tall dock shows without scrolling (6), at least 4.</summary>
+        public static int HardpointRows(float body)
+        {
+            int n = (int)Math.Floor((LoadoutView(body) - HardpointsTop - HardpointHead - (HpPager + HeadGap)) / HpPitch);
+            return n < HpRowsMin ? HpRowsMin : n > HpRowsMax ? HpRowsMax : n;
+        }
+
+        public static float LoadoutContent(int rows, bool paged) => HardpointsTop + HardpointHead + rows * HpPitch + (paged ? HpPager + HeadGap : 0f);
+
+        /// <summary>The toolkit popup's height for <paramref name="entries"/> rows (seven at most: it pages beyond).</summary>
+        public static float PopupHeight(int entries) =>
+            PopupRowPitch * (entries <= 0 ? 1 : entries > PopupMaxRows ? PopupMaxRows : entries) + PopupPad;
+
+        /// <summary>Where a popup for a row goes, as a depth from the body's top: below the row when it fits, else above, else after
+        /// scrolling the row up (<paramref name="scroll"/> &gt; 0, at most <paramref name="maxScroll"/>) so it fits below, else after
+        /// scrolling it down (<paramref name="scroll"/> &lt; 0, at most <paramref name="backScroll"/>: the page's offset) so it fits
+        /// above — never over its row and never past the body (the page layer sits under the chrome). A last resort, when nothing fits,
+        /// keeps it in the body.</summary>
+        public static float PopupPlace(float rowDepth, float rowH, float popupH, float bodyH, float maxScroll, out float scroll,
+            float backScroll = 0f)
+        {
+            scroll = 0f;
+            if (rowDepth + rowH + popupH <= bodyH) return rowDepth + rowH;
+            if (rowDepth - popupH >= 0f) return rowDepth - popupH;
+            float need = rowDepth + rowH + popupH - bodyH;
+            if (need <= maxScroll && rowH + popupH <= bodyH)
+            {
+                scroll = need;
+                return rowDepth - need + rowH;
+            }
+            // Review R5: a short page cannot scroll a middle row far enough up; scrolled back, the row sits under the popup instead.
+            float back = popupH - rowDepth;
+            if (back <= backScroll && popupH + rowH <= bodyH)
+            {
+                scroll = -back;
+                return 0f;
+            }
+            float room = bodyH - (rowDepth + rowH) >= rowDepth ? rowDepth + rowH : rowDepth - popupH;
+            return Math.Max(0f, Math.Min(room, bodyH - popupH));
+        }
+
+        /// <summary>SUPPLY's scroll viewport: the body less the DISPATCH pin.</summary>
+        public static float SupplyView(float body) => body - SupplyPin;
+
+        /// <summary>INBOUND rows drawn (the last says "+n MORE" beyond <see cref="InboundMax"/>).</summary>
+        public static int InboundRows(int inbound) => inbound <= 0 ? 0 : inbound > InboundMax ? InboundMax : inbound;
+
+        public static float InboundBlock(int inbound)
+        {
+            int rows = InboundRows(inbound);
+            return rows == 0 ? 0f : InboundHead + HeadGap + rows * InboundRow + StepGap;
+        }
+
+        public static float AdoptBlock(bool adopt) => adopt ? AdoptBand + StepGap : 0f;
+
+        /// <summary>SUPPLY's scroll content: INBOUND and ADOPT when they show, then the four steps.</summary>
+        public static float SupplyContent(int inbound, bool adopt) => InboundBlock(inbound) + AdoptBlock(adopt) + SupplySteps;
+
+        public static float TileWidth(float content) => (content - (TileCols - 1) * TileGap) / TileCols;
+    }
+}
