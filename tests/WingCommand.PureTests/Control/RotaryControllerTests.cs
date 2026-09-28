@@ -147,15 +147,30 @@ namespace WingCommand.PureTests
         }
 
         [Fact]
-        public void TrimStaysWithinItsRangeWhenTheAircraftDoesNotRespond()
+        public void TrimStaysBelowItsCeilingWhenTheAircraftDoesNotRespond()
         {
             AirframeProfile p = Utility();
             var c = new RotaryController();
             var climb = new GuidanceCommand { VelCmd = new Vec3(0f, 50f, 0f), Accel = new Vec3(0f, p.VerticalAccelMax, 0f) };
             Run(c, climb, Hover(), p, 60f);
             ControlOutput back = Run(c, default, Hover(), p, 2f);
-            Assert.True(back.Throttle <= (1f + RotaryController.TrimRange) * p.HoverCollective + 1e-3f,
-                $"collective {back.Throttle:0.00} once the command ended");
+            Assert.True(back.Throttle <= RotaryController.TrimMax(p) + 1e-3f, $"collective {back.Throttle:0.00} once the command ended");
+        }
+
+        [Fact]
+        public void AHelicopterThatCannotClimbOutOfGroundEffectRaisesItsTrimPastHalfAgainItsHover()
+        {
+            // Night-2 sim (SAH-46, mountain field): the game's hover throttle 0.35 put the trim's ceiling at 0.53 — collective 0.69
+            // held it at 6-15 m in ground effect for 40 s, never climbing out, until the watchdog moved it. The native autopilot
+            // goes to full collective; the trim may rise to TrimCeiling when the climb does not come.
+            AirframeProfile p = AirframeProfile.Derive(new ProfileInputs
+            {
+                UnitName = "SAH-46", Class = AirframeClass.Rotary, MaxSpeed = 100f, GLimit = 3f, MaxRadius = 8f, HoverCollective = 0.35f,
+            });
+            var c = new RotaryController();
+            var climb = new GuidanceCommand { VelCmd = new Vec3(0f, 5f, 0f), Accel = new Vec3(0f, p.VerticalAccelMax, 0f) };
+            ControlOutput o = Run(c, climb, Hover(), p, 20f);
+            Assert.True(o.Throttle > 0.9f, $"collective {o.Throttle:0.00} after 20 s asking to climb");
         }
 
         [Fact]

@@ -59,6 +59,8 @@ namespace WingCommand
         /// <summary>A helicopter still not up this long after starting its lift-off is moved out of its hangar, once (night-1 sim runs:
         /// a UH-90 hovered pinned under a roof for five minutes).</summary>
         public static float LiftOffStuckSeconds = 40f;
+        /// <summary>Above this (m), a lift-off that stopped climbing clear of its hangar is airborne: it hands over, never moved.</summary>
+        public static float LiftOffAirborneHeight = 2f;
         public static float ClimbOutHeight = 150f, ClimbOutSeconds = 30f, ClimbOutAboveRunway = 300f, ClimbOutSpeedFactor = 1.3f;
         /// <summary>The takeoff roll rotates from <see cref="RotateFraction"/> × the takeoff speed toward
         /// <see cref="RotatePitchDeg"/> nose-up (pitch stick <see cref="RotateGain"/> per degree short), as the game's own
@@ -805,7 +807,11 @@ namespace WingCommand
                 liftOffBest = progress;
                 liftOffProgressAt = time;
             }
-            if (!liftOffMoved && !float.IsNaN(liftOffProgressAt) && time - liftOffProgressAt > LiftOffStuckSeconds && s.RadarAlt < LiftOffHeight - 3f)
+            bool stuck = !float.IsNaN(liftOffProgressAt) && time - liftOffProgressAt > LiftOffStuckSeconds && s.RadarAlt < LiftOffHeight - 3f;
+            // Night-2 sim (SAH-46, mountains): off the ground and clear of its hangar, a lift-off that stopped climbing hands over to
+            // flight — moving it from the air onto the ground lost all three.
+            bool handOver = stuck && outside && s.RadarAlt >= LiftOffAirborneHeight;
+            if (!liftOffMoved && stuck && !handOver)
             {
                 liftOffMoved = true;
                 exitedHangar = true;
@@ -827,7 +833,7 @@ namespace WingCommand
             };
             GuidanceCommand g = pipeline.Guide(intent, s, p);
             ControlOutput o = pipeline.Step(g, s, new LimitContext { FloorY = float.NaN, Aggression = 0.3f }, p, dt);
-            if (outside && s.RadarAlt >= LiftOffHeight - 3f)
+            if (handOver || (outside && s.RadarAlt >= LiftOffHeight - 3f))
             {
                 Log(events, time, slot, WingEventKind.Airborne);
                 Finish(time, events, slot);

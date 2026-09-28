@@ -30,6 +30,9 @@ namespace WingCommand
     {
         public static float AttitudeGain = 2.5f, RateMaxDps = 60f, YawGain = 1.5f, YawRateMaxDps = 30f;
         public static float TrimTau = 3f, CollectiveKi = 0.05f, CollectiveSlew = 1f, TrimRange = 0.5f;
+        /// <summary>The trim may always rise this far (night-2 sim: a SAH-46 on a mountain field needed more than 1.5× the game's
+        /// hover throttle and hung in ground effect; the native autopilot goes to full collective).</summary>
+        public static float TrimCeiling = 0.9f;
         public static float AuxNeutral = 0.5f, TiltSlewDps = 30f;
         public static float RpmFloor = 0.975f, GovernorGain = 10f, CeilingMin = 0.2f;
         public static float VerticalShortfall = 1f, TiltYieldRate = 0.2f, TiltRecoverRate = 0.05f, MinTiltScale = 0.4f;
@@ -50,6 +53,9 @@ namespace WingCommand
         public float CollectiveMax = 1f;
         /// <summary>The collective trim (the hover estimate the loop has learned).</summary>
         public float Trim => integrator;
+
+        /// <summary>The highest the trim may go: half again the hover estimate, and at least <see cref="TrimCeiling"/>.</summary>
+        public static float TrimMax(AirframeProfile p) => Math.Max((1f + TrimRange) * p.HoverCollective, TrimCeiling);
 
         public ControlOutput Step(in GuidanceCommand g, in AircraftState s, AirframeProfile p, float dt)
         {
@@ -103,7 +109,7 @@ namespace WingCommand
             float error = g.VelCmd.Y - s.Vel.Y;
             float cos = Scalar.Clamp(s.Up.Y, 0.7f, 1f);
             float raw = integrator * (Scalar.G + g.Accel.Y) / (Scalar.G * cos);
-            float trimMax = (1f + TrimRange) * p.HoverCollective;
+            float trimMax = TrimMax(p);
             bool atCeiling = raw >= ceiling - 1e-3f;
             if (!(atCeiling && error > 0f) && !(raw <= 0f && error < 0f))
                 integrator = Scalar.Clamp(integrator + CollectiveKi * error * dt, (1f - TrimRange) * p.HoverCollective, trimMax);
@@ -132,8 +138,7 @@ namespace WingCommand
         {
             Seed(p);
             collective = Scalar.Clamp01(applied.Throttle);
-            integrator = Scalar.Clamp(collective * Scalar.Clamp(s.Up.Y, 0.7f, 1f),
-                (1f - TrimRange) * p.HoverCollective, (1f + TrimRange) * p.HoverCollective);
+            integrator = Scalar.Clamp(collective * Scalar.Clamp(s.Up.Y, 0.7f, 1f), (1f - TrimRange) * p.HoverCollective, TrimMax(p));
             trimF = trimR = 0f;
             pitchTarget = s.PitchDeg;
             rollTarget = s.BankDeg;

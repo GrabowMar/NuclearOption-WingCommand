@@ -281,6 +281,36 @@ namespace WingCommand.FlightSim
         }
 
         [Fact]
+        public void AnAirborneLiftOffThatStopsClimbingHandsOverAndIsNeverMoved()
+        {
+            // Night-2 sim (SAH-46, mountain field): out of their hangars and hovering at 6-15 m, three helicopters gained no metre for
+            // 40 s and the watchdog moved them — a teleport from the air onto the ground, and all three were lost. One that is off the
+            // ground and clear of its hangar hands over to flight (the climb goes on with the flight's terrain floor) instead.
+            var field = new FieldTraffic(Field(), 0, false);
+            AirframeProfile p = SimProfiles.Utility();
+            Pose spawn = field.Field.Hangars[0].Spawn;
+            var pilot = new GroundPilot(0, field, AirframeClass.Rotary, spawn, -1);
+            IFlightPipeline pipe = FlightStack.NewPipeline(AirframeClass.Rotary);
+            var events = new WingEventRing();
+            int moves = 0;
+            for (float t = 0f; t < 90f && pilot.Phase != GroundPhase.Done; t += Dt)
+            {
+                // Up to 12 m in the first 10 s, then hanging there.
+                float up = Math.Min(12f, t * 1.2f);
+                var s = new AircraftState
+                {
+                    Pos = spawn.Pos + Vec3.Up * up, Fwd = spawn.Fwd, Up = Vec3.Up, Right = Vec3.Cross(Vec3.Up, spawn.Fwd),
+                    RadarAlt = up, RotorRpm = 1f, Dt = Dt,
+                };
+                field.Step(Dt);
+                pilot.Step(s, p, pipe, t, Dt, events, 0);
+                if (pilot.TakeRelocation(out _)) moves++;
+            }
+            Assert.Equal(0, moves);
+            Assert.Equal(GroundPhase.Done, pilot.Phase);
+        }
+
+        [Fact]
         public void AVtolStandingTallAboveItsHangarFloorAsksToClimbNotToDescend()
         {
             // Night-2 sim (VL-49 at Boscali North): the spawn pose is the hangar floor, but the aircraft's root stands its spawn

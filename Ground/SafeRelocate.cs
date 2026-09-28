@@ -1,4 +1,5 @@
 using System.Collections;
+using System.Collections.Generic;
 using System.Reflection;
 using HarmonyLib;
 using UnityEngine;
@@ -15,6 +16,22 @@ namespace WingCommand
 
         private static readonly FieldInfo ImpactPrev = AccessTools.Field(typeof(ImpactDetector), "velocityPrev");
         private static readonly FieldInfo FuelPrev = AccessTools.Field(typeof(FuelTank), "velocityPrev");
+        // Night-2 sim (SAH-46): a helicopter's soft-body rotor keeps its mass points in world space and takes their velocity and
+        // acceleration from how far they moved — a 10 m move read as 600 m/s and flung the aircraft (54 m/s, 46 rad/s, lost). They
+        // move with the aircraft, their velocities turned with it (the rotor keeps spinning), their pending force dropped
+        // (SoftBodyRotor.massPoints / anchoredMassPoints, MassPoint.position / velocity / velocityPrev / frameForces, read in the decompile).
+        private static readonly System.Type MassPointType = AccessTools.Inner(typeof(SoftBodyRotor), "MassPoint");
+        private static readonly FieldInfo[] RotorPoints =
+        {
+            AccessTools.Field(typeof(SoftBodyRotor), "massPoints"), AccessTools.Field(typeof(SoftBodyRotor), "anchoredMassPoints"),
+        };
+        private static readonly FieldInfo PointPosition = MassPointType != null ? AccessTools.Field(MassPointType, "position") : null;
+        private static readonly FieldInfo[] PointRates = MassPointType == null ? new FieldInfo[0] : new[]
+        {
+            AccessTools.Field(MassPointType, "velocity"), AccessTools.Field(MassPointType, "velocityPrev"),
+        };
+        private static readonly FieldInfo PointForces = MassPointType != null ? AccessTools.Field(MassPointType, "frameForces") : null;
+        private static readonly HashSet<object> movedPoints = new HashSet<object>();
 
         /// <remarks>It is put down as the game's spawner puts an aircraft down: its spawn offset above the ground, turned to the
         /// pose and at its rest attitude (definition.restRotation). Night-2 sim: an attitude kept from the move (a helicopter caught
@@ -60,6 +77,7 @@ namespace WingCommand
                 rb.angularVelocity = Vector3.zero;
             }
             root.SetPositionAndRotation(target, turn * root.rotation);
+            MoveRotors(a, origin, target, turn);
             a.velocityPrev = Vector3.zero;
             if (a.pilots != null)
                 foreach (Pilot p in a.pilots)
@@ -71,6 +89,28 @@ namespace WingCommand
                 foreach (FuelTank f in a.GetComponentsInChildren<FuelTank>(true)) FuelPrev.SetValue(f, Vector3.zero);
             Plugin.Logger.LogWarning($"[Ground] relocated {a.definition.unitName} to ({to.Pos.X:0}, {to.Pos.Z:0}) after it was stuck");
             WingRuntime.Instance?.StartCoroutine(Watch(a, target));
+        }
+
+        /// <summary>Every soft-body rotor's mass points go where the aircraft went, turned with it (each point once: the arrays share
+        /// them).</summary>
+        private static void MoveRotors(Aircraft a, Vector3 origin, Vector3 target, Quaternion turn)
+        {
+            if (PointPosition == null) return;
+            movedPoints.Clear();
+            foreach (SoftBodyRotor rotor in a.GetComponentsInChildren<SoftBodyRotor>(true))
+                foreach (FieldInfo field in RotorPoints)
+                {
+                    if (field == null || !(field.GetValue(rotor) is System.Array points)) continue;
+                    foreach (object point in points)
+                    {
+                        if (point == null || !movedPoints.Add(point)) continue;
+                        PointPosition.SetValue(point, target + turn * ((Vector3)PointPosition.GetValue(point) - origin));
+                        foreach (FieldInfo rate in PointRates)
+                            if (rate != null) rate.SetValue(point, turn * (Vector3)rate.GetValue(point));
+                        PointForces?.SetValue(point, Vector3.zero);
+                    }
+                }
+            movedPoints.Clear();
         }
 
         /// <summary>How the aircraft moves in the physics frames after a relocation (dev evidence, a few log lines).</summary>
