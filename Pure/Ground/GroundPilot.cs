@@ -106,6 +106,8 @@ namespace WingCommand
         // and collision bias for it (night-1 sim runs, 2026-09-28).
         private float lane;
         private bool liftOffMoved;
+        /// <summary>The lift-off's best progress so far (height plus distance from the spawn) and when it last grew a metre.</summary>
+        private float liftOffBest = float.NaN, liftOffProgressAt = float.NaN;
         private LimitContext air;
         private bool hasAir;
         private int restands;
@@ -198,6 +200,7 @@ namespace WingCommand
             liftoffTime = settleStart = rollStart = float.NaN;
             lane = 0f;
             liftOffMoved = false;
+            liftOffBest = liftOffProgressAt = float.NaN;
             Phase = GroundPhase.Parked;
             phaseStart = float.NaN;
         }
@@ -791,8 +794,15 @@ namespace WingCommand
             if (roof && !exitedHangar && (s.Pos - exit).Horizontal.Length < HoverExitReached) exitedHangar = true;
             bool outside = !roof || exitedHangar;
             Vec3 over = roof ? exit : spawn.Pos;
-            // Still not up long after starting: moved out of the hangar, on the ground at its exit, once.
-            if (!liftOffMoved && !float.IsNaN(phaseStart) && time - phaseStart > LiftOffStuckSeconds && s.RadarAlt < LiftOffHeight - 3f)
+            // Night-2 sim (UH-90): a lift-off still gaining ground — sliding out of its hangar, then climbing — is not stuck, however
+            // slow; only one that has gained no metre (up or away from its spawn) for the whole time is moved out, once.
+            float progress = Math.Max(0f, s.RadarAlt) + (s.Pos - spawn.Pos).Horizontal.Length;
+            if (float.IsNaN(liftOffBest) || progress > liftOffBest + 1f)
+            {
+                liftOffBest = progress;
+                liftOffProgressAt = time;
+            }
+            if (!liftOffMoved && !float.IsNaN(liftOffProgressAt) && time - liftOffProgressAt > LiftOffStuckSeconds && s.RadarAlt < LiftOffHeight - 3f)
             {
                 liftOffMoved = true;
                 exitedHangar = true;

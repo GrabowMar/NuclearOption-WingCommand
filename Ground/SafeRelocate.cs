@@ -15,7 +15,9 @@ namespace WingCommand
         private static readonly FieldInfo ImpactPrev = AccessTools.Field(typeof(ImpactDetector), "velocityPrev");
         private static readonly FieldInfo FuelPrev = AccessTools.Field(typeof(FuelTank), "velocityPrev");
 
-        public static void Move(Aircraft a, Pose to)
+        /// <param name="level">Put it down level, not only turned (a helicopter caught climbing nose-down would strike its rotor and
+        /// tail: night-2 sim, two UH-90s). A jet on the ground keeps its sitting pitch.</param>
+        public static void Move(Aircraft a, Pose to, bool level = false)
         {
             Transform root = a.transform;
             // The pose is on the ground; the aircraft's root stands its spawn offset above it (as a hangar spawn does). The
@@ -30,8 +32,10 @@ namespace WingCommand
             target.y = SurfacePick.Closest(target.y, ys, n, SurfaceProbeHeight);
             target += Vector3.up * (a.definition != null ? a.definition.spawnOffset.y : 0f);
             Vector3 fwd = to.Fwd.Horizontal.SqrLength > 1e-4f ? to.Fwd.Horizontal.Normalized.ToUnity() : root.forward;
-            Quaternion turn = Quaternion.LookRotation(fwd, Vector3.up) * Quaternion.Inverse(Quaternion.LookRotation(
-                Vector3.ProjectOnPlane(root.forward, Vector3.up).normalized, Vector3.up));
+            Quaternion turn = level
+                ? Quaternion.LookRotation(fwd, Vector3.up) * Quaternion.Inverse(root.rotation)
+                : Quaternion.LookRotation(fwd, Vector3.up) * Quaternion.Inverse(Quaternion.LookRotation(
+                    Vector3.ProjectOnPlane(root.forward, Vector3.up).normalized, Vector3.up));
             Vector3 origin = root.position;
             foreach (Rigidbody rb in a.GetComponentsInChildren<Rigidbody>())
             {

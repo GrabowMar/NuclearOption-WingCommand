@@ -251,6 +251,36 @@ namespace WingCommand.FlightSim
         }
 
         [Fact]
+        public void AHelicopterStillClimbingOutOfItsHangarIsNeverMoved()
+        {
+            // Night-2 sim (UH-90 at Boscali North): two helicopters slid out of their hangars for 30 s, left them and were climbing
+            // through 4-9 m when the 40 s timer moved them to the exit on the ground — both were destroyed. Only a lift-off that has
+            // stopped making progress (no metre gained toward the exit or upward for the whole time) is moved.
+            var field = new FieldTraffic(Field(), 0, false);
+            AirframeProfile p = SimProfiles.Utility();
+            Pose spawn = field.Field.Hangars[0].Spawn;
+            var pilot = new GroundPilot(0, field, AirframeClass.Rotary, spawn, 0) { RoofOverhead = true };
+            IFlightPipeline pipe = FlightStack.NewPipeline(AirframeClass.Rotary);
+            var events = new WingEventRing();
+            Vec3 fwd = spawn.Fwd.Horizontal.Normalized;
+            int moves = 0;
+            for (float t = 0f; t < 90f; t += Dt)
+            {
+                // Slides out at 0.4 m/s for 40 s (on the ground), then climbs at 0.5 m/s: slow, but never stuck.
+                float out1 = Math.Min(t, 40f) * 0.4f, up = Math.Max(0f, t - 40f) * 0.5f;
+                var s = new AircraftState
+                {
+                    Pos = spawn.Pos + fwd * out1 + Vec3.Up * up, Fwd = spawn.Fwd, Up = Vec3.Up, Right = Vec3.Cross(Vec3.Up, spawn.Fwd),
+                    RadarAlt = up, RotorRpm = 1f, Dt = Dt,
+                };
+                field.Step(Dt);
+                pilot.Step(s, p, pipe, t, Dt, events, 0);
+                if (pilot.TakeRelocation(out _)) moves++;
+            }
+            Assert.Equal(0, moves);
+        }
+
+        [Fact]
         public void ABlockedTaxiwayIsReroutedAroundWithoutARelocation()
         {
             // T3: a wreck appears on the parallel taxiway south of the apron while the wing taxis.

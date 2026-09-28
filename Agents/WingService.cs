@@ -327,7 +327,7 @@ namespace WingCommand
             m.GroundOutput = o;
             ControlWriter.Fly(m.Aircraft, o, m.Profile.Class);
             LogLongStop(m);
-            if (m.Ground.TakeRelocation(out Pose to)) SafeRelocate.Move(m.Aircraft, to);
+            if (m.Ground.TakeRelocation(out Pose to)) SafeRelocate.Move(m.Aircraft, to, m.Profile.Class != AirframeClass.FixedWing);
             if (m.Ground.Phase == GroundPhase.Aborted)
             {
                 Release(m, "could not take off");
