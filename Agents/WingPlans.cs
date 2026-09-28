@@ -71,6 +71,14 @@ namespace WingCommand
             Completed = false;
         }
 
+        /// <summary>A finished or aborted run is forgotten (the plan is being edited).</summary>
+        public void ForgetRun()
+        {
+            if (Running) return;
+            Runner = null;
+            Completed = false;
+        }
+
         /// <summary>Loads <paramref name="plan"/> in place of the one drawn (a running one is aborted).</summary>
         public void Load(WingPlan plan)
         {

@@ -439,7 +439,8 @@ namespace WingCommand
             foreach (WingMember m in Members)
             {
                 if (float.IsNaN(m.JamUntil)) continue;
-                if (missionTime >= m.JamUntil || m.Released || !m.Alive)
+                // Review A2: not once it is down or landing (the lit cell could not switch it off then).
+                if (missionTime >= m.JamUntil || m.Released || !m.Alive || m.OnGround || (m.Recovery != null && m.Recovery.Phase >= RecoveryPhase.Landing))
                 {
                     m.JamUntil = float.NaN;
                     continue;

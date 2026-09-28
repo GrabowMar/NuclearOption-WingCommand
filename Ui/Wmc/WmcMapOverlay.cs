@@ -177,6 +177,12 @@ namespace WingCommand
                             RouteView.Task(PlanCompile.Order(p, e).Task, 0, new Vec3(x0, 0f, z0), speed, legs, rings);
                         string tag = PlanRules.Name(e, i) + " " + PlanWords.Kind(p.Kind) + " · " + PlanWords.Start(plan, e, i)
                                      + (st == StepState.Held ? " · HELD" : st == StepState.Blocked ? " · BLOCKED" : "");
+                        // Review P2: a SWEEP draws its circuit unlabelled and an orbit where the element already is draws no leg: a
+                        // zero-length leg at the step's point carries its anchor.
+                        bool anchored = false;
+                        for (int j = first; j < legs.Count; j++) anchored |= legs[j].Number > 0;
+                        if (!anchored && p.Points != null && p.Points.Length > 0)
+                            legs.Add(new RouteLeg { FromX = p.Points[0].X, FromZ = p.Points[0].Z, ToX = p.Points[0].X, ToZ = p.Points[0].Z, Number = 1 });
                         float alpha = selected || st == StepState.Running ? 1f : 0.55f;
                         for (int j = first; j < legs.Count; j++)
                         {

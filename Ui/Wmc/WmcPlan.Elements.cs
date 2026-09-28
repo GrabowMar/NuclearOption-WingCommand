@@ -66,6 +66,7 @@ namespace WingCommand
         private int selLane, selStep = -1, lanesShown, version;
         private long elementsKey = long.MinValue;
         private float toolRadius;
+        private string toolWhy;
         private bool routeOpen;
 
         /// <summary>Lanes showing now (automation; was the element cards).</summary>
@@ -263,7 +264,7 @@ namespace WingCommand
 
             // The key: plan edits, runner states, selection, tool, where the elements are (to the 100 m) and the dock.
             long key = version * 7919L + (running ? 1 : 0) + (plans != null && plans.Completed ? 2 : 0) + selLane * 13L + selStep * 131L
-                       + (long)c.Map.Tool * 1543L + (long)toolRadius + c.Count * 17L;
+                       + (long)c.Map.Tool * 1543L + (long)toolRadius + c.Count * 17L + c.Selection.Count * 257L;
             for (int e = 0; e < WingPlan.Lanes && plan != null; e++)
             {
                 key = key * 31L + (w != null && w.Roster.InUse(e) ? 1 : 0);
@@ -376,9 +377,10 @@ namespace WingCommand
                 tools[i].SetEnabled(editable && (ToolOrder[i] != PlanTool.Replace || selStep >= 0));
             }
             string why = running ? "ABORT the plan to change it." : c.Client ? "The host plans this mission." : null;
-            if (why != null)
-                for (int i = 0; i < tools.Length; i++)
-                    if (i != 6) tools[i].WithTooltip(why);
+            if (why == toolWhy) return;
+            toolWhy = why;
+            for (int i = 0; i < tools.Length; i++)
+                if (i != 6) tools[i].WithTooltip(why ?? ToolTips[i]);
         }
 
         private void RefreshCue(WmcContext c, WingPlan plan, bool running)
@@ -496,6 +498,9 @@ namespace WingCommand
 
         private void Changed()
         {
+            // Review P2: editing after a run shows the plan as drawn, not the old run's states.
+            WingPlans plans = Plans;
+            if (plans != null && !plans.Running && plans.Runner != null) plans.ForgetRun();
             version++;
             elementsKey = long.MinValue;
             if (last != null) RefreshElements(last);
