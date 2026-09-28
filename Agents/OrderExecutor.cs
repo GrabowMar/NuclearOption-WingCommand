@@ -13,6 +13,15 @@ namespace WingCommand
 
         public static OrderResult Execute(WingOrder o)
         {
+            // Spec WMC rebuild §PLAN: the player's order to a plan element holds its lane (read before a detach moves anyone).
+            int lanes = o.Source == OrderSource.Player && PlanRules.Holds(o.Kind) ? WingPlans.Instance?.Reaches(o.Scope) ?? 0 : 0;
+            OrderResult r = Apply(o);
+            if (r.Accepted && lanes != 0) WingPlans.Instance.PlayerOrdered(lanes);
+            return r;
+        }
+
+        private static OrderResult Apply(WingOrder o)
+        {
             string invalid = OrderValidator.Check(o);
             if (invalid != null) return OrderResult.Refused("Wing cannot: " + invalid);
             WingService w = WingService.Instance;

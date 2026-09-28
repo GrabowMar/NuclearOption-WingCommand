@@ -345,6 +345,22 @@ namespace WingCommand
                 error = "unknown task kind";
                 return null;
             }
+            Waypoint[] points = Points(args, wing, out error);
+            if (points == null) return null;
+            var task = new WingTask { Kind = kind, Points = points };
+            if (args.TryGetValue("alt", out object alt)) task.Altitude = Convert.ToSingle(alt, CultureInfo.InvariantCulture);
+            if (args.TryGetValue("speed", out object speed)) task.Speed = Convert.ToSingle(speed, CultureInfo.InvariantCulture);
+            if (args.TryGetValue("seconds", out object seconds)) task.Seconds = Convert.ToSingle(seconds, CultureInfo.InvariantCulture);
+            task.Loop = args.TryGetValue("loop", out object loop) && loop is bool l && l;
+            task.Left = args.TryGetValue("left", out object left) && left is bool lf && lf;
+            return task;
+        }
+
+        /// <summary>Points from <c>offsets</c> ([forward, right] metres from the lead, along its heading); none without
+        /// offsets. Null with the error when there are offsets but no lead.</summary>
+        private static Waypoint[] Points(Dictionary<string, object> args, WingService wing, out string error)
+        {
+            error = null;
             var points = new List<Waypoint>();
             if (args.TryGetValue("offsets", out object raw) && raw is List<object> list)
             {
@@ -366,13 +382,82 @@ namespace WingCommand
                         points.Add(Waypoint.At(p.X, p.Z));
                     }
             }
-            var task = new WingTask { Kind = kind, Points = points.ToArray() };
-            if (args.TryGetValue("alt", out object alt)) task.Altitude = Convert.ToSingle(alt, CultureInfo.InvariantCulture);
-            if (args.TryGetValue("speed", out object speed)) task.Speed = Convert.ToSingle(speed, CultureInfo.InvariantCulture);
-            if (args.TryGetValue("seconds", out object seconds)) task.Seconds = Convert.ToSingle(seconds, CultureInfo.InvariantCulture);
-            task.Loop = args.TryGetValue("loop", out object loop) && loop is bool l && l;
-            task.Left = args.TryGetValue("left", out object left) && left is bool lf && lf;
-            return task;
+            return points.ToArray();
+        }
+
+        /// <summary>Spec WMC rebuild §PLAN: the wing plan. <c>action</c>:
+        /// <list type="bullet">
+        /// <item><c>add</c>: a step at the end of <c>lane</c> (A-D): <c>kind</c> (a PlanKind), <c>offsets</c> as the Task hook,
+        /// <c>alt</c>, <c>radius</c>, <c>target</c> (a scenario unit), <c>start</c> (Now, Exec, TPlus, After) with <c>delay</c>
+        /// and <c>after</c> ("A1"), <c>end</c> (Arrive, Time, Bingo, Winchester, TargetsDown) with <c>seconds</c>.</item>
+        /// <item><c>execute</c>, <c>abort</c>, <c>clear</c>; <c>resume</c>, <c>retry</c>, <c>skip</c> for <c>lane</c>.</item>
+        /// </list>
+        /// Every action answers the plan's state: running, completed, sent, steps, errors, and per lane <c>a_step</c>
+        /// (1-based, 0 when through), <c>a_state</c> and <c>a_why</c>.</summary>
+        public static Dictionary<string, object> Plan(Dictionary<string, object> args)
+        {
+            WingService wing = WingService.Instance;
+            WingPlans plans = WingPlans.Instance;
+            if (wing == null || plans == null) return Fail("Plan", "the wing is not active");
+            string action = (Text(args, "action") ?? "state").ToLowerInvariant();
+            string laneText = Text(args, "lane");
+            int lane = string.IsNullOrEmpty(laneText) ? 0 : char.ToUpperInvariant(laneText[0]) - 'A';
+            if (lane < 0 || lane >= WingPlan.Lanes) return Fail("Plan", "no such lane");
+            List<string> errors = null;
+            switch (action)
+            {
+                case "add":
+                {
+                    if (!Enum.TryParse(Text(args, "kind") ?? "", true, out PlanKind kind)) return Fail("Plan", "unknown step kind");
+                    Waypoint[] points = Points(args, wing, out string error);
+                    if (points == null) return Fail("Plan", error);
+                    float alt = Float(args, "alt", float.NaN);
+                    for (int i = 0; i < points.Length; i++) points[i].Altitude = alt;
+                    var step = new PlanStep { Kind = kind, Points = points, Radius = Float(args, "radius", 0f), Delay = Float(args, "delay", 0f),
+                        EndSeconds = Float(args, "seconds", 0f) };
+                    if (Arg(args, "targetUnit") is Unit target) step.Targets = new[] { target.persistentID.Id };
+                    if (Text(args, "start") is string start && !Enum.TryParse(start, true, out step.Start)) return Fail("Plan", "unknown start");
+                    if (Text(args, "end") is string end && !Enum.TryParse(end, true, out step.End)) return Fail("Plan", "unknown end");
+                    if (Text(args, "after") is string after && after.Length >= 2)
+                    {
+                        step.AfterLane = char.ToUpperInvariant(after[0]) - 'A';
+                        step.AfterStep = int.Parse(after.Substring(1), CultureInfo.InvariantCulture) - 1;
+                    }
+                    if (!plans.Plan.Add(lane, step)) return Fail("Plan", "that lane is full");
+                    break;
+                }
+                case "execute": errors = plans.Execute(); break;
+                case "abort": plans.Abort(); break;
+                case "clear": plans.Clear(); break;
+                case "resume": plans.Runner?.Resume(lane); break;
+                case "retry": plans.Runner?.Retry(lane); break;
+                case "skip": plans.Runner?.Skip(lane, wing.MissionTime); break;
+                case "state": break;
+                default: return Fail("Plan", "unknown action");
+            }
+            var result = new Dictionary<string, object>
+            {
+                { "ok", errors == null }, { "running", plans.Running ? 1 : 0 }, { "completed", plans.Completed ? 1 : 0 }, { "sent", plans.Sent },
+                { "errors", errors == null ? "" : string.Join("; ", errors) },
+            };
+            int steps = 0, held = 0, blocked = 0;
+            for (int l = 0; l < WingPlan.Lanes; l++)
+            {
+                steps += plans.Plan.Steps[l].Count;
+                string key = ElementRoster.Letter(l).ToLowerInvariant();
+                PlanRunner r = plans.Runner;
+                int s = r?.Current(l) ?? -1;
+                StepState st = s >= 0 ? r.State(l, s) : StepState.Done;
+                if (s >= 0 && st == StepState.Held) held++;
+                if (s >= 0 && st == StepState.Blocked) blocked++;
+                result[key + "_step"] = s + 1;
+                result[key + "_state"] = s >= 0 ? st.ToString() : "";
+                result[key + "_why"] = r?.Why(l) ?? "";
+            }
+            result["steps"] = steps;
+            result["held"] = held;
+            result["blocked"] = blocked;
+            return result;
         }
 
         /// <summary>Spec WMC program §3.2: one order through the executor. kind: an OrderKind name (Task takes the Task hook's

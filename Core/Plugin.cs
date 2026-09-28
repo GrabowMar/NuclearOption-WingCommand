@@ -63,6 +63,7 @@ namespace WingCommand
             var wing = new WingService();
             wing.RosterChanged += () => Interop.WingMembership.Publish(wing.Members);
             runtime.Register(wing);
+            runtime.Register(new WingPlans());
             runtime.Register(new RadioDirector());
             runtime.Register(new SpawnService());
             runtime.Register(new PlayerAutopilot());

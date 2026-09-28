@@ -10,3 +10,4 @@ wc-m5e-splash-fs20
 wc-m8-perf-8ship-fs20
 wc-a1-cap-fs20
 wc-a2-ecm-ew25
+wc-p2-plan-fs20

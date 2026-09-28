@@ -1,0 +1,333 @@
+{
+ "name": "wc-p2-plan-fs20",
+ "mods": [
+  "wingcommand"
+ ],
+ "timeout_s": 420,
+ "ops": [
+  {
+   "op": "spawn",
+   "id": "lead",
+   "type": "FS-20 Vortex",
+   "at": {
+    "map": [
+     0,
+     0
+    ]
+   },
+   "altitude": 3000,
+   "speed": 200,
+   "heading": 0
+  },
+  {
+   "op": "fly",
+   "id": "lead",
+   "program": [
+    {
+     "level": 5
+    },
+    {
+     "orbit": {
+      "bank": 25,
+      "seconds": 600
+     }
+    }
+   ]
+  },
+  {
+   "op": "wait",
+   "seconds": 2
+  },
+  {
+   "op": "call",
+   "method": "WingCommand.Automation.FormOn",
+   "store": "form",
+   "args": {
+    "lead": "lead",
+    "count": 3,
+    "shape": "finger-four-right",
+    "spacing": "Standard"
+   }
+  },
+  {
+   "op": "wait",
+   "seconds": 45
+  },
+  {
+   "op": "call",
+   "method": "WingCommand.Automation.Order",
+   "store": "split",
+   "args": {
+    "kind": "Task",
+    "task": "Move",
+    "members": [
+     3,
+     4
+    ],
+    "offsets": [
+     [
+      6000,
+      6000
+     ]
+    ]
+   }
+  },
+  {
+   "op": "wait",
+   "seconds": 5
+  },
+  {
+   "op": "call",
+   "method": "WingCommand.Automation.Plan",
+   "store": "a1",
+   "args": {
+    "action": "add",
+    "lane": "A",
+    "kind": "Move",
+    "offsets": [
+     [
+      10000,
+      -4000
+     ]
+    ]
+   }
+  },
+  {
+   "op": "call",
+   "method": "WingCommand.Automation.Plan",
+   "store": "a2",
+   "args": {
+    "action": "add",
+    "lane": "A",
+    "kind": "Orbit",
+    "offsets": [
+     [
+      10000,
+      -4000
+     ]
+    ],
+    "end": "Time",
+    "seconds": 90
+   }
+  },
+  {
+   "op": "call",
+   "method": "WingCommand.Automation.Plan",
+   "store": "a3",
+   "args": {
+    "action": "add",
+    "lane": "A",
+    "kind": "FormUp"
+   }
+  },
+  {
+   "op": "call",
+   "method": "WingCommand.Automation.Plan",
+   "store": "b1",
+   "args": {
+    "action": "add",
+    "lane": "B",
+    "kind": "Orbit",
+    "offsets": [
+     [
+      6000,
+      6000
+     ]
+    ],
+    "start": "After",
+    "after": "A1",
+    "end": "Time",
+    "seconds": 60
+   }
+  },
+  {
+   "op": "call",
+   "method": "WingCommand.Automation.Plan",
+   "store": "b2",
+   "args": {
+    "action": "add",
+    "lane": "B",
+    "kind": "FormUp"
+   }
+  },
+  {
+   "op": "call",
+   "method": "WingCommand.Automation.Plan",
+   "store": "exec",
+   "args": {
+    "action": "execute"
+   }
+  },
+  {
+   "op": "wait",
+   "seconds": 5
+  },
+  {
+   "op": "call",
+   "method": "WingCommand.Automation.Plan",
+   "store": "early",
+   "args": {}
+  },
+  {
+   "op": "wait",
+   "seconds": 85
+  },
+  {
+   "op": "call",
+   "method": "WingCommand.Automation.Plan",
+   "store": "mid",
+   "args": {}
+  },
+  {
+   "op": "capture",
+   "name": "plan-mid"
+  },
+  {
+   "op": "call",
+   "method": "WingCommand.Automation.Order",
+   "store": "player",
+   "args": {
+    "kind": "Task",
+    "task": "Orbit",
+    "element": "B",
+    "offsets": [
+     [
+      3000,
+      3000
+     ]
+    ]
+   }
+  },
+  {
+   "op": "wait",
+   "seconds": 3
+  },
+  {
+   "op": "call",
+   "method": "WingCommand.Automation.Plan",
+   "store": "held",
+   "args": {}
+  },
+  {
+   "op": "wait",
+   "seconds": 15
+  },
+  {
+   "op": "call",
+   "method": "WingCommand.Automation.Plan",
+   "store": "resumed",
+   "args": {
+    "action": "resume",
+    "lane": "B"
+   }
+  },
+  {
+   "op": "wait",
+   "seconds": 3
+  },
+  {
+   "op": "call",
+   "method": "WingCommand.Automation.Plan",
+   "store": "running",
+   "args": {}
+  },
+  {
+   "op": "wait",
+   "seconds": 120
+  },
+  {
+   "op": "call",
+   "method": "WingCommand.Automation.Plan",
+   "store": "done",
+   "args": {}
+  },
+  {
+   "op": "call",
+   "method": "WingCommand.Automation.Elements",
+   "store": "elements"
+  },
+  {
+   "op": "call",
+   "method": "WingCommand.Automation.Metrics",
+   "store": "wing"
+  },
+  {
+   "op": "end"
+  }
+ ],
+ "checks": [
+  {
+   "check": "status_ok"
+  },
+  {
+   "check": "result_above",
+   "path": "form.spawned",
+   "min": 3
+  },
+  {
+   "check": "result_above",
+   "path": "split.element",
+   "min": 1
+  },
+  {
+   "check": "result_above",
+   "path": "b2.steps",
+   "min": 5
+  },
+  {
+   "check": "result_above",
+   "path": "exec.running",
+   "min": 1
+  },
+  {
+   "check": "result_above",
+   "path": "early.sent",
+   "min": 1
+  },
+  {
+   "check": "result_above",
+   "path": "mid.a_step",
+   "min": 2
+  },
+  {
+   "check": "result_above",
+   "path": "mid.sent",
+   "min": 3
+  },
+  {
+   "check": "result_above",
+   "path": "held.held",
+   "min": 1
+  },
+  {
+   "check": "result_below",
+   "path": "running.held",
+   "max": 0
+  },
+  {
+   "check": "result_above",
+   "path": "running.sent",
+   "min": 4
+  },
+  {
+   "check": "result_above",
+   "path": "done.completed",
+   "min": 1
+  },
+  {
+   "check": "result_below",
+   "path": "done.blocked",
+   "max": 0
+  },
+  {
+   "check": "result_below",
+   "path": "elements.in_use",
+   "max": 1
+  },
+  {
+   "check": "result_above",
+   "path": "elements.a",
+   "min": 3
+  }
+ ]
+}
