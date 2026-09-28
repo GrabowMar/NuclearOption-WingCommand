@@ -549,7 +549,8 @@ namespace WingCommand.PureTests
             {
                 field.Step(Dt);
                 pilot.Step(s, Jet(), FlightStack.NewPipeline(AirframeClass.FixedWing), i * Dt, Dt, null, 0);
-                if (pilot.TakeRelocation(out Pose pose))
+                // Frozen, it later also sits still in its line-up and is put on its slot: only moves to the hold-short count here.
+                if (pilot.TakeRelocation(out Pose pose) && (pose.Pos - field.Graph.NodePos(field.Graph.HoldShort(0, false))).Length < 1f)
                 {
                     relocations++;
                     to = pose;
@@ -642,7 +643,8 @@ namespace WingCommand.PureTests
                 float t = i * Dt;
                 field.Step(Dt);
                 first.Step(sa, Jet(), pa, t, Dt, null, 0);
-                if (first.TakeRelocation(out _))
+                // The move to the hold-short (a frozen first member is later put on its line-up slot too).
+                if (first.TakeRelocation(out _) && float.IsNaN(firstAt))
                 {
                     firstAt = t;
                     field.Reservations.ReleaseAll(1);   // it lined up at once; its report still shows the old spot

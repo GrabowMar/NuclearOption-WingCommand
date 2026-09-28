@@ -108,6 +108,53 @@ namespace WingCommand.PureTests
         }
 
         [Fact]
+        public void ALineUpThatCannotMoveIsPutOnItsSlotInsteadOfGivenUp()
+        {
+            // Day-1 sims (refit FS-20, SFB-81): from a hold point behind and beside the runway, the line-up turn stuck at 85 %
+            // throttle for 80 s and the member was released after the line-up time ran out.
+            var field = new FieldTraffic(TestFields.Simple(), 0, false);
+            Pose spawn = field.Field.Hangars[0].Spawn;
+            var plant = new TestGroundPlant(spawn);
+            var pilot = new GroundPilot(1, field, AirframeClass.FixedWing, spawn, 0);
+            field.Departures.Expect(1, 1);
+            IFlightPipeline pipeline = FlightStack.NewPipeline(AirframeClass.FixedWing);
+            var events = new WingEventRing();
+            int i = 0;
+            for (; i < 300 * 30 && pilot.Phase != GroundPhase.LineUp; i++)
+            {
+                field.Step(Dt);
+                plant.Step(pilot.Step(plant.Read(Dt), Jet(), pipeline, i * Dt, Dt, events, 0), Dt);
+            }
+            Assert.Equal(GroundPhase.LineUp, pilot.Phase);
+            // Stuck: the aircraft no longer moves whatever it asks.
+            AircraftState stuck = plant.Read(Dt);
+            stuck.Vel = Vec3.Zero;
+            stuck.Tas = 0f;
+            Pose to = default;
+            bool moved = false;
+            for (int k = 0; k < 40 * 30 && !moved; k++, i++)
+            {
+                field.Step(Dt);
+                pilot.Step(stuck, Jet(), pipeline, i * Dt, Dt, events, 0);
+                moved = pilot.TakeRelocation(out to);
+            }
+            Assert.True(moved, $"still {pilot.Phase} after 40 s stuck");
+            Vec3 slot = LineupPlanner.Slot(field.Field.Runways[0], false, 0, 0, 1, 1);
+            Assert.True((to.Pos - slot).Horizontal.Length < 1f, $"put at {to.Pos}, slot {slot}");
+            Assert.True(Vec3.Dot(to.Fwd, field.Runway.Direction(false)) > 0.99f, "facing down the runway");
+            plant.Pos = to.Pos;
+            plant.Fwd = to.Fwd;
+            plant.Speed = 0f;
+            for (int k = 0; k < 30 * 30 && pilot.Phase == GroundPhase.LineUp; k++, i++)
+            {
+                field.Step(Dt);
+                plant.Step(pilot.Step(plant.Read(Dt), Jet(), pipeline, i * Dt, Dt, events, 0), Dt);
+            }
+            Assert.Equal(GroundPhase.Roll, pilot.Phase);
+            Assert.Equal(0, events.CountOf(WingEventKind.DepartureAborted));
+        }
+
+        [Fact]
         public void NoTowRoundWithAnotherAircraftWithinASpanOfTheStand()
         {
             // Review (day 1): turning in place with a neighbour inside the swept circle interpenetrates them; it drives out instead

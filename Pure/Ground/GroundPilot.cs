@@ -75,6 +75,9 @@ namespace WingCommand
         public static float RotateFraction = 0.7f, RotatePitchDeg = 10f, RotateGain = 0.25f, RotateForceFactor = 1.1f, WheelsOffHeight = 1.5f;
         public static float RerouteCost = 1e4f, OppositeCost = 1000f, RelocateClearRadius = 30f, RelocateCancelMetres = 10f, RelocateSpanMargin = 10f;
         public static float AlignSettleSeconds = 5f, LineUpSeconds = 120f, RollSeconds = 60f;
+        /// <summary>A line-up that has not moved for this long is put on its slot (day-1 sims: the turn from a hold point behind
+        /// and beside the runway stuck at 85 % throttle, and the member was released when the line-up time ran out).</summary>
+        public static float LineUpStuckSeconds = 20f;
         public static float PullAsideMetres = 45f, PullAsideSeconds = 90f;
         public static float SpoolRpm = 0.9f, SpoolCollective = 0.05f, SpoolSeconds = 30f;
 
@@ -96,6 +99,8 @@ namespace WingCommand
         private readonly FieldTraffic traffic;
         private readonly AirframeClass cls;
         private Pose spawn, lastPose;
+        private float lineUpStuckSince = float.NaN;
+        private bool lineUpMoved;
         private int hangar, startNode, standNode = -1;
         private bool arriving, pulledAside;
         private int asideFor = -1, asideNode = -1, asideBack = -1;
@@ -680,8 +685,8 @@ namespace WingCommand
             Vec3 lane = LineupPlanner.Slot(r, traffic.Reverse, row, column, traffic.Departures.Abreast, traffic.Departures.Rows);
             SetPath(new[] { pos, threshold + dir * ThresholdEntry, lane - dir * LineupRunIn, lane, lane + dir * AlignTail });
             lineupSlotIndex = 3;
-            taxiReleased = clearedThreshold = false;
-            settleStart = float.NaN;
+            taxiReleased = clearedThreshold = lineUpMoved = false;
+            settleStart = lineUpStuckSince = float.NaN;
             Enter(GroundPhase.LineUp, time);
         }
 
@@ -702,6 +707,13 @@ namespace WingCommand
             float toSlot = cum[lineupSlotIndex] - along;
             float speed = Vec3.Dot(s.Vel, s.Fwd.Horizontal.Normalized);
             Vec3 dir = traffic.Runway.Direction(traffic.Reverse);
+            if (!lineUpMoved && toSlot > LineupTolerance && Math.Abs(speed) < StoppedSpeed)
+            {
+                if (float.IsNaN(lineUpStuckSince)) lineUpStuckSince = time;
+                else if (time - lineUpStuckSince > LineUpStuckSeconds && PutOnSlot(s, p, dir, time, events, slot))
+                    return new ControlOutput { Brake = 1f };
+            }
+            else lineUpStuckSince = float.NaN;
             float heading = Math.Abs(Scalar.Wrap180(Vec3.HeadingDeg(s.Fwd) - Vec3.HeadingDeg(dir)));
             bool stoppedOnSlot = toSlot < LineupTolerance && speed < StoppedSpeed;
             if (!stoppedOnSlot) settleStart = float.NaN;
@@ -719,6 +731,28 @@ namespace WingCommand
             }
             GroundCommand c = GroundGuidance.Pursue(path, ref progress, s, toSlot);
             return controller.Step(c, s, p, dt);
+        }
+
+        /// <summary>Once per line-up: the engine moves the aircraft onto its slot facing down the runway (the group's runway is
+        /// locked for it), unless someone is within its span of the slot.</summary>
+        private bool PutOnSlot(in AircraftState s, AirframeProfile p, Vec3 dir, float time, WingEventRing events, int slot)
+        {
+            Vec3 lane = path[lineupSlotIndex];
+            if (traffic.Occupied(lane, Math.Max(RelocateClearRadius, p.SpanM + RelocateSpanMargin), Owner)) return false;
+            lineUpMoved = true;
+            if (!taxiReleased)
+            {
+                taxiReleased = true;
+                traffic.Reservations.ReleaseAll(Owner);
+            }
+            relocation = new Pose(lane, dir);
+            relocationPending = true;
+            traffic.NoteRelocation(Owner, lane);
+            SetPath(new[] { lane, lane + dir * AlignTail });
+            lineupSlotIndex = 0;
+            lineUpStuckSince = float.NaN;
+            Log(events, time, slot, WingEventKind.Relocated);
+            return true;
         }
 
         private ControlOutput Roll(in AircraftState s, AirframeProfile p, IFlightPipeline pipeline, float time, WingEventRing events, int slot)
