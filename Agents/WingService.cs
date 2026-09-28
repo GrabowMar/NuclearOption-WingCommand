@@ -327,6 +327,7 @@ namespace WingCommand
             m.GroundOutput = o;
             ControlWriter.Fly(m.Aircraft, o, m.Profile.Class);
             LogLongStop(m);
+            TraceRoll(m);
             if (m.Ground.TakeRelocation(out Pose to)) SafeRelocate.Move(m.Aircraft, to);
             if (m.Ground.Phase == GroundPhase.Aborted)
             {
@@ -1043,6 +1044,19 @@ namespace WingCommand
 
         /// <summary>Diagnostics: a member taxiing that has stood still for <see cref="LongStopSeconds"/> is logged once
         /// per stop with its phase, position and what holds it.</summary>
+        /// <summary>Day-1 sim (refit): a jet on its take-off roll swung 75 deg off the runway at full throttle and was lost. Once a
+        /// second while rolling: speed, heading and centreline error, and what the stick and pedals ask.</summary>
+        private void TraceRoll(WingMember m)
+        {
+            if (m.Ground.Phase != GroundPhase.Roll || missionTime < m.RollTraceAt) return;
+            m.RollTraceAt = missionTime + 1f;
+            m.Ground.RunwayError(m.Last.Pos, m.Last.Fwd, out float heading, out float lateral);
+            var inputs = m.Aircraft.GetInputs();
+            Plugin.Logger.LogInfo($"[Ground] roll t={missionTime:0.0} #{m.Number} v {m.Last.Speed:0.0} heading {heading:0.0} off centreline {lateral:0.0} m, " +
+                                  $"yaw {inputs.yaw:0.00} pitch {inputs.pitch:0.00} throttle {m.Last.Throttle:0.00} brake {inputs.brake:0.00}, " +
+                                  $"radar {m.Last.RadarAlt:0.0}, bank {m.Last.BankDeg:0.0}, yaw rate {m.Last.R * 57.2958f:0.0} deg/s");
+        }
+
         private void LogLongStop(WingMember m)
         {
             GroundPhase phase = m.Ground.Phase;

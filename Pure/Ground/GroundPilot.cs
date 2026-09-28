@@ -409,6 +409,16 @@ namespace WingCommand
             spawn = relocation;
         }
 
+        /// <summary>How far round from the departure runway's heading <paramref name="fwd"/> points (deg, + right) and how far off its
+        /// centreline <paramref name="pos"/> is (m, + right): the take-off roll's dev trace.</summary>
+        public void RunwayError(Vec3 pos, Vec3 fwd, out float headingDeg, out float lateral)
+        {
+            RunwaySample r = traffic.Runway;
+            Vec3 d = r.Direction(traffic.Reverse);
+            headingDeg = Scalar.Wrap180(Vec3.HeadingDeg(fwd) - Vec3.HeadingDeg(d));
+            lateral = Vec3.Dot(pos - (traffic.Reverse ? r.End : r.Start), Vec3.Cross(Vec3.Up, d).Normalized);
+        }
+
         /// <summary>A pending relocation (the engine moves the aircraft there, once).</summary>
         public bool TakeRelocation(out Pose pose)
         {
