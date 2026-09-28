@@ -15,8 +15,8 @@ namespace WingCommand
     /// the map on it.</summary>
     internal sealed partial class WmcPlan : IWmcPage
     {
-        public const int SubElements = 0, SubRoute = 1, SubLog = 2;
-        private static readonly string[] SubLabels = { "ELEMENTS", "ROUTE", "LOG" };
+        public const int SubElements = 0, SubRoute = 1, SubTimeline = 2, SubLog = 3;
+        private static readonly string[] SubLabels = { "ELEMENTS", "ROUTE", "TIMELINE", "LOG" };
         private const float KeyWidth = 64f, ToggleH = 22f, TogglePitch = 24f;
 
         private readonly Dictionary<string, AvButton> ids;
@@ -42,7 +42,8 @@ namespace WingCommand
 
         public string Hint => sub == SubRoute
             ? "DRAW, then right-click the map to add points; SEND flies them. NAV flies your own aircraft along them."
-            : sub == SubLog ? "A line with an aircraft opens it on INSPECT and centres the map on it."
+            : sub == SubLog ? "A line with an aircraft opens it on INSPECT and centres the map on it; DEBRIEF sums up the sortie."
+            : sub == SubTimeline ? "PLAN is frozen at EXECUTE; REAL is when each step went out and was done. A ? ends where it cannot be known."
             : "Pick a tool and right-click the map to add steps to the selected lane; EXECUTE runs the plan.";
 
         public string Alert => null;
@@ -56,7 +57,8 @@ namespace WingCommand
             subTabs = WmcKit.SubTabs(page, new Rect(x, body.y, width, BezelLayout.SubTabs), SubLabels, "plan.sub.", ids, ShowSub);
             subTabs[SubElements].WithTooltip("Every element's task and legs, with SELECT, SKIP, FORM UP and FIT.");
             subTabs[SubRoute].WithTooltip("The scope's quick route, and your own autopilot with NAV.");
-            subTabs[SubLog].WithTooltip("The wing's events and radio lines.");
+            subTabs[SubTimeline].WithTooltip("The plan against what happened, lane by lane.");
+            subTabs[SubLog].WithTooltip("The wing's events and radio lines, and the sortie's DEBRIEF.");
             float top = BezelLayout.SubTabs + BezelLayout.SubGap;
 
             RectTransform route = SubRoot(SubRoute, "PlanRoute");
@@ -66,6 +68,7 @@ namespace WingCommand
             routeScroll.SetViewport(new Rect(x, body.y - rt, width + 8f, Mathf.Max(40f, body.height - rt)));
 
             BuildElements(SubRoot(SubElements, "PlanElements"), body.y - top, body.height - top);
+            BuildTimeline(SubRoot(SubTimeline, "PlanTimeline"), body.y - top, body.height - top);
             BuildLog(SubRoot(SubLog, "PlanLog"), body.y - top, body.height - top);
             popup = new AvKit.Popup(page, shellBody.width);
             ShowSub(SubElements);
@@ -123,6 +126,7 @@ namespace WingCommand
         public void Shown(WmcContext c)
         {
             elementsKey = long.MinValue;
+            timelineNext = 0f;
             logFilled = false;
             for (int i = 0; i < logKeys.Length; i++) logKeys[i] = long.MinValue;
         }
@@ -137,6 +141,7 @@ namespace WingCommand
             }
             else if (sub == SubElements) RefreshElements(c);
             else if (sub == SubLog) RefreshLog(c);
+            else if (sub == SubTimeline) RefreshTimeline(c);
         }
 
         private static RectTransform Container(RectTransform parent, string name, Rect r)

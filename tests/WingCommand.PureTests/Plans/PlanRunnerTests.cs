@@ -186,6 +186,25 @@ namespace WingCommand.PureTests
         }
 
         [Fact]
+        public void EachStepKeepsWhenItStartedAndEndedForTheTimeline()
+        {
+            var plan = new WingPlan();
+            plan.Steps[0].Add(Step(PlanKind.Move));
+            plan.Steps[0].Add(new PlanStep { Kind = PlanKind.Orbit, Points = new[] { P }, End = PlanEnd.Time, EndSeconds = 30f });
+            var r = new PlanRunner(plan);
+            r.Execute(100f);
+            Assert.True(float.IsNaN(r.StartedAt(0, 0)));
+            Tick(r, 100f, Facts());
+            LaneFacts[] f = Facts();
+            f[0].TaskDone = true;
+            Tick(r, 160f, f);
+            Assert.Equal(0f, r.StartedAt(0, 0));        // seconds after EXECUTE
+            Assert.Equal(60f, r.EndedAt(0, 0));
+            Assert.Equal(60f, r.StartedAt(0, 1));
+            Assert.True(float.IsNaN(r.EndedAt(0, 1)));
+        }
+
+        [Fact]
         public void AbortStopsEveryLane()
         {
             var plan = new WingPlan();

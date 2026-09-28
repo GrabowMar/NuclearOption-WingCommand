@@ -25,6 +25,9 @@ namespace WingCommand
         /// <summary>The last run went through every step.</summary>
         public bool Completed { get; private set; }
         public int Sent { get; private set; }
+        /// <summary>Each step's planned start and end, s after EXECUTE, frozen then (the TIMELINE's PLAN; NaN: open).</summary>
+        public readonly float[,] PlannedStart = new float[WingPlan.Lanes, WingPlan.MaxSteps], PlannedEnd = new float[WingPlan.Lanes, WingPlan.MaxSteps];
+        private readonly float[] fromX = new float[WingPlan.Lanes], fromZ = new float[WingPlan.Lanes], fromSpeed = new float[WingPlan.Lanes];
 
         private readonly LaneFacts[] facts = new LaneFacts[WingPlan.Lanes];
         private readonly List<PlanEmit> emits = new List<PlanEmit>(WingPlan.Lanes);
@@ -95,6 +98,9 @@ namespace WingCommand
                 laneElement[l] = l;
                 Capture(w, l, l);
             }
+            for (int l = 0; l < WingPlan.Lanes; l++)
+                if (!WmcPlan.From(w, l, out fromX[l], out fromZ[l], out fromSpeed[l])) fromSpeed[l] = 150f;
+            PlanTimeline.Planned(Plan, fromX, fromZ, fromSpeed, PlannedStart, PlannedEnd);
             Runner.Execute(w.MissionTime);
             lastTick = float.NegativeInfinity;
             Plugin.Logger.LogInfo($"[Plan] {Plan.Name} executed");

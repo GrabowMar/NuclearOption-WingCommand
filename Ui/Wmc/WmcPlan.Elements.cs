@@ -56,7 +56,9 @@ namespace WingCommand
         private readonly List<RouteRing> cardRings = new List<RouteRing>();
         private WmcScroll elementsScroll;
         private TMP_Text barText, cueText, cueRadiusText, delayText, timeText, altText, radiusText;
-        private AvButton execute, clearPlan, cueMinus, cuePlus, cueDone, cueCancel, addElement;
+        private AvButton execute, clearPlan, plansButton, cueMinus, cuePlus, cueDone, cueCancel, addElement;
+        private readonly List<AvKit.PopupEntry> planEntries = new List<AvKit.PopupEntry>(PlanStore.Max + 2);
+        private readonly List<int> planIndices = new List<int>(PlanStore.Max);
         private AvButton delayMinus, delayPlus, timeMinus, timePlus, altMinus, altPlus, radiusMinus, radiusPlus, replace, up, down, delete;
         private readonly AvButton[] tools = new AvButton[ToolOrder.Length];
         private RectTransform editor;
@@ -74,12 +76,15 @@ namespace WingCommand
         private void BuildElements(RectTransform root, float top, float height)
         {
             float y = top;
-            barText = WmcKit.Text(root, new Rect(x, y, width - 170f, Row - 2f), "row-name");
-            clearPlan = AvStyled.Button(root, new Rect(x + width - 166f, y, 60f, Row - 2f), "NEW", "btn", NewPlan);
-            clearPlan.WithTooltip("A new, empty plan (asks first).");
+            plansButton = AvStyled.Button(root, new Rect(x, y, 70f, Row - 2f), "PLANS ›", "btn", OpenPlans);
+            plansButton.WithTooltip("This theatre's saved plans, NEW and DELETE.");
+            barText = WmcKit.Text(root, new Rect(x + 74f, y, width - 74f - 166f, Row - 2f), "row-name");
+            clearPlan = AvStyled.Button(root, new Rect(x + width - 162f, y, 56f, Row - 2f), "SAVE", "btn", SavePlan);
+            clearPlan.WithTooltip("Keep this plan for this theatre (targets are picked again after loading).");
             execute = AvStyled.Button(root, new Rect(x + width - 102f, y, 102f, Row - 2f), "EXECUTE", "btn", ExecuteOrAbort);
             execute.WithTooltip("Run the plan: every lane's steps in turn. While it runs: ABORT (asks first).");
-            ids["plan.bar.new"] = clearPlan;
+            ids["plan.bar.plans"] = plansButton;
+            ids["plan.bar.save"] = clearPlan;
             ids["plan.bar.execute"] = execute;
             y -= Row + 2f;
             float tw = (width - 4f * WmcUi.Gap) / 5f;
@@ -279,9 +284,9 @@ namespace WingCommand
             }
             WmcKit.Set(barText, PlanWords.Bar(plan, running, plans.Completed));
             execute.SetText(running ? (planGate.IsArmed("abort", Time.unscaledTime) ? "ABORT?" : "ABORT") : "EXECUTE");
-            clearPlan.SetText(planGate.IsArmed("new", Time.unscaledTime) ? "NEW?" : "NEW");
             execute.SetEnabled(w != null && (running || Count(plan) > 0));
-            clearPlan.SetEnabled(editable && Count(plan) > 0);
+            clearPlan.SetEnabled(w != null && Count(plan) > 0);
+            plansButton.SetEnabled(w != null && !running);
             RefreshCue(c, plan, running);
 
             float y = 0f;
@@ -497,6 +502,88 @@ namespace WingCommand
         }
 
         // ---- The bar, tools and cue ----
+
+        /// <summary>PLANS ›: NEW, this theatre's saved plans (a pick loads a copy), DELETE for the one loaded.</summary>
+        private void OpenPlans()
+        {
+            WingPlans plans = Plans;
+            if (plans == null || plans.Running) return;
+            PlanStore store = WmcPlanFiles.Store;
+            planIndices.Clear();
+            planIndices.AddRange(store.For(WmcPlanFiles.Theatre));
+            planEntries.Clear();
+            planEntries.Add(new AvKit.PopupEntry(planGate.IsArmed("new", Time.unscaledTime) ? "NEW? (again)" : "NEW PLAN",
+                Count(plans.Plan) > 0 ? "drops this one (asks first)" : "an empty plan", false));
+            int loaded = -1;
+            foreach (int i in planIndices)
+            {
+                SavedPlan sp = store.Plans[i];
+                if (sp.Name == plans.Plan.Name) loaded = i;
+                planEntries.Add(new AvKit.PopupEntry(sp.Name, Count(sp.Plan) + " STEPS", sp.Name == plans.Plan.Name));
+            }
+            if (loaded >= 0)
+                planEntries.Add(new AvKit.PopupEntry(planGate.IsArmed("drop" + loaded, Time.unscaledTime) ? "DELETE? (again)" : "DELETE " + plans.Plan.Name,
+                    "from the saved plans", false));
+            popup.Show(WmcKit.PopupArea(page, body, (RectTransform)plansButton.transform, planEntries.Count, elementsScroll), planEntries, PickPlan);
+        }
+
+        private void PickPlan(int k)
+        {
+            WingPlans plans = Plans;
+            if (plans == null || plans.Running) return;
+            if (k == 0)
+            {
+                NewPlan();
+                return;
+            }
+            PlanStore store = WmcPlanFiles.Store;
+            if (k - 1 < planIndices.Count)
+            {
+                WingPlan copy = store.Load(planIndices[k - 1]);
+                if (copy == null) return;
+                plans.Load(copy);
+                selLane = 0;
+                selStep = -1;
+                routeOpen = false;
+                last?.Map.Disarm();
+                WingToast.Show("Loaded " + copy.Name + ": pick ATTACK targets again with RE-PLACE");
+                Changed();
+                return;
+            }
+            // DELETE the loaded plan (asks first).
+            int index = -1;
+            foreach (int i in planIndices)
+                if (store.Plans[i].Name == plans.Plan.Name) index = i;
+            if (index < 0) return;
+            if (!planGate.Press("drop" + index, Time.unscaledTime))
+            {
+                WingToast.Show("DELETE again to drop " + store.Plans[index].Name);
+                return;
+            }
+            string name = store.Plans[index].Name;
+            store.Remove(index);
+            WmcPlanFiles.Save();
+            WingToast.Show(name + " deleted");
+        }
+
+        /// <summary>SAVE: this plan for this theatre (a first save names it PLAN n).</summary>
+        private void SavePlan()
+        {
+            WingPlans plans = Plans;
+            if (plans == null) return;
+            WingPlan plan = plans.Plan;
+            if (plan.Name == "PLAN") plan.Name = "";
+            if (!WmcPlanFiles.Store.Save(plan, WmcPlanFiles.Theatre, out string name))
+            {
+                if (plan.Name.Length == 0) plan.Name = "PLAN";
+                WingToast.Show(PlanStore.Max + " plans saved already: delete one from PLANS ›");
+                return;
+            }
+            plan.Name = name;
+            WmcPlanFiles.Save();
+            WingToast.Show("Saved " + name);
+            Changed();
+        }
 
         private void NewPlan()
         {

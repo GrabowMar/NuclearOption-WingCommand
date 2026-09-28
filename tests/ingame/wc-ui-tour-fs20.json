@@ -199,6 +199,25 @@
    }
   },
   {
+   "op": "call",
+   "method": "WingCommand.Automation.Wmc",
+   "store": "timeline",
+   "args": {
+    "tab": "PLAN",
+    "sub": "TIMELINE"
+   }
+  },
+  {
+   "op": "call",
+   "method": "WingCommand.Automation.Wmc",
+   "store": "debrief",
+   "args": {
+    "tab": "PLAN",
+    "sub": "LOG",
+    "press": "plan.log.debrief"
+   }
+  },
+  {
    "op": "wait",
    "seconds": 1
   },
@@ -289,6 +308,21 @@
    "check": "result_above",
    "path": "inspect.inspect_member",
    "min": 2
+  },
+  {
+   "check": "result_below",
+   "path": "timeline.overflow",
+   "max": 0
+  },
+  {
+   "check": "result_above",
+   "path": "debrief.pressed",
+   "min": 1
+  },
+  {
+   "check": "result_below",
+   "path": "debrief.overflow",
+   "max": 0
   }
  ]
 }

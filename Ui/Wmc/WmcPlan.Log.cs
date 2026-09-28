@@ -27,14 +27,15 @@ namespace WingCommand
         private int logElement = -1, logShown = -1;
         private bool logSelected;
         private long logStamp = long.MinValue;
-        private bool logFilled;
+        private bool logFilled, debrief;
+        private AvButton debriefButton;
 
         /// <summary>LOG lines showing now (automation).</summary>
         public int LogRowsShown { get; private set; }
 
         private void BuildLog(RectTransform root, float top, float height)
         {
-            float cw = (width - 70f - WmcUi.Gap * (LogChipLabels.Length - 1)) / LogChipLabels.Length;
+            float cw = (width - 140f - WmcUi.Gap * (LogChipLabels.Length - 1)) / LogChipLabels.Length;
             for (int i = 0; i < LogChipLabels.Length; i++)
             {
                 int k = i;
@@ -42,7 +43,10 @@ namespace WingCommand
                     () => PickLogFilter(k), AvButtonStyle.Toggle);
                 ids["plan.log.filter" + i] = logChipButtons[i];
             }
-            logCount = WmcKit.Text(root, new Rect(x + width - 66f, top, 66f, LogChips - 2f), "row-sub", TextAlignmentOptions.MidlineRight);
+            logCount = WmcKit.Text(root, new Rect(x + width - 136f, top, 66f, LogChips - 2f), "row-sub", TextAlignmentOptions.MidlineRight);
+            debriefButton = AvStyled.Button(root, new Rect(x + width - 66f, top, 66f, LogChips - 2f), "DEBRIEF", "btn", ToggleDebrief, AvButtonStyle.Toggle);
+            debriefButton.WithTooltip("This sortie in a few lines (kills, losses, tasks), then the last ones.");
+            ids["plan.log.debrief"] = debriefButton;
             float listTop = top - LogChips - 4f;
             logScroll = WmcScroll.Build(root, new Rect(x, listTop, width + 8f, height - LogChips - 4f), "PlanLogScroll");
             RectTransform s = logScroll.Content;
@@ -80,8 +84,59 @@ namespace WingCommand
             if (WingRows.IndexOf(last.Rows, last.Count, id) >= 0) WmcPanel.Instance?.Inspect(id);
         }
 
+        private void ToggleDebrief()
+        {
+            debrief = !debrief;
+            debriefButton.SetLatched(debrief);
+            logFilled = false;
+            for (int i = 0; i < logKeys.Length; i++) logKeys[i] = long.MinValue;
+            if (last != null) RefreshLog(last);
+        }
+
+        /// <summary>DEBRIEF: this sortie's lines, then the first line of each kept one (spec WMC rebuild §PLAN DEBRIEF).</summary>
+        private void RefreshDebrief()
+        {
+            DebriefService d = DebriefService.Instance;
+            SortieLog s = d?.Sortie;
+            long stamp = s == null ? 0 : ((long)(s.End - s.Start) / 10L) * 131L + s.Launched + s.Airborne * 3 + s.Landed * 7 + s.Lost * 11
+                                         + s.Kills * 13 + s.TasksDone * 17 + s.TasksFailed * 19 + s.TargetsDown * 23 + s.Relocated * 29 + s.Gcas * 31;
+            if (stamp == logStamp && logFilled) return;
+            logStamp = stamp;
+            logFilled = true;
+            int n = 0;
+            if (s != null)
+                foreach (string line in s.Lines())
+                    if (n < logLabels.Length) Line(n++, n == 1 ? "THIS " + line : "   " + line, true);
+            DebriefStore store = d?.Store;
+            for (int i = 0; store != null && i < store.Count && n < logLabels.Length; i++)
+                Line(n++, "EARLIER · " + store.Lines(i)[0], false);
+            LogRowsShown = n;
+            for (int i = n; i < logLabels.Length; i++)
+                if (logLineRoots[i].activeSelf) logLineRoots[i].SetActive(false);
+            logShown = -1;
+            logScroll.SetContentHeight(Mathf.Max(1, n) * LogRow);
+            WmcKit.Set(logCount, "");
+            if (logEmpty.gameObject.activeSelf != (n == 0)) logEmpty.gameObject.SetActive(n == 0);
+        }
+
+        private void Line(int i, string text, bool current)
+        {
+            if (!logLineRoots[i].activeSelf) logLineRoots[i].SetActive(true);
+            logIds[i] = 0u;
+            logKeys[i] = long.MinValue;
+            logHits[i].SetEnabled(false);
+            WmcUi.SetRail(logRails[i], current ? "ready" : "info");
+            logLabels[i].text = text;
+            logLabels[i].color = current ? AvTheme.TextPrimary : AvTheme.Dim;
+        }
+
         private void RefreshLog(WmcContext c)
         {
+            if (debrief)
+            {
+                RefreshDebrief();
+                return;
+            }
             WingEventRing events = c.Client ? null : c.Wing?.Events;
             RadioLog radio = RadioDirector.Instance?.Log;
             // Fill allocates while it describes events: only when something was logged, or the filter or the selection changed.

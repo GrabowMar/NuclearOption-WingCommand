@@ -30,6 +30,7 @@ namespace WingCommand
         private readonly WingPlan plan;
         private readonly StepState[,] state = new StepState[WingPlan.Lanes, WingPlan.MaxSteps];
         private readonly float[,] doneAt = new float[WingPlan.Lanes, WingPlan.MaxSteps];
+        private readonly float[,] startedAt = new float[WingPlan.Lanes, WingPlan.MaxSteps];
         private readonly int[] current = new int[WingPlan.Lanes];
         private readonly float[] startAt = new float[WingPlan.Lanes];
         private readonly bool[] resend = new bool[WingPlan.Lanes];
@@ -58,6 +59,12 @@ namespace WingCommand
 
         public StepState State(int lane, int step) => state[lane, step];
 
+        /// <summary>When the step first went out, s after EXECUTE (NaN: not yet) — the TIMELINE's actual.</summary>
+        public float StartedAt(int lane, int step) => startedAt[lane, step] - execAt;
+
+        /// <summary>When the step was done or passed over, s after EXECUTE (NaN: not yet).</summary>
+        public float EndedAt(int lane, int step) => doneAt[lane, step] - execAt;
+
         /// <summary>The lane's step on now (running, waiting, held or blocked); −1 once the lane is through.</summary>
         public int Current(int lane) => current[lane] < plan.Steps[lane].Count ? current[lane] : -1;
 
@@ -77,6 +84,7 @@ namespace WingCommand
                 {
                     state[l, s] = StepState.Pending;
                     doneAt[l, s] = float.NaN;
+                    startedAt[l, s] = float.NaN;
                     wentOut[l, s] = false;
                 }
             }
@@ -120,6 +128,7 @@ namespace WingCommand
                     resend[l] = false;
                     state[l, i] = StepState.Running;
                     wentOut[l, i] = true;
+                    if (float.IsNaN(startedAt[l, i])) startedAt[l, i] = time;
                     startAt[l] = time;
                     into?.Add(new PlanEmit { Lane = l, Step = i, Order = PlanCompile.Order(steps[i], l) });
                     sent++;
