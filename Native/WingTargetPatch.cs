@@ -30,7 +30,7 @@ namespace WingCommand
             {
                 // weapons-radar.md E: that the postfix sees the prefix's list is Harmony's standard behaviour; logged once.
                 confirmed = true;
-                Plugin.Logger.LogInfo("[Wing] target choice: the filtered station list reaches the postfix");
+                Plugin.LogVerbose("[Wing] target choice: the filtered station list reaches the postfix");
             }
             Unit target = wing.AssignedTarget(a);
             if (target == null)

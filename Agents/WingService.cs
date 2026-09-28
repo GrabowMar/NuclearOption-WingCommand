@@ -1054,7 +1054,7 @@ namespace WingCommand
             m.RollTraceAt = missionTime + 1f;
             m.Ground.RunwayError(m.Last.Pos, m.Last.Fwd, out float heading, out float lateral);
             var inputs = m.Aircraft.GetInputs();
-            Plugin.Logger.LogInfo($"[Ground] roll t={missionTime:0.0} #{m.Number} v {m.Last.Speed:0.0} heading {heading:0.0} off centreline {lateral:0.0} m, " +
+            Plugin.LogVerbose($"[Ground] roll t={missionTime:0.0} #{m.Number} v {m.Last.Speed:0.0} heading {heading:0.0} off centreline {lateral:0.0} m, " +
                                   $"yaw {inputs.yaw:0.00} pitch {inputs.pitch:0.00} throttle {m.Last.Throttle:0.00} brake {inputs.brake:0.00}, " +
                                   $"radar {m.Last.RadarAlt:0.0}, bank {m.Last.BankDeg:0.0}, yaw rate {m.Last.R * 57.2958f:0.0} deg/s");
         }
@@ -1072,7 +1072,7 @@ namespace WingCommand
             if (float.IsNaN(m.StoppedSince)) m.StoppedSince = missionTime;
             if (m.StopLogged || missionTime - m.StoppedSince < LongStopSeconds) return;
             m.StopLogged = true;
-            Plugin.Logger.LogInfo($"[Ground] #{m.Number} stopped {LongStopSeconds:0} s in {phase} at ({m.Last.Pos.X:0}, {m.Last.Pos.Z:0}): " +
+            Plugin.LogVerbose($"[Ground] #{m.Number} stopped {LongStopSeconds:0} s in {phase} at ({m.Last.Pos.X:0}, {m.Last.Pos.Z:0}): " +
                                   $"{m.Ground.Stop}{(m.Ground.StopWho >= 0 ? " (member " + NumberOf(m.Ground.StopWho) + ")" : "")}; " +
                                   $"command {m.Ground.LastCommand.Speed:0.0} m/s{(m.Ground.LastCommand.Stop ? " stop" : "")} curvature {m.Ground.LastCommand.Curvature:0.000}/m, " +
                                   $"yaw {m.Aircraft.GetInputs().yaw:0.00}, " +
@@ -1202,12 +1202,16 @@ namespace WingCommand
                 Metrics.Event(e.Kind);
                 if (e.Kind >= WingEventKind.TaskStarted && e.Kind <= WingEventKind.WaypointReached)
                 {
-                    Plugin.Logger.LogInfo(string.Format(CultureInfo.InvariantCulture, "[Wing] t={0:0.0} task {1} {2} ({3})",
-                        e.Time, e.Task, e.Kind, e.Reason));
+                    // 1.0: the event trail is for bug reports (VerboseLogging); a failure stays in the normal log.
+                    string task = string.Format(CultureInfo.InvariantCulture, "[Wing] t={0:0.0} task {1} {2} ({3})", e.Time, e.Task, e.Kind, e.Reason);
+                    if (e.Kind == WingEventKind.TaskFailed) Plugin.Logger.LogInfo(task);
+                    else Plugin.LogVerbose(task);
                     continue;
                 }
-                Plugin.Logger.LogInfo(string.Format(CultureInfo.InvariantCulture, "[Wing] t={0:0.0} #{1} {2} {3}->{4} ({5})",
-                    e.Time, e.Member + 2, e.Kind, e.From, e.To, e.Reason));
+                bool notable = e.Kind == WingEventKind.MemberLost || e.Kind == WingEventKind.DepartureAborted || e.Kind == WingEventKind.LandingFailed;
+                if (notable || Plugin.Settings.VerboseLogging.Value)
+                    Plugin.Logger.LogInfo(string.Format(CultureInfo.InvariantCulture, "[Wing] t={0:0.0} #{1} {2} {3}->{4} ({5})",
+                        e.Time, e.Member + 2, e.Kind, e.From, e.To, e.Reason));
                 if (Plugin.Settings.DevTools.Value &&
                     (e.Kind == WingEventKind.GcasActivated || e.Kind == WingEventKind.CollisionEmergency))
                     TelemetryRecorder.AutoDump(e.Kind.ToString(), e.Time);

@@ -181,7 +181,7 @@ namespace WingCommand
             if (attempted) m.Cadence.Fired();
             if (!launched) return;
             StandingShots++;
-            Plugin.Logger.LogInfo($"[Wing] #{m.Number} fox on {best.unitName} ({doctrine.PatternName})");
+            Plugin.LogVerbose($"[Wing] #{m.Number} fox on {best.unitName} ({doctrine.PatternName})");
             CallFox(m, bestStation, best);
         }
 
@@ -228,7 +228,7 @@ namespace WingCommand
                     {
                         fired++;
                         shots++;
-                        Plugin.Logger.LogInfo($"[Wing] #{m.Number} splash on {target.unitName}");
+                        Plugin.LogVerbose($"[Wing] #{m.Number} splash on {target.unitName}");
                         CallFox(m, w, target);
                     }
                     // SalvoSpecialist: a second missile from another station (spec M5 §11).

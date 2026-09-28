@@ -270,7 +270,7 @@ namespace WingCommand
                     m.ThreatChoice = a.countermeasureManager != null ? a.countermeasureManager.ChooseCountermeasure(missile) : "";
                 }
                 m.ThreatSeeker = m.ThreatChoice == "IR" ? MissileSeeker.Infrared : MissileSeeker.Radar;
-                Plugin.Logger.LogInfo($"[Wing] #{m.Number} missile inbound ({seeker}; {m.ThreatSeeker})");
+                Plugin.LogVerbose($"[Wing] #{m.Number} missile inbound ({seeker}; {m.ThreatSeeker})");
             }
             return new MissileThreat
             {
@@ -751,7 +751,7 @@ namespace WingCommand
         internal static void Assign(WingMember m, Unit target)
         {
             if (ReferenceEquals(m.AssignedTarget, target)) return;
-            Plugin.Logger.LogInfo($"[Wing] #{m.Number} target {(target != null ? target.unitName : "own choice")}");
+            Plugin.LogVerbose($"[Wing] #{m.Number} target {(target != null ? target.unitName : "own choice")}");
             m.AssignedTarget = target;
             m.Pilot?.SetPrimaryTarget(target);
         }
@@ -860,7 +860,7 @@ namespace WingCommand
                 string from = pilot.currentState == null ? "none" : ReferenceEquals(pilot.currentState, m.State) ? "ours" : pilot.currentState.GetType().Name;
                 string to = next == null ? "none" : ReferenceEquals(next, m.State) ? "ours" : next.GetType().Name;
                 string redirected = ReferenceEquals(asked, next) ? "" : $" (asked {(asked == null ? "none" : asked.GetType().Name)})";
-                Plugin.Logger.LogInfo($"[Native] #{m.Number} state {from} -> {to}{redirected}, engaged {m.Engaged}, " +
+                Plugin.LogVerbose($"[Native] #{m.Number} state {from} -> {to}{redirected}, engaged {m.Engaged}, " +
                                       $"fuel {m.Aircraft.GetFuelLevel():0.00}, disabled {m.Aircraft.disabled}");
                 return;
             }

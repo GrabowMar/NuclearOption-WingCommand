@@ -257,7 +257,7 @@ namespace WingCommand
             Aircraft a = m.Aircraft;
             Airbase field = NativeLandingBridge.Field(m.Pilot);
             float toField = field != null ? (field.transform.position - a.transform.position).magnitude : -1f;
-            Plugin.Logger.LogInfo($"[Recovery] #{m.Number} game landing {(m.LandingMode.Length > 0 ? m.LandingMode : "start")} -> " +
+            Plugin.LogVerbose($"[Recovery] #{m.Number} game landing {(m.LandingMode.Length > 0 ? m.LandingMode : "start")} -> " +
                                   $"{(mode.Length > 0 ? mode : "left")} at t={missionTime:0}: {toField:0} m from the field, radar alt " +
                                   $"{a.radarAlt:0}, speed {a.speed:0}, gear {a.gearState}");
             m.LandingMode = mode;

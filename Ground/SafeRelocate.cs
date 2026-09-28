@@ -58,7 +58,7 @@ namespace WingCommand
                     if (part.rb != null && !bodies.Contains(part.rb)) bodies.Add(part.rb);
                     if (!part.transform.IsChildOf(root)) objects.Add(part.gameObject);
                 }
-            Plugin.Logger.LogInfo($"[Ground] relocating {a.definition?.unitName}: {bodies.Count} bodies, {objects.Count - 1} parts apart from it, " +
+            Plugin.LogVerbose($"[Ground] relocating {a.definition?.unitName}: {bodies.Count} bodies, {objects.Count - 1} parts apart from it, " +
                                   $"from {origin} to {target} (graph y {graphY:0.00}, surface y {surfaceY:0.00} of {n} hits, offset " +
                                   $"{(a.definition != null ? a.definition.spawnOffset.y : 0f):0.00})");
             foreach (Rigidbody rb in bodies)
@@ -85,7 +85,7 @@ namespace WingCommand
                 if (FuelPrev != null)
                     foreach (FuelTank f in o.GetComponentsInChildren<FuelTank>(true)) FuelPrev.SetValue(f, Vector3.zero);
             }
-            Plugin.Logger.LogWarning($"[Ground] relocated {a.definition.unitName} to ({to.Pos.X:0}, {to.Pos.Z:0}) heading {Vec3.HeadingDeg(to.Fwd):0} (stuck, or towed round at its stand)");
+            Plugin.Logger.LogInfo($"[Ground] moved {a.definition.unitName} to ({to.Pos.X:0}, {to.Pos.Z:0}) heading {Vec3.HeadingDeg(to.Fwd):0} (stuck, or towed round at its stand)");
             WingRuntime.Instance?.StartCoroutine(Watch(a, target));
         }
 
@@ -102,7 +102,7 @@ namespace WingCommand
                 }
                 if (a == null) yield break;
                 Rigidbody rb = a.rb;
-                Plugin.Logger.LogInfo($"[Ground] after relocation +{frame} frames: {(a.transform.position - target).magnitude:0.0} m from where it was put, " +
+                Plugin.LogVerbose($"[Ground] after relocation +{frame} frames: {(a.transform.position - target).magnitude:0.0} m from where it was put, " +
                                       $"v {(rb != null ? rb.velocity.magnitude : 0f):0.0} m/s, w {(rb != null ? rb.angularVelocity.magnitude : 0f):0.00} rad/s, " +
                                       $"pitch {-a.transform.eulerAngles.x:0.0}, radar {a.radarAlt:0.0}, disabled {a.disabled}");
                 if (a.disabled) yield break;
