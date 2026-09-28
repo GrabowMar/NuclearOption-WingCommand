@@ -10,7 +10,8 @@ namespace WingCommand
 {
     /// <summary>FORM (spec bezel v2 §5 FORM; the 0.9 deck modernized): the scope row, the plan view of the scope's shape with the
     /// members' live positions (as big as the dock allows), the family and shapes for the scope's element, then what is wing-wide —
-    /// spacing, stack and power — under its own head so scope is never ambiguous. The maneuvers are TACTICAL's REACT row.</summary>
+    /// spacing and stack — under its own head so scope is never ambiguous (POWER is on OPTIONS). The maneuvers are TACTICAL's REACT
+    /// row. BEHAVIOUR › FORM since the user's 2026-09-28 tab cut.</summary>
     internal sealed class WmcForm : IWmcPage
     {
         private const int MaxShapes = 12, MaxFamilies = 4, MaxDots = WcSnapshot.MaxMembers;
@@ -29,7 +30,7 @@ namespace WingCommand
             scope = new WmcScopeRow(controls, "form.scope.");
         }
 
-        public string Hint => "Shapes are the scope element's; spacing, stack and power are the whole wing's.";
+        public string Hint => "Shapes are the scope element's; spacing and stack are the whole wing's.";
 
         public string Alert => null;
 
@@ -67,7 +68,7 @@ namespace WingCommand
         private readonly string[] shapeIds = new string[MaxShapes];
         private readonly List<FormationDefinition> shapes = new List<FormationDefinition>();
         private readonly List<string> families = new List<string>();
-        private SegmentRow spacingRow, stackRow, powerRow;
+        private SegmentRow spacingRow, stackRow;
         private int formKey = int.MinValue, shapesKey = int.MinValue;
 
         private void BuildFormation(RectTransform root, float top)
@@ -143,10 +144,6 @@ namespace WingCommand
                 new[] { "The wing flies above you.", "Level with you.", "The wing flies below you." },
                 "form.", new[] { "high", "level", "low" }, ids, PickStack);
             y -= TogglePitch;
-            powerRow = SegmentRow.Build(s, new Rect(0f, y, w, ToggleH), KeyWidth, "POWER", new[] { "BUSTER", "GATE" },
-                new[] { "Full power, no afterburner.", "Afterburner allowed." }, "form.", new[] { "buster", "gate" }, ids,
-                i => WmcUi.Order(last, () => WingCommands.Afterburner(i == 1)));
-            y -= TogglePitch;
             formScroll.SetContentHeight(-y + 4f);
         }
 
@@ -221,8 +218,6 @@ namespace WingCommand
             spacingRow.SetEnabled(c.CanOrder, "Orders are host only for now");
             stackRow.Set(stackWord);
             stackRow.SetEnabled(c.CanOrder, "Orders are host only for now");
-            powerRow.Set(w.AfterburnerAllowed ? 1 : 0);
-            powerRow.SetEnabled(c.CanOrder, "Orders are host only for now");
             RefreshPlanView(c, current, sel.SpacingMetres, e, members);
         }
 

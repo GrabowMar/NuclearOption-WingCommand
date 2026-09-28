@@ -20,7 +20,7 @@ namespace WingCommand
 
     internal struct PoolTotals
     {
-        public int AirMissiles, Agm, Bombs, GunRounds, Ecm, Aircraft;
+        public int AirMissiles, Agm, Bombs, GunRounds, Ecm;
     }
 
     /// <summary>TACTICAL's FLIGHT POOL (spec WMC rebuild §TACTICAL): what the scope still carries — missiles, strike stores,

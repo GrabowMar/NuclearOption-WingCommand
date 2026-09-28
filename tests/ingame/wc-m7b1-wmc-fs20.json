@@ -138,7 +138,7 @@
       "method": "WingCommand.Automation.Wmc",
       "store": "targets",
       "args": {
-        "press": "tac.orders.targets.both"
+        "press": "opt.targets.both"
       }
     },
     {

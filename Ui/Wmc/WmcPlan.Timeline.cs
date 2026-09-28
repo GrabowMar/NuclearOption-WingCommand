@@ -56,7 +56,7 @@ namespace WingCommand
                 tableRows[i].gameObject.SetActive(false);
             }
             timelineEmpty = WmcKit.Text(root, new Rect(x, top - AxisH, width, 20f), "hint");
-            timelineEmpty.text = "No steps yet: draw the plan on ELEMENTS.";
+            timelineEmpty.text = "No steps yet: draw the plan on PLAN.";
         }
 
         private void RefreshTimeline(WmcContext c)

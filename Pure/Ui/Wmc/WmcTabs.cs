@@ -6,17 +6,18 @@ namespace WingCommand
     /// names its tab, so a press from automation shows the page it lives on.</summary>
     internal static class WmcTabs
     {
-        public const int Tactical = 0, Form = 1, Plan = 2, Inspect = 3, Supply = 4, Loadout = 5, Squadron = 6;
+        public const int Tactical = 0, Behaviour = 1, Supply = 2, Loadout = 3, Squadron = 4;
 
-        /// <summary>At most 8 characters each: the 8th tab (SETUP) leaves a 48 px label box.</summary>
-        public static readonly string[] Labels = { "TACTICAL", "FORM", "PLAN", "INSPECT", "SUPPLY", "LOADOUT", "SQUADRON" };
+        /// <summary>The user (2026-09-28): fewer tabs — PLAN went into FORM, renamed BEHAVIOUR (formation, behaviour options, the plan,
+        /// the route, the timeline and the log as its sub-pages); INSPECT went into SQUADRON.</summary>
+        public static readonly string[] Labels = { "TACTICAL", "BEHAVIOUR", "SUPPLY", "LOADOUT", "SQUADRON" };
 
         /// <summary>The first logistics tab (the group rule sits on its left edge).</summary>
         public const int FirstLogistics = Supply;
 
         private static readonly string[][] prefixes =
         {
-            new[] { "tac." }, new[] { "form." }, new[] { "plan." }, new[] { "insp." }, new[] { "sup." }, new[] { "lo." }, new[] { "wing.", "sq." },
+            new[] { "tac." }, new[] { "form.", "opt.", "plan." }, new[] { "sup." }, new[] { "lo." }, new[] { "wing.", "sq.", "insp." },
         };
 
         /// <summary>A tab by its label (any case; the 0.9 name WING is SQUADRON); −1 when there is none. Numbers are refused: the
@@ -24,7 +25,9 @@ namespace WingCommand
         public static int Index(string name)
         {
             if (string.IsNullOrEmpty(name)) return -1;
-            if (string.Equals(name, "WING", StringComparison.OrdinalIgnoreCase)) return Squadron;
+            // Older names still open the tab that holds them now (WING was 0.9's SQUADRON).
+            if (string.Equals(name, "WING", StringComparison.OrdinalIgnoreCase) || string.Equals(name, "INSPECT", StringComparison.OrdinalIgnoreCase)) return Squadron;
+            if (string.Equals(name, "FORM", StringComparison.OrdinalIgnoreCase) || string.Equals(name, "PLAN", StringComparison.OrdinalIgnoreCase)) return Behaviour;
             for (int i = 0; i < Labels.Length; i++)
                 if (string.Equals(name, Labels[i], StringComparison.OrdinalIgnoreCase)) return i;
             return -1;

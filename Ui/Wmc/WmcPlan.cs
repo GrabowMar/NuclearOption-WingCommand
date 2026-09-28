@@ -7,7 +7,8 @@ using UnityEngine.UI;
 
 namespace WingCommand
 {
-    /// <summary>PLAN (spec bezel v2 §5 PLAN): planning on the game's map, in three sub-pages. ELEMENTS: a card per element in use
+    /// <summary>BEHAVIOUR (the user, 2026-09-28: fewer tabs — FORM and PLAN in one tab, renamed BEHAVIOUR): FORM (the shapes), OPTIONS
+    /// (every standing setting), then the plan's sub-pages. PLAN (spec bezel v2 §5 PLAN): planning on the game's map. PLAN: a card per element in use
     /// with its task and the legs still to fly, SELECT · SKIP · FORM UP · FIT (FIT frames it on the map). ROUTE (the user merged
     /// ROUTE and AP): the scope row, the scope's quick route — draw points on the map, set each one's altitude, speed and arrival
     /// action, send it, loop it, skip a leg, save it — then MY AUTOPILOT: your own holds, and NAV, which flies the route you drew.
@@ -15,12 +16,14 @@ namespace WingCommand
     /// the map on it.</summary>
     internal sealed partial class WmcPlan : IWmcPage
     {
-        public const int SubElements = 0, SubRoute = 1, SubTimeline = 2, SubLog = 3;
-        private static readonly string[] SubLabels = { "ELEMENTS", "ROUTE", "TIMELINE", "LOG" };
+        public const int SubForm = 0, SubOptions = 1, SubPlan = 2, SubRoute = 3, SubTimeline = 4, SubLog = 5;
+        private static readonly string[] SubLabels = { "FORM", "OPTIONS", "PLAN", "ROUTE", "TIMELINE", "LOG" };
         private const float KeyWidth = 64f, ToggleH = 22f, TogglePitch = 24f;
 
         private readonly Dictionary<string, AvButton> ids;
         private readonly WmcScopeRow scope;
+        private readonly WmcForm form;
+        private readonly WmcOptions options;
         private readonly GameObject[] subRoots = new GameObject[SubLabels.Length];
         private AvButton[] subTabs;
         private RectTransform page;
@@ -34,13 +37,19 @@ namespace WingCommand
         {
             ids = controls;
             scope = new WmcScopeRow(controls, "plan.scope.");
+            form = new WmcForm(controls);
+            options = new WmcOptions(controls);
         }
+
+        public WmcForm Form => form;
+
+        public WmcOptions Options => options;
 
         public int Sub => sub;
 
         public string SubName => sub >= 0 && sub < SubLabels.Length ? SubLabels[sub] : "";
 
-        public string Hint => sub == SubRoute
+        public string Hint => sub == SubForm ? form.Hint : sub == SubOptions ? options.Hint : sub == SubRoute
             ? "DRAW, then right-click the map to add points; SEND flies them. NAV flies your own aircraft along them."
             : sub == SubLog ? "A line with an aircraft opens it on INSPECT and centres the map on it; DEBRIEF sums up the sortie."
             : sub == SubTimeline ? "PLAN is frozen at EXECUTE; REAL is when each step went out and was done. A ? ends where it cannot be known."
@@ -55,11 +64,17 @@ namespace WingCommand
             x = body.x;
             width = body.width;
             subTabs = WmcKit.SubTabs(page, new Rect(x, body.y, width, BezelLayout.SubTabs), SubLabels, "plan.sub.", ids, ShowSub);
-            subTabs[SubElements].WithTooltip("Every element's task and legs, with SELECT, SKIP, FORM UP and FIT.");
+            subTabs[SubForm].WithTooltip("The shape each element flies, and the wing's spacing and stack.");
+            subTabs[SubOptions].WithTooltip("How the wing fights and flies: targets, weapons, radar, falling back, bingo and winchester, the radio.");
+            subTabs[SubPlan].WithTooltip("Every element's steps on the map, with EXECUTE, SKIP, FORM UP and FIT.");
             subTabs[SubRoute].WithTooltip("The scope's quick route, and your own autopilot with NAV.");
             subTabs[SubTimeline].WithTooltip("The plan against what happened, lane by lane.");
             subTabs[SubLog].WithTooltip("The wing's events and radio lines, and the sortie's DEBRIEF.");
             float top = BezelLayout.SubTabs + BezelLayout.SubGap;
+            // FORM and OPTIONS are whole pages of their own, built under the sub-tabs.
+            var under = new Rect(shellBody.x, shellBody.y - top, shellBody.width, shellBody.height - top);
+            form.Build(SubRoot(SubForm, "BehaviourForm"), under);
+            options.Build(SubRoot(SubOptions, "BehaviourOptions"), under);
 
             RectTransform route = SubRoot(SubRoute, "PlanRoute");
             scope.Build(route, x, body.y - top, width, "ROUTE FOR", false);
@@ -67,11 +82,11 @@ namespace WingCommand
             BuildRoute(route, body.y - rt);
             routeScroll.SetViewport(new Rect(x, body.y - rt, width + 8f, Mathf.Max(40f, body.height - rt)));
 
-            BuildElements(SubRoot(SubElements, "PlanElements"), body.y - top, body.height - top);
+            BuildElements(SubRoot(SubPlan, "PlanElements"), body.y - top, body.height - top);
             BuildTimeline(SubRoot(SubTimeline, "PlanTimeline"), body.y - top, body.height - top);
             BuildLog(SubRoot(SubLog, "PlanLog"), body.y - top, body.height - top);
             popup = new AvKit.Popup(page, shellBody.width);
-            ShowSub(SubElements);
+            ShowSub(SubForm);
         }
 
         private RectTransform SubRoot(int k, string name)
@@ -88,6 +103,11 @@ namespace WingCommand
         public void ShowSub(int k)
         {
             if (k < 0 || k >= subRoots.Length || subRoots[k] == null) return;
+            if (k != sub && last != null)
+            {
+                if (k == SubForm) form.Shown(last);
+                else if (k == SubOptions) options.Shown(last);
+            }
             sub = k;
             for (int i = 0; i < subRoots.Length; i++)
             {
@@ -102,18 +122,22 @@ namespace WingCommand
         public void ShowSubFor(string id)
         {
             if (id == null) return;
-            if (id.StartsWith("plan.route.", System.StringComparison.Ordinal) || id.StartsWith("plan.ap.", System.StringComparison.Ordinal)
+            if (id.StartsWith("form.", System.StringComparison.Ordinal)) ShowSub(SubForm);
+            else if (id.StartsWith("opt.", System.StringComparison.Ordinal)) ShowSub(SubOptions);
+            else if (id.StartsWith("plan.route.", System.StringComparison.Ordinal) || id.StartsWith("plan.ap.", System.StringComparison.Ordinal)
                 || id.StartsWith("plan.scope.", System.StringComparison.Ordinal)) ShowSub(SubRoute);
             else if (id.StartsWith("plan.el", System.StringComparison.Ordinal) || id.StartsWith("plan.step", System.StringComparison.Ordinal)
                      || id.StartsWith("plan.edit.", System.StringComparison.Ordinal) || id.StartsWith("plan.tool.", System.StringComparison.Ordinal)
                      || id.StartsWith("plan.bar.", System.StringComparison.Ordinal) || id.StartsWith("plan.cue.", System.StringComparison.Ordinal)
-                     || id.StartsWith("plan.add.", System.StringComparison.Ordinal)) ShowSub(SubElements);
+                     || id.StartsWith("plan.add.", System.StringComparison.Ordinal)) ShowSub(SubPlan);
             else if (id.StartsWith("plan.log.", System.StringComparison.Ordinal)) ShowSub(SubLog);
         }
 
         /// <summary>A sub-page by its label (automation).</summary>
         public bool ShowSubNamed(string name)
         {
+            // Scenarios written before BEHAVIOUR call PLAN's first sub-page ELEMENTS.
+            if (string.Equals(name, "ELEMENTS", System.StringComparison.OrdinalIgnoreCase)) name = "PLAN";
             for (int i = 0; i < SubLabels.Length; i++)
                 if (string.Equals(SubLabels[i], name, System.StringComparison.OrdinalIgnoreCase))
                 {
@@ -125,6 +149,8 @@ namespace WingCommand
 
         public void Shown(WmcContext c)
         {
+            if (sub == SubForm) form.Shown(c);
+            else if (sub == SubOptions) options.Shown(c);
             elementsKey = long.MinValue;
             timelineNext = 0f;
             logFilled = false;
@@ -134,12 +160,14 @@ namespace WingCommand
         public void Refresh(WmcContext c)
         {
             last = c;
-            if (sub == SubRoute)
+            if (sub == SubForm) form.Refresh(c);
+            else if (sub == SubOptions) options.Refresh(c);
+            else if (sub == SubRoute)
             {
                 scope.Refresh(c);
                 RefreshRoute(c);
             }
-            else if (sub == SubElements) RefreshElements(c);
+            else if (sub == SubPlan) RefreshElements(c);
             else if (sub == SubLog) RefreshLog(c);
             else if (sub == SubTimeline) RefreshTimeline(c);
         }

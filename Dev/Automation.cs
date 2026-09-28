@@ -737,7 +737,8 @@ namespace WingCommand
         }
 
         /// <summary>Spec bezel v2 §10: open the panel (<c>open</c>: maximize the map and select WMC), latch a tab (<c>tab</c> by
-        /// its label — TACTICAL, FORM, PLAN, INSPECT, SUPPLY, LOADOUT, SQUADRON — or its number), and/or press a control by id
+        /// its label — TACTICAL, BEHAVIOUR, SUPPLY, LOADOUT, SQUADRON; the old FORM, PLAN and INSPECT open their sub-page) and a
+        /// sub-page (<c>sub</c> by label, on BEHAVIOUR or SQUADRON), and/or press a control by id
         /// (<c>press</c>; an id shows its own tab first), then report the panel's state — including <c>overflow</c> (labels that
         /// would spill out of their box: the no-"…" check), <c>gap_px</c> (the tallest empty band on the page: the density audit),
         /// the alerts shown and the order-grid cells that cannot be pressed now.</summary>
@@ -752,13 +753,22 @@ namespace WingCommand
                 int index = tab is string ? WmcTabs.Index(name) : -1;
                 if (index < 0) return Fail("Wmc", "no tab " + name + " (tabs go by name: " + string.Join(", ", WmcTabs.Labels) + ")");
                 panel.Show(index);
+                // The tabs cut on 2026-09-28 live on as sub-pages.
+                string old = name.ToUpperInvariant();
+                if (old == "FORM" || old == "PLAN") panel.Plan?.ShowSubNamed(old);
+                else if (old == "INSPECT") panel.WingPage?.ShowSub(WmcWing.SubInspect);
             }
-            // PLAN's sub-pages by name: ELEMENTS, ROUTE, LOG.
+            // A sub-page by name: BEHAVIOUR's (FORM, OPTIONS, PLAN or ELEMENTS, ROUTE, TIMELINE, LOG) or SQUADRON's (ROSTER, STUDIO,
+            // INSPECT); SQUADRON's when it shows, else BEHAVIOUR's.
             string sub = Text(args, "sub");
             if (sub != null)
             {
-                panel.Show(WmcTabs.Plan);
-                if (panel.Plan == null || !panel.Plan.ShowSubNamed(sub)) return Fail("Wmc", "no PLAN sub-page " + sub);
+                bool squadron = panel.Page == WmcTabs.Squadron && panel.WingPage != null && panel.WingPage.ShowSubNamed(sub);
+                if (!squadron)
+                {
+                    panel.Show(WmcTabs.Behaviour);
+                    if (panel.Plan == null || !panel.Plan.ShowSubNamed(sub)) return Fail("Wmc", "no sub-page " + sub);
+                }
             }
             // Spec WMC program §4: the scope — clear, an element by letter, or wingmen by their #numbers.
             WmcSelection selection = panel.Context.Selection;
@@ -855,11 +865,11 @@ namespace WingCommand
             var result = new Dictionary<string, object>
             {
                 { "ok", string.IsNullOrEmpty(press) || pressed }, { "visible", panel.Visible }, { "tab", panel.Page },
-                { "tab_name", panel.PageName }, { "sub_name", panel.Page == WmcTabs.Plan ? panel.Plan.SubName : "" },
+                { "tab_name", panel.PageName },
+                { "sub_name", panel.Page == WmcTabs.Behaviour ? panel.Plan.SubName : panel.Page == WmcTabs.Squadron ? panel.WingPage.SubName : "" },
                 { "plan_cards", panel.Plan?.Cards ?? 0 }, { "log_rows", panel.Plan?.LogRowsShown ?? 0 }, { "pressed", pressed }, { "members", panel.Context.Count }, { "controls", panel.Controls.Count },
                 { "scope", panel.Context.Selection.Label(panel.Context.Rows, panel.Context.Count) },
                 { "overflow", panel.Overflow }, { "gap_px", panel.Gap }, { "typing", WmcNameField.Typing ? 1 : 0 }, { "alerts", panel.Tactical?.AlertsShown ?? 0 },
-                { "recent", panel.Tactical?.RecentShown ?? 0 },
                 { "armed", panel.Context.Map.Mode != MapMode.Off ? 1 : 0 },
                 { "disabled", panel.Tactical != null ? string.Join(",", panel.Tactical.DisabledOrders()) : "" },
             };
@@ -870,9 +880,9 @@ namespace WingCommand
                 result["sq_sub"] = panel.WingPage.SubName;
                 result["sq_sub_index"] = panel.WingPage.Sub;
                 if (panel.WingPage.Sub == WmcWing.SubStudio) panel.WingPage.Studio.Report(result);
+                else if (panel.WingPage.Sub == WmcWing.SubInspect) panel.InspectPage.Report(result);
                 else panel.WingPage.Report(result);
             }
-            if (panel.InspectPage != null && panel.Page == WmcTabs.Inspect) panel.InspectPage.Report(result);
             return result;
         }
 

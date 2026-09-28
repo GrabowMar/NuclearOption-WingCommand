@@ -8,17 +8,14 @@ using UnityEngine.UI;
 
 namespace WingCommand
 {
-    /// <summary>Spec bezel v2 §3: the WMC bezel panel on the maximized map — TACTICAL · FORM · PLAN · INSPECT ‖ SUPPLY · LOADOUT ·
-    /// SQUADRON on an <see cref="AvScreen"/> (display glass included), claimed through <see cref="BezelRegistry.Wmc"/>, refreshed at
+    /// <summary>Spec bezel v2 §3: the WMC bezel panel on the maximized map — TACTICAL · BEHAVIOUR ‖ SUPPLY · LOADOUT · SQUADRON (the
+    /// user cut seven tabs to five on 2026-09-28: FORM and PLAN are BEHAVIOUR's sub-pages, INSPECT is SQUADRON's) on an <see cref="AvScreen"/> (display glass included), claimed through <see cref="BezelRegistry.Wmc"/>, refreshed at
     /// 5 Hz. The header is the wing's title and four vitals chips (FUEL · AMMO · THREAT · MODE) on every tab; there are no metric
     /// tiles, so every page has 84 px more body.</summary>
     internal sealed class WmcPanel : IWingService
     {
         /// <summary>A tab not built yet says so in its tooltip.</summary>
-        private static readonly string[] PendingTabs =
-        {
-            null, null, null, null, null, null, null,
-        };
+        private static readonly string[] PendingTabs = { null, null, null, null, null };
 
         public static WmcPanel Instance { get; private set; }
         public string Name => "WMC";
@@ -29,9 +26,7 @@ namespace WingCommand
         private readonly int[] headerKeys = { -1, -1, -1, -1, -1 };
         private IWmcPage[] pages;
         private WmcTactical tactical;
-        private WmcForm form;
         private WmcPlan plan;
-        private WmcInspect inspect;
         private WmcSupply supply;
         private WmcLoadout loadout;
         private WmcWing wingPage;
@@ -53,20 +48,21 @@ namespace WingCommand
         }
 
         public bool Visible => screen != null && screen.isActive && DynamicMap.mapMaximized;
-        /// <summary>A page with the COMMAND scope row is on show (spec bezel v2 §6: an unarmed right-click MOVE is TACTICAL's and
-        /// FORM's only).</summary>
-        public bool CommandShowing => Visible && shell != null && (shell.Page == WmcTabs.Tactical || shell.Page == WmcTabs.Form);
-        /// <summary>PLAN › ELEMENTS is showing: its map tools stay armed only here.</summary>
-        public bool PlanShowing => Visible && shell != null && shell.Page == WmcTabs.Plan && plan != null && plan.Sub == WmcPlan.SubElements;
+        /// <summary>A page with a scope row that gives orders is on show (spec bezel v2 §6: an unarmed right-click MOVE is TACTICAL's,
+        /// FORM's and OPTIONS' only; ROUTE's right-click draws).</summary>
+        public bool CommandShowing => Visible && shell != null && (shell.Page == WmcTabs.Tactical
+            || (shell.Page == WmcTabs.Behaviour && plan != null && (plan.Sub == WmcPlan.SubForm || plan.Sub == WmcPlan.SubOptions)));
+        /// <summary>BEHAVIOUR › PLAN is showing: its map tools stay armed only here.</summary>
+        public bool PlanShowing => Visible && shell != null && shell.Page == WmcTabs.Behaviour && plan != null && plan.Sub == WmcPlan.SubPlan;
         public int Page => shell != null ? shell.Page : -1;
         public string PageName => shell != null && shell.Page >= 0 && shell.Page < WmcTabs.Labels.Length ? WmcTabs.Labels[shell.Page] : "";
         public IReadOnlyDictionary<string, AvButton> Controls => controls;
         public WmcContext Context => context;
         public WmcMapOverlay Overlay => overlay;
         public WmcTactical Tactical => tactical;
-        public WmcForm Form => form;
+        public WmcForm Form => plan?.Form;
         public WmcPlan Plan => plan;
-        public WmcInspect InspectPage => inspect;
+        public WmcInspect InspectPage => wingPage?.InspectPage;
         public WmcSupply Supply => supply;
         public WmcLoadout Loadout => loadout;
         public WmcWing WingPage => wingPage;
@@ -152,9 +148,10 @@ namespace WingCommand
         /// <summary>INSPECT on this aircraft (INSPECT › on a row, a log line, automation); it never changes who orders go to.</summary>
         public void Inspect(uint id)
         {
-            if (inspect == null || id == 0u) return;
-            inspect.Focus(id);
-            Show(WmcTabs.Inspect);
+            if (wingPage == null || id == 0u) return;
+            wingPage.InspectPage.Focus(id);
+            Show(WmcTabs.Squadron);
+            wingPage.ShowSub(WmcWing.SubInspect);
             Refresh();
         }
 
@@ -166,7 +163,7 @@ namespace WingCommand
             if (tab >= 0 && pages != null && pages[tab] != null)
             {
                 Show(tab);
-                if (tab == WmcTabs.Plan) plan.ShowSubFor(id);
+                if (tab == WmcTabs.Behaviour) plan.ShowSubFor(id);
                 if (tab == WmcTabs.Squadron) wingPage.ShowSubFor(id);
                 Refresh();
             }
@@ -190,9 +187,7 @@ namespace WingCommand
             shell = null;
             pages = null;
             tactical = null;
-            form = null;
             plan = null;
-            inspect = null;
             supply = null;
             loadout = null;
             wingPage = null;
@@ -305,13 +300,11 @@ namespace WingCommand
             BuildGroupRule();
 
             tactical = new WmcTactical(controls);
-            form = new WmcForm(controls);
             plan = new WmcPlan(controls);
-            inspect = new WmcInspect(controls);
             supply = new WmcSupply(controls);
             loadout = new WmcLoadout(controls);
             wingPage = new WmcWing(controls);
-            pages = new IWmcPage[] { tactical, form, plan, inspect, supply, loadout, wingPage };
+            pages = new IWmcPage[] { tactical, plan, supply, loadout, wingPage };
             for (int i = 0; i < pages.Length; i++)
             {
                 if (pages[i] == null)

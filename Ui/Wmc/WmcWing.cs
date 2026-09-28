@@ -12,16 +12,17 @@ namespace WingCommand
     /// squadron page with its critique fixed: the roster in join order with one status word per pilot (the same word on the row, the
     /// dossier stamp and the head), a dossier (portrait, rank and XP bar with rank ticks, record, radio, RELEASE), PERKS 2×2, and an
     /// AIRFRAME ASSIGNMENT bar pinned to the floor with AIR SAR and LOCAL SAR. A row inspects only (R6 ruling): SUPPLY's pilot card
-    /// picks who flies. STUDIO: the saved pilots and the pilot studio (the room's SQUADRON, moved here). The roster is the host's; a
-    /// client sees one card.</summary>
+    /// picks who flies. STUDIO: the saved pilots and the pilot studio (the room's SQUADRON, moved here). INSPECT: one aircraft in depth
+    /// (its own tab until the user's 2026-09-28 tab cut). The roster is the host's; a client sees one card.</summary>
     internal sealed partial class WmcWing : IWmcPage
     {
-        public const int SubRoster = 0, SubStudio = 1;
-        private static readonly string[] SubLabels = { "ROSTER", "STUDIO" };
+        public const int SubRoster = 0, SubStudio = 1, SubInspect = 2;
+        private static readonly string[] SubLabels = { "ROSTER", "STUDIO", "INSPECT" };
 
         private readonly Dictionary<string, AvButton> ids;
         private readonly WmcStudio studioPage;
-        private readonly GameObject[] subRoots = new GameObject[2];
+        private readonly WmcInspect inspectPage;
+        private readonly GameObject[] subRoots = new GameObject[SubLabels.Length];
         private AvButton[] subTabs;
         private int sub = -1;
         private RectTransform page, pageRoot, content;
@@ -53,7 +54,10 @@ namespace WingCommand
         {
             ids = controls;
             studioPage = new WmcStudio(controls);
+            inspectPage = new WmcInspect(controls);
         }
+
+        public WmcInspect InspectPage => inspectPage;
 
         public int Sub => sub;
 
@@ -61,7 +65,7 @@ namespace WingCommand
 
         public WmcStudio Studio => studioPage;
 
-        public string Hint => sub == SubStudio ? studioPage.Hint : hint;
+        public string Hint => sub == SubStudio ? studioPage.Hint : sub == SubInspect ? inspectPage.Hint : hint;
 
         public string Alert => alert;
 
@@ -76,9 +80,11 @@ namespace WingCommand
             subTabs = WmcKit.SubTabs(root, new Rect(body.x, body.y, width, BezelLayout.SubTabs), SubLabels, "sq.sub.", ids, ShowSub);
             subTabs[SubRoster].WithTooltip("This mission's pilots: the roster, the dossier and SAR.");
             subTabs[SubStudio].WithTooltip("The saved pilots and the pilot studio: identity, look, radio and bio.");
+            subTabs[SubInspect].WithTooltip("One aircraft in depth: fuel, stores, damage, what it is doing and why.");
             float off = BezelLayout.SubTabs + BezelLayout.SubGap;
             page = SubRoot(SubRoster, "SquadronRoster");
             studioPage.Build(SubRoot(SubStudio, "SquadronStudio"), body.x, body.y - off, width, body.height - off, root, shellBody.width);
+            inspectPage.Build(SubRoot(SubInspect, "SquadronInspect"), new Rect(shellBody.x, shellBody.y - off, shellBody.width, shellBody.height - off));
             body = new Rect(body.x, body.y - off, body.width, body.height - off);
             float view = BezelLayout.WingView(shellBody.height) - off;
             scroll = WmcScroll.Build(page, new Rect(body.x, body.y, width + 8f, view), "WingScroll");
@@ -111,6 +117,7 @@ namespace WingCommand
         {
             if (k < 0 || k >= subRoots.Length || subRoots[k] == null) return;
             if (sub == SubStudio && k != SubStudio) studioPage.Hide();
+            if (k == SubInspect && sub != SubInspect && last != null) inspectPage.Shown(last);
             sub = k;
             for (int i = 0; i < subRoots.Length; i++)
             {
@@ -126,7 +133,8 @@ namespace WingCommand
         {
             if (id == null) return;
             if (id.StartsWith("sq.sub.", System.StringComparison.Ordinal)) return;
-            if (id.StartsWith("sq.", System.StringComparison.Ordinal)) ShowSub(SubStudio);
+            if (id.StartsWith("insp.", System.StringComparison.Ordinal)) ShowSub(SubInspect);
+            else if (id.StartsWith("sq.", System.StringComparison.Ordinal)) ShowSub(SubStudio);
             else if (id.StartsWith("wing.", System.StringComparison.Ordinal)) ShowSub(SubRoster);
         }
 
@@ -177,10 +185,33 @@ namespace WingCommand
 
         private int IndexOf(WingPilot p) => p != null ? roster.IndexOf(p) : -1;
 
-        public void Shown(WmcContext c) => Snapshot(c);
+        /// <summary>A sub-page by its label (automation).</summary>
+        public bool ShowSubNamed(string name)
+        {
+            for (int i = 0; i < SubLabels.Length; i++)
+                if (string.Equals(SubLabels[i], name, System.StringComparison.OrdinalIgnoreCase))
+                {
+                    ShowSub(i);
+                    return true;
+                }
+            return false;
+        }
+
+        public void Shown(WmcContext c)
+        {
+            Snapshot(c);
+            if (sub == SubInspect) inspectPage.Shown(c);
+        }
 
         public void Refresh(WmcContext c)
         {
+            if (sub == SubInspect)
+            {
+                Snapshot(c);
+                RefreshAlert();
+                inspectPage.Refresh(c);
+                return;
+            }
             if (sub == SubStudio)
             {
                 Snapshot(c);
