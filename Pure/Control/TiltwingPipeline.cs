@@ -21,6 +21,10 @@ namespace WingCommand
     internal sealed class TiltwingPipeline : IFlightPipeline
     {
         public static float MinDwell = 3f, RotaryCapFactor = 0.9f, RotaryCatchUp = 10f, PlaneFloorFactor = 1.05f;
+        /// <summary>Asked to slow below the band on its wings, it converts once under ConversionHigh with its bank within this (deg).</summary>
+        public static float ConvertBankDeg = 30f;
+        // The reference speed the last guidance asked for (unknown until then: no early conversion).
+        private float lastReference = float.PositiveInfinity;
 
         public readonly FixedWingPipeline Plane = new FixedWingPipeline();
         public readonly RotaryPipeline Rotary = new RotaryPipeline();
@@ -40,12 +44,14 @@ namespace WingCommand
         {
             Prime(s, p);
             float reference = intent.Ref.Vel.Horizontal.Length;
+            lastReference = reference;
             FlightIntent limited = intent;
             if (Mode == TiltwingMode.Plane)
             {
-                if (reference >= p.ConversionLow)
-                    limited.Limits = new SpeedLimits(Math.Max(intent.Limits.Min, PlaneFloorFactor * p.ConversionLow), intent.Limits.Max,
-                        intent.Limits.AfterburnerAllowed, intent.Limits.AirbrakeAllowed);
+                // In-game 2026-09-28: on its wings it never asks for less than its floor, whatever the reference — slowing further is
+                // the rotary stack's job, after a conversion (Step converts early when the reference is below the band).
+                limited.Limits = new SpeedLimits(Math.Max(intent.Limits.Min, PlaneFloorFactor * p.ConversionLow), intent.Limits.Max,
+                    intent.Limits.AfterburnerAllowed, intent.Limits.AirbrakeAllowed);
                 return Plane.Guide(limited, s, p);
             }
             float cap = reference > p.ConversionHigh ? reference + RotaryCatchUp : RotaryCapFactor * p.ConversionHigh;
@@ -59,8 +65,9 @@ namespace WingCommand
             Prime(s, p);
             ControlOutput o = Active.Step(guidance, s, ctx, p, dt);
             dwell += dt;
+            bool slowAhead = lastReference < p.ConversionLow && s.Tas < p.ConversionHigh && Math.Abs(s.BankDeg) < ConvertBankDeg;
             TiltwingMode wanted = Mode == TiltwingMode.Plane
-                ? (s.Tas < p.ConversionLow ? TiltwingMode.Rotary : TiltwingMode.Plane)
+                ? (s.Tas < p.ConversionLow || slowAhead ? TiltwingMode.Rotary : TiltwingMode.Plane)
                 : (s.Tas > p.ConversionHigh ? TiltwingMode.Plane : TiltwingMode.Rotary);
             if (wanted != Mode && dwell >= MinDwell - 1e-6f)
             {

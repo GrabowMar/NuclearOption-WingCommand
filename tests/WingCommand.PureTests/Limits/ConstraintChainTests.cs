@@ -1,3 +1,4 @@
+using System;
 using Xunit;
 
 namespace WingCommand.PureTests
@@ -278,6 +279,25 @@ namespace WingCommand.PureTests
             Assert.Equal(new Vec3(1f, 3f, 0f), g.Accel);
             Assert.True(report.CollisionActive);
             Assert.Contains("COLL", report.Describe());
+        }
+
+        [Fact]
+        public void ATiltwingOnItsWingsKeepsItsLoadedMinimumSpeed()
+        {
+            // In-game (2026-09-28, VT-7 after lift-off): a tiltwing's profile minimum speed is 0 (it can hover), so on its wings the
+            // envelope never protected its loaded stall — at 54 m/s it held a 70 deg bank at idle, stalled and hit the ground.
+            AirframeProfile tw = AirframeProfile.Derive(new ProfileInputs
+            {
+                UnitName = "tiltwing", Class = AirframeClass.Tiltwing, PublishedStallKmh = 45f * 3.6f, MaxSpeed = 150f, GLimit = 4f,
+            });
+            var chain = new ConstraintChain();
+            var report = new BindingReport();
+            float nz70 = 1f / (float)Math.Cos(70f * Scalar.Deg2Rad);
+            var a = new AttitudeCommand { BankDeg = -70f, Nz = nz70, EnergyRate = -20f };
+            chain.ApplyAttitude(ref a, At(300f, 54f), new LimitContext { FloorY = float.NaN, Aggression = 1f }, tw, Dt, ref report);
+            Assert.True(a.EnergyRate >= 10f, $"energy {a.EnergyRate}");
+            Assert.True(Math.Abs(a.BankDeg) < 50f, $"bank {a.BankDeg:0}");
+            Assert.Equal(ConstraintId.Envelope, report.SpeedBy);
         }
     }
 }

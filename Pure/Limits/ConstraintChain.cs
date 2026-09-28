@@ -83,7 +83,7 @@ namespace WingCommand
             // Both scale with equivalent airspeed, so the limits hold at altitude.
             float nzMax = Math.Min(p.GLimit, p.LiftLimitedG(s.Eas));
             float nzCap = nzMax;
-            if (s.Eas < p.MinimumSpeed(Math.Max(1f, a.Nz)))
+            if (s.Eas < p.WingMinimumSpeed(Math.Max(1f, a.Nz)))
             {
                 a.EnergyRate = Math.Max(a.EnergyRate, 10f);
                 r.SpeedBy = ConstraintId.Envelope;
@@ -139,7 +139,7 @@ namespace WingCommand
         /// <see cref="RecoverSinkMax"/>) to win the speed back.</summary>
         public static float SpeedLimitedClimb(in AircraftState s, AirframeProfile p)
         {
-            float vmin = p.MinimumSpeed(1f), high = SpeedProtectFactor * vmin;
+            float vmin = p.WingMinimumSpeed(1f), high = SpeedProtectFactor * vmin;
             if (s.Eas >= high) return float.PositiveInfinity;
             if (s.Eas >= vmin)
             {

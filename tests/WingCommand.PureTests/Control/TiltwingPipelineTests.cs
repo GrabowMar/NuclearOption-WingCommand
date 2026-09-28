@@ -146,5 +146,25 @@ namespace WingCommand.PureTests
             Assert.True(Math.Abs(first.Throttle - last.Throttle) <= RotaryController.CollectiveSlew * Dt + 1e-4f,
                 $"collective {first.Throttle:0.000} after the switch, {last.Throttle:0.000} before");
         }
+
+        [Fact]
+        public void OnItsWingsAndAskedToStopATiltwingConvertsInsteadOfStalling()
+        {
+            // In-game (2026-09-28): following a hovering leader, a VT-7 on its wings slowed at idle with the airbrake out toward its
+            // stall, because it converts only below ConversionLow. Asked to slow below the band, it converts once under ConversionHigh
+            // with its wings level; on its wings it never asks for less than its floor.
+            AirframeProfile p = Tiltwing();
+            var t = new TiltwingPipeline();
+            var ctx = new LimitContext { FloorY = float.NaN, Clearance = 60f };
+            var stop = new FlightIntent { Ref = new RefState(new Vec3(0f, 500f, 2000f), Vec3.Zero, Vec3.Zero), Limits = new SpeedLimits(0f, 150f, false, true) };
+            AircraftState fast = At(80f);
+            t.Step(t.Guide(stop, fast, p), fast, ctx, p, Dt);
+            Assert.Equal(TiltwingMode.Plane, t.Mode);
+            GuidanceCommand g = t.Guide(stop, fast, p);
+            Assert.True(g.VelCmd.Horizontal.Length >= TiltwingPipeline.PlaneFloorFactor * p.ConversionLow - 0.5f, $"asks {g.VelCmd.Horizontal.Length:0.0} m/s on its wings");
+            AircraftState slower = At(p.ConversionHigh - 3f);
+            for (int i = 0; i < (int)((TiltwingPipeline.MinDwell + 0.5f) / Dt); i++) t.Step(t.Guide(stop, slower, p), slower, ctx, p, Dt);
+            Assert.Equal(TiltwingMode.Rotary, t.Mode);
+        }
     }
 }

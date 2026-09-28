@@ -73,6 +73,13 @@ namespace WingCommand
             ? 0f
             : StallSpeed * 1.2f * (float)Math.Sqrt(Math.Max(1f, loadFactor));
 
+        /// <summary>The loaded minimum speed on the wings: a tiltwing's too (its <see cref="MinimumSpeed"/> is 0 because it can hover,
+        /// but on its wings it stalls like a plane — in-game 2026-09-28 a VT-7 stalled in a 70 deg bank after lift-off); 0 for a
+        /// helicopter. The constraint chain, which only flies wing-borne aircraft, protects this.</summary>
+        public float WingMinimumSpeed(float loadFactor) => Class == AirframeClass.Rotary
+            ? 0f
+            : StallSpeed * 1.2f * (float)Math.Sqrt(Math.Max(1f, loadFactor));
+
         /// <summary>Load factor the wing can generate at this airspeed (n = 1 at StallSpeed).</summary>
         public float LiftLimitedG(float airspeed)
         {
