@@ -104,7 +104,7 @@ namespace WingCommand
                 bool present = false;
                 for (int i = 0; i < c.Count && !present; i++) present = c.Rows[i].Element == e;
                 string name = present && c.Wing != null && !c.Client ? c.Wing.Roster.Name(e) : ElementRoster.Letter(e);
-                if (present != chipInUse[e] || !ReferenceEquals(name, chipNames[e])) changed = true;
+                if (present != chipInUse[e] || !string.Equals(name, chipNames[e], System.StringComparison.Ordinal)) changed = true;
                 chipInUse[e] = present;
                 chipNames[e] = name;
                 if (present) used++;

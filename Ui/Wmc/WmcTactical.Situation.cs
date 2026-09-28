@@ -120,7 +120,7 @@ namespace WingCommand
 
         private float ViewHeight()
         {
-            int max = WingService.MaxMembers;
+            int max = Reserve;
             bool open = doctrineOpen && !BezelLayout.DoctrineSwaps(body.height, max);
             return Mathf.Max(0f, body.height - BezelLayout.TacticalFixed(max, open));
         }
@@ -199,7 +199,7 @@ namespace WingCommand
             bool host = c.Wing != null && !c.Client;
             WingMember one = host ? c.MemberOf(c.Selection.Single) : null;
             Unit t = one != null ? (one.AssignedTarget != null ? one.AssignedTarget : one.StandingTarget) : null;
-            int key = (t != null ? t.GetInstanceID() : 0) * 31 + PostureKey(c) + (host ? 1 : 0);
+            int key = (t != null ? t.GetInstanceID() : 0) * 31 + PostureKey(c) + (host ? 1 : 0) + (one != null ? 2 : 0);
             if (key == targetKey) return;
             targetKey = key;
             WmcKit.Set(target, !host ? WmcText.Unknown : t != null && !t.disabled

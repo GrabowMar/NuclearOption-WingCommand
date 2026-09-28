@@ -5,6 +5,13 @@ namespace WingCommand.PureTests
 {
     public class ElementRosterTests
     {
+        [Fact]
+        public void ALetterIsTheSameStringEveryCall()
+        {
+            Assert.Equal("B", ElementRoster.Letter(1));
+            Assert.Same(ElementRoster.Letter(2), ElementRoster.Letter(2));
+        }
+
         private static ElementRoster Four()
         {
             var r = new ElementRoster();

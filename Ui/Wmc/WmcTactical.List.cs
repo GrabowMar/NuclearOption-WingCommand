@@ -223,8 +223,7 @@ namespace WingCommand
 
         private void RefreshList(WmcContext c)
         {
-            int max = Mathf.Max(WingService.MaxMembers, c.Count);
-            float cap = BezelLayout.ListReserve(max);
+            float cap = BezelLayout.ListReserve(Reserve);
             int n = FlightList.Page(c.Rows, c.Count, order, cap, listPage, lines, out pageCount);
             if (listPage >= pageCount) listPage = pageCount - 1;
 

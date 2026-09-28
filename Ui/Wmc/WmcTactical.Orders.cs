@@ -318,7 +318,7 @@ namespace WingCommand
                 radar.Set(r);
                 radar.SetEnabled(c.CanOrder, cannot);
             }
-            RefreshSummary(t, w, r);
+            RefreshSummary(c.Client ? -3 : t, w, r);
 
             SetGrid(HelosInScope(c));
             bool scoped = c.Scope.Kind != ScopeKind.Wing;
@@ -351,6 +351,11 @@ namespace WingCommand
             if (doctrineOpen)
             {
                 WmcKit.Set(doctrineSummary, "");
+                return;
+            }
+            if (t == -3)
+            {
+                WmcKit.Set(doctrineSummary, "THE HOST'S SETTINGS");
                 return;
             }
             summary.Length = 0;

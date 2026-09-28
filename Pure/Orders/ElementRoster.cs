@@ -26,7 +26,10 @@ namespace WingCommand
         private readonly List<uint> picked = new List<uint>();
         private readonly List<KeyValuePair<uint, int>> moved = new List<KeyValuePair<uint, int>>();
 
-        public static string Letter(int e) => ((char)('A' + e)).ToString();
+        private static readonly string[] Letters = { "A", "B", "C", "D", "E", "F", "G", "H" };
+
+        /// <summary>The element's letter; the same string every call (pages compare it by reference to skip work).</summary>
+        public static string Letter(int e) => e >= 0 && e < Letters.Length ? Letters[e] : ((char)('A' + e)).ToString();
 
         public void Add(uint id)
         {

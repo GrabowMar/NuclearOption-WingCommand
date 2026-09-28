@@ -283,7 +283,7 @@ namespace WingCommand
             }
             if (key == rowsKey) return;
             rowsKey = key;
-            WmcKit.Set(headNote, client ? WmcText.Unknown : SquadronWords.Head(roster.Count - kia, flying, free, lost));
+            WmcKit.Set(headNote, client ? WmcText.Unknown : SquadronWords.Head(roster.Count - kia, flying, free, lost - kia));
             bool none = client || roster.Count == 0;
             emptyRoot.SetActive(none);
             WmcKit.Set(emptyText, client ? SquadronWords.ClientWhy : SquadronWords.Empty);

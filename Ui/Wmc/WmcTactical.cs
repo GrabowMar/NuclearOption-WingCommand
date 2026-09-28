@@ -47,7 +47,7 @@ namespace WingCommand
             BuildDoctrine();
             BuildGrid();
             BuildSituation();
-            doctrineOpen = BezelLayout.DoctrineOpenByDefault(body.height, WingService.MaxMembers);
+            doctrineOpen = BezelLayout.DoctrineOpenByDefault(body.height, Reserve);
             PlaceBlocks();
         }
 
@@ -64,7 +64,7 @@ namespace WingCommand
         /// size setting) or DOCTRINE's toggle changed.</summary>
         private void PlaceBlocks()
         {
-            int max = WingService.MaxMembers;
+            int max = Reserve;
             if (placed && max == reservedFor && doctrineOpen == doctrineShown) return;
             placed = true;
             reservedFor = max;
@@ -88,6 +88,10 @@ namespace WingCommand
 
         private bool doctrineShown;
 
+        /// <summary>The seats the list reserves: the wing's size setting, or more when the wing flies more (a client of a bigger wing,
+        /// the setting lowered mid-mission).</summary>
+        private int Reserve => Mathf.Max(WingService.MaxMembers, last != null ? last.Count : 0);
+
         private static bool InScope(WmcContext c, in SnapshotMember m) => c.InScope(m);
 
         private void PickElement(int e) => scope.PickElement(e);
@@ -102,8 +106,9 @@ namespace WingCommand
             PlaceBlocks();
             scope.Refresh(c);
             RefreshList(c);
-            RefreshOrders(c);
+            // The situation first: the cue row reads this refresh's alerts.
             RefreshSituation(c);
+            RefreshOrders(c);
         }
     }
 }
