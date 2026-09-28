@@ -570,6 +570,21 @@ namespace WingCommand
             return n;
         }
 
+        /// <summary>Why <see cref="EngageAll"/> took nobody in scope, member by member ("#2 going home, #4 on the ground"); in-game
+        /// 2026-09-28 a bare "Nobody can attack" left the player guessing.</summary>
+        public string WhyNoneFight(Func<WingMember, bool> who)
+        {
+            string why = null;
+            foreach (WingMember m in Members)
+            {
+                if (m.Released || !m.Alive || (who != null && !who(m))) continue;
+                string s = m.OnGround ? "on the ground" : m.Recovery != null ? "going home" : m.Settle != null ? "landing at its point"
+                    : "cannot enter combat";
+                why = (why == null ? "" : why + ", ") + "#" + m.Number + " " + s;
+            }
+            return why ?? "no wingman in the scope";
+        }
+
         public static float ReallocateSeconds = 1f;
         // A3 (spec WMC rebuild §AI R8): up to one attack order per element at once, each over the members it claimed (AttackClaims:
         // the newest order on a member wins), each with its own targets.

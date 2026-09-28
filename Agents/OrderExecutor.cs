@@ -167,7 +167,7 @@ namespace WingCommand
                     if (!w.MayEngage(out int hostiles, out int members))
                         return OrderResult.Refused($"Outnumbered {hostiles} to {members} - Engage again to fight anyway");
                     int n = w.Engage(who);
-                    return n > 0 ? OrderResult.Acked($"{n} engaging") : OrderResult.Refused("Nobody can engage");
+                    return n > 0 ? OrderResult.Acked($"{n} engaging") : OrderResult.Refused("Nobody can engage: " + w.WhyNoneFight(who));
                 }
                 case OrderKind.Attack:
                 {
@@ -175,7 +175,7 @@ namespace WingCommand
                     if (units.Count == 0) return OrderResult.Refused("No enemy target selected");
                     int n = w.Attack(units, who);
                     string plural = units.Count == 1 ? "" : "s";
-                    return n > 0 ? OrderResult.Acked($"{n} attacking {units.Count} target{plural}") : OrderResult.Refused("Nobody can attack");
+                    return n > 0 ? OrderResult.Acked($"{n} attacking {units.Count} target{plural}") : OrderResult.Refused("Nobody can attack: " + w.WhyNoneFight(who));
                 }
                 case OrderKind.Splash:
                 {
