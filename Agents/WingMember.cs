@@ -52,6 +52,8 @@ namespace WingCommand
         public SettlePilot Settle;
         /// <summary>When the take-off roll is next traced (dev trace, once a second).</summary>
         public float RollTraceAt;
+        /// <summary>The terrain along this member's own look-ahead, smoothed (a far rejoin flies under it, not the wing's).</summary>
+        public readonly TerrainFloor OwnFloor = new TerrainFloor();
         /// <summary>The seated pilot's combat perks as modifiers (spec M5 §11).</summary>
         public PerkEffects Perks = PerkEffects.None;
         /// <summary>The member's radio voice, dealt once when it joins (review M7d I1: slots renumber, voices must not).</summary>

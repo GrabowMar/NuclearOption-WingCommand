@@ -169,7 +169,8 @@ namespace WingCommand
             GuidanceCommand guidance = LastGuidance = Pipeline.Guide(LastIntent, s, p);
             var ctx = new LimitContext
             {
-                FloorY = frame.FloorY, NearFloorY = frame.NearFloorY[Slot], HasNearFloor = frame.HasNearFloor[Slot],
+                FloorY = FormationWing.FloorFor(frame, Slot, (slot.Ref.Pos - s.Pos).Horizontal.Length),
+                NearFloorY = frame.NearFloorY[Slot], HasNearFloor = frame.HasNearFloor[Slot],
                 Clearance = Clearance, Aggression = aggression, CollisionBias = frame.Bias[Slot],
             };
             LastOutput = Pipeline.Step(guidance, s, ctx, p, dt);

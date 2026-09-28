@@ -13,6 +13,9 @@ namespace WingCommand
         /// <summary>Terrain under and 2 s ahead of this member, for its GCAS.</summary>
         public float NearFloorY;
         public bool HasNearFloor;
+        /// <summary>Terrain along this member's own 10 s look-ahead, smoothed like the wing's floor (<see cref="FloorFor"/>).</summary>
+        public float OwnFloorY;
+        public bool HasOwnFloor;
         /// <summary>The member's role as of its last step (the wing computes trail references for Trail members).</summary>
         public Role Role;
         /// <summary>Stable for the member's life in the wing (slots renumber when a member ahead leaves); trail state is
@@ -44,6 +47,8 @@ namespace WingCommand
         public readonly bool[] StaggerClear = new bool[FormationCatalog.MaxSlots];
         public readonly float[] NearFloorY = new float[FormationCatalog.MaxSlots];
         public readonly bool[] HasNearFloor = new bool[FormationCatalog.MaxSlots];
+        public readonly float[] OwnFloorY = new float[FormationCatalog.MaxSlots];
+        public readonly bool[] HasOwnFloor = new bool[FormationCatalog.MaxSlots];
         /// <summary>For Trail members: their point on the anchor's route (see <see cref="FormationWing"/>), valid when
         /// <see cref="TrailValid"/> (the wing saw the member trailing this tick).</summary>
         public readonly RefState[] TrailRef = new RefState[FormationCatalog.MaxSlots];
@@ -66,6 +71,16 @@ namespace WingCommand
     /// Members read the resulting <see cref="WingFrame"/>, so their order does not matter.</summary>
     internal sealed class FormationWing
     {
+        /// <summary>Further than this from its slot a member flies under its own terrain look-ahead, not the wing's floor.</summary>
+        public static float OwnFloorMetres = 3000f;
+
+        /// <summary>The floor member <paramref name="slot"/> flies under: the wing's (the highest terrain ahead of the anchor and
+        /// every member), or, while it is further than <see cref="OwnFloorMetres"/> from its slot, its own look-ahead only.
+        /// Day-1 sim: EW-25s just off the runway, rejoining a leader 20 km away over the hills, zoomed at 45 deg to clear the
+        /// leader's terrain at once and stalled.</summary>
+        public static float FloorFor(WingFrame frame, int slot, float slotDistance) =>
+            frame.HasOwnFloor[slot] && slotDistance > OwnFloorMetres ? frame.OwnFloorY[slot] : frame.FloorY;
+
         public static float EstablishedFraction = 0.3f, EstablishedSeconds = 2f;
         public static float TrailBelow = 150f, TrailStagger = 0.5f, TrailGapSpacings = 2f;
         private const int N = FormationCatalog.MaxSlots;
@@ -142,6 +157,8 @@ namespace WingCommand
                 caps[i] = members[i].Capability;
                 Frame.NearFloorY[i] = members[i].NearFloorY;
                 Frame.HasNearFloor[i] = members[i].HasNearFloor;
+                Frame.OwnFloorY[i] = members[i].OwnFloorY;
+                Frame.HasOwnFloor[i] = members[i].HasOwnFloor;
             }
             Solver.Solve(Frame.Definition, Frame.Spacing, Frame.Leader, caps, count, floorY, clearance, dt, Frame.Slots, History);
             Frame.Stack = Solver.StackNow;

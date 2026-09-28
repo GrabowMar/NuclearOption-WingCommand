@@ -784,6 +784,8 @@ namespace WingCommand
             Radius = m.Profile.MaxRadius,
             NearFloorY = m.NearFloorY,
             HasNearFloor = !float.IsNaN(m.NearFloorY),
+            OwnFloorY = m.OwnFloor.Value,
+            HasOwnFloor = !float.IsNaN(m.OwnFloor.Value),
             Role = m.Brain.Roles.Current,
             Id = m.Id,
             Grounded = m.OnGround,
@@ -1183,7 +1185,9 @@ namespace WingCommand
                 WingMember m = Members[i];
                 if (!m.Alive) continue;
                 m.NearFloorY = TerrainProbe.Near(m.Last.Pos, m.Last.Vel);
-                raw = Math.Max(raw, TerrainProbe.LookAhead(m.Last.Pos, m.Last.Vel));
+                float own = TerrainProbe.LookAhead(m.Last.Pos, m.Last.Vel);
+                m.OwnFloor.Update(own, dt);
+                raw = Math.Max(raw, own);
                 any = true;
             }
             if (any) floor.Update(raw, dt);
