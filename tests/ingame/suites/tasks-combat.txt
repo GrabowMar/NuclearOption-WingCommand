@@ -1,0 +1,10 @@
+# Tasks and combat: move/orbit, cargo, landing, engage, defend, outnumbered, splash, 8-ship performance.
+wc-m4a-move-orbit-fs20
+wc-m4c-cargo-uh90
+wc-m4c-land-here-uh90
+wc-m5a-engage-fs20
+wc-m5c-defend-fs20
+wc-m5d-outnumbered-fs20
+wc-m5d-standing-fire-fs20
+wc-m5e-splash-fs20
+wc-m8-perf-8ship-fs20

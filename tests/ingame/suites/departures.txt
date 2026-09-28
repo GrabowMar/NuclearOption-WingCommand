@@ -1,0 +1,25 @@
+# Every airframe off two fields (gen_departures.py): three wingmen each must lift off, fly and not be lost.
+wc-dep-a19-mountains
+wc-dep-a19-north
+wc-dep-ci22-mountains
+wc-dep-ci22-north
+wc-dep-ew25-mountains
+wc-dep-ew25-north
+wc-dep-fs12-mountains
+wc-dep-fs12-north
+wc-dep-fs20-mountains
+wc-dep-fs20-north
+wc-dep-kr67-mountains
+wc-dep-kr67-north
+wc-dep-sah46-mountains
+wc-dep-sah46-north
+wc-dep-sfb81-mountains
+wc-dep-sfb81-north
+wc-dep-ta30-mountains
+wc-dep-ta30-north
+wc-dep-uh90-mountains
+wc-dep-uh90-north
+wc-dep-vl49-mountains
+wc-dep-vl49-north
+wc-dep-vt7-mountains
+wc-dep-vt7-north

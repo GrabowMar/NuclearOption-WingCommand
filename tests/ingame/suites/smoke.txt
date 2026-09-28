@@ -1,0 +1,7 @@
+# A quick check after a change: two departures, a join, the order grid, the UI tour and an RTB.
+wc-dep-fs20-north
+wc-dep-ci22-mountains
+wc-m1-join-fs20
+wc-r3-orders-fs20
+wc-ui-tour-fs20
+wc-m3b-rtb-fs20-boscali-north
