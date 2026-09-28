@@ -111,5 +111,17 @@ namespace WingCommand.PureTests
             Assert.Equal(MapMode.Cap, cap.Map);
             Assert.Null(OrderGrid.Why(cap, true, 2, false));
         }
+
+        [Fact]
+        public void TheAreaDoesNotReEngageAMemberBeyondItsLeashOrJustTakenBack()
+        {
+            // Review (combat): a member taken back beyond the leash was re-engaged 0.5 s later, and again, so its missile defence
+            // never started; an outnumbered fall-back lasted half a second.
+            WingTask cap = WingTask.Cap(Waypoint.At(0f, 0f), 8000f);
+            Assert.True(AreaGuard.MayEngage(cap, 5000f, float.PositiveInfinity));
+            Assert.False(AreaGuard.MayEngage(cap, 12500f, float.PositiveInfinity));    // beyond 1.5 x 8 km
+            Assert.False(AreaGuard.MayEngage(cap, 5000f, AreaGuard.ReEngageSeconds - 1f));
+            Assert.True(AreaGuard.MayEngage(cap, 5000f, AreaGuard.ReEngageSeconds + 1f));
+        }
     }
 }

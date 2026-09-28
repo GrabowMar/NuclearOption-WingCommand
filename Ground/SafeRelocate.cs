@@ -16,22 +16,9 @@ namespace WingCommand
 
         private static readonly FieldInfo ImpactPrev = AccessTools.Field(typeof(ImpactDetector), "velocityPrev");
         private static readonly FieldInfo FuelPrev = AccessTools.Field(typeof(FuelTank), "velocityPrev");
-        // Night-2 sim (SAH-46): a helicopter's soft-body rotor keeps its mass points in world space and takes their velocity and
-        // acceleration from how far they moved — a 10 m move read as 600 m/s and flung the aircraft (54 m/s, 46 rad/s, lost). They
-        // move with the aircraft, their velocities turned with it (the rotor keeps spinning), their pending force dropped
-        // (SoftBodyRotor.massPoints / anchoredMassPoints, MassPoint.position / velocity / velocityPrev / frameForces, read in the decompile).
-        private static readonly System.Type MassPointType = AccessTools.Inner(typeof(SoftBodyRotor), "MassPoint");
-        private static readonly FieldInfo[] RotorPoints =
-        {
-            AccessTools.Field(typeof(SoftBodyRotor), "massPoints"), AccessTools.Field(typeof(SoftBodyRotor), "anchoredMassPoints"),
-        };
-        private static readonly FieldInfo PointPosition = MassPointType != null ? AccessTools.Field(MassPointType, "position") : null;
-        private static readonly FieldInfo[] PointRates = MassPointType == null ? new FieldInfo[0] : new[]
-        {
-            AccessTools.Field(MassPointType, "velocity"), AccessTools.Field(MassPointType, "velocityPrev"),
-        };
-        private static readonly FieldInfo PointForces = MassPointType != null ? AccessTools.Field(MassPointType, "frameForces") : null;
-        private static readonly HashSet<object> movedPoints = new HashSet<object>();
+        // The bodies and objects of the aircraft being moved (reused; the move runs rarely).
+        private static readonly List<Rigidbody> bodies = new List<Rigidbody>();
+        private static readonly List<GameObject> objects = new List<GameObject>();
 
         /// <remarks>It is put down as the game's spawner puts an aircraft down: its spawn offset above the ground, turned to the
         /// pose and at its rest attitude (definition.restRotation). Night-2 sim: an attitude kept from the move (a helicopter caught
@@ -56,61 +43,50 @@ namespace WingCommand
             Quaternion rest = Quaternion.LookRotation(fwd, Vector3.up) * Quaternion.Euler(a.definition != null ? a.definition.restRotation : Vector3.zero);
             Quaternion turn = rest * Quaternion.Inverse(root.rotation);
             Vector3 origin = root.position;
-            // Night-2 sim: relocated aircraft (VL-49, SFB-81, FS-20) were often flung (40-100 m/s, nose 56 deg down) and lost the
-            // moment they were moved. Evidence first: every body moved, every joint and whether it holds a body left behind.
-            Rigidbody[] bodies = a.GetComponentsInChildren<Rigidbody>();
-            int joints = 0, outside = 0;
-            foreach (Joint j in a.GetComponentsInChildren<Joint>(true))
-            {
-                joints++;
-                if (j.connectedBody != null && !j.connectedBody.transform.IsChildOf(root)) outside++;
-            }
-            Plugin.Logger.LogInfo($"[Ground] relocating {a.definition?.unitName}: {bodies.Length} bodies, {joints} joints ({outside} to bodies outside it), " +
+            // Review (ground): on the host an aircraft flies complex physics — every part with mass is unparented with its own
+            // Rigidbody, held to its neighbours by FixedJoints (Aircraft.SetComplexPhysics -> AeroPart.CreateRB SetParent(null),
+            // CreateJoints). A move of the root's hierarchy alone left the wings and tail behind, and the joints flung the fuselage
+            // back to them (night-2 sim: 40-490 m/s, lost). Every part's body and object moves with it.
+            bodies.Clear();
+            objects.Clear();
+            objects.Add(a.gameObject);
+            foreach (Rigidbody rb in a.GetComponentsInChildren<Rigidbody>()) bodies.Add(rb);
+            if (a.partLookup != null)
+                foreach (UnitPart part in a.partLookup)
+                {
+                    if (part == null) continue;
+                    if (part.rb != null && !bodies.Contains(part.rb)) bodies.Add(part.rb);
+                    if (!part.transform.IsChildOf(root)) objects.Add(part.gameObject);
+                }
+            Plugin.Logger.LogInfo($"[Ground] relocating {a.definition?.unitName}: {bodies.Count} bodies, {objects.Count - 1} parts apart from it, " +
                                   $"from {origin} to {target} (graph y {graphY:0.00}, surface y {surfaceY:0.00} of {n} hits, offset " +
-                                  $"{(a.definition != null ? a.definition.spawnOffset.y : 0f):0.00}), pitch {-root.eulerAngles.x:0.0} to rest " +
-                                  $"{-rest.eulerAngles.x:0.0}");
+                                  $"{(a.definition != null ? a.definition.spawnOffset.y : 0f):0.00})");
             foreach (Rigidbody rb in bodies)
             {
-                rb.position = target + turn * (rb.position - origin);
-                rb.rotation = turn * rb.rotation;
+                Vector3 p = target + turn * (rb.position - origin);
+                Quaternion r = turn * rb.rotation;
+                rb.position = p;
+                rb.rotation = r;
                 rb.velocity = Vector3.zero;
                 rb.angularVelocity = Vector3.zero;
+                // An unparented part's transform goes with its body now (the joints are solved from both).
+                if (!rb.transform.IsChildOf(root)) rb.transform.SetPositionAndRotation(p, r);
             }
             root.SetPositionAndRotation(target, turn * root.rotation);
-            MoveRotors(a, origin, target, turn);
             a.velocityPrev = Vector3.zero;
             if (a.pilots != null)
-                foreach (Pilot p in a.pilots)
-                    if (p != null) p.velocityPrev = Vector3.zero;
-            foreach (GForceDamage g in a.GetComponentsInChildren<GForceDamage>(true)) g.velocityPrev = Vector3.zero;
-            if (ImpactPrev != null)
-                foreach (ImpactDetector d in a.GetComponentsInChildren<ImpactDetector>(true)) ImpactPrev.SetValue(d, Vector3.zero);
-            if (FuelPrev != null)
-                foreach (FuelTank f in a.GetComponentsInChildren<FuelTank>(true)) FuelPrev.SetValue(f, Vector3.zero);
+                foreach (Pilot pilot in a.pilots)
+                    if (pilot != null) pilot.velocityPrev = Vector3.zero;
+            foreach (GameObject o in objects)
+            {
+                foreach (GForceDamage g in o.GetComponentsInChildren<GForceDamage>(true)) g.velocityPrev = Vector3.zero;
+                if (ImpactPrev != null)
+                    foreach (ImpactDetector d in o.GetComponentsInChildren<ImpactDetector>(true)) ImpactPrev.SetValue(d, Vector3.zero);
+                if (FuelPrev != null)
+                    foreach (FuelTank f in o.GetComponentsInChildren<FuelTank>(true)) FuelPrev.SetValue(f, Vector3.zero);
+            }
             Plugin.Logger.LogWarning($"[Ground] relocated {a.definition.unitName} to ({to.Pos.X:0}, {to.Pos.Z:0}) after it was stuck");
             WingRuntime.Instance?.StartCoroutine(Watch(a, target));
-        }
-
-        /// <summary>Every soft-body rotor's mass points go where the aircraft went, turned with it (each point once: the arrays share
-        /// them).</summary>
-        private static void MoveRotors(Aircraft a, Vector3 origin, Vector3 target, Quaternion turn)
-        {
-            if (PointPosition == null) return;
-            movedPoints.Clear();
-            foreach (SoftBodyRotor rotor in a.GetComponentsInChildren<SoftBodyRotor>(true))
-                foreach (FieldInfo field in RotorPoints)
-                {
-                    if (field == null || !(field.GetValue(rotor) is System.Array points)) continue;
-                    foreach (object point in points)
-                    {
-                        if (point == null || !movedPoints.Add(point)) continue;
-                        PointPosition.SetValue(point, target + turn * ((Vector3)PointPosition.GetValue(point) - origin));
-                        foreach (FieldInfo rate in PointRates)
-                            if (rate != null) rate.SetValue(point, turn * (Vector3)rate.GetValue(point));
-                        PointForces?.SetValue(point, Vector3.zero);
-                    }
-                }
-            movedPoints.Clear();
         }
 
         /// <summary>How the aircraft moves in the physics frames after a relocation (dev evidence, a few log lines).</summary>

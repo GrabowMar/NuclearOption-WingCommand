@@ -7,11 +7,13 @@ namespace WingCommand
     /// half), not the wing's anchor. The task itself flies as the orbit or patrol it is.</summary>
     internal static class AreaGuard
     {
-        public const float MinRadius = 2000f, MaxRadius = 40000f, CapRadius = 8000f, SweepRadius = 12000f, MinLeash = 10000f;
-        public const float LeashFactor = 1.5f;
+        public static float MinRadius = 2000f, MaxRadius = 40000f, CapRadius = 8000f, SweepRadius = 12000f, MinLeash = 10000f;
+        public static float LeashFactor = 1.5f;
+        /// <summary>A member taken back from a fight (leash, odds, no target) is not engaged by the area again for this long, s.</summary>
+        public static float ReEngageSeconds = 20f;
         /// <summary>SWEEP's circuit: this many points on a circle at <see cref="SweepCircuit"/> of the radius.</summary>
         public const int SweepPoints = 6;
-        public const float SweepCircuit = 0.6f;
+        public static float SweepCircuit = 0.6f;
 
         public static float Clamp(float radius) =>
             float.IsNaN(radius) ? CapRadius : radius < MinRadius ? MinRadius : radius > MaxRadius ? MaxRadius : radius;
@@ -31,6 +33,12 @@ namespace WingCommand
         /// <summary>How far from the area's centre an engaged member may chase (0: the wing's own leash applies).</summary>
         public static float Leash(WingTask t) =>
             t == null || t.GuardRadius <= 0f ? 0f : Math.Max(MinLeash, LeashFactor * t.GuardRadius);
+
+        /// <summary>Whether the area may engage a member <paramref name="fromCentre"/> m (horizontally) from its centre, taken back from
+        /// a fight <paramref name="sinceTakeBack"/> s ago: not beyond its leash, which the supervisor would take it back from at once,
+        /// and not straight after a take-back (review A1: engage and take-back every 0.5 s kept restarting its missile defence).</summary>
+        public static bool MayEngage(WingTask t, float fromCentre, float sinceTakeBack) =>
+            t != null && t.GuardRadius > 0f && fromCentre <= Leash(t) && !(sinceTakeBack < ReEngageSeconds);
 
         /// <summary>SWEEP's loop round <paramref name="center"/>, clockwise from north, at the centre's height and speed.</summary>
         public static Waypoint[] Circuit(Waypoint center, float radius)

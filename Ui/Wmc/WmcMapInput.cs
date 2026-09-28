@@ -190,7 +190,8 @@ namespace WingCommand
                 return;
             }
             // CAP and SWEEP: the press is the centre, the drag the radius, drawn live.
-            if (pressed && Area && pressOnMap && !gesture.ReleasedAsClick(mouse.x, mouse.y)
+            // Review (plans): Moved, not ReleasedAsClick, which consumed the press every held frame (a click became a 2 km area).
+            if (pressed && Area && pressOnMap && (Dragging || gesture.Moved(mouse.x, mouse.y))
                 && WmcMapPointer.TryGet(map, out GlobalPosition now, out _, out _))
             {
                 Dragging = true;

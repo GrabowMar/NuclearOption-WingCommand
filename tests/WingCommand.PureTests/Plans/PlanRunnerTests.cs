@@ -153,6 +153,39 @@ namespace WingCommand.PureTests
         }
 
         [Fact]
+        public void AResumedStepThatNeverWentOutStillWaitsForItsStart()
+        {
+            // Review (plans): a step held while still waiting for its T+ went out on RESUME, eight minutes early.
+            var plan = new WingPlan();
+            plan.Steps[1].Add(new PlanStep { Kind = PlanKind.Move, Points = new[] { P }, Start = PlanStart.TPlus, Delay = 600f });
+            var r = new PlanRunner(plan);
+            r.Execute(0f);
+            LaneFacts[] f = Facts();
+            f[1].PlayerOrdered = true;
+            Assert.Empty(Tick(r, 60f, f));
+            Assert.Equal(StepState.Held, r.State(1, 0));
+            r.Resume(1);
+            Assert.Empty(Tick(r, 121f, Facts()));
+            Assert.Single(Tick(r, 601f, Facts()));
+        }
+
+        [Fact]
+        public void SkippingAfterARetryDoesNotSendTheNextStepBeforeItsStart()
+        {
+            var plan = new WingPlan();
+            plan.Steps[0].Add(Step(PlanKind.Move));
+            plan.Steps[0].Add(new PlanStep { Kind = PlanKind.Orbit, Points = new[] { P }, Start = PlanStart.TPlus, Delay = 600f, End = PlanEnd.Time, EndSeconds = 60f });
+            var r = new PlanRunner(plan);
+            r.Execute(0f);
+            Tick(r, 0f, Facts());
+            r.Refused(0, "no");
+            r.Retry(0);
+            r.Skip(0, 5f);
+            Assert.Empty(Tick(r, 10f, Facts()));
+            Assert.Single(Tick(r, 600f, Facts()));
+        }
+
+        [Fact]
         public void AbortStopsEveryLane()
         {
             var plan = new WingPlan();
@@ -192,11 +225,13 @@ namespace WingCommand.PureTests
         {
             foreach (OrderKind k in new[] { OrderKind.Task, OrderKind.FormUp, OrderKind.Rtb, OrderKind.Refit, OrderKind.Engage,
                          OrderKind.Attack, OrderKind.Splash, OrderKind.BreakOff, OrderKind.LandHere, OrderKind.TakeOff,
-                         OrderKind.DeliverCargo, OrderKind.Rescue, OrderKind.EscortMe, OrderKind.EscortTarget })
+                         OrderKind.DeliverCargo, OrderKind.EscortMe, OrderKind.EscortTarget })
                 Assert.True(PlanRules.Holds(k), k.ToString());
             foreach (OrderKind k in new[] { OrderKind.Ecm, OrderKind.Maneuver, OrderKind.SetOverride, OrderKind.SetDoctrine,
                          OrderKind.SetSpacing, OrderKind.NextShape, OrderKind.Stack, OrderKind.Afterburner, OrderKind.SkipLeg,
-                         OrderKind.RenameElement, OrderKind.Call, OrderKind.BogeyDope, OrderKind.Eject, OrderKind.Release })
+                         OrderKind.RenameElement, OrderKind.Call, OrderKind.BogeyDope, OrderKind.Eject, OrderKind.Release,
+                         // Review (plans): AIR SAR sends one helicopter whatever the scope; it holds no lane.
+                         OrderKind.Rescue })
                 Assert.False(PlanRules.Holds(k), k.ToString());
         }
 

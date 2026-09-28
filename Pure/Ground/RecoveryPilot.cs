@@ -33,7 +33,7 @@ namespace WingCommand
         public static float StackStep = 150f, HeloStackStep = 40f, RetrySeconds = 20f;
         public static int MaxLandingTries = 3;
 
-        public readonly RecoveryIntent Intent;
+        public RecoveryIntent Intent { get; private set; }
         public readonly FieldTraffic Field;
         public RecoveryPhase Phase { get; private set; } = RecoveryPhase.Approach;
         public int FailedLandings { get; private set; }
@@ -147,6 +147,16 @@ namespace WingCommand
 
         /// <summary>After the ground pilot's step: on the stand, back to the reserve (RTB) or into servicing (Refit); the
         /// service is due after the refit time; departing, done once airborne.</summary>
+        /// <summary>An RTB not yet decided on its stand becomes a REFIT (a plan's REFIT after bingo sent the member home); false when it
+        /// is one already or past the stand.</summary>
+        public bool Upgrade(RecoveryIntent intent)
+        {
+            if (intent == Intent || intent != RecoveryIntent.Refit) return false;
+            if (Phase != RecoveryPhase.Approach && Phase != RecoveryPhase.Landing && Phase != RecoveryPhase.Ground) return false;
+            Intent = intent;
+            return true;
+        }
+
         public RecoveryAction Update(float time, float fuel, float ammo, WingEventRing events, int slot)
         {
             switch (Phase)

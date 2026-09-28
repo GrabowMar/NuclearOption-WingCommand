@@ -27,7 +27,15 @@ namespace WingCommand
         /// <summary>Sends a member home. False when it cannot go (no friendly field, already going, released).</summary>
         public bool Recover(WingMember m, RecoveryIntent intent)
         {
-            if (m.Released || m.Recovery != null) return false;
+            if (m.Released) return false;
+            // Review P2: a REFIT for a member already going home (bingo sent it) makes that recovery a refit, where the field serves
+            // one (never a deck); another recovery is refused as before.
+            if (m.Recovery != null)
+            {
+                if (intent != RecoveryIntent.Refit || m.Recovery.Field.Field.Attached || !m.Recovery.Upgrade(intent)) return false;
+                Plugin.Logger.LogInfo($"[Wing] #{m.Number} going to refit instead of the reserve");
+                return true;
+            }
             if (m.Engaged) TakeBack(m, TransitionReason.Commanded);
             EndDefence(m);
             if (m.Settle != null)

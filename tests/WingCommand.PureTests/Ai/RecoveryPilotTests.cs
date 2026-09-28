@@ -305,5 +305,17 @@ namespace WingCommand.PureTests
             recovery.Landed(field, pad, 5f, events, 0);
             Assert.Equal(RecoveryAction.Reserve, recovery.Update(5f, 0.5f, 1f, events, 0));
         }
+
+        [Fact]
+        public void AnRtbStillOnItsWayHomeBecomesARefitButNotOnceItIsBackInTheReserve()
+        {
+            // Review (plans): a plan's REFIT after a BINGO end was refused ("already going") because bingo had already sent the member
+            // home; the aircraft went back to the reserve. An RTB not yet decided on its stand becomes the refit.
+            var field = new FieldTraffic(TestFields.WithServicePointAndExit(), 0, false);
+            var recovery = new RecoveryPilot(1, field, AirframeClass.FixedWing, RecoveryIntent.Rtb);
+            Assert.True(recovery.Upgrade(RecoveryIntent.Refit));
+            Assert.Equal(RecoveryIntent.Refit, recovery.Intent);
+            Assert.False(recovery.Upgrade(RecoveryIntent.Refit));   // already one
+        }
     }
 }

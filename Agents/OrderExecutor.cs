@@ -15,6 +15,9 @@ namespace WingCommand
         {
             // Spec WMC rebuild §PLAN: the player's order to a plan element holds its lane (read before a detach moves anyone).
             int lanes = o.Source == OrderSource.Player && PlanRules.Holds(o.Kind) ? WingPlans.Instance?.Reaches(o.Scope) ?? 0 : 0;
+            // Review P2: an escort only moves element A's anchor, whatever its scope.
+            if (lanes != 0 && (o.Kind == OrderKind.EscortMe || o.Kind == OrderKind.EscortTarget))
+                lanes &= WingPlans.Instance.Reaches(WingScope.OfElement(0));
             OrderResult r = Apply(o);
             if (r.Accepted && lanes != 0) WingPlans.Instance.PlayerOrdered(lanes);
             return r;

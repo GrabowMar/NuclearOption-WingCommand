@@ -452,6 +452,12 @@ namespace WingCommand
         private float guardClock;
         private readonly bool[] guardFighting = new bool[ElementRoster.MaxElements];
 
+        private static float Horizontal(Vec3 p, Waypoint c)
+        {
+            float dx = p.X - c.X, dz = p.Z - c.Z;
+            return (float)Math.Sqrt(dx * dx + dz * dz);
+        }
+
         /// <summary>Element <paramref name="e"/>'s task when it guards an area (CAP, SWEEP) and it flies it, else null.</summary>
         private WingTask GuardedTask(int e)
         {
@@ -488,8 +494,12 @@ namespace WingCommand
                 foreach (KeyValuePair<PersistentID, TrackingInfo> pair in hq.trackingDatabase)
                 {
                     TrackingInfo t = pair.Value;
-                    if (t == null || !t.TryGetUnit(out Unit u) || !(u is Aircraft) || u.disabled || u.NetworkHQ == null || u.NetworkHQ == hq) continue;
+                    if (t == null || !t.TryGetUnit(out Unit u) || !(u is Aircraft enemy) || u.disabled || u.NetworkHQ == null || u.NetworkHQ == hq) continue;
                     if (!AreaGuard.Inside(area, t.GetPosition().ToVec3())) continue;
+                    // Review A1: a stale track or a parked aircraft is no threat (the game's AI would find no target, and the
+                    // element would cycle through 15 s no-target fights) — the odds count's own test.
+                    float antiAir = enemy.definition != null ? enemy.definition.roleIdentity.antiAir : 0f;
+                    if (!OutnumberedJudge.IsAirThreat(hq.IsTargetPositionAccurate(u, TargetAccuracyMetres), enemy.radarAlt, antiAir)) continue;
                     threat = u;
                     break;
                 }
@@ -498,10 +508,14 @@ namespace WingCommand
                     guardFighting[e] = false;
                     continue;
                 }
+                // Review A1: not while the wing is outnumbered (the fall-back held half a second).
+                if (!MayEngage(out _, out _)) continue;
                 // EngageAll, not Engage: an ATTACK order another element flies stays.
-                // Not a member the supervisor would take straight back (no ammunition, bingo): it would be engaged every half second.
+                // Not a member the supervisor would take straight back (no ammunition, bingo, beyond the area's leash), nor one it just
+                // took back: engaged every half second, its missile defence never started (review A1).
                 int n = EngageAll(m => ElementOf(m) == element && !m.Engaged && DoctrineFor(m).Targets != TargetPolicy.Hold
-                    && AmmoFraction(m.Aircraft) > 0f && !m.Bingo.Bingo);
+                    && AmmoFraction(m.Aircraft) > 0f && !m.Bingo.Bingo
+                    && AreaGuard.MayEngage(area, Horizontal(m.Last.Pos, area.Center), missionTime - m.TakenBackAt));
                 if (n > 0 && !guardFighting[e])
                     Plugin.Logger.LogInfo($"[Wing] element {ElementRoster.Letter(e)} {AreaGuard.Word(area)}: {threat.unitName} inside the area, {n} engaging");
                 guardFighting[e] = n > 0 || guardFighting[e];
@@ -838,6 +852,7 @@ namespace WingCommand
             Aircraft a = m.Aircraft;
             if (a != null && a.countermeasureTrigger) a.Countermeasures(false, a.countermeasureManager.activeIndex);
             m.Engaged = false;
+            m.TakenBackAt = missionTime;
             m.AssignedTarget = null;
             m.Pilot?.SetPrimaryTarget(null);
             // The fight's own Winchester already told the wing: the formation sample must not say it again.

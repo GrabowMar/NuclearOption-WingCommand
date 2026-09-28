@@ -33,6 +33,8 @@ namespace WingCommand
         private readonly int[] current = new int[WingPlan.Lanes];
         private readonly float[] startAt = new float[WingPlan.Lanes];
         private readonly bool[] resend = new bool[WingPlan.Lanes];
+        // Whether a step's order went out (RESUME and RETRY send again only what went out; one held before it did still waits).
+        private readonly bool[,] wentOut = new bool[WingPlan.Lanes, WingPlan.MaxSteps];
         private readonly string[] why = new string[WingPlan.Lanes];
         private float execAt;
 
@@ -75,6 +77,7 @@ namespace WingCommand
                 {
                     state[l, s] = StepState.Pending;
                     doneAt[l, s] = float.NaN;
+                    wentOut[l, s] = false;
                 }
             }
         }
@@ -116,6 +119,7 @@ namespace WingCommand
                     if (!resend[l] && !Ready(l, i, time)) break;
                     resend[l] = false;
                     state[l, i] = StepState.Running;
+                    wentOut[l, i] = true;
                     startAt[l] = time;
                     into?.Add(new PlanEmit { Lane = l, Step = i, Order = PlanCompile.Order(steps[i], l) });
                     sent++;
@@ -168,7 +172,7 @@ namespace WingCommand
             if (i >= plan.Steps[lane].Count || state[lane, i] != StepState.Blocked) return;
             state[lane, i] = StepState.Pending;
             why[lane] = null;
-            resend[lane] = true;
+            resend[lane] = wentOut[lane, i];
         }
 
         /// <summary>The lane's step is passed over (it counts as done for the steps that wait for it).</summary>
@@ -179,6 +183,7 @@ namespace WingCommand
             state[lane, i] = StepState.Skipped;
             doneAt[lane, i] = time;
             why[lane] = null;
+            resend[lane] = false;
             current[lane]++;
         }
 
@@ -194,7 +199,7 @@ namespace WingCommand
             int i = current[lane];
             if (i >= plan.Steps[lane].Count || state[lane, i] != StepState.Held) return;
             state[lane, i] = StepState.Pending;
-            resend[lane] = true;
+            resend[lane] = wentOut[lane, i];
         }
     }
 }

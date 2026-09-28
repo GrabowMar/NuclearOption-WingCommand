@@ -30,5 +30,21 @@ namespace WingCommand.PureTests
             Assert.True(g.ReleasedAsClick(5f, 5f));
             Assert.False(g.ReleasedAsClick(5f, 5f));   // consumed
         }
+
+        [Fact]
+        public void AHeldPressReadsAsADragOnlyOnceItHasMovedAndIsNotConsumed()
+        {
+            // Review (plans): CAP/SWEEP asked ReleasedAsClick every held frame to spot a drag; it consumed the press, so a plain
+            // click became a 2 km area (or nothing). Moved asks without consuming.
+            var g = new MapGesture();
+            g.NotePointerDown(100f, 100f);
+            Assert.False(g.Moved(103f, 101f));
+            Assert.False(g.Moved(103f, 101f));
+            Assert.True(g.ReleasedAsClick(103f, 101f));
+            g.NotePointerDown(100f, 100f);
+            Assert.True(g.Moved(140f, 100f));
+            Assert.False(g.ReleasedAsClick(140f, 100f));
+            Assert.False(g.Moved(140f, 100f));   // nothing tracked
+        }
     }
 }

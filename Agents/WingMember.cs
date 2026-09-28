@@ -40,6 +40,8 @@ namespace WingCommand
         public Unit AssignedTarget;
         /// <summary>How long the game's combat state has had no target.</summary>
         public float NoTargetClock;
+        /// <summary>When the member was last taken back from a fight (the area guard waits before engaging it again).</summary>
+        public float TakenBackAt = float.NegativeInfinity;
         /// <summary>How long the member has been unable to attack its assigned target (<see cref="TargetAllocator"/>).</summary>
         public float TargetLost;
         /// <summary>The missile the defence last classified (spec M5 §7.1), and how.</summary>

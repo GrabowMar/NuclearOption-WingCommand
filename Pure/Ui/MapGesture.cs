@@ -32,6 +32,16 @@ namespace WingCommand
             return dx * dx + dy * dy <= slopPixels * slopPixels;
         }
 
+        /// <summary>Whether the pointer has left the click slop since the tracked press (a drag under way). Does not consume the press;
+        /// false when none is tracked.</summary>
+        public bool Moved(float screenX, float screenY, float slopPixels = ClickSlopPixels)
+        {
+            if (float.IsNaN(pressX) || float.IsNaN(pressY)) return false;
+            float dx = screenX - pressX;
+            float dy = screenY - pressY;
+            return dx * dx + dy * dy > slopPixels * slopPixels;
+        }
+
         public void Clear()
         {
             pressX = float.NaN;

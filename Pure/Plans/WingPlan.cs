@@ -91,7 +91,8 @@ namespace WingCommand
         }
 
         /// <summary>Whether a player's order of this kind to a plan element holds its lane (spec WMC rebuild §PLAN): the
-        /// orders that change what the element does. Settings, reactions, ECM, radio and one member's ejection do not.</summary>
+        /// orders that change what the element does. Settings, reactions, ECM, radio, one member's ejection and AIR SAR (it sends one
+        /// helicopter whatever the scope) do not.</summary>
         public static bool Holds(OrderKind kind)
         {
             switch (kind)
@@ -107,7 +108,6 @@ namespace WingCommand
                 case OrderKind.LandHere:
                 case OrderKind.TakeOff:
                 case OrderKind.DeliverCargo:
-                case OrderKind.Rescue:
                 case OrderKind.EscortMe:
                 case OrderKind.EscortTarget:
                     return true;

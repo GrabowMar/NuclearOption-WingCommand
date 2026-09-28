@@ -612,7 +612,13 @@ namespace WingCommand
                         PlanEdit.Replace(selected, point.x, point.z);
                         if (radius > 0f && (selected.Kind == PlanKind.Cap || selected.Kind == PlanKind.Sweep)) selected.Radius = radius;
                     }
-                    c.Map.Disarm();
+                    // Review P2: a route re-placed starts again from its first point; the next right-clicks add the rest.
+                    if (selected.Kind == PlanKind.Route && c.Map.ArmTool(c, PlanTool.Route))
+                    {
+                        routeOpen = true;
+                        WingToast.Show("Right-click the route's next points; DONE ends it");
+                    }
+                    else c.Map.Disarm();
                     break;
                 case PlanTool.Attack:
                     if (!enemy)
