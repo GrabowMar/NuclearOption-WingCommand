@@ -114,7 +114,11 @@ namespace WingCommand
                 n.SteerRateDps = steerRate;
                 n.WheelbaseM = wheelbase;
             }
-            if (def != null) n.SpanM = def.width;
+            if (def != null)
+            {
+                n.SpanM = def.width;
+                n.LengthM = def.length;
+            }
             return n;
         }
     }

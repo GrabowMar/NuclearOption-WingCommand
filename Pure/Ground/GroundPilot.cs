@@ -53,6 +53,9 @@ namespace WingCommand
     {
         public static float ParkedSeconds = 2f, ClaimAhead = 80f, NodeClearRadius = 15f, FollowGap = 40f, QueueReach = 400f;
         public static float ObstacleCorridor = 15f, ObstacleGap = 30f, ObstacleLookahead = 150f, PassMargin = 2f, ForeignHalfSpan = 8f;
+        /// <summary>Behind a member: at least its own length plus this, centre to centre (day-1 sim: a 40 m gap put an SFB-81's nose
+        /// into the tail ahead).</summary>
+        public static float FollowMargin = 10f;
         /// <summary>Leaving a stand (or a service-point spawn) with the way out more than this far round from the nose, it is towed
         /// round where it stands first (overnight 2026-09-28: a refitted FS-20 U-turned out of its stand into something).</summary>
         public static float TowTurnDeg = 100f, TowLookMetres = 20f;
@@ -450,7 +453,7 @@ namespace WingCommand
                 {
                     // Never claim past a member ahead on the path: what lies beyond it is its to take first.
                     int limit = 0;
-                    while (step + limit < edges.Count && NodeAt(step + limit + 1) < obstacle + FollowGap) limit++;
+                    while (step + limit < edges.Count && NodeAt(step + limit + 1) < obstacle + Follow(p)) limit++;
                     steps = Math.Min(steps, limit);
                 }
                 for (int k = step; k < edges.Count; k++)
@@ -505,7 +508,7 @@ namespace WingCommand
                 // Stopped behind a member: the edge it stands on is what a deadlock victim would go round.
                 if (member >= 0 && edges.Count > 0)
                 {
-                    waitEdge = Math.Min(StepAt(obstacle + FollowGap), edges.Count - 1);
+                    waitEdge = Math.Min(StepAt(obstacle + Follow(p)), edges.Count - 1);
                     waitNode = -1;
                 }
                 stopAt = obstacle;
@@ -1089,6 +1092,8 @@ namespace WingCommand
         /// <summary>Where to stop for another aircraft (a very long distance when none): foreign ones
         /// <see cref="ObstacleGap"/> short, members <see cref="FollowGap"/> short (<paramref name="member"/>: the member
         /// that sets it, −1 when none).</summary>
+        private static float Follow(AirframeProfile p) => Math.Max(FollowGap, p.LengthM + FollowMargin);
+
         private float ObstacleStop(float along, in AircraftState s, AirframeProfile p, out int member)
         {
             float stop = float.MaxValue;
@@ -1097,10 +1102,11 @@ namespace WingCommand
             // Overnight 2026-09-28 (SFB-81): a fixed 15 m corridor let a 42 m wingspan sweep a member 25 m off the path. A member
             // is taken to be as wide as this aircraft; a foreign one as wide as a fighter.
             float foreign = Math.Max(ObstacleCorridor, 0.5f * p.SpanM + ForeignHalfSpan), members = Math.Max(ObstacleCorridor, p.SpanM + PassMargin);
+            float follow = Follow(p), gap = Math.Max(ObstacleGap, 0.5f * p.LengthM + ForeignHalfSpan + PassMargin);
             foreach (Vec3 o in traffic.Obstacles)
             {
                 float at = OnPathAt(o, along, s, foreign, out _);
-                if (at - ObstacleGap < stop) stop = at - ObstacleGap;
+                if (at - gap < stop) stop = at - gap;
             }
             foreach (KeyValuePair<int, Vec3> m in traffic.Positions)
             {
@@ -1109,8 +1115,8 @@ namespace WingCommand
                 if (at == float.MaxValue) continue;
                 // It waits for us: the lower id goes first, when it passes clear of it.
                 if (Owner < m.Key && traffic.WaitsFor(m.Key) == Owner && lateral >= p.SpanM + PassMargin) continue;
-                if (at - FollowGap >= stop) continue;
-                stop = at - FollowGap;
+                if (at - follow >= stop) continue;
+                stop = at - follow;
                 member = m.Key;
             }
             return stop;

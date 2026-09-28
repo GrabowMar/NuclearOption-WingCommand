@@ -41,6 +41,32 @@ namespace WingCommand.PureTests
         }
 
         [Fact]
+        public void ALongAircraftStopsItsLengthAndAMarginBehindAMemberAhead()
+        {
+            // Day-1 sim (SFB-81, Boscali North): stopped 41.6 m centre to centre behind another — the fixed 40 m follow gap put a
+            // bomber's nose into the tail ahead, and the physics slowed the game to a tenth of real time.
+            var field = new FieldTraffic(TestFields.Simple(), 0, false);
+            var ahead = new Vec3(-150f, 0f, 250f);
+            Pose spawn = field.Field.Hangars[0].Spawn;
+            var plant = new TestGroundPlant(spawn);
+            var pilot = new GroundPilot(1, field, AirframeClass.FixedWing, spawn, 0);
+            field.Departures.Expect(1, 1);
+            IFlightPipeline pipeline = FlightStack.NewPipeline(AirframeClass.FixedWing);
+            AirframeProfile bomber = Jet(42f);
+            bomber.LengthM = 45f;
+            float closest = float.MaxValue;
+            for (int i = 0; i < 50 * 30; i++)
+            {
+                field.Report(2, ahead);
+                field.Step(Dt);
+                plant.Step(pilot.Step(plant.Read(Dt), bomber, pipeline, i * Dt, Dt, null, 0), Dt);
+                closest = Math.Min(closest, (plant.Pos - ahead).Horizontal.Length);
+            }
+            Assert.True(closest >= 55f - 3f, $"stopped {closest:0} m from the member ahead");
+            Assert.Equal(GroundStop.Member, pilot.Stop);
+        }
+
+        [Fact]
         public void AFighterStillPassesAMemberWellClearOfItsWings()
         {
             // The same member, for an 11 m fighter: 25 m off the centreline is clear, no stop.

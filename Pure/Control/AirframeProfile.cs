@@ -22,7 +22,7 @@ namespace WingCommand
         public float HeloPitchRate, HeloYawRate, HeloRollRate, HeloGLimit, HoverCollective;
         /// <summary>Landing gear: the steering leg's lock (degrees, signed: its sign reverses the wheel) and slew rate,
         /// the wheelbase (steering leg to braked legs), and the wingspan.</summary>
-        public float SteerLockDeg, SteerRateDps, WheelbaseM, SpanM;
+        public float SteerLockDeg, SteerRateDps, WheelbaseM, SpanM, LengthM;
         /// <summary>The 1-g stall speed (m/s EAS) its wings give at its weight (<see cref="LiftStall"/>); 0 unknown.</summary>
         public float LiftStallSpeed;
     }
@@ -64,7 +64,7 @@ namespace WingCommand
         public static float RotaryClimbRateMax = 8f;
         /// <summary>Ground: nose-wheel lock (deg, signed) and slew rate, wheelbase and span (m), and the speed the takeoff
         /// roll rotates at (the published takeoff speed, else 1.2 × stall).</summary>
-        public float SteerLockDeg = 45f, SteerRateDps = 60f, WheelbaseM = 6f, SpanM = 12f, TakeoffSpeed = 66f;
+        public float SteerLockDeg = 45f, SteerRateDps = 60f, WheelbaseM = 6f, SpanM = 12f, LengthM = 15f, TakeoffSpeed = 66f;
         public static float WheelbaseMin = 2f;
 #pragma warning disable CS0649 // set only from airframes JSON through ApplyOverrides (reflection)
         public bool ForceAutoAimFallback;
@@ -128,6 +128,7 @@ namespace WingCommand
             if (n.SteerRateDps > 0f) p.SteerRateDps = n.SteerRateDps;
             if (n.WheelbaseM > 0f) p.WheelbaseM = Math.Max(WheelbaseMin, n.WheelbaseM);
             if (n.SpanM > 0f) p.SpanM = n.SpanM;
+            if (n.LengthM > 0f) p.LengthM = n.LengthM;
             if (p.Class == AirframeClass.Rotary) DeriveRotary(p, n);
             if (p.Class == AirframeClass.Tiltwing)
             {
