@@ -18,7 +18,10 @@ namespace WingCommand
         public const string PluginGuid = "com.marci.wingcommand";
         public const string PluginName = "Wing Command";
         public const string PluginVersion = "1.0.0";
-        public const string PluginPrerelease = "alpha.5";
+        public const string PluginPrerelease = "";
+
+        /// <summary>"1.0.0", or "1.0.0-alpha.5" for a prerelease (the log line, the multiplayer handshake).</summary>
+        public static string FullVersion => PluginPrerelease.Length == 0 ? PluginVersion : PluginVersion + "-" + PluginPrerelease;
 
         internal static Plugin Instance { get; private set; }
         internal static new ManualLogSource Logger { get; private set; }
@@ -74,7 +77,7 @@ namespace WingCommand
             runtime.Register(new DevService());
             go.AddComponent<BridgeState>();
 
-            Logger.LogInfo($"{PluginName} {PluginVersion}-{PluginPrerelease} loaded. " +
+            Logger.LogInfo($"{PluginName} {FullVersion} loaded. " +
                 $"mvid={typeof(Plugin).Assembly.ManifestModule.ModuleVersionId}");
             Logger.LogInfo(new WingDiagnostic(WingDiagnosticEvent.PluginReady, 0));
             if (WingConfig.SimRun) Logger.LogInfo("Sim run: the player's records are left alone; this run's go to " + WingConfig.RecordsRoot);

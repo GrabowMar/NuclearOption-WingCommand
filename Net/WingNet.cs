@@ -63,7 +63,7 @@ namespace WingCommand
         private static readonly HashSet<INetworkPlayer> answered = new HashSet<INetworkPlayer>();
         private static readonly HashSet<INetworkPlayer> silent = new HashSet<INetworkPlayer>();
 
-        private static string Version => Plugin.PluginVersion + "-" + Plugin.PluginPrerelease;
+        private static string Version => Plugin.FullVersion;
 
         /// <summary>Once, at plugin start: the serializers, and the ids checked against the game's own messages.</summary>
         public static void Init()
