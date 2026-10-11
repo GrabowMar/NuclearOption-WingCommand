@@ -1,5 +1,9 @@
 <div align="center">
 
+> [!IMPORTANT]
+> Development on this mod is currently paused, as its rework has been integrated into my overall overhaul of Nuclear Option. A new version will be released after the 1.0 release of the 'Boscali Summer' mod. Thank you for your patience!
+
+
 # ✈ WING COMMAND
 ### Tactical AI wing control for Nuclear Option
 
