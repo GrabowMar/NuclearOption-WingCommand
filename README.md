@@ -1,9 +1,5 @@
 <div align="center">
 
-> [!IMPORTANT]
-> Development on this mod is currently paused, as its rework has been integrated into my overall overhaul of Nuclear Option. A new version will be released after the 1.0 release of the 'Boscali Summer' mod. Thank you for your patience!
-
-
 # ✈ WING COMMAND
 ### Tactical AI wing control for Nuclear Option
 
@@ -26,10 +22,7 @@
 > game, but cannot yet see or command the host's wing — that lands in a later update.
 
 > [!IMPORTANT]
-> 1.0 is a clean-break rewrite of the AI, UI and configuration. It does **not** carry over
-> 0.9.x settings, saved rosters, plans, routes or loadout templates — the first launch archives
-> your old `.cfg` beside itself and starts fresh. Active development: balance and controls
-> still shift between releases.
+> Development on this mod is currently paused, as its rework has been integrated into my overall overhaul of Nuclear Option. A new version will be released after the 1.0 release of the 'Boscali Summer' mod. Thank you for your patience!
 
 ## What it does
 
