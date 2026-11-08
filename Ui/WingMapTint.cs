@@ -15,6 +15,9 @@ namespace WingCommand
     {
         // The icon's own selected flag: DynamicMap updates selectedIcons after its colour callback.
         private static readonly AccessTools.FieldRef<MapIcon, bool> nativeSelected = AccessTools.FieldRefAccess<MapIcon, bool>("isSelected");
+        internal static readonly MethodInfo UnitRepaintMethod = UnitMapIconRepaint.Resolve(typeof(UnitMapIcon));
+        private static readonly Action<UnitMapIcon> repaintUnit =
+            (Action<UnitMapIcon>)Delegate.CreateDelegate(typeof(Action<UnitMapIcon>), UnitRepaintMethod);
         private static bool warned;
 
         /// <summary>The game's colours back, then the current mark (none for a unit that lost it).</summary>
@@ -25,7 +28,7 @@ namespace WingCommand
             {
                 if (!DynamicMap.TryGetMapIcon(unit, out UnitMapIcon icon) || icon == null) return;
                 // The unit repaint keeps the game's filter dimming and player highlight (MapIcon.UpdateColor does not).
-                icon.UnitMapIcon_UpdateColor();
+                repaintUnit(icon);
                 Apply(icon);
             }
             catch (Exception e)
@@ -82,7 +85,7 @@ namespace WingCommand
             private static IEnumerable<MethodBase> TargetMethods()
             {
                 yield return AccessTools.Method(typeof(MapIcon), nameof(MapIcon.UpdateColor));
-                yield return AccessTools.Method(typeof(UnitMapIcon), nameof(UnitMapIcon.UnitMapIcon_UpdateColor));
+                yield return UnitRepaintMethod;
                 yield return AccessTools.Method(typeof(UnitMapIcon), nameof(UnitMapIcon.SetIcon));
                 yield return AccessTools.Method(typeof(UnitMapIcon), nameof(UnitMapIcon.UpdateIcon));
             }

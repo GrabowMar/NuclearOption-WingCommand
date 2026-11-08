@@ -75,7 +75,7 @@ namespace WingCommand
             "DynamicMap.MapControls",
             "UnitMapIcon.ClickIcon",
             "MapIcon.UpdateColor",
-            "UnitMapIcon.UnitMapIcon_UpdateColor",
+            "UnitMapIcon." + WingMapTint.UnitRepaintMethod.Name,
             "UnitMapIcon.SetIcon",
             "UnitMapIcon.UpdateIcon",
             "DynamicMap.ShouldShowAirbase",
