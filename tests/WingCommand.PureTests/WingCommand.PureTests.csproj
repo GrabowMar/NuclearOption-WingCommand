@@ -23,6 +23,7 @@
     <Compile Include="..\..\Pure\**\*.cs" Link="Pure\%(RecursiveDir)%(Filename)%(Extension)" />
     <Compile Include="..\..\Avionics\*.cs" Link="Avionics\%(Filename)%(Extension)" />
     <Compile Include="..\..\Agents\HoverAssist.cs" Link="Agents\HoverAssist.cs" />
+    <Compile Include="..\..\Native\UnitMapIconRepaint.cs" Link="Native\UnitMapIconRepaint.cs" />
   </ItemGroup>
 
   <!-- Tests whose production subject is quarantined in WingCommand.csproj; restored with it. -->
